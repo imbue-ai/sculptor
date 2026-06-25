@@ -5,8 +5,18 @@ import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ElementIds } from "~/api";
+import type * as ApiClientModule from "~/apiClient.ts";
 
 import { FilePreviewList } from "./FilePreviewList";
+
+// FilePreviewList fetches `${baseUrl}/api/v1/uploaded-file/<id>` in http mode.
+// Pin baseUrl to a known origin so the http-mode test can assert the whole URL —
+// and would fail if baseUrl were ever undefined (e.g. "undefined/api/v1/...").
+const { TEST_BASE_URL } = vi.hoisted(() => ({ TEST_BASE_URL: "https://backend.test" }));
+vi.mock("~/apiClient.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof ApiClientModule>()),
+  baseUrl: TEST_BASE_URL,
+}));
 
 const Wrapper = ({ children }: { children: ReactNode }): ReactElement => <Theme>{children}</Theme>;
 
@@ -31,6 +41,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   delete (window as unknown as Record<string, unknown>).sculptor;
 });
 
@@ -389,6 +400,57 @@ describe("FilePreviewList", () => {
 
       await waitFor(() => {
         expect(screen.getByAltText("Attachment: vacation.png")).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("upload-id previews (HTTP)", () => {
+    // A bare upload id (no leading slash) is a backend upload, fetched over HTTP.
+    // (The absolute-path tests above exercise the legacy getFileData fallback.)
+    beforeEach(() => {
+      // The shared mockGetFileData accumulates calls across this file's tests
+      // (vitest does not auto-clear vi.fn() call history), so clear it here to
+      // keep "the Electron IPC path must not be used for upload ids" accurate.
+      mockGetFileData.mockClear();
+      // jsdom does not implement URL.createObjectURL; stub it so the http path
+      // can turn the fetched blob into an <img> src.
+      (URL as unknown as { createObjectURL: unknown }).createObjectURL = vi.fn(() => "blob:mock-url");
+    });
+
+    afterEach(() => {
+      delete (URL as unknown as Record<string, unknown>).createObjectURL;
+    });
+
+    it("loads previews over HTTP from the uploaded-file endpoint", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        blob: async (): Promise<Blob> => new Blob(["png-bytes"], { type: "image/png" }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      renderList({ files: ["abc123.png"] });
+
+      await waitFor(() => {
+        const img = screen.getByAltText("Attachment: abc123.png");
+        expect(img).toHaveAttribute("src", "blob:mock-url");
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [url] = fetchMock.mock.calls[0] as [string];
+      expect(url).toBe(`${TEST_BASE_URL}/api/v1/uploaded-file/abc123.png`);
+      // The Electron IPC path must not be used for upload-id references.
+      expect(mockGetFileData).not.toHaveBeenCalled();
+    });
+
+    it("marks the file as failed when the HTTP request is not ok", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+      vi.stubGlobal("fetch", fetchMock);
+
+      renderList({ files: ["missing.png"] });
+
+      await waitFor(() => {
+        expect(screen.getByTestId(ElementIds.FILE_PREVIEW_CONTAINER)).toBeInTheDocument();
+        expect(screen.queryByAltText("Attachment: missing.png")).not.toBeInTheDocument();
       });
     });
   });

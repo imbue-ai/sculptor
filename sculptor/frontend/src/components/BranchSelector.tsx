@@ -1,7 +1,7 @@
 import { Flex, Text } from "@radix-ui/themes";
 import { GitBranchIcon } from "lucide-react";
 import type { ReactElement } from "react";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 
 import type { RepoInfo } from "~/api";
 import { ElementIds } from "~/api";
@@ -26,8 +26,10 @@ const BranchSelectorComponent = ({
   disabled = false,
   triggerVariant = "soft",
 }: BranchSelectorProps): ReactElement => {
-  const [shouldFetch, setShouldFetch] = useState(false);
   const [isFetchingBranches, setIsFetchingBranches] = useState(false);
+  // Drop refresh requests that arrive while one is already in flight, so they
+  // don't stack into concurrent fetches.
+  const isFetchingRef = useRef(false);
 
   const selectedBranchName = sourceBranch || "";
   const areBranchesLoaded = (repoInfo?.recentBranches?.length ?? 0) > 0;
@@ -52,22 +54,25 @@ const BranchSelectorComponent = ({
 
   const displayBranchName = selectedBranchName;
 
-  useEffect(() => {
-    if (shouldFetch && !isFetchingBranches) {
-      setIsFetchingBranches(true);
-      fetchRepoInfo().finally(() => {
-        setShouldFetch(false);
-        setIsFetchingBranches(false);
-      });
-    }
-  }, [shouldFetch, fetchRepoInfo, isFetchingBranches]);
+  // Refresh the branch list in response to a user interaction (selecting a
+  // branch or opening the dropdown), straight from the handler. A request that
+  // arrives while a refresh is in flight is dropped.
+  const triggerFetch = useCallback((): void => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    setIsFetchingBranches(true);
+    void fetchRepoInfo().finally(() => {
+      isFetchingRef.current = false;
+      setIsFetchingBranches(false);
+    });
+  }, [fetchRepoInfo]);
 
   return (
     <BranchSelectorCore
       selectedBranch={selectedBranchName}
       onBranchSelected={(branch) => {
         setUserSelectedBranch(branch);
-        setShouldFetch(true);
+        triggerFetch();
       }}
       branches={branches}
       isLoadingBranches={!areBranchesLoaded && isFetchingBranches}
@@ -84,7 +89,9 @@ const BranchSelectorComponent = ({
       triggerVariant={triggerVariant}
       testId={ElementIds.BRANCH_SELECTOR}
       className={styles.dropdownButton}
-      onOpenChange={(open) => open && setShouldFetch(true)}
+      onOpenChange={(open) => {
+        if (open) triggerFetch();
+      }}
     />
   );
 };

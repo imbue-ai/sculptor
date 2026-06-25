@@ -838,14 +838,11 @@ describe("usePanelKeyboardShortcuts focus-then-toggle dispatch", () => {
     const store = createPanelStore(panels, { useDefaultLayout: true });
     store.set(zoneVisibilityAtom, (prev) => ({ ...prev, "top-left": false }));
 
-    vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
     const { unmount } = mountDispatch(store, panels);
     act(() => fireMetaE());
-    act(() => vi.runAllTimers());
 
     expect(focusSpy).toHaveBeenCalled();
 
-    vi.useRealTimers();
     customTarget.remove();
     unmount();
   });

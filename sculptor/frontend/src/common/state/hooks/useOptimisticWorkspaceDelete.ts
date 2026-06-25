@@ -1,6 +1,6 @@
 import { useSetAtom } from "jotai";
 import { posthog } from "posthog-js";
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import { deleteWorkspace } from "../../../api";
 import { ToastType } from "../../../components/Toast.tsx";
@@ -22,7 +22,10 @@ export const useOptimisticWorkspaceDelete = (
   const setOptimisticDelete = useSetAtom(optimisticDeleteWorkspaceAtom);
   const setRollbackDelete = useSetAtom(rollbackDeleteWorkspaceAtom);
   const setErrorToast = useSetAtom(workspaceDeleteErrorToastAtom);
-  const lastFailedRef = useRef<{ workspaceId: string; workspaceName: string } | null>(null);
+  // The Retry action re-invokes execute. Reach it through a ref (kept current
+  // by the effect below) so the callback doesn't reference itself before it is
+  // declared.
+  const executeRef = useRef<(workspaceId: string, workspaceName: string) => void>(undefined);
 
   const execute = useCallback(
     (workspaceId: string, workspaceName: string): void => {
@@ -32,8 +35,6 @@ export const useOptimisticWorkspaceDelete = (
       }
 
       onNavigateAfterDelete(workspaceId);
-
-      lastFailedRef.current = { workspaceId, workspaceName };
 
       posthog.capture("workspace.deleted", {
         workspace_id: workspaceId,
@@ -51,11 +52,8 @@ export const useOptimisticWorkspaceDelete = (
           action: {
             label: "Retry",
             handleClick: (): void => {
-              const last = lastFailedRef.current;
-              if (last) {
-                setErrorToast(null);
-                execute(last.workspaceId, last.workspaceName);
-              }
+              setErrorToast(null);
+              executeRef.current?.(workspaceId, workspaceName);
             },
           },
         });
@@ -63,6 +61,10 @@ export const useOptimisticWorkspaceDelete = (
     },
     [setOptimisticDelete, setRollbackDelete, setErrorToast, onNavigateAfterDelete],
   );
+
+  useEffect(() => {
+    executeRef.current = execute;
+  }, [execute]);
 
   return { execute };
 };

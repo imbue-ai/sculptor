@@ -14,6 +14,10 @@
   word-wrap: break-word;
 }
 
+.messageText {
+  flex: 1;
+}
+
 .copyButton {
   flex-shrink: 0;
   opacity: 70%;

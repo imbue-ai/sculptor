@@ -1,6 +1,6 @@
 import { useSetAtom } from "jotai";
 import { posthog } from "posthog-js";
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import { deleteWorkspaceAgent } from "../../../api";
 import { ToastType } from "../../../components/Toast.tsx";
@@ -26,7 +26,10 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
   const { navigateToRoot } = useImbueNavigate();
   const { isAgentRoute } = useImbueLocation();
   const { taskID } = useImbueParams();
-  const lastFailedRef = useRef<{ taskId: string; taskTitle: string } | null>(null);
+  // The Retry action re-invokes execute. Reach it through a ref (kept current
+  // by the effect below) so the callback doesn't reference itself before it is
+  // declared.
+  const executeRef = useRef<(taskId: string, taskTitle: string) => void>(undefined);
 
   const execute = useCallback(
     (taskId: string, taskTitle: string): void => {
@@ -40,8 +43,6 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
       } else if (isAgentRoute && taskID === taskId) {
         navigateToRoot();
       }
-
-      lastFailedRef.current = { taskId, taskTitle };
 
       posthog.capture("agent.deleted", {
         workspace_id: workspaceId,
@@ -60,11 +61,8 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
           action: {
             label: "Retry",
             handleClick: (): void => {
-              const last = lastFailedRef.current;
-              if (last) {
-                setDeleteErrorToast(null);
-                execute(last.taskId, last.taskTitle);
-              }
+              setDeleteErrorToast(null);
+              executeRef.current?.(taskId, taskTitle);
             },
           },
         });
@@ -81,6 +79,10 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
       workspaceId,
     ],
   );
+
+  useEffect(() => {
+    executeRef.current = execute;
+  }, [execute]);
 
   return { execute };
 };

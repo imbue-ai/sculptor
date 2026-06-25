@@ -3,8 +3,7 @@ import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useMemo, useState } from "react";
 
-import type { UserConfigField } from "~/api";
-import { ElementIds } from "~/api";
+import { ElementIds, UserConfigField } from "~/api";
 import {
   CATEGORY_DISPLAY_NAMES,
   CATEGORY_ORDER,
@@ -62,7 +61,7 @@ export const KeybindingsSection = ({ onSettingChange }: KeybindingsSectionProps)
 
   const saveKeybindings = useCallback(
     async (updatedDict: Record<string, string | null>): Promise<void> => {
-      await onSettingChange("keybindings" as UserConfigField, updatedDict);
+      await onSettingChange(UserConfigField.KEYBINDINGS, updatedDict);
     },
     [onSettingChange],
   );

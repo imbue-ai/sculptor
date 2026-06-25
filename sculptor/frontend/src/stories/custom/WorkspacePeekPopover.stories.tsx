@@ -553,7 +553,7 @@ const BASE_PR_STATUS: PrStatusInfo = {
   prState: "open",
   prIid: 342,
   prTitle: "Migrate v1 endpoints to v2 schema",
-  prWebUrl: "https://gitlab.example.com/project/-/merge_requests/342",
+  prWebUrl: "https://github.com/project/repo/pull/342",
   pipelineStatus: "passed",
   approvals: [{ name: "Alice", approved: true }],
   unresolvedComments: [],

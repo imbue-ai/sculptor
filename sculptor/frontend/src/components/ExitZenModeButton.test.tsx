@@ -10,6 +10,10 @@ import type { PanelDefinition } from "~/components/panels/types.ts";
 
 import { ExitZenModeButton } from "./ExitZenModeButton";
 
+vi.mock("~/common/keybindings/hooks.ts", () => ({
+  useKeybindingDisplayText: vi.fn(() => "MOCK_SHORTCUT"),
+}));
+
 const TEST_PANELS: ReadonlyArray<PanelDefinition> = [
   {
     id: "info",
@@ -52,7 +56,7 @@ const TEST_PANELS: ReadonlyArray<PanelDefinition> = [
 const renderInZenMode = (): ReturnType<typeof renderWithProviders> => {
   const store = createPanelStore(TEST_PANELS, { useDefaultLayout: true });
   act(() => store.set(zenModeActiveAtom, true));
-  return renderWithProviders(<ExitZenModeButton />, store, TEST_PANELS);
+  return renderWithProviders(<ExitZenModeButton />, { store, panels: TEST_PANELS });
 };
 
 const getHotZone = (): HTMLElement => {
@@ -76,7 +80,7 @@ afterEach(() => {
 describe("ExitZenModeButton", () => {
   it("returns null when zen mode is inactive", () => {
     const store = createPanelStore(TEST_PANELS, { useDefaultLayout: true });
-    renderWithProviders(<ExitZenModeButton />, store, TEST_PANELS);
+    renderWithProviders(<ExitZenModeButton />, { store, panels: TEST_PANELS });
 
     expect(screen.queryByTestId(ElementIds.EXIT_ZEN_MODE_BUTTON)).not.toBeInTheDocument();
   });
@@ -144,5 +148,17 @@ describe("ExitZenModeButton", () => {
     fireEvent.click(button);
 
     expect(store.get(zenModeActiveAtom)).toBe(false);
+  });
+
+  // Regression: the shortcut shown in the button must come from the user's
+  // keybinding (useKeybindingDisplayText("zen_mode")), not a hardcoded literal.
+  // The mocked hook returns "MOCK_SHORTCUT"; a hardcoded literal would not.
+  it("renders the shortcut from the keybinding hook", () => {
+    renderInZenMode();
+    const hotZone = getButtonContainer().parentElement!;
+    fireEvent.mouseEnter(hotZone);
+
+    const button = screen.getByRole("button", { name: /exit zen mode/i });
+    expect(button.textContent).toContain("MOCK_SHORTCUT");
   });
 });

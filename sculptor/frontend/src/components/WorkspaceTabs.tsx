@@ -49,6 +49,8 @@ import { WorkspacePeekOverlay } from "~/pages/workspace/components/WorkspacePeek
 
 import styles from "./WorkspaceTabs.module.scss";
 
+const ICON_SIZE = 14;
+
 export const WorkspaceTabs = (): ReactElement => {
   const dangerColor = useThemeDangerColor();
   const workspaces = useAtomValue(workspacesArrayAtom);
@@ -350,7 +352,7 @@ export const WorkspaceTabs = (): ReactElement => {
         id: workspace.objectId,
         label: workspace.description ?? "Untitled",
         icon: <WorkspaceStatusDots status={status} />,
-        closeIcon: <Minus width={14} height={14} />,
+        closeIcon: <Minus width={ICON_SIZE} height={ICON_SIZE} />,
         dataTestId: ElementIds.WORKSPACE_TAB,
         dataAttributes: { "workspace-tab": "", "has-unread": String(status.hasUnread) },
         labelContent: isRenaming ? (
@@ -368,7 +370,7 @@ export const WorkspaceTabs = (): ReactElement => {
       workspaceTabs.push({
         id: HOME_TAB_ID,
         label: "Home",
-        icon: <HomeIcon size={14} />,
+        icon: <HomeIcon size={ICON_SIZE} />,
         dataTestId: ElementIds.HOME_TAB,
       });
     }
@@ -377,7 +379,7 @@ export const WorkspaceTabs = (): ReactElement => {
       workspaceTabs.push({
         id: SETTINGS_TAB_ID,
         label: "Settings",
-        icon: <SettingsGearIcon size={14} />,
+        icon: <SettingsGearIcon size={ICON_SIZE} />,
         dataTestId: ElementIds.SETTINGS_TAB,
       });
     }
@@ -386,7 +388,7 @@ export const WorkspaceTabs = (): ReactElement => {
       workspaceTabs.push({
         id: COMPONENT_GALLERY_TAB_ID,
         label: "Component Gallery",
-        icon: <LayoutGrid size={14} />,
+        icon: <LayoutGrid size={ICON_SIZE} />,
         dataTestId: ElementIds.COMPONENT_GALLERY_TAB,
       });
     }
@@ -395,7 +397,7 @@ export const WorkspaceTabs = (): ReactElement => {
       workspaceTabs.push({
         id: newWorkspaceTabId(draftId),
         label: "New Workspace",
-        icon: <PlusIcon size={14} />,
+        icon: <PlusIcon size={ICON_SIZE} />,
         dataTestId: ElementIds.ADD_WORKSPACE_TAB,
       });
     }
@@ -527,17 +529,17 @@ export const WorkspaceTabs = (): ReactElement => {
         return (
           <ContextMenu.Content size="1">
             <ContextMenu.Item data-testid={ElementIds.TAB_CONTEXT_MENU_CLOSE} onSelect={() => handleClose(tabId)}>
-              <X size={14} /> Close
+              <X size={ICON_SIZE} /> Close
             </ContextMenu.Item>
             <ContextMenu.Item
               data-testid={ElementIds.TAB_CONTEXT_MENU_CLOSE_OTHERS}
               onSelect={() => handleCloseOthers(tabId)}
               disabled={effectiveOpenTabIds.length <= 1}
             >
-              <XCircle size={14} /> Close others
+              <XCircle size={ICON_SIZE} /> Close others
             </ContextMenu.Item>
             <ContextMenu.Item data-testid={ElementIds.TAB_CONTEXT_MENU_CLOSE_ALL} onSelect={handleCloseAll}>
-              <XCircle size={14} /> Close all
+              <XCircle size={ICON_SIZE} /> Close all
             </ContextMenu.Item>
           </ContextMenu.Content>
         );
@@ -591,7 +593,7 @@ export const WorkspaceTabs = (): ReactElement => {
           aria-label="Add workspace"
           data-testid={ElementIds.ADD_WORKSPACE_BUTTON}
         >
-          <PlusIcon size={14} />
+          <PlusIcon size={ICON_SIZE} />
         </IconButton>
       </TabBar>
       <WorkspacePeekOverlay onNavigate={handleWorkspacePeekNavigate} />

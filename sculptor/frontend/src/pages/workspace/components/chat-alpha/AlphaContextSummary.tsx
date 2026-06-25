@@ -9,6 +9,8 @@ import { AlphaMarkdownBlock } from "./AlphaMarkdownBlock.tsx";
 
 const POPOVER_STYLE: CSSProperties = { padding: 0, width: 560, maxHeight: 480 };
 
+const HINT_PREVIEW_LENGTH = 80;
+
 export const AlphaContextSummary = ({ text, label }: { text: string; label: string }): ReactElement => {
   const [isOpen, setIsOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -37,7 +39,7 @@ export const AlphaContextSummary = ({ text, label }: { text: string; label: stri
           <span className={styles.pillLabel} data-testid={ElementIds.CONTEXT_SUMMARY_HEADER}>
             {label}
           </span>
-          <span className={styles.pillHint}>{text.slice(0, 80)}</span>
+          <span className={styles.pillHint}>{text.slice(0, HINT_PREVIEW_LENGTH)}</span>
         </div>
       </PopoverAnchor>
       <Popover.Content

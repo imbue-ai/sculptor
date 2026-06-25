@@ -45,7 +45,9 @@ const renderEntityItem =
       return (
         <>
           <Icon className={styles.icon} aria-hidden />
-          <span className={styles.name}>{highlightMatch(item.label, query, styles.highlight, "strong")}</span>
+          <span className={styles.name}>
+            {highlightMatch({ text: item.label, query, highlightClassName: styles.highlight, element: "strong" })}
+          </span>
           <span className={styles.tail}>
             <span className={styles.subtitle}>{item.description}</span>
           </span>
@@ -59,7 +61,14 @@ const renderEntityItem =
     return (
       <>
         <Icon className={styles.icon} aria-hidden />
-        <span className={styles.name}>{highlightMatch(item.entityDisplayName, query, styles.highlight, "strong")}</span>
+        <span className={styles.name}>
+          {highlightMatch({
+            text: item.entityDisplayName,
+            query,
+            highlightClassName: styles.highlight,
+            element: "strong",
+          })}
+        </span>
         {(hasSubtitle || isWorkspace) && (
           <span className={styles.tail}>
             {hasSubtitle && <span className={styles.subtitle}>{item.subtitle}</span>}

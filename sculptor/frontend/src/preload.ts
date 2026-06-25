@@ -13,12 +13,13 @@ import {
   CAPTURE_SCREENSHOT_CHANNEL_NAME,
   GET_APP_VERSION_CHANNEL_NAME,
   GET_AUTO_UPDATE_STATUS_CHANNEL_NAME,
+  GET_BACKEND_URL_CHANNEL_NAME,
   GET_CURRENT_BACKEND_STATUS_CHANNEL_NAME,
   GET_CUSTOM_BACKEND_SETTINGS_CHANNEL_NAME,
   GET_DEV_INFO_CHANNEL_NAME,
   GET_FILE_DATA_CHANNEL_NAME,
+  GET_SESSION_TOKEN_CHANNEL_NAME,
   IS_CUSTOM_COMMAND_MODE_CHANNEL_NAME,
-  SAVE_FILE_CHANNEL_NAME,
   SELECT_PROJECT_DIRECTORY_CHANNEL_NAME,
   SET_CUSTOM_BACKEND_SETTINGS_CHANNEL_NAME,
   TEST_BROWSER_WEBVIEW_EXECUTE_CHANNEL_NAME,
@@ -62,11 +63,10 @@ contextBridge.exposeInMainWorld("sculptor", {
     ipcRenderer.on(BACKEND_STATUS_CHANGE_CHANNEL_NAME, (_event, state) => callback(state)),
   // Remove backend state listener
   removeBackendStatusListener: () => ipcRenderer.removeAllListeners(BACKEND_STATUS_CHANGE_CHANNEL_NAME),
-  getSessionToken: () => ipcRenderer.invoke("get-session-token"),
+  getSessionToken: () => ipcRenderer.invoke(GET_SESSION_TOKEN_CHANNEL_NAME),
   getBackendPort: () => ipcRenderer.invoke(BACKEND_PORT_CHANNEL_NAME),
-  // File storage operations
-  saveFile: (fileData: ArrayBuffer, filename: string): Promise<string> =>
-    ipcRenderer.invoke(SAVE_FILE_CHANNEL_NAME, fileData, filename),
+  // File storage: retained to read legacy desktop attachments (absolute paths
+  // saved before uploads moved to the backend). New uploads go over HTTP.
   getFileData: (filePath: string): Promise<string> => ipcRenderer.invoke(GET_FILE_DATA_CHANNEL_NAME, filePath),
   // Auto-update status (pull initial + push updates)
   getAutoUpdateStatus: () => ipcRenderer.invoke(GET_AUTO_UPDATE_STATUS_CHANNEL_NAME),
@@ -89,7 +89,7 @@ contextBridge.exposeInMainWorld("sculptor", {
   setCustomBackendSettings: (settings: Partial<CustomBackendSettings>): Promise<void> =>
     ipcRenderer.invoke(SET_CUSTOM_BACKEND_SETTINGS_CHANNEL_NAME, settings),
   isCustomCommandMode: (): Promise<boolean> => ipcRenderer.invoke(IS_CUSTOM_COMMAND_MODE_CHANNEL_NAME),
-  getBackendUrl: (): Promise<string | null> => ipcRenderer.invoke("get-backend-url"),
+  getBackendUrl: (): Promise<string | null> => ipcRenderer.invoke(GET_BACKEND_URL_CHANNEL_NAME),
   getAppVersion: (): Promise<string> => ipcRenderer.invoke(GET_APP_VERSION_CHANNEL_NAME),
   // Screenshot capture for feedback reports
   captureScreenshot: (): Promise<ArrayBuffer> => ipcRenderer.invoke(CAPTURE_SCREENSHOT_CHANNEL_NAME),

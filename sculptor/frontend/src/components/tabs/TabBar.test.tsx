@@ -31,7 +31,7 @@ const DEFAULT_PROPS: TabBarProps = {
 const renderTabBar = (overrides: Partial<TabBarProps> = {}): ReturnType<typeof renderWithProviders> => {
   const store = createStore();
   const props = { ...DEFAULT_PROPS, ...overrides };
-  return renderWithProviders(<TabBar {...props} />, store);
+  return renderWithProviders(<TabBar {...props} />, { store });
 };
 
 afterEach(() => {

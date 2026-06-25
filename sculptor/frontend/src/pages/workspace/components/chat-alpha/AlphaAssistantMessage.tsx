@@ -3,7 +3,6 @@ import { useMemo } from "react";
 
 import type { ChatMessage, ToolResultBlock } from "~/api";
 import { ElementIds, TaskStatus } from "~/api";
-import type { BlockUnion } from "~/common/Guards";
 import { FilePreviewList } from "~/components/FilePreviewList.tsx";
 import type { SubagentMetadata } from "~/pages/workspace/utils/subagentTree.ts";
 import type { SubagentTreeNode } from "~/pages/workspace/utils/subagentTree.ts";
@@ -15,6 +14,7 @@ import { AlphaMarkdownBlock } from "./AlphaMarkdownBlock.tsx";
 import { ToolBlockGroup } from "./AlphaToolGroup.tsx";
 import { AlphaWarningBlock } from "./AlphaWarningBlock.tsx";
 import { buildRenderGroups } from "./buildRenderGroups.ts";
+import { MESSAGE_LIST_ORDER_STRIDE } from "./messageUtils.ts";
 import { StreamingCursor } from "./StreamingCursor.tsx";
 
 export const AssistantMessageContent = ({
@@ -46,10 +46,7 @@ export const AssistantMessageContent = ({
   activeSearchOccurrence?: number;
   messageIndex?: number;
 }): ReactElement => {
-  const groups = useMemo(
-    () => buildRenderGroups(message.content as ReadonlyArray<BlockUnion>, node.children),
-    [message.content, node.children],
-  );
+  const groups = useMemo(() => buildRenderGroups(message.content, node.children), [message.content, node.children]);
 
   const isTurnActive = isLastMessage && taskStatus === TaskStatus.RUNNING;
   const lastGroupType = groups.length > 0 ? groups[groups.length - 1].type : null;
@@ -132,7 +129,7 @@ export const AssistantMessageContent = ({
               displayMode="inline"
               allowCopyImage
               listId={`${messageIndex}-files-${groupIndex}`}
-              listOrder={messageIndex * 1000 + groupIndex}
+              listOrder={messageIndex * MESSAGE_LIST_ORDER_STRIDE + groupIndex}
             />
           );
         }

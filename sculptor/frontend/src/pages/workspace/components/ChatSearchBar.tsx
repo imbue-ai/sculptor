@@ -44,7 +44,8 @@ export const ChatSearchBar = ({
     return (): void => clearTimeout(debounceTimerRef.current);
   }, [localQuery, setGlobalQuery]);
 
-  // Reset local state when unmounted and remounted
+  // Clear the global search query when the search bar closes (unmounts) so
+  // highlights are removed and a fresh mount starts with an empty query.
   useEffect(() => {
     return (): void => {
       setGlobalQuery("");
@@ -59,10 +60,21 @@ export const ChatSearchBar = ({
   const hasQuery = localQuery !== "";
   const hasStaleNoResults = hasQuery && totalMatchCount === 0;
 
+  // Clear the indicator the instant the no-results condition lifts (results
+  // appear or the query clears). Adjusting during render with a prev-value
+  // guard keeps the reset out of the effect, and re-arms the debounce so the
+  // red state must be earned again next time the condition recurs.
+  const [prevStaleNoResults, setPrevStaleNoResults] = useState({ value: hasStaleNoResults });
+  if (hasStaleNoResults !== prevStaleNoResults.value) {
+    setPrevStaleNoResults({ value: hasStaleNoResults });
+    if (!hasStaleNoResults) {
+      setIsNoResultsVisible(false);
+    }
+  }
+
   useEffect(() => {
     clearTimeout(noResultsTimerRef.current);
     if (!hasStaleNoResults) {
-      setIsNoResultsVisible(false);
       return;
     }
     // Wait longer than the search debounce so the highlight rebuild has time
@@ -95,7 +107,7 @@ export const ChatSearchBar = ({
     }
   };
 
-  const counterText = hasQuery ? (totalMatchCount > 0 ? `${activeIndex + 1}/${totalMatchCount}` : `0/0`) : "0/0";
+  const counterText = hasQuery && totalMatchCount > 0 ? `${activeIndex + 1}/${totalMatchCount}` : "0/0";
 
   return (
     <div

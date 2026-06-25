@@ -31,7 +31,7 @@ export const determineFileStatus = (fileChange: DiffData["fileChanges"][number])
 export const FILE_TREE_OVERSCAN = 10;
 
 /** Maps file status to its design-system color token (text level). */
-export const STATUS_COLORS: Record<FileStatus, string> = {
+const STATUS_COLORS: Record<FileStatus, string> = {
   M: "var(--amber-11)",
   A: "var(--green-11)",
   D: "var(--red-11)",

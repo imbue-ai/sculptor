@@ -25,22 +25,22 @@ export const ANIMATION_POOL: ReadonlyArray<ComponentType<AnimationProps>> = [
  * callers (StatusPill, SubagentPill, etc.) so consecutive animations are
  * always visually distinct.
  */
-let lastPickedIndex: number | null = null;
+let lastPickedIndex: number | undefined = undefined;
 
 /**
  * Pick a random animation index from `ANIMATION_POOL`, guaranteed to differ
  * from the previous pick across all callers.
  */
-export function pickAnimationIndex(): number {
+export const pickAnimationIndex = (): number => {
   const pool = ANIMATION_POOL.length;
-  if (lastPickedIndex === null) {
+  if (lastPickedIndex === undefined) {
     lastPickedIndex = Math.floor(Math.random() * pool);
     return lastPickedIndex;
   }
   const offset = Math.floor(Math.random() * (pool - 1));
   lastPickedIndex = offset >= lastPickedIndex ? offset + 1 : offset;
   return lastPickedIndex;
-}
+};
 
 export { AudioBarsAnimation };
 export { BouncingDotsAnimation };

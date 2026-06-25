@@ -1,5 +1,5 @@
 import type { KeyboardEvent, ReactElement } from "react";
-import { forwardRef, memo, useCallback } from "react";
+import { createElement, forwardRef, memo, useCallback } from "react";
 
 import type { ToolResultBlock, ToolUseBlock } from "~/api";
 import { ElementIds } from "~/api";
@@ -99,7 +99,9 @@ const AlphaExpandedToolRowImpl = forwardRef<HTMLDivElement, AlphaExpandedToolRow
           {isShowingStatusDot ? (
             <span className={`${styles.statusDot} ${styles.statusDotPulsing}`} aria-label="executing" />
           ) : (
-            <Icon className={styles.rowIcon} aria-hidden="true" />
+            // Icon is selected from module-level tool icons (getToolIcon), not
+            // created during render; createElement keeps that explicit.
+            createElement(Icon, { className: styles.rowIcon, "aria-hidden": true })
           )}
           <span className={state === "error" ? styles.rowLabelError : styles.rowLabel}>{label}</span>
           <span className={styles.rowSeparator} aria-hidden="true">

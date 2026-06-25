@@ -4,6 +4,14 @@
   &:last-child {
     border-bottom: none;
   }
+
+  // Drop the row's bottom border when a Separator immediately follows so we
+  // don't render two parallel lines between sections (e.g. between Git and
+  // GitHub CLI in DependenciesSettingsSection).
+  // stylelint-disable-next-line selector-class-pattern -- Radix-internal class
+  &:has(+ :global(.rt-Separator)) {
+    border-bottom: none;
+  }
 }
 
 .descriptionText {

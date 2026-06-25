@@ -66,7 +66,7 @@ export const hydrateEntityMentions = (editor: Editor): void => {
   replacements.sort((a, b) => b.from - a.from);
 
   for (const r of replacements) {
-    const mentionNode = editor.schema.nodes.mention.create({
+    const mentionNode = schema.nodes.mention.create({
       entityType: r.entityType,
       entityId: r.entityId,
       entityDisplayName: r.entityDisplayName,

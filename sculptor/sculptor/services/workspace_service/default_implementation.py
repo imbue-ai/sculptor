@@ -6,7 +6,7 @@ import uuid
 from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import Generator
 from typing import Self
 from typing import cast
 
@@ -560,7 +560,7 @@ class DefaultWorkspaceService(WorkspaceService):
     # Environment Lifecycle
 
     @contextmanager
-    def _environment_setup_lock(self, workspace_id: WorkspaceID) -> Iterator[None]:
+    def _environment_setup_lock(self, workspace_id: WorkspaceID) -> Generator[None, None, None]:
         """Per-workspace lock for environment setup.
 
         This prevents two tasks in the same workspace from racing to create
@@ -683,7 +683,7 @@ class DefaultWorkspaceService(WorkspaceService):
         concurrency_group: ConcurrencyGroup,
         root_progress_handle: RootProgressHandle,
         shutdown_event: ReadOnlyEvent,
-    ) -> Iterator[AgentExecutionEnvironment]:
+    ) -> Generator[AgentExecutionEnvironment, None, None]:
         """Set up the environment for a workspace and wrap it for agent use."""
         environment = self._create_or_resume_environment(
             project=project,

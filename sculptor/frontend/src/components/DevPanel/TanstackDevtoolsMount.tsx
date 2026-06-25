@@ -16,7 +16,11 @@ import {
 
 import { ElementIds } from "~/api";
 
-import { tanstackDevtoolsEnabledAtom, tanstackDevtoolsModeAtom } from "../../common/state/atoms/devPanel.ts";
+import {
+  tanstackDevtoolsEnabledAtom,
+  type TanstackDevtoolsMode,
+  tanstackDevtoolsModeAtom,
+} from "../../common/state/atoms/devPanel.ts";
 import styles from "./TanstackDevtoolsMount.module.scss";
 
 // Use the explicit `/production` entry: the package's default entry replaces
@@ -208,7 +212,7 @@ type FloatingPanelProps = {
   size: Size;
   onPositionChange: (position: Position) => void;
   onSizeChange: (size: Size) => void;
-  onModeChange: (mode: "floating" | "docked-bottom") => void;
+  onModeChange: (mode: TanstackDevtoolsMode) => void;
 };
 
 const FloatingPanel = ({
@@ -295,7 +299,7 @@ const FloatingPanel = ({
 type DockedPanelProps = {
   height: number;
   onHeightChange: (height: number) => void;
-  onModeChange: (mode: "floating" | "docked-bottom") => void;
+  onModeChange: (mode: TanstackDevtoolsMode) => void;
 };
 
 const DockedPanel = ({ height, onHeightChange, onModeChange }: DockedPanelProps): ReactElement => {
@@ -350,8 +354,8 @@ const DockedPanel = ({ height, onHeightChange, onModeChange }: DockedPanelProps)
 };
 
 type PanelHeaderProps = {
-  mode: "floating" | "docked-bottom";
-  onModeChange: (mode: "floating" | "docked-bottom") => void;
+  mode: TanstackDevtoolsMode;
+  onModeChange: (mode: TanstackDevtoolsMode) => void;
   onClose: () => void;
   dragListeners?: ReturnType<typeof useDraggable>["listeners"];
   dragAttributes?: ReturnType<typeof useDraggable>["attributes"];

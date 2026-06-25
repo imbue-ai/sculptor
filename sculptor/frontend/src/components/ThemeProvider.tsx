@@ -2,7 +2,7 @@ import { Theme as RadixTheme } from "@radix-ui/themes";
 import type { CSSProperties, PropsWithChildren, ReactElement } from "react";
 import { useLayoutEffect, useMemo, useRef } from "react";
 
-import type { AccentColor, ColorSettingKey, GrayColor, HexOverrides } from "~/common/state/atoms/themeBuilder.ts";
+import type { ColorSettingKey, HexOverrides, ThemeBuilderSettings } from "~/common/state/atoms/themeBuilder.ts";
 import { COLOR_SETTING_KEYS, DEFAULT_HEX_OVERRIDES } from "~/common/state/atoms/themeBuilder.ts";
 import { useThemeBuilderSettings } from "~/common/state/hooks/useThemeBuilder.ts";
 import { generateColorScale, isValidHex } from "~/common/theme/generateColorScale.ts";
@@ -13,17 +13,10 @@ import { useResolvedTheme } from "~/common/Utils.ts";
  * Maps a ColorSettingKey to the CSS variable prefix used by Radix.
  * accentColor -> "accent", grayColor -> "gray", dangerColor/successColor/etc. -> their color name.
  */
-const getCssVarPrefix = (
-  key: ColorSettingKey,
-  settings: {
-    accentColor: AccentColor;
-    grayColor: GrayColor;
-    dangerColor: AccentColor;
-    successColor: AccentColor;
-    warningColor: AccentColor;
-    infoColor: AccentColor;
-  },
-): string => {
+/** Number of steps in a Radix color scale (--<color>-1 through --<color>-12). */
+const COLOR_SCALE_STEPS = 12;
+
+const getCssVarPrefix = (key: ColorSettingKey, settings: ThemeBuilderSettings): string => {
   switch (key) {
     case "accentColor":
       return settings.accentColor;
@@ -45,14 +38,7 @@ const getCssVarPrefix = (
 const buildHexOverrideStyles = (
   hexOverrides: HexOverrides,
   resolvedAppearance: "light" | "dark",
-  settings: {
-    accentColor: AccentColor;
-    grayColor: GrayColor;
-    dangerColor: AccentColor;
-    successColor: AccentColor;
-    warningColor: AccentColor;
-    infoColor: AccentColor;
-  },
+  settings: ThemeBuilderSettings,
 ): CSSProperties => {
   const cssVars: Record<string, string> = {};
 
@@ -71,7 +57,7 @@ const buildHexOverrideStyles = (
     const scale = generateColorScale(hex, resolvedAppearance);
     const defaultScale = getColorScale(prefix, resolvedAppearance);
 
-    for (let step = 1; step <= 12; step++) {
+    for (let step = 1; step <= COLOR_SCALE_STEPS; step++) {
       const customValue = scale[step - 1];
       const defaultValue = defaultScale[step - 1];
       // Only override if the custom scale differs from the default
@@ -82,14 +68,14 @@ const buildHexOverrideStyles = (
 
     // For accentColor, also override the --accent-N aliases that Radix uses
     if (key === "accentColor") {
-      for (let step = 1; step <= 12; step++) {
+      for (let step = 1; step <= COLOR_SCALE_STEPS; step++) {
         cssVars[`--accent-${step}`] = scale[step - 1];
       }
     }
 
     // For grayColor, also override the --gray-N aliases
     if (key === "grayColor") {
-      for (let step = 1; step <= 12; step++) {
+      for (let step = 1; step <= COLOR_SCALE_STEPS; step++) {
         cssVars[`--gray-${step}`] = scale[step - 1];
       }
     }

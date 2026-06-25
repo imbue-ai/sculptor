@@ -46,6 +46,34 @@ export type OverlayDefinition = {
   component: ComponentType;
 };
 
+/**
+ * A compact, workspace-scoped contribution the host places in its workspace
+ * chrome — today the workspace banner's action row, beside the PR button.
+ * Deliberately named for the contribution (a small widget) rather than a
+ * location: the same registration is what a future per-workspace vertical-tabs
+ * layout would render too, so plugins don't re-register per surface.
+ *
+ * Like a panel (and unlike an app-global overlay) it is mounted inside the
+ * host's `WorkspacePluginContext`, so the workspace SDK hooks
+ * (`useCurrentWorkspace`, `useWorkspaceTasks`, per-workspace `usePluginSetting`
+ * keys) resolve to the workspace it is rendered for.
+ */
+export type WorkspaceWidgetDefinition = {
+  /** Stable id; registering twice with the same id replaces the previous one. */
+  id: string;
+  component: ComponentType;
+  /**
+   * Where the widget sits in the host's progressive-collapse order when the row
+   * runs out of horizontal room: lower values are hidden first, higher values
+   * survive longer (the banner's PR button is the most protected built-in). A
+   * host without a collapsing container — e.g. the future vertical-tabs layout —
+   * is free to ignore this. Built-in banner items occupy a few small integers,
+   * so pick a value that orders the widget relative to them; omit it to collapse
+   * before everything else.
+   */
+  collapsePriority?: number;
+};
+
 export type PluginHostApi = {
   registerPanel: (panel: PanelDefinition) => () => void;
   /**
@@ -61,6 +89,13 @@ export type PluginHostApi = {
    * PluginContext (so `usePluginSetting` works). Returns a disposer.
    */
   registerOverlay: (overlay: OverlayDefinition) => () => void;
+  /**
+   * Registers a workspace-scoped widget the host renders in its workspace
+   * chrome (the banner action row beside the PR button). Wrapped, like a panel,
+   * in a per-plugin error boundary, the host's PluginContext, and the
+   * WorkspacePluginContext for the workspace it is shown in. Returns a disposer.
+   */
+  registerWorkspaceWidget: (widget: WorkspaceWidgetDefinition) => () => void;
 };
 
 export type PluginActivate = (api: PluginHostApi) => void | (() => void) | Promise<void | (() => void)>;

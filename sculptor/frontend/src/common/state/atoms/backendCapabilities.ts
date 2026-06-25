@@ -8,27 +8,21 @@
  * and never change for the lifetime of the session.
  */
 
-type FileUploadMode = "electron-ipc" | "http";
-
 export type BackendCapabilities = {
   /** Can the backend open files/folders on the host OS? */
   canOpenInOS: boolean;
   /** Can Electron show a native directory picker that the backend can access? */
   canSelectLocalDir: boolean;
-  /** How should file uploads/downloads be handled? */
-  fileUploadMode: FileUploadMode;
 };
 
-const DEFAULT_CAPABILITIES: BackendCapabilities = {
+const DEFAULT_CAPABILITIES = {
   canOpenInOS: true,
   canSelectLocalDir: true,
-  fileUploadMode: "electron-ipc",
 } as const satisfies BackendCapabilities;
 
-const REMOTE_CAPABILITIES: BackendCapabilities = {
+const REMOTE_CAPABILITIES = {
   canOpenInOS: false,
   canSelectLocalDir: false,
-  fileUploadMode: "http",
 } as const satisfies BackendCapabilities;
 
 let capabilities: BackendCapabilities = DEFAULT_CAPABILITIES;

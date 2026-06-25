@@ -8,6 +8,26 @@
   @include thin-scrollbar($autohide: false);
 }
 
+// Place the + icon in the same absolute slot Radix uses for its
+// SelectItemIndicator, so it lines up horizontally with the checkmark.
+.importRepoIndicator {
+  align-items: center;
+  bottom: 0;
+  display: inline-flex;
+  justify-content: center;
+  left: 0;
+  position: absolute;
+  top: 0;
+  width: var(--select-item-indicator-width);
+
+  // Override the global .lucide { width/height: var(--font-size-3) } rule so
+  // the + icon matches the size-1 checkmark on selected items.
+  svg {
+    height: 12px;
+    width: 12px;
+  }
+}
+
 .newRepoSeparator {
   margin-left: calc(-1 * var(--select-content-padding));
   margin-right: calc(-1 * var(--select-content-padding));

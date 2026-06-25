@@ -85,23 +85,6 @@
   }
 }
 
-.groupHeader {
-  color: var(--gray-9);
-  font-size: var(--font-size-1);
-  font-weight: var(--font-weight-medium);
-  overflow-wrap: anywhere;
-  padding: var(--space-2) var(--space-3) var(--space-1);
-  user-select: none;
-}
-
-.flatFileName {
-  color: var(--gray-12);
-  flex: 1;
-  font-size: var(--font-size-1-5);
-  line-height: 20px;
-  overflow-wrap: anywhere;
-}
-
 .extension {
   color: var(--gray-9);
 }
@@ -124,39 +107,6 @@
 
 .lineStatsRemoved {
   color: var(--red-11);
-}
-
-.changesToolbar {
-  align-items: center;
-  border-bottom: 1px solid var(--gray-a4);
-  display: flex;
-  flex-shrink: 0;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-3);
-}
-
-.toolbarSpacer {
-  flex: 1;
-}
-
-.viewToggle {
-  align-items: center;
-  all: unset;
-  border-radius: var(--radius-1);
-  color: var(--gray-9);
-  cursor: pointer;
-  display: flex;
-  padding: var(--space-1);
-  transition: background-color var(--duration-fast), color var(--duration-fast);
-
-  &:hover {
-    background-color: var(--gray-3);
-    color: var(--gray-11);
-  }
-}
-
-.viewToggleActive {
-  color: var(--gray-12);
 }
 
 .flatListRow {

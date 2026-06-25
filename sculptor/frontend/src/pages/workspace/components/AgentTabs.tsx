@@ -49,6 +49,10 @@ import styles from "./AgentTabs.module.scss";
 
 const NO_SESSION_TOOLTIP = "No active session — send a prompt first";
 
+// How long to hold a freshly renamed title locally, shielding the tab label
+// and chat intro from a stale mark-read WebSocket that carries the old title.
+const PENDING_TITLE_HOLD_MS = 2000;
+
 /**
  * Fetches diagnostics on mount (when the sub-menu opens) and disables
  * copy items when there is nothing to copy.
@@ -203,14 +207,14 @@ export const AgentTabs = (): ReactElement | null => {
 
       // The mark-read debounce can fire concurrently with a rename, causing the backend to publish
       // a WebSocket with the pre-rename title that overwrites taskAtomFamily. Hold the new title in
-      // pendingAgentTitlesAtom for 2 s so the tab label and chat intro stay correct through any
-      // such stale WebSocket window.
+      // pendingAgentTitlesAtom so the tab label and chat intro stay correct through any such stale
+      // WebSocket window.
       setPendingTitles((prev) => ({ ...prev, [taskId]: newName }));
       const existingTimer = pendingTitleTimers.current.get(taskId);
       if (existingTimer !== undefined) clearTimeout(existingTimer);
       pendingTitleTimers.current.set(
         taskId,
-        setTimeout(() => clearPendingTitle(taskId), 2000),
+        setTimeout(() => clearPendingTitle(taskId), PENDING_TITLE_HOLD_MS),
       );
 
       try {

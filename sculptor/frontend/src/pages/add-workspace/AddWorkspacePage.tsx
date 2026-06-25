@@ -82,7 +82,9 @@ export const AddWorkspacePage = (): ReactElement => {
   // Latest selection, read inside the one-shot project-load effect without
   // making it a dependency (which would re-fetch projects on every change).
   const selectedProjectIdRef = useRef(selectedProjectId);
-  selectedProjectIdRef.current = selectedProjectId;
+  useEffect(() => {
+    selectedProjectIdRef.current = selectedProjectId;
+  });
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
 
   // Form state. Worktree is the default mode; clone and in-place are opt-in.
@@ -355,7 +357,7 @@ export const AddWorkspacePage = (): ReactElement => {
             <div>
               <b>Failed to create workspace</b>
               <br />
-              <pre>{"" + error}</pre>
+              <pre>{String(error)}</pre>
             </div>
           ),
           type: ToastType.ERROR,
@@ -428,8 +430,9 @@ export const AddWorkspacePage = (): ReactElement => {
             repoInfo={repoInfo}
             isPending={isPending}
             isSubmitDisabled={
-              mode === WorkspaceInitializationStrategy.WORKTREE &&
-              (effectiveBranchName.trim() === "" || isBranchNamePreviewLoading)
+              selectedProjectId === null ||
+              (mode === WorkspaceInitializationStrategy.WORKTREE &&
+                (effectiveBranchName.trim() === "" || isBranchNamePreviewLoading))
             }
             onSubmit={handleSubmit}
             autoFocus

@@ -101,8 +101,8 @@ class PlaywrightChatPanelElement(PlaywrightFilePreviewAndUploadMixin, Playwright
     def get_undo_queued_message_cancel_button(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.UNDO_QUEUED_MESSAGE_CANCEL_BUTTON)
 
-    def get_undo_queued_message_copy_button(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.UNDO_QUEUED_MESSAGE_COPY_BUTTON)
+    def get_undo_queued_message_remove_button(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.UNDO_QUEUED_MESSAGE_REMOVE_BUTTON)
 
     def get_undo_queued_message_overwrite_button(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.UNDO_QUEUED_MESSAGE_OVERWRITE_BUTTON)

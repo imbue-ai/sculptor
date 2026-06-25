@@ -13,6 +13,7 @@ import { buildTerminalCommands } from "../builtinCommands/terminal.ts";
 import { buildThemeCommands } from "../builtinCommands/theme.ts";
 import { buildWorkspaceActionCommands } from "../builtinCommands/workspaces.ts";
 import { buildAgentActions } from "../contextActions/agentActions.ts";
+import type { AgentActionRuntime, WorkspaceActionRuntime } from "../contextActions/types.ts";
 import { buildWorkspaceActions } from "../contextActions/workspaceActions.ts";
 import { buildWorkspaceProvider } from "../dynamic/workspaceCommands.tsx";
 import type { CommandRuntime } from "../runtime.ts";
@@ -96,11 +97,11 @@ const collectDescriptorShortcuts = (): Array<KeybindingId> => {
   // Both descriptor lists feed dynamic providers that copy
   // `paletteShortcut` straight onto the Command's `shortcut`. We don't
   // need to invoke the providers — checking the descriptor source
-  // covers every shortcut they could ever surface.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const wsRuntime = {} as any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const agRuntime = {} as any;
+  // covers every shortcut they could ever surface. The builders only
+  // assemble static descriptors here; the runtime methods live inside
+  // closures the descriptors never call, so an empty stub is enough.
+  const wsRuntime = {} as unknown as WorkspaceActionRuntime;
+  const agRuntime = {} as unknown as AgentActionRuntime;
   const out: Array<KeybindingId> = [];
   for (const a of buildWorkspaceActions(wsRuntime)) {
     if (a.paletteShortcut != null) out.push(a.paletteShortcut);

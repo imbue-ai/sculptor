@@ -48,7 +48,7 @@ export function useWebsocket<T>({
     if (!enabled) return;
 
     let ws: WebSocket | null = null;
-    let reconnectTimeout: NodeJS.Timeout | null = null;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
     let reconnectCount = 0;
 
     const connect = (): void => {
@@ -70,7 +70,9 @@ export function useWebsocket<T>({
         }
 
         const wsUrl = urlObj.toString();
-        console.log(`[WebSocket] Connecting to ${wsUrl}`);
+        // Strip the query string before logging: the URL may carry a session
+        // token in a query parameter, which must not be written to the console.
+        console.log(`[WebSocket] Connecting to ${wsUrl.split("?")[0]}`);
 
         try {
           ws = new WebSocket(wsUrl);
@@ -96,7 +98,7 @@ export function useWebsocket<T>({
             // land verbatim in the trace file, and the URL may carry a
             // session token in a query parameter in some code paths.
             traceMark(`ws.recv ${url.split("?")[0]}`);
-            const data = JSON.parse(event.data);
+            const data = JSON.parse(event.data) as T;
             onMessageRef.current(data);
           } catch (error) {
             if (error instanceof SyntaxError) {

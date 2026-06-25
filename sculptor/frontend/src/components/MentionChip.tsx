@@ -3,7 +3,7 @@ import classnames from "classnames";
 import { useAtomValue, useSetAtom } from "jotai";
 import { Folder } from "lucide-react";
 import type { ComponentType, ElementType, MouseEvent, ReactElement, ReactNode } from "react";
-import { useCallback } from "react";
+import { createElement, useCallback } from "react";
 import { useParams } from "react-router-dom";
 
 import { ElementIds } from "~/api";
@@ -160,6 +160,10 @@ const FileMentionChip = ({
   const Icon = isDirectory ? Folder : getFileIcon(basename);
   const visibleLabel = displayLabel ?? basename;
   const displayPath = id.startsWith("@") ? id.slice(1) : id;
+  // Outside a workspace route there is nowhere to open the file/folder, so the
+  // chip renders inert rather than as a pointer-cursor control that silently
+  // drops the click (matches the EntityMentionChip pattern from SCU-1215).
+  const isClickable = Boolean(workspaceID);
 
   const handleClick = useCallback(
     (e: MouseEvent) => {
@@ -182,11 +186,12 @@ const FileMentionChip = ({
       trigger={
         <Wrapper
           {...wrapperProps}
-          className={styles.clickableMention}
+          className={isClickable ? styles.clickableMention : styles.mention}
           data-testid={ElementIds.MENTION_SPAN}
-          onClick={handleClick}
+          onClick={isClickable ? handleClick : undefined}
+          aria-disabled={isClickable ? undefined : true}
         >
-          <Icon style={ICON_STYLE} />
+          {createElement(Icon, { style: ICON_STYLE })}
           {/* `direction: rtl` on the label produces start-truncation when the
             chip caps at max-width, preserving the basename (the part users
             scan for) on the right and ellipsizing the disambiguating prefix
@@ -209,7 +214,9 @@ const FileMentionChip = ({
           }}
         >
           <Flex align="start" gap="1" style={{ minWidth: 0 }}>
-            <Icon style={{ ...ICON_STYLE, flexShrink: 0, color: "var(--gray-12)", marginTop: "2px" }} />
+            {createElement(Icon, {
+              style: { ...ICON_STYLE, flexShrink: 0, color: "var(--gray-12)", marginTop: "2px" },
+            })}
             <Text
               as="div"
               size="1"

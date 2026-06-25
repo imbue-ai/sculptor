@@ -45,8 +45,8 @@ vi.mock("~/common/state/hooks/useWorkspace.ts", () => ({
   useWorkspace: (): { targetBranch: string } => ({ targetBranch: "origin/main" }),
 }));
 vi.mock("~/common/state/hooks/useWorkspaceDiff.ts", () => ({
-  useWorkspaceDiff: (): { diff: { uncommittedDiff: string | null } } => ({
-    diff: { uncommittedDiff: mockUncommittedDiff },
+  useWorkspaceDiff: (): { data: { uncommittedDiff: string | null } } => ({
+    data: { uncommittedDiff: mockUncommittedDiff },
   }),
 }));
 

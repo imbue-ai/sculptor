@@ -4,6 +4,15 @@ import { isPageScoped } from "./types.ts";
 
 export type GroupedCommands = Array<{ id: CommandGroupId; commands: Array<Command> }>;
 
+const maxScore = (cmds: ReadonlyArray<Command>, score: (cmd: Command) => number): number => {
+  let best = 0;
+  for (const cmd of cmds) {
+    const s = score(cmd);
+    if (s > best) best = s;
+  }
+  return best;
+};
+
 /**
  * Bucket the command list into groups for rendering. Within each group,
  * commands are sorted: top-level → page-scoped, then primary → non-primary,
@@ -24,8 +33,12 @@ export const groupCommands = (
   const byGroup = new Map<CommandGroupId, Array<Command>>();
 
   for (const cmd of commands) {
-    if (!byGroup.has(cmd.group)) byGroup.set(cmd.group, []);
-    byGroup.get(cmd.group)!.push(cmd);
+    const bucket = byGroup.get(cmd.group);
+    if (bucket) {
+      bucket.push(cmd);
+    } else {
+      byGroup.set(cmd.group, [cmd]);
+    }
   }
 
   // Sort each group: top-level entries first (no `onPage`), then
@@ -52,15 +65,6 @@ export const groupCommands = (
       return a.title.localeCompare(b.title);
     });
   }
-
-  const maxScore = (cmds: ReadonlyArray<Command>, score: (cmd: Command) => number): number => {
-    let best = 0;
-    for (const cmd of cmds) {
-      const s = score(cmd);
-      if (s > best) best = s;
-    }
-    return best;
-  };
 
   return Array.from(byGroup.entries())
     .filter(([, cmds]) => cmds.length > 0)

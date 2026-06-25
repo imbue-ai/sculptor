@@ -13,7 +13,10 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
   // Read inside the debounced setTimeout to see the latest state — the captured
   // `task` closure may be stale by the time the timer fires.
   const taskRef = useRef(task);
-  taskRef.current = task;
+  // Keep the ref current after every commit so the pending timer reads the latest task.
+  useEffect(() => {
+    taskRef.current = task;
+  });
 
   const markRead = (): void => {
     // Functional update: read the latest atom value at apply time so a stale

@@ -8,7 +8,6 @@ import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
 import { determineFileStatus, isBinaryFile } from "~/pages/workspace/panels/fileBrowser/utils.ts";
 
 import { diffPanelStateAtomFamily } from "./atoms.ts";
-import type { SingleFileDiffTab } from "./types.ts";
 import { isCombinedTab, isCommitDiffTab, isFileViewTab, TARGET_BRANCH_DIFF_PREFIX } from "./types.ts";
 
 type ActiveFileDiffResult = {
@@ -101,19 +100,20 @@ export const useActiveFileDiff = (workspaceId: string): ActiveFileDiffResult => 
       };
     }
 
-    const tabScope = (activeTab as SingleFileDiffTab).scope;
+    const tabScope = activeTab.scope;
 
     // If the tab was opened with a specific diff string (e.g., from chip popover),
     // use it directly instead of looking up from workspace uncommitted changes.
-    if ((activeTab as SingleFileDiffTab).diffString) {
-      const lineCounts = getLineCounts((activeTab as SingleFileDiffTab).diffString!);
+    const tabDiffString = activeTab.diffString;
+    if (tabDiffString) {
+      const lineCounts = getLineCounts(tabDiffString);
 
       return {
         filePath: activeTabPath,
         tabFilePath: activeTabPath,
         previousFilePath: null,
         status: activeTab.status,
-        diffString: (activeTab as SingleFileDiffTab).diffString!,
+        diffString: tabDiffString,
         addedLines: lineCounts.added,
         removedLines: lineCounts.removed,
         isBinary: false,
@@ -186,5 +186,5 @@ export const useActiveFileDiff = (workspaceId: string): ActiveFileDiffResult => 
     };
   }, [diffPanelState, parsedUncommittedDiff, parsedTargetBranchDiff, diff?.fileErrors]);
 
-  return { ...memoized, isFetching, targetBranchMergeBase: diff?.targetBranchMergeBase || null };
+  return { ...memoized, isFetching, targetBranchMergeBase: diff?.targetBranchMergeBase ?? null };
 };

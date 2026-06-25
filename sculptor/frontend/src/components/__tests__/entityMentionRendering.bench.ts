@@ -101,14 +101,12 @@ const markdownFastCheckThenRegex = (paragraphs: ReadonlyArray<string>): number =
 // nodes via a transaction. The benchmark simulates the traversal + regex
 // cost without the actual ProseMirror overhead.
 
-type TextNode = { text: string; pos: number };
+type TextNode = { text: string };
 
 const buildTextNodes = (paragraphs: ReadonlyArray<string>): Array<TextNode> => {
   const nodes: Array<TextNode> = [];
-  let pos = 0;
   for (const text of paragraphs) {
-    nodes.push({ text, pos });
-    pos += text.length + 1;
+    nodes.push({ text });
   }
   return nodes;
 };

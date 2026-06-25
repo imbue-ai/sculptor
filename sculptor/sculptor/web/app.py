@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import contextlib
+import datetime
 import json
 import logging
 import mimetypes
@@ -10,7 +11,9 @@ import queue
 import re
 import subprocess
 import sys
+import threading
 import time
+import traceback
 import urllib.parse
 from asyncio import CancelledError
 from importlib import resources
@@ -25,6 +28,7 @@ from typing import TypeVar
 from uuid import uuid4
 
 import anyio
+import anyio.to_thread
 import psutil
 import typeid.errors
 from fastapi import Depends
@@ -36,6 +40,7 @@ from fastapi import UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
+from fastapi.responses import PlainTextResponse
 from fastapi.responses import StreamingResponse
 from fastapi.websockets import WebSocket
 from fastapi.websockets import WebSocketDisconnect
@@ -44,6 +49,7 @@ from pydantic import ValidationError
 from pydantic.alias_generators import to_camel
 
 from sculptor import version
+from sculptor.agents.attachments import resolve_attachment_source
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import NoBtwSessionAvailable
 from sculptor.agents.harness_registry import get_harness_for_config
 from sculptor.common.plugin import get_plugin_dirs
@@ -161,10 +167,16 @@ from sculptor.utils.build import get_sculptor_folder
 from sculptor.utils.build import is_packaged
 from sculptor.utils.errors import is_irrecoverable_exception
 from sculptor.utils.timeout import log_runtime
+from sculptor.utils.tracing import DEFAULT_ADHOC_TRACER_ENTRIES
+from sculptor.utils.tracing import DEFAULT_TRACER_ENTRIES
 from sculptor.utils.tracing import ELECTRON_MAIN_PID
 from sculptor.utils.tracing import RENDERER_PID
 from sculptor.utils.tracing import add_external_events
+from sculptor.utils.tracing import get_buffered_external_event_count
+from sculptor.utils.tracing import get_trace_to_path
 from sculptor.utils.tracing import is_tracing_enabled
+from sculptor.utils.tracing import start_tracing
+from sculptor.utils.tracing import stop_and_write_trace
 from sculptor.web.access_log_filter import should_suppress_access_log
 from sculptor.web.auth import SESSION_TOKEN_HEADER_NAME
 from sculptor.web.auth import SessionTokenMiddleware
@@ -253,6 +265,7 @@ from sculptor.web.middleware import resolve_stream_scope
 from sculptor.web.middleware import run_sync_function_with_debugging_support_if_enabled
 from sculptor.web.middleware import shutdown_event as shutdown_event_impl
 from sculptor.web.open_with import open_path_in_external_app
+from sculptor.web.remote_repos import remote_repos_router
 from sculptor.web.skills import discover_skills
 from sculptor.web.streams import Scope
 from sculptor.web.streams import ServerStopped
@@ -653,10 +666,14 @@ def _cleanup_task_file_attachments(
 
     for file_path in file_paths:
         try:
-            file_file = Path(file_path)
-            if file_file.exists():
-                file_file.unlink()
-                logger.debug("Deleted file: {}", file_path)
+            # Resolve the stored reference to its real source: an absolute path
+            # (Electron) is used as-is; a bare upload id (web/HTTP) lives under
+            # <internal>/uploads/. Without this, http-uploaded files would never
+            # be deleted (Path("<id>").unlink() looks in the cwd, not uploads/).
+            source = resolve_attachment_source(file_path)
+            if source.exists():
+                source.unlink()
+                logger.debug("Deleted file: {}", source)
         except Exception as e:
             log_exception(e, "Failed to delete {file_path}", file_path=file_path)
     logger.info("Cleaned up {} file(s) for task {}", len(file_paths), task_id)
@@ -1975,7 +1992,8 @@ def create_workspace_agent(
                 agent_config=agent_config,
                 git_hash=initial_commit_hash,
                 system_prompt=project.default_system_prompt,
-                default_model=agent_request.model,
+                # Terminal agents don't carry a model — Sculptor doesn't control it (SCU-1580).
+                default_model=None if is_terminal_agent_config(agent_config) else agent_request.model,
             ),
             current_state=initial_task_state,
         )
@@ -2632,7 +2650,7 @@ def await_message_response(
     message_id: AgentMessageID,
     task_id: TaskID,
     services: CompleteServiceCollection,
-) -> Iterator[None]:
+) -> Generator[None, None, None]:
     with services.task_service.subscribe_to_task(task_id) as updates_queue:
         yield
         logger.debug("Waiting for response to message {} in task {}", message_id, task_id)
@@ -2652,7 +2670,7 @@ def await_request_outcome(
     message_id: AgentMessageID,
     task_id: TaskID,
     services: CompleteServiceCollection,
-) -> Iterator[list[PersistentRequestCompleteAgentMessage]]:
+) -> Generator[list[PersistentRequestCompleteAgentMessage], None, None]:
     """Like `await_message_response`, but captures the terminal request message.
 
     Yields a one-element list the caller reads after the block to inspect the
@@ -2739,7 +2757,7 @@ def get_config_status(
         has_email=bool(user_config.user_email) and check_is_user_email_field_valid(user_config),
         has_privacy_consent=user_config.is_privacy_policy_consented,
         has_project=has_project,
-        has_dependencies_passing=bool(deps_passing),
+        has_dependencies_passing=deps_passing,
     )
 
 
@@ -2760,9 +2778,9 @@ def save_user_email(
         user_config,
         {
             "user_email": email_config_request.user_email,
-            "user_id": create_user_id(str(email_config_request.user_email)),
+            "user_id": create_user_id(email_config_request.user_email),
             "user_full_name": email_config_request.full_name,
-            "organization_id": create_organization_id(str(email_config_request.user_email)),
+            "organization_id": create_organization_id(email_config_request.user_email),
             # Saving user email counts as consenting to the Policy email
             "is_privacy_policy_consented": True,
             # Telemetry choice comes from the welcome-step checkbox
@@ -3176,11 +3194,6 @@ def _extract_hostname(url: str) -> str:
     return parsed.hostname or ""
 
 
-def _is_gitlab_url(url: str) -> bool:
-    """Check if a URL points to a GitLab instance."""
-    return "gitlab" in _extract_hostname(url).lower()
-
-
 def _is_github_url(url: str) -> bool:
     """Check if a URL points to a GitHub instance."""
     return "github" in _extract_hostname(url).lower()
@@ -3354,7 +3367,6 @@ def get_repo_info(
 
         # Get origin URL and provider detection info
         origin_url = _get_origin_url(repo_path)
-        is_gitlab_origin = _is_gitlab_url(origin_url) if origin_url is not None else False
         is_github_origin = _is_github_url(origin_url) if origin_url is not None else False
         remote_branches = _get_remote_branches(repo_path)
 
@@ -3363,7 +3375,6 @@ def get_repo_info(
             current_branch=current_branch,
             recent_branches=branches,
             project_id=project.object_id,
-            is_gitlab_origin=is_gitlab_origin,
             is_github_origin=is_github_origin,
             remote_branches=remote_branches,
         )
@@ -4006,8 +4017,8 @@ def get_health_check(request: Request) -> HealthCheckResponse:
     dependencies_status = services.dependency_management_service.get_status()
 
     return HealthCheckResponse(
-        version=str(version.__version__),
-        git_sha=str(version.__git_sha__),
+        version=version.__version__,
+        git_sha=version.__git_sha__,
         python_version=sys.version.split()[0],
         platform=platform.system(),
         platform_version=platform.release(),
@@ -4376,6 +4387,143 @@ def post_trace_batch(payload: TraceBatchRequest) -> None:
     add_external_events(payload.events, _TRACE_SOURCE_TO_PID[payload.source])
 
 
+class TraceStartRequest(SerializableModel):
+    """Knobs for arming an ad-hoc backend trace at runtime.
+
+    There is intentionally no ``output_path`` field: the file is always written
+    under a fixed server-owned directory (see ``post_trace_start``). These
+    endpoints require the session token, but constraining the path keeps an
+    attacker who obtains the token from using the trace writer as an
+    arbitrary-file-write primitive."""
+
+    # None → DEFAULT_ADHOC_TRACER_ENTRIES. Bounded server-side; the ring buffer
+    # costs ~50 bytes/entry of resident memory, so an unbounded value would be
+    # an OOM lever.
+    tracer_entries: int | None = None
+
+
+class TraceStatusResponse(SerializableModel):
+    enabled: bool
+    output_path: str | None
+    buffered_external_events: int
+
+
+class TraceStopResponse(SerializableModel):
+    output_path: str
+    backend_event_count: int
+    external_event_count: int
+
+
+def _adhoc_trace_dir(settings: SculptorSettings) -> Path:
+    return Path(settings.LOG_PATH) / "traces"
+
+
+@router.post("/api/v1/trace/start")
+def post_trace_start(
+    payload: TraceStartRequest,
+    settings: SculptorSettings = Depends(get_settings),
+) -> TraceStatusResponse:
+    """Arm viztracer on the running backend, writing to a fresh timestamped
+    file under ``{LOG_PATH}/traces``. 409 if a trace is already running.
+
+    Renderer / Electron-main events are only captured if the renderer learned
+    tracing was on at boot (it reads ``window.__SCULPTOR_TRACING__`` once);
+    a trace armed at runtime therefore captures backend Python only, which is
+    the point of this endpoint — profiling a live (e.g. production) backend
+    without a restart. Requires the session token (not exempt like
+    ``/trace/batch``)."""
+    if is_tracing_enabled():
+        raise HTTPException(
+            status_code=409,
+            detail="A trace is already running. Stop it first with POST /api/v1/trace/stop.",
+        )
+
+    tracer_entries = payload.tracer_entries if payload.tracer_entries is not None else DEFAULT_ADHOC_TRACER_ENTRIES
+    if tracer_entries <= 0 or tracer_entries > DEFAULT_TRACER_ENTRIES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"tracer_entries must be in 1..{DEFAULT_TRACER_ENTRIES}",
+        )
+
+    # Microsecond precision (%f), not just seconds: a stop-then-immediate-start
+    # within the same second would otherwise reuse this path, and stop's
+    # os.replace would silently overwrite the previous session's trace.
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    output_path = _adhoc_trace_dir(settings) / f"trace-{timestamp}.json"
+    start_tracing(output_path, tracer_entries=tracer_entries)
+    # Report the resolved path that start_tracing stored, so it matches what
+    # /trace/status and /trace/stop later report (start_tracing resolves it,
+    # e.g. /tmp -> /private/tmp on macOS).
+    resolved_path = get_trace_to_path()
+    logger.info("Ad-hoc trace armed, output -> {} (tracer_entries={})", resolved_path, tracer_entries)
+    return TraceStatusResponse(
+        enabled=True,
+        output_path=str(resolved_path),
+        buffered_external_events=get_buffered_external_event_count(),
+    )
+
+
+@router.post("/api/v1/trace/stop")
+def post_trace_stop() -> TraceStopResponse:
+    """Stop the running trace, flush the combined Chrome-JSON file to disk, and
+    return where it landed plus how much was captured. 409 if no trace is
+    running. The backend is left disarmed and ready to be armed again."""
+    if not is_tracing_enabled():
+        raise HTTPException(
+            status_code=409,
+            detail="No trace is running. Start one first with POST /api/v1/trace/start.",
+        )
+    result = stop_and_write_trace()
+    if result is None:
+        # Defensive: is_tracing_enabled() was true above, so a None here means
+        # the tracer state was torn down concurrently (e.g. process shutdown
+        # raced this request). Surface it rather than returning a bogus path.
+        raise HTTPException(status_code=409, detail="Trace was torn down before it could be written.")
+    logger.info("Ad-hoc trace written to {}", result.path)
+    return TraceStopResponse(
+        output_path=str(result.path),
+        backend_event_count=result.backend_event_count,
+        external_event_count=result.external_event_count,
+    )
+
+
+@router.get("/api/v1/trace/status")
+def get_trace_status() -> TraceStatusResponse:
+    """Report whether a trace is currently running and, if so, where it will be
+    written and how many external events are buffered so far."""
+    path = get_trace_to_path()
+    return TraceStatusResponse(
+        enabled=is_tracing_enabled(),
+        output_path=str(path) if path is not None else None,
+        buffered_external_events=get_buffered_external_event_count(),
+    )
+
+
+@router.get("/api/v1/debug/threads", response_class=PlainTextResponse)
+def get_debug_threads() -> PlainTextResponse:
+    """Dump a Python traceback for every live thread, as plain text.
+
+    Uses ``sys._current_frames()`` rather than ``faulthandler``/signals: it
+    reads Python frame objects and never walks the C stack, so it is safe with
+    greenlet (which manipulates the C stack for coroutine switching and makes
+    faulthandler's stack walk crash). A cheap, instant escape hatch for
+    inspecting a wedged backend without arming a full trace. Requires the
+    session token."""
+    chunks: list[str] = [
+        f"Thread dump at {datetime.datetime.now().isoformat()}\n",
+        "=" * 72 + "\n\n",
+    ]
+    thread_names = {t.ident: t.name for t in threading.enumerate()}
+    for thread_id, frame in sys._current_frames().items():
+        name = thread_names.get(thread_id, "<unknown>")
+        chunks.append(f"Thread {thread_id} ({name}):\n")
+        # traceback.format_stack returns lines that already end in "\n", so
+        # join them with "" — using "\n".join here would double every newline.
+        chunks.extend(traceback.format_stack(frame))
+        chunks.append("\n")
+    return PlainTextResponse("".join(chunks))
+
+
 # Dummy routes to include WebSocket types in OpenAPI schema
 
 
@@ -4398,6 +4546,7 @@ def _element_tags() -> ElementIDs:
 
 
 APP.include_router(router)
+APP.include_router(remote_repos_router)
 
 APP.add_middleware(SessionTokenMiddleware, settings_factory=get_settings)
 

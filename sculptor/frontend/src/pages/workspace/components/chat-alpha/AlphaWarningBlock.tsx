@@ -1,6 +1,6 @@
 import { Badge } from "@radix-ui/themes";
 import { ChevronRightIcon } from "lucide-react";
-import type { ReactElement } from "react";
+import type { KeyboardEvent, ReactElement } from "react";
 import { useState } from "react";
 
 import type { WarningBlock } from "~/api";
@@ -10,23 +10,25 @@ import styles from "./AlphaChatView.module.scss";
 export const AlphaWarningBlock = ({ block }: { block: WarningBlock }): ReactElement => {
   const [isExpanded, setIsExpanded] = useState(false);
   const warningLabel = block.warningType ? block.warningType.split(".").pop() : "Warning";
-  const hasContent = block.traceback && block.traceback.trim().length > 0;
+  const hasContent = block.traceback !== null && block.traceback.trim().length > 0;
+
+  const handleToggle = (): void => setIsExpanded((prev) => !prev);
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      handleToggle();
+    }
+  };
 
   return (
     <div className={styles.warningBlock}>
       <div
-        className={styles.warningHeader}
-        onClick={hasContent ? (): void => setIsExpanded((prev) => !prev) : undefined}
+        className={`${styles.warningHeader} ${hasContent ? styles.warningHeaderClickable : ""}`}
+        onClick={hasContent ? handleToggle : undefined}
         role={hasContent ? "button" : undefined}
         tabIndex={hasContent ? 0 : undefined}
-        onKeyDown={
-          hasContent
-            ? (e): void => {
-                if (e.key === "Enter" || e.key === " ") setIsExpanded((prev) => !prev);
-              }
-            : undefined
-        }
-        style={{ cursor: hasContent ? "pointer" : "default" }}
+        aria-expanded={hasContent ? isExpanded : undefined}
+        onKeyDown={hasContent ? handleKeyDown : undefined}
       >
         {hasContent && (
           <ChevronRightIcon size={12} className={isExpanded ? styles.chevronOpen : styles.chevronClosed} />

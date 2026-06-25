@@ -8,6 +8,8 @@ type PendingWrite = {
 
 const pendingWrites = new Map<string, PendingWrite>();
 
+const DEFAULT_DEBOUNCE_MS = 300;
+
 const flushPendingWrites = (): void => {
   for (const [key, { timeout, value }] of pendingWrites) {
     clearTimeout(timeout);
@@ -76,7 +78,7 @@ const readStoredValue = <T>(key: string, initialValue: T): T => {
 export const atomWithDebouncedStorage = <T>(
   key: string,
   initialValue: T,
-  delayMs = 300,
+  delayMs = DEFAULT_DEBOUNCE_MS,
 ): WritableAtom<T, [T | ((prev: T) => T)], void> => {
   // Wrapping in an object distinguishes "value has been set in this store"
   // (non-null) from "no write yet" (null). When null, the getter re-reads

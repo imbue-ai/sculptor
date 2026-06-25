@@ -14,6 +14,7 @@ from playwright.sync_api import expect
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.playwright_utils import add_agent_and_wait_for_ready
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -50,6 +51,39 @@ def test_create_second_agent_in_existing_workspace(
     # Verify the chat panel is visible for the new agent
     chat_panel = task_page.get_chat_panel()
     expect(chat_panel).to_be_visible()
+
+
+@user_story("to immediately chat with a newly added agent")
+def test_message_to_newly_added_agent_lands_on_that_agent(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """A message sent immediately after adding a second agent must reach the new
+    agent's chat, not the outgoing one.
+
+    Adding an agent switches to it asynchronously; typing before the switch
+    settles can leave the new agent's send button disabled or its editor
+    unmounted.  ``add_agent_and_wait_for_ready`` settles the switch, and this
+    test pins that the new agent receives the message and no copy leaks onto
+    the first.
+    """
+    page = sculptor_instance_.page
+    second_agent_message = "Hello from the second agent"
+
+    task_page = start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="New Agent Chat WS")
+    wait_for_completed_message_count(task_page.get_chat_panel(), expected_message_count=2)
+
+    task_page_2 = add_agent_and_wait_for_ready(page)
+    chat_panel_2 = task_page_2.get_chat_panel()
+    send_chat_message(chat_panel_2, second_agent_message)
+    wait_for_completed_message_count(chat_panel_2, expected_message_count=2)
+    expect(chat_panel_2.get_messages().filter(has_text=second_agent_message)).to_have_count(1)
+
+    # The message landed only on the new agent: switching back shows the first
+    # agent still has just its own single exchange and no copy of the message.
+    task_page.get_agent_tab_bar().get_agent_tabs().first.click()
+    first_agent_chat = task_page.get_chat_panel()
+    expect(first_agent_chat.get_messages()).to_have_count(2)
+    expect(first_agent_chat.get_messages().filter(has_text=second_agent_message)).to_have_count(0)
 
 
 @user_story("to see which agents share a workspace")

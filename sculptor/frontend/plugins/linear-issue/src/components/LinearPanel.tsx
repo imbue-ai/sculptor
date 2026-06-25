@@ -3,8 +3,10 @@ import { PanelHeader, useCurrentWorkspace, usePluginSetting } from "@sculptor/pl
 import { RefreshCw } from "lucide-react";
 import type { ReactElement } from "react";
 
+import { useExpandedIds } from "../linear/useExpandedIds.ts";
 import { useLinearTickets } from "../linear/useLinearTickets.ts";
 import { usePinnedIds } from "../linear/usePinnedIds.ts";
+import { useShortcut } from "../linear/useShortcut.ts";
 import { EmptyState } from "./EmptyState.tsx";
 import { QuickSearch } from "./QuickSearch.tsx";
 import { TicketSection } from "./TicketSection.tsx";
@@ -17,9 +19,26 @@ import { TicketSection } from "./TicketSection.tsx";
 export const LinearPanel = (): ReactElement => {
   const branch = useCurrentWorkspace((workspace) => workspace?.branch ?? null);
   const workspaceId = useCurrentWorkspace((workspace) => workspace?.id ?? null);
+  const pullRequestUrl = useCurrentWorkspace((workspace) => workspace?.pullRequestUrl ?? null);
   const [apiKey] = usePluginSetting("apiKey");
   const { pinnedIds, pin, unpin } = usePinnedIds(workspaceId);
-  const { tickets, isFetching, isError, error, refetch } = useLinearTickets({ apiKey, branch, pinnedIds });
+  const { overrides, setExpanded } = useExpandedIds(workspaceId);
+  // A separate map for each ticket's sub-issue disclosure, keyed by the same
+  // ticket identifier but namespaced so it can't collide with the section map.
+  const { overrides: subOverrides, setExpanded: setSubExpanded } = useExpandedIds(workspaceId, "subissues");
+  const { shortcutId, setShortcut, clearShortcut } = useShortcut(workspaceId);
+  const { tickets, isFetching, isError, error, refetch } = useLinearTickets({
+    apiKey,
+    branch,
+    pullRequestUrl,
+    pinnedIds,
+  });
+
+  // The effective shortcut: the explicit assignment, or — when none — the branch
+  // (primary) ticket, mirroring what the banner widget shows. Highlighting that
+  // ticket here keeps the panel and the widget pointing at the same issue.
+  const primaryId = tickets.find((ticket) => ticket.isPrimary)?.issue.identifier ?? null;
+  const effectiveShortcutId = shortcutId ?? primaryId;
 
   const refreshAction = apiKey ? (
     <IconButton size="1" variant="ghost" color="gray" onClick={() => refetch()} disabled={isFetching} title="Refresh">
@@ -31,15 +50,32 @@ export const LinearPanel = (): ReactElement => {
     if (tickets.length > 0) {
       return (
         <Flex direction="column" gap="2">
-          {tickets.map((ticket) => (
-            <TicketSection
-              // Include isPrimary so a ticket that becomes (or stops being) the
-              // workspace's primary remounts and re-derives its default open state.
-              key={`${ticket.issue.identifier}:${ticket.isPrimary}`}
-              ticket={ticket}
-              onUnpin={unpin}
-            />
-          ))}
+          {tickets.map((ticket) => {
+            const id = ticket.issue.identifier;
+            // A user toggle wins; otherwise open the primary, and open a lone
+            // ticket of any source so a single result is never left collapsed.
+            const defaultOpen = ticket.isPrimary || tickets.length === 1;
+            const isOpen = overrides[id] ?? defaultOpen;
+            // Sub-issues stay collapsed until asked for, keeping the body compact.
+            const subIssuesDefaultOpen = false;
+            const subIssuesOpen = subOverrides[id] ?? subIssuesDefaultOpen;
+            // Toggle: clear when this ticket is already the explicit override
+            // (reverting to the branch default), otherwise assign it.
+            const onToggleShortcut = (): void => (shortcutId === id ? clearShortcut() : setShortcut(id));
+            return (
+              <TicketSection
+                key={id}
+                ticket={ticket}
+                isOpen={isOpen}
+                onToggle={() => setExpanded(id, !isOpen, defaultOpen)}
+                subIssuesOpen={subIssuesOpen}
+                onToggleSubIssues={() => setSubExpanded(id, !subIssuesOpen, subIssuesDefaultOpen)}
+                onUnpin={unpin}
+                isShortcut={effectiveShortcutId === id}
+                onToggleShortcut={onToggleShortcut}
+              />
+            );
+          })}
         </Flex>
       );
     }

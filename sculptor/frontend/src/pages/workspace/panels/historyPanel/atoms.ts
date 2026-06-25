@@ -5,7 +5,7 @@ import { atomFamily } from "jotai/utils";
 export const expandedCommitsAtomFamily = atomFamily((_workspaceId: string) => atom<Set<string>>(new Set<string>()));
 
 /** Collapse all expanded commits. */
-export const collapseAllCommitsAtom = atom(null, (get, set, { workspaceId }: { workspaceId: string }) => {
+export const collapseAllCommitsAtom = atom(null, (get, set, { workspaceId }: { workspaceId: string }): void => {
   const expandedAtom = expandedCommitsAtomFamily(workspaceId);
   set(expandedAtom, new Set<string>());
 });
@@ -13,7 +13,7 @@ export const collapseAllCommitsAtom = atom(null, (get, set, { workspaceId }: { w
 /** Toggle a commit's expanded state. */
 export const toggleCommitExpandedAtom = atom(
   null,
-  (get, set, { workspaceId, commitHash }: { workspaceId: string; commitHash: string }) => {
+  (get, set, { workspaceId, commitHash }: { workspaceId: string; commitHash: string }): void => {
     const expandedAtom = expandedCommitsAtomFamily(workspaceId);
     const current = get(expandedAtom);
     const next = new Set(current);

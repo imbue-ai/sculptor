@@ -54,6 +54,11 @@
   flex-shrink: 0;
 }
 
+.iconNeutral {
+  color: var(--accent-9);
+  flex-shrink: 0;
+}
+
 /* Text */
 .label {
   color: var(--accent-11);
@@ -69,7 +74,6 @@
 
 .optionalTag {
   color: var(--accent-8);
-  font-style: italic;
 }
 
 .chevron {

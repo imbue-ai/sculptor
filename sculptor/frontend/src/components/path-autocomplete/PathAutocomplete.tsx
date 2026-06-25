@@ -23,6 +23,7 @@ type PathAutocompleteProps = {
   onValueChange?: (value: string) => void;
   inputTestId?: string;
   autoFocus?: boolean;
+  suffix?: string;
 };
 
 /**
@@ -61,6 +62,7 @@ export const PathAutocomplete = ({
   onValueChange: controlledOnValueChange,
   inputTestId,
   autoFocus = false,
+  suffix,
 }: PathAutocompleteProps): ReactElement => {
   const [internalValue, setInternalValue] = useState<string>("");
   const inputValue = controlledValue ?? internalValue;
@@ -78,6 +80,10 @@ export const PathAutocomplete = ({
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const fetchIdRef = useRef(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  // Keep a ref in sync with isOpen so the document-level listeners below read the
+  // latest value without re-subscribing. Synced in an effect (not during render)
+  // to satisfy the refs lint; the listeners only fire on user interaction, well
+  // after commit, so the ref is never observed stale — see the "latest ref" pattern.
   const isOpenRef = useRef(isOpen);
   useEffect(() => {
     isOpenRef.current = isOpen;
@@ -109,7 +115,7 @@ export const PathAutocomplete = ({
 
             // Detect home directory prefix from first tilde-based query
             if (path.startsWith("~") && results.length > 0 && homeDirPrefix === undefined) {
-              const detected = detectHomeDirPrefix(path, results[0].path);
+              const detected = detectHomeDirPrefix({ inputPath: path, firstResultPath: results[0].path });
               if (detected !== undefined) {
                 setHomeDirPrefix(detected);
               }
@@ -180,7 +186,13 @@ export const PathAutocomplete = ({
           closeDropdown();
           onSubmit(submittedPath);
         } else if (!isOpen && submittedPath) {
+          // We're consuming this Enter as the autocomplete's submit — stop it
+          // from bubbling. Inside a Radix Select dropdown the bubbled Enter
+          // re-fires onValueChange on the highlighted item, which in the
+          // Add Repository flow can close the dialog and reopen it via
+          // setIsAddDialogOpen(true) — wiping the user's source selection.
           e.preventDefault();
+          e.stopPropagation();
           onSubmit(submittedPath);
           setInputValue("");
         }
@@ -258,16 +270,23 @@ export const PathAutocomplete = ({
         ref={rootRef}
         onKeyDown={handleKeyDown}
       >
-        <Command.Input
-          className={styles.input}
-          value={inputValue}
-          onValueChange={handleInputChange}
-          onFocus={handleFocus}
-          placeholder={placeholder}
-          disabled={disabled}
-          data-testid={inputTestId}
-          autoFocus={autoFocus}
-        />
+        <div className={styles.inputWrapper} data-has-suffix={suffix ? "true" : "false"}>
+          <Command.Input
+            className={styles.input}
+            value={inputValue}
+            onValueChange={handleInputChange}
+            onFocus={handleFocus}
+            placeholder={placeholder}
+            disabled={disabled}
+            data-testid={inputTestId}
+            autoFocus={autoFocus}
+          />
+          {suffix && (
+            <span className={styles.suffix} aria-hidden="true">
+              {suffix}
+            </span>
+          )}
+        </div>
         {isDropdownVisible && (
           <Command.List className={styles.list}>
             {isLoading && items.length === 0 && (
@@ -280,7 +299,7 @@ export const PathAutocomplete = ({
             )}
             {items.length > 0 && (
               <>
-                <ScrollArea type="hover" scrollbars="vertical" style={{ maxHeight: 240 }}>
+                <ScrollArea type="hover" scrollbars="vertical" className={styles.scrollArea}>
                   {items.map((entry) => (
                     <PathItem key={entry.path} entry={entry} homeDirPrefix={homeDirPrefix} onSelect={handleSelect} />
                   ))}

@@ -13,38 +13,34 @@ const handleBranchChange = (branch: string): void => {
   console.log("Target branch changed:", branch);
 };
 
-type MrState = "none" | "open" | "loading";
+type PrState = "none" | "open" | "loading";
 
 type StoryProps = {
   currentBranch: string;
   targetBranch: string;
-  gitProvider: "gitlab" | "github";
-  mrState: MrState;
-  /** Whether an MR exists on a different target branch */
-  hasMismatchedMr: boolean;
-  /** The MR iid of the mismatched MR */
-  mismatchedMrIid: number;
-  /** The branch the mismatched MR actually targets */
-  mismatchedMrTarget: string;
+  prState: PrState;
+  /** Whether a PR exists on a different target branch */
+  hasMismatchedPr: boolean;
+  /** The number of the mismatched PR */
+  mismatchedPrNumber: number;
+  /** The branch the mismatched PR actually targets */
+  mismatchedPrTarget: string;
 };
 
 // Static mock of AssignPrButton from PrButton.tsx — the real component uses
 // Jotai atoms and chat actions that aren't available in Storybook. If the real
 // component's UI changes, this mock needs to be updated to match.
-const AssignMrButton = ({ gitProvider }: { gitProvider: "gitlab" | "github" }): ReactElement => {
-  const isGitLab = gitProvider === "gitlab";
-  const assignLabel = isGitLab ? "Assign MR" : "Assign PR";
-
+const AssignPrButton = (): ReactElement => {
   return (
     <div className={prStyles.assignButton}>
       <span
         role="button"
         tabIndex={0}
         className={prStyles.assignMainArea}
-        onClick={() => console.log("Assign MR clicked")}
+        onClick={() => console.log("Assign PR clicked")}
       >
         <GitMergeIcon size={12} className={prStyles.assignMergeIcon} />
-        <Text size="1">{assignLabel}</Text>
+        <Text size="1">Assign PR</Text>
       </span>
     </div>
   );
@@ -62,20 +58,15 @@ const DiffSummaryMock = (): ReactElement => (
 const BannerShell = ({
   currentBranch,
   targetBranch,
-  gitProvider,
-  mrState,
-  hasMismatchedMr,
-  mismatchedMrIid,
-  mismatchedMrTarget,
+  prState,
+  hasMismatchedPr,
+  mismatchedPrNumber,
+  mismatchedPrTarget,
 }: StoryProps): ReactElement => {
-  const isGitLab = gitProvider === "gitlab";
-  const prefix = isGitLab ? "!" : "#";
-  const label = isGitLab ? "MR" : "PR";
-  const createLabel = isGitLab ? "Create MR" : "Create PR";
-  const isMismatch = hasMismatchedMr && mrState === "none";
+  const isMismatch = hasMismatchedPr && prState === "none";
 
   const tooltipContent = isMismatch
-    ? `Retarget to origin/${mismatchedMrTarget} — ${label} ${prefix}${mismatchedMrIid} targets this branch`
+    ? `Retarget to origin/${mismatchedPrTarget} — PR #${mismatchedPrNumber} targets this branch`
     : "Target branch";
 
   return (
@@ -100,13 +91,13 @@ const BannerShell = ({
               mismatch={
                 isMismatch
                   ? {
-                      targetBranch: mismatchedMrTarget,
+                      targetBranch: mismatchedPrTarget,
                       badge: {
-                        text: `${label} ${prefix}${mismatchedMrIid}`,
-                        tooltip: `Open ${label} targets this branch`,
+                        text: `PR #${mismatchedPrNumber}`,
+                        tooltip: `Open PR targets this branch`,
                       },
                     }
-                  : null
+                  : undefined
               }
             />
           </span>
@@ -117,14 +108,14 @@ const BannerShell = ({
         <DiffSummaryMock />
 
         {isMismatch ? (
-          <AssignMrButton gitProvider={gitProvider} />
+          <AssignPrButton />
         ) : (
           <>
-            {mrState === "none" && (
+            {prState === "none" && (
               <div className={prStyles.createSplitButton}>
                 <span role="button" tabIndex={0} className={prStyles.createMainArea}>
                   <PlusIcon size={12} className={prStyles.plusIcon} />
-                  <Text size="1">{createLabel}</Text>
+                  <Text size="1">Create PR</Text>
                 </span>
                 <span className={prStyles.createChevronArea}>
                   <ChevronDownIcon />
@@ -132,12 +123,10 @@ const BannerShell = ({
               </div>
             )}
 
-            {mrState === "open" && (
+            {prState === "open" && (
               <div className={prStyles.openButton}>
                 <span role="button" tabIndex={0} className={prStyles.prNumberArea}>
-                  <Text size="1">
-                    {label} {prefix}847
-                  </Text>
+                  <Text size="1">PR #847</Text>
                   <span className={`${prStyles.statusDot} ${prStyles.dotPassed}`} />
                   <span className={`${prStyles.statusDot} ${prStyles.dotPending}`} />
                 </span>
@@ -147,9 +136,9 @@ const BannerShell = ({
               </div>
             )}
 
-            {mrState === "loading" && (
+            {prState === "loading" && (
               <div className={prStyles.loadingButton}>
-                <Text size="1">Checking {label}...</Text>
+                <Text size="1">Checking PR...</Text>
               </div>
             )}
           </>
@@ -165,20 +154,15 @@ const meta = {
   args: {
     currentBranch: "dev/fix/auth-flow",
     targetBranch: "origin/develop",
-    gitProvider: "gitlab",
-    mrState: "none",
-    hasMismatchedMr: false,
-    mismatchedMrIid: 847,
-    mismatchedMrTarget: "main",
+    prState: "none",
+    hasMismatchedPr: false,
+    mismatchedPrNumber: 847,
+    mismatchedPrTarget: "main",
   },
   argTypes: {
-    mrState: {
+    prState: {
       control: "select",
       options: ["none", "open", "loading"],
-    },
-    gitProvider: {
-      control: "select",
-      options: ["gitlab", "github"],
     },
   },
   parameters: {
@@ -191,50 +175,38 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Normal state — no MR exists, target matches intent. */
-export const CreateMr: Story = {
+/** Normal state — no PR exists, target matches intent. */
+export const CreatePr: Story = {
   args: {
-    mrState: "none",
-    hasMismatchedMr: false,
+    prState: "none",
+    hasMismatchedPr: false,
   },
 };
 
-/** An open MR exists and the target matches the workspace target. */
-export const OpenMr: Story = {
+/** An open PR exists and the target matches the workspace target. */
+export const OpenPr: Story = {
   args: {
     targetBranch: "origin/main",
-    mrState: "open",
-    hasMismatchedMr: false,
+    prState: "open",
+    hasMismatchedPr: false,
   },
 };
 
-/** MR exists on different target — amber target branch + "Assign MR" button. */
-export const MismatchedMrResting: Story = {
+/** PR exists on different target — amber target branch + "Assign PR" button. */
+export const MismatchedPr: Story = {
   args: {
     targetBranch: "origin/develop",
-    mrState: "none",
-    hasMismatchedMr: true,
-    mismatchedMrIid: 847,
-    mismatchedMrTarget: "main",
+    prState: "none",
+    hasMismatchedPr: true,
+    mismatchedPrNumber: 312,
+    mismatchedPrTarget: "main",
   },
 };
 
-/** GitHub variant — amber target + "Assign PR". */
-export const MismatchedPrGitHub: Story = {
-  args: {
-    targetBranch: "origin/develop",
-    gitProvider: "github",
-    mrState: "none",
-    hasMismatchedMr: true,
-    mismatchedMrIid: 312,
-    mismatchedMrTarget: "main",
-  },
-};
-
-/** Loading state while checking MR status. */
+/** Loading state while checking PR status. */
 export const Loading: Story = {
   args: {
-    mrState: "loading",
-    hasMismatchedMr: false,
+    prState: "loading",
+    hasMismatchedPr: false,
   },
 };

@@ -11,10 +11,10 @@ import styles from "./Toast.module.scss";
 
 // eslint-disable-next-line react-refresh/only-export-components -- enum-style const shared with non-component code
 export const ToastType = {
-  DEFAULT: "DEFAULT",
-  SUCCESS: "SUCCESS",
-  ERROR: "ERROR",
-  WARNING: "WARNING",
+  DEFAULT: "default",
+  SUCCESS: "success",
+  ERROR: "error",
+  WARNING: "warning",
   ERROR_PROMINENT: "errorProminent",
 } as const;
 

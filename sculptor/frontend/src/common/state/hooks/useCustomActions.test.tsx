@@ -1,7 +1,6 @@
 import type { RenderHookResult } from "@testing-library/react";
 import { act, renderHook } from "@testing-library/react";
-import { createStore } from "jotai";
-import { Provider } from "jotai";
+import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

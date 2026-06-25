@@ -68,14 +68,14 @@ class WorkspaceTargetBranchesInfo(SerializableModel):
 
 
 class PrApproval(SerializableModel):
-    """A reviewer's approval status on a pull/merge request."""
+    """A reviewer's approval status on a pull request."""
 
     name: str
     approved: bool
 
 
 class PrComment(SerializableModel):
-    """An unresolved comment on a pull/merge request."""
+    """An unresolved comment on a pull request."""
 
     author: str
     file_path: str
@@ -101,7 +101,7 @@ class PrStatusInfo(SerializableModel):
     error_category: (
         Literal["cli_missing", "not_authenticated", "no_access", "network_error", "rate_limited", "transient"] | None
     ) = None
-    error_provider: Literal["gitlab", "github"] | None = None
+    error_provider: Literal["github"] | None = None
     error_message: str | None = None
     mismatched_pr_iid: int | None = None
     mismatched_pr_target_branch: str | None = None
@@ -112,7 +112,7 @@ class PrStatusInfoCleared(SerializableModel):
     """Sentinel pushed to the stream to clear a workspace's PR status on the frontend.
 
     When the workspace branch changes, the old PR status is stale. This signal
-    causes the frontend atom to be set to null, showing "Checking MR/PR..." until
+    causes the frontend atom to be set to null, showing "Checking PR..." until
     the next poll result arrives.
     """
 
@@ -444,7 +444,6 @@ class RepoInfo(SerializableModel):
     current_branch: str
     recent_branches: list[str]
     project_id: ProjectID
-    is_gitlab_origin: bool = False
     is_github_origin: bool = False
     remote_branches: list[str] = Field(default_factory=list)
 
@@ -668,10 +667,16 @@ class AuthStartResult(SerializableModel):
     On a machine with a usable local browser the CLI completes the loopback flow
     on its own and no code is needed — that case returns ``success=True`` with
     ``needs_code=False``.
+
+    Some tools (e.g. ``gh``) use a browser *device flow* instead: start returns
+    ``auth_url`` plus a ``user_code`` for the user to enter at that URL, then the
+    CLI polls and completes on its own — no code is pasted back (so ``needs_code``
+    stays ``False``); the frontend watches the dependency status for completion.
     """
 
     auth_url: str | None = None
     needs_code: bool = False
+    user_code: str | None = None
     success: bool = False
     error: str | None = None
 
@@ -689,6 +694,50 @@ class DependenciesStatus(SerializableModel):
     git: DependencyInfo
     claude: DependencyInfo
     pi: DependencyInfo
+    gh: DependencyInfo
+
+
+class RemoteRepo(SerializableModel):
+    """A repository listed from GitHub."""
+
+    full_name: str
+    clone_url: str
+    ssh_url: str
+    is_private: bool
+    pushed_at: str | None = None
+    description: str | None = None
+
+
+class RemoteCloneRequest(RequestModel):
+    """Request to clone a remote repository into a local directory."""
+
+    provider: Literal["github"]
+    url: str
+    target_dir: str
+    name: str
+    # When the user picked from the repo list (not the manual-URL form), we
+    # also send the `owner/repo` slug. The backend prefers passing this to
+    # `gh repo clone`, which then picks the protocol from the user's CLI
+    # config rather than forcing the protocol embedded in the URL.
+    full_name: str | None = None
+
+
+class RemoteCloneResponse(SerializableModel):
+    """Path of the newly-cloned repository on the backend host."""
+
+    project_path: str
+
+
+class CloneDefaults(SerializableModel):
+    """Backend-owned defaults for the Add Repository → GitHub clone flow.
+
+    ``default_clones_dir`` is the absolute parent dir (``<sculptor_folder>/repos``)
+    the dialog pre-fills the Target Folder with. Only the backend knows the real
+    sculptor folder, which varies by deployment (dev ``.dev_sculptor``, packaged
+    ``~/.sculptor``, hosted ``$SCULPTOR_FOLDER``).
+    """
+
+    default_clones_dir: str
 
 
 class WorkspaceSetupStatus(SerializableModel):

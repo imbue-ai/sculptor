@@ -1,4 +1,4 @@
-import { Button, Flex, Text } from "@radix-ui/themes";
+import { Button, Flex, Link, Text, Tooltip } from "@radix-ui/themes";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -13,6 +13,7 @@ import {
   updateUserConfig,
 } from "~/api";
 import { HTTPException } from "~/common/Errors.ts";
+import { getBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { useInterval } from "~/common/useInterval.ts";
 import { usePollingInterval } from "~/common/usePollingInterval.ts";
@@ -20,6 +21,9 @@ import { usePollingInterval } from "~/common/usePollingInterval.ts";
 import { DependencyCard } from "./DependencyCard.tsx";
 import type { DependencyStatus } from "./dependencyTypes.ts";
 import styles from "./OnboardingWizard.module.scss";
+
+// Normal cadence for re-checking dependency status while not actively installing.
+const NORMAL_POLL_INTERVAL_MS = 30_000;
 
 const deriveClaudeStatus = (
   info: DependencyInfo | undefined,
@@ -57,6 +61,15 @@ const deriveGitStatus = (info: DependencyInfo | undefined): DependencyStatus => 
   return { state: "installed", path: info.path ?? "—", version: info.version ?? "—", isOverride: info.isOverride };
 };
 
+const deriveOptionalCliStatus = (info: DependencyInfo | undefined): DependencyStatus => {
+  if (!info) return { state: "loading" };
+  if (!info.installed) return { state: "not-installed" };
+  if (info.isAuthenticated === false) {
+    return { state: "needs-auth", path: info.path ?? "—", version: info.version ?? "—" };
+  }
+  return { state: "installed", path: info.path ?? "—", version: info.version ?? "—", isOverride: info.isOverride };
+};
+
 type InstallationStepProps = {
   onComplete: () => void;
   isLoading: boolean;
@@ -66,7 +79,7 @@ type InstallationStepProps = {
 /** The InstallationStep is the second step of the OnboardingWizard where we verify that users have
  * the necessary dependencies installed.
  *
- * It is a key requirement of this page to track the appropriate PostHog events granurlaly as users complete the verious
+ * It is a key requirement of this page to track the appropriate PostHog events granularly as users complete the various
  * steps so that we can identify where users are dropping off in the onboarding process.
  */
 export const InstallationStep = ({ onComplete, isLoading, error }: InstallationStepProps): ReactElement => {
@@ -82,6 +95,11 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
   // "open this link, then paste the code" UI for headless/remote deployments.
   const [authUrl, setAuthUrl] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  // gh device-flow sign-in state: the one-time code + verification URL shown on
+  // the gh card while we poll for the user to authorize in their browser.
+  const [ghAuthUrl, setGhAuthUrl] = useState<string | null>(null);
+  const [ghUserCode, setGhUserCode] = useState<string | null>(null);
+  const [ghAuthError, setGhAuthError] = useState<string | null>(null);
   const [isRechecking, setIsRechecking] = useState(false);
   const { startPolling, stopPolling } = usePollingInterval();
 
@@ -208,8 +226,47 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
     }
   };
 
+  // gh sign-in: a browser device flow. Start returns a one-time code + URL; the
+  // user enters the code at github.com/login/device and gh completes on its own,
+  // so we poll the dependency status until gh reports authenticated (no paste-back).
+  const triggerGhAuth = async (): Promise<void> => {
+    setGhAuthError(null);
+    setGhAuthUrl(null);
+    setGhUserCode(null);
+    try {
+      const response = await startDependencyAuth({ query: { tool: "GH" } });
+      if (response.data?.success) {
+        await loadDependencies();
+        return;
+      }
+
+      if (response.data?.authUrl && response.data?.userCode) {
+        setGhAuthUrl(response.data.authUrl);
+        setGhUserCode(response.data.userCode);
+        startPolling(async () => {
+          try {
+            const { data: newDeps } = await getDependenciesStatus({ meta: { skipWsAck: true } });
+            if (newDeps) setDependencies(newDeps);
+            if (newDeps?.gh?.isAuthenticated === true) {
+              stopPolling();
+            }
+          } catch {
+            // Keep polling on a transient error.
+          }
+        });
+        return;
+      }
+      setGhAuthError(response.data?.error ?? "Sign-in failed. Please try again.");
+    } catch (err) {
+      setGhAuthError(err instanceof Error ? err.message : "Sign-in failed. Please try again.");
+    }
+  };
+
   // Initial load
   useEffect(() => {
+    // Genuine mount-time fetch from the backend; the synchronous setState is
+    // only the loading flag flip on an external-system sync, not derived state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadDependencies();
   }, [loadDependencies]);
 
@@ -222,6 +279,9 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
       dependencies.claude.mode === "MANAGED" &&
       (!dependencies.claude.installed || dependencies.claude.isVersionInRange === false)
     ) {
+      // Reactive to backend-polled `dependencies`, not a user action, so this
+      // install-kickoff side effect can't move to an event handler.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       triggerInstall();
     }
   }, [dependencies, hasTriggeredInstall, isInstalling, triggerInstall]);
@@ -232,16 +292,35 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
     if (!isDependenciesLoading && !isInstalling) {
       loadDependencies(true);
     }
-  }, 30_000);
+  }, NORMAL_POLL_INTERVAL_MS);
 
   // Dismiss the sign-in prompt once Claude reports authenticated — e.g. when a
   // local loopback login completed in the background and the poll picked it up.
+  // Derived during render so there's no extra render cycle (and no stale frame
+  // showing the prompt) when the background poll reports success.
+  const isClaudeAuthenticated = dependencies?.claude?.isAuthenticated === true;
+  const displayedAuthUrl = isClaudeAuthenticated ? null : authUrl;
+  const displayedAuthError = isClaudeAuthenticated ? null : authError;
+
+  // Hide the gh device-flow prompt once gh reports authenticated (the poll in
+  // triggerGhAuth, or the background 30s poll, picked up the completed sign-in).
+  // Derived during render so there's no extra render cycle (and no stale frame
+  // showing the prompt) when the background poll reports success.
+  const isGhAuthenticated = dependencies?.gh?.isAuthenticated === true;
+  const displayedGhAuthUrl = isGhAuthenticated ? null : ghAuthUrl;
+  const displayedGhUserCode = isGhAuthenticated ? null : ghUserCode;
+  const displayedGhAuthError = isGhAuthenticated ? null : ghAuthError;
+
+  // Tear down the device-flow poll once gh authenticates. The prompt is already
+  // hidden via the derived values above; this only stops the interval (a
+  // genuine external-system side effect, idempotent). The device-flow poll also
+  // stops itself, so this just covers the case where the background 30s poll is
+  // what flips the flag.
   useEffect(() => {
-    if (authUrl && dependencies?.claude?.isAuthenticated === true) {
-      setAuthUrl(null);
-      setAuthError(null);
+    if (ghAuthUrl && isGhAuthenticated) {
+      stopPolling();
     }
-  }, [authUrl, dependencies?.claude?.isAuthenticated]);
+  }, [ghAuthUrl, isGhAuthenticated, stopPolling]);
 
   /* We can only submit if all the dependencies are installed, in range, and authenticated */
   const canSubmit = (): boolean => {
@@ -274,7 +353,7 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
     return (): void => window.removeEventListener("keydown", handleKeyDown);
   });
 
-  const handleOverride = async (depKey: "claude" | "git", path: string): Promise<void> => {
+  const handleOverride = async (depKey: "claude" | "git" | "gh", path: string): Promise<void> => {
     const { data: currentConfig } = await getUserConfig({ meta: { skipWsAck: true } });
     if (!currentConfig) throw new Error("Config not loaded");
 
@@ -314,6 +393,8 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
     installError ?? backendInstallError,
   );
   const gitStatus = deriveGitStatus(dependencies?.git);
+  const ghStatus = deriveOptionalCliStatus(dependencies?.gh);
+  const canInstallOptionalClis = getBackendCapabilities().canSelectLocalDir;
 
   const claudeMode = dependencies?.claude?.mode ?? null;
   const claudeModeControls =
@@ -330,7 +411,7 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
         The following are required to use Sculptor
       </Text>
 
-      {/* Dependencies Section */}
+      {/* Required dependencies */}
       <Flex direction="column" gap="3">
         <DependencyCard
           name="Claude Code CLI"
@@ -342,8 +423,8 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
           onModeSwitch={handleModeSwitch}
           modeControls={claudeModeControls}
           onAuthenticate={triggerAuth}
-          authUrl={authUrl}
-          authError={authError}
+          authUrl={displayedAuthUrl}
+          authError={displayedAuthError}
           onSubmitAuthCode={submitAuthCode}
           onApplyOverride={(path) => handleOverride("claude", path)}
           installProgress={dependencies?.claude?.installProgress ?? null}
@@ -359,6 +440,55 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
         />
       </Flex>
 
+      {/* Optional CLI for cloning from GitHub. Hidden in web-remote mode since
+          the user can't install binaries on the backend host. */}
+      {canInstallOptionalClis && (
+        <>
+          <Text size="2" mt="2" color="gray">
+            Recommended for{" "}
+            <Tooltip
+              content={
+                <Flex direction="column" gap="2" style={{ maxWidth: 280 }}>
+                  <Text size="2" weight="medium">
+                    Sculptor uses gh (GitHub CLI) to:
+                  </Text>
+                  <Flex direction="column" gap="1">
+                    <Text size="1">• Create projects from your GitHub repos</Text>
+                    <Text size="1">• Create workspaces from your remote branches</Text>
+                    <Text size="1">• Warn when local and remote diverge</Text>
+                  </Flex>
+                  <Button asChild size="1" variant="surface" mt="1">
+                    <a href="https://github.com/cli/cli#installation" target="_blank" rel="noreferrer">
+                      Read GitHub CLI docs
+                    </a>
+                  </Button>
+                </Flex>
+              }
+            >
+              <Link href="https://github.com/cli/cli#installation" target="_blank" className={styles.inlineLink}>
+                GitHub
+              </Link>
+            </Tooltip>
+          </Text>
+          <Flex direction="column" gap="3">
+            <DependencyCard
+              name="GitHub CLI"
+              cliName="gh"
+              optional
+              status={ghStatus}
+              installUrl="https://github.com/cli/cli#installation"
+              brewPackage="gh"
+              helpText="Used to clone GitHub repos from inside Sculptor."
+              onApplyOverride={(path) => handleOverride("gh", path)}
+              onAuthenticate={triggerGhAuth}
+              authUrl={displayedGhAuthUrl}
+              userCode={displayedGhUserCode}
+              authError={displayedGhAuthError}
+            />
+          </Flex>
+        </>
+      )}
+
       {error && (
         <Text size="2" color={dangerColor} className={styles.error}>
           {error}
@@ -372,26 +502,23 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
       )}
 
       <Flex mt="1">
-        <Text size="2" style={{ color: "var(--accent-10)" }}>
-          {isRechecking ? (
-            "Checking…"
-          ) : (
-            <>
-              Click{" "}
-              <Text
-                className={styles.recheckLink}
-                onClick={async () => {
-                  setIsRechecking(true);
-                  await loadDependencies(true);
-                  setIsRechecking(false);
-                }}
-              >
-                here
-              </Text>{" "}
-              to check again
-            </>
-          )}
-        </Text>
+        {isRechecking ? (
+          <Text size="2" style={{ color: "var(--accent-10)" }}>
+            Checking…
+          </Text>
+        ) : (
+          <Text
+            size="2"
+            className={styles.inlineLink}
+            onClick={async () => {
+              setIsRechecking(true);
+              await loadDependencies(true);
+              setIsRechecking(false);
+            }}
+          >
+            Click to check again
+          </Text>
+        )}
       </Flex>
 
       <Button

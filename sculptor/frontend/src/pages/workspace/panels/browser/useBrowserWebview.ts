@@ -33,13 +33,21 @@ export const useBrowserWebview = (
   // slot. The ref holds the running value so partial updates can merge.
   const statusRef = useRef<BrowserViewStatus>({ ...INITIAL_STATUS, currentUrl: initialUrl });
 
+  // A navigation requested before the guest <webview> has fired did-attach.
+  // loadURL throws "WebView must be attached to the DOM and the dom-ready
+  // event emitted" until then, so navigate() stashes the URL here instead of
+  // losing it, and handleDidAttach replays it once the guest attaches.
+  const pendingNavigationUrlRef = useRef<string | null>(null);
+
   // Latest-ref pattern: the event-listener effect runs once with [], so it
   // captures the originally-passed callbacks. Reading via ref keeps it
   // pointing at the most recent props on every event.
   const onUrlChangeRef = useRef(onUrlChange);
-  onUrlChangeRef.current = onUrlChange;
   const setStatusRef = useRef(setStatus);
-  setStatusRef.current = setStatus;
+  useEffect(() => {
+    onUrlChangeRef.current = onUrlChange;
+    setStatusRef.current = setStatus;
+  });
 
   useEffect(() => {
     const webview = webviewRef.current;
@@ -88,6 +96,14 @@ export const useBrowserWebview = (
       const id = webview.getWebContentsId();
       setWebContentsId(id);
       publishStatus({ webContentsId: id });
+      // Replay a navigation requested before the guest attached (loadURL
+      // would have thrown then). This also overrides the initial
+      // src="about:blank" load so the user's first typed URL wins.
+      const pendingUrl = pendingNavigationUrlRef.current;
+      if (pendingUrl !== null) {
+        pendingNavigationUrlRef.current = null;
+        webview.loadURL(pendingUrl).catch(() => {});
+      }
     };
 
     webview.addEventListener("did-navigate", handleDidNavigate);
@@ -139,7 +155,15 @@ export const useBrowserWebview = (
 
   const navigate = useCallback((url: string): void => {
     const webview = webviewRef.current;
-    if (!webview) return;
+    // Until the guest has fired did-attach (webContentsId still null),
+    // loadURL throws and the navigation is silently lost. Stash the URL so
+    // handleDidAttach can replay it once the guest attaches — mirroring the
+    // agent-command gate in BrowserViewSlot. Last write wins, so the user's
+    // most recent typed URL is the one that loads.
+    if (!webview || statusRef.current.webContentsId === null) {
+      pendingNavigationUrlRef.current = url;
+      return;
+    }
     webview.loadURL(url).catch(() => {});
   }, []);
 

@@ -226,17 +226,15 @@ const Section = ({ id, title, children }: { id: string; title: string; children:
 );
 
 const ComponentBlock = ({
-  id,
   name,
   description,
   children,
 }: {
-  id?: string;
   name: string;
   description: string;
   children: ReactNode;
 }): ReactElement => (
-  <div id={id} className={styles.componentBlock}>
+  <div className={styles.componentBlock}>
     <h3 className={styles.componentName}>{name}</h3>
     <p className={styles.componentDescription}>{description}</p>
     <div className={styles.componentPreview}>
@@ -631,7 +629,7 @@ const ThemeControls = ({
         onChange={(panelBackground) => onSettingsChange({ panelBackground })}
       />
 
-      <Flex direction="column" gap="1">
+      <Flex direction="column" gap="2">
         <Text size="1" color="gray" weight="medium">
           Mode
         </Text>

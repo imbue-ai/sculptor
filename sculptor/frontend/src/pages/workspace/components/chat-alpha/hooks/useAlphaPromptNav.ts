@@ -91,9 +91,13 @@ export const useAlphaPromptNav = (
 
   // Route the (possibly-undefined) controller methods through a ref so every
   // useCallback below has stable deps even though the parent re-creates the
-  // `activePromptIndex` object on every render.
+  // `activePromptIndex` object on every render. The ref is read only inside
+  // callbacks, never during render, so syncing it in an effect keeps render
+  // pure without changing behavior.
   const controllerRef = useRef(activePromptIndex);
-  controllerRef.current = activePromptIndex;
+  useEffect(() => {
+    controllerRef.current = activePromptIndex;
+  });
   const fallbackActiveRef = useRef(-1);
   const activeRef = activePromptIndex?.ref ?? fallbackActiveRef;
   const setActiveIndex = useCallback((i: number): void => {
@@ -153,7 +157,7 @@ export const useAlphaPromptNav = (
 
   const focusChatInput = useCallback((): void => {
     const inputContainer = document.getElementById(CHAT_INPUT_ELEMENT_ID);
-    const editable = inputContainer?.querySelector("[contenteditable]") as HTMLElement | null;
+    const editable = inputContainer?.querySelector<HTMLElement>("[contenteditable]");
     editable?.focus();
   }, []);
 
@@ -181,8 +185,12 @@ export const useAlphaPromptNav = (
     [userPromptIndices, virtualizer, applyHighlight, setIsSuppressed, setActiveIndex, setIsNavigating],
   );
 
-  // Exit navigation if messages shrink to no user prompts (e.g. agent switch)
+  // Exit navigation if messages shrink to no user prompts (e.g. agent switch).
+  // exitNavigation is an imperative teardown (DOM focus + class removal + a
+  // parent setIsSuppressed callback) that must run as a side effect, not during
+  // render; its setIsNavigating(false) is an inseparable part of that teardown.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- genuine teardown sync (DOM focus + parent callback), not derivable during render
     if (isNavigating && userPromptIndices.length === 0) exitNavigation();
   }, [isNavigating, userPromptIndices, exitNavigation]);
 
@@ -220,7 +228,7 @@ export const useAlphaPromptNav = (
         // position of the editor so we don't hijack normal cursor movement
         // inside a multi-line input.
         if (!isNavigating && isInputFocused) {
-          const editable = inputContainer?.querySelector("[contenteditable]") as HTMLElement | null;
+          const editable = inputContainer?.querySelector<HTMLElement>("[contenteditable]");
           if (!editable || !isCaretAtVeryStart(editable)) return;
         }
 

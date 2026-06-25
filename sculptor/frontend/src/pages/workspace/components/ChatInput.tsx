@@ -79,6 +79,13 @@ import { SettingsSection } from "../../settings/sections.ts";
 import { stripHtml } from "../utils/utils.ts";
 import styles from "./ChatInput.module.scss";
 
+// Allow extra time for the context-reset round trip, which discards the session.
+const CLEAR_CONTEXT_TIMEOUT_MS = 30_000;
+// HTTP 409 from `/btw` means there's no live session to fork from yet.
+const HTTP_STATUS_CONFLICT = 409;
+// Delay before the mention-picker tooltip appears, to avoid flicker on hover.
+const MENTION_TOOLTIP_DELAY_MS = 500;
+
 /**
  * Cheap predicate used to decide whether the SendButton / handleSend should
  * bypass the main-busy lock for a `/btw` draft. The authoritative parsing
@@ -246,7 +253,7 @@ export const ChatInput = ({
           try {
             await clearWorkspaceAgentContext({
               path: { workspace_id: workspaceID, agent_id: taskID! },
-              meta: { wsTimeout: 30000 },
+              meta: { wsTimeout: CLEAR_CONTEXT_TIMEOUT_MS },
             });
           } catch {
             setToast({ title: "Failed to clear context", type: ToastType.ERROR });
@@ -305,7 +312,7 @@ export const ChatInput = ({
               typeof error === "object" &&
               error !== null &&
               "status" in error &&
-              (error as { status?: number }).status === 409;
+              (error as { status?: number }).status === HTTP_STATUS_CONFLICT;
             setToast({
               title: isNoSession ? "/btw is unavailable until you've sent a message" : "Failed to run /btw",
               type: ToastType.ERROR,
@@ -369,7 +376,7 @@ export const ChatInput = ({
           <div>
             <b>Failed to send message</b>
             <br />
-            <pre>{"" + error}</pre>
+            <pre>{String(error)}</pre>
           </div>
         ),
         type: ToastType.ERROR,
@@ -561,7 +568,7 @@ export const ChatInput = ({
       return;
     }
 
-    appendTextRef.current = (text: string, _actionName?: string): void => {
+    appendTextRef.current = (text: string): void => {
       const currentDraft = promptDraft || "";
       setPromptDraft(currentDraft ? `${currentDraft}\n${text}\n` : `${text}\n`);
       editorRef.current?.commands.focus("end");
@@ -660,7 +667,7 @@ export const ChatInput = ({
             }
           />
           <Flex align="center" justify="between" className={styles.toolbar}>
-            <Flex align="center" gapX="3" className={styles.toolbarLeft}>
+            <Flex align="center" gapX="3">
               <FileUpload
                 ref={fileUploadRef}
                 files={attachedFiles}
@@ -676,7 +683,7 @@ export const ChatInput = ({
                 aria-label="Open mention menu"
                 data-testid={ElementIds.MENTION_PICKER_TOOLBAR_BUTTON}
                 style={{ color: "var(--accent-10)" }}
-                delayDuration={500}
+                delayDuration={MENTION_TOOLTIP_DELAY_MS}
               >
                 <Plus size={16} />
               </TooltipIconButton>

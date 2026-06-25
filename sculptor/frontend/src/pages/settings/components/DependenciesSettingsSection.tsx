@@ -1,14 +1,98 @@
 import { CheckCircledIcon, CrossCircledIcon, ExclamationTriangleIcon } from "@radix-ui/react-icons";
-import { Box, Button, Flex, Progress, Select, Separator, Spinner, Text, TextField, Tooltip } from "@radix-ui/themes";
+import {
+  Box,
+  Button,
+  Code,
+  Flex,
+  Link,
+  Progress,
+  Select,
+  Separator,
+  Spinner,
+  Text,
+  TextField,
+  Tooltip,
+} from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
-import type { ReactElement } from "react";
+import { type ReactElement, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 
-import type { UserConfigField } from "../../../api";
-import { ElementIds } from "../../../api";
+import { type DependencyInfo, ElementIds, type UserConfigField } from "../../../api";
+import { getBackendCapabilities } from "../../../common/state/atoms/backendCapabilities";
 import { dependenciesStatusAtom } from "../../../common/state/atoms/dependenciesStatus";
 import { useManagedDependency } from "../../../common/useManagedDependency";
 import { SettingRow } from "./SettingRow.tsx";
 import { SectionTitle, SettingsSectionLayout } from "./SettingsSection.tsx";
+
+type OptionalCliSectionProps = {
+  title: string;
+  cliName: string;
+  authCommand: string;
+  installUrl: string;
+  info: DependencyInfo | null;
+  loading: boolean;
+};
+
+const OptionalCliSection = ({
+  title,
+  cliName,
+  authCommand,
+  installUrl,
+  info,
+  loading,
+}: OptionalCliSectionProps): ReactElement => {
+  const isInstalled = info?.installed === true;
+  const isAuthenticated = info?.isAuthenticated;
+  const isUnauthed = isInstalled && isAuthenticated === false;
+
+  return (
+    <div data-cli-section={cliName}>
+      <SectionTitle>{title}</SectionTitle>
+
+      <SettingRow title="Status" description={`Whether ${cliName} is available on your PATH.`}>
+        <Flex align="center" gap="2">
+          {loading ? (
+            <Spinner size="1" />
+          ) : !isInstalled ? (
+            <>
+              <CrossCircledIcon color="var(--red-9)" />
+              <Text size="2" color="red">
+                Not installed —{" "}
+                <Link href={installUrl} target="_blank" rel="noreferrer">
+                  install {cliName}
+                </Link>
+              </Text>
+            </>
+          ) : isUnauthed ? (
+            <>
+              <ExclamationTriangleIcon color="var(--orange-9)" />
+              <Text size="2" color="orange">
+                Not signed in — run <Code>{authCommand}</Code>
+              </Text>
+            </>
+          ) : (
+            <>
+              <CheckCircledIcon color="var(--green-9)" />
+              <Text size="2" color="green">
+                v{info?.version} — Installed
+              </Text>
+            </>
+          )}
+        </Flex>
+      </SettingRow>
+
+      <SettingRow title="Active Version" description={`Currently resolved ${cliName} version.`}>
+        <Text size="2">{info?.version ?? "Not installed"}</Text>
+      </SettingRow>
+
+      <SettingRow title="Active Path" description={`Path to the active ${cliName} binary.`}>
+        <Text size="2" style={{ wordBreak: "break-all" }}>
+          {info?.path ?? "—"}
+        </Text>
+      </SettingRow>
+    </div>
+  );
+};
 
 type DependenciesSettingsSectionProps = {
   onSettingChange: (field: UserConfigField, value: unknown) => Promise<void>;
@@ -17,6 +101,8 @@ type DependenciesSettingsSectionProps = {
 export const DependenciesSettingsSection = ({ onSettingChange }: DependenciesSettingsSectionProps): ReactElement => {
   const dependenciesStatus = useAtomValue(dependenciesStatusAtom);
   const git = dependenciesStatus?.git ?? null;
+  const gh = dependenciesStatus?.gh ?? null;
+  const canInstallOptionalClis = getBackendCapabilities().canSelectLocalDir;
   const {
     info: claude,
     mode,
@@ -33,6 +119,18 @@ export const DependenciesSettingsSection = ({ onSettingChange }: DependenciesSet
     setCustomPathInput,
     handleApplyCustomPath,
   } = useManagedDependency({ tool: "CLAUDE", onSettingChange });
+
+  // Deep-link from onboarding ("?cli=gh") scrolls to that CLI section.
+  const [searchParams] = useSearchParams();
+  const targetCli = searchParams.get("cli");
+
+  useEffect(() => {
+    if (!targetCli) return;
+    const section = document.querySelector(`[data-cli-section="${CSS.escape(targetCli)}"]`);
+    if (section instanceof HTMLElement) {
+      section.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [targetCli]);
 
   const statusTooltip = claude?.versionRange
     ? `Supported range: ${claude.versionRange.minVersion} \u2013 ${claude.versionRange.maxVersion}`
@@ -154,30 +252,29 @@ export const DependenciesSettingsSection = ({ onSettingChange }: DependenciesSet
           </SettingRow>
 
           <SettingRow title="Active Path" description="Path to the active Claude CLI binary.">
-            <Text size="2" style={{ wordBreak: "break-all" }}>
-              {claude?.path ?? "\u2014"}
-            </Text>
-          </SettingRow>
-
-          {displayMode === "CUSTOM" && (
-            <SettingRow
-              title="Custom Path"
-              description="Absolute path or command name (e.g. /usr/local/bin/claude or claude)."
-            >
+            {displayMode === "CUSTOM" ? (
               <Flex gap="2" align="center">
                 <TextField.Root
                   placeholder="/usr/local/bin/claude or claude"
                   value={customPathInput}
                   onChange={(e) => setCustomPathInput(e.target.value)}
                   data-testid={ElementIds.CLAUDE_CLI_CUSTOM_PATH_INPUT}
-                  style={{ minWidth: "300px" }}
+                  style={{ minWidth: "220px" }}
                 />
-                <Button variant="soft" onClick={handleApplyCustomPath} data-testid="claude-cli-custom-path-apply">
+                <Button
+                  variant="soft"
+                  onClick={handleApplyCustomPath}
+                  data-testid={ElementIds.CLAUDE_CLI_CUSTOM_PATH_APPLY}
+                >
                   Apply
                 </Button>
               </Flex>
-            </SettingRow>
-          )}
+            ) : (
+              <Text size="2" style={{ wordBreak: "break-all" }}>
+                {claude?.path ?? "\u2014"}
+              </Text>
+            )}
+          </SettingRow>
         </>
       )}
 
@@ -206,6 +303,20 @@ export const DependenciesSettingsSection = ({ onSettingChange }: DependenciesSet
           )}
         </Flex>
       </SettingRow>
+
+      {canInstallOptionalClis && (
+        <>
+          <Separator size="4" my="5" />
+          <OptionalCliSection
+            title="GitHub CLI"
+            cliName="gh"
+            authCommand="gh auth login"
+            installUrl="https://github.com/cli/cli#installation"
+            info={gh}
+            loading={dependenciesStatus === null}
+          />
+        </>
+      )}
     </SettingsSectionLayout>
   );
 };

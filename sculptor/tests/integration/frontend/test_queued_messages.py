@@ -229,7 +229,7 @@ def test_edit_with_text_in_editor_shows_dialog(sculptor_instance_: SculptorInsta
     # Dialog should appear with all three buttons
     expect(chat_panel.get_undo_queued_message_dialog()).to_be_visible()
     expect(chat_panel.get_undo_queued_message_cancel_button()).to_be_visible()
-    expect(chat_panel.get_undo_queued_message_copy_button()).to_be_visible()
+    expect(chat_panel.get_undo_queued_message_remove_button()).to_be_visible()
     expect(chat_panel.get_undo_queued_message_overwrite_button()).to_be_visible()
 
 
@@ -282,7 +282,7 @@ def test_edit_dialog_remove_discards_queued_message(sculptor_instance_: Sculptor
     expect(chat_panel.get_undo_queued_message_dialog()).to_be_visible()
 
     # Click "Remove"
-    chat_panel.get_undo_queued_message_copy_button().click()
+    chat_panel.get_undo_queued_message_remove_button().click()
 
     # Dialog closes, editor still has draft text, bar is gone
     expect(chat_panel.get_undo_queued_message_dialog()).not_to_be_visible()

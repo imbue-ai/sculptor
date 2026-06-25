@@ -1,6 +1,6 @@
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import type { ReactElement } from "react";
-import { useCallback, useEffect, useRef } from "react";
+import type { CSSProperties, ReactElement } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { ElementIds } from "~/api";
 
@@ -25,12 +25,10 @@ export const BrowserViewSlot = ({ workspaceId }: { workspaceId: string }): React
   const store = useStore();
   // Snapshot the persisted URL once at mount so subsequent persistUrl writes
   // don't re-render this slot (the toolbar reads liveUrl from the status atom).
-  // Lazy-init via ref + null sentinel since "" is a valid persisted value.
-  const initialUrlRef = useRef<string | null>(null);
-  if (initialUrlRef.current === null) {
-    initialUrlRef.current = store.get(browserPanelStateAtomFamily(workspaceId)).currentUrl;
-  }
-  const initialUrl = initialUrlRef.current;
+  // Lazy useState (read-only snapshot, no setter needed); single-element
+  // destructure trips react/hook-use-state, which wants a value+setter pair.
+  // eslint-disable-next-line react/hook-use-state
+  const [initialUrl] = useState(() => store.get(browserPanelStateAtomFamily(workspaceId)).currentUrl);
 
   const persistUrl = useCallback(
     (url: string) => {
@@ -95,8 +93,17 @@ export const BrowserViewSlot = ({ workspaceId }: { workspaceId: string }): React
   const partition = `persist:sculptor-browser-${workspaceId}`;
   const initialSrc = initialUrl === "" ? "about:blank" : initialUrl;
 
-  const style: React.CSSProperties =
-    placement.visible && placement.bounds !== null
+  // The <webview> guest renders with a transparent base, so a plain/unstyled
+  // page (whose <body> has no background of its own) lets whatever is behind
+  // the webview show through — namely Sculptor's themed app background. In dark
+  // mode that paints the guest's default black text on a dark backdrop, which
+  // is unreadable (SCU-1577). Give the element an opaque white background so
+  // transparent pages render against the browser's normal white canvas,
+  // independent of the Sculptor theme; pages with their own background paint
+  // over it as usual.
+  const style: CSSProperties = {
+    backgroundColor: "#ffffff",
+    ...(placement.visible && placement.bounds !== null
       ? {
           position: "fixed",
           left: placement.bounds.x,
@@ -104,7 +111,8 @@ export const BrowserViewSlot = ({ workspaceId }: { workspaceId: string }): React
           width: placement.bounds.width,
           height: placement.bounds.height,
         }
-      : { display: "none" };
+      : { display: "none" }),
+  };
 
   // Only the focused workspace's slot carries the BROWSER_WEBVIEW test id.
   const testId = isFocused ? ElementIds.BROWSER_WEBVIEW : undefined;

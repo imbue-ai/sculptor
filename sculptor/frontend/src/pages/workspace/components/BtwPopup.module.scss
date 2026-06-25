@@ -44,25 +44,6 @@
   font-size: var(--font-size-1);
 }
 
-.closeButton {
-  align-items: center;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-2);
-  color: var(--gray-11);
-  cursor: pointer;
-  display: inline-flex;
-  height: 20px;
-  justify-content: center;
-  padding: 0;
-  width: 20px;
-
-  &:hover {
-    background: var(--gray-a3);
-    color: var(--gray-12);
-  }
-}
-
 .body {
   display: flex;
   flex: 1 1 auto;

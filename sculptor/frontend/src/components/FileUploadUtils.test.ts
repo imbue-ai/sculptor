@@ -1,5 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
+import type * as ApiClientModule from "~/apiClient.ts";
+
 import {
   ALLOWED_EXTENSIONS,
   ALLOWED_MIME_TYPES,
@@ -9,6 +11,15 @@ import {
   validateFileContent,
   validateFileData,
 } from "./FileUploadUtils";
+
+// uploadFilesToBackend builds `${baseUrl}/api/v1/upload-file`. Pin baseUrl to a
+// known origin so the http-mode test can assert the whole URL — and would fail
+// if baseUrl were ever undefined (e.g. "undefined/api/v1/upload-file").
+const { TEST_BASE_URL } = vi.hoisted(() => ({ TEST_BASE_URL: "https://backend.test" }));
+vi.mock("~/apiClient.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof ApiClientModule>()),
+  baseUrl: TEST_BASE_URL,
+}));
 
 // jsdom's Blob doesn't implement arrayBuffer(), so polyfill it for tests
 beforeAll(() => {
@@ -26,6 +37,7 @@ beforeAll(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   delete (window as unknown as Record<string, unknown>).sculptor;
 });
 
@@ -234,24 +246,31 @@ describe("processAndValidateFiles", () => {
 });
 
 describe("saveFiles", () => {
-  it("saves files using window.sculptor.saveFile", async () => {
-    const mockSaveFile = vi.fn().mockResolvedValue("/path/to/saved.png");
-    window.sculptor = { saveFile: mockSaveFile } as unknown as typeof window.sculptor;
+  it("uploads files over HTTP and returns the backend file ids", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async (): Promise<{ fileId: string }> => ({ fileId: "abc123.png" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
 
     const file = createFileWithContent("photo.png", PNG_HEADER, "image/png");
     const result = await saveFiles([file]);
 
-    expect(result).toEqual(["/path/to/saved.png"]);
-    expect(mockSaveFile).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(["abc123.png"]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${TEST_BASE_URL}/api/v1/upload-file`);
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeInstanceOf(FormData);
   });
 
-  it("filters out failed saves", async () => {
-    const mockSaveFile = vi
+  it("filters out uploads that the backend rejects", async () => {
+    const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce("/path/to/first.png")
-      .mockRejectedValueOnce(new Error("save failed"))
-      .mockResolvedValueOnce("/path/to/third.png");
-    window.sculptor = { saveFile: mockSaveFile } as unknown as typeof window.sculptor;
+      .mockResolvedValueOnce({ ok: true, json: async (): Promise<{ fileId: string }> => ({ fileId: "first.png" }) })
+      .mockResolvedValueOnce({ ok: false, status: 413 })
+      .mockResolvedValueOnce({ ok: true, json: async (): Promise<{ fileId: string }> => ({ fileId: "third.png" }) });
+    vi.stubGlobal("fetch", fetchMock);
 
     const files = [
       createFileWithContent("first.png", PNG_HEADER, "image/png"),
@@ -260,11 +279,12 @@ describe("saveFiles", () => {
     ];
     const result = await saveFiles(files);
 
-    expect(result).toEqual(["/path/to/first.png", "/path/to/third.png"]);
+    expect(result).toEqual(["first.png", "third.png"]);
   });
 
-  it("returns empty array when window.sculptor is not available", async () => {
-    delete (window as unknown as Record<string, unknown>).sculptor;
+  it("filters out uploads that throw a network error", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("network down"));
+    vi.stubGlobal("fetch", fetchMock);
 
     const file = createFileWithContent("photo.png", PNG_HEADER, "image/png");
     const result = await saveFiles([file]);

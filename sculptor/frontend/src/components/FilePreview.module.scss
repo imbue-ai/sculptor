@@ -33,11 +33,35 @@
   width: 100%;
 }
 
+.previewErrorIcon {
+  padding: var(--space-1);
+  text-align: center;
+}
+
+// Media fades in once its source is ready, so it doesn't pop over the loading
+// placeholder (or the bare container, for an already-cached source).
+@keyframes filePreviewFadeIn {
+  from {
+    opacity: 0%;
+  }
+
+  to {
+    opacity: 100%;
+  }
+}
+
 .preview {
+  animation: filePreviewFadeIn var(--duration-fast) ease-out;
   display: block;
   height: 100%;
   object-fit: cover;
   object-position: center;
+  width: 100%;
+}
+
+// Loading state for the compact thumbnail: a centered spinner in the 50x30 box.
+.previewLoading {
+  height: 100%;
   width: 100%;
 }
 
@@ -70,6 +94,7 @@
 }
 
 .inlineMedia {
+  animation: filePreviewFadeIn var(--duration-fast) ease-out;
   border: 1px solid transparent;
   border-radius: var(--radius-3);
   display: block;
@@ -103,6 +128,7 @@
 
 // Full-width display mode styles (used for assistant message images)
 .fullMedia {
+  animation: filePreviewFadeIn var(--duration-fast) ease-out;
   border-radius: var(--radius-3);
   display: block;
   max-width: 100%;

@@ -38,7 +38,7 @@ export const DeleteGroupDialog = ({
               </Text>
               <Flex direction="column" gap="1" pl="3">
                 {actionNames.map((name) => (
-                  <Text key={name} size="2" style={{ color: "var(--gray-11)" }}>
+                  <Text key={name} size="2" className={styles.actionName}>
                     &bull; {name}
                   </Text>
                 ))}
@@ -59,7 +59,7 @@ export const DeleteGroupDialog = ({
               color={dangerColor}
               onClick={onConfirm}
               disabled={isDeleting}
-              style={{ minWidth: "120px" }}
+              className={styles.confirmButton}
               data-testid={ElementIds.DELETE_GROUP_CONFIRM_BUTTON}
             >
               {isDeleting ? <Spinner /> : "Delete Group"}

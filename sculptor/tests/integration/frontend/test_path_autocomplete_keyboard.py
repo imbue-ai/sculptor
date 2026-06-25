@@ -62,6 +62,7 @@ def test_shift_arrow_up_selects_text_instead_of_navigating_dropdown(
     settings_page = navigate_to_settings_page(page=page)
     repos_settings = settings_page.click_on_repositories()
     add_repo_dialog = repos_settings.open_add_repo_dialog()
+    add_repo_dialog.select_local_source()
 
     path_input = add_repo_dialog.get_path_input()
     path_input.fill("~/")
@@ -106,6 +107,7 @@ def test_enter_on_directory_highlights_first_subentry(
     settings_page = navigate_to_settings_page(page=page)
     repos_settings = settings_page.click_on_repositories()
     add_repo_dialog = repos_settings.open_add_repo_dialog()
+    add_repo_dialog.select_local_source()
 
     path_input = add_repo_dialog.get_path_input()
     path_input.fill("~/")
@@ -147,6 +149,7 @@ def test_cmd_enter_submits_path(
     settings_page = navigate_to_settings_page(page=page)
     repos_settings = settings_page.click_on_repositories()
     add_repo_dialog = repos_settings.open_add_repo_dialog()
+    add_repo_dialog.select_local_source()
 
     path_input = add_repo_dialog.get_path_input()
     path_input.fill("~/")
@@ -184,6 +187,7 @@ def test_selected_folder_submit_shows_correct_repo_name(
     settings_page = navigate_to_settings_page(page=page)
     repos_settings = settings_page.click_on_repositories()
     add_repo_dialog = repos_settings.open_add_repo_dialog()
+    add_repo_dialog.select_local_source()
 
     # Type a prefix that filters to just this worker's sentinel directory.
     # The xdist worker_id is baked into the fixture name so the prefix is
@@ -231,6 +235,7 @@ def test_autocomplete_shows_submit_hint(
     settings_page = navigate_to_settings_page(page=page)
     repos_settings = settings_page.click_on_repositories()
     add_repo_dialog = repos_settings.open_add_repo_dialog()
+    add_repo_dialog.select_local_source()
 
     path_input = add_repo_dialog.get_path_input()
     path_input.fill("~/")

@@ -79,11 +79,13 @@ ensure_node_installed() {
     nvm install "$NODE_VERSION"
     set -eu
   fi
+  # Provide pnpm (matching `packageManager` in the frontend package) via Corepack.
+  nvm exec "$NODE_VERSION" corepack enable pnpm 2>/dev/null || true
 }
 
-npm_with_node() {
-  # Run npm under the requested Node via nvm exec (keeps env isolation)
-  nvm exec "$NODE_VERSION" npm "$@"
+pnpm_with_node() {
+  # Run pnpm under the requested Node via nvm exec (keeps env isolation)
+  nvm exec "$NODE_VERSION" pnpm "$@"
 }
 
 verify_node_arch_x64() {
@@ -134,7 +136,7 @@ build_frontend_app() (
   rm -rf .node_modules/.cache ~/.cache/electron ~/.cache/electron-builder 2>/dev/null || true
 
   # Install JS deps
-  npm_with_node ci
+  pnpm_with_node install --frozen-lockfile
 
   # Backend & assets
   just sidecar "cpython-3.14.4-macos-x86_64-none"
@@ -146,17 +148,17 @@ build_frontend_app() (
   export npm_config_target_arch="$ELECTRON_ARCH"
   export ELECTRON_ARCH="$ELECTRON_ARCH"
 
-  # Inject telemetry/build env vars (eval so npm sees them in this subshell).
+  # Inject telemetry/build env vars (eval so pnpm sees them in this subshell).
   # Defaults to production; CI sets SCULPTOR_BUILD_ENV=dev for non-release builds.
   eval "$(uv run --project sculptor builder setup-build-vars "${SCULPTOR_BUILD_ENV:-production}")"
 
 
   # <REPLACEMENT> begins here. We want to run:
-  # `nvm exec "$NODE_VERSION" npm run electron:make -- -- --platform=darwin --arch=x64`
+  # `nvm exec "$NODE_VERSION" pnpm run electron:make -- --platform=darwin --arch=x64`
   # But there is a bug which prevents the right electron from being run in the right arch mode!
 
   # Actual exec of the electron:make command; Note we don't call pre/post inside here.
-  nvm exec v24.17.0 -- npx --no-install electron-forge package \
+  nvm exec v24.17.0 -- pnpm exec electron-forge package \
      --platform=darwin \
      --arch=x64
 
@@ -206,7 +208,7 @@ make_worktree_and_stage_assets
   verify_node_arch_x64
 
   # First, we need to manually trigger `pre electron make` to ensure that the correct version is seen by electron
-  nvm exec v24.17.0 -- npm run preelectron:package
+  nvm exec v24.17.0 -- pnpm run preelectron:package
 
   build_frontend_app
   echo "App was built, on to package"
@@ -237,6 +239,7 @@ make_worktree_and_stage_assets
 
         nvm install $NODE_VERSION
         nvm use $NODE_VERSION
+        corepack enable pnpm 2>/dev/null || true
 
         set -x
 
@@ -255,9 +258,9 @@ make_worktree_and_stage_assets
 
         # Let us nuke the old node_modules and get new ones
         rm -rf node_modules
-        npm ci --foreground-scripts
+        pnpm install --frozen-lockfile
 
-        npx --no-install electron-forge make \
+        pnpm exec electron-forge make \
           --platform=darwin \
           --arch=x64 \
           --skip-package \

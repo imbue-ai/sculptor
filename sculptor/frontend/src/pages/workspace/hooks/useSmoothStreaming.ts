@@ -39,6 +39,21 @@ const DELIVERY_INTERVAL_SMOOTHING = 0.3;
  */
 const MAX_ARRIVAL_GAP_MS = 3000;
 
+/** Characters of look-ahead when snapping a reveal offset to a word boundary. */
+const WORD_BOUNDARY_LOOKAHEAD_CHARS = 15;
+
+/** Characters treated as word boundaries for snapping (whitespace and punctuation). */
+const WORD_BOUNDARY_PATTERN = /[\s\n.,;:!?)}\]"']/;
+
+/**
+ * The currently animated message paired with the task it belongs to, so the
+ * render path can discard text from a previous task without reading a ref.
+ */
+type RenderedState = {
+  readonly message: ChatMessage | null;
+  readonly taskID: string;
+};
+
 /**
  * Snap a target character offset forward to the nearest word boundary.
  * Returns the adjusted number of characters to reveal.
@@ -50,14 +65,13 @@ const snapToWordBoundary = (text: string, currentOffset: number, rawCharsToRevea
   }
 
   // Already at a boundary.
-  if (/[\s\n.,;:!?)}\]"']/.test(text[targetOffset])) {
+  if (WORD_BOUNDARY_PATTERN.test(text[targetOffset])) {
     return rawCharsToReveal;
   }
 
-  // Look ahead up to 15 characters for a word boundary.
-  const lookAhead = Math.min(targetOffset + 15, text.length);
+  const lookAhead = Math.min(targetOffset + WORD_BOUNDARY_LOOKAHEAD_CHARS, text.length);
   for (let i = targetOffset + 1; i < lookAhead; i += 1) {
-    if (/[\s\n.,;:!?)}\]"']/.test(text[i])) {
+    if (WORD_BOUNDARY_PATTERN.test(text[i])) {
       return i - currentOffset;
     }
   }
@@ -106,7 +120,10 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
    * period over which we should spread each batch's characters.
    */
   const lastBatchArrivalTimeRef = useRef<number>(0);
-  const [renderedMessage, setRenderedMessage] = useState<ChatMessage | null>(chatMessage ?? null);
+  const [renderedState, setRenderedState] = useState<RenderedState>({
+    message: chatMessage ?? null,
+    taskID,
+  });
 
   const ensureEngine = useCallback((): StreamingEngine => {
     if (!engineRef.current) {
@@ -140,14 +157,14 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
       const bufferSize = engine.getBufferSize();
       if (bufferSize === 0) {
         rafIdRef.current = null;
-        setRenderedMessage(engine.flush());
+        setRenderedState({ message: engine.flush(), taskID });
         return;
       }
 
       // Enforce the hard max-latency cap.
       if (bufferSize > MAX_BUFFER_CHARS) {
         rafIdRef.current = null;
-        setRenderedMessage(engine.flush());
+        setRenderedState({ message: engine.flush(), taskID });
         return;
       }
 
@@ -173,12 +190,12 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
         }
       }
 
-      setRenderedMessage(engine.advanceCursor(charsToReveal));
+      setRenderedState({ message: engine.advanceCursor(charsToReveal), taskID });
       rafIdRef.current = requestAnimationFrame(tick);
     };
 
     rafIdRef.current = requestAnimationFrame(tick);
-  }, []);
+  }, [taskID]);
 
   // Initialize the engine on mount; clean up on unmount.
   useEffect(() => {
@@ -205,7 +222,7 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
       if (isNewMessage || isTaskSwitch) {
         stopAnimationLoop();
         engine.updateLatestSnapshot(snapshot);
-        setRenderedMessage(engine.flush());
+        setRenderedState({ message: engine.flush(), taskID });
         deliveryIntervalEmaRef.current = null;
         lastBatchArrivalTimeRef.current = 0;
         return;
@@ -215,7 +232,7 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
       if (!isSmoothStreamingEnabled) {
         stopAnimationLoop();
         engine.updateLatestSnapshot(snapshot);
-        setRenderedMessage(engine.flush());
+        setRenderedState({ message: engine.flush(), taskID });
         return;
       }
 
@@ -253,34 +270,45 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
     const engine = ensureEngine();
 
     if (!chatMessage) {
-      // Stream completed — clear rendered message so isStreaming becomes false.
+      // Stream completed — tear down the engine/loop so isStreaming becomes false.
       // The completed message is already in completedChatMessages by the time
       // inProgressChatMessage goes null, so we don't need to keep rendering it.
+      // The "cleared" rendered value is derived from chatMessage during render
+      // rather than written to state here, avoiding a setState in this effect.
       stopAnimationLoop();
       engine.updateLatestSnapshot(null);
-      setRenderedMessage(null);
       activeMessageIdRef.current = null;
       activeTaskIdRef.current = null;
       return;
     }
 
     handleSnapshot(engine, chatMessage);
-  }, [chatMessage, handleSnapshot, isSmoothStreamingEnabled, ensureEngine, stopAnimationLoop]);
+    // `isSmoothStreamingEnabled` is intentionally omitted: it's already captured
+    // by `handleSnapshot`, which re-creates whenever the flag changes.
+  }, [chatMessage, handleSnapshot, ensureEngine, stopAnimationLoop]);
 
   // When smooth streaming is disabled while the loop is running, flush.
   useEffect(() => {
     if (!isSmoothStreamingEnabled && engineRef.current) {
       stopAnimationLoop();
-      setRenderedMessage(engineRef.current.flush());
+      setRenderedState({ message: engineRef.current.flush(), taskID });
     }
-  }, [isSmoothStreamingEnabled, stopAnimationLoop]);
+  }, [isSmoothStreamingEnabled, stopAnimationLoop, taskID]);
 
   return useMemo(() => {
-    // Synchronous guard: if we switched to a different task, don't return stale
-    // animated text from the previous task.
-    if (renderedMessage && activeTaskIdRef.current !== null && activeTaskIdRef.current !== taskID) {
+    // Stream completed: derive the cleared value directly from the prop instead
+    // of from state, so the reconcile effect doesn't need to setState.
+    if (!chatMessage) {
       return null;
     }
-    return renderedMessage ?? null;
-  }, [renderedMessage, taskID]);
+
+    // Synchronous guard: if we switched to a different task, don't return stale
+    // animated text from the previous task. Comparing the task recorded
+    // alongside the rendered message against the current taskID keeps this a
+    // pure render-time derivation (no ref read).
+    if (renderedState.taskID !== taskID) {
+      return null;
+    }
+    return renderedState.message ?? null;
+  }, [chatMessage, renderedState, taskID]);
 };

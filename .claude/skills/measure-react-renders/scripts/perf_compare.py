@@ -178,7 +178,7 @@ def build_frontend(repo_dir):
     """Build frontend with --minify false to preserve component names."""
     frontend_dir = Path(repo_dir) / "sculptor" / "frontend"
     subprocess.run(
-        ["npx", "vite", "build", "--minify", "false", "-l", "error"],
+        ["pnpm", "exec", "vite", "build", "--minify", "false", "-l", "error"],
         cwd=frontend_dir, check=True, capture_output=True,
     )
 

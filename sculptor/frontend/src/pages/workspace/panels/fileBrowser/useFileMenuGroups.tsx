@@ -50,6 +50,7 @@ export const useFileMenuGroups = ({
   const closeAllDiffTabs = useSetAtom(closeAllDiffTabsAtom);
   const expandFolders = useSetAtom(expandFoldersAtom);
   const diffPanelState = useAtomValue(diffPanelStateAtomFamily(workspaceId));
+  const codePath = useWorkspaceCodePath(workspaceId);
 
   const isDeleted = context.fileStatus === "D";
   const isFile = !context.isFolder;
@@ -63,8 +64,6 @@ export const useFileMenuGroups = ({
   const handleOpenFileView = useCallback((): void => {
     openFileViewTab({ workspaceId, filePath: context.filePath });
   }, [openFileViewTab, workspaceId, context.filePath]);
-
-  const codePath = useWorkspaceCodePath(workspaceId);
 
   const handleCopyFilePath = useCallback((): void => {
     const isAlreadyAbsolute = context.filePath.startsWith("/");

@@ -8,6 +8,10 @@ import { usePollingInterval } from "~/common/usePollingInterval";
 
 type ManagedDependencyTool = "CLAUDE" | "PI";
 
+// Clear an optimistic pending mode after this long so the settling spinner cannot
+// get stuck if the WebSocket update that would confirm the new mode never arrives.
+const MODE_SETTLE_TIMEOUT_MS = 10_000;
+
 // The per-tool mode/path live in a named field of dependency_paths, so a config
 // write keys off the lower-case field name while the install/status API keys off
 // the upper-case tool.
@@ -69,20 +73,19 @@ export const useManagedDependency = ({
   // Track the requested mode locally so the Select and conditional sections switch
   // immediately. Cleared once the WebSocket-pushed atom catches up.
   const [pendingMode, setPendingMode] = useState<string | null>(null);
+  // Once the atom catches up to the requested mode, drop the local override during
+  // render so the derived values reflect the settled mode without an extra render.
+  if (pendingMode !== null && pendingMode === mode) {
+    setPendingMode(null);
+  }
   const displayMode = pendingMode ?? mode;
   const isModeSettling = pendingMode !== null && pendingMode !== mode;
 
-  useEffect(() => {
-    if (pendingMode !== null && pendingMode === mode) {
-      setPendingMode(null);
-    }
-  }, [pendingMode, mode]);
-
-  // Safety timeout: clear pendingMode after 10s so the spinner cannot get stuck if
-  // the WebSocket update never arrives.
+  // Safety timeout: clear pendingMode so the spinner cannot get stuck if the
+  // WebSocket update never arrives.
   useEffect(() => {
     if (!isModeSettling) return;
-    const timeout = setTimeout(() => setPendingMode(null), 10_000);
+    const timeout = setTimeout(() => setPendingMode(null), MODE_SETTLE_TIMEOUT_MS);
     return (): void => clearTimeout(timeout);
   }, [isModeSettling]);
 
@@ -91,7 +94,7 @@ export const useManagedDependency = ({
       setPendingMode(newMode);
       onSettingChange(UserConfigField.DEPENDENCY_PATHS, { [configKey]: newMode });
     },
-    [onSettingChange, configKey, mode], // eslint-disable-line react-hooks/exhaustive-deps -- mode forces recreation to avoid a stale onSettingChange closure
+    [onSettingChange, configKey],
   );
 
   const [isInstalling, setIsInstalling] = useState(false);
@@ -150,10 +153,13 @@ export const useManagedDependency = ({
   const [customPathInput, setCustomPathInput] = useState(path);
 
   // Keep the custom path input in sync when the backend value changes (e.g. after
-  // applying a new path or switching modes).
-  useEffect(() => {
+  // applying a new path or switching modes). Comparing against the previous backend
+  // value and adjusting during render avoids the extra render an effect would add.
+  const [lastSyncedPath, setLastSyncedPath] = useState(path);
+  if (path !== lastSyncedPath) {
+    setLastSyncedPath(path);
     setCustomPathInput(path);
-  }, [path]);
+  }
 
   const handleApplyCustomPath = useCallback((): void => {
     // An empty path reverts to MANAGED rather than persisting a blank custom value
@@ -162,13 +168,13 @@ export const useManagedDependency = ({
   }, [onSettingChange, configKey, customPathInput]);
 
   // Clear stale error/installing state once the atom confirms the binary is healthy
-  // (e.g. the backend finished after the frontend timed out or errored).
-  useEffect(() => {
-    if (info?.installed && info?.isVersionInRange) {
-      setInstallError(null);
-      setIsInstalling(false);
-    }
-  }, [info?.installed, info?.isVersionInRange]);
+  // (e.g. the backend finished after the frontend timed out or errored). Adjusting
+  // during render avoids the extra render cycle an effect would introduce.
+  const isBinaryHealthy = Boolean(info?.installed && info?.isVersionInRange);
+  if (isBinaryHealthy && (installError !== null || isInstalling)) {
+    setInstallError(null);
+    setIsInstalling(false);
+  }
 
   const installProgress = info?.installProgress ?? null;
   const progressPercent =

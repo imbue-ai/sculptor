@@ -23,7 +23,6 @@ type AlphaMessageNodeProps = {
   inProgressMessageId: string | null;
   toolResultMap: Map<string, ToolResultBlock>;
   subagentMetadataMap?: Map<string, SubagentMetadata>;
-  onHeightChange?: () => void;
   searchQuery?: string;
   /** The content block index (in message.content) that contains the active search match. -1 for none. */
   activeSearchBlockIndex?: number;
@@ -43,7 +42,6 @@ export const AlphaMessageNode = ({
   inProgressMessageId,
   toolResultMap,
   subagentMetadataMap,
-  onHeightChange: _onHeightChange,
   searchQuery,
   activeSearchBlockIndex = -1,
   activeSearchOccurrence = -1,
@@ -55,7 +53,7 @@ export const AlphaMessageNode = ({
   messageIndex = 0,
 }: AlphaMessageNodeProps): ReactElement => {
   const message = node.message;
-  const turnSummaryData = useTurnSummaryData(message, node);
+  const turnSummaryData = useTurnSummaryData(node);
   const isUser = message.role === ChatMessageRole.USER;
   const isNewCycle = isUser && (prevNode === undefined || prevNode.message.role === ChatMessageRole.ASSISTANT);
   const isAfterUser = !isUser && prevNode !== undefined && prevNode.message.role === ChatMessageRole.USER;

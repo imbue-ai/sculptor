@@ -1,5 +1,7 @@
 import { atom } from "jotai";
 
+export type BtwPopupPosition = { x: number; y: number };
+
 export type BtwPopupState =
   | { kind: "closed" }
   | {
@@ -13,7 +15,7 @@ export type BtwPopupState =
       streaming: boolean;
       error?: string;
       requestId: string;
-      position?: { x: number; y: number };
+      position?: BtwPopupPosition;
     };
 
 export const btwPopupAtom = atom<BtwPopupState>({ kind: "closed" });
@@ -80,7 +82,7 @@ export const closeBtwPopupAtom = atom(null, (_get, set): void => {
   set(btwPopupAtom, { kind: "closed" });
 });
 
-export const setBtwPopupPositionAtom = atom(null, (get, set, position: { x: number; y: number }): void => {
+export const setBtwPopupPositionAtom = atom(null, (get, set, position: BtwPopupPosition): void => {
   const current = get(btwPopupAtom);
   if (current.kind !== "open") {
     return;

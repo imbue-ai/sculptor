@@ -1,25 +1,30 @@
 import { Flex, Select, Text } from "@radix-ui/themes";
+import { useSetAtom } from "jotai";
 import { FolderOpenIcon, PlusIcon } from "lucide-react";
 import type { ReactElement } from "react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import type { Project } from "../api";
-import { ElementIds } from "../api";
+import { ElementIds, getDependenciesStatus } from "../api";
+import { dependenciesStatusAtom } from "../common/state/atoms/dependenciesStatus.ts";
 import { AddRepoDialog } from "./add-repo/AddRepoDialog.tsx";
+import { prefetchInitialRemoteRepos } from "./add-repo/useRemoteRepos.ts";
 import styles from "./RepoSelector.module.scss";
 import type { ToastContent } from "./Toast.tsx";
 import { Toast } from "./Toast.tsx";
+
+const PATH_ELLIPSIS = ".../";
 
 const truncatePath = (path: string, maxLength: number = 50): string => {
   if (path.length <= maxLength) {
     return path;
   }
-  const truncated = path.slice(-(maxLength - 4));
+  const truncated = path.slice(-(maxLength - PATH_ELLIPSIS.length));
   const firstSlash = truncated.indexOf("/");
   if (firstSlash !== -1) {
-    return ".../" + truncated.slice(firstSlash + 1);
+    return PATH_ELLIPSIS + truncated.slice(firstSlash + 1);
   }
-  return ".../" + truncated;
+  return PATH_ELLIPSIS + truncated;
 };
 
 const _NEW_REPO_SELECT_VALUE = "_NEW_REPO_SELECT_VALUE";
@@ -39,6 +44,7 @@ export const RepoSelector = ({
 }: RepoSelectorProps): ReactElement => {
   const [toast, setToast] = useState<ToastContent | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const setDependenciesStatus = useSetAtom(dependenciesStatusAtom);
 
   const handleValueChange = (value: string): void => {
     if (value === _NEW_REPO_SELECT_VALUE) {
@@ -47,6 +53,36 @@ export const RepoSelector = ({
     }
     onProjectChange(value);
   };
+
+  const handleToastOpenChange = useCallback((open: boolean): void => {
+    if (!open) {
+      setToast(null);
+    }
+  }, []);
+
+  // Warm caches when the user pops open the repo dropdown so the Add
+  // Repository dialog paints with real data on first frame:
+  //   1. Dependencies status → skips the NotConfiguredSection flash while the
+  //      dialog's own first poll is in flight.
+  //   2. The github initial repo list → the search combobox paints with
+  //      results instead of a spinner. 412 (unconfigured CLI) is harmless
+  //      since the combobox doesn't mount in that case.
+  // All best-effort; on failure the dialog falls back to its own fetches.
+  const handleSelectOpenChange = useCallback(
+    (isOpen: boolean): void => {
+      if (!isOpen) return;
+      void (async (): Promise<void> => {
+        try {
+          const { data } = await getDependenciesStatus({ meta: { skipWsAck: true } });
+          if (data) setDependenciesStatus(data);
+        } catch {
+          // Dialog's own poll will retry on open.
+        }
+      })();
+      void prefetchInitialRemoteRepos("github");
+    },
+    [setDependenciesStatus],
+  );
 
   const currentProject = projects.find((p) => p.objectId === selectedProjectId);
   const displayName = currentProject?.name ?? "Select repo";
@@ -57,6 +93,7 @@ export const RepoSelector = ({
         size="1"
         value={selectedProjectId ?? undefined}
         onValueChange={handleValueChange}
+        onOpenChange={handleSelectOpenChange}
         disabled={projects.length === 0}
       >
         <Select.Trigger variant="ghost" className={className} data-testid={ElementIds.PROJECT_SELECTOR}>
@@ -105,7 +142,7 @@ export const RepoSelector = ({
 
       <AddRepoDialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen} setToast={setToast} />
 
-      <Toast open={!!toast} onOpenChange={(open) => !open && setToast(null)} title={toast?.title} type={toast?.type} />
+      <Toast open={!!toast} onOpenChange={handleToastOpenChange} title={toast?.title} type={toast?.type} />
     </>
   );
 };

@@ -18,6 +18,7 @@ import pytest
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.panel_zones import PlaywrightPanelZonesElement
+from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.pages.settings_page import PlaywrightSettingsPage
 from sculptor.testing.playwright_utils import blur_active_element
 from sculptor.testing.playwright_utils import navigate_to_settings_page
@@ -200,6 +201,46 @@ def test_configure_panels_deep_link(sculptor_instance_: SculptorInstance) -> Non
     settings_page = PlaywrightSettingsPage(page=page)
     panels = settings_page.click_on_panels()
     expect(panels.get_panel_row("files")).to_be_visible()
+
+
+@user_story("to have 'Configure panels…' open Settings as a persistent workspace tab")
+def test_configure_panels_creates_persistent_settings_tab(sculptor_instance_: SculptorInstance) -> None:
+    """Opening Settings via a panel's "Configure panels…" item must create the
+    Settings pseudo-workspace-tab in the workspace tab bar.
+
+    Regression test for SCU-1581: the context-menu handler navigated straight
+    to /settings without calling `ensurePseudoTab(SETTINGS_TAB_ID)`, so Settings
+    opened with no tab in the tab bar — a broken state. We assert the Settings
+    tab appears, and that it is a real tab by confirming it survives switching
+    back to the workspace tab (a merely route-derived tab would disappear).
+    """
+    page = sculptor_instance_.page
+    start_task_and_wait_for_ready(sculptor_page=page, prompt="Hello")
+
+    layout = PlaywrightProjectLayoutPage(page)
+    zones = PlaywrightPanelZonesElement(page=page)
+
+    # Open Settings via the panel context menu's "Configure panels…" item.
+    files_icon = zones.get_files_icon()
+    expect(files_icon).to_be_visible()
+    files_icon.click(button="right")
+    configure_item = zones.get_configure_context_menu_item()
+    expect(configure_item).to_be_visible()
+    configure_item.click()
+
+    # "Configure panels…" must open Settings as a tab in the workspace tab bar.
+    settings_tab = layout.get_settings_tab()
+    expect(settings_tab).to_be_visible()
+
+    # Switch back to the workspace tab and wait for the tab bar to settle.
+    workspace_tab = layout.get_workspace_tabs().first
+    expect(workspace_tab).to_be_visible()
+    workspace_tab.click()
+    expect(workspace_tab).to_have_attribute("aria-selected", "true")
+
+    # The Settings tab must still be present: "Configure panels…" opened it as a
+    # real pseudo-tab, so leaving the /settings route does not close it.
+    expect(settings_tab).to_be_visible()
 
 
 @user_story("to drag a panel icon in the layout diagram to move it to another zone")

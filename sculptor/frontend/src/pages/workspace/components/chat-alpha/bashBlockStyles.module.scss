@@ -11,84 +11,10 @@
   }
 }
 
-.trigger {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  width: 100%;
-}
-
-.block {
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-1);
-  box-sizing: border-box;
-  font-family: var(--code-font-family);
-  font-size: var(--font-size-1);
-  overflow: hidden;
-  transition: color var(--duration-fast) var(--ease-default);
-}
-
-.header {
-  align-items: center;
-  box-sizing: border-box;
-  cursor: pointer;
-  display: flex;
-  gap: var(--space-2);
-  height: 28px;
-  min-width: 0;
-  overflow: hidden;
-  padding: 0;
-  transition: color var(--duration-fast) var(--ease-default);
-  user-select: none;
-}
-
-.headerNoToggle {
-  cursor: default;
-}
-
 .prompt {
   color: var(--gray-8);
   flex-shrink: 0;
   font-weight: var(--font-weight-regular);
-}
-
-.command {
-  color: var(--gray-11);
-  flex: 1;
-  font-weight: var(--font-weight-medium);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.summary {
-  color: var(--gray-8);
-  flex-shrink: 0;
-  font-size: var(--font-size-1);
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.blockOpen {
-  background: var(--gray-a3);
-}
-
-.blockOpen .prompt,
-.block:hover .prompt {
-  color: var(--gray-9);
-}
-
-.blockOpen .command,
-.block:hover .command {
-  color: var(--gray-12);
-}
-
-.blockOpen .summary,
-.block:hover .summary {
-  color: var(--gray-9);
 }
 
 .badge {

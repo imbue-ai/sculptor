@@ -14,8 +14,10 @@ from playwright.sync_api import BrowserContext
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page
 from playwright.sync_api import Playwright
+from tenacity import RetryCallState
 from tenacity import retry
 from tenacity import retry_if_exception_type
+from tenacity import stop_after_attempt
 from tenacity import stop_after_delay
 from tenacity import wait_fixed
 
@@ -34,6 +36,15 @@ _SLOW_LOCK_WAIT_LOG_THRESHOLD_SECONDS = 1.0
 _CDP_CONNECT_TIMEOUT_SECONDS = 120
 _CDP_CONNECT_RETRY_INTERVAL_SECONDS = 1
 _PROCESS_KILL_TIMEOUT_SECONDS = 5
+# Relaunch a few times so a transient esbuild crash doesn't fail the test's setup.
+_MAX_ELECTRON_LAUNCH_ATTEMPTS = 3
+# esbuild's Go crash dump spans many goroutines; keep enough of the tail that its
+# bundler frames survive both for the raised error and the relaunch decision.
+_RECENT_OUTPUT_LINES = 200
+
+
+class _TransientElectronStartError(RuntimeError):
+    """Electron exited before its ready message with a transient esbuild dev-bundle crash."""
 
 
 def _is_known_harmless_electron_error(line: str) -> bool:
@@ -45,6 +56,29 @@ def _is_known_harmless_electron_error(line: str) -> bool:
         "X connection error received.",
     ]
     return any(substring in line for substring in harmless_substrings)
+
+
+def _is_transient_electron_start_crash(output: str) -> bool:
+    """Whether the captured Electron output shows esbuild's Go binary crashing at startup.
+
+    ``electron-forge start`` drives the renderer's background dependency
+    optimization and the main/preload bundle build over a single shared esbuild
+    service. Under that concurrent load — and the CI sandbox's limited CPU/memory —
+    the esbuild process intermittently dies with a Go runtime crash dump whose
+    goroutine traces name ``github.com/evanw/esbuild``, so the renderer never
+    reaches its ready message and forge exits non-zero. Such a launch recovers on a
+    fresh attempt.
+    """
+    return "github.com/evanw/esbuild" in output
+
+
+def _log_electron_relaunch(retry_state: RetryCallState) -> None:
+    """Warn before each relaunch (tenacity ``before_sleep`` hook)."""
+    logger.warning(
+        "[Electron] dev bundler (esbuild) crashed on launch attempt {}/{}; relaunching",
+        retry_state.attempt_number,
+        _MAX_ELECTRON_LAUNCH_ATTEMPTS,
+    )
 
 
 class ElectronFrontend:
@@ -118,55 +152,9 @@ class ElectronFrontend:
 
         frontend_dir = get_v1_frontend_path()
         lock_path = Path("/tmp/sculptor_electron_forge.lock")
-
-        is_launched = False
-        # Keep the most recent Electron output (stderr is merged into stdout
-        # below) so that if it never reaches its ready message we can surface
-        # the crash output in the raised error.
-        recent_output: deque[str] = deque(maxlen=50)
         file_lock = FileLock(str(lock_path), timeout=_FORGE_LOCK_TIMEOUT_SECONDS)
-        t_lock = time.monotonic()
-        file_lock.acquire()
-        lock_wait = time.monotonic() - t_lock
-        if lock_wait > _SLOW_LOCK_WAIT_LOG_THRESHOLD_SECONDS:
-            logger.info("[timing] Electron forge lock wait: {:.2f}s", lock_wait)
-        try:
-            t_proc = time.monotonic()
-            self._electron_proc = subprocess.Popen(
-                cmd,
-                cwd=frontend_dir,
-                env=full_env,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                preexec_fn=lambda: os.setpgid(0, 0),
-            )
-            assert self._electron_proc.stdout is not None
-            for line in self._electron_proc.stdout:
-                recent_output.append(line.rstrip())
-                logger.info("[Electron stdout] {}", line.rstrip())
-                if ELECTRON_READY_MESSAGE in line:
-                    is_launched = True
-                    self._forwarder = Forwarder(
-                        self._electron_proc,
-                        prefix="[Electron stdout] ",
-                        known_harmless_func=_is_known_harmless_electron_error,
-                    )
-                    self._forwarder.start()
-                    break
-        finally:
-            file_lock.release()
-        logger.info(
-            "[timing] Electron process launch (xvfb + Vite + Electron ready): {:.2f}s", time.monotonic() - t_proc
-        )
 
-        if not is_launched:
-            self._kill_electron()
-            exit_code = self._electron_proc.poll() if self._electron_proc is not None else None
-            tail = "\n".join(recent_output) or "(no output captured)"
-            message = f"Electron frontend failed to start (exit code {exit_code}). Last Electron output:\n{tail}"
-            raise RuntimeError(message)
+        recent_output = self._launch_electron_with_retries(cmd, full_env, frontend_dir, file_lock)
 
         t_cdp = time.monotonic()
         try:
@@ -201,6 +189,87 @@ class ElectronFrontend:
         self._page = page
 
         return (context, page)
+
+    @retry(
+        stop=stop_after_attempt(_MAX_ELECTRON_LAUNCH_ATTEMPTS),
+        retry=retry_if_exception_type(_TransientElectronStartError),
+        before_sleep=_log_electron_relaunch,
+        reraise=True,
+    )
+    def _launch_electron_with_retries(
+        self,
+        cmd: tuple[str, ...],
+        full_env: dict[str, str],
+        frontend_dir: Path,
+        file_lock: FileLock,
+    ) -> deque[str]:
+        """Launch electron-forge once, returning its recent output when it is ready.
+
+        A transient esbuild dev-bundle crash raises ``_TransientElectronStartError``, which
+        the ``@retry`` decorator relaunches on; other startup failures raise a plain
+        ``RuntimeError`` and surface immediately.
+        """
+        is_launched, recent_output = self._start_electron_process(cmd, full_env, frontend_dir, file_lock)
+        if is_launched:
+            return recent_output
+        self._kill_electron()
+        exit_code = self._electron_proc.poll() if self._electron_proc is not None else None
+        tail = "\n".join(recent_output) or "(no output captured)"
+        message = f"Electron frontend failed to start (exit code {exit_code}). Last Electron output:\n{tail}"
+        if _is_transient_electron_start_crash(tail):
+            raise _TransientElectronStartError(message)
+        raise RuntimeError(message)
+
+    def _start_electron_process(
+        self,
+        cmd: tuple[str, ...],
+        full_env: dict[str, str],
+        frontend_dir: Path,
+        file_lock: FileLock,
+    ) -> tuple[bool, deque[str]]:
+        """Launch electron-forge once and read stdout until its ready message or exit.
+
+        Returns whether the ready message was seen and the most recent output
+        captured. The forge lock serialises this across concurrent test workers.
+        """
+        recent_output: deque[str] = deque(maxlen=_RECENT_OUTPUT_LINES)
+        is_launched = False
+        t_lock = time.monotonic()
+        file_lock.acquire()
+        lock_wait = time.monotonic() - t_lock
+        if lock_wait > _SLOW_LOCK_WAIT_LOG_THRESHOLD_SECONDS:
+            logger.info("[timing] Electron forge lock wait: {:.2f}s", lock_wait)
+        t_proc = time.monotonic()
+        try:
+            self._electron_proc = subprocess.Popen(
+                cmd,
+                cwd=frontend_dir,
+                env=full_env,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                preexec_fn=lambda: os.setpgid(0, 0),
+            )
+            assert self._electron_proc.stdout is not None
+            for line in self._electron_proc.stdout:
+                recent_output.append(line.rstrip())
+                logger.info("[Electron stdout] {}", line.rstrip())
+                if ELECTRON_READY_MESSAGE in line:
+                    is_launched = True
+                    self._forwarder = Forwarder(
+                        self._electron_proc,
+                        prefix="[Electron stdout] ",
+                        known_harmless_func=_is_known_harmless_electron_error,
+                    )
+                    self._forwarder.start()
+                    break
+        finally:
+            file_lock.release()
+        logger.info(
+            "[timing] Electron process launch (xvfb + Vite + Electron ready): {:.2f}s", time.monotonic() - t_proc
+        )
+        return is_launched, recent_output
 
     def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
         self._kill_electron()

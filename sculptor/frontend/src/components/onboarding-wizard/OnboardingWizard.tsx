@@ -24,7 +24,11 @@ export const OnboardingStep = {
 
 export type OnboardingStep = (typeof OnboardingStep)[keyof typeof OnboardingStep];
 
-const STEP_ORDER: Array<OnboardingStep> = [OnboardingStep.EMAIL, OnboardingStep.INSTALLATION, OnboardingStep.ADD_REPO];
+const STEP_ORDER: ReadonlyArray<OnboardingStep> = [
+  OnboardingStep.EMAIL,
+  OnboardingStep.INSTALLATION,
+  OnboardingStep.ADD_REPO,
+];
 const STEP_COUNT = STEP_ORDER.length;
 
 type OnboardingWizardProps = {
@@ -148,12 +152,12 @@ export const OnboardingWizard = ({ initialStep, onComplete }: OnboardingWizardPr
       }
 
       goToStep(OnboardingStep.ADD_REPO);
-    } catch (error) {
+    } catch (err) {
       let errorMessage = "Failed to check configuration";
-      if (error instanceof HTTPException) {
-        errorMessage = error.detail;
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
+      if (err instanceof HTTPException) {
+        errorMessage = err.detail;
+      } else if (err instanceof Error) {
+        errorMessage = err.message;
       }
       setError(errorMessage);
     } finally {
@@ -171,12 +175,12 @@ export const OnboardingWizard = ({ initialStep, onComplete }: OnboardingWizardPr
       });
 
       onComplete();
-    } catch (error) {
+    } catch (err) {
       let errorMessage = "Failed to complete onboarding";
-      if (error instanceof HTTPException) {
-        errorMessage = error.detail;
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
+      if (err instanceof HTTPException) {
+        errorMessage = err.detail;
+      } else if (err instanceof Error) {
+        errorMessage = err.message;
       }
       setError(errorMessage);
     } finally {
@@ -216,15 +220,15 @@ export const OnboardingWizard = ({ initialStep, onComplete }: OnboardingWizardPr
   return (
     <Flex direction="column" className={styles.wizardContainer}>
       <TitleBar />
-      <Flex direction="column" className={styles.contentArea}>
-        <div className={styles.stepContent}>{renderStep()}</div>
-      </Flex>
       <StepIndicator
         totalSteps={STEP_COUNT}
         currentStep={currentStepIndex}
         maxVisitedStep={maxVisitedStep}
         onStepClick={handleStepClick}
       />
+      <Flex direction="column" className={styles.contentArea}>
+        <div className={styles.stepContent}>{renderStep()}</div>
+      </Flex>
     </Flex>
   );
 };

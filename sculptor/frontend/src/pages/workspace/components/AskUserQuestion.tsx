@@ -48,6 +48,14 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
     recordToMapOfSets(draftState.multiSelections),
   );
   const [focusedOptionIndex, setFocusedOptionIndex] = useState(0);
+  // Reset the focused option whenever the active question changes. Adjusting
+  // state during render (with a previous-value guard) avoids the stale frame
+  // an effect would produce.
+  const [prevIndexForFocus, setPrevIndexForFocus] = useState(currentIndex);
+  if (prevIndexForFocus !== currentIndex) {
+    setPrevIndexForFocus(currentIndex);
+    setFocusedOptionIndex(0);
+  }
   const otherInputRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const sendMessageBinding = useKeybinding("send_message");
@@ -63,11 +71,6 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
   // focus to <body> as the input unmounts, so we inherit focus naturally.
   // If the user had focused something else (e.g. the terminal), it stays.
   useFocusOnMountIfUnclaimed(containerRef);
-
-  // Reset focused option when question changes
-  useEffect(() => {
-    setFocusedOptionIndex(0);
-  }, [currentIndex]);
 
   // Focus the "Other" input when it's selected
   useEffect(() => {
@@ -210,11 +213,6 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
 
   const isOtherCurrentlySelected = otherSelected.get(questionKey) ?? false;
 
-  const isAllAnswered = questions.every((q) => {
-    const answer = answers.get(q.question);
-    return answer !== undefined && answer !== "";
-  });
-
   const hasAnswer = useCallback(
     (q: (typeof questions)[number]) => {
       const answer = answers.get(q.question);
@@ -222,6 +220,8 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
     },
     [answers],
   );
+
+  const isAllAnswered = questions.every(hasAnswer);
 
   const hasUnansweredElsewhere = questions.some((q, i) => i !== currentIndex && !hasAnswer(q));
 
@@ -294,7 +294,7 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
           return;
         }
 
-        if (handleModifiedEnter(e.nativeEvent as unknown as KeyboardEvent)) {
+        if (handleModifiedEnter(e.nativeEvent)) {
           e.preventDefault();
         }
         return;
@@ -341,7 +341,7 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
 
         default:
           // Check for submit shortcut (cmd-enter)
-          if (handleModifiedEnter(e.nativeEvent as unknown as KeyboardEvent)) {
+          if (handleModifiedEnter(e.nativeEvent)) {
             e.preventDefault();
           }
           break;

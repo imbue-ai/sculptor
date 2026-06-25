@@ -13,12 +13,14 @@ type Store = ReturnType<typeof createStore>;
 
 type RenderWithProvidersResult = RenderResult & { store: Store };
 
-export const renderWithProviders = (
-  ui: ReactNode,
-  store: Store,
-  panels?: ReadonlyArray<PanelDefinition>,
-  initialEntries?: ReadonlyArray<string>,
-): RenderWithProvidersResult => {
+type RenderWithProvidersOptions = {
+  store: Store;
+  panels?: ReadonlyArray<PanelDefinition>;
+  initialEntries?: ReadonlyArray<string>;
+};
+
+export const renderWithProviders = (ui: ReactNode, options: RenderWithProvidersOptions): RenderWithProvidersResult => {
+  const { store, panels, initialEntries } = options;
   const Wrapper = ({ children }: { children: ReactNode }): ReactElement => (
     <Provider store={store}>
       <Theme>

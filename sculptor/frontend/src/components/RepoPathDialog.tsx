@@ -55,7 +55,7 @@ export const RepoPathDialog = ({ isOpen, project, onClose }: RepoPathDialogProps
                 </Text>
 
                 <Box className={styles.pathBox}>
-                  <Text size="2" style={{ fontFamily: "monospace", wordBreak: "break-all" }}>
+                  <Text size="2" className={styles.pathText}>
                     {projectPath}
                   </Text>
                 </Box>

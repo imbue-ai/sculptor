@@ -2,7 +2,6 @@ import type { ReactElement } from "react";
 import { useMemo } from "react";
 
 import type { ToolResultBlock, ToolUseBlock } from "~/api";
-import type { BlockUnion } from "~/common/Guards";
 import { isToolUseBlock } from "~/common/Guards";
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import {
@@ -74,13 +73,12 @@ export const ToolBlockGroup = ({
       if (isHiddenTool(getToolName(block))) continue;
       if (isSpecialToolResult(block)) continue;
 
-      if (isToolUseBlock(block as BlockUnion)) {
-        const toolBlock = block as ToolUseBlock;
-        const children = node.children.get(toolBlock.id);
-        if (SUBAGENT_TOOL_NAMES.has(toolBlock.name) || (children && children.length > 0)) {
-          subagent.push(toolBlock);
-        } else if (isSpecialToolUse(toolBlock)) {
-          special.push(toolBlock);
+      if (isToolUseBlock(block)) {
+        const children = node.children.get(block.id);
+        if (SUBAGENT_TOOL_NAMES.has(block.name) || (children && children.length > 0)) {
+          subagent.push(block);
+        } else if (isSpecialToolUse(block)) {
+          special.push(block);
         } else if (isTopLevelToolBlock(block)) {
           topLevel.push(block);
         } else {
@@ -93,9 +91,8 @@ export const ToolBlockGroup = ({
         // their content is already rendered inside the AlphaSubagentPill.
         // Check both tree structure and tool name so results are hidden
         // even when the ToolResultBlock is in a different message.
-        const resultBlock = block as ToolResultBlock;
-        if (SUBAGENT_TOOL_NAMES.has(resultBlock.toolName)) continue;
-        const toolUseId = resultBlock.toolUseId;
+        if (SUBAGENT_TOOL_NAMES.has(block.toolName)) continue;
+        const toolUseId = block.toolUseId;
         const children = toolUseId ? node.children.get(toolUseId) : undefined;
         if (children && children.length > 0) continue;
 
@@ -134,20 +131,13 @@ export const ToolBlockGroup = ({
           return null;
         })}
       {topLevelBlocks.map((block) => {
-        if (isToolUseBlock(block as BlockUnion)) {
-          const toolBlock = block as ToolUseBlock;
-          const isExecuting = inProgressMessageId !== null && !toolResultMap.has(toolBlock.id);
+        if (isToolUseBlock(block)) {
+          const isExecuting = inProgressMessageId != null && !toolResultMap.has(block.id);
           return (
-            <ToolLine
-              key={toolBlock.id}
-              block={toolBlock}
-              result={toolResultMap.get(toolBlock.id)}
-              isExecuting={isExecuting}
-            />
+            <ToolLine key={block.id} block={block} result={toolResultMap.get(block.id)} isExecuting={isExecuting} />
           );
         }
-        const resultBlock = block as ToolResultBlock;
-        return <CompletedToolLine key={resultBlock.toolUseId} block={resultBlock} />;
+        return <CompletedToolLine key={block.toolUseId} block={block} />;
       })}
       {renderToolSegments(regularBlocks, toolResultMap, {
         isActive,

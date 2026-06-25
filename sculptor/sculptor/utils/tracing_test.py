@@ -88,6 +88,54 @@ def test_start_tracing_is_idempotent(tmp_path: Path) -> None:
     tracing.stop_and_write_trace()
 
 
+def test_stop_returns_result_with_counts(tmp_path: Path) -> None:
+    out = tmp_path / "trace.json"
+    tracing.start_tracing(out)
+    tracing.add_external_events(
+        [
+            {"ph": "X", "name": "renderer.a", "ts": 0, "dur": 1},
+            {"ph": "X", "name": "renderer.b", "ts": 1, "dur": 1},
+        ],
+        tracing.RENDERER_PID,
+    )
+    result = tracing.stop_and_write_trace()
+    assert result is not None
+    assert result.path == out.resolve()
+    assert result.external_event_count == 2
+    # viztracer always records at least its own frames, so this is non-zero.
+    assert result.backend_event_count > 0
+
+
+def test_stop_when_disabled_returns_none() -> None:
+    assert tracing.stop_and_write_trace() is None
+
+
+def test_rearm_after_stop_starts_fresh_session(tmp_path: Path) -> None:
+    """The whole point of runtime arm/disarm: after a flush the module must be
+    ready to arm a brand-new session to a different file. Pins that
+    stop_and_write_trace resets state and that a second start builds a fresh
+    tracer rather than no-opping (which is what the idempotency guard would do
+    if the prior tracer were not cleared)."""
+    first = tmp_path / "first.json"
+    tracing.start_tracing(first)
+    first_tracer = tracing._tracer
+    assert tracing.stop_and_write_trace() is not None
+    # Disarmed and reset.
+    assert tracing.is_tracing_enabled() is False
+    assert tracing.get_trace_to_path() is None
+    assert tracing._tracer is None
+
+    second = tmp_path / "second.json"
+    tracing.start_tracing(second)
+    assert tracing.is_tracing_enabled() is True
+    assert tracing._tracer is not None
+    assert tracing._tracer is not first_tracer
+    assert tracing.get_trace_to_path() == second.resolve()
+    result = tracing.stop_and_write_trace()
+    assert result is not None and result.path == second.resolve()
+    assert first.exists() and second.exists()
+
+
 def test_temp_directory_cleaned_up_after_write(tmp_path: Path) -> None:
     out = tmp_path / "trace.json"
     tracing.start_tracing(out)

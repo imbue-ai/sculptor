@@ -262,7 +262,7 @@ export const useRunCommand = (): ((cmd: Command, opts?: { keepOpen?: boolean }) 
       const shouldKeepOpen = opts?.keepOpen ?? cmd.keepOpen ?? false;
       const isPageOpener = cmd.pageId != null;
 
-      // H9: Multiple commands in flight can race on `pendingCommandIdAtom`.
+      // Multiple commands in flight can race on `commandPalettePendingAtom`.
       // Only set pending if no other command is in flight, and only clear
       // pending if the in-flight command is OURS (so a faster sibling's
       // finally doesn't clear our spinner).

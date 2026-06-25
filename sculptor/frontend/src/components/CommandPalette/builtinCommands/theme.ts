@@ -1,8 +1,8 @@
 import { MoonIcon, PaletteIcon } from "lucide-react";
 
+import { themeBuilderSettingsAtom } from "~/common/state/atoms/themeBuilder.ts";
 import { APPEARANCE_MODES } from "~/common/theme/appearanceModes.ts";
 
-import { themeBuilderSettingsAtom } from "../../../common/state/atoms/themeBuilder.ts";
 import type { CommandRuntime } from "../runtime.ts";
 import type { Command } from "../types.ts";
 

@@ -35,4 +35,4 @@ class FixedTraceback(Traceback):
 
     @classmethod
     def from_dict(cls, dct: dict[str, Any]) -> Self:
-        return cast(cls, super().from_dict(dct))
+        return super().from_dict(dct)

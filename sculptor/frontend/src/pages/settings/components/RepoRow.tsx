@@ -1,13 +1,13 @@
 import { Box, Button, Flex, Link, Text, Tooltip } from "@radix-ui/themes";
 import { AlertTriangle, Terminal } from "lucide-react";
-import type { ReactElement } from "react";
+import type { FocusEvent, ReactElement } from "react";
 import { useRef, useState } from "react";
 
+import { ElementIds } from "~/api";
 import { DEFAULT_WORKSPACE_SETUP_COMMAND } from "~/common/setupDefaults";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { useOnMountIf } from "~/common/useOnMountIf";
 
-import { ElementIds } from "../../../api";
 import styles from "./RepoRow.module.scss";
 
 type RepoRowProps = {
@@ -47,7 +47,7 @@ export const RepoRow = ({
     setupCommandTextareaRef.current?.focus();
   });
 
-  const handleSetupCommandBlur = (e: React.FocusEvent<HTMLTextAreaElement>): void => {
+  const handleSetupCommandBlur = (e: FocusEvent<HTMLTextAreaElement>): void => {
     const trimmed = e.target.value.trim();
     if (isTrackingDefault) {
       // Unchanged default text → remain tracking default. Otherwise freeze the edit.
@@ -63,7 +63,7 @@ export const RepoRow = ({
     onSetupCommandSave(null);
   };
 
-  const handleNamingPatternBlur = (e: React.FocusEvent<HTMLInputElement>): void => {
+  const handleNamingPatternBlur = (e: FocusEvent<HTMLInputElement>): void => {
     const trimmed = e.target.value.trim();
     if (trimmed !== namingPattern) {
       onNamingPatternSave(trimmed);

@@ -4,7 +4,7 @@ import { Command } from "cmdk";
 import { useAtom, useAtomValue } from "jotai";
 import { ChevronRightIcon, SearchIcon, XIcon } from "lucide-react";
 import type { KeyboardEvent, ReactElement } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ElementIds } from "../../api";
 import { keybindingsMapAtom } from "../../common/keybindings/atoms.ts";
@@ -103,7 +103,7 @@ const PaletteRow = ({
       data-command-id={command.id}
       aria-busy={isPending}
     >
-      <div className={styles.itemIcon}>{Icon ? <Icon size={16} /> : <SearchIcon size={16} />}</div>
+      <div className={styles.itemIcon}>{Icon ? createElement(Icon, { size: 16 }) : <SearchIcon size={16} />}</div>
       <div className={styles.itemBody}>
         <span className={styles.itemTitle}>{displayTitle}</span>
         {displaySubtitle ? <span className={styles.itemSubtitle}>{displaySubtitle}</span> : null}
@@ -266,10 +266,14 @@ export const CommandPalette = (): ReactElement => {
   // this `activeValue` would carry over from the previous session and cmdk
   // would re-select that row on the next open instead of auto-selecting the
   // first row. Resetting on close means the very first paint of the next open
-  // sees an empty value and cmdk picks the top row — no flicker.
-  useEffect(() => {
+  // sees an empty value and cmdk picks the top row — no flicker. Adjusting
+  // state during render (with a previous-value guard) avoids the extra render
+  // an effect would add.
+  const [isOpenOnPrevRender, setIsOpenOnPrevRender] = useState(isOpen);
+  if (isOpenOnPrevRender !== isOpen) {
+    setIsOpenOnPrevRender(isOpen);
     if (!isOpen) setActiveValue("");
-  }, [isOpen]);
+  }
 
   // Ref on Command.Input so we can pull focus back to it after a
   // `keepOpen` command finishes. The pending atom tracks in-flight runs;
@@ -611,7 +615,7 @@ export const CommandPalette = (): ReactElement => {
                 hasCursorMovedRef.current = true;
                 return;
               }
-              const item = (e.target as HTMLElement | null)?.closest("[cmdk-item]");
+              const item = e.target instanceof HTMLElement ? e.target.closest("[cmdk-item]") : null;
               if (!item) return;
               if (item.getAttribute("aria-disabled") === "true") return;
               const value = item.getAttribute("data-value");

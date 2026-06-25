@@ -37,9 +37,9 @@ export const BranchNameField = ({
   onUserEdit,
   onReset,
   disabled,
-}: BranchNameFieldProps): ReactElement | null => {
+}: BranchNameFieldProps): ReactElement | undefined => {
   if (mode === Strategy.IN_PLACE) {
-    return null;
+    return undefined;
   }
 
   const shouldShowRequiredHint = mode === Strategy.WORKTREE && value.trim() === "";

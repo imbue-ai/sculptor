@@ -5,7 +5,7 @@ import {
   PanelLeftIcon,
   PanelRightIcon,
   PuzzleIcon,
-  ScanLine,
+  ScanLineIcon,
 } from "lucide-react";
 
 import type { CommandRuntime } from "../runtime.ts";
@@ -113,7 +113,7 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
     group: "view",
     // Matches the Focus Mode toggle in the BottomBar so the visual
     // language is consistent across surfaces.
-    icon: ScanLine,
+    icon: ScanLineIcon,
     shortcut: "focus_mode",
     onPage: "view.layout",
     order: 40,

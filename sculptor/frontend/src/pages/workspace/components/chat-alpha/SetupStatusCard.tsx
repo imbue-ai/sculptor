@@ -26,6 +26,8 @@ type SetupStatusCardProps = {
 };
 
 const SETUP_LABEL = "Setup";
+// Cadence for ticking the live elapsed-time readout while setup is running.
+const LIVE_TIMER_TICK_MS = 100;
 const POPOVER_STYLE: CSSProperties = {
   maxHeight: 380,
   overflow: "hidden",
@@ -40,7 +42,7 @@ function useElapsedSinceStart(startedAt: number | null, isRunning: boolean): str
     if (!isRunning) return;
     const id = setInterval(() => {
       setNow(Date.now() / 1000);
-    }, 100);
+    }, LIVE_TIMER_TICK_MS);
     return (): void => clearInterval(id);
   }, [isRunning]);
   if (startedAt === null) return "0.0s";
@@ -170,9 +172,9 @@ export const SetupStatusCard = ({ workspaceId }: SetupStatusCardProps): ReactEle
 
   const handleEdit = useCallback((): void => {
     if (project?.objectId) {
-      openSettings("repositories", project.objectId);
+      openSettings("REPOSITORIES", project.objectId);
     } else {
-      openSettings("repositories");
+      openSettings("REPOSITORIES");
     }
   }, [project?.objectId, openSettings]);
 

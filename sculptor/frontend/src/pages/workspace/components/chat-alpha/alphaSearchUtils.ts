@@ -1,5 +1,4 @@
 import type { ChatMessage } from "~/api";
-import type { BlockUnion } from "~/common/Guards";
 import { isTextBlock, isToolResultBlock, isToolUseBlock } from "~/common/Guards";
 
 export type SearchableBlock = {
@@ -29,7 +28,7 @@ export const splitMarkdownSegments = (rawText: string): Array<{ text: string; ty
   const fencePattern = /^(```|~~~)[^\n]*\n([\s\S]*?)^\1[ \t]*$/gm;
 
   let lastIndex = 0;
-  let match;
+  let match: RegExpExecArray | null;
 
   while ((match = fencePattern.exec(rawText)) !== null) {
     if (match.index > lastIndex) {
@@ -61,13 +60,12 @@ export const extractSearchableText = (message: ChatMessage): Array<SearchableBlo
   const blocks: Array<SearchableBlock> = [];
 
   message.content.forEach((block, blockIndex) => {
-    if (isToolUseBlock(block as BlockUnion) || isToolResultBlock(block as BlockUnion)) {
+    if (isToolUseBlock(block) || isToolResultBlock(block)) {
       return;
     }
 
-    if (isTextBlock(block as BlockUnion)) {
-      const textBlock = block as { text: string };
-      const segments = splitMarkdownSegments(textBlock.text);
+    if (isTextBlock(block)) {
+      const segments = splitMarkdownSegments(block.text);
       for (const segment of segments) {
         blocks.push({ blockIndex, text: segment.text, type: segment.type });
       }
@@ -105,7 +103,7 @@ export const findMatches = (messages: ReadonlyArray<ChatMessage>, query: string)
           length: query.length,
         });
 
-        startPos = idx + 1;
+        startPos = idx + lowerQuery.length;
       }
     }
   });

@@ -14,8 +14,8 @@ export const PSEUDO_SKILLS: ReadonlyArray<{
   { name: "btw", description: "Ask a read-only side question", argMode: "required" },
 ];
 
-const PSEUDO_SKILL_NAMES: Set<string> = new Set(PSEUDO_SKILLS.map((s) => s.name));
-const PSEUDO_SKILL_BY_NAME: Map<PseudoSkillName, { argMode: ArgMode }> = new Map(
+const PSEUDO_SKILL_NAMES: ReadonlySet<string> = new Set(PSEUDO_SKILLS.map((s) => s.name));
+const PSEUDO_SKILL_BY_NAME: ReadonlyMap<PseudoSkillName, { argMode: ArgMode }> = new Map(
   PSEUDO_SKILLS.map((s) => [s.name, { argMode: s.argMode }]),
 );
 

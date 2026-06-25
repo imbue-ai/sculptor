@@ -65,7 +65,7 @@ const renderDiffContent = ({
 }): ReactElement => {
   return (
     <LargeDiffGate diffString={diffString}>
-      {(visibleDiff, isTruncated) => (
+      {({ visibleDiff, isTruncated }) => (
         <PierreDiffView
           diffString={visibleDiff}
           viewType={viewType}
@@ -130,7 +130,6 @@ export const DiffPanel = ({ workspaceId }: DiffPanelProps): ReactElement => {
     shouldSkipFileLines ? null : activeFileDiff.filePath,
     shouldSkipFileLines ? null : activeFileDiff.previousFilePath,
     shouldSkipFileLines ? null : activeFileDiff.status,
-    shouldSkipFileLines ? null : activeFileDiff.diffString,
     // The vs-target-branch diff is computed against merge-base(target, HEAD), so
     // its old-side line numbers reference the merge-base — fetch oldLines from
     // that exact commit, not the target-branch tip (which may have diverged and
@@ -345,7 +344,6 @@ export const DiffPanel = ({ workspaceId }: DiffPanelProps): ReactElement => {
               tabFilePath={activeFileDiff.tabFilePath ?? undefined}
               addedLines={0}
               removedLines={0}
-              fileStatus={null}
               isBinary={false}
             />
             <Flex ref={diffContentRef} direction="column" flexGrow="1" overflow="hidden" className={styles.content}>
@@ -360,7 +358,6 @@ export const DiffPanel = ({ workspaceId }: DiffPanelProps): ReactElement => {
               tabFilePath={activeFileDiff.tabFilePath ?? undefined}
               addedLines={commitFileLineCounts.added}
               removedLines={commitFileLineCounts.removed}
-              fileStatus={null}
               isBinary={false}
             />
             <Flex ref={diffContentRef} direction="column" flexGrow="1" overflow="hidden" className={styles.content}>
@@ -400,7 +397,7 @@ export const DiffPanel = ({ workspaceId }: DiffPanelProps): ReactElement => {
               tabFilePath={activeFileDiff.tabFilePath ?? undefined}
               addedLines={activeFileDiff.addedLines}
               removedLines={activeFileDiff.removedLines}
-              fileStatus={activeFileDiff.status}
+              fileStatus={activeFileDiff.status ?? undefined}
               isBinary={activeFileDiff.isBinary}
             />
             <Flex ref={diffContentRef} direction="column" flexGrow="1" overflow="hidden" className={styles.content}>

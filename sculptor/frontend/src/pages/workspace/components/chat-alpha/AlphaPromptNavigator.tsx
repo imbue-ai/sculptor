@@ -25,6 +25,9 @@ const OPEN_DELAY_MS = 420;
 const CLOSE_DELAY_MS = 80;
 const REOPEN_GRACE_PERIOD_MS = 300;
 
+// How long the copy button shows its "copied" checkmark before reverting.
+const COPY_FEEDBACK_DURATION_MS = 1500;
+
 const getMessageText = (message: ChatMessage): string =>
   message.content
     .filter((block: BlockUnion): block is TextBlock => isTextBlock(block))
@@ -60,15 +63,10 @@ export const AlphaPromptNavigator = ({
   const prevDotCountRef = useRef(userMessages.length);
 
   // FLIP-style compensation: when a new dot is added to the bottom-anchored
-  // rail, all dots shift up.  We snapshot the rail's top edge before React
-  // commits, then apply a compensating translateY to cancel the visual jump,
+  // rail, all dots shift up.  We remember the rail's top edge from the previous
+  // commit, then apply a compensating translateY to cancel the visual jump,
   // and let the CSS transition slide dots to their new positions.
   const prevRailTopRef = useRef<number | null>(null);
-
-  // Capture the rail's position BEFORE React updates the DOM.
-  if (railRef.current && userMessages.length > prevDotCountRef.current) {
-    prevRailTopRef.current = railRef.current.getBoundingClientRect().top;
-  }
 
   useLayoutEffect(() => {
     const rail = railRef.current;
@@ -76,14 +74,21 @@ export const AlphaPromptNavigator = ({
     const prevCount = prevDotCountRef.current;
     const newCount = userMessages.length;
     prevDotCountRef.current = newCount;
-    prevRailTopRef.current = null;
 
-    if (!rail || newCount <= prevCount || prevTop == null) return;
+    if (!rail) {
+      prevRailTopRef.current = null;
+      return;
+    }
 
-    // Measure how far the rail actually shifted after the DOM update.
+    // Measure the rail's top after this commit. The ref still holds the top
+    // measured in the previous layout effect (before the new dot existed), so
+    // the difference tells us how far the rail shifted.
     const newTop = rail.getBoundingClientRect().top;
-    const offset = prevTop - newTop;
+    prevRailTopRef.current = newTop;
 
+    if (newCount <= prevCount || prevTop == null) return;
+
+    const offset = prevTop - newTop;
     if (offset <= 0) return;
 
     // Cancel any in-progress transition and snap to the compensating offset.
@@ -95,7 +100,10 @@ export const AlphaPromptNavigator = ({
       rail.style.transition = "";
       rail.style.transform = "";
     });
-  }, [userMessages.length]);
+    // maxVisibleDots is included so a resize-driven re-layout refreshes the
+    // stored top (without triggering compensation, since the count is unchanged),
+    // keeping the FLIP baseline accurate when the next dot is added.
+  }, [userMessages.length, maxVisibleDots]);
 
   // Popover state — mirrors WorkspacePeekOverlay pattern.
   const [popoverIndex, setPopoverIndex] = useState<number | null>(null);
@@ -103,7 +111,10 @@ export const AlphaPromptNavigator = ({
   const [popoverPosition, setPopoverPosition] = useState<PopoverPosition>({ x: 0, y: 0 });
   const [hasAnimated, setHasAnimated] = useState(false);
 
-  const [isCopied, setIsCopied] = useState(false);
+  // Tracks which prompt was last copied. Deriving the "copied" indicator from
+  // this (rather than a bare boolean) means it naturally clears when the user
+  // hovers a different dot — no effect needed to reset on dot change.
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -214,25 +225,24 @@ export const AlphaPromptNavigator = ({
     schedulePopoverClose();
   }, [schedulePopoverClose]);
 
+  const handleContextMenuOpenChange = useCallback(
+    (open: boolean): void => {
+      setIsContextMenuOpen(open);
+      // Dismiss the popover when the context menu opens so the two don't overlap.
+      if (open) dismissPopover();
+    },
+    [dismissPopover],
+  );
+
   const handlePopoverCopy = useCallback((): void => {
     if (popoverIndex == null) return;
     const message = userMessages[popoverIndex];
     if (!message) return;
-    navigator.clipboard.writeText(getMessageText(message));
-    setIsCopied(true);
+    void navigator.clipboard.writeText(getMessageText(message));
+    setCopiedIndex(popoverIndex);
     clearTimeout(copyTimerRef.current);
-    copyTimerRef.current = setTimeout(() => setIsCopied(false), 1500);
+    copyTimerRef.current = setTimeout(() => setCopiedIndex(null), COPY_FEEDBACK_DURATION_MS);
   }, [popoverIndex, userMessages]);
-
-  // Reset copied state when switching dots.
-  useEffect(() => {
-    setIsCopied(false);
-  }, [popoverIndex]);
-
-  // Dismiss popover when context menu opens.
-  useEffect(() => {
-    if (isContextMenuOpen) dismissPopover();
-  }, [isContextMenuOpen, dismissPopover]);
 
   // Cleanup timers on unmount.
   useEffect(() => {
@@ -292,6 +302,10 @@ export const AlphaPromptNavigator = ({
     [popoverMessage],
   );
 
+  // The checkmark shows only for the prompt that was just copied; switching
+  // dots changes popoverIndex and clears it automatically.
+  const isCopied = copiedIndex != null && copiedIndex === popoverIndex;
+
   if (userMessages.length === 0) return null;
 
   const renderDot = (messageIndex: number): ReactElement => {
@@ -299,7 +313,7 @@ export const AlphaPromptNavigator = ({
     const isActive = messageIndex === activePromptIndex;
     const isPopoverTarget = isPopoverVisible && messageIndex === popoverIndex;
     return (
-      <ContextMenu.Root key={message.id} onOpenChange={setIsContextMenuOpen}>
+      <ContextMenu.Root key={message.id} onOpenChange={handleContextMenuOpenChange}>
         <ContextMenu.Trigger>
           <div
             className={styles.dotWrapper}

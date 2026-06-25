@@ -12,6 +12,12 @@ import { useEffect, useRef, useState } from "react";
  */
 const persistedOrigins = new Map<string, number>();
 
+const MILLISECONDS_PER_SECOND = 1000;
+const TICK_INTERVAL_MS = 100;
+
+/** Format a duration in milliseconds as a one-decimal seconds string, e.g. "1.5s". */
+const formatElapsedSeconds = (elapsedMs: number): string => `${(elapsedMs / MILLISECONDS_PER_SECOND).toFixed(1)}s`;
+
 /**
  * Tracks elapsed time with separate visibility and ticking controls.
  * - `isVisible`: when true the timer is shown; when it transitions from false→true the timer resets.
@@ -44,8 +50,12 @@ export const useElapsedTime = (isVisible: boolean, isTicking: boolean, persistKe
       }
       startRef.current = performance.now();
       frozenOffsetRef.current = initialOffset;
-      const formatted = initialOffset > 0 ? `${(initialOffset / 1000).toFixed(1)}s` : "0.0s";
+      const formatted = formatElapsedSeconds(initialOffset);
       lastDisplayedRef.current = formatted;
+      // Syncs from external systems (the persisted-origins store and performance.now())
+      // on the visibility transition; the value reflects the clock at this moment and
+      // is not derivable during render without an impure time read.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setElapsed(formatted);
     } else {
       if (intervalRef.current !== null) {
@@ -81,7 +91,7 @@ export const useElapsedTime = (isVisible: boolean, isTicking: boolean, persistKe
         if (startRef.current === null) return;
 
         const elapsedMs = performance.now() - startRef.current + frozenOffsetRef.current;
-        const formatted = `${(elapsedMs / 1000).toFixed(1)}s`;
+        const formatted = formatElapsedSeconds(elapsedMs);
 
         if (formatted !== lastDisplayedRef.current) {
           lastDisplayedRef.current = formatted;
@@ -89,7 +99,7 @@ export const useElapsedTime = (isVisible: boolean, isTicking: boolean, persistKe
         }
       };
 
-      intervalRef.current = setInterval(tick, 100);
+      intervalRef.current = setInterval(tick, TICK_INTERVAL_MS);
     } else {
       // Freeze: capture current elapsed into offset
       if (intervalRef.current !== null) {
@@ -105,7 +115,7 @@ export const useElapsedTime = (isVisible: boolean, isTicking: boolean, persistKe
       // Ensure the displayed value reflects the frozen offset.
       // The last interval tick may not have fired before the cleanup.
       if (frozenOffsetRef.current > 0) {
-        const formatted = `${(frozenOffsetRef.current / 1000).toFixed(1)}s`;
+        const formatted = formatElapsedSeconds(frozenOffsetRef.current);
         if (formatted !== lastDisplayedRef.current) {
           lastDisplayedRef.current = formatted;
           setElapsed(formatted);

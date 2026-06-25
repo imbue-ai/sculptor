@@ -145,6 +145,9 @@ export const usePillHoverDelay = ({
     cancelClose();
   }, [cancelClose]);
 
+  // Clear any armed open/close timers (and the safe-area mousemove listener,
+  // via cancelClose) on unmount. The effect body returns `clearTimers` itself
+  // as the cleanup function rather than invoking it on mount.
   useEffect(() => clearTimers, [clearTimers]);
 
   const fireClose = useCallback((): void => {

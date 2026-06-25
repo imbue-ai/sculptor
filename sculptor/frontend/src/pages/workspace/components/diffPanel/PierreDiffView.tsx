@@ -2,7 +2,7 @@ import type { FileDiffMetadata, FileDiffOptions } from "@pierre/diffs";
 import { getSingularPatch, processFile } from "@pierre/diffs";
 import { FileDiff, PatchDiff } from "@pierre/diffs/react";
 import { useAtomValue } from "jotai";
-import type { ErrorInfo, ReactElement, ReactNode, RefObject } from "react";
+import type { CSSProperties, ErrorInfo, ReactElement, ReactNode, RefObject } from "react";
 import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
 import { ElementIds } from "~/api";
@@ -238,7 +238,7 @@ export const PierreDiffView = ({
     ? ({
         "--diffs-split-left": `${splitRatio}fr`,
         "--diffs-split-right": `${100 - splitRatio}fr`,
-      } as Record<string, string>)
+      } as CSSProperties)
     : undefined;
 
   const patchFallback = <PatchDiff patch={diffString} options={options} />;

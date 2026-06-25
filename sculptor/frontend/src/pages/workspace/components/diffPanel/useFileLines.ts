@@ -51,10 +51,6 @@ export const useFileLines = (
   filePath: string | null,
   previousFilePath: string | null,
   fileStatus: FileStatus | null,
-  // Retained for API compatibility; per-key caching in TanStack Query
-  // already prevents the stale-pairing problem the hook had to guard
-  // against with a sync-clear hack.
-  _diffFingerprint: string | null,
   baseRefOverride?: string,
 ): FileLines => {
   const workspace = useWorkspace(workspaceId);

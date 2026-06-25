@@ -28,7 +28,6 @@ export type GitAndOpenInRuntime = {
   hasUncommittedChanges: (workspace: Workspace) => boolean;
   hasOpenPr: (workspace: Workspace) => boolean;
   canCreatePr: (workspace: Workspace) => boolean;
-  prTerm: (workspace: Workspace) => "merge request" | "pull request";
   canOpenInOS: () => boolean;
   isMacUi: () => boolean;
 };
@@ -63,12 +62,8 @@ export const useGitAndOpenInRuntime = (): GitAndOpenInRuntime => {
       createMergeRequest: (ws): void => {
         const chatActions = store.get(chatActionsAtom);
         const prompt = store.get(prCreationPromptAtom);
-        const term = ((): "merge request" | "pull request" => {
-          const repoInfo = store.get(repoInfoAtomFamily(ws.projectId));
-          return repoInfo?.isGitlabOrigin ? "merge request" : "pull request";
-        })();
         const targetBranch = ws.targetBranch;
-        const message = targetBranch ? `${prompt}\n\nTarget the ${term} against \`${targetBranch}\`.` : prompt;
+        const message = targetBranch ? `${prompt}\n\nTarget the pull request against \`${targetBranch}\`.` : prompt;
         void chatActions.sendMessage?.(message);
       },
       openMergeRequest: (ws): void => {
@@ -107,12 +102,8 @@ export const useGitAndOpenInRuntime = (): GitAndOpenInRuntime => {
       canCreatePr: (ws): boolean => {
         const prStatus = store.get(prStatusAtomFamily(ws.objectId));
         // Allow Create when there's no open PR yet — covers "none" and
-        // "merged" (you can open a follow-up MR after a previous merge).
+        // "merged" (you can open a follow-up PR after a previous merge).
         return prStatus?.prState !== "open";
-      },
-      prTerm: (ws): "merge request" | "pull request" => {
-        const repoInfo = store.get(repoInfoAtomFamily(ws.projectId));
-        return repoInfo?.isGitlabOrigin ? "merge request" : "pull request";
       },
       canOpenInOS: (): boolean => getBackendCapabilities().canOpenInOS,
       isMacUi: (): boolean => isMac(),

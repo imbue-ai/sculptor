@@ -35,6 +35,20 @@ global.ResizeObserver = class {
   disconnect(): void {}
 };
 
+// Radix UI menus (and their submenus) drive open/close through Pointer Capture
+// and scroll focused items into view. jsdom implements none of these, so under
+// user-event interactions Radix menus never open. Provide no-op polyfills.
+const noop = (): void => undefined;
+if (typeof Element.prototype.hasPointerCapture !== "function") {
+  Element.prototype.hasPointerCapture = (): boolean => false;
+  Element.prototype.setPointerCapture = noop;
+  Element.prototype.releasePointerCapture = noop;
+}
+
+if (typeof Element.prototype.scrollIntoView !== "function") {
+  Element.prototype.scrollIntoView = noop;
+}
+
 // Radix UI's floating-ui uses DOMRect.fromRect for context menu positioning.
 // jsdom does not implement DOMRect, so we provide a minimal polyfill.
 if (typeof globalThis.DOMRect === "undefined") {

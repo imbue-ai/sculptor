@@ -22,6 +22,10 @@ set +u
 . "$NVM_DIR/nvm.sh"
 nvm use --silent 24.17.0 2>/dev/null || nvm install 24.17.0 >/dev/null
 nvm use --silent 24.17.0
+# Provide pnpm via Corepack (ships with Node). The pinned version comes from the
+# `packageManager` field in sculptor/frontend/package.json. Tolerate failure so
+# an already-on-PATH pnpm still works.
+corepack enable pnpm 2>/dev/null || true
 set -u
 '''
 
@@ -150,9 +154,9 @@ format:
       uv run ruff format --force-exclude --config pyproject.toml sculptor/
       echo "Formatting JS/TS files..."
       {{ nvm_use }}
-      cd "{{justfile_directory()}}/sculptor/frontend" && npm run format -- .
+      cd "{{justfile_directory()}}/sculptor/frontend" && pnpm run format .
       echo "Formatting SCSS files..."
-      cd "{{justfile_directory()}}/sculptor/frontend" && npx stylelint --fix --cache --cache-location node_modules/.cache/stylelint-fix 'src/**/*.scss'
+      cd "{{justfile_directory()}}/sculptor/frontend" && pnpm exec stylelint --fix --cache --cache-location node_modules/.cache/stylelint-fix 'src/**/*.scss'
     }
     quiet_by_default format _do_format
 
@@ -169,9 +173,9 @@ lint:
       uv run ruff check --force-exclude --config pyproject.toml sculptor/
       echo "Linting JS/TS files..."
       {{ nvm_use }}
-      cd "{{justfile_directory()}}/sculptor/frontend" && npm run lint -- .
+      cd "{{justfile_directory()}}/sculptor/frontend" && pnpm run lint .
       echo "Linting SCSS files..."
-      cd "{{justfile_directory()}}/sculptor/frontend" && npm run lint:styles
+      cd "{{justfile_directory()}}/sculptor/frontend" && pnpm run lint:styles
     }
     quiet_by_default lint _do_lint
 
@@ -186,7 +190,7 @@ typecheck:
       cd "{{justfile_directory()}}" && uv run --project sculptor pyrefly check
       echo "Type checking JS/TS files with tsc..."
       {{ nvm_use }}
-      cd "{{justfile_directory()}}/sculptor/frontend" && npm run tsc
+      cd "{{justfile_directory()}}/sculptor/frontend" && pnpm run tsc
     }
     quiet_by_default typecheck _do_typecheck
 
@@ -250,8 +254,8 @@ check-large-files maxkb="500":
     cd "{{justfile_directory()}}"
     echo "Checking for large staged files (>{{maxkb}}KB)..."
     # Get files staged for commit, excluding the generated lockfiles that are
-    # legitimately committed and exceed the threshold (uv.lock, npm package-lock.json).
-    STAGED=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | grep -Ev 'uv\.lock|package-lock\.json' || true)
+    # legitimately committed and exceed the threshold (uv.lock, pnpm-lock.yaml).
+    STAGED=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | grep -Ev 'uv\.lock|pnpm-lock\.yaml' || true)
     if [ -z "$STAGED" ]; then
       echo "No staged files to check."
       exit 0
@@ -592,10 +596,11 @@ _patch-electron-app-name label:
 [group("dev")]
 frontend:
     #!/usr/bin/env bash
+    {{ nvm_use }}
     just _patch-electron-app-name "Sculptor (from source)"
     cd "{{justfile_directory()}}/sculptor/frontend"
     env SCULPTOR_ICON_LABEL="src" \
-      npm run electron:start -- --  --unhandled-rejections=strict --trace-warnings
+      pnpm run electron:start -- --unhandled-rejections=strict --trace-warnings
 
 # Start Electron with the backend running in a Docker container (dev mode).
 # Requires: Docker, ANTHROPIC_API_KEY (or ~/anthropic_key.txt).
@@ -604,6 +609,7 @@ frontend:
 frontend-container:
     #!/usr/bin/env bash
     set -euo pipefail
+    {{ nvm_use }}
     REPO_ROOT="{{justfile_directory()}}"
     IMAGE_NAME="sculptor-backend-dev"
     SCRIPT="$REPO_ROOT/container/run-backend-in-container.sh"
@@ -629,7 +635,7 @@ frontend-container:
     just _patch-electron-app-name "Sculptor (from source)"
     export SCULPTOR_ICON_LABEL="src"
     cd "$REPO_ROOT/sculptor/frontend"
-    exec npm run electron:start -- --  --unhandled-rejections=strict --trace-warnings
+    exec pnpm run electron:start -- --unhandled-rejections=strict --trace-warnings
 
 # Start Electron in custom-command mode WITHOUT Docker.
 # Runs the backend from source via uv, but exercises the full custom-command
@@ -640,6 +646,7 @@ frontend-container:
 frontend-custom:
     #!/usr/bin/env bash
     set -euo pipefail
+    {{ nvm_use }}
     REPO_ROOT="{{justfile_directory()}}"
     PORT="${SCULPTOR_API_PORT:-5050}"
 
@@ -652,7 +659,7 @@ frontend-custom:
     just _patch-electron-app-name "Sculptor (from source)"
     export SCULPTOR_ICON_LABEL="src"
     cd "$REPO_ROOT/sculptor/frontend"
-    exec npm run electron:start -- --  --unhandled-rejections=strict --trace-warnings
+    exec pnpm run electron:start -- --unhandled-rejections=strict --trace-warnings
 
 # Start the Storybook dev server
 [group("dev")]
@@ -660,7 +667,7 @@ storybook:
     #!/usr/bin/env bash
     {{ nvm_use }}
     cd "{{justfile_directory()}}/sculptor/frontend"
-    npm run storybook
+    pnpm run storybook
 
 # Start the Backend server. Pass repo_path="none" to skip auto-creating a project.
 [group("dev")]
@@ -803,7 +810,7 @@ generate-api:
     _do_generate_api() {
       {{ nvm_use }}
       cd "{{justfile_directory()}}/sculptor/frontend"
-      npm run generate-api
+      pnpm run generate-api
     }
     quiet_by_default generate-api _do_generate_api
 
@@ -816,18 +823,18 @@ install-frontend: && generate-api
     _do_install_frontend() {
       {{ nvm_use }}
       cd "{{justfile_directory()}}/sculptor/frontend"
-      # Skip npm install when neither package.json nor package-lock.json has
-      # changed since the last install. npm writes node_modules/.package-lock.json
+      # Skip pnpm install when neither package.json nor pnpm-lock.yaml has
+      # changed since the last install. pnpm writes node_modules/.modules.yaml
       # on every successful install, so its mtime is a reliable stamp.
-      stamp=node_modules/.package-lock.json
+      stamp=node_modules/.modules.yaml
       if [ -f "$stamp" ] \
           && [ ! package.json -nt "$stamp" ] \
-          && [ ! package-lock.json -nt "$stamp" ]; then
-        echo "Frontend dependencies up to date, skipping npm install."
+          && [ ! pnpm-lock.yaml -nt "$stamp" ]; then
+        echo "Frontend dependencies up to date, skipping pnpm install."
         return 0
       fi
       echo "Installing frontend dependencies..."
-      npm ci
+      pnpm install --frozen-lockfile
     }
     quiet_by_default install-frontend _do_install_frontend
 
@@ -962,8 +969,10 @@ build-frontend: install-frontend
     #! /usr/bin/env bash
     {{ nvm_use }}
     cd "{{justfile_directory()}}/sculptor/frontend"
-    # NOTE: intentionally not calling setup-build-vars here so test/dev builds don't pelt sentry
-    npm run build --mode {{MODE}}
+    # NOTE: intentionally not calling setup-build-vars here so test/dev builds don't pelt sentry.
+    # Do not pass `--mode` to this build: pnpm forwards trailing args straight to vite, so a stray
+    # flag would silently change the build mode. Leave vite on its default mode.
+    pnpm run build
     mkdir -p ./frontend-dist
     cp -a dist/. ../frontend-dist/
 
@@ -1031,7 +1040,7 @@ icons:
     #! /usr/bin/env bash
     {{ nvm_use }}
     cd "{{justfile_directory()}}/sculptor/frontend"
-    npm run generate-icons
+    pnpm run generate-icons
     cp assets/desktop_icon.png assets/icons/icon.png
 
 
@@ -1061,7 +1070,7 @@ build-desktop-app:
     # Set up the environment variables for the correct version. Defaults to
     # "dev" so `just refresh app` works locally without ceremony; CI sets
     # MODE=production explicitly when packaging release artifacts.
-    eval $(uv run --project sculptor builder setup-build-vars "${MODE:-dev}") && npm run electron:package
+    eval $(uv run --project sculptor builder setup-build-vars "${MODE:-dev}") && pnpm run electron:package
     mkdir -p "{{justfile_directory()}}/dist/darwin-arm64"
     cp -r out/Sculptor-darwin-arm64/ "{{justfile_directory()}}/dist/darwin-arm64"
 
@@ -1080,7 +1089,7 @@ build-desktop-app:
     # Set up the environment variables for the correct version. Defaults to
     # "dev" so `just refresh app` works locally without ceremony; CI sets
     # MODE=production explicitly when packaging release artifacts.
-    eval $(uv run --project sculptor builder setup-build-vars "${MODE:-dev}") && npm run electron:package
+    eval $(uv run --project sculptor builder setup-build-vars "${MODE:-dev}") && pnpm run electron:package
     mkdir -p "{{justfile_directory()}}/dist/linux-${ELECTRON_ARCH}"
     cp -r "out/Sculptor-linux-${ELECTRON_ARCH}/" "{{justfile_directory()}}/dist/linux-${ELECTRON_ARCH}"
 
@@ -1108,7 +1117,7 @@ package-desktop-installer:
     # Telemetry env baked into the installer. Defaults to production so a bare
     # `just pkg` never ships a dev DSN; CI sets SCULPTOR_BUILD_ENV=dev for
     # non-release builds.
-    eval "$(uv run --project sculptor builder setup-build-vars "${SCULPTOR_BUILD_ENV:-production}")" && npm run electron:make
+    eval "$(uv run --project sculptor builder setup-build-vars "${SCULPTOR_BUILD_ENV:-production}")" && pnpm run electron:make
     mkdir -p "{{justfile_directory()}}/dist"
     cp -r out/make/zip "{{justfile_directory()}}/dist"
     cp out/make/Sculptor.dmg "{{justfile_directory()}}/dist"
@@ -1140,7 +1149,7 @@ pkg-dev:
     # Use the "dev" sentry/posthog environment so daily-driver telemetry stays
     # out of the production buckets.
     eval $(uv run --project sculptor builder setup-build-vars dev) && \
-        SKIP_NOTARIZE_AND_SIGN=1 npm run electron:make
+        SKIP_NOTARIZE_AND_SIGN=1 pnpm run electron:make
     mkdir -p "$ROOT/dist"
     cp out/make/Sculptor.dmg "$ROOT/dist"
     echo "Built: $ROOT/dist/Sculptor.dmg"
@@ -1240,7 +1249,7 @@ package-desktop-installer:
     # Inject the telemetry env before packaging, like the macOS recipe; without
     # it the renderer bakes an empty DSN. Defaults to production; CI sets
     # SCULPTOR_BUILD_ENV=dev for non-release builds.
-    eval "$(uv run --project sculptor builder setup-build-vars "${SCULPTOR_BUILD_ENV:-production}")" && npm run electron:make
+    eval "$(uv run --project sculptor builder setup-build-vars "${SCULPTOR_BUILD_ENV:-production}")" && pnpm run electron:make
 
     # The AppImage maker includes the version in the filename.
     # Rename the file to remove the version for consistent filenames.
@@ -1307,16 +1316,16 @@ test-unit-frontend:
     _do_test_unit_frontend() {
       {{ nvm_use }}
       cd "{{justfile_directory()}}/sculptor/frontend"
-      stamp=node_modules/.package-lock.json
+      stamp=node_modules/.modules.yaml
       if [ ! -f "$stamp" ] \
           || [ package.json -nt "$stamp" ] \
-          || [ package-lock.json -nt "$stamp" ]; then
-        npm ci
+          || [ pnpm-lock.yaml -nt "$stamp" ]; then
+        pnpm install --frozen-lockfile
       else
-        echo "Frontend dependencies up to date, skipping npm install."
+        echo "Frontend dependencies up to date, skipping pnpm install."
       fi
-      npm run generate-api
-      npm test
+      pnpm run generate-api
+      pnpm test
     }
     quiet_by_default test-unit-frontend _do_test_unit_frontend
 

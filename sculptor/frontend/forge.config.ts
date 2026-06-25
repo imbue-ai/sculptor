@@ -208,6 +208,34 @@ let config = {
         );
       }
     },
+    // Dev (unsigned) macOS builds only: ad-hoc re-sign the backend sidecar with
+    // get-task-allow so a profiler/debugger (py-spy, lldb) can attach to a
+    // running `sculptor_backend` without anyone re-signing it by hand. Gated to
+    // the unsigned dev path on purpose: get-task-allow is a hardened-runtime
+    // bypass and must never ship on a notarized release (Apple's workflow strips
+    // it anyway). Runs after packaging the .app, before the DMG is made. See the
+    // `profile-sculptor-backend` skill / SCU-1604.
+    postPackage: async (
+      _forgeConfig: ForgeConfig,
+      packageResult: { platform: string; arch: string; outputPaths: Array<string> },
+    ): Promise<void> => {
+      if (IS_NOTARIZING_AND_SIGNING || packageResult.platform !== "darwin") {
+        return;
+      }
+      const entitlements = path.resolve(__dirname, "config/entitlements.dev.plist");
+      for (const outputPath of packageResult.outputPaths) {
+        for (const entry of fs.readdirSync(outputPath)) {
+          if (!entry.endsWith(".app")) continue;
+          const backend = path.join(outputPath, entry, "Contents/Resources/sculptor_backend/sculptor_backend");
+          if (!fs.existsSync(backend)) continue;
+          console.log(`🔓 Dev build: ad-hoc signing sidecar with get-task-allow (debug attach): ${backend}`);
+          const isSigned = await run("codesign", ["--sign", "-", "--force", "--entitlements", entitlements, backend]);
+          if (!isSigned) {
+            throw new Error(`Failed to ad-hoc sign ${backend} with dev debug entitlements`);
+          }
+        }
+      }
+    },
     // Runs after all makers finish (i.e., after the DMG is created)
     postMake: async (_forgeConfig: ForgeConfig, results: Array<ForgeMakeResult>): Promise<void> => {
       if (!IS_NOTARIZING_AND_SIGNING) {

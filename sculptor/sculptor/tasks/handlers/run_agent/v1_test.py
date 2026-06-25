@@ -55,6 +55,7 @@ from sculptor.tasks.handlers.run_agent.v1 import AgentPaused
 from sculptor.tasks.handlers.run_agent.v1 import _build_agent_path
 from sculptor.tasks.handlers.run_agent.v1 import _run_agent_in_environment
 from sculptor.tasks.handlers.run_agent.v1 import _save_messages
+from sculptor.tasks.handlers.run_agent.v1 import _send_user_input_message
 from sculptor.tasks.handlers.run_agent.v1 import _update_task_state
 
 
@@ -943,6 +944,377 @@ def test_resuming_in_flight_message_does_not_persist_a_duplicate(
     chat_copies = [message for message in saved_messages if message.message_id == chat_message.message_id]
     assert len(chat_copies) == 1, (
         f"resumed in-flight message must not be re-persisted; found {len(chat_copies)} copies in saved_agent_message"
+    )
+
+
+class _RecordAnswerOrResumeAgent(DefaultAgentWrapper):
+    """Fake agent that records whether the loop dispatched a raw answer or a resume.
+
+    Mirrors ``_RecordOnlyAgent`` but for the crash-mid-answer restore path: it
+    records pushed ``UserQuestionAnswerMessage`` and
+    ``ResumeAgentResponseRunnerMessage`` so a test can assert which one the loop
+    sent for an orphaned answer. On the ``StopAgentUserMessage`` the v1 loop pushes
+    when it observes ``shutdown_event``, it emits a ``RequestStoppedAgentMessage``
+    for the most recent dispatched request and sets ``_exit_code =
+    AGENT_EXIT_CODE_FROM_SIGTERM`` so the next iteration early-exits into
+    ``_handle_completed_agent``.
+    """
+
+    _pushed_answer_or_resume: list[UserQuestionAnswerMessage | ResumeAgentResponseRunnerMessage] = PrivateAttr(
+        default_factory=list
+    )
+    _last_request_id: AgentMessageID | None = PrivateAttr(default=None)
+
+    def _start(self) -> None: ...
+
+    def _terminate(self, force_kill_seconds: float) -> None: ...
+
+    def wait(self, timeout: float) -> int:
+        return self._exit_code if self._exit_code is not None else 0
+
+    @property
+    def pushed_answer_or_resume(self) -> list[UserQuestionAnswerMessage | ResumeAgentResponseRunnerMessage]:
+        return self._pushed_answer_or_resume
+
+    def _push_message(self, message: Message) -> bool:
+        if isinstance(message, UserQuestionAnswerMessage):
+            self._pushed_answer_or_resume.append(message)
+            self._last_request_id = message.message_id
+            return True
+        if isinstance(message, ResumeAgentResponseRunnerMessage):
+            self._pushed_answer_or_resume.append(message)
+            self._last_request_id = message.for_user_message_id
+            return True
+        if isinstance(message, StopAgentUserMessage):
+            request_id = self._last_request_id
+            assert request_id is not None, "Stop arrived before any answer/resume message"
+            try:
+                raise AgentClientError("Killed by SIGTERM", exit_code=AGENT_EXIT_CODE_FROM_SIGTERM)
+            except AgentClientError as exc:
+                err = SerializedException.build(exc, exc.__traceback__)
+            self._output_messages.put(
+                RequestStoppedAgentMessage(
+                    message_id=AgentMessageID(),
+                    request_id=request_id,
+                    error=err,
+                )
+            )
+            self._exit_code = AGENT_EXIT_CODE_FROM_SIGTERM
+            return True
+        return False
+
+
+def test_orphaned_question_answer_is_resumed_not_stale_skipped(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: LocalEnvironment,
+    test_settings: SculptorSettings,
+) -> None:
+    """SCU-1558: a question answer whose turn died mid-flight must be RESUMED on
+    restart, not re-delivered raw.
+
+    A crash mid-question-answer leaves the ``UserQuestionAnswerMessage`` with a
+    ``RequestStarted`` but no completion -- the per-turn ``RequestSuccess`` is
+    deferred to the turn boundary, which the crash never reaches. Reconciliation
+    keeps the orphaned answer in the queue, so the resume loop re-dispatches it.
+
+    On restart the pi process has already recorded the answer as a ``toolResult``
+    and has no open dialog, so re-delivering the answer raw is reported as a stale
+    dialog and dropped (``_deliver_question_answer`` emits ``RequestSkipped``): no
+    turn is driven and the request never settles, leaving a perpetually-busy agent.
+
+    The loop must instead convert the orphaned answer to a
+    ``ResumeAgentResponseRunnerMessage`` -- the same contract it already honors for
+    an orphaned chat message -- so the dangling request settles.
+    """
+    workspace_id = WorkspaceID()
+    previous_message_id = AgentMessageID()
+    chat_message = _make_in_flight_chat_message()
+    answer = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"Which option?": "the first one"},
+        question_data=AskUserQuestionData(questions=[], tool_use_id="t1"),
+        tool_use_id="t1",
+    )
+    stale_state = AgentTaskStateV2(
+        workspace_id=workspace_id,
+        last_processed_message_id=previous_message_id,
+    )
+    _set_task_state(local_task, stale_state, services)
+
+    # Persist the crash-mid-answer history: the chat turn started and produced a
+    # partial response, then the user's answer was delivered (RequestStarted) but
+    # its turn never completed -- no completion message for either request.
+    _persist_messages(
+        local_task,
+        services,
+        [
+            chat_message,
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=chat_message.message_id),
+            _make_partial_response_block(),
+            answer,
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=answer.message_id),
+        ],
+    )
+
+    agent_env = LocalAgentExecutionEnvironment(
+        environment=environment,
+        task_id=local_task.object_id,
+        dependency_management_service=services.dependency_management_service,
+    )
+    fake_agent = _RecordAnswerOrResumeAgent(
+        harness=CLAUDE_CODE_HARNESS,
+        environment=agent_env,
+        task_id=local_task.object_id,
+        system_prompt="",
+    )
+
+    input_message_queue: Queue = Queue()
+    shutdown_event = threading.Event()
+    shutdown_event.set()  # Fire immediately so the loop sends Stop after the first send.
+
+    assert isinstance(local_task.input_data, AgentTaskInputsV2)
+    task_data = local_task.input_data
+
+    with patch("sculptor.tasks.handlers.run_agent.v1._get_agent_wrapper", return_value=fake_agent):
+        with pytest.raises(AgentPaused):
+            _run_agent_in_environment(
+                task=local_task,
+                task_data=task_data,
+                task_state=stale_state,
+                re_queued_messages=(answer,),
+                input_message_queue=input_message_queue,
+                environment=agent_env,
+                services=services,
+                project=project,
+                settings=test_settings,
+                shutdown_event=shutdown_event,
+            )
+
+    assert fake_agent.pushed_answer_or_resume, "Expected the loop to dispatch the orphaned answer"
+    first_push = fake_agent.pushed_answer_or_resume[0]
+    assert isinstance(first_push, ResumeAgentResponseRunnerMessage), (
+        f"orphaned answer must be resumed, not re-delivered raw (which is stale-skipped); got {type(first_push).__name__}"
+    )
+    assert first_push.for_user_message_id == answer.message_id
+
+
+def test_send_user_input_message_resumes_only_the_orphaned_answer() -> None:
+    """Only the answer tracked as orphaned converts to a resume; any other is raw.
+
+    Guards the boundary of the SCU-1558 fix: a live answer (one not left in flight
+    by a previous, crashed run) must still reach the harness as a raw
+    UserQuestionAnswerMessage so it is delivered to the open dialog. Converting it
+    to a resume would silently drop the user's actual answer.
+    """
+    orphaned = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"q": "a"},
+        question_data=AskUserQuestionData(questions=[], tool_use_id="t1"),
+        tool_use_id="t1",
+    )
+    live = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"q": "b"},
+        question_data=AskUserQuestionData(questions=[], tool_use_id="t2"),
+        tool_use_id="t2",
+    )
+
+    orphaned_agent = MagicMock()
+    _send_user_input_message(
+        orphaned_agent,
+        orphaned,
+        None,
+        orphaned.message_id,
+    )
+    (orphaned_call,) = orphaned_agent.push_message.call_args_list
+    sent_for_orphaned = orphaned_call.args[0]
+    assert isinstance(sent_for_orphaned, ResumeAgentResponseRunnerMessage)
+    assert sent_for_orphaned.for_user_message_id == orphaned.message_id
+
+    live_agent = MagicMock()
+    _send_user_input_message(
+        live_agent,
+        live,
+        None,
+        orphaned.message_id,
+    )
+    (live_call,) = live_agent.push_message.call_args_list
+    assert live_call.args[0] is live, "a live answer must be delivered raw, not converted to a resume"
+
+
+def test_orphaned_answer_with_interrupted_completion_is_still_resumed(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: LocalEnvironment,
+    test_settings: SculptorSettings,
+) -> None:
+    """An answer whose only completion is interrupted stays orphaned and resumes.
+
+    A post-answer shutdown can leave the answer with RequestStarted +
+    RequestSuccess(interrupted=True): the deferred per-turn success fired during
+    teardown, but the follow-up turn was never driven. That is not a finished turn,
+    so the resume replay must keep treating the answer as orphaned and convert it
+    to a ResumeAgentResponseRunnerMessage. Clearing it on the interrupted
+    completion would fall back to raw re-delivery, which a fresh agent stale-skips
+    — re-introducing the bug on the next restart.
+    """
+    workspace_id = WorkspaceID()
+    previous_message_id = AgentMessageID()
+    chat_message = _make_in_flight_chat_message()
+    answer = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"q": "a"},
+        question_data=AskUserQuestionData(questions=[], tool_use_id="t1"),
+        tool_use_id="t1",
+    )
+    stale_state = AgentTaskStateV2(
+        workspace_id=workspace_id,
+        last_processed_message_id=previous_message_id,
+    )
+    _set_task_state(local_task, stale_state, services)
+
+    # Crash-mid-answer history where the answer's deferred success fired interrupted
+    # during teardown: RequestStarted + RequestSuccess(interrupted=True), no clean
+    # completion and no follow-up turn.
+    _persist_messages(
+        local_task,
+        services,
+        [
+            chat_message,
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=chat_message.message_id),
+            _make_partial_response_block(),
+            answer,
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=answer.message_id),
+            RequestSuccessAgentMessage(message_id=AgentMessageID(), request_id=answer.message_id, interrupted=True),
+        ],
+    )
+
+    agent_env = LocalAgentExecutionEnvironment(
+        environment=environment,
+        task_id=local_task.object_id,
+        dependency_management_service=services.dependency_management_service,
+    )
+    fake_agent = _RecordAnswerOrResumeAgent(
+        harness=CLAUDE_CODE_HARNESS,
+        environment=agent_env,
+        task_id=local_task.object_id,
+        system_prompt="",
+    )
+
+    input_message_queue: Queue = Queue()
+    shutdown_event = threading.Event()
+    shutdown_event.set()  # Fire immediately so the loop sends Stop after the first send.
+
+    assert isinstance(local_task.input_data, AgentTaskInputsV2)
+    task_data = local_task.input_data
+
+    with patch("sculptor.tasks.handlers.run_agent.v1._get_agent_wrapper", return_value=fake_agent):
+        with pytest.raises(AgentPaused):
+            _run_agent_in_environment(
+                task=local_task,
+                task_data=task_data,
+                task_state=stale_state,
+                re_queued_messages=(answer,),
+                input_message_queue=input_message_queue,
+                environment=agent_env,
+                services=services,
+                project=project,
+                settings=test_settings,
+                shutdown_event=shutdown_event,
+            )
+
+    assert fake_agent.pushed_answer_or_resume, "Expected the loop to dispatch the orphaned answer"
+    first_push = fake_agent.pushed_answer_or_resume[0]
+    assert isinstance(first_push, ResumeAgentResponseRunnerMessage), (
+        f"interrupted answer completion must keep the orphan resumable; got {type(first_push).__name__}"
+    )
+    assert first_push.for_user_message_id == answer.message_id
+
+
+def test_answer_with_clean_completion_is_not_resumed(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: LocalEnvironment,
+    test_settings: SculptorSettings,
+) -> None:
+    """A cleanly-completed answer is cleared from orphan tracking, not resumed.
+
+    A clean (non-interrupted) RequestSuccess means the answer's turn actually
+    finished, so the replay must clear it. If such an answer still reaches the
+    resume loop it is delivered raw (its dialog round is genuinely over), never
+    converted to a resume — the negative side of the clearing condition.
+    """
+    workspace_id = WorkspaceID()
+    previous_message_id = AgentMessageID()
+    chat_message = _make_in_flight_chat_message()
+    answer = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"q": "a"},
+        question_data=AskUserQuestionData(questions=[], tool_use_id="t1"),
+        tool_use_id="t1",
+    )
+    stale_state = AgentTaskStateV2(
+        workspace_id=workspace_id,
+        last_processed_message_id=previous_message_id,
+    )
+    _set_task_state(local_task, stale_state, services)
+
+    # The answer's turn finished cleanly: RequestStarted + RequestSuccess(interrupted=False).
+    _persist_messages(
+        local_task,
+        services,
+        [
+            chat_message,
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=chat_message.message_id),
+            _make_partial_response_block(),
+            answer,
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=answer.message_id),
+            RequestSuccessAgentMessage(message_id=AgentMessageID(), request_id=answer.message_id, interrupted=False),
+        ],
+    )
+
+    agent_env = LocalAgentExecutionEnvironment(
+        environment=environment,
+        task_id=local_task.object_id,
+        dependency_management_service=services.dependency_management_service,
+    )
+    fake_agent = _RecordAnswerOrResumeAgent(
+        harness=CLAUDE_CODE_HARNESS,
+        environment=agent_env,
+        task_id=local_task.object_id,
+        system_prompt="",
+    )
+
+    input_message_queue: Queue = Queue()
+    shutdown_event = threading.Event()
+    shutdown_event.set()  # Fire immediately so the loop sends Stop after the first send.
+
+    assert isinstance(local_task.input_data, AgentTaskInputsV2)
+    task_data = local_task.input_data
+
+    with patch("sculptor.tasks.handlers.run_agent.v1._get_agent_wrapper", return_value=fake_agent):
+        with pytest.raises(AgentPaused):
+            _run_agent_in_environment(
+                task=local_task,
+                task_data=task_data,
+                task_state=stale_state,
+                re_queued_messages=(answer,),
+                input_message_queue=input_message_queue,
+                environment=agent_env,
+                services=services,
+                project=project,
+                settings=test_settings,
+                shutdown_event=shutdown_event,
+            )
+
+    assert fake_agent.pushed_answer_or_resume, "Expected the loop to dispatch the answer"
+    first_push = fake_agent.pushed_answer_or_resume[0]
+    assert isinstance(first_push, UserQuestionAnswerMessage), (
+        f"a cleanly-completed answer must not be resumed; got {type(first_push).__name__}"
     )
 
 

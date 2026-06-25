@@ -30,6 +30,12 @@ type AlphaChipDiffPopoverProps = {
   actionRef?: MutableRefObject<ChipDiffPopoverActions | null>;
 };
 
+/** How long the copy buttons show their "copied" check before reverting. */
+const COPIED_INDICATOR_DURATION_MS = 1500;
+
+/** Pixel size for the header action icons. */
+const HEADER_ICON_SIZE = 14;
+
 const splitFilePath = (filePath: string): { dir: string; base: string } => {
   const lastSlash = filePath.lastIndexOf("/");
 
@@ -159,7 +165,7 @@ export const AlphaChipDiffPopover = ({
   const flashCopied = useCallback((key: "path" | "error"): void => {
     setCopiedKey(key);
     clearTimeout(copyTimerRef.current);
-    copyTimerRef.current = setTimeout(() => setCopiedKey(null), 1500);
+    copyTimerRef.current = setTimeout(() => setCopiedKey(null), COPIED_INDICATOR_DURATION_MS);
   }, []);
 
   const handleCopyPath = useCallback((): void => {
@@ -218,7 +224,7 @@ export const AlphaChipDiffPopover = ({
                   onClick={handleCopyPath}
                   aria-label="Copy file path"
                 >
-                  {copiedKey === "path" ? <Check size={14} /> : <CopyIcon size={14} />}
+                  {copiedKey === "path" ? <Check size={HEADER_ICON_SIZE} /> : <CopyIcon size={HEADER_ICON_SIZE} />}
                 </IconButton>
               </Tooltip>
               <Tooltip content="View full diff">
@@ -230,7 +236,7 @@ export const AlphaChipDiffPopover = ({
                   aria-label="View full diff"
                   data-testid={ElementIds.ALPHA_CHAT_CHIP_VIEW_FULL_DIFF_BTN}
                 >
-                  <ExternalLink size={14} />
+                  <ExternalLink size={HEADER_ICON_SIZE} />
                 </IconButton>
               </Tooltip>
             </div>
@@ -245,7 +251,7 @@ export const AlphaChipDiffPopover = ({
                   onClick={handleCopyError}
                   aria-label="Copy error"
                 >
-                  {copiedKey === "error" ? <Check size={14} /> : <CopyIcon size={14} />}
+                  {copiedKey === "error" ? <Check size={HEADER_ICON_SIZE} /> : <CopyIcon size={HEADER_ICON_SIZE} />}
                 </IconButton>
               </Tooltip>
             </div>

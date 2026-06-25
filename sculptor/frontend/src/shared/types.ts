@@ -4,7 +4,7 @@ export type BackendStatusPayloads = {
   loading: BaseBackendStatusPayload;
   running: BaseBackendStatusPayload;
   warning: BaseBackendStatusPayload;
-  error: BaseBackendStatusPayload & { message: string; stack: string };
+  error: BaseBackendStatusPayload & { stack: string };
   exited: BaseBackendStatusPayload & { code: number | null; signal: NodeJS.Signals | null; stderr: string };
   unresponsive: BaseBackendStatusPayload;
   shutting_down: BaseBackendStatusPayload;
@@ -52,8 +52,10 @@ export type SculptorElectronAPI = {
   removeBackendStatusListener: () => void;
   getSessionToken: () => Promise<string>;
   getBackendPort: () => Promise<number>;
-  // File storage operations
-  saveFile: (fileData: ArrayBuffer, filename: string) => Promise<string>;
+  // File storage operations.
+  // `getFileData` is retained to read legacy desktop attachments (saved to disk
+  // as absolute paths before uploads moved to the backend); the matching
+  // `saveFile` handler was removed once uploads went through the backend.
   getFileData: (filePath: string) => Promise<string>;
   // Auto-update status (pull initial + push updates)
   getAutoUpdateStatus: () => Promise<AutoUpdateStatus>;

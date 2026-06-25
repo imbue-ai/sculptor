@@ -43,7 +43,9 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
 
   const isChatSearchVisible = useAtomValue(chatSearchVisibleAtom);
   const isChatSearchVisibleRef = useRef(isChatSearchVisible);
-  isChatSearchVisibleRef.current = isChatSearchVisible;
+  useEffect(() => {
+    isChatSearchVisibleRef.current = isChatSearchVisible;
+  });
 
   const keybindingsMap = useAtomValue(keybindingsMapAtom);
 
@@ -66,9 +68,12 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
         return;
       }
 
-      // Cmd+W / Ctrl+W: when an overlay is open, close it instead of
-      // letting Electron close the window.
-      if ((e.metaKey || e.ctrlKey) && e.key === "w" && isDismissibleOverlayOpen()) {
+      // Cmd+W / Ctrl+W: when an overlay is open, close it instead of letting
+      // Electron close the window. Scoped to the bare close_workspace chord
+      // (no Shift/Alt): Cmd+Shift+W is delete_workspace and opens the
+      // confirmation dialog, so treating it as a close-overlay gesture would
+      // dismiss the dialog it just opened.
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key === "w" && isDismissibleOverlayOpen()) {
         e.preventDefault();
         document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
         return;

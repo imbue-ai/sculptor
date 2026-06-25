@@ -4,8 +4,8 @@ import { RefreshCw } from "lucide-react";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useState } from "react";
 
-import type { ProjectEnvVarNames, UserConfigField } from "~/api";
-import { ElementIds, getEnvVarNames } from "~/api";
+import type { ProjectEnvVarNames } from "~/api";
+import { ElementIds, getEnvVarNames, UserConfigField } from "~/api";
 import { envVarOverrideEnabledAtom } from "~/common/state/atoms/userConfig.ts";
 import { Code } from "~/components/Code.tsx";
 
@@ -23,29 +23,53 @@ type EnvData = {
   projects: Array<ProjectEnvVarNames>;
 };
 
+// Fetch the loaded env-var names. Returns the parsed data on success, null when
+// the request fails (clearing any prior value), and undefined when the backend
+// sends an empty response (leaving the prior value untouched). Pure of React so
+// both the mount effect and the manual Refresh button can reuse it.
+const fetchEnvData = async (): Promise<EnvData | null | undefined> => {
+  try {
+    const response = await getEnvVarNames({ meta: { skipWsAck: true } });
+    if (response.data) {
+      return {
+        globalVarNames: response.data.globalVarNames as Array<string>,
+        globalEnvPath: response.data.globalEnvPath as string,
+        projects: response.data.projects as Array<ProjectEnvVarNames>,
+      };
+    }
+    return undefined;
+  } catch {
+    return null;
+  }
+};
+
 export const EnvironmentVariablesSection = ({ onSettingChange }: EnvironmentVariablesSectionProps): ReactElement => {
   const isEnvVarOverrideEnabled = useAtomValue(envVarOverrideEnabledAtom);
   const [envData, setEnvData] = useState<EnvData | null>(null);
   const globalEnvPath = envData?.globalEnvPath ?? "~/.sculptor/.env";
 
-  const fetchData = useCallback(async () => {
-    try {
-      const response = await getEnvVarNames({ meta: { skipWsAck: true } });
-      if (response.data) {
-        setEnvData({
-          globalVarNames: response.data.globalVarNames as Array<string>,
-          globalEnvPath: response.data.globalEnvPath as string,
-          projects: response.data.projects as Array<ProjectEnvVarNames>,
-        });
-      }
-    } catch {
-      setEnvData(null);
+  const refresh = useCallback(async () => {
+    const data = await fetchEnvData();
+    if (data !== undefined) {
+      setEnvData(data);
     }
   }, []);
 
+  // Load the variable list on mount. The setState lives behind an await, and the
+  // cleanup flag drops a stale response if the component unmounts mid-request.
   useEffect(() => {
-    void fetchData();
-  }, [fetchData]);
+    let isIgnored = false;
+    void (async (): Promise<void> => {
+      const data = await fetchEnvData();
+      if (!isIgnored && data !== undefined) {
+        setEnvData(data);
+      }
+    })();
+
+    return (): void => {
+      isIgnored = true;
+    };
+  }, []);
 
   const hasGlobalVars = envData !== null && envData.globalVarNames.length > 0;
   const hasProjectVars = envData !== null && envData.projects.length > 0;
@@ -100,13 +124,13 @@ export const EnvironmentVariablesSection = ({ onSettingChange }: EnvironmentVari
       >
         <Switch
           checked={isEnvVarOverrideEnabled}
-          onCheckedChange={(checked) => onSettingChange("envVarOverrideEnabled" as UserConfigField, checked)}
+          onCheckedChange={(checked) => onSettingChange(UserConfigField.ENV_VAR_OVERRIDE_ENABLED, checked)}
           data-testid={ElementIds.SETTINGS_ENV_VAR_OVERRIDE_TOGGLE}
         />
       </SettingRow>
 
       <SettingRow title="Loaded variables" description="Variables loaded from .env files across your repos.">
-        <Button variant="soft" onClick={() => void fetchData()}>
+        <Button variant="soft" onClick={() => void refresh()}>
           <RefreshCw size={14} />
           Refresh
         </Button>
@@ -144,15 +168,15 @@ export const EnvironmentVariablesSection = ({ onSettingChange }: EnvironmentVari
                   </Text>
                 </Flex>
                 {envData.projects.map((project) => (
-                  <Flex key={String(project.projectPath)} direction="column" gap="1" align="start">
+                  <Flex key={project.projectPath} direction="column" gap="1" align="start">
                     <Text size="2" weight="medium">
-                      {String(project.projectName)}{" "}
+                      {project.projectName}{" "}
                       <Code size="2" style={inlineCodeStyle}>
-                        {String(project.projectPath)}
+                        {project.projectPath}
                       </Code>
                     </Text>
                     <Flex direction="column" gap="1" align="start">
-                      {(project.varNames as Array<string>).map((name: string) => (
+                      {project.varNames.map((name: string) => (
                         <Code key={name} size="2" style={inlineCodeStyle}>
                           {name}
                         </Code>

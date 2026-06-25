@@ -1,6 +1,6 @@
 import { IconButton, Tooltip } from "@radix-ui/themes";
 import { AlertTriangle, ChevronRight, Folder, X } from "lucide-react";
-import { memo, type ReactElement } from "react";
+import { createElement, memo, type ReactElement } from "react";
 
 import { ElementIds } from "~/api";
 
@@ -8,6 +8,11 @@ import { getFileIcon } from "./fileIcons.ts";
 import styles from "./FileTree.module.scss";
 import type { TreeNode } from "./types.ts";
 import { STATUS_COLOR_STYLES, truncateMiddlePath } from "./utils.ts";
+
+/** Left padding (px) of a depth-0 row. */
+const TREE_ROW_BASE_PADDING_LEFT = 12;
+/** Extra left padding (px) added per nesting level. */
+const TREE_ROW_DEPTH_INDENT = 10;
 
 type TreeRowProps = {
   node: TreeNode;
@@ -45,8 +50,9 @@ const FolderIcon = memo(function FolderIcon({ isExpanded }: { isExpanded: boolea
 });
 
 const FileTypeIcon = memo(function FileTypeIcon({ filename }: { filename: string }): ReactElement {
-  const Icon = getFileIcon(filename);
-  return <Icon size={14} className={styles.fileIcon} />;
+  // getFileIcon selects a stable module-level Lucide component; render it via
+  // createElement so it reads as choosing a component, not creating one.
+  return createElement(getFileIcon(filename), { size: 14, className: styles.fileIcon });
 });
 
 const LineStats = ({
@@ -117,7 +123,7 @@ export const TreeRow = memo(function TreeRow({
   const isFolder = node.type === "directory";
   const isDeleted = node.status === "D";
   const { baseName, extension } = splitFileName(node.name);
-  const paddingLeft = 12 + depth * 10;
+  const paddingLeft = TREE_ROW_BASE_PADDING_LEFT + depth * TREE_ROW_DEPTH_INDENT;
 
   const handleClick = (): void => {
     if (isFolder) {

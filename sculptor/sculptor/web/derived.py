@@ -396,7 +396,11 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
 
     @computed_field
     @property
-    def model(self) -> LLMModel:
+    def model(self) -> LLMModel | None:
+        # Terminal agents have no chat and Sculptor does not control their model,
+        # so they carry no model at all — report None rather than a fallback (SCU-1580).
+        if is_terminal_agent_config(self.task_input.agent_config):
+            return None
         # Use the most recent chat message that carried an explicit model selection.
         for message in reversed(self._messages):
             if isinstance(message, ChatInputUserMessage) and message.model_name is not None:

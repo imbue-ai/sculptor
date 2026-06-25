@@ -3,10 +3,21 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { ToolUseBlock } from "~/api";
+
 import { AlphaFileChip } from "../AlphaFileChip.tsx";
 import type { ChipData } from "../chipRow.types.ts";
+import { getExecutingLabel } from "../chipRowUtils.ts";
 
 const Wrapper = ({ children }: { children: ReactNode }): ReactElement => <Theme>{children}</Theme>;
+
+const createToolUseBlock = (overrides: Partial<ToolUseBlock> = {}): ToolUseBlock => ({
+  id: "tool-1",
+  name: "Edit",
+  type: "tool_use",
+  input: { file_path: "/src/example.ts" },
+  ...overrides,
+});
 
 const createChipData = (overrides: Partial<ChipData> = {}): ChipData => ({
   id: "chip-1",
@@ -133,7 +144,7 @@ describe("AlphaFileChip", () => {
         chipData: createChipData({
           state: "executing",
           stats: null,
-          blocks: [{ name: "Edit" } as never],
+          blocks: [createToolUseBlock({ name: "Edit" })],
         }),
       });
       // The tooltip is rendered but the button should still be present
@@ -167,25 +178,30 @@ describe("AlphaFileChip", () => {
     });
   });
 
-  describe("executing label", () => {
-    it("shows 'Writing…' tooltip for Write blocks", () => {
-      renderChip({
-        chipData: createChipData({
-          state: "executing",
-          stats: null,
-          blocks: [{ name: "Write" } as never],
-        }),
-      });
-      // Tooltip content is rendered but hidden — verify the button exists
-      expect(screen.getByRole("button")).toBeDisabled();
+  describe("getExecutingLabel", () => {
+    it("returns 'Writing…' for a Write block", () => {
+      const chipData = createChipData({ blocks: [createToolUseBlock({ name: "Write" })] });
+      expect(getExecutingLabel(chipData)).toBe("Writing…");
     });
 
-    it("shows 'Editing…' tooltip for Edit blocks", () => {
+    it("returns 'Editing…' for an Edit block", () => {
+      const chipData = createChipData({ blocks: [createToolUseBlock({ name: "Edit" })] });
+      expect(getExecutingLabel(chipData)).toBe("Editing…");
+    });
+
+    it("falls back to 'Editing…' when there is no leading block", () => {
+      const chipData = createChipData({ blocks: [] });
+      expect(getExecutingLabel(chipData)).toBe("Editing…");
+    });
+  });
+
+  describe("executing state rendering", () => {
+    it("disables the chip while a tool is executing", () => {
       renderChip({
         chipData: createChipData({
           state: "executing",
           stats: null,
-          blocks: [{ name: "Edit" } as never],
+          blocks: [createToolUseBlock({ name: "Write" })],
         }),
       });
       expect(screen.getByRole("button")).toBeDisabled();

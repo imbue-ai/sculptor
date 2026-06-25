@@ -43,7 +43,7 @@ export const UndoQueuedMessageDialog = ({
           <AlertDialog.Title>{title}</AlertDialog.Title>
           <AlertDialog.Description mb="3">You have unsaved text in the chat input.</AlertDialog.Description>
           <Flex align="center" gap="2" className={styles.queuedMessageCard} mb="3">
-            <Text style={{ flex: 1 }}>{queuedMessageText}</Text>
+            <Text className={styles.messageText}>{queuedMessageText}</Text>
             <Tooltip content="Copy to clipboard">
               <IconButton variant="ghost" size="1" className={styles.copyButton} onClick={handleCopy} color="gray">
                 <CopyIcon size={14} />
@@ -69,7 +69,7 @@ export const UndoQueuedMessageDialog = ({
                 variant="soft"
                 color="gray"
                 onClick={onRemove}
-                data-testid={ElementIds.UNDO_QUEUED_MESSAGE_COPY_BUTTON}
+                data-testid={ElementIds.UNDO_QUEUED_MESSAGE_REMOVE_BUTTON}
               >
                 {removeLabel}
               </Button>

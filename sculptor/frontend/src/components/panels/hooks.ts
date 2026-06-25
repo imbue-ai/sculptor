@@ -41,7 +41,10 @@ export const usePanelsByZone = (): Partial<Record<ZoneId, ReadonlyArray<PanelId>
       result[zoneId] = zonePanelArrays[i];
     });
     return result;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deps are spread from a fixed-length per-zone atom subscription (see the
+    // rules-of-hooks note above), so the list is dynamic by construction rather
+    // than an inline array literal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/use-memo
   }, zonePanelArrays);
 };
 

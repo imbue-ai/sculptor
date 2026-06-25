@@ -11,11 +11,10 @@ attachments. Pi delivers them two ways, split exclusively by type:
   way Claude's prompt assembly presents them — pi reads the contents with its
   own `read` tool (`supports_file_references` already proves that loop).
 
-The file-saving step mirrors Claude's
-`ClaudeProcessManager._maybe_save_files_to_environment`
-(`agents/default/claude_code_sdk/process_manager.py`): same resolution rules
-(absolute path, or `<internal>/uploads/<id>`), same destination
-(`environment.get_attachments_path()`), same skip-on-missing-source.
+The file-saving step itself (resolving an upload id or absolute path and
+copying it into the environment) is shared with the Claude harness in
+`sculptor.agents.attachments.save_attachments_to_environment`; this module
+only handles how pi *presents* the saved files to the model.
 """
 
 from __future__ import annotations
@@ -25,9 +24,6 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from loguru import logger
-
-from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
-from sculptor.utils.build import get_internal_folder
 
 # The image formats the upload pipeline accepts, mapped to the mimeType pi's
 # `ImageContent` block needs. Python mirror of the frontend's notion of an
@@ -50,35 +46,6 @@ def is_image_attachment(path: str) -> bool:
 def image_mime_type(path: str) -> str:
     """The `ImageContent.mimeType` for an image path. Call only on images."""
     return IMAGE_EXTENSION_TO_MIME_TYPE[Path(path).suffix.lower()]
-
-
-def save_attachments_to_environment(environment: AgentExecutionEnvironment, files: Sequence[str]) -> tuple[str, ...]:
-    """Copy each attachment into the environment, returning the saved paths.
-
-    Mirrors Claude's `_maybe_save_files_to_environment`: an absolute path is
-    used as-is, otherwise the entry is an upload id resolved under
-    `<internal>/uploads/`. A missing source is skipped rather than failing the turn.
-    """
-    saved_paths: list[str] = []
-    for local_file_path in files:
-        local_path = Path(local_file_path)
-        filename = local_path.name
-        if local_path.is_absolute():
-            source = local_path
-        else:
-            source = get_internal_folder() / "uploads" / local_file_path
-
-        try:
-            file_content = source.read_bytes()
-        except FileNotFoundError:
-            logger.warning("Skipping missing file attachment: {}", source)
-            continue
-
-        destination = environment.get_attachments_path() / filename
-        environment.write_file(path=str(destination), content=file_content, mode="wb")
-        saved_paths.append(str(destination))
-
-    return tuple(saved_paths)
 
 
 def split_image_and_path_attachments(saved_paths: Sequence[str]) -> tuple[tuple[str, ...], tuple[str, ...]]:

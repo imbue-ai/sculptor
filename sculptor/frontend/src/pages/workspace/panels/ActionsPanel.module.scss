@@ -12,6 +12,10 @@
   @include thin-scrollbar;
 }
 
+.scrollContent {
+  min-height: 100%;
+}
+
 .chipGrid {
   display: flex;
   flex-wrap: wrap;
@@ -38,6 +42,10 @@
   text-transform: uppercase;
 }
 
+.renameField {
+  flex: 1;
+}
+
 .countBadge {
   border-radius: var(--radius-5);
   font-size: var(--font-size-1);
@@ -45,7 +53,7 @@
 }
 
 .dragGhost {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 15%);
+  box-shadow: var(--shadow-lg);
   cursor: grabbing;
 }
 
@@ -100,4 +108,8 @@
     background-color: var(--accent-a2);
     border-color: var(--accent-9);
   }
+}
+
+.dropHintText {
+  color: var(--gray-9);
 }

@@ -76,7 +76,7 @@ export const useUnifiedStream = (): void => {
           updateTaskDetail({
             taskId,
             updater: (currentState) => {
-              const state = currentState || getEmptyTaskDetailState();
+              const state = currentState ?? getEmptyTaskDetailState();
 
               // Process incremental updates using pure reducers
               const newChatState = chatMessagesReducer(

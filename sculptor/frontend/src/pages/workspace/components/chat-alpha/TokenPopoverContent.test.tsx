@@ -90,7 +90,7 @@ describe("TokenPopoverContent", () => {
   it("displays 0 for input/output tokens when they are nullish", () => {
     const metrics: TurnMetrics = {
       durationSeconds: 5.0,
-    } as TurnMetrics;
+    };
     renderWithProviders(<TokenPopoverContent turnMetrics={metrics} />);
 
     const zeros = screen.getAllByText("0");

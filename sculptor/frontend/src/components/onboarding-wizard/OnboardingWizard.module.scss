@@ -3,6 +3,11 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  // TitleBar is position:absolute with `app-region: drag`. Anything that
+  // overlaps it gets its clicks swallowed by the drag region, so reserve
+  // its height (--space-7 = 40px, matches TITLEBAR_HEIGHT) so the
+  // StepIndicator dots sit below it and remain clickable.
+  padding-top: var(--space-7);
 }
 
 .contentArea {
@@ -15,13 +20,8 @@
 }
 
 .stepContent {
-  max-width: 360px;
+  max-width: 440px;
   width: 100%;
-}
-
-.logo {
-  height: 25px;
-  width: 30px;
 }
 
 .titleText {
@@ -30,23 +30,10 @@
   font-weight: var(--font-weight-bold);
 }
 
-.primaryText {
-  color: var(--accent-11);
-  font-size: var(--font-size-5);
-  font-weight: var(--font-weight-medium);
-}
-
 .secondaryText {
-  color: var(--accent-10);
   font-size: var(--font-size-3);
   font-weight: var(--font-weight-regular);
   line-height: 24px;
-}
-
-.circleIcon {
-  color: var(--accent-11);
-  height: 24px;
-  width: 24px;
 }
 
 .termsText {
@@ -56,20 +43,9 @@
   text-decoration: underline;
 }
 
-.linkText {
-  color: var(--accent-10);
-  font-size: var(--font-size-3);
-  font-weight: var(--font-weight-regular);
-  text-decoration: underline;
-}
-
 .tosAndPrivacy {
     gap: var(--space-2);
     padding-top: var(--space-3);
-}
-
-.researchPreviewClassic {
-    bottom: var(--space-7);
 }
 
 .emailInput {
@@ -93,7 +69,7 @@
 }
 
 
-.recheckLink {
+.inlineLink {
   color: var(--accent-10);
   cursor: pointer;
   text-decoration: underline;
@@ -121,26 +97,4 @@
 
 .error {
   margin-top: var(--space-1);
-}
-
-.completeDependencyCard {
-  background-color: var(--green-3);
-  border: 2px solid var(--green-6);
-  border-radius: var(--radius-5);
-}
-
-
-.telemetryCheck {
-  align-items: center;
-  display: flex;
-  height: 22px;
-  justify-content: center;
-  width: 22px;
-}
-
-.telemetrySettings {
-  > * {
-    font-size: var(--font-size-3);
-    min-width: 280px;
-  }
 }

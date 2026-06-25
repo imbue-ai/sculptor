@@ -43,12 +43,16 @@ type AuthPanelProps = {
   authUrl: string | null;
   authError: string | null;
   onSubmitAuthCode?: (code: string) => Promise<void>;
+  // Device flow (e.g. gh): when userCode is set, show the one-time code to enter
+  // at authUrl and wait for completion (no paste-back) — the parent polls the
+  // dependency's auth status and clears authUrl once authenticated.
+  userCode?: string | null;
 };
 
 // Headless/remote sign-in panel: the link to open plus a field to paste the
 // resulting code back. Owns the code-entry state so DependencyCard doesn't have
 // to. Rendered only when there's a sign-in URL to show or an error to surface.
-const AuthPanel = ({ authUrl, authError, onSubmitAuthCode }: AuthPanelProps): ReactElement => {
+const AuthPanel = ({ authUrl, authError, onSubmitAuthCode, userCode = null }: AuthPanelProps): ReactElement => {
   const [authCode, setAuthCode] = useState<string>("");
   const [isSubmittingCode, setIsSubmittingCode] = useState<boolean>(false);
 
@@ -65,7 +69,31 @@ const AuthPanel = ({ authUrl, authError, onSubmitAuthCode }: AuthPanelProps): Re
 
   return (
     <Flex direction="column" gap="2" className={styles.details} data-role="auth-panel">
-      {authUrl && (
+      {authUrl && userCode ? (
+        // Device flow (gh): show the one-time code to enter at the URL, then
+        // wait — the parent polls auth status and clears authUrl on success.
+        <>
+          <Text size="1">Open the verification page, enter the code below, and approve access.</Text>
+          <Link href={authUrl} target="_blank" size="2" className={styles.installLink} data-role="auth-url-link">
+            <Flex align="center" gap="1">
+              Open verification page
+              <ExternalLinkIcon size={12} />
+            </Flex>
+          </Link>
+          <Flex align="center" gap="2">
+            <Text size="1">Code:</Text>
+            <Code size="2" data-role="auth-user-code">
+              {userCode}
+            </Code>
+          </Flex>
+          <Flex align="center" gap="2">
+            <Spinner size="1" />
+            <Text size="1" color="gray">
+              Waiting for authorization…
+            </Text>
+          </Flex>
+        </>
+      ) : authUrl ? (
         <>
           <Text size="1">Open the sign-in page, approve access, then paste the code shown back here.</Text>
           <Link href={authUrl} target="_blank" size="2" className={styles.installLink} data-role="auth-url-link">
@@ -97,7 +125,7 @@ const AuthPanel = ({ authUrl, authError, onSubmitAuthCode }: AuthPanelProps): Re
             </Button>
           </Flex>
         </>
-      )}
+      ) : null}
       {authError && (
         <Text size="1" color="red" data-role="auth-error">
           {authError}
@@ -122,6 +150,10 @@ type DependencyCardProps = {
   authUrl?: string | null;
   authError?: string | null;
   onSubmitAuthCode?: (code: string) => Promise<void>;
+  // Device flow (e.g. gh): when userCode is set, the card shows the one-time code
+  // to enter at authUrl and waits for completion (no paste-back) — the parent
+  // polls the dependency's auth status and clears authUrl once authenticated.
+  userCode?: string | null;
   onModeSwitch?: (mode: string) => void;
   modeControls?: Array<{ label: string; mode: string }>;
   helpText?: string;
@@ -177,6 +209,7 @@ export const DependencyCard = ({
   authUrl = null,
   authError = null,
   onSubmitAuthCode,
+  userCode = null,
   onModeSwitch,
   modeControls,
   helpText,
@@ -189,6 +222,9 @@ export const DependencyCard = ({
   const [isApplying, setIsApplying] = useState<boolean>(false);
 
   const canExpand = status.state !== "loading" && status.state !== "installing" && status.state !== "authenticating";
+
+  const isNeutralOptional =
+    optional && (status.state === "not-installed" || status.state === "needs-auth" || status.state === "wrong-version");
 
   const isSpinnerVisible =
     status.state === "loading" || status.state === "installing" || status.state === "authenticating";
@@ -226,7 +262,7 @@ export const DependencyCard = ({
       : null;
 
   const shouldShowInstallAction = status.state === "not-installed" || status.state === "wrong-version";
-  const showBrew = brewPackage && isMac();
+  const shouldShowBrew = Boolean(brewPackage) && isMac();
 
   const hasPathAndVersion =
     status.state === "installed" ||
@@ -241,7 +277,12 @@ export const DependencyCard = ({
     // dropped by the early-return. Surfacing the gate as `aria-disabled` makes the
     // framework's actionability contract honor it — Playwright auto-waits for the card to
     // become ready instead of dropping the click and timing out downstream (SCU-1215).
-    <Flex direction="column" className={ROW_CLASSES[status.state]} data-dependency={cliName} aria-disabled={!canExpand}>
+    <Flex
+      direction="column"
+      className={isNeutralOptional ? styles.row : ROW_CLASSES[status.state]}
+      data-dependency={cliName}
+      aria-disabled={!canExpand}
+    >
       <Flex
         align="center"
         gap="2"
@@ -254,6 +295,8 @@ export const DependencyCard = ({
           ) : (
             <Spinner size="1" />
           )
+        ) : isNeutralOptional ? (
+          <AlertCircleIcon size={14} className={styles.iconNeutral} />
         ) : (
           STATUS_ICONS[status.state]
         )}
@@ -266,13 +309,13 @@ export const DependencyCard = ({
           {STATUS_LABELS[status.state]}
         </Text>
 
-        {optional && status.state !== "installed" && (
-          <Text size="1" className={styles.optionalTag}>
-            optional
-          </Text>
-        )}
-
         <Flex align="center" gap="2" ml="auto" style={{ flexShrink: 0 }}>
+          {optional && status.state !== "installed" && (
+            <Text size="2" className={styles.optionalTag}>
+              optional
+            </Text>
+          )}
+
           {helpText && status.state === "installing" && (
             <Popover.Root>
               <Popover.Trigger>
@@ -289,40 +332,38 @@ export const DependencyCard = ({
           )}
 
           {shouldShowInstallAction && (
-            <>
-              <Popover.Root>
-                <Popover.Trigger>
-                  <Button
-                    size="1"
-                    variant="soft"
-                    data-role="install-button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                    }}
-                  >
-                    Install
-                  </Button>
-                </Popover.Trigger>
-                <Popover.Content side="bottom" align="end" sideOffset={4}>
-                  <Flex direction="column" gap="2" style={{ minWidth: 220 }}>
-                    <Text size="2" weight="medium">
-                      Install {name}
-                    </Text>
-                    {showBrew && (
-                      <Code size="1" className={styles.brewCommand}>
-                        brew install {brewPackage}
-                      </Code>
-                    )}
-                    <Link href={installUrl} target="_blank" size="2" className={styles.installLink}>
-                      <Flex align="center" gap="1">
-                        Details
-                        <ExternalLinkIcon size={12} />
-                      </Flex>
-                    </Link>
-                  </Flex>
-                </Popover.Content>
-              </Popover.Root>
-            </>
+            <Popover.Root>
+              <Popover.Trigger>
+                <Button
+                  size="1"
+                  variant="soft"
+                  data-role="install-button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                >
+                  Install
+                </Button>
+              </Popover.Trigger>
+              <Popover.Content side="bottom" align="end" sideOffset={4}>
+                <Flex direction="column" gap="2" style={{ minWidth: 220 }}>
+                  <Text size="2" weight="medium">
+                    Install {name}
+                  </Text>
+                  {shouldShowBrew && (
+                    <Code size="1" className={styles.brewCommand}>
+                      brew install {brewPackage}
+                    </Code>
+                  )}
+                  <Link href={installUrl} target="_blank" size="2" className={styles.installLink}>
+                    <Flex align="center" gap="1">
+                      Details
+                      <ExternalLinkIcon size={12} />
+                    </Flex>
+                  </Link>
+                </Flex>
+              </Popover.Content>
+            </Popover.Root>
           )}
 
           {status.state === "needs-auth" && onAuthenticate && !authUrl && (
@@ -365,7 +406,7 @@ export const DependencyCard = ({
       </Flex>
 
       {(authUrl || authError) && (
-        <AuthPanel authUrl={authUrl} authError={authError} onSubmitAuthCode={onSubmitAuthCode} />
+        <AuthPanel authUrl={authUrl} authError={authError} onSubmitAuthCode={onSubmitAuthCode} userCode={userCode} />
       )}
 
       {isExpanded && (

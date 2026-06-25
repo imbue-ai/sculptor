@@ -32,6 +32,28 @@ const InfoRow = ({ label, value, testId }: InfoRowProps): ReactElement => (
   </Flex>
 );
 
+const SECONDS_PER_HOUR = 3600;
+const SECONDS_PER_MINUTE = 60;
+
+const formatDiskSpace = (gb: number | undefined): string | undefined => {
+  if (gb === undefined) {
+    return undefined;
+  }
+  return `${gb.toFixed(1)} GB`;
+};
+
+const formatUptime = (seconds: number | undefined): string | undefined => {
+  if (seconds === undefined) {
+    return undefined;
+  }
+  const hours = Math.floor(seconds / SECONDS_PER_HOUR);
+  const minutes = Math.floor((seconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE);
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
+};
+
 export const VersionPopover = (): ReactElement => {
   const healthCheckData = useAtomValue(healthCheckDataAtom);
   const autoUpdateStatus = useAtomValue(autoUpdateStatusAtom);
@@ -41,21 +63,6 @@ export const VersionPopover = (): ReactElement => {
   const tanstackDevtools = useTanstackDevtools();
   const tanstackEventLog = useTanstackEventLog();
   const { install, isInstalling } = useInstallUpdate();
-
-  const formatDiskSpace = (gb: number | undefined): string => {
-    if (gb === undefined) return "—";
-    return `${gb.toFixed(1)} GB`;
-  };
-
-  const formatUptime = (seconds: number | undefined): string => {
-    if (seconds === undefined) return "—";
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    }
-    return `${minutes}m`;
-  };
 
   return (
     <Popover.Root open={isDevPanelOpen} onOpenChange={(open) => (open ? showDevPanel() : hideDevPanel())}>
@@ -121,7 +128,10 @@ export const VersionPopover = (): ReactElement => {
             Diagnostics
           </Text>
           <Flex direction="column" gap="2" className={styles.details}>
-            <InfoRow label="Platform" value={`${healthCheckData?.platform} ${healthCheckData?.platformVersion}`} />
+            <InfoRow
+              label="Platform"
+              value={healthCheckData ? `${healthCheckData.platform} ${healthCheckData.platformVersion}` : undefined}
+            />
             <InfoRow label="Uptime" value={formatUptime(healthCheckData?.uptimeSeconds)} />
             <InfoRow label="Active Agents" value={healthCheckData?.activeTaskCount?.toString()} />
             <InfoRow label="Free Disk" value={formatDiskSpace(healthCheckData?.freeDiskGb)} />
@@ -131,13 +141,13 @@ export const VersionPopover = (): ReactElement => {
             <InfoRow
               label="Claude CLI"
               value={healthCheckData?.dependenciesStatus?.claude?.version ?? undefined}
-              testId="claude-cli-version-popover"
+              testId={ElementIds.CLAUDE_CLI_VERSION_POPOVER}
             />
             <InfoRow label="Claude Path" value={healthCheckData?.dependenciesStatus?.claude?.path ?? undefined} />
             <InfoRow
               label="Claude Mode"
               value={healthCheckData?.dependenciesStatus?.claude?.mode ?? undefined}
-              testId="claude-cli-mode-popover"
+              testId={ElementIds.CLAUDE_CLI_MODE_POPOVER}
             />
           </Flex>
           <Text size="2" weight="medium" mt="1">

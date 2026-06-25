@@ -207,7 +207,11 @@ export const MentionPickerList = forwardRef<SuggestionListRef, MentionPickerList
           <>
             <Icon className={styles.rowIcon} size={14} aria-hidden />
             <span className={styles.name}>
-              {highlightMatch(rawItem.label, suggestionProps.query, styles.highlight)}
+              {highlightMatch({
+                text: rawItem.label,
+                query: suggestionProps.query,
+                highlightClassName: styles.highlight,
+              })}
             </span>
           </>
         );

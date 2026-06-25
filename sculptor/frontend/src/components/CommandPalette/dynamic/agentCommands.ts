@@ -4,9 +4,14 @@ import { tasksArrayAtom } from "../../../common/state/atoms/tasks.ts";
 import type { CommandRuntime } from "../runtime.ts";
 import type { Command, DynamicProvider } from "../types.ts";
 
+const MAX_TITLE_LENGTH = 80;
+const ELLIPSIS = "...";
+
 const taskDisplayTitle = (task: { title?: string | null; initialPrompt: string }): string => {
   const display = task.title?.trim() || task.initialPrompt.trim() || "Untitled agent";
-  return display.length > 80 ? `${display.slice(0, 77)}...` : display;
+  return display.length > MAX_TITLE_LENGTH
+    ? `${display.slice(0, MAX_TITLE_LENGTH - ELLIPSIS.length)}${ELLIPSIS}`
+    : display;
 };
 
 /**
@@ -27,10 +32,11 @@ const taskDisplayTitle = (task: { title?: string | null; initialPrompt: string }
 export const buildAgentProvider = (runtime: CommandRuntime): DynamicProvider => ({
   id: "dynamic.agents",
   produce: (ctx): Array<Command> => {
-    if (ctx.activeWorkspaceId == null) return [];
+    const activeWorkspaceId = ctx.activeWorkspaceId;
+    if (activeWorkspaceId == null) return [];
     const tasks = runtime.store.get(tasksArrayAtom) ?? [];
     const inWorkspace = tasks
-      .filter((t) => t.workspaceId === ctx.activeWorkspaceId)
+      .filter((t) => t.workspaceId === activeWorkspaceId)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     const hasMultipleAgents = inWorkspace.length >= 2;
@@ -77,7 +83,7 @@ export const buildAgentProvider = (runtime: CommandRuntime): DynamicProvider => 
         onPage: "agents.switch",
         disabled: isCurrent,
         disabledReason: isCurrent ? "Already on this agent" : undefined,
-        perform: () => runtime.navigate.toAgent(ctx.activeWorkspaceId as string, task.id),
+        perform: () => runtime.navigate.toAgent(activeWorkspaceId, task.id),
       });
     }
 

@@ -7,6 +7,7 @@ import { batchUpdateOpenState, updateWorkspace as updateWorkspaceApi } from "../
 import { ToastType } from "../../../components/Toast.tsx";
 import { invalidateWorkspaceGitQueries, removeWorkspaceQueriesCache } from "../../queryClient.ts";
 import { workspaceOpenCloseErrorToastAtom } from "./toasts";
+import type { SetupStatusSnapshot } from "./workspaceSetupStatus";
 import { workspaceSetupStatusAtomFamily } from "./workspaceSetupStatus";
 
 export const workspaceAtomFamily = atomFamily<string, PrimitiveAtom<Workspace | null>>(() =>
@@ -49,9 +50,19 @@ export const INVALID_ACTIVE_INDEX = -1;
 export type TabEntry = { tabId: string; agentId: string | null };
 export type TabsState = { order: Array<TabEntry>; activeIndex: number };
 
+/** localStorage key holding the persisted `TabsState` (see `tabsAtom`). */
+export const SCULPTOR_TABS_STORAGE_KEY = "sculptor-tabs";
+
+/** Prefix identifying a real workspace tab ID (vs. a pseudo-tab). */
+export const WORKSPACE_TAB_ID_PREFIX = "ws_";
+
 const LEGACY_TAB_ORDER_KEY = "sculptor-tab-order";
 
-const isValidTabsState = (value: unknown): value is TabsState => {
+/**
+ * Runtime validator for a persisted `TabsState`. Exported so the pre-React
+ * router loader can reuse it without re-deriving the shape.
+ */
+export const isValidTabsState = (value: unknown): value is TabsState => {
   if (value === null || typeof value !== "object") return false;
   const v = value as { order?: unknown; activeIndex?: unknown };
   if (!Array.isArray(v.order) || typeof v.activeIndex !== "number") return false;
@@ -121,7 +132,7 @@ export const createMigratingTabsStorage = (): ReturnType<typeof createJSONStorag
  * atomically so they cannot disagree.
  */
 export const tabsAtom = atomWithStorage<TabsState>(
-  "sculptor-tabs",
+  SCULPTOR_TABS_STORAGE_KEY,
   { order: [], activeIndex: INVALID_ACTIVE_INDEX },
   createMigratingTabsStorage(),
   { getOnInit: true },
@@ -153,7 +164,14 @@ const applyClose = (state: TabsState, tabId: string): TabsState => {
   const order = state.order.filter((_, i) => i !== removedIndex);
   let activeIndex = state.activeIndex;
   if (state.activeIndex === removedIndex) {
-    activeIndex = INVALID_ACTIVE_INDEX;
+    // The active tab was closed. Land on the neighbor that shifted into its
+    // slot (or the new last tab if we removed the end) so the persisted state
+    // never points past the end — order[INVALID_ACTIVE_INDEX] is undefined, and
+    // on reload rootLoader reads that as "no MRU pointer" and bounces to
+    // /ws/new even though tabs survive. A subsequent navigation may refine this
+    // to an MRU target; this only guarantees the pointer is always valid.
+    // Only when nothing survives do we fall back to the sentinel.
+    activeIndex = order.length > 0 ? Math.min(removedIndex, order.length - 1) : INVALID_ACTIVE_INDEX;
   } else if (state.activeIndex > removedIndex) {
     activeIndex = state.activeIndex - 1;
   }
@@ -493,7 +511,7 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
     // active observers refetch. The same `diffUpdatedAt` bump fires for any
     // git event the backend surfaces — file changes, commits, branch
     // movement — so it's the right shared trigger. Non-git workspace queries
-    // (e.g. future MR status) live outside the `git` subtree and are
+    // (e.g. future PR status) live outside the `git` subtree and are
     // unaffected. We compare against the prior atom value here rather than
     // tracking the previous snapshot externally.
     const previous = get(workspaceAtomFamily(workspace.objectId));
@@ -515,7 +533,7 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
       if (existingStatus === null) {
         set(workspaceSetupStatusAtomFamily(workspace.objectId), {
           workspaceId: workspace.objectId,
-          status: workspace.setupStatus as "not_configured" | "pending" | "running" | "succeeded" | "failed" | "legacy",
+          status: workspace.setupStatus as SetupStatusSnapshot["status"],
           runId: workspace.setupRunId ?? null,
           exitCode: workspace.setupExitCode ?? null,
           startedAt: workspace.setupStartedAt ?? null,
@@ -623,7 +641,10 @@ export const optimisticDeleteWorkspaceAtom = atom(null, (get, set, workspaceId: 
   // arriving before the server confirms deletion doesn't treat it as
   // a "new" workspace and auto-open it as a tab. workspacesArrayAtom
   // filters out null atoms, so it won't appear in the UI.
-  // Remove from tab order so the tab disappears immediately
+  // Remove from tab order so the tab disappears immediately. When the deleted
+  // workspace was the active tab, applyClose lands activeIndex on a surviving
+  // neighbor so the persisted state never points past the end (which would make
+  // a reload bounce to /ws/new); a following navigation may refine it further.
   set(tabsAtom, applyClose(get(tabsAtom), workspaceId));
   // Track the deletion so components with their own workspace lists
   // (e.g. RecentWorkspaces) can filter it out without a page reload.
@@ -766,7 +787,7 @@ export const agentIdForWorkspaceAtomFamily = atomFamily<string, Atom<string | nu
 export const agentIdsByWorkspaceAtom = atom<ReadonlyMap<string, string>>((get) => {
   const map = new Map<string, string>();
   for (const entry of get(tabsAtom).order) {
-    if (entry.tabId.startsWith("ws_") && entry.agentId !== null) {
+    if (entry.tabId.startsWith(WORKSPACE_TAB_ID_PREFIX) && entry.agentId !== null) {
       map.set(entry.tabId, entry.agentId);
     }
   }

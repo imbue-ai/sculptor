@@ -22,7 +22,7 @@ type ShortcutRowProps = {
 const ShortcutRow = ({ label, shortcut, testId }: ShortcutRowProps): ReactElement => (
   <div className={styles.shortcutRow} data-testid={testId}>
     <Text className={styles.shortcutLabel}>{label}</Text>
-    <Badge size="1" variant="soft" className={styles.shortcutKeys}>
+    <Badge size="1" variant="soft">
       {shortcut}
     </Badge>
   </div>
@@ -46,7 +46,7 @@ export const KeyboardShortcutsDialog = (): ReactElement => {
   const { isHelpDialogOpen, hideHelpDialog } = useHelpDialog();
   const keybindings = useAtomValue(keybindingsAtom);
 
-  const sections = useMemo((): Array<{ title: string; shortcuts: Array<ShortcutRowProps> }> => {
+  const sections = useMemo((): Array<ShortcutSectionProps> => {
     const grouped = new Map<KeybindingCategory, Array<ShortcutRowProps>>();
 
     for (const kb of keybindings) {
@@ -60,7 +60,7 @@ export const KeyboardShortcutsDialog = (): ReactElement => {
       grouped.set(kb.category, existing);
     }
 
-    const result: Array<{ title: string; shortcuts: Array<ShortcutRowProps> }> = [];
+    const result: Array<ShortcutSectionProps> = [];
     for (const category of CATEGORY_ORDER) {
       const shortcuts = grouped.get(category);
       if (!shortcuts || shortcuts.length === 0) continue;

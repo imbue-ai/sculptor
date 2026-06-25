@@ -12,6 +12,7 @@ import {
   pluginSettingsComponentsAtom,
   pluginSourcesAtom,
   pluginSourceStatesAtom,
+  pluginWorkspaceWidgetsAtom,
 } from "./pluginRegistry.ts";
 import type { LoadedPlugin, PluginHostApi, PluginLoadError, PluginManifest } from "./types.ts";
 
@@ -199,9 +200,10 @@ describe("PluginManager", () => {
     expect(loader.calls[1].activateDispose).not.toHaveBeenCalled();
   });
 
-  it("removing a loaded source runs its disposers and clears panels and settings", async () => {
+  it("removing a loaded source runs its disposers and clears panels, settings, and widgets", async () => {
     const store = createStore();
     const settingsComponent = (): null => null;
+    const widgetComponent = (): null => null;
     const activateDispose = vi.fn();
     const manager = new PluginManager({
       fetchManifest: async (): Promise<{ manifest: PluginManifest }> => ({ manifest: manifestFor("alpha") }),
@@ -209,6 +211,7 @@ describe("PluginManager", () => {
         const api = makeApi(manifest);
         api.registerPanel(panelFor("alpha"));
         api.registerSettings(settingsComponent);
+        api.registerWorkspaceWidget({ id: "alpha", component: widgetComponent, collapsePriority: 3 });
         return { manifest, dispose: activateDispose };
       },
       builtinSources: [],
@@ -217,11 +220,15 @@ describe("PluginManager", () => {
     await manager.addSource(store, "/plugins/alpha");
     expect(store.get(pluginPanelsAtom)).toHaveLength(1);
     expect(store.get(pluginSettingsComponentsAtom)["alpha"]).toBe(settingsComponent);
+    const widgets = store.get(pluginWorkspaceWidgetsAtom);
+    expect(widgets.map((w) => w.id)).toEqual(["alpha"]);
+    expect(widgets[0].collapsePriority).toBe(3);
 
     manager.removeSource(store, "/plugins/alpha");
 
     expect(store.get(pluginPanelsAtom)).toEqual([]);
     expect(store.get(pluginSettingsComponentsAtom)["alpha"]).toBeUndefined();
+    expect(store.get(pluginWorkspaceWidgetsAtom)).toEqual([]);
     expect(activateDispose).toHaveBeenCalledTimes(1);
     expect(store.get(pluginSourcesAtom)).toEqual([]);
   });

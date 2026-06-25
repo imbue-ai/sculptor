@@ -19,6 +19,51 @@ export type BranchWithBadges = {
   badges: Array<string | BadgeInfo>;
 };
 
+type BranchOptionProps = {
+  branch: string;
+  badges: Array<string | BadgeInfo>;
+};
+
+const BranchOption = ({ branch, badges }: BranchOptionProps): ReactElement => {
+  return (
+    <SelectPrimitive.Item
+      value={branch}
+      asChild={false}
+      className="rt-SelectItem"
+      data-testid={ElementIds.BRANCH_OPTION}
+    >
+      <SelectPrimitive.ItemIndicator className="rt-SelectItemIndicator">
+        <ThickCheckIcon className="rt-SelectItemIndicatorIcon" />
+      </SelectPrimitive.ItemIndicator>
+      <Flex width="100%" gapX="2">
+        <Box>
+          <Text>{branch}</Text>
+        </Box>
+        {badges.length > 0 && (
+          <Box ml="auto">
+            {badges.map((badge, idx) => {
+              const badgeText = typeof badge === "string" ? badge : badge.text;
+              const badgeTooltip = typeof badge === "string" ? undefined : badge.tooltip;
+              const badgeElement = (
+                <Badge size="1" ml="1" key={idx}>
+                  {badgeText}
+                </Badge>
+              );
+              return badgeTooltip ? (
+                <Tooltip key={idx} content={badgeTooltip}>
+                  {badgeElement}
+                </Tooltip>
+              ) : (
+                badgeElement
+              );
+            })}
+          </Box>
+        )}
+      </Flex>
+    </SelectPrimitive.Item>
+  );
+};
+
 type BranchSelectorCoreProps = {
   selectedBranch: string;
   onBranchSelected: (branch: string) => void;
@@ -174,7 +219,6 @@ export const BranchSelectorCore = ({
               <Box className={styles.searchInputWrapper}>
                 <SearchIcon className={styles.searchIcon} />
                 <input
-                  key={isOpen ? "open" : "closed"}
                   ref={searchInputRef}
                   type="text"
                   placeholder="Search branches..."
@@ -197,40 +241,7 @@ export const BranchSelectorCore = ({
               <Box flexShrink="0">
                 <Select.Group>
                   {specialBranchesFiltered.map(({ branch, badges }) => (
-                    <SelectPrimitive.Item
-                      key={branch}
-                      value={branch}
-                      asChild={false}
-                      className="rt-SelectItem"
-                      data-testid={ElementIds.BRANCH_OPTION}
-                    >
-                      <SelectPrimitive.ItemIndicator className="rt-SelectItemIndicator">
-                        <ThickCheckIcon className="rt-SelectItemIndicatorIcon" />
-                      </SelectPrimitive.ItemIndicator>
-                      <Flex width="100%" gapX="2">
-                        <Box>
-                          <Text>{branch}</Text>
-                        </Box>
-                        <Box ml="auto">
-                          {badges.map((badge, idx) => {
-                            const badgeText = typeof badge === "string" ? badge : badge.text;
-                            const badgeTooltip = typeof badge === "string" ? undefined : badge.tooltip;
-                            const badgeElement = (
-                              <Badge size="1" ml="1" key={idx}>
-                                {badgeText}
-                              </Badge>
-                            );
-                            return badgeTooltip ? (
-                              <Tooltip key={idx} content={badgeTooltip}>
-                                {badgeElement}
-                              </Tooltip>
-                            ) : (
-                              badgeElement
-                            );
-                          })}
-                        </Box>
-                      </Flex>
-                    </SelectPrimitive.Item>
+                    <BranchOption key={branch} branch={branch} badges={badges} />
                   ))}
                 </Select.Group>
                 {otherBranchesFiltered.length > 0 && <Select.Separator />}
@@ -239,42 +250,7 @@ export const BranchSelectorCore = ({
             <ScrollArea type="auto" scrollbars="vertical" style={{ flex: 1, minHeight: 0 }}>
               <Select.Group>
                 {otherBranchesFiltered.map(({ branch, badges }) => (
-                  <SelectPrimitive.Item
-                    key={branch}
-                    value={branch}
-                    asChild={false}
-                    className="rt-SelectItem"
-                    data-testid={ElementIds.BRANCH_OPTION}
-                  >
-                    <SelectPrimitive.ItemIndicator className="rt-SelectItemIndicator">
-                      <ThickCheckIcon className="rt-SelectItemIndicatorIcon" />
-                    </SelectPrimitive.ItemIndicator>
-                    <Flex width="100%" gapX="2">
-                      <Box>
-                        <Text>{branch}</Text>
-                      </Box>
-                      {badges.length > 0 && (
-                        <Box ml="auto">
-                          {badges.map((badge, idx) => {
-                            const badgeText = typeof badge === "string" ? badge : badge.text;
-                            const badgeTooltip = typeof badge === "string" ? undefined : badge.tooltip;
-                            const badgeElement = (
-                              <Badge size="1" ml="1" key={idx}>
-                                {badgeText}
-                              </Badge>
-                            );
-                            return badgeTooltip ? (
-                              <Tooltip key={idx} content={badgeTooltip}>
-                                {badgeElement}
-                              </Tooltip>
-                            ) : (
-                              badgeElement
-                            );
-                          })}
-                        </Box>
-                      )}
-                    </Flex>
-                  </SelectPrimitive.Item>
+                  <BranchOption key={branch} branch={branch} badges={badges} />
                 ))}
                 {isLoadingBranches && allFilteredBranches.length === 0 && (
                   <Box p="4" style={{ textAlign: "center" }}>

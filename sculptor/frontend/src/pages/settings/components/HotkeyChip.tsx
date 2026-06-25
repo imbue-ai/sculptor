@@ -44,7 +44,6 @@ export const HotkeyChip = ({
 }: HotkeyChipProps): ReactElement => {
   // `recording` is the only genuinely local state; idle/set are derived from `value`.
   const [isRecording, setIsRecording] = useState(false);
-  const [recordedKeys, setRecordedKeys] = useState<Array<string>>([]);
   const recordingChipRef = useRef<HTMLDivElement>(null);
   // Exit recording when `value` changes externally (e.g., websocket-driven update).
   // State-during-render: React re-renders immediately with the adjusted value.
@@ -90,7 +89,6 @@ export const HotkeyChip = ({
         }
       }
 
-      setRecordedKeys(keys);
       onSet(hotkeyString);
       setIsRecording(false);
     },
@@ -121,12 +119,10 @@ export const HotkeyChip = ({
   const handleClick = (): void => {
     if (disabled || isRecording) return;
     setIsRecording(true);
-    setRecordedKeys([]);
   };
 
   const handleClear = (): void => {
     setIsRecording(false);
-    setRecordedKeys([]);
     onClear();
   };
 
@@ -170,10 +166,11 @@ export const HotkeyChip = ({
       py="2"
       px="4"
       onClick={handleClick}
+      aria-disabled={disabled}
       style={{ cursor: disabled ? "default" : "pointer", ...opacityStyle }}
       data-testid={ElementIds.SETTINGS_HOTKEY_SET_BUTTON}
     >
-      <Text size="2">{formatShortcutForDisplay(value || formatHotkey(recordedKeys))}</Text>
+      <Text size="2">{formatShortcutForDisplay(value)}</Text>
       <Button
         variant="ghost"
         size="1"

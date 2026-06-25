@@ -49,16 +49,23 @@ echo "OPENHOST_HOST=sculptor.<your-zone>" >>.sculptor/.env   # gitignored
 To run ad-hoc `oh` commands in a shell, just use those values directly, e.g.:
 
 ```bash
-oh app status sculptor
+oh app status sculptor   # see "Gotchas": older instances need the app_id, not the name
 oh app deploy "https://github.com/imbue-ai/sculptor@$(git rev-parse --abbrev-ref HEAD)" \
-  --name sculptor --grant-permissions-v2 --wait
+  --name sculptor --wait
 ```
 
 ## Prereqs
 
-- **`oh` CLI** installed and authenticated on this machine. Sanity check:
-  `oh app list` should show your apps without an auth error. (Authenticate once
-  with `oh instance login`.)
+- **`oh` CLI** installed and authenticated on this machine.
+  - Install (it's not on PyPI — installs from the private openhost repo):
+    ```bash
+    uv tool install "oh @ git+https://github.com/imbue-ai/openhost.git#subdirectory=compute_space_cli"
+    ```
+    `uv` drops the binary at `~/.local/bin/oh`; add that to PATH if needed.
+  - Authenticate once with **`oh login`** (prompts for the compute-space URL and a
+    token). Sanity check: **`oh status`** should print `<url> — up (HTTP 200)`.
+    (Don't rely on `oh app list` for the check — it crashes against older
+    instances; see "Gotchas".)
 - **The branch must be pushed to GitHub first.** The deploy builds from
   `$REPO@$BRANCH` — OpenHost clones from GitHub, so unpushed local commits are
   invisible to it. Push (with the user's permission) before deploying.
@@ -85,14 +92,14 @@ Knowing how the container is wired explains the deploy and reset behavior below.
 ## Deploy / update
 
 Each script deploys the current git branch (`BRANCH`) and runs `oh` with `--wait`
-(the from-source build takes **~10 min** — uv sync, frontend `npm install` /
+(the from-source build takes **~10 min** — uv sync, frontend `pnpm install` /
 `generate-api` / `build`; don't assume it's instant).
 
 ### Fresh deploy — app name not yet in use
 
 ```bash
 .claude/skills/openhost-sculptor/scripts/deploy.sh
-# → oh app deploy "$REPO@$BRANCH" --name "$APP" --grant-permissions-v2 --wait
+# → oh app deploy "$REPO@$BRANCH" --name "$APP" --wait
 ```
 
 ### Update, or switch branches — keep data
@@ -105,7 +112,7 @@ remove` blocks until the app is gone, so the deploy reuses the name cleanly.
 ```bash
 .claude/skills/openhost-sculptor/scripts/redeploy.sh
 # → oh app remove "$APP" --keep-data
-# → oh app deploy "$REPO@$BRANCH" --name "$APP" --grant-permissions-v2 --wait
+# → oh app deploy "$REPO@$BRANCH" --name "$APP" --wait
 ```
 
 Note: `oh app reload "$APP" --update` only `git pull`s and rebuilds the *same*
@@ -125,8 +132,11 @@ missing):
 
 It checks:
 
-1. **Right code is live** — `oh app status "$APP"` prints `git: <branch> @ <sha>`.
-   Confirm the branch and SHA match what you deployed.
+1. **It's up** — `oh app status "$APP"` prints `<app>: <status>` (expect
+   `running`; `building` means the deploy is still in progress). To confirm
+   *which* code is live (branch/SHA), check the deploy's build logs — `oh app
+   status` reports only the status string. (On an instance older than the CLI
+   this call needs the app_id, not the name — see "Gotchas".)
 2. **It's serving** — `curl` the live URL.
    - **`302` = healthy.** That's the OpenHost SSO login redirect, not an error.
    - `502` / `503` = down (still building, crashed, or failed to bind).
@@ -146,7 +156,7 @@ It prompts for confirmation first, then rebuilds (~10 min).
 ```bash
 .claude/skills/openhost-sculptor/scripts/reset.sh
 # → oh app remove "$APP"            # no --keep-data: deletes persistent app_data
-# → oh app deploy "$REPO@$BRANCH" --name "$APP" --grant-permissions-v2 --wait
+# → oh app deploy "$REPO@$BRANCH" --name "$APP" --wait
 ```
 
 `oh app remove --keep-data` (what `redeploy.sh` uses) preserves `app_data`,
@@ -162,6 +172,32 @@ wipe only *part* of the data, or restart without a rebuild — require host acce
 for any flow above; reach for it only for one-off inspection or surgical fixes.
 
 ## Gotchas
+
+- **An instance older than the `oh` CLI breaks name-based `app` commands.** The
+  current CLI (and openhost repo HEAD) addresses apps by **name** and expects
+  `GET /api/apps` to return a name-keyed dict. Older compute-space servers instead
+  return a **list** of `{app_id, name, status}` and key `app_status`/`app_logs` on
+  an opaque **app_id**. Against such an instance:
+  - `oh app list` crashes with `AttributeError: 'list' object has no attribute
+    'items'` (it calls `.items()` on the list).
+  - `oh app status <name>` / `oh app logs <name>` fail with `Error (400): Invalid
+    app_id` — they need the app_id, which changes on every remove+redeploy.
+
+  Fetch the current app_id (and a working list) by calling the API directly with
+  the CLI's own saved auth, then pass the id to `status`/`logs`:
+  ```bash
+  ~/.local/share/uv/tools/oh/bin/python - <<'PY'
+  import json
+  from compute_space_cli import config
+  from compute_space_cli.main import make_api_request
+  mc = config.MultiConfig.load()
+  inst = mc.instances[mc.default_instance or "default"]
+  print(json.dumps(make_api_request(inst.url, inst.token, "GET", "/api/apps").json(), indent=2))
+  PY
+  # → oh app logs <app_id>
+  ```
+  The durable fix is to **update the compute-space instance** to current openhost;
+  then the name-based commands (and these scripts) work as written.
 
 - **A returning browser can skip onboarding/Add Workspace.** Post-onboarding
   landing is driven by the browser's `sculptor-tabs` localStorage, not the server:

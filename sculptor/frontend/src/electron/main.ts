@@ -33,12 +33,13 @@ import {
   CAPTURE_SCREENSHOT_CHANNEL_NAME,
   GET_APP_VERSION_CHANNEL_NAME,
   GET_AUTO_UPDATE_STATUS_CHANNEL_NAME,
+  GET_BACKEND_URL_CHANNEL_NAME,
   GET_CURRENT_BACKEND_STATUS_CHANNEL_NAME,
   GET_CUSTOM_BACKEND_SETTINGS_CHANNEL_NAME,
   GET_DEV_INFO_CHANNEL_NAME,
   GET_FILE_DATA_CHANNEL_NAME,
+  GET_SESSION_TOKEN_CHANNEL_NAME,
   IS_CUSTOM_COMMAND_MODE_CHANNEL_NAME,
-  SAVE_FILE_CHANNEL_NAME,
   SELECT_PROJECT_DIRECTORY_CHANNEL_NAME,
   SET_CUSTOM_BACKEND_SETTINGS_CHANNEL_NAME,
   ZOOM_COMMAND_CHANNEL_NAME,
@@ -174,6 +175,12 @@ const DEVELOPMENT_BACKEND_READINESS_TIMEOUT_MS = 10000; // 10 secs
 const TESTING_BACKEND_READINESS_TIMEOUT_MS = 60000; // 60 secs
 const RETRY_INTERVAL_MS = 200; // 200ms between retries for fast detection
 const INITIAL_WAIT_MS = 100; // 100ms initial wait before first check
+
+// How long to wait for the backend to drain and exit on shutdown before
+// escalating to SIGKILL. The default-mode backend gets a longer budget because
+// its --trace-to teardown can take many seconds to flush viztracer.
+const CUSTOM_COMMAND_SHUTDOWN_GRACE_PERIOD_MS = 15000;
+const DEFAULT_BACKEND_SHUTDOWN_GRACE_PERIOD_MS = 32000;
 
 // Window configuration constants
 const WINDOW_WIDTH = 1200;
@@ -1040,7 +1047,7 @@ app.whenReady().then(async () => {
     return currentBackendStatus;
   });
 
-  ipcMain.handle("get-session-token", () => {
+  ipcMain.handle(GET_SESSION_TOKEN_CHANNEL_NAME, () => {
     return SESSION_TOKEN;
   });
 
@@ -1067,7 +1074,7 @@ app.whenReady().then(async () => {
   ipcMain.handle(IS_CUSTOM_COMMAND_MODE_CHANNEL_NAME, () => isInCustomCommandMode);
   ipcMain.handle(GET_DEV_INFO_CHANNEL_NAME, () => getDevInfo());
   ipcMain.handle(GET_APP_VERSION_CHANNEL_NAME, () => app.getVersion());
-  ipcMain.handle("get-backend-url", () => backendUrlReady);
+  ipcMain.handle(GET_BACKEND_URL_CHANNEL_NAME, () => backendUrlReady);
 
   ipcMain.handle(CAPTURE_SCREENSHOT_CHANNEL_NAME, async () => {
     if (!window) {
@@ -1091,31 +1098,9 @@ app.whenReady().then(async () => {
     registerTestIpcHandlers(ipcMain);
   }
 
-  ipcMain.handle(SAVE_FILE_CHANNEL_NAME, async (_event, fileData: ArrayBuffer, originalFilename: string) => {
-    try {
-      const userDataPath = app.getPath("userData");
-      const filesDir = path.join(userDataPath, "files");
-
-      if (!fs.existsSync(filesDir)) {
-        fs.mkdirSync(filesDir, { recursive: true });
-      }
-
-      const { randomUUID } = await import("crypto");
-      const uuid = randomUUID();
-      const ext = path.extname(originalFilename);
-      const uniqueFilename = `${uuid}${ext}`;
-      const filePath = path.join(filesDir, uniqueFilename);
-
-      fs.writeFileSync(filePath, Buffer.from(fileData));
-
-      logger.info(`File saved to: ${filePath}`);
-      return filePath;
-    } catch (error) {
-      logger.error("Error saving file:", error);
-      throw error;
-    }
-  });
-
+  // GET_FILE_DATA is retained to read legacy desktop attachments (saved to disk
+  // as absolute paths before uploads moved to the backend). New uploads go
+  // through the backend over HTTP, so there is no longer a SAVE_FILE handler.
   ipcMain.handle(GET_FILE_DATA_CHANNEL_NAME, async (_event, filePath: string) => {
     try {
       const fileBuffer = fs.readFileSync(filePath);
@@ -1316,7 +1301,9 @@ const cleanupBackendProcess = async (): Promise<void> => {
       // take far longer than the default budget — without the extension the
       // SIGKILL fires while viztracer is still loading and the trace file is
       // never written.
-      const baseGracePeriodMs = isInCustomCommandMode ? 15000 : 32000;
+      const baseGracePeriodMs = isInCustomCommandMode
+        ? CUSTOM_COMMAND_SHUTDOWN_GRACE_PERIOD_MS
+        : DEFAULT_BACKEND_SHUTDOWN_GRACE_PERIOD_MS;
       const gracePeriodMs = tracingTeardownGracePeriodMs(baseGracePeriodMs);
       await killProcessAndWait(pythonBackgroundProcess, gracePeriodMs);
     }
@@ -1351,9 +1338,9 @@ app.on("before-quit", async (e): Promise<void> => {
   app.quit();
 });
 
-function killProcessAndWait(process: ReturnType<typeof spawn>, timeoutMs: number): Promise<void> {
+function killProcessAndWait(proc: ReturnType<typeof spawn>, timeoutMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (!process || process.killed) {
+    if (!proc || proc.killed) {
       resolve();
       return;
     }
@@ -1362,17 +1349,17 @@ function killProcessAndWait(process: ReturnType<typeof spawn>, timeoutMs: number
       reject(new Error("Process kill timeout"));
     }, timeoutMs);
 
-    process.once("exit", () => {
+    proc.once("exit", () => {
       clearTimeout(timeout);
       resolve();
     });
 
-    process.once("error", (err) => {
+    proc.once("error", (err) => {
       clearTimeout(timeout);
       reject(err);
     });
 
-    process.kill("SIGTERM");
+    proc.kill("SIGTERM");
   });
 }
 

@@ -33,6 +33,11 @@ ENV NODE_VERSION="24.17.0"
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash && \
     bash -c "source /root/.nvm/nvm.sh && nvm install $NODE_VERSION"
 
+# Provision pnpm via Corepack. Bake the exact version (matching `packageManager`
+# in sculptor/frontend/package.json) into the image so the offload/Modal frontend
+# install + build never have to fetch pnpm at runtime against Modal's flaky mirror.
+RUN bash -c "source /root/.nvm/nvm.sh && nvm use $NODE_VERSION && corepack enable pnpm && corepack prepare pnpm@10.28.2 --activate"
+
 # offload >= 0.9.1 invokes `offload apply-diff` inside the sandbox to apply
 # thin-diff patches (replacing the previous `git apply --3way`), so the
 # binary must be on PATH here. Install via rustup minimal, then strip the

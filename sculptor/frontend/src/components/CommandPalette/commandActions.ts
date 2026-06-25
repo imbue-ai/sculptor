@@ -28,11 +28,13 @@ export type CommandActionCallback = () => void;
 
 /**
  * Single source of truth for registered actions. Stored as a record to keep
- * the API symmetric with the runtime's `ui.*` shape; we replace the whole
- * record on registration so consumers using `useAtomValue` re-render only
- * when the specific slot they read changes.
+ * the API symmetric with the runtime's `ui.*` shape; registration replaces
+ * the whole record (rather than mutating in place) so Jotai sees a new
+ * reference and notifies subscribers. The runtime reads the latest record
+ * imperatively via `store.get` when dispatching an action.
  *
- * Stored as a frozen object so accidental in-place mutation is loud.
+ * The value is typed `Readonly`, so an accidental in-place mutation is a
+ * compile-time error rather than a silent corruption of shared state.
  */
 export const commandActionsAtom = atom<Readonly<Partial<Record<CommandActionId, CommandActionCallback>>>>({});
 
@@ -49,7 +51,9 @@ export const useRegisterCommandAction = (id: CommandActionId, callback: CommandA
   // Keep the callback in a ref so the registered function always sees the
   // latest closure without forcing the effect to re-run on every render.
   const ref = useRef(callback);
-  ref.current = callback;
+  useEffect(() => {
+    ref.current = callback;
+  });
 
   useEffect(() => {
     const stableCallback: CommandActionCallback = () => ref.current();

@@ -12,13 +12,17 @@ import {
   setCiBabysitterPausedAtom,
 } from "../../../common/state/atoms/ciBabysitterStatus";
 import { isCiBabysitterEnabledAtom } from "../../../common/state/atoms/userConfig";
-import type { GitProvider } from "./PrButton";
 import styles from "./PrDetailDropdown.module.scss";
 
 type PrDetailDropdownProps = {
   prStatus: PrStatusInfo;
-  gitProvider: GitProvider;
 };
+
+const MS_PER_MINUTE = 60_000;
+const MS_PER_HOUR = 3_600_000;
+const MS_PER_DAY = 86_400_000;
+const MINUTES_PER_HOUR = 60;
+const HOURS_PER_DAY = 24;
 
 const formatRelativeTime = (isoTimestamp: string | null | undefined): string => {
   if (!isoTimestamp) return "";
@@ -26,18 +30,18 @@ const formatRelativeTime = (isoTimestamp: string | null | undefined): string => 
   const now = Date.now();
   const then = new Date(isoTimestamp).getTime();
   const diffMs = now - then;
-  const diffMinutes = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
+  const diffMinutes = Math.floor(diffMs / MS_PER_MINUTE);
+  const diffHours = Math.floor(diffMs / MS_PER_HOUR);
+  const diffDays = Math.floor(diffMs / MS_PER_DAY);
 
   if (diffMinutes < 1) return "just now";
-  if (diffMinutes < 60) return `${diffMinutes} minute${diffMinutes === 1 ? "" : "s"} ago`;
-  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+  if (diffMinutes < MINUTES_PER_HOUR) return `${diffMinutes} minute${diffMinutes === 1 ? "" : "s"} ago`;
+  if (diffHours < HOURS_PER_DAY) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
 
   return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
 };
 
-const getPipelineBadge = (status: string | null | undefined): ReactElement | null => {
+const getPipelineBadge = (status: PrStatusInfo["pipelineStatus"]): ReactElement | undefined => {
   switch (status) {
     case "passed":
       return <span className={`${styles.badge} ${styles.badgePassed}`}>Passed</span>;
@@ -47,12 +51,11 @@ const getPipelineBadge = (status: string | null | undefined): ReactElement | nul
       return <span className={`${styles.badge} ${styles.badgeFailed}`}>Failed</span>;
     case null:
     case undefined:
-    default:
-      return null;
+      return undefined;
   }
 };
 
-export const PrDetailDropdown = ({ prStatus, gitProvider }: PrDetailDropdownProps): ReactElement => {
+export const PrDetailDropdown = ({ prStatus }: PrDetailDropdownProps): ReactElement => {
   const approvedCount = prStatus.approvals?.filter((a) => a.approved).length ?? 0;
   const totalApprovals = prStatus.approvals?.length ?? 0;
   const commentCount = prStatus.unresolvedComments?.length ?? 0;
@@ -84,9 +87,9 @@ export const PrDetailDropdown = ({ prStatus, gitProvider }: PrDetailDropdownProp
   if (babysitterState == null) {
     babysitterStatusText = "Loading…";
   } else if (isRetired && prStatus.prState === "merged") {
-    babysitterStatusText = "Retired (MR merged)";
+    babysitterStatusText = "Retired (PR merged)";
   } else if (isRetired && prStatus.prState === "closed") {
-    babysitterStatusText = "Retired (MR closed)";
+    babysitterStatusText = "Retired (PR closed)";
   } else if (isRetired) {
     babysitterStatusText = "Retired";
   } else if (disabledReason != null) {
@@ -106,24 +109,17 @@ export const PrDetailDropdown = ({ prStatus, gitProvider }: PrDetailDropdownProp
     void setPaused({ workspaceId, paused: !nextActive });
   };
 
-  const isGitHub = gitProvider === "github";
-  const prefix = isGitHub ? "#" : "!";
-  const ciLabel = isGitHub ? "Checks" : "Pipeline";
-  const noCiLabel = isGitHub ? "No checks" : "No pipeline";
-  const reviewLabel = isGitHub ? "Reviews" : "Approvals";
-  const noReviewerLabel = isGitHub ? "No reviews" : "No reviewers assigned";
-
   return (
     <div className={styles.dropdown} data-testid={ElementIds.PR_DROPDOWN}>
       <Flex align="center" gap="2" mb="3">
         {prStatus.prWebUrl ? (
           <Link size="2" weight="medium" href={prStatus.prWebUrl} target="_blank" style={{ flex: 1 }} truncate>
-            {prStatus.prTitle ?? `${prefix}${prStatus.prIid}`}
+            {prStatus.prTitle ?? `#${prStatus.prIid}`}
             <ExternalLinkIcon size={12} style={{ marginLeft: "var(--space-1)", verticalAlign: "middle" }} />
           </Link>
         ) : (
           <Text size="2" weight="medium" style={{ flex: 1 }} truncate>
-            {prStatus.prTitle ?? `${prefix}${prStatus.prIid}`}
+            {prStatus.prTitle ?? `#${prStatus.prIid}`}
           </Text>
         )}
       </Flex>
@@ -131,7 +127,7 @@ export const PrDetailDropdown = ({ prStatus, gitProvider }: PrDetailDropdownProp
       <Separator size="4" mb="3" />
 
       <Flex direction="column" gap="1" mb="3">
-        <Text className={styles.sectionTitle}>{ciLabel}</Text>
+        <Text className={styles.sectionTitle}>Checks</Text>
         {prStatus.pipelineStatus ? (
           <Flex align="center" gap="2">
             {getPipelineBadge(prStatus.pipelineStatus)}
@@ -153,7 +149,7 @@ export const PrDetailDropdown = ({ prStatus, gitProvider }: PrDetailDropdownProp
           </Flex>
         ) : (
           <Text size="1" color="gray">
-            {noCiLabel}
+            No checks
           </Text>
         )}
       </Flex>
@@ -183,7 +179,7 @@ export const PrDetailDropdown = ({ prStatus, gitProvider }: PrDetailDropdownProp
 
       <Flex direction="column" gap="1" mb="3">
         <Text className={styles.sectionTitle}>
-          {reviewLabel} {totalApprovals > 0 && `(${approvedCount}/${totalApprovals})`}
+          Reviews {totalApprovals > 0 && `(${approvedCount}/${totalApprovals})`}
         </Text>
         {totalApprovals > 0 ? (
           prStatus.approvals?.map((approval) => (
@@ -201,7 +197,7 @@ export const PrDetailDropdown = ({ prStatus, gitProvider }: PrDetailDropdownProp
           ))
         ) : (
           <Text size="1" color="gray">
-            {noReviewerLabel}
+            No reviews
           </Text>
         )}
       </Flex>

@@ -55,16 +55,16 @@ export const WelcomeStep = ({
           Your code is yours — Imbue does not store your repositories or train on your code.
         </Text>
         <Text size="2" color="gray">
-          We encourage you to also review the privacy rules of your model providers.
+          We also encourage you to review the privacy rules of your model providers.
         </Text>
         <Text size="2" color="gray">
           By continuing, you agree to our{" "}
           <Link className={styles.termsText} href="https://imbue.com/terms">
-            terms of service
+            Terms of Service
           </Link>{" "}
           and{" "}
           <Link className={styles.termsText} href="https://imbue.com/privacy">
-            privacy policy
+            Privacy&nbsp;Policy
           </Link>
           .
         </Text>
@@ -74,7 +74,7 @@ export const WelcomeStep = ({
           placeholder="Full name"
           size="3"
           autoFocus
-          value={fullName || ""}
+          value={fullName ?? ""}
           onChange={(e) => setFullName(e.target.value)}
           onKeyDown={handleKeyPress}
           className={styles.nameInput}

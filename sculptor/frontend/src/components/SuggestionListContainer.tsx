@@ -22,7 +22,7 @@ export type SuggestionListRef = {
  */
 export type SuggestionAction = "select" | "drillIn";
 
-type SuggestionItemShape = {
+export type SuggestionItemShape = {
   id: string;
   label: string;
   isSectionHeader?: boolean;

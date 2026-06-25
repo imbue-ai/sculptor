@@ -26,17 +26,6 @@
   }
 }
 
-.unifiedContainerDisabled {
-  background: var(--gray-3);
-  border-color: var(--gray-6);
-  cursor: not-allowed;
-  opacity: 60%;
-
-  &:focus-within {
-    border-color: var(--gray-6);
-  }
-}
-
 .editorInner {
   background: transparent;
   display: flex;
@@ -49,13 +38,6 @@
 
   min-height: 40px;
   padding: 0 var(--space-3) var(--space-3) var(--space-4);
-}
-
-.separator {
-  background: var(--accent-6);
-  height: 20px;
-  margin: 0 var(--space-1);
-  width: 1px;
 }
 
 .dragging {
