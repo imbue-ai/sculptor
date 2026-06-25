@@ -224,6 +224,16 @@ class PiHarnessProcess implements HarnessProcess {
   // /clear: tell the running pi CLI to start a fresh session so prior turns are
   // forgotten (the persistent process keeps the conversation in memory, so
   // clearing the on-disk session id alone doesn't reset it).
+  // Launch the pi process before any user message so its model catalog
+  // (get_available_models, via startProcess → fetchModels) is reported and the
+  // model switcher shows pi's models on a fresh agent.
+  warmUp(): void {
+    if (this.finished) {
+      return;
+    }
+    void this.ensureStarted().catch(() => undefined);
+  }
+
   clearSession(): void {
     if (this.child === undefined) {
       return;

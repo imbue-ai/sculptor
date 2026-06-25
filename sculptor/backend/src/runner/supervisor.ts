@@ -68,6 +68,9 @@ export class AgentSupervisor {
     });
     this.process.onMessage((message) => this.handleMessage(message));
     this.process.onExit((result) => this.handleExit(result));
+    // Let a harness report its model catalog before the first turn (pi). No-op
+    // for harnesses that need nothing pre-turn (claude).
+    this.process.warmUp?.();
   }
 
   private handleMessage(message: Record<string, unknown>): void {

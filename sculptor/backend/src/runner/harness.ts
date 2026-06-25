@@ -31,6 +31,10 @@ export interface HarnessProcess {
   // cleared by the caller); a persistent process (pi) must tell the CLI to start
   // a new session. Optional — defaults to a no-op.
   clearSession?(): void;
+  // Start the process without a user turn so it can report its model catalog
+  // before the first message (pi: launch + get_available_models). No-op for a
+  // harness that needs nothing before the first turn (claude). Optional.
+  warmUp?(): void;
 }
 
 export interface Harness {

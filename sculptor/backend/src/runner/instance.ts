@@ -143,6 +143,21 @@ export function getAgentRunner(): AgentRunner {
         environmentFor: piEnvironmentFor,
         initializationStrategyFor: strategyForAgent,
         apiKeyEnvVarNames: config.pi.api_key_env_var_names as readonly string[],
+        // Persist pi's reported model catalog onto the agent row so the model
+        // switcher (available_models / current_model) reflects pi's models, then
+        // re-publish the agent view so the switcher updates.
+        onModelsReported: (agent, models, current) => {
+          updateAgent(getOrm(), agent.objectId, {
+            availableModels: models,
+            currentModel: current,
+          });
+          eventBus.publish({
+            kind: "agent_status",
+            agentId: agent.objectId,
+            workspaceId: agent.workspaceId ?? undefined,
+            projectId: agent.projectId,
+          });
+        },
       },
     });
     runner = new AgentRunner({

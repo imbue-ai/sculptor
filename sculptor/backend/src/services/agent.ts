@@ -329,6 +329,13 @@ export class AgentService {
       });
     }
 
+    // A pi agent launches its harness on creation (even with no prompt) so the
+    // pi process reports its model catalog and the switcher shows pi's models
+    // immediately (run_agent/v1.py's start-time fetch_available_models_probe).
+    if (configType === "PiAgentConfig") {
+      getAgentRunner().startAgent(agentId);
+    }
+
     if (prompt !== null && prompt !== "") {
       const message: Record<string, unknown> = {
         object_type: "ChatInputUserMessage",
