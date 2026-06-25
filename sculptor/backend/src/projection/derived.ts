@@ -406,6 +406,10 @@ const NON_CONTENT_MESSAGE_TYPES: ReadonlySet<string> = new Set([
   "RequestFailureAgentMessage",
   "RequestStoppedAgentMessage",
   "RequestSkippedAgentMessage",
+  // Ephemeral runner lifecycle messages (is_ephemeral in Python) — environment
+  // acquisition etc. are not user-visible content for read/unread tracking.
+  "EnvironmentAcquiredRunnerMessage",
+  "EnvironmentReleasedRunnerMessage",
 ]);
 
 function isContentMessage(message: RawMessage): boolean {

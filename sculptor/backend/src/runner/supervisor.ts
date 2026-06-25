@@ -3,6 +3,7 @@ import type { Orm } from "~/db/orm";
 import type { AgentRow, RunState } from "~/db/schema";
 import { eventBus } from "~/events";
 import type { ChangedEntityRef } from "~/events/types";
+import { newAgentMessageId } from "~/ids";
 import type { ProjectionCache } from "~/projection/cache";
 import type { Harness, HarnessExitResult, HarnessProcess } from "~/runner/harness";
 import { MessageWriter } from "~/runner/message_writer";
@@ -50,6 +51,16 @@ export class AgentSupervisor {
 
   start(): void {
     this.setRunState("RUNNING");
+    // Record that the agent's environment is ready (run_agent/v1.py emits this
+    // before the first turn). The derived status gates on it: a coding agent
+    // with a user message but no EnvironmentAcquired stays BUILDING. Written
+    // through the writer so it folds into the warm cache + streams.
+    this.writer.write({
+      object_type: "EnvironmentAcquiredRunnerMessage",
+      message_id: newAgentMessageId(),
+      source: "RUNNER",
+      approximate_creation_time: new Date().toISOString(),
+    });
     this.process = this.deps.harness.launch({
       agent: this.agent,
       workingDirectory: this.deps.workingDirectory,
