@@ -148,6 +148,22 @@ export function useAgentStatus(props: UseAgentStatusProps): AgentStatusResult {
       return;
     }
 
+    // Entering compaction is a deliberate lifecycle signal, not the
+    // high-frequency thinking/streaming/calling_tools flicker the debounce
+    // smooths — apply it immediately. A debounced compacting transition can be
+    // cleared by the next active-state transition before its timer fires (when
+    // a brief compaction ends within the debounce window), so the "Compacting"
+    // chrome would never reach the displayed state.
+    if (rawState === "compacting") {
+      if (pendingTimeoutRef.current !== null) {
+        clearTimeout(pendingTimeoutRef.current);
+        pendingTimeoutRef.current = null;
+      }
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      applyState(rawState);
+      return;
+    }
+
     // When stopping transitions to idle, show "Stopped" briefly first.
     // Timer-driven state machine: this synchronous transition kicks off the
     // 1500ms "Stopped" linger timer below. Deriving it during render would
@@ -156,7 +172,6 @@ export function useAgentStatus(props: UseAgentStatusProps): AgentStatusResult {
       if (pendingTimeoutRef.current !== null) {
         clearTimeout(pendingTimeoutRef.current);
       }
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       applyState("stopped");
       pendingTimeoutRef.current = setTimeout(() => {
         pendingTimeoutRef.current = null;

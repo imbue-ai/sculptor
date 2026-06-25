@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ChatMessage } from "~/api";
 
-import type { UseAgentStatusProps } from "./useAgentStatus.ts";
+import type { AgentState, UseAgentStatusProps } from "./useAgentStatus.ts";
 import { useAgentStatus } from "./useAgentStatus.ts";
 
 const DEBOUNCE_MS = 500;
@@ -295,6 +295,64 @@ describe("useAgentStatus", () => {
       });
       expect(result.current.state).toBe("idle");
       expect(result.current.isVisible).toBe(false);
+    });
+  });
+
+  describe("compacting indicator (SCU-1564)", () => {
+    it("shows compacting even when compaction ends within the debounce window", () => {
+      // A compaction brief enough to end within the debounce window must still
+      // appear in the pill. The render callback records every displayed state
+      // so the assertion can confirm "compacting" showed at some point, rather
+      // than only inspecting the final state.
+      const observed: Array<AgentState> = [];
+      const { rerender } = renderHook(
+        (props: UseAgentStatusProps) => {
+          const status = useAgentStatus(props);
+          observed.push(status.state);
+          return status;
+        },
+        { initialProps: { ...defaultProps, taskStatus: "RUNNING", workingUserMessageId: "msg-1" } },
+      );
+      expect(observed).toContain("thinking");
+
+      // Compaction starts almost immediately, well within the debounce window.
+      rerender({ ...defaultProps, taskStatus: "RUNNING", workingUserMessageId: "msg-1", isAutoCompacting: true });
+
+      // It ends before DEBOUNCE_MS elapses: the agent resumes streaming.
+      act(() => {
+        vi.advanceTimersByTime(DEBOUNCE_MS - 100);
+      });
+      const summary = makeChatMessage([{ type: "text", text: "Summary of the conversation so far." }]);
+      rerender({
+        ...defaultProps,
+        taskStatus: "RUNNING",
+        workingUserMessageId: "msg-1",
+        isStreaming: true,
+        inProgressChatMessage: summary,
+      });
+      act(() => {
+        vi.runAllTimers();
+      });
+
+      // The compacting state must have been displayed at some point.
+      expect(observed).toContain("compacting");
+    });
+
+    it("shows compacting immediately, not after the debounce delay", () => {
+      // Even when the previous displayed-state change was recent (so an active
+      // state would be debounced), entering compaction must light the pill on
+      // the very next render — the indicator should not lag the actual start
+      // of compaction by up to DEBOUNCE_MS.
+      const { result, rerender } = renderHook((props: UseAgentStatusProps) => useAgentStatus(props), {
+        initialProps: { ...defaultProps, taskStatus: "RUNNING", workingUserMessageId: "msg-1" },
+      });
+      expect(result.current.state).toBe("thinking");
+
+      rerender({ ...defaultProps, taskStatus: "RUNNING", workingUserMessageId: "msg-1", isAutoCompacting: true });
+      // No timer advance: compacting is shown synchronously.
+      expect(result.current.state).toBe("compacting");
+      expect(result.current.label).toBe("Compacting...");
+      expect(result.current.isVisible).toBe(true);
     });
   });
 
