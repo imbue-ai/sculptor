@@ -341,6 +341,7 @@ export class AgentService {
         fast_mode: input.fastMode ?? false,
         effort: input.effort ?? "xhigh",
         sent_via: input.sentVia ?? null,
+        approximate_creation_time: new Date().toISOString(),
       };
       recordUserMessage(orm, agent, message);
       const runner = getAgentRunner();
@@ -437,6 +438,7 @@ export class AgentService {
       fast_mode: input.fastMode ?? false,
       effort: input.effort ?? "xhigh",
       sent_via: input.sentVia ?? null,
+      approximate_creation_time: new Date().toISOString(),
     };
     recordUserMessage(orm, agent, message);
     const runner = getAgentRunner();

@@ -1,6 +1,10 @@
 import { getCurrentUserConfig } from "~/config/user_config";
 import { getOrm } from "~/db/orm";
-import { getRepo, listRecentWorkspaces } from "~/db/repositories";
+import {
+  getRepo,
+  getWorkspace,
+  listRecentWorkspaces,
+} from "~/db/repositories";
 import type { WorkspaceRow } from "~/db/schema";
 import { workingDirectory } from "~/environment/paths";
 import { eventBus } from "~/events";
@@ -50,6 +54,8 @@ export class PrPollingService {
   private readonly deps: PrPollingDeps;
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private running = false;
+  private scheduled = new Set<string>();
+  private unsubscribe: (() => void) | undefined;
 
   constructor(deps: Partial<PrPollingDeps> = {}) {
     this.deps = {
@@ -152,12 +158,33 @@ export class PrPollingService {
     )) {
       // Stagger the initial polls slightly so they don't all fire at t=0; the
       // throttle enforces the hard spacing once they dispatch.
+      this.scheduled.add(workspace.objectId);
       this.schedule(workspace, 0);
     }
+    // Poll workspaces created after boot too (the backend starts with none, so
+    // every workspace — and its PR button — depends on this).
+    this.unsubscribe = eventBus.subscribe((event) => {
+      if (event.kind !== "data_model_change") {
+        return;
+      }
+      for (const ref of event.changedEntities ?? []) {
+        if (ref.type !== "workspace" || this.scheduled.has(ref.id)) {
+          continue;
+        }
+        const workspace = getWorkspace(getOrm(), ref.id);
+        if (workspace !== undefined && !workspace.isDeleted) {
+          this.scheduled.add(ref.id);
+          this.schedule(workspace, 0);
+        }
+      }
+    });
   }
 
   stop(): void {
     this.running = false;
+    this.unsubscribe?.();
+    this.unsubscribe = undefined;
+    this.scheduled.clear();
     for (const timer of this.timers) {
       clearTimeout(timer);
     }

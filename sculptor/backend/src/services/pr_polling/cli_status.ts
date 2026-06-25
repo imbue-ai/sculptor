@@ -113,7 +113,10 @@ export const defaultCliRunner: CliRunner = (cmd, cwd) =>
           (error as NodeJS.ErrnoException).code === "ENOENT"
         ) {
           reject(
-            new CliStatusError("cli_missing", `${cmd[0]} not found on PATH`),
+            new CliStatusError(
+              "cli_missing",
+              `${cmd[0]} CLI not found in PATH`,
+            ),
           );
           return;
         }
