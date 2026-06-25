@@ -57,9 +57,8 @@ const clearScrollAnimation = (
 };
 
 type UseAlphaAutoScrollReturn = {
-  // Derived from the scroll state machine: true while pinning to the bottom
-  // (following) or anchoring a new turn (filling). Read-only projection — the
-  // machine is the source of truth, so this can never disagree with it.
+  // Read-only projection derived from the scroll state machine: true while
+  // pinning to the bottom (following) or anchoring a new turn (filling).
   isEngaged: boolean;
   isAtBottom: boolean;
   scrollToBottom: () => void;
@@ -311,18 +310,22 @@ export const useAlphaAutoScroll = (
     let prev = machine.getState().authority;
     return machine.subscribe(() => {
       const next = machine.getState().authority;
-      if (prev.kind === "anchoringTurn" && next.kind !== "anchoringTurn") {
+      // Advance the tracker before any dispatch below: re-engage dispatches
+      // reachedBottom, which notifies this same subscriber re-entrantly, so the
+      // tracker must already reflect `next` to stay in sync.
+      const previous = prev;
+      prev = next;
+      if (previous.kind === "anchoringTurn" && next.kind !== "anchoringTurn") {
         clearScrollAnimation(scrollContainerRef.current, scrollAnimationRef, virtualizer, savedScrollAdjustRef);
         setIsJumpSuppressed(false);
       }
 
-      if (prev.kind === "restoring" && next.kind === "userControlled" && isStreamingRef.current) {
+      if (previous.kind === "restoring" && next.kind === "userControlled" && isStreamingRef.current) {
         const el = scrollContainerRef.current;
         if (el !== null && el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_THRESHOLD) {
           machine.dispatch({ kind: "reachedBottom" });
         }
       }
-      prev = next;
     });
   }, [machine, scrollContainerRef, virtualizer]);
 

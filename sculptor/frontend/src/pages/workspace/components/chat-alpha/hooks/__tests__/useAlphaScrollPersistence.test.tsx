@@ -152,8 +152,6 @@ describe("useAlphaScrollPersistence", () => {
     expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(1, { align: "start" });
   });
 
-  // ─── Scroll state machine integration ────────────────────────────────────
-
   it("drives the machine through restoring -> userControlled", () => {
     const el = createMockScrollContainer(0, 2000, 500);
     const ref = { current: el };
