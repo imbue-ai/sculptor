@@ -1,6 +1,7 @@
 # Unifying alpha-chat scroll behavior into an explicit state machine
 
-Status: **design + in-progress migration**. Audience: Sculptor frontend maintainers.
+Status: **reference** — the migration described here has landed. Audience:
+Sculptor frontend maintainers.
 
 This document explains *why* the alpha chat's scroll behavior is being reworked
 into a single explicit state machine, *what* that machine is, and *how* the
@@ -10,7 +11,9 @@ first.
 
 ---
 
-## Motivating prompt (Danver)
+## Motivating prompt
+
+The maintainer who initiated this work framed the problem as follows:
 
 > Please look at the underlying issue holistically. Look at it more than just the
 > one case, but the entire cluster.
@@ -199,9 +202,12 @@ source of "the button says one thing while the scroll says another."
 When in-chat search is open, auto-scroll behaviors are suspended. Rather than add
 a `searching` member to the authority union (which would multiply every phase by
 "is search open"), suppression is a **single top-level boolean on the store that
-gates dispatch**: while suppressed, auto-scroll-driving events (`newUserTurn`,
-`reachedBottom`, `streamingStopped`) are dropped; `userScrolled`, `taskSwitched`
-and the nav events still apply. This keeps the union strictly about *authority*.
+gates dispatch**: while suppressed, only the auto-scroll *initiation* events
+(`newUserTurn`, `reachedBottom`) are dropped, so a search session never starts
+pinning or anchoring. Completion events (`turnAnchored`, `streamingStopped`,
+`restoreSettled`, `navEnded`) and the globals (`userScrolled`, `taskSwitched`)
+still apply, so the machine can always reach a settled state. This keeps the
+union strictly about *authority*.
 
 ### The store: one writer, ref-backed, selectively reactive
 
@@ -248,7 +254,7 @@ sleeps. `wait_for_alpha_scroll_idle` and friends are deleted.
 
 ## Resolved design decisions
 
-These were settled with Danver when the design was reviewed:
+These were settled during design review:
 
 1. **At-bottom is derived geometry, kept orthogonal to the authority union.**
    It never becomes a stored mode.
