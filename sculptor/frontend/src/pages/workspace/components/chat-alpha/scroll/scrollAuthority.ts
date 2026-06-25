@@ -73,6 +73,13 @@ export const nextAuthority = (state: ScrollAuthority, event: ScrollEvent): Scrol
       return state;
     case "restoring":
       if (event.kind === "restoreSettled") return { kind: "userControlled" };
+      // Genuine user intent during the restore window preempts the restore —
+      // the deferred restore re-assert is guarded on the phase still being
+      // `restoring`, so leaving it here cancels the re-assert instead of letting
+      // it clobber what the user just did. Mirrors the `userControlled` arms.
+      if (event.kind === "newUserTurn") return { kind: "anchoringTurn", anchorIndex: event.index };
+      if (event.kind === "reachedBottom") return { kind: "following" };
+      if (event.kind === "navStarted") return { kind: "navigating", promptIndex: event.promptIndex };
       return state;
     case "anchoringTurn":
       // The anchored turn becomes the thing we follow once its response

@@ -51,9 +51,14 @@ describe("nextAuthority", () => {
     it("restoreSettled -> userControlled", () => {
       expect(nextAuthority(s, { kind: "restoreSettled" })).toEqual({ kind: "userControlled" });
     });
-    it("ignores auto-scroll events while restoring (same reference)", () => {
-      expect(nextAuthority(s, { kind: "newUserTurn", index: 1 })).toBe(s);
-      expect(nextAuthority(s, { kind: "reachedBottom" })).toBe(s);
+    it("newUserTurn preempts the restore -> anchoringTurn", () => {
+      expect(nextAuthority(s, { kind: "newUserTurn", index: 1 })).toEqual({ kind: "anchoringTurn", anchorIndex: 1 });
+    });
+    it("reachedBottom preempts the restore -> following", () => {
+      expect(nextAuthority(s, { kind: "reachedBottom" })).toEqual({ kind: "following" });
+    });
+    it("navStarted preempts the restore -> navigating", () => {
+      expect(nextAuthority(s, { kind: "navStarted", promptIndex: 3 })).toEqual({ kind: "navigating", promptIndex: 3 });
     });
   });
 
