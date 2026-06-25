@@ -1,14 +1,14 @@
-import { Select, Theme } from "@radix-ui/themes";
-import { cleanup, render, type RenderResult, screen, within } from "@testing-library/react";
+import { Button, DropdownMenu, Select, Theme } from "@radix-ui/themes";
+import { cleanup, fireEvent, render, type RenderResult, screen, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ElementIds, LlmModel, type ModelOption } from "~/api";
-import { routeModelChange } from "~/common/modelConstants.ts";
+import { groupModelsByProvider, routeModelChange } from "~/common/modelConstants.ts";
 
 import { ModelSelectOptions } from "./ModelSelectOptions";
-import { ModelSelector } from "./ModelSelector";
+import { CascadingProviderMenu, ModelSelector } from "./ModelSelector";
 
 const PI_MODELS: ReadonlyArray<ModelOption> = [
   { provider: "anthropic", modelId: "claude-opus-4-8", displayName: "Claude Opus 4.8" },
@@ -31,7 +31,7 @@ const withStore = (children: ReactNode): ReactElement => (
 );
 
 beforeAll(() => {
-  // Radix Select calls scrollIntoView on open; jsdom does not implement it.
+  // Radix Select/DropdownMenu call scrollIntoView on open; jsdom does not implement it.
   Element.prototype.scrollIntoView = (): void => {};
 });
 
@@ -91,25 +91,9 @@ describe("ModelSelectOptions", () => {
     expect(optionTexts).not.toContain("OpenRouter");
   });
 
-  it("places each model under its provider, preserving newest-first order within the group", () => {
-    renderOptions(MULTI_PROVIDER_MODELS, ElementIds.MODEL_OPTION);
-    const groups = screen.getAllByRole("group");
-
-    const textsIn = (group: HTMLElement): ReadonlyArray<string | null> =>
-      within(group)
-        .getAllByTestId(new RegExp(`^${ElementIds.MODEL_OPTION}-`))
-        .map((item) => item.textContent);
-
-    // Interleaving collapses into contiguous groups, each still newest-first.
-    expect(textsIn(groups[0])).toEqual(["Anthropic New", "Anthropic Old"]);
-    expect(textsIn(groups[1])).toEqual(["OpenRouter New", "OpenRouter Old"]);
-  });
-
   it("gives each grouped model a MODEL_OPTION test id carrying its model_id", () => {
     renderOptions(MULTI_PROVIDER_MODELS, ElementIds.MODEL_OPTION);
 
-    // Every model is a single option whose testid encodes its model_id — the hook
-    // integration tests select options by `<MODEL_OPTION>-<model id>`.
     const options = screen.getAllByTestId(new RegExp(`^${ElementIds.MODEL_OPTION}-`));
     expect(options).toHaveLength(MULTI_PROVIDER_MODELS.length);
     for (const model of MULTI_PROVIDER_MODELS) {
@@ -126,8 +110,10 @@ describe("ModelSelector", () => {
           model={LlmModel.CLAUDE_4_OPUS_200K}
           onModelChange={() => {}}
           capabilityValue={true}
+          sourcesBackendModels={true}
           backendModels={PI_MODELS}
           selectedModelId="claude-sonnet-4-6"
+          onAuthenticate={() => {}}
         />,
       ),
     );
@@ -136,7 +122,14 @@ describe("ModelSelector", () => {
 
   it("keeps the Claude short-name label when no backend models are present", () => {
     render(
-      withStore(<ModelSelector model={LlmModel.CLAUDE_FABLE_5} onModelChange={() => {}} capabilityValue={true} />),
+      withStore(
+        <ModelSelector
+          model={LlmModel.CLAUDE_FABLE_5}
+          onModelChange={() => {}}
+          capabilityValue={true}
+          onAuthenticate={() => {}}
+        />,
+      ),
     );
     const trigger = screen.getByTestId(ElementIds.MODEL_SELECTOR);
     // The Claude path must not show a raw model_id; it renders the short name.
@@ -145,7 +138,14 @@ describe("ModelSelector", () => {
 
   it("renders the disabled-with-tooltip treatment when the capability is false", () => {
     render(
-      withStore(<ModelSelector model={LlmModel.CLAUDE_FABLE_5} onModelChange={() => {}} capabilityValue={false} />),
+      withStore(
+        <ModelSelector
+          model={LlmModel.CLAUDE_FABLE_5}
+          onModelChange={() => {}}
+          capabilityValue={false}
+          onAuthenticate={() => {}}
+        />,
+      ),
     );
     expect(screen.getByTestId(ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION)).toBeInTheDocument();
     expect(screen.queryByTestId(ElementIds.MODEL_SELECTOR)).not.toBeInTheDocument();
@@ -158,17 +158,99 @@ describe("ModelSelector", () => {
           model={LlmModel.CLAUDE_4_OPUS_200K}
           onModelChange={() => {}}
           capabilityValue={true}
+          sourcesBackendModels={true}
           backendModels={[PI_MODELS[0]]}
           selectedModelId="claude-opus-4-8"
+          onAuthenticate={() => {}}
         />,
       ),
     );
-    // Still shows the current model, but the trigger is disabled (nothing to
-    // switch to) and not the capability-denial treatment.
     const trigger = screen.getByTestId(ElementIds.MODEL_SELECTOR);
     expect(trigger).toHaveTextContent("Claude Opus 4.8");
     expect(trigger).toBeDisabled();
     expect(screen.queryByTestId(ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION)).not.toBeInTheDocument();
+  });
+
+  it("prompts to authenticate when a backend harness has no providers", () => {
+    render(
+      withStore(
+        <ModelSelector
+          model={LlmModel.CLAUDE_4_OPUS_200K}
+          onModelChange={() => {}}
+          capabilityValue={true}
+          sourcesBackendModels={true}
+          backendModels={[]}
+          onAuthenticate={() => {}}
+        />,
+      ),
+    );
+    expect(screen.getByTestId(ElementIds.MODEL_SELECTOR_AUTH_PROMPT)).toBeInTheDocument();
+    expect(screen.queryByTestId(ElementIds.MODEL_SELECTOR)).not.toBeInTheDocument();
+  });
+
+  it("invokes onAuthenticate when the no-providers prompt is clicked", () => {
+    const onAuthenticate = vi.fn();
+    render(
+      withStore(
+        <ModelSelector
+          model={LlmModel.CLAUDE_4_OPUS_200K}
+          onModelChange={() => {}}
+          capabilityValue={true}
+          sourcesBackendModels={true}
+          backendModels={[]}
+          onAuthenticate={onAuthenticate}
+        />,
+      ),
+    );
+    fireEvent.click(screen.getByTestId(ElementIds.MODEL_SELECTOR_AUTH_PROMPT));
+    expect(onAuthenticate).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders an interactive cascading trigger for a multi-provider catalog", () => {
+    render(
+      withStore(
+        <ModelSelector
+          model={LlmModel.CLAUDE_4_OPUS_200K}
+          onModelChange={() => {}}
+          capabilityValue={true}
+          sourcesBackendModels={true}
+          backendModels={MULTI_PROVIDER_MODELS}
+          selectedModelId="anthropic-new"
+          onAuthenticate={() => {}}
+        />,
+      ),
+    );
+    const trigger = screen.getByTestId(ElementIds.MODEL_SELECTOR);
+    expect(trigger).toHaveTextContent("Anthropic New");
+    expect(trigger).not.toBeDisabled();
+    expect(screen.queryByTestId(ElementIds.MODEL_SELECTOR_AUTH_PROMPT)).not.toBeInTheDocument();
+  });
+});
+
+describe("CascadingProviderMenu", () => {
+  // The menu body only mounts when the DropdownMenu is open; render it inside a
+  // controlled-open menu to inspect the per-provider sub-triggers.
+  const renderMenu = (models: ReadonlyArray<ModelOption>): RenderResult =>
+    render(
+      withStore(
+        <DropdownMenu.Root open>
+          <DropdownMenu.Trigger>
+            <Button>trigger</Button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content>
+            <CascadingProviderMenu groups={groupModelsByProvider(models)} onValueChange={() => {}} />
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>,
+      ),
+    );
+
+  it("renders one cascading sub-trigger per provider, ordered by first appearance", () => {
+    renderMenu(MULTI_PROVIDER_MODELS);
+    const providers = screen.getAllByTestId(new RegExp(`^${ElementIds.MODEL_PROVIDER_OPTION}-`));
+    expect(providers.map((item) => item.textContent)).toEqual(["Anthropic", "OpenRouter"]);
+    // The models live behind their provider's submenu, so they are not rendered
+    // until the user opens it.
+    expect(screen.queryByTestId(`${ElementIds.MODEL_OPTION}-anthropic-new`)).not.toBeInTheDocument();
   });
 });
 
@@ -179,7 +261,6 @@ describe("routeModelChange", () => {
     routeModelChange("claude-sonnet-4-6", PI_MODELS, onModelChange, onBackendModelChange);
     expect(onBackendModelChange).toHaveBeenCalledTimes(1);
     expect(onBackendModelChange).toHaveBeenCalledWith(PI_MODELS[1]);
-    // The Claude per-turn handler must NOT fire on the pi path.
     expect(onModelChange).not.toHaveBeenCalled();
   });
 

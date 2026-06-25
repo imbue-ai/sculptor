@@ -91,6 +91,7 @@ function makeTask(overrides: Partial<CodingAgentTaskView> & { id: string }): Cod
     },
     availableModels: [],
     selectedModelId: null,
+    sourcesBackendModels: false,
     isSmoothStreamingSupported: false,
     fastMode: false,
     effort: null,

@@ -120,6 +120,13 @@ export const taskSelectedModelIdAtomFamily = atomFamily<string, Atom<string | un
   atom((get) => get(taskAtomFamily(taskId))?.selectedModelId ?? undefined),
 );
 
+// Whether the harness sources its switcher catalog from a backend (pi). A
+// non-capability view field, so the no-direct-harness-capability-read ratchet
+// does not apply.
+export const taskSourcesBackendModelsAtomFamily = atomFamily<string, Atom<boolean>>((taskId) =>
+  atom((get) => get(taskAtomFamily(taskId))?.sourcesBackendModels ?? false),
+);
+
 export const taskIsAutoCompactingAtomFamily = atomFamily<string, Atom<boolean>>((taskId) =>
   atom((get) => get(taskAtomFamily(taskId))?.isAutoCompacting ?? false),
 );

@@ -117,6 +117,10 @@ class ElementIDs(StrEnum):
     THINKING_INDICATOR = "THINKING_INDICATOR"
     MODEL_SELECTOR = "MODEL_SELECTOR"
     MODEL_OPTION = "MODEL_OPTION"
+    # Cascading provider sub-trigger (a multi-provider pi catalog) and the
+    # no-providers call-to-action that points at pi authentication settings.
+    MODEL_PROVIDER_OPTION = "MODEL_PROVIDER_OPTION"
+    MODEL_SELECTOR_AUTH_PROMPT = "MODEL_SELECTOR_AUTH_PROMPT"
     CONTEXT_SUMMARY = "CONTEXT_SUMMARY"
     CONTEXT_SUMMARY_HEADER = "CONTEXT_SUMMARY_HEADER"
     RESUME_RESPONSE = "RESUME_RESPONSE"
