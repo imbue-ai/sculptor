@@ -27,7 +27,7 @@ import type {
   WorkspaceRow,
   WorkspaceInitializationStrategy,
 } from "~/db/schema";
-import { localPathFromRepo } from "~/services/project";
+import { getProjectService, localPathFromRepo } from "~/services/project";
 import {
   resolveWorkspaceSetupCommand,
   WorkspaceSetupRunner,
@@ -288,6 +288,10 @@ export class WorkspaceService {
       setupCommand: command,
     });
     publishWorkspaceChanged(workspaceId);
+    // Creating a workspace makes its project the most-recently-used one (so the
+    // Add Workspace project selector defaults to it) — app.py
+    // update_most_recently_used_project on workspace create.
+    getProjectService().activate(input.projectId);
 
     // Kick off the setup command (the runner transitions pending -> running ->
     // succeeded/failed and persists each step).

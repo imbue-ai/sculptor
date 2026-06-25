@@ -1,4 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -30,7 +36,9 @@ describe("project routes", () => {
     app = buildApp();
     await app.ready();
     // A real git repo to register (init-git creates .git + an initial commit).
-    projectDir = mkdtempSync(path.join(tmpdir(), "sculptor-repo-"));
+    // realpath so the path matches what initializeProject canonicalizes to
+    // (macOS /var → /private/var), which is what the routes store + return.
+    projectDir = realpathSync(mkdtempSync(path.join(tmpdir(), "sculptor-repo-")));
     writeFileSync(path.join(projectDir, "README.md"), "# demo\n");
     const init = await app.inject({
       method: "POST",

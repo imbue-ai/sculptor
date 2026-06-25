@@ -3,6 +3,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   statSync,
   writeFileSync,
@@ -208,6 +209,9 @@ export class ProjectService {
         `Project path is not a directory: ${projectPath}`,
       );
     }
+    // Canonicalize symlinks (e.g. macOS /var → /private/var) so the same repo
+    // reached via different path spellings dedupes against an existing one.
+    projectPath = realpathSync(projectPath);
     if (!existsSync(path.join(projectPath, ".git"))) {
       if (await isPathInGitRepo(projectPath)) {
         throw new ProjectError(
