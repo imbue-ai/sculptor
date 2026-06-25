@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Sculptor</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0b0b0d;
+        color: #e6e6e9;
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+      }
+      main {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1.25rem;
+        min-height: 100%;
+        padding: max(2rem, env(safe-area-inset-top)) 1.5rem max(2rem, env(safe-area-inset-bottom));
+      }
+      h1 {
+        margin: 0;
+        font-size: 1.6rem;
+        letter-spacing: 0.02em;
+      }
+      form,
+      .connecting {
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+        width: 100%;
+        max-width: 26rem;
+      }
+      label {
+        font-size: 0.85rem;
+        color: #a0a0a8;
+      }
+      input {
+        width: 100%;
+        padding: 0.8rem 0.9rem;
+        font-size: 1rem;
+        color: #e6e6e9;
+        background: #161619;
+        border: 1px solid #2a2a30;
+        border-radius: 8px;
+      }
+      input:focus {
+        outline: none;
+        border-color: #5b8cff;
+      }
+      button {
+        padding: 0.8rem 1rem;
+        font-size: 1rem;
+        font-weight: 600;
+        color: #fff;
+        background: #3b6cf0;
+        border: none;
+        border-radius: 8px;
+      }
+      button:active {
+        background: #2f59c9;
+      }
+      .link {
+        background: none;
+        color: #8aa6ff;
+        font-weight: 400;
+        font-size: 0.9rem;
+        padding: 0.4rem;
+      }
+      .error {
+        color: #ff8a8a;
+        font-size: 0.85rem;
+        min-height: 1.1rem;
+      }
+      .target {
+        color: #e6e6e9;
+        word-break: break-all;
+      }
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Sculptor</h1>
+
+      <!-- Shown when a server is already saved: auto-connects, but lets you
+           bail out to reconfigure before the redirect fires. -->
+      <div class="connecting" id="connecting" hidden>
+        <label>Connecting to</label>
+        <div class="target" id="connecting-target"></div>
+        <button type="button" class="link" id="change-server">Use a different server</button>
+      </div>
+
+      <!-- Shown on first launch, or after tapping "Use a different server". -->
+      <form id="setup" hidden>
+        <label for="url">Your Sculptor server URL</label>
+        <input
+          id="url"
+          name="url"
+          type="url"
+          inputmode="url"
+          autocomplete="url"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck="false"
+          placeholder="https://sculptor.example.com"
+        />
+        <div class="error" id="error"></div>
+        <button type="submit">Connect</button>
+      </form>
+    </main>
+
+    <script>
+      // The saved URL lives in localStorage on THIS local app origin
+      // (https://localhost). Cold starts always reload this bundled page first,
+      // so it persists across launches even after we navigate to the remote.
+      const STORAGE_KEY = "sculptor.serverUrl"
+      const AUTO_CONNECT_DELAY_MS = 1200
+
+      const connectingEl = document.getElementById("connecting")
+      const connectingTargetEl = document.getElementById("connecting-target")
+      const setupEl = document.getElementById("setup")
+      const urlInput = document.getElementById("url")
+      const errorEl = document.getElementById("error")
+
+      let autoConnectTimer = null
+
+      // Accept bare hostnames too — default to https, the only scheme an
+      // OpenHost edge serves. Returns a normalized origin string or null.
+      function normalizeUrl(raw) {
+        const trimmed = (raw || "").trim()
+        if (!trimmed) return null
+        const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : "https://" + trimmed
+        try {
+          return new URL(withScheme).toString().replace(/\/$/, "")
+        } catch {
+          return null
+        }
+      }
+
+      function connect(url) {
+        // Plain href (not replace) so the device back button can return here to
+        // reconfigure if a server is unreachable.
+        window.location.href = url
+      }
+
+      function showSetup(prefill) {
+        if (autoConnectTimer) clearTimeout(autoConnectTimer)
+        connectingEl.hidden = true
+        setupEl.hidden = false
+        if (prefill) urlInput.value = prefill
+        urlInput.focus()
+      }
+
+      function showConnecting(url) {
+        connectingTargetEl.textContent = url
+        connectingEl.hidden = false
+        setupEl.hidden = true
+        autoConnectTimer = setTimeout(() => connect(url), AUTO_CONNECT_DELAY_MS)
+      }
+
+      document.getElementById("change-server").addEventListener("click", () => {
+        showSetup(localStorage.getItem(STORAGE_KEY) || "")
+      })
+
+      setupEl.addEventListener("submit", (event) => {
+        event.preventDefault()
+        const url = normalizeUrl(urlInput.value)
+        if (!url) {
+          errorEl.textContent = "Enter a valid URL, e.g. https://sculptor.example.com"
+          return
+        }
+        errorEl.textContent = ""
+        localStorage.setItem(STORAGE_KEY, url)
+        connect(url)
+      })
+
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved) {
+        showConnecting(saved)
+      } else {
+        showSetup("")
+      }
+    </script>
+  </body>
+</html>

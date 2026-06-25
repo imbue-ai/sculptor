@@ -194,8 +194,10 @@ typecheck:
     }
     quiet_by_default typecheck _do_typecheck
 
-# Exclude pattern for style checks (test fixtures and snapshots)
-_style_exclude := '__snapshots__|test_data'
+# Exclude pattern for style checks (test fixtures, snapshots, and generated
+# native projects). mobile/android/ is the Capacitor-generated Android project
+# (vendored gradle wrapper, resource XML, etc.) — not hand-edited source.
+_style_exclude := '__snapshots__|test_data|mobile/android/'
 
 # File patterns to skip in hygiene checks (binary and cache files)
 _binary_file_pattern := '*.png|*.ico|*.jpg|*.jpeg|*.gif|*.webp|*.pdf|*.woff|*.woff2|*.ttf|*.eot'

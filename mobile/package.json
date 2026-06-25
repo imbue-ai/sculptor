@@ -1,0 +1,22 @@
+{
+  "name": "sculptor-mobile",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Thin Capacitor shell that wraps the OpenHost-hosted Sculptor web UI as a native mobile app.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "sync": "cap sync",
+    "open:android": "cap open android",
+    "run:android": "cap run android",
+    "build:apk": "cap sync android && cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "7.4.4",
+    "@capacitor/core": "7.4.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "7.4.4",
+    "typescript": "^5.9.3"
+  }
+}

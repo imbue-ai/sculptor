@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Sculptor</string>
+    <string name="title_activity_main">Sculptor</string>
+    <string name="package_name">com.imbue.sculptor</string>
+    <string name="custom_url_scheme">com.imbue.sculptor</string>
+</resources>

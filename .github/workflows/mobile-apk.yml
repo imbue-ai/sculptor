@@ -1,0 +1,64 @@
+name: Mobile APK
+
+# Builds the thin Capacitor Android shell (mobile/) into a single universal,
+# installable debug APK. The shell is instance-agnostic: it loads the live
+# Sculptor UI from whatever OpenHost-hosted backend the user enters on first
+# launch, so there are no build-time inputs.
+#
+# This is a debug APK signed with the Android debug keystore: fine for
+# sideloading a download off GitHub, not suitable for the Play Store.
+
+on:
+  workflow_dispatch: {}
+  push:
+    tags:
+      - "mobile-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync Capacitor + build debug APK
+        run: |
+          npx cap sync android
+          cd android
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Stage APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk sculptor-debug.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sculptor-debug-apk
+          path: mobile/sculptor-debug.apk
+          if-no-files-found: error
+
+      # On a mobile-v* tag, also attach the APK to a GitHub Release so it is
+      # downloadable straight from the repo's Releases page.
+      - name: Attach APK to release
+        if: startsWith(github.ref, 'refs/tags/mobile-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: mobile/sculptor-debug.apk
