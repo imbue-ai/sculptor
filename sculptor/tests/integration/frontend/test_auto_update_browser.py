@@ -198,8 +198,8 @@ def test_dismissed_download_toast_stays_dismissed(
     # close button directly: the toast slides in over ~150ms, so a click fired the
     # instant ``to_be_visible`` returns can race the slide-in (and, on the shared
     # page, a mid-unmount toast lingering in the DOM), failing the
-    # "visible, enabled and stable" actionability check. ``dismiss_all`` filters to
-    # visible close buttons and waits for the count to settle.
+    # "visible, enabled and stable" actionability check. ``dismiss_all`` targets only
+    # open-state (not unmounting) close buttons and waits for the count to settle.
     mock_electron_api.push_status({"type": "downloading", "channel": "STABLE", "percent": 20})
     expect(toast).to_be_visible()
 

@@ -217,6 +217,37 @@ def get_workspace_creation_button(page: Page) -> tuple[Locator, bool]:
     return create_button, is_inline_form
 
 
+def _open_new_workspace_modal(page: Page) -> None:
+    """Press the new-workspace keybinding until the modal's create button appears.
+
+    The ``new_workspace`` shortcut (Cmd/Meta+T) is a ``window`` keydown handler,
+    but a single press can be lost: focus may sit in the chat input (a prior
+    ``start_task_and_wait_for_ready`` leaves it focused) or in a still-open / just-
+    closed Radix overlay (a model/select dropdown), and while a dismissible overlay
+    is the active element the shortcut hook's overlay-suppression branch swallows
+    the press without opening the modal. Dismiss an intercepting overlay (Escape)
+    and blur the active element before each press so it reaches the handler, then
+    retry — a retried press is harmless because the modal toggle is keyed off the
+    create button being absent (it is only pressed again while no modal is open).
+    """
+    create_button = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_CREATE_BUTTON)
+    mod = get_playwright_modifier_key()
+
+    def _press_and_wait() -> None:
+        page.keyboard.press("Escape")
+        blur_active_element(page)
+        page.keyboard.press(f"{mod}+t")
+        page.keyboard.up(mod)
+        expect(create_button).to_be_visible(timeout=5_000)
+
+    retry(
+        stop=stop_after_delay(45),
+        wait=wait_fixed(0.1),
+        retry=retry_if_exception_type(AssertionError),
+        reraise=True,
+    )(_press_and_wait)()
+
+
 def navigate_to_add_workspace_page(page: Page) -> None:
     """Bring up a workspace-creation surface (the new-workspace modal or inline form).
 
@@ -226,26 +257,31 @@ def navigate_to_add_workspace_page(page: Page) -> None:
     and waits for its create button to appear.
 
     Callers may arrive parked on a surface that exposes NEITHER create button nor
-    chat panel — e.g. the Settings page (a prior step navigated there, or a config
-    flag helper's GET+PUT+``page.reload()`` reloaded the current ``/settings`` URL).
-    When neither surface is present we first route Home, which always settles on a
-    create surface: the empty-first-run inline form (no workspaces) or the Home
-    workspace list (from which the modal shortcut below opens the create button).
+    chat panel: the Settings page (a prior step navigated there, or a config flag
+    helper's GET+PUT+``page.reload()`` reloaded the current ``/settings`` URL), or
+    the Home workspace list (a prior step routed Home, and workspaces now exist so
+    it renders the list rather than the empty-first-run inline form). Both are
+    recognized below so the settle never times out, and from either the modal
+    shortcut opens the create button.
     """
     create_button = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_CREATE_BUTTON)
     chat_panel = page.get_by_test_id(ElementIDs.CHAT_PANEL)
     settings_page = page.get_by_test_id(ElementIDs.SETTINGS_PAGE)
+    # The Home workspace list (rows, or its search-empty heading) is a valid
+    # parked surface too: it exposes no create button until the modal opens, so
+    # it must be in the settle set or a caller parked there times out.
+    home_list = page.get_by_test_id(ElementIDs.WORKSPACE_ROW).first.or_(
+        page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
+    )
 
     # Settle on a known surface before deciding. Without this, a non-waiting
     # is_visible() check on a not-yet-rendered page can race: pressing the modal
     # shortcut on the empty-first-run page (where it is disabled, and where the
     # inline form is the create surface) would open the modal OVER the inline form
     # and leave its overlay stuck. Wait until a create surface is showing (inline
-    # form or already-open modal), we are on a workspace (chat panel), or we are
-    # parked on Settings — the one no-create-affordance surface callers reach
-    # (a prior step navigated there, or a config flag helper's GET+PUT+reload
-    # reloaded the current ``/settings`` URL, including its repo-config section).
-    expect(create_button.or_(chat_panel).or_(settings_page)).to_be_visible(timeout=45_000)
+    # form or already-open modal), we are on a workspace (chat panel), parked on
+    # Settings, or sitting on the Home workspace list.
+    expect(create_button.or_(chat_panel).or_(settings_page).or_(home_list)).to_be_visible(timeout=45_000)
     # Parked on Settings (no create affordance) — route Home, which settles on a
     # definite Home surface: the empty-first-run inline form (no workspaces, which
     # exposes the create button and returns below) or the Home workspace list (no
@@ -259,10 +295,7 @@ def navigate_to_add_workspace_page(page: Page) -> None:
     # No create surface yet — a workspace (chat panel) or the Home list. Open the
     # modal via the new_workspace keybinding (Cmd/Meta+T), which is mounted on every
     # route. The empty-first-run case already returned above via the inline button.
-    mod = get_playwright_modifier_key()
-    page.keyboard.press(f"{mod}+t")
-    page.keyboard.up(mod)
-    expect(create_button).to_be_visible(timeout=45_000)
+    _open_new_workspace_modal(page)
 
 
 def reset_active_panel_to_files(page: Page) -> None:

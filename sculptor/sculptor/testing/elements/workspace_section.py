@@ -1,8 +1,15 @@
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+
+# expand_section retries the toggle click across workspace-header re-render churn
+# (see expand_section). Each attempt gets a short timeout so an unstable toggle
+# fails fast and the loop can re-check the guard / clear an intercepting overlay.
+_EXPAND_SECTION_CLICK_ATTEMPTS = 5
+_EXPAND_SECTION_CLICK_TIMEOUT_MS = 5_000
 
 # The four sections of the workspace grid. A sub-section id is either a section id
 # (the unsplit "primary" half) or a section id suffixed with ":secondary" (e.g.
@@ -174,6 +181,14 @@ class PlaywrightWorkspaceSection:
         reading the section's (non-auto-waiting) ``is_visible`` state, so a check that
         races a still-loading shell doesn't misfire the toggle and collapse a section
         that was already (about to be) expanded. Idempotent.
+
+        The toggle click is made resilient to a transiently unstable workspace header:
+        during per-test cleanup the previous workspace is being torn down, so its
+        header (a Skeleton that resolves into the branch name) re-renders and the
+        toggle's box keeps moving, tripping Playwright's "visible, enabled and stable"
+        actionability check. Each attempt re-checks the idempotency guard (the header
+        already showing means done) and dismisses a dismissible overlay that could
+        intercept the click before retrying.
         """
         header = self.get_header()
         if section_of(self._sub_section) == "center":
@@ -183,7 +198,26 @@ class PlaywrightWorkspaceSection:
         expect(toggle).to_be_visible()
         if header.is_visible():
             return
-        toggle.click()
+
+        # Retry the toggle click across header re-render churn. A short per-attempt
+        # click timeout lets a churning (never-stable) toggle fail fast so we can
+        # re-check the guard and clear any intercepting overlay between attempts,
+        # rather than burning the whole default timeout on a single unstable click.
+        last_error: Exception | None = None
+        for _ in range(_EXPAND_SECTION_CLICK_ATTEMPTS):
+            if header.is_visible():
+                return
+            try:
+                toggle.click(timeout=_EXPAND_SECTION_CLICK_TIMEOUT_MS)
+                expect(header).to_be_visible(timeout=_EXPAND_SECTION_CLICK_TIMEOUT_MS)
+                return
+            except (PlaywrightTimeoutError, AssertionError) as error:
+                last_error = error
+                # An open dismissible overlay (a lingering popover/tooltip/dialog
+                # from the prior test) can intercept the click; clear it, then retry.
+                self._page.keyboard.press("Escape")
+        if last_error is not None:
+            raise last_error
         expect(header).to_be_visible()
 
     def collapse_section(self) -> None:

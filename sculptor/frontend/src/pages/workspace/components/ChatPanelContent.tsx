@@ -1,6 +1,6 @@
 import type { Editor as TipTapEditor } from "@tiptap/react";
 import { useAtomValue, useSetAtom } from "jotai";
-import { type ReactElement, useEffect } from "react";
+import { type ReactElement, useEffect, useRef } from "react";
 
 import { debugViewAtomFamily } from "~/common/state/atoms/alphaScroll.ts";
 import { closeBtwPopupIfNotForAgentAtom, isBtwPopupOpenAtom } from "~/common/state/atoms/btwPopup.ts";
@@ -69,10 +69,28 @@ export const ChatPanelContent = ({
   );
 };
 
-const ChatPanelInner = ({ taskId, appendTextRef, insertSkillRef, editorRef }: ChatPanelContentProps): ReactElement => {
+const ChatPanelInner = ({
+  taskId,
+  appendTextRef: appendTextRefProp,
+  insertSkillRef: insertSkillRefProp,
+  editorRef: editorRefProp,
+}: ChatPanelContentProps): ReactElement => {
   // The chat data hook needs the task's workspace id; derive it from the task atom
   // rather than the route so the panel stays shell-agnostic (principle 2).
   const workspaceID = useAtomValue(taskAtomFamily(taskId))?.workspaceId ?? "";
+
+  // The append-text / insert-skill / editor refs used to be created by the route
+  // page; in the section shell the panel wrapper (AgentPanel) renders this with no
+  // refs, so create them here when not supplied. They MUST be real (not undefined):
+  // useChatData registers the chatActions append/insert closures against them and
+  // ChatInput registers its editor into them, so a missing ref makes SkillsPanel /
+  // ActionsPanel inserts no-op.
+  const fallbackAppendTextRef = useRef<((text: string) => void) | null>(null);
+  const fallbackInsertSkillRef = useRef<((skill: InsertSkillArg) => void) | null>(null);
+  const fallbackEditorRef = useRef<TipTapEditor | null>(null);
+  const appendTextRef = appendTextRefProp ?? fallbackAppendTextRef;
+  const insertSkillRef = insertSkillRefProp ?? fallbackInsertSkillRef;
+  const editorRef = editorRefProp ?? fallbackEditorRef;
   const isDebugView = useAtomValue(debugViewAtomFamily(taskId));
   const closeBtwPopupIfNotForAgent = useSetAtom(closeBtwPopupIfNotForAgentAtom);
   const isBtwPopupOpen = useAtomValue(isBtwPopupOpenAtom);
@@ -117,6 +135,8 @@ const ChatPanelInner = ({ taskId, appendTextRef, insertSkillRef, editorRef }: Ch
         appendTextRef={appendTextRef}
         insertSkillRef={insertSkillRef}
         editorRef={editorRef}
+        taskId={taskId}
+        workspaceId={workspaceID}
       />
       {isBtwPopupOpen && <BtwPopup />}
     </>

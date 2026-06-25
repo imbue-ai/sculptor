@@ -9,6 +9,7 @@ behind the experimental pi-agent flag.
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropdownElement
 from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.terminal import expect_terminal_panel_replaces_chat
 from sculptor.testing.elements.user_config import disable_pi_agent
@@ -94,9 +95,17 @@ def test_first_agent_type_defaults_to_shared_last_used(
     )
 
     # The form's creation recorded the MRU — a plain + click (no menu) now
-    # creates another Terminal in the tab bar.
+    # creates another Terminal in the tab bar. The form persists the MRU on the
+    # backend (lastUsedAgentType) and the pinned "New {recent} agent" row picks it
+    # up via the user-config WebSocket sync, which can lag the create round-trip.
+    # Open the center dropdown and wait for the pinned row to read "Terminal"
+    # before clicking it, so the click isn't raced against a still-"Claude" MRU.
     agent_tab_bar = PlaywrightAgentTabBarElement(page)
-    agent_tab_bar.add_agent()
+    dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
+    dropdown.open()
+    new_agent_item = dropdown.get_new_agent_item()
+    expect(new_agent_item).to_contain_text("Terminal")
+    new_agent_item.click()
     expect(agent_tab_bar.get_agent_tab_by_name("Terminal 2")).to_have_count(1)
 
     # And the next new-workspace form opens preset to Terminal. (No cleanup

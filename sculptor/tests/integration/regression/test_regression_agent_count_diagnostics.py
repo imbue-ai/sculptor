@@ -95,9 +95,6 @@ fake_claude:ask_user_question `{
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible()
 
-    # Save the URL before deletion so we can detect when the new agent loads
-    old_url = page.url
-
     # Delete the agent via the close button on the agent tab
     agent_tab_bar = PlaywrightAgentTabBarElement(page)
     agent_tabs = agent_tab_bar.get_agent_tabs()
@@ -107,10 +104,11 @@ fake_claude:ask_user_question `{
     # Wait for the deletion dialog to close
     expect(agent_tab_bar.get_delete_confirmation_dialog()).to_be_hidden()
 
-    # After deleting the last agent, the frontend auto-creates a new one and
-    # navigates to its URL. Wait for the URL to change from the old agent's
-    # path to the new one, proving the post-deletion navigation completed.
-    page.wait_for_url(lambda url: url != old_url and "/agent/" in url)
+    # Closing the last agent no longer auto-creates a replacement (Decision B1):
+    # the center section is left empty. Wait for the agent tab to disappear,
+    # which is the sync point that the optimistic delete (and the underlying
+    # is_deleting state this regression guards) has been applied.
+    expect(agent_tabs).to_have_count(0)
 
     # Now compare: the health check API count should match the settings page count.
     # With the bug, the health check would still count the is_deleting task,

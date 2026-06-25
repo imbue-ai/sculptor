@@ -18,6 +18,7 @@ import type { SectionId } from "~/components/sections/sectionTypes.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 import { getTitleBarLeftPadding } from "~/electron/utils.ts";
 import { getBranchName } from "~/pages/home/Utils";
+import { pluginWorkspaceWidgetsAtom } from "~/plugins/pluginRegistry.ts";
 
 import { DiffSummary } from "./components/DiffSummary";
 import { PrButton } from "./components/PrButton";
@@ -67,6 +68,7 @@ const SectionToggle = ({ section, icon, label, testId }: SectionToggleProps): Re
 export const WorkspaceHeader = (): ReactElement | null => {
   // External atoms
   const isSidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
+  const workspaceWidgets = useAtomValue(pluginWorkspaceWidgetsAtom);
 
   // External hooks
   const { workspaceID } = useWorkspacePageParams();
@@ -163,6 +165,15 @@ export const WorkspaceHeader = (): ReactElement | null => {
     [hasMismatch, prStatus?.mismatchedPrTargetBranch, prStatus?.mismatchedPrIid, isGitLab],
   );
 
+  // Plugin-contributed workspace widgets sit in the banner's action row beside the
+  // PR button (see pluginWorkspaceWidgetsAtom). Higher collapsePriority is the more
+  // protected slot, so order it nearest the PR button (rendered last). Each widget
+  // component already carries its own error boundary + Plugin/WorkspacePluginContext.
+  const orderedWorkspaceWidgets = useMemo(
+    () => [...workspaceWidgets].sort((a, b) => a.collapsePriority - b.collapsePriority),
+    [workspaceWidgets],
+  );
+
   if (!workspace) {
     return null;
   }
@@ -225,6 +236,9 @@ export const WorkspaceHeader = (): ReactElement | null => {
       {/* Right cluster: re-homed diff summary + PR button, then bottom/right toggles. */}
       <Flex align="center" gap="2" flexShrink="0">
         <DiffSummary workspaceId={workspaceID} />
+        {orderedWorkspaceWidgets.map(({ id, component: Widget }) => (
+          <Widget key={id} />
+        ))}
         {canCreatePr && (
           <PrButton
             workspaceId={workspaceID}
