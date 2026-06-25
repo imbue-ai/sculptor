@@ -203,9 +203,17 @@ export function defineFrontendConfig(opts: FrontendConfigOptions): UserConfigExp
 
     console.log(`Started vite with command: "${command}" and mode: "${mode}"`);
 
+    // When served behind the OpenHost nginx /proxy/<port>/ front (mobile live
+    // preview), Vite must emit its asset + HMR URLs under that same base so they
+    // resolve through the proxy. Gated on SCULPTOR_PROXY_BASE, so normal
+    // dev/build is byte-for-byte unaffected.
+    const proxyBase = env.SCULPTOR_PROXY_BASE
+      ? (env.SCULPTOR_PROXY_BASE.endsWith("/") ? env.SCULPTOR_PROXY_BASE : `${env.SCULPTOR_PROXY_BASE}/`)
+      : undefined;
+
     const config: UserConfig = {
       root: opts.root,
-      base: opts.base ?? "/",
+      base: proxyBase ?? opts.base ?? "/",
       optimizeDeps: sharedOptimizeDeps,
       define: sharedDefine(env, {
         apiUrlBaseExpr: opts.apiUrlBase(env),
@@ -221,6 +229,13 @@ export function defineFrontendConfig(opts: FrontendConfigOptions): UserConfigExp
 
     if (command === "serve" || mode === "development") {
       const server = devServer(env, opts.defaultFrontendPort);
+      // Behind the nginx /proxy front: accept the public Host (forwarded by
+      // nginx) and point the HMR client back through the TLS edge (:443, wss) at
+      // the same sub-path, instead of Vite's raw loopback port.
+      if (proxyBase) {
+        server.allowedHosts = true;
+        server.hmr = { protocol: "wss", clientPort: 443 };
+      }
       // HMR can cause race conditions in integration tests, so disable it there.
       if (opts.gateHmrUnderPytest) {
         server.hmr = !env.PYTEST_CURRENT_TEST;
