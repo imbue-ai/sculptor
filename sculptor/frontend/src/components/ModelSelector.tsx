@@ -1,18 +1,15 @@
-import { Button, DropdownMenu, Text, Tooltip } from "@radix-ui/themes";
-import { useAtomValue } from "jotai";
+import { Button, DropdownMenu, Flex, Select, Text, Tooltip } from "@radix-ui/themes";
 import type { ReactElement } from "react";
 
 import type { LlmModel, ModelOption } from "~/api";
 import { ElementIds } from "~/api";
 import {
-  getClaudeModelList,
-  getModelLongName,
   getModelShortName,
   getProviderDisplayName,
   groupModelsByProvider,
   routeModelChange,
 } from "~/common/modelConstants.ts";
-import { isIntegrationTestingEnabledAtom } from "~/common/state/atoms/sculptorSettings.ts";
+import { ModelSelectOptions } from "~/components/ModelSelectOptions.tsx";
 import { useCapabilityGate } from "~/components/useCapabilityGate.ts";
 
 import styles from "./ModelSelector.module.scss";
@@ -51,14 +48,16 @@ export const ModelSelector = ({
   sourcesBackendModels = false,
   onAuthenticate,
 }: ModelSelectorProps): ReactElement => {
-  const isIntegrationTesting = useAtomValue(isIntegrationTestingEnabledAtom);
   const gate = useCapabilityGate(capabilityValue, ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION);
 
   const models = backendModels ?? [];
   const hasBackendModels = sourcesBackendModels && models.length > 0;
+  const providerGroups = hasBackendModels ? groupModelsByProvider(models) : [];
 
-  // The trigger label diverges by source: a backend list (pi) is labelled by the
-  // selected model's display_name; the Claude path keeps its short name.
+  // The Select value / trigger label diverge by source: a backend list (pi) is
+  // keyed and labelled by model_id / display_name; the Claude path keeps its
+  // LlmModel value and short name.
+  const value = hasBackendModels ? (selectedModelId ?? "") : model;
   const selectedBackendLabel =
     models.find((option) => option.modelId === selectedModelId)?.displayName ?? selectedModelId;
   const triggerLabel = sourcesBackendModels ? (selectedBackendLabel ?? "Select model") : getModelShortName(model);
@@ -70,11 +69,13 @@ export const ModelSelector = ({
     return (
       <Tooltip content={gate.tooltip}>
         <span data-testid={gate.elementId} style={{ display: "inline-flex" }}>
-          <Button size="1" variant="ghost" className={styles.trigger} disabled>
-            <Text size="1" truncate>
-              {triggerLabel}
-            </Text>
-          </Button>
+          <Select.Root size="1" value={value} disabled>
+            <Select.Trigger className={styles.trigger} variant="ghost">
+              <Flex align="center">
+                <Text size="1">{triggerLabel}</Text>
+              </Flex>
+            </Select.Trigger>
+          </Select.Root>
         </span>
       </Tooltip>
     );
@@ -103,11 +104,13 @@ export const ModelSelector = ({
     // Nothing to switch to: a disabled trigger showing the current model, no
     // dropdown. No tooltip — this is not a capability denial.
     return (
-      <Button size="1" variant="ghost" className={styles.trigger} data-testid={ElementIds.MODEL_SELECTOR} disabled>
-        <Text size="1" truncate>
-          {triggerLabel}
-        </Text>
-      </Button>
+      <Select.Root size="1" value={value} disabled>
+        <Select.Trigger className={styles.trigger} data-testid={ElementIds.MODEL_SELECTOR} variant="ghost">
+          <Flex align="center">
+            <Text size="1">{triggerLabel}</Text>
+          </Flex>
+        </Select.Trigger>
+      </Select.Root>
     );
   }
 
@@ -118,111 +121,88 @@ export const ModelSelector = ({
     routeModelChange(next, hasBackendModels ? models : undefined, onModelChange, onBackendModelChange);
   };
 
-  return (
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger>
-        <Button size="1" variant="ghost" className={styles.trigger} data-testid={ElementIds.MODEL_SELECTOR}>
-          <Text size="1" truncate>
-            {triggerLabel}
-          </Text>
-          <DropdownMenu.TriggerIcon />
-        </Button>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content>
-        {hasBackendModels ? (
-          <BackendModelItems models={models} selectedModelId={selectedModelId} onValueChange={onValueChange} />
-        ) : (
-          <ClaudeModelItems
-            models={getClaudeModelList(isIntegrationTesting)}
-            selectedModel={model}
+  if (providerGroups.length >= 2) {
+    // Multiple providers cascade into a per-provider submenu. Radix Select cannot
+    // nest submenus, so this case uses a DropdownMenu; the flat single-provider
+    // and Claude cases below stay on the Select primitive.
+    return (
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger>
+          <Button size="1" variant="ghost" className={styles.trigger} data-testid={ElementIds.MODEL_SELECTOR}>
+            <Text size="1" truncate>
+              {triggerLabel}
+            </Text>
+            <DropdownMenu.TriggerIcon />
+          </Button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content>
+          <CascadingProviderMenu
+            groups={providerGroups}
+            selectedModelId={selectedModelId}
             onValueChange={onValueChange}
           />
-        )}
-      </DropdownMenu.Content>
-    </DropdownMenu.Root>
-  );
-};
-
-type BackendModelItemsProps = {
-  models: ReadonlyArray<ModelOption>;
-  selectedModelId?: string;
-  onValueChange: (next: string) => void;
-};
-
-/**
- * The dropdown body for a backend catalog (pi). A single provider renders as a
- * non-selectable header over a flat radio list; two or more providers render as
- * a top-level entry per provider, each cascading into its own models.
- */
-export const BackendModelItems = ({ models, selectedModelId, onValueChange }: BackendModelItemsProps): ReactElement => {
-  const groups = groupModelsByProvider(models);
-
-  if (groups.length === 1) {
-    return (
-      <>
-        <DropdownMenu.Label>{getProviderDisplayName(groups[0].provider)}</DropdownMenu.Label>
-        <ProviderRadioItems models={groups[0].models} selectedModelId={selectedModelId} onValueChange={onValueChange} />
-      </>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
     );
   }
 
   return (
-    <>
-      {groups.map((group) => (
-        <DropdownMenu.Sub key={group.provider}>
-          <DropdownMenu.SubTrigger data-testid={`${ElementIds.MODEL_PROVIDER_OPTION}-${group.provider}`}>
-            {getProviderDisplayName(group.provider)}
-          </DropdownMenu.SubTrigger>
-          <DropdownMenu.SubContent>
-            <ProviderRadioItems models={group.models} selectedModelId={selectedModelId} onValueChange={onValueChange} />
-          </DropdownMenu.SubContent>
-        </DropdownMenu.Sub>
-      ))}
-    </>
+    <Select.Root size="1" value={value} onValueChange={onValueChange}>
+      <Select.Trigger className={styles.trigger} data-testid={ElementIds.MODEL_SELECTOR} variant="ghost">
+        <Flex align="center">
+          <Text size="1">{triggerLabel}</Text>
+        </Flex>
+      </Select.Trigger>
+      <Select.Content position="popper" sideOffset={5}>
+        {hasBackendModels ? (
+          // A single pi provider renders its own provider-headed group.
+          <ModelSelectOptions optionTestId={ElementIds.MODEL_OPTION} models={models} />
+        ) : (
+          <Select.Group>
+            <Select.Label>Model</Select.Label>
+            <ModelSelectOptions optionTestId={ElementIds.MODEL_OPTION} />
+          </Select.Group>
+        )}
+      </Select.Content>
+    </Select.Root>
   );
 };
 
-type ProviderRadioItemsProps = {
-  models: ReadonlyArray<ModelOption>;
+type CascadingProviderMenuProps = {
+  groups: ReadonlyArray<{ provider: string; models: ReadonlyArray<ModelOption> }>;
   selectedModelId?: string;
   onValueChange: (next: string) => void;
 };
 
-const ProviderRadioItems = ({ models, selectedModelId, onValueChange }: ProviderRadioItemsProps): ReactElement => (
-  <DropdownMenu.RadioGroup value={selectedModelId ?? ""} onValueChange={onValueChange}>
-    {models.map((option) => (
-      <DropdownMenu.RadioItem
-        key={option.modelId}
-        value={option.modelId}
-        data-testid={`${ElementIds.MODEL_OPTION}-${option.modelId}`}
-      >
-        {option.displayName}
-      </DropdownMenu.RadioItem>
-    ))}
-  </DropdownMenu.RadioGroup>
-);
-
-type ClaudeModelItemsProps = {
-  models: ReadonlyArray<LlmModel>;
-  selectedModel: LlmModel;
-  onValueChange: (next: string) => void;
-};
-
 /**
- * The dropdown body for the built-in Claude list: a flat radio list keyed by
- * model id with the current model selected. Used when the harness sources no
- * backend catalog.
+ * The dropdown body for a multi-provider backend catalog (pi): a top-level entry
+ * per provider, each cascading into its own models.
  */
-export const ClaudeModelItems = ({ models, selectedModel, onValueChange }: ClaudeModelItemsProps): ReactElement => (
-  <DropdownMenu.RadioGroup value={selectedModel} onValueChange={onValueChange}>
-    {models.map((modelValue) => (
-      <DropdownMenu.RadioItem
-        key={modelValue}
-        value={modelValue}
-        data-testid={`${ElementIds.MODEL_OPTION}-${modelValue}`}
-      >
-        {getModelLongName(modelValue)}
-      </DropdownMenu.RadioItem>
+export const CascadingProviderMenu = ({
+  groups,
+  selectedModelId,
+  onValueChange,
+}: CascadingProviderMenuProps): ReactElement => (
+  <>
+    {groups.map((group) => (
+      <DropdownMenu.Sub key={group.provider}>
+        <DropdownMenu.SubTrigger data-testid={`${ElementIds.MODEL_PROVIDER_OPTION}-${group.provider}`}>
+          {getProviderDisplayName(group.provider)}
+        </DropdownMenu.SubTrigger>
+        <DropdownMenu.SubContent>
+          <DropdownMenu.RadioGroup value={selectedModelId ?? ""} onValueChange={onValueChange}>
+            {group.models.map((option) => (
+              <DropdownMenu.RadioItem
+                key={option.modelId}
+                value={option.modelId}
+                data-testid={`${ElementIds.MODEL_OPTION}-${option.modelId}`}
+              >
+                {option.displayName}
+              </DropdownMenu.RadioItem>
+            ))}
+          </DropdownMenu.RadioGroup>
+        </DropdownMenu.SubContent>
+      </DropdownMenu.Sub>
     ))}
-  </DropdownMenu.RadioGroup>
+  </>
 );
