@@ -11,6 +11,122 @@ first.
 
 ---
 
+## The state machine at a glance
+
+Scroll behavior is three concerns. **`ScrollAuthority`** (who is moving
+`scrollTop`, and why) is the primary machine. **`LayoutPhase`** (the
+virtualizer's measurement settle) is an orthogonal machine. Search
+**suppression** is a top-level guard, not a phase.
+
+### `ScrollAuthority` — who owns `scrollTop`
+
+Green phases are *settled* (quiescent); amber phases are *transient/busy*.
+`userScrolled` and `taskSwitched` are **global** — valid from every phase — and
+are drawn once below to keep the graph readable.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+
+    [*] --> userControlled
+
+    userControlled --> anchoringTurn : newUserTurn(i)
+    userControlled --> following : reachedBottom
+    userControlled --> navigating : navStarted(p)
+    userControlled --> restoring : taskSwitched (global)
+
+    restoring --> userControlled : restoreSettled
+
+    anchoringTurn --> following : turnAnchored
+    anchoringTurn --> following : reachedBottom
+    anchoringTurn --> userControlled : streamingStopped
+    anchoringTurn --> anchoringTurn : newUserTurn(i)
+
+    following --> userControlled : streamingStopped
+    following --> anchoringTurn : newUserTurn(i)
+    following --> navigating : navStarted(p)
+    following --> userControlled : userScrolled (global)
+
+    navigating --> navigating : navMoved(p)
+    navigating --> userControlled : navEnded
+
+    classDef settled fill:#2da44e,color:#ffffff,stroke:#1a7f37
+    classDef busy fill:#bf8700,color:#ffffff,stroke:#9a6700
+    class userControlled settled
+    class following settled
+    class restoring busy
+    class anchoringTurn busy
+    class navigating busy
+```
+
+> The two **global** transitions apply from *every* phase, not just the one
+> they're drawn from: `userScrolled → userControlled` (the user always wins) and
+> `taskSwitched → restoring` (a switch always restarts a restore). The reducer
+> handles both before the per-phase `switch`, so they need exactly one line each.
+
+### `LayoutPhase` — virtualizer measurement settle (orthogonal)
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> stable
+    stable --> measuring : invalidated(taskId)
+    measuring --> stable : converged
+```
+
+### Suppression — a top-level dispatch guard (orthogonal)
+
+```mermaid
+flowchart LR
+    E([dispatch authority event]) --> Q{search open?}
+    Q -- "no" --> M[apply to ScrollAuthority]
+    Q -- "yes, and event is newUserTurn or reachedBottom" --> D[drop]
+    Q -- "yes, any other event" --> M
+```
+
+### The signal tests await
+
+```
+data-scroll-phase   = ScrollAuthority.kind
+data-scroll-settled = (authority is userControlled OR following) AND layout is stable
+```
+
+### Edge cases & non-obvious transitions
+
+- **`userScrolled` is global and always wins.** From any phase it returns to
+  `userControlled`. This single rule stops a late restore/settle frame from
+  clobbering a scroll the user just made — the original flake. The deferred
+  restore re-assert re-checks that the phase is still `restoring` before
+  re-applying, so a mid-restore user scroll cancels it.
+- **`taskSwitched` is global.** A switch from any phase — even mid-`restoring` —
+  restarts `restoring`, so rapid tab switches can't strand the machine.
+- **`anchoringTurn → userControlled` on `streamingStopped`.** A short response
+  that finishes before it ever overflows the viewport ends the turn *without*
+  entering `following` — there is nothing to follow.
+- **`anchoringTurn → following` on `reachedBottom`.** Jumping to the bottom while
+  a new turn is anchored hands off to pin-to-bottom.
+- **`following` counts as settled.** It is a stable steady mode, not a transient
+  one-shot scroll, so `data-scroll-settled` is true in it (given `layout ==
+  stable`). `restoring` / `anchoringTurn` / `navigating` are busy.
+- **`isEngaged` is derived, never stored.** It is `following ∨ anchoringTurn` —
+  there is no independent "engaged" boolean that could disagree with the phase.
+- **Leaving `anchoringTurn` fires side effects.** However the machine leaves the
+  anchoring phase (user scroll, overflow into `following`, `streamingStopped`, or
+  `taskSwitched`), one re-entrancy-safe store subscription tears down the
+  scroll-to-top CSS animation and clears jump-suppression. That same
+  subscription re-engages `following` when a restore settles to `userControlled`
+  on a still-streaming task whose restored view sits at the bottom (the
+  streaming-start engage check is a no-op while `restoring`).
+- **Suppression is an orthogonal guard.** While in-chat search is open the store
+  drops only the two *initiation* events (`newUserTurn`, `reachedBottom`);
+  completion and global events still apply, so the machine can always reach a
+  settled state even if search opens mid-turn.
+- **`LayoutPhase` is orthogonal.** `data-scroll-settled` also requires
+  `layout === stable`, so geometry (scrollHeight, message offsets) has stopped
+  moving before a test reads it.
+
+---
+
 ## Motivating prompt
 
 The maintainer who initiated this work framed the problem as follows:
