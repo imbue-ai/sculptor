@@ -56,12 +56,18 @@ function handleError(error: unknown, reply: FastifyReply): FastifyReply {
 function requireOpenWorkspace(workspaceId: string): void {
   const row = getWorkspace(getOrm(), workspaceId);
   if (row === undefined || row.isDeleted) {
-    throw new WorkspaceError(404, `Workspace ${workspaceId} not found`);
+    throw new CodedError(
+      404,
+      "workspace_not_found",
+      `workspace ${workspaceId} not found`,
+    );
   }
   if (!row.isOpen) {
-    throw new WorkspaceError(
+    // Coded so the sculpt CLI maps it to exit 3 (workspace_not_open).
+    throw new CodedError(
       409,
-      `Workspace ${workspaceId} is not open; cannot drive its webview`,
+      "workspace_not_open",
+      `workspace ${workspaceId} is not open; cannot drive its webview`,
     );
   }
 }
