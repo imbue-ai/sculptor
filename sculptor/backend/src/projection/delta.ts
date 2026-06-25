@@ -24,7 +24,6 @@ import {
 } from "~/db/repositories";
 import { ProjectionCache, projectionCache } from "~/projection/cache";
 import type { BusEvent, DataModelChangeEvent } from "~/events/types";
-import type { RawMessage } from "~/projection/message_log";
 import { foldStateToTaskUpdate } from "~/projection/task_update";
 import {
   type BtwUpdate,
@@ -143,11 +142,14 @@ export class DeltaBuilder {
   eventToDelta(event: BusEvent): StreamingUpdate | null {
     switch (event.kind) {
       case "agent_message": {
-        const entry = this.cache.applyMessage(
-          this.ctx.orm,
-          event.agentId,
-          event.message as RawMessage,
-        );
+        // The runner (MessageWriter / recordUserMessage) is the SOLE applier of
+        // the message to the warm cache; the delta path only READS the
+        // already-folded entry (cache.ts: "the runner pushes messages in,
+        // snapshot/delta reads them out"). Re-applying here would double-fold the
+        // message on the process-wide cache — harmless for plain text (the fold
+        // dedups by id) but it corrupts the streaming start-index advancement,
+        // duplicating every streamed tool/text segment across a multi-turn reply.
+        const entry = this.cache.ensure(this.ctx.orm, event.agentId);
         if (entry === undefined) {
           return null;
         }

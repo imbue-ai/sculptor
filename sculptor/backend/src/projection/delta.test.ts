@@ -137,6 +137,9 @@ describe("eventToDelta / DeltaBuilder", () => {
       text: "hi",
       sent_via: null,
     };
+    // The runner is the sole applier; the delta path only reads. Mirror that by
+    // folding the message into the warm cache before emitting the delta.
+    cache.applyMessage(orm, "tsk_1", message);
     const delta = eventToDelta({ kind: "agent_message", agentId: "tsk_1", message }, { orm, cache });
     const taskUpdate = delta?.task_update_by_task_id["tsk_1"];
     expect(taskUpdate?.task_id).toBe("tsk_1");
