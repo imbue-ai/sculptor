@@ -67,6 +67,20 @@ COPY . /app
 # `uv run` to emit the OpenAPI schema, so the backend env must already exist.
 RUN cd /app/sculptor && uv sync
 
+# Generate the `sculpt` CLI's OpenAPI client into tools/sculpt/sculpt/client.
+# Without it, every `sculpt` command fails at import (ModuleNotFoundError: No
+# module named 'sculpt.client'). Mirrors the `generate-sculpt-client` just recipe,
+# run inline since `just` isn't in the image; needs the backend env (the uv sync
+# above) to emit the OpenAPI schema.
+RUN cd /app && \
+    tmp_schema="$(mktemp)" && \
+    uv run --project sculptor python sculptor/sculptor/scripts/generate_json_schema.py "$tmp_schema" && \
+    uv run --project tools/sculpt openapi-python-client generate \
+        --path "$tmp_schema" --output-path tools/sculpt/sculpt/client_tmp --overwrite && \
+    rm -rf tools/sculpt/sculpt/client && \
+    mv tools/sculpt/sculpt/client_tmp/sculptor_v1_api_client tools/sculpt/sculpt/client && \
+    rm -rf tools/sculpt/sculpt/client_tmp "$tmp_schema"
+
 # Regenerate the API client from the (just-built) backend, then build the web UI.
 # NODE_OPTIONS raises V8's heap ceiling for the Vite build: the default (~2 GB)
 # leaves the production build right at the limit, so it intermittently aborts
