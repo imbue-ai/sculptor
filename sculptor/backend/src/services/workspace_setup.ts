@@ -122,7 +122,15 @@ interface RunSlot {
   buffer: OutputBuffer;
   seq: number;
   cancelled: boolean;
+  command: string;
+  logPath: string;
 }
+
+// The first-message setup reminder state (setup_command_runner.py
+// RunningSetup / FailedSetup), or null when there's nothing to remind about.
+export type SetupReminderState =
+  | { kind: "running"; command: string; pid: number; logPath: string }
+  | { kind: "failed"; command: string; exitCode: number; logPath: string };
 
 export interface SetupRunnerOptions {
   // Persists the snapshot to the workspace row (so a reconnect/snapshot reflects
@@ -162,6 +170,32 @@ export class WorkspaceSetupRunner {
     return this.slots.get(workspaceId)?.status === "running";
   }
 
+  // The first-message reminder state for this workspace (setup_command_runner.py
+  // get_reminder_state): a running or failed setup, else null.
+  getReminderState(workspaceId: string): SetupReminderState | null {
+    const slot = this.slots.get(workspaceId);
+    if (slot === undefined) {
+      return null;
+    }
+    if (slot.status === "running" && slot.process.pid !== undefined) {
+      return {
+        kind: "running",
+        command: slot.command,
+        pid: slot.process.pid,
+        logPath: slot.logPath,
+      };
+    }
+    if (slot.status === "failed" && slot.exitCode !== null) {
+      return {
+        kind: "failed",
+        command: slot.command,
+        exitCode: slot.exitCode,
+        logPath: slot.logPath,
+      };
+    }
+    return null;
+  }
+
   // Start (or restart) the setup command for a workspace. Idempotent while a run
   // is already in flight (returns the in-flight snapshot).
   start(
@@ -188,6 +222,8 @@ export class WorkspaceSetupRunner {
       buffer: new OutputBuffer(),
       seq: 0,
       cancelled: false,
+      command,
+      logPath: path.join(stateDir, LOG_FILE_NAME),
     };
     this.slots.set(workspaceId, slot);
     this.emitStatus(workspaceId, command);

@@ -184,6 +184,38 @@ The user invoked the /${skillName} skill. If this skill is not in your available
 `;
 }
 
+// First-message setup-command reminder (workspace_setup.SetupReminderState).
+// Defined structurally here to keep prompts free of a service-layer import.
+export type SetupReminder =
+  | { kind: "running"; command: string; pid: number; logPath: string }
+  | { kind: "failed"; command: string; exitCode: number; logPath: string };
+
+// Port of process_manager_utils._build_setup_reminder.
+function buildSetupReminder(setup: SetupReminder): string {
+  if (setup.kind === "running") {
+    return `<system-reminder>
+A workspace setup command is currently running.
+
+Command: ${setup.command}
+Bash PID: ${setup.pid}
+Log file: ${setup.logPath}
+
+The setup command may modify workspace state — files, dependencies, git, locks — concurrently with your work. Before proceeding, consider whether your task depends on that state being settled, or whether your actions could conflict with what setup is doing. If so, wait on this PID; otherwise, continue.
+</system-reminder>
+
+`;
+  }
+  return `<system-reminder>
+The workspace setup command exited non-zero.
+
+Command: ${setup.command}
+Exit code: ${setup.exitCode}
+Log file: ${setup.logPath}
+</system-reminder>
+
+`;
+}
+
 export interface UserInstructionsOptions {
   text: string;
   filePaths?: readonly string[];
@@ -191,6 +223,7 @@ export interface UserInstructionsOptions {
   exitPlanMode?: boolean;
   envVarNames?: readonly string[];
   isFirstMessage?: boolean;
+  setupReminder?: SetupReminder | null;
 }
 
 // Build the user-instruction text written to the CLI on stdin, mirroring the
@@ -238,6 +271,10 @@ The user has configured the following environment variables for this agent: ${op
 </system-reminder>
 
 ` + instructions;
+  }
+
+  if (options.isFirstMessage && options.setupReminder != null) {
+    instructions = buildSetupReminder(options.setupReminder) + instructions;
   }
 
   if (skillMatch !== null) {

@@ -20,6 +20,7 @@ import type { PiHarnessEnvironment } from "~/harness/pi/harness";
 import { createHarnessResolver } from "~/harness/registry";
 import { getCurrentUserConfig } from "~/config/user_config";
 import { localPathFromRepo } from "~/services/project";
+import { getWorkspaceService } from "~/services/workspace";
 import { getRepo } from "~/db/repositories";
 import { resolveBinaryPath } from "~/services/dependencies";
 import { resolveEnv } from "~/services/env_injection/env";
@@ -137,6 +138,14 @@ export function getAgentRunner(): AgentRunner {
           updateAgent(getOrm(), agent.objectId, { claudeSessionId: sessionId }),
         // Re-read .env per turn so a var added after launch is picked up.
         resolveEnvForAgent: (agent) => resolveEnv(repoLocalPathForAgent(agent)),
+        // First-message reminder if this workspace's setup command is running or
+        // failed (workspace_setup get_reminder_state).
+        setupReminderFor: (agent) =>
+          agent.workspaceId === null
+            ? null
+            : getWorkspaceService().setupRunner.getReminderState(
+                agent.workspaceId,
+              ),
       },
       pi: {
         resolveBinaryPath: () => resolveBinaryPath("PI") ?? undefined,

@@ -37,6 +37,7 @@ import {
 import {
   getCombinedSystemPrompt,
   getUserInstructions,
+  type SetupReminder,
 } from "~/harness/claude/prompts";
 import { isSessionIdValid } from "~/harness/claude/session";
 import {
@@ -94,6 +95,9 @@ export interface ClaudeHarnessDeps {
   // next message (the launch-time context.env is otherwise stale). Falls back to
   // context.env when omitted.
   resolveEnvForAgent?: (agent: AgentRow) => Record<string, string>;
+  // The first-message setup-command reminder for the agent's workspace (a running
+  // or failed workspace setup), or null. Prepended to the first user turn.
+  setupReminderFor?: (agent: AgentRow) => SetupReminder | null;
   now?: () => number;
 }
 
@@ -345,6 +349,9 @@ class ClaudeHarnessProcess implements HarnessProcess {
             exitPlanMode: message.exit_plan_mode === true,
             envVarNames: Object.keys(this.context.env ?? {}),
             isFirstMessage,
+            setupReminder: isFirstMessage
+              ? (this.deps.setupReminderFor?.(this.agent) ?? null)
+              : null,
           });
     // Persist the instructions the CLI received (diagnostics + the env-var-reminder
     // tests read state/tasks/<id>/user_instructions_<id>.txt) and mark the
