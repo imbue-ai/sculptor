@@ -17,8 +17,8 @@ vi.mock("../../../api", async () => {
   return { ...actual, markWorkspaceAgentRead: mockMarkRead };
 });
 
-const makeTask = (updatedAt: string, lastReadAt: string | null): CodingAgentTaskView =>
-  ({ id: "agent-1", status: "READY", updatedAt, lastReadAt }) as unknown as CodingAgentTaskView;
+const makeTask = (updatedAt: string, lastReadAt: string | null, id = "agent-1"): CodingAgentTaskView =>
+  ({ id, status: "READY", updatedAt, lastReadAt }) as unknown as CodingAgentTaskView;
 
 const renderMarkRead = (store: ReturnType<typeof createStore>): RenderHookResult<void, unknown> => {
   const wrapper = ({ children }: { children: ReactNode }): ReactElement => createElement(Provider, { store }, children);
@@ -48,8 +48,7 @@ describe("useMarkRead", () => {
       store.set(taskAtomFamily("agent-1"), makeTask("2024-01-01T00:00:06.000Z", "2024-01-01T00:00:01.000Z"));
     });
 
-    // Leaving the agent before the debounce fires must flush the pending read,
-    // so the agent persists as read instead of reappearing unread.
+    // Leaving the agent before the debounce fires must flush the pending read.
     act(() => {
       unmount();
     });
@@ -94,5 +93,38 @@ describe("useMarkRead", () => {
     });
 
     expect(mockMarkRead).not.toHaveBeenCalled();
+  });
+
+  it("preserves an explicit mark-unread on the agent being left when switching agents", () => {
+    const store = createStore();
+    store.set(taskAtomFamily("agent-x"), makeTask("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z", "agent-x"));
+    store.set(taskAtomFamily("agent-y"), makeTask("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z", "agent-y"));
+    const wrapper = ({ children }: { children: ReactNode }): ReactElement =>
+      createElement(Provider, { store }, children);
+    const { rerender } = renderHook(({ agentId }: { agentId: string }) => useMarkRead("ws-1", agentId), {
+      wrapper,
+      initialProps: { agentId: "agent-x" },
+    });
+    mockMarkRead.mockClear();
+
+    // agent-x gets an update (schedules a debounced read), then the user marks
+    // agent-x unread before the debounce fires.
+    act(() => {
+      store.set(taskAtomFamily("agent-x"), makeTask("2024-01-01T00:00:06.000Z", "2024-01-01T00:00:01.000Z", "agent-x"));
+    });
+    act(() => {
+      store.set(taskAtomFamily("agent-x"), makeTask("2024-01-01T00:00:06.000Z", null, "agent-x"));
+    });
+
+    // Switching to agent-y must consult agent-x's state (it is unread), not
+    // agent-y's, so the flush must not re-mark agent-x read.
+    act(() => {
+      rerender({ agentId: "agent-y" });
+    });
+
+    const didMarkAgentXRead = mockMarkRead.mock.calls.some(
+      (call) => (call[0] as { path?: { agent_id?: string } })?.path?.agent_id === "agent-x",
+    );
+    expect(didMarkAgentXRead).toBe(false);
   });
 });

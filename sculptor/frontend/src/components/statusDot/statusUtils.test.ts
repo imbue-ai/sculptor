@@ -31,8 +31,7 @@ describe("getAgentDotStatus", () => {
 
   it("reports the focused agent as read even when content is newer than the last read", () => {
     // The user is actively viewing this agent, so its updates are seen by
-    // definition — it must read as "read" regardless of the debounced
-    // mark-read round-trip having settled.
+    // definition — it reads as "read".
     expect(getAgentDotStatus(TaskStatus.READY, READ_AT, UPDATED_AT_LATER, true)).toBe("read");
     expect(getAgentDotStatus(TaskStatus.READY, null, UPDATED_AT_LATER, true)).toBe("read");
   });

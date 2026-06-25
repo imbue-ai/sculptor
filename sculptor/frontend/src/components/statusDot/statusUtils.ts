@@ -38,10 +38,6 @@ export function getAgentDotStatus(
 
   // The agent the user is currently viewing has no unseen updates by
   // definition — its content is on screen — so it always reads as "read".
-  // Deriving its read state from the updatedAt/lastReadAt comparison is racy:
-  // lastReadAt is advanced by a debounced, fire-and-forget mark-read that can
-  // lag the latest update or be clobbered by a stale task snapshot from the
-  // WebSocket stream, which would otherwise leave the open agent stuck unread.
   if (isFocused) {
     return "read";
   }
@@ -80,9 +76,8 @@ type AgentTaskLike = {
 };
 
 // `focusedAgentId` is the agent the user is currently viewing (or null when no
-// agent is focused, e.g. on the home page). The focused agent is treated as
-// read, so the workspace tab containing it does not flash unread while its
-// debounced mark-read settles — see getAgentDotStatus.
+// agent is focused, e.g. on the home page); it is treated as read — see
+// getAgentDotStatus.
 export function computeWorkspaceDotStatus(
   tasks: ReadonlyArray<AgentTaskLike>,
   focusedAgentId: string | null = null,

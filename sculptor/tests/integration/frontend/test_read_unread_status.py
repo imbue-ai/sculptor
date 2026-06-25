@@ -8,6 +8,8 @@ These tests verify:
 - Read/unread status persists across server restarts
 """
 
+import re
+
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import send_chat_message
@@ -50,16 +52,14 @@ def test_unread_indicator_when_switching_agents_within_workspace(
     agent_tab_bar.get_add_agent_button().click()
     expect(agent_tabs).to_have_count(2)
 
-    # Wait for the route to finish settling onto the new agent before typing.
-    # Adding an agent auto-navigates to it, and the chat input editor is keyed
-    # by task id, so it remounts as the route transitions (the old editor
-    # detaches, a new one mounts a beat later — see type_into_tiptap). Typing
-    # before the chat panel is bound to the new agent can land the draft in the
-    # detaching editor, dropping it and leaving the send button disabled. The
-    # chat panel's data-taskid flips to the new agent only once navigation has
-    # settled, so it is a deterministic settle point.
-    new_agent_id = agent_tabs.last.get_attribute("data-tab-id")
-    assert new_agent_id is not None
+    # Adding an agent auto-navigates to it; the chat input is keyed by task id
+    # and remounts as the route settles. Typing before the chat panel is bound
+    # to the new agent can drop the draft and leave the send button disabled, so
+    # wait for the chat panel's data-taskid to flip to the new agent first.
+    new_agent_tab = agent_tabs.last
+    expect(new_agent_tab).to_have_attribute("data-tab-id", re.compile(r".+"))
+    new_agent_id = new_agent_tab.get_attribute("data-tab-id")
+    assert new_agent_id is not None  # narrowed for the type checker; the expect above guarantees it
     chat_panel = task_page.get_chat_panel()
     expect(chat_panel).to_have_attribute("data-taskid", new_agent_id)
 

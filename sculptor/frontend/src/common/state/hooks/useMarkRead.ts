@@ -1,4 +1,4 @@
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useEffect, useRef } from "react";
 
 import { markWorkspaceAgentRead } from "../../../api";
@@ -9,18 +9,11 @@ const DEBOUNCE_MS = 1000;
 export const useMarkRead = (workspaceID: string, agentID: string): void => {
   const task = useAtomValue(taskAtomFamily(agentID));
   const setTask = useSetAtom(taskAtomFamily(agentID));
+  const store = useStore();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // True while a debounced mark-read is scheduled but hasn't fired yet. Lets us
-  // flush it when the user leaves this agent so the read persists before we
-  // navigate away (see the cleanup below).
+  // True while a debounced mark-read is scheduled but hasn't fired yet, so the
+  // cleanup below can flush it when the user leaves this agent.
   const hasPendingReadRef = useRef(false);
-  // Read inside the debounced setTimeout / cleanup to see the latest state — the
-  // captured `task` closure may be stale by the time the timer fires.
-  const taskRef = useRef(task);
-  // Keep the ref current after every commit so the pending timer reads the latest task.
-  useEffect(() => {
-    taskRef.current = task;
-  });
 
   const markRead = (): void => {
     // Functional update: read the latest atom value at apply time so a stale
@@ -31,10 +24,16 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
     });
   };
 
+  // Whether the user has explicitly marked THIS agent unread (lastReadAt=null).
+  // Read live from the store rather than the rendered `task`: switching agents
+  // re-renders this hook (no remount) before the leaving agent's effect cleanup
+  // runs, so a render-scoped value would describe the agent being switched to,
+  // not the one being left. Keyed by `agentID`, the cleanup's closure still sees
+  // the departing agent.
+  const isExplicitlyUnread = (): boolean => store.get(taskAtomFamily(agentID))?.lastReadAt === null;
+
   // Mark as read on mount / agent change, and flush a still-pending debounced
-  // read when leaving this agent. Without the flush, navigating away within the
-  // debounce window leaves the agent's last update unacknowledged, so it (and
-  // its workspace) reappear as "unread" even though the user just viewed it.
+  // read when leaving this agent so it persists as read before the route changes.
   useEffect(() => {
     if (task) {
       markRead();
@@ -50,7 +49,7 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
         hasPendingReadRef.current = false;
         // Don't undo an explicit mark-unread the user performed while the timer
         // was pending.
-        if (taskRef.current?.lastReadAt !== null) {
+        if (!isExplicitlyUnread()) {
           markRead();
         }
       }
@@ -79,9 +78,9 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
       hasPendingReadRef.current = false;
-      // Skip if the user explicitly marked unread (lastReadAt=null) while the
-      // timer was pending — don't undo their action.
-      if (taskRef.current?.lastReadAt === null) {
+      // Skip if the user explicitly marked unread while the timer was pending —
+      // don't undo their action.
+      if (isExplicitlyUnread()) {
         return;
       }
       markRead();
