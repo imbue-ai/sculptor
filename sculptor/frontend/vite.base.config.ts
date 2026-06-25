@@ -213,17 +213,9 @@ export function defineFrontendConfig(opts: FrontendConfigOptions): UserConfigExp
 
     console.log(`Started vite with command: "${command}" and mode: "${mode}"`);
 
-    // When served behind the OpenHost nginx /proxy/<port>/ front (mobile live
-    // preview), Vite must emit its asset + HMR URLs under that same base so they
-    // resolve through the proxy. Gated on SCULPTOR_PROXY_BASE, so normal
-    // dev/build is byte-for-byte unaffected.
-    const proxyBase = env.SCULPTOR_PROXY_BASE
-      ? (env.SCULPTOR_PROXY_BASE.endsWith("/") ? env.SCULPTOR_PROXY_BASE : `${env.SCULPTOR_PROXY_BASE}/`)
-      : undefined;
-
     const config: UserConfig = {
       root: opts.root,
-      base: proxyBase ?? opts.base ?? "/",
+      base: opts.base ?? "/",
       optimizeDeps: sharedOptimizeDeps,
       define: sharedDefine(env, {
         apiUrlBaseExpr: opts.apiUrlBase(env),
@@ -239,16 +231,21 @@ export function defineFrontendConfig(opts: FrontendConfigOptions): UserConfigExp
 
     if (command === "serve" || mode === "development") {
       const server = devServer(env, opts.defaultFrontendPort);
-      // Behind the nginx /proxy front: accept the public Host (forwarded by
-      // nginx) and point the HMR client back through the TLS edge (:443, wss) at
-      // the same sub-path, instead of Vite's raw loopback port.
-      if (proxyBase) {
+      // OpenHost-only: when served behind the nginx /proxy/<port>/ front, accept
+      // the public Host (forwarded by nginx) and dial the HMR client back through
+      // the TLS edge (:443, wss) at the sub-path. `base` itself is passed natively
+      // (`vite --base=/proxy/<port>/`); only these bits have no CLI equivalent and
+      // need config. Gated on SCULPTOR_OPENHOST_PROXY so normal dev/build is
+      // unaffected.
+      if (env.SCULPTOR_OPENHOST_PROXY) {
         server.allowedHosts = true;
         server.hmr = { protocol: "wss", clientPort: 443 };
       }
-      // HMR can cause race conditions in integration tests, so disable it there.
-      if (opts.gateHmrUnderPytest) {
-        server.hmr = !env.PYTEST_CURRENT_TEST;
+      // HMR can race in integration tests, so disable it there — but only force
+      // the disable, leaving any other HMR config (e.g. the OpenHost override
+      // above) intact otherwise.
+      if (opts.gateHmrUnderPytest && env.PYTEST_CURRENT_TEST) {
+        server.hmr = false;
       }
       config.server = server;
     }

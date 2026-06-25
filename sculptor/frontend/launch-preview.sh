@@ -9,12 +9,13 @@
 # How it fits together:
 #   - Vite binds 127.0.0.1:<port>; nginx reaches it on loopback and forwards the
 #     /proxy/<port>/ path through UNSTRIPPED.
-#   - SCULPTOR_PROXY_BASE makes Vite serve under base=/proxy/<port>/ and point its
-#     HMR client back through the TLS edge (wss, :443) — see vite.base.config.ts.
+#   - base is passed natively (`vite --base=/proxy/<port>/`) so Vite serves its
+#     assets + HMR under that sub-path; SCULPTOR_OPENHOST_PROXY tells the Vite
+#     config to dial HMR back over the TLS edge (wss, :443) — see vite.base.config.ts.
 #   - The app's /api + /ws calls are same-origin ABSOLUTE (the web build compiles
 #     API base to ""), so they bypass this Vite and hit the SHARED backend via
-#     nginx. No per-preview backend is needed (and full-stack previews are parked
-#     on the cookie-scoping question — see the dev-preview doc).
+#     nginx. No per-preview backend is needed; full-stack previews aren't supported
+#     on one origin (the session cookie would collide).
 set -euo pipefail
 
 port="${1:-}"
@@ -25,7 +26,8 @@ esac
 
 cd "$(dirname "$0")"
 export SCULPTOR_FRONTEND_PORT="$port"
-export SCULPTOR_PROXY_BASE="/proxy/$port/"
+export SCULPTOR_OPENHOST_PROXY=1
 
 echo "Live preview -> https://<this-app-host>/proxy/$port/   (Vite on 127.0.0.1:$port)"
-exec pnpm run dev
+# `base` is a native Vite flag; the env var above only drives the wss/HMR override.
+exec pnpm run dev -- --base="/proxy/$port/"
