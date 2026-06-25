@@ -149,6 +149,7 @@ class ClaudeHarnessProcess implements HarnessProcess {
   private stdoutBuffer = "";
   private interrupted = false;
   private controlRequestCounter = 0;
+  private interruptEscalationTimers: ReturnType<typeof setTimeout>[] = [];
   // AUQ/plan answers delivered mid-turn via the MCP backchannel: their
   // RequestStarted is emitted on delivery, but the matching RequestSuccess is
   // deferred until the in-flight CLI invocation completes (the answer continues
@@ -220,9 +221,25 @@ class ClaudeHarnessProcess implements HarnessProcess {
       return;
     }
     this.interrupted = true;
+    // Graceful first: the real CLI honors a control_request and ends the turn.
     this.writeStdin(
       buildInterruptControlRequest(this.nextControlRequestId("interrupt")),
     );
+    // Escalate for a CLI that ignores the control request (e.g. a sleeping
+    // fake_claude, which exits on SIGTERM): stdin → SIGTERM → SIGKILL, mirroring
+    // process_manager's interrupt escalation. Timers are cleared on close.
+    this.clearInterruptEscalation();
+    this.interruptEscalationTimers.push(
+      setTimeout(() => this.killChildGroup("SIGTERM"), 1_000),
+      setTimeout(() => this.killChildGroup("SIGKILL"), 5_000),
+    );
+  }
+
+  private clearInterruptEscalation(): void {
+    for (const timer of this.interruptEscalationTimers) {
+      clearTimeout(timer);
+    }
+    this.interruptEscalationTimers = [];
   }
 
   stop(): void {
@@ -411,6 +428,7 @@ class ClaudeHarnessProcess implements HarnessProcess {
         resolve();
       });
       child.on("close", () => {
+        this.clearInterruptEscalation();
         const remaining = this.stdoutBuffer.trim();
         if (remaining) {
           outputProcessor.processLine(remaining);
