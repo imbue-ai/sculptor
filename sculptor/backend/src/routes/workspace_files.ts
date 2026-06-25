@@ -217,12 +217,15 @@ export async function registerWorkspaceFileRoutes(
     async (request, reply) => {
       try {
         const workspace = requireWorkspace(request.params.workspace_id);
+        const row = getWorkspace(getOrm(), request.params.workspace_id);
         const workingDir = getWorkspaceWorkingDirectory(
           request.params.workspace_id,
         );
+        // The fork point is merge-base(HEAD, target); the source git hash is the
+        // fallback when there's no target / the merge-base can't be computed.
         const history = await listCommits({
           workingDir,
-          sourceGitHash: "",
+          sourceGitHash: row?.sourceGitHash ?? "",
           targetBranch: workspace.targetBranch,
         });
         return commitHistoryToWire(history);
