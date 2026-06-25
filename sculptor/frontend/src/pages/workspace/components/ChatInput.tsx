@@ -1,18 +1,21 @@
-import { Flex, IconButton, Tooltip } from "@radix-ui/themes";
+import { DropdownMenu, Flex, IconButton, Tooltip } from "@radix-ui/themes";
 import type { Editor as TipTapEditor } from "@tiptap/react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { ListChecks, Plus } from "lucide-react";
+import { Bot, Check, Gauge, ListChecks, Plus, SlidersHorizontal, Zap } from "lucide-react";
 import { posthog } from "posthog-js";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { HTTPException } from "~/common/Errors.ts";
 import { isTextBlock } from "~/common/Guards.ts";
+import { useIsMobile } from "~/common/hooks/useLayoutMode.ts";
 import { useKeybinding, useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
 import { getModelCapabilities } from "~/common/modelCapabilities.ts";
+import { getModelShortName, PRODUCTION_MODELS } from "~/common/modelConstants.ts";
 import { type ParsedPseudoSkillCommand, parsePseudoSkillCommand } from "~/common/pseudoSkills.ts";
 import { mergeClasses, optional } from "~/common/Utils.ts";
 import { CapabilityGate } from "~/components/CapabilityGate.tsx";
+import { EFFORT_DISPLAY_NAMES, EFFORT_OPTIONS } from "~/components/effortConstants.ts";
 import { EffortSelector } from "~/components/EffortSelector.tsx";
 import { FastModeToggle } from "~/components/FastModeToggle.tsx";
 import { FilePreviewList } from "~/components/FilePreviewList.tsx";
@@ -123,6 +126,9 @@ export const ChatInput = ({
   const dragCounterRef = useRef<number>(0);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const { workspaceID, agentID: taskID } = useWorkspacePageParams();
+  // On mobile the toolbar's secondary controls collapse into a single settings
+  // menu (plan/model/effort/fast) and the keyboard hints are dropped.
+  const isMobile = useIsMobile();
   const taskModel = useTaskModel(taskID ?? "");
   // Harness-supplied model list + selection (pi); empty/undefined for Claude, in
   // which case the switcher falls back to its built-in list and localModel.
@@ -678,44 +684,134 @@ export const ChatInput = ({
                 <Plus size={16} />
               </TooltipIconButton>
             </Flex>
-            <Flex align="center" flexShrink="0">
-              <CapabilityGate
-                capabilityValue={canEnterPlanMode}
-                elementId={ElementIds.CAPABILITY_DISABLED_PLAN_MODE}
-                disabledIcon={<ListChecks size={16} />}
-                size="3"
-                style={{ margin: 0 }}
-              >
-                <Tooltip content={isPlanFirst || isInPlanMode ? "Leave plan mode" : "Enter plan mode"}>
-                  <IconButton
-                    variant="ghost"
+            <Flex align="center" flexShrink="0" gap={isMobile ? "2" : undefined}>
+              {isMobile ? (
+                <DropdownMenu.Root>
+                  <DropdownMenu.Trigger>
+                    <IconButton variant="ghost" size="3" aria-label="Message options" style={{ margin: 0 }}>
+                      <SlidersHorizontal size={16} />
+                    </IconButton>
+                  </DropdownMenu.Trigger>
+                  {/* Radix portals to <body>, outside the shell's .mobileTheme
+                      subtree, so re-apply the class on the portaled content. */}
+                  <DropdownMenu.Content align="end" variant="soft" className="mobileTheme">
+                    {/* Plain Items (not CheckboxItem) so Radix doesn't reserve a
+                        left indicator gutter for every row; active state shows as
+                        a trailing check. Model/Effort show just their value. */}
+                    <DropdownMenu.Item
+                      disabled={!canEnterPlanMode}
+                      onSelect={() => setIsPlanFirst(!isPlanFirst)}
+                      data-testid={ElementIds.PLAN_MODE_TOGGLE}
+                    >
+                      <ListChecks size={16} /> Plan mode
+                      {(isPlanFirst || isInPlanMode) && <Check size={14} className={styles.menuTrailing} />}
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Sub>
+                      <DropdownMenu.SubTrigger>
+                        <Bot size={16} />{" "}
+                        {backendModels.length > 0
+                          ? (backendModels.find((model) => model.modelId === selectedModelId)?.displayName ??
+                            getModelShortName(localModel))
+                          : getModelShortName(localModel)}
+                      </DropdownMenu.SubTrigger>
+                      <DropdownMenu.SubContent className="mobileTheme">
+                        {/* Mirror the desktop ModelSelector: a harness with a
+                            backend model list (pi) switches out-of-band by id;
+                            otherwise the built-in Claude list applies per-turn. */}
+                        {backendModels.length > 0 ? (
+                          <DropdownMenu.RadioGroup
+                            value={selectedModelId ?? ""}
+                            onValueChange={(value) => {
+                              const option = backendModels.find((model) => model.modelId === value);
+                              if (option) void handleBackendModelChange(option);
+                            }}
+                          >
+                            {backendModels.map((model) => (
+                              <DropdownMenu.RadioItem key={model.modelId} value={model.modelId}>
+                                {model.displayName}
+                              </DropdownMenu.RadioItem>
+                            ))}
+                          </DropdownMenu.RadioGroup>
+                        ) : (
+                          <DropdownMenu.RadioGroup
+                            value={localModel}
+                            onValueChange={(value) => handleModelChange(value as LlmModel)}
+                          >
+                            {PRODUCTION_MODELS.map((modelValue) => (
+                              <DropdownMenu.RadioItem key={modelValue} value={modelValue}>
+                                {getModelShortName(modelValue)}
+                              </DropdownMenu.RadioItem>
+                            ))}
+                          </DropdownMenu.RadioGroup>
+                        )}
+                      </DropdownMenu.SubContent>
+                    </DropdownMenu.Sub>
+                    <DropdownMenu.Sub>
+                      <DropdownMenu.SubTrigger>
+                        <Gauge size={16} /> {EFFORT_DISPLAY_NAMES[effort]}
+                      </DropdownMenu.SubTrigger>
+                      <DropdownMenu.SubContent className="mobileTheme">
+                        <DropdownMenu.RadioGroup
+                          value={effort}
+                          onValueChange={(value) => setEffort(value as EffortLevel)}
+                        >
+                          {EFFORT_OPTIONS.map((level) => (
+                            <DropdownMenu.RadioItem key={level} value={level}>
+                              {EFFORT_DISPLAY_NAMES[level]}
+                            </DropdownMenu.RadioItem>
+                          ))}
+                        </DropdownMenu.RadioGroup>
+                      </DropdownMenu.SubContent>
+                    </DropdownMenu.Sub>
+                    {modelCapabilities.supportsFastMode && canUseFastMode && (
+                      <DropdownMenu.Item onSelect={() => setIsFastMode(!isFastMode)}>
+                        <Zap size={16} /> Fast mode
+                        {isFastMode && <Check size={14} className={styles.menuTrailing} />}
+                      </DropdownMenu.Item>
+                    )}
+                  </DropdownMenu.Content>
+                </DropdownMenu.Root>
+              ) : (
+                <>
+                  <CapabilityGate
+                    capabilityValue={canEnterPlanMode}
+                    elementId={ElementIds.CAPABILITY_DISABLED_PLAN_MODE}
+                    disabledIcon={<ListChecks size={16} />}
                     size="3"
-                    onClick={() => setIsPlanFirst(!isPlanFirst)}
-                    aria-label="Toggle plan first mode"
-                    data-testid={ElementIds.PLAN_MODE_TOGGLE}
-                    data-active={isPlanFirst || isInPlanMode}
-                    style={
-                      isPlanFirst || isInPlanMode ? { color: "var(--button-primary-bg)", margin: 0 } : { margin: 0 }
-                    }
+                    style={{ margin: 0 }}
                   >
-                    <ListChecks size={16} />
-                  </IconButton>
-                </Tooltip>
-              </CapabilityGate>
-              {modelCapabilities.supportsFastMode && canUseFastMode && (
-                <FastModeToggle isActive={isFastMode} onToggle={() => setIsFastMode(!isFastMode)} />
+                    <Tooltip content={isPlanFirst || isInPlanMode ? "Leave plan mode" : "Enter plan mode"}>
+                      <IconButton
+                        variant="ghost"
+                        size="3"
+                        onClick={() => setIsPlanFirst(!isPlanFirst)}
+                        aria-label="Toggle plan first mode"
+                        data-testid={ElementIds.PLAN_MODE_TOGGLE}
+                        data-active={isPlanFirst || isInPlanMode}
+                        style={
+                          isPlanFirst || isInPlanMode ? { color: "var(--button-primary-bg)", margin: 0 } : { margin: 0 }
+                        }
+                      >
+                        <ListChecks size={16} />
+                      </IconButton>
+                    </Tooltip>
+                  </CapabilityGate>
+                  {modelCapabilities.supportsFastMode && canUseFastMode && (
+                    <FastModeToggle isActive={isFastMode} onToggle={() => setIsFastMode(!isFastMode)} />
+                  )}
+                  <EffortSelector effort={effort} onEffortChange={setEffort} />
+                  <Flex pr="1">
+                    <ModelSelector
+                      model={localModel}
+                      onModelChange={handleModelChange}
+                      capabilityValue={canSelectModel}
+                      backendModels={backendModels}
+                      selectedModelId={selectedModelId}
+                      onBackendModelChange={handleBackendModelChange}
+                    />
+                  </Flex>
+                </>
               )}
-              <EffortSelector effort={effort} onEffortChange={setEffort} />
-              <Flex pr="1">
-                <ModelSelector
-                  model={localModel}
-                  onModelChange={handleModelChange}
-                  capabilityValue={canSelectModel}
-                  backendModels={backendModels}
-                  selectedModelId={selectedModelId}
-                  onBackendModelChange={handleBackendModelChange}
-                />
-              </Flex>
               <SendButton
                 onClick={handleSend}
                 disabled={(isDisabled && !draftIsBypassCommand(promptDraft)) || !promptDraft?.trim()}
@@ -734,12 +830,14 @@ export const ChatInput = ({
             </div>
           )}
         </div>
-        <Flex justify="between" mt="2" gap="3">
-          <Flex gap="3" align="center">
-            {showPromptNavHint && <KeyboardHint keys="↑↓" label="navigate prompts" />}
+        {!isMobile && (
+          <Flex justify="between" mt="2" gap="3">
+            <Flex gap="3" align="center">
+              {showPromptNavHint && <KeyboardHint keys="↑↓" label="navigate prompts" />}
+            </Flex>
+            <KeyboardHint keys={sendHint} label="to send message" />
           </Flex>
-          <KeyboardHint keys={sendHint} label="to send message" />
-        </Flex>
+        )}
       </div>
       <Toast
         open={!!toast}

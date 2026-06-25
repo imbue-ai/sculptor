@@ -19,6 +19,8 @@ type ChatPanelContentProps = {
   appendTextRef?: React.MutableRefObject<((text: string) => void) | null>;
   insertSkillRef?: React.MutableRefObject<((skill: InsertSkillArg) => void) | null>;
   editorRef?: React.MutableRefObject<TipTapEditor | null>;
+  /** Mobile: suppress the built-in desktop input; the shell supplies its own. */
+  hideChatInput?: boolean;
 };
 
 /**
@@ -35,6 +37,7 @@ export const ChatPanelContent = ({
   appendTextRef,
   insertSkillRef,
   editorRef,
+  hideChatInput,
 }: ChatPanelContentProps): ReactElement | null => {
   const { agentID: taskID } = useWorkspacePageParams();
   const isChatInterfaceSupported = useTaskSupportsChatInterface(taskID ?? "");
@@ -55,10 +58,22 @@ export const ChatPanelContent = ({
   if (isChatInterfaceSupported === undefined) {
     return null;
   }
-  return <ChatPanelInner appendTextRef={appendTextRef} insertSkillRef={insertSkillRef} editorRef={editorRef} />;
+  return (
+    <ChatPanelInner
+      appendTextRef={appendTextRef}
+      insertSkillRef={insertSkillRef}
+      editorRef={editorRef}
+      hideChatInput={hideChatInput}
+    />
+  );
 };
 
-const ChatPanelInner = ({ appendTextRef, insertSkillRef, editorRef }: ChatPanelContentProps): ReactElement => {
+const ChatPanelInner = ({
+  appendTextRef,
+  insertSkillRef,
+  editorRef,
+  hideChatInput,
+}: ChatPanelContentProps): ReactElement => {
   const { workspaceID, agentID: taskID } = useWorkspacePageParams();
   const isDebugView = useAtomValue(debugViewAtomFamily(taskID ?? ""));
   const closeBtwPopupIfNotForAgent = useSetAtom(closeBtwPopupIfNotForAgentAtom);
@@ -104,6 +119,7 @@ const ChatPanelInner = ({ appendTextRef, insertSkillRef, editorRef }: ChatPanelC
         appendTextRef={appendTextRef}
         insertSkillRef={insertSkillRef}
         editorRef={editorRef}
+        hideChatInput={hideChatInput}
       />
       {isBtwPopupOpen && <BtwPopup />}
     </>
