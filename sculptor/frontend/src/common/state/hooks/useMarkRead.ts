@@ -10,8 +10,12 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
   const task = useAtomValue(taskAtomFamily(agentID));
   const setTask = useSetAtom(taskAtomFamily(agentID));
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Read inside the debounced setTimeout to see the latest state — the captured
-  // `task` closure may be stale by the time the timer fires.
+  // True while a debounced mark-read is scheduled but hasn't fired yet. Lets us
+  // flush it when the user leaves this agent so the read persists before we
+  // navigate away (see the cleanup below).
+  const hasPendingReadRef = useRef(false);
+  // Read inside the debounced setTimeout / cleanup to see the latest state — the
+  // captured `task` closure may be stale by the time the timer fires.
   const taskRef = useRef(task);
   // Keep the ref current after every commit so the pending timer reads the latest task.
   useEffect(() => {
@@ -27,12 +31,30 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
     });
   };
 
-  // Mark as read on mount
+  // Mark as read on mount / agent change, and flush a still-pending debounced
+  // read when leaving this agent. Without the flush, navigating away within the
+  // debounce window leaves the agent's last update unacknowledged, so it (and
+  // its workspace) reappear as "unread" even though the user just viewed it.
   useEffect(() => {
-    if (!task) {
-      return;
+    if (task) {
+      markRead();
     }
-    markRead();
+
+    return (): void => {
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+
+      if (hasPendingReadRef.current) {
+        hasPendingReadRef.current = false;
+        // Don't undo an explicit mark-unread the user performed while the timer
+        // was pending.
+        if (taskRef.current?.lastReadAt !== null) {
+          markRead();
+        }
+      }
+    };
     // Only run on mount and when agentID changes, not on every task update
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentID]);
@@ -53,8 +75,10 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
     if (timerRef.current !== null) {
       clearTimeout(timerRef.current);
     }
+    hasPendingReadRef.current = true;
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
+      hasPendingReadRef.current = false;
       // Skip if the user explicitly marked unread (lastReadAt=null) while the
       // timer was pending — don't undo their action.
       if (taskRef.current?.lastReadAt === null) {

@@ -50,8 +50,20 @@ def test_unread_indicator_when_switching_agents_within_workspace(
     agent_tab_bar.get_add_agent_button().click()
     expect(agent_tabs).to_have_count(2)
 
-    # Send a message on agent 2 so it gets response activity
+    # Wait for the route to finish settling onto the new agent before typing.
+    # Adding an agent auto-navigates to it, and the chat input editor is keyed
+    # by task id, so it remounts as the route transitions (the old editor
+    # detaches, a new one mounts a beat later — see type_into_tiptap). Typing
+    # before the chat panel is bound to the new agent can land the draft in the
+    # detaching editor, dropping it and leaving the send button disabled. The
+    # chat panel's data-taskid flips to the new agent only once navigation has
+    # settled, so it is a deterministic settle point.
+    new_agent_id = agent_tabs.last.get_attribute("data-tab-id")
+    assert new_agent_id is not None
     chat_panel = task_page.get_chat_panel()
+    expect(chat_panel).to_have_attribute("data-taskid", new_agent_id)
+
+    # Send a message on agent 2 so it gets response activity
     send_chat_message(chat_panel, "Do something")
     wait_for_completed_message_count(chat_panel, expected_message_count=2)
 
