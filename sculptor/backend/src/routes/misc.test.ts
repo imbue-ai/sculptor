@@ -128,7 +128,7 @@ describe("misc + uploads routes", () => {
     );
     const res = await app.inject({
       method: "GET",
-      url: `/api/v1/skills?projectId=${projectId}`,
+      url: `/api/v1/skills?project_id=${projectId}`,
     });
     expect(res.statusCode).toBe(200);
     const names = (res.json() as { name: string }[]).map((s) => s.name);

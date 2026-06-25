@@ -99,8 +99,8 @@ export async function registerSkillRoutes(app: FastifyInstance): Promise<void> {
     {
       schema: {
         querystring: z.object({
-          workspaceId: z.string().optional(),
-          projectId: z.string().optional(),
+          workspace_id: z.string().optional(),
+          project_id: z.string().optional(),
         }),
         response: {
           200: z.array(
@@ -116,7 +116,8 @@ export async function registerSkillRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     async (request, reply) => {
-      const { workspaceId, projectId } = request.query;
+      const { workspace_id: workspaceId, project_id: projectId } =
+        request.query;
       if ((workspaceId === undefined) === (projectId === undefined)) {
         return reply
           .code(400)
