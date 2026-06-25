@@ -34,6 +34,23 @@ if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
     fi
 fi
 
+# Install/refresh the host-wide OpenHost agent skill — it's ours, so overwrite on
+# every boot to keep it current. User-level skills (under CLAUDE_CONFIG_DIR/skills)
+# load for agents in ANY workspace/repo, so this reaches them regardless of what
+# the workspace holds. Best-effort; never fail the boot.
+if [ -d /app/openhost-agent/skills/openhost-environment ]; then
+    mkdir -p "$CLAUDE_CONFIG_DIR/skills"
+    rm -rf "$CLAUDE_CONFIG_DIR/skills/openhost-environment"
+    cp -r /app/openhost-agent/skills/openhost-environment \
+        "$CLAUDE_CONFIG_DIR/skills/openhost-environment" || true
+fi
+
+# Seed the owner's standing-instructions file ONCE, never overwriting their edits.
+# AGENTS.md is the source of truth; CLAUDE.md is a symlink to it (Claude Code loads
+# CLAUDE.md). Both are meta only — the maintained env detail lives in the skill.
+[ -e "$CLAUDE_CONFIG_DIR/AGENTS.md" ] || cp /app/openhost-agent/AGENTS.md "$CLAUDE_CONFIG_DIR/AGENTS.md" 2>/dev/null || true
+[ -e "$CLAUDE_CONFIG_DIR/CLAUDE.md" ] || ln -s AGENTS.md "$CLAUDE_CONFIG_DIR/CLAUDE.md" 2>/dev/null || true
+
 # Backend behind nginx (SCULPTOR_API_PORT=5051 is set in the Dockerfile).
 /app/.venv/bin/python -m sculptor.cli.main --no-open-browser /workspace &
 backend_pid=$!
