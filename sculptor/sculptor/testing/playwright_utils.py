@@ -289,7 +289,13 @@ def navigate_to_add_workspace_page(page: Page) -> None:
     # and leave its overlay stuck. Wait until a create surface is showing (inline
     # form or already-open modal), the empty-first-run page is up, we are on a
     # workspace (chat panel), parked on Settings, or sitting on the Home list.
-    expect(create_button.or_(chat_panel).or_(settings_page).or_(empty_first_run).or_(home_list)).to_be_visible(
+    #
+    # ``.first`` is required: these surfaces OVERLAP (the empty-first-run page shows
+    # both EMPTY_FIRST_RUN_PAGE and, once its form loads, NEW_WORKSPACE_CREATE_BUTTON),
+    # so the bare ``or_`` chain resolves to >1 element and a strict-mode
+    # ``to_be_visible()`` raises "resolved to N elements". ``.first`` makes the wait
+    # mean "at least one of these surfaces is visible", which is the intent.
+    expect(create_button.or_(chat_panel).or_(settings_page).or_(empty_first_run).or_(home_list).first).to_be_visible(
         timeout=45_000
     )
     # Parked on Settings (no create affordance) — route Home, which settles on a
