@@ -504,16 +504,18 @@ class ClaudeHarnessProcess implements HarnessProcess {
         }
         this.stdoutBuffer = "";
         outputProcessor.finalizeTurn();
-        // A non-zero exit with no error frame and no interrupt is a crash: the
-        // process died unrecoverably (the CLI emits a result frame on a clean
-        // end, so turnError is already set in that path). Treat it as fatal —
+        // A non-zero exit with no error frame, no interrupt, AND no completed
+        // result is a crash: the process died unrecoverably mid-turn. A non-zero
+        // exit AFTER the turn already produced its result frame (a slow/dirty
+        // shutdown post-success) is NOT a crash. Treat a real crash as fatal —
         // exitCb drives the supervisor to run_state FAILED (→ ERROR + the
         // restore-agent prompt), not a recoverable REQUEST_ERROR.
         const isCrash =
           code !== 0 &&
           code !== null &&
           !this.interrupted &&
-          outputProcessor.turnError === undefined;
+          outputProcessor.turnError === undefined &&
+          !outputProcessor.isTurnComplete();
         this.child = undefined;
         if (isCrash) {
           this.finished = true;

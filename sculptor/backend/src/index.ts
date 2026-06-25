@@ -12,6 +12,7 @@ import { getCIBabysitterCoordinator } from "~/services/ci_babysitter/coordinator
 import { getProjectService } from "~/services/project";
 import { getPrPollingService } from "~/services/pr_polling/service";
 import { getRepoPollingManager } from "~/services/repo_polling/manager";
+import { installBundledRegistrations } from "~/services/terminal_agent_registry/bundled";
 
 // The integration harness scrapes stdout for this exact string to decide the
 // backend is ready (READY_MESSAGE_V1 in sculptor/sculptor/testing/server_utils.py).
@@ -75,6 +76,11 @@ export async function main(
   const logger = setupLogging();
   const db = getDatabase();
   runMigrations(db);
+
+  // One-time install of the bundled Claude Code terminal-agent registration
+  // (web/app.py install_bundled_registrations) so it appears in the agent-type
+  // menu out of the box. Non-fatal.
+  installBundledRegistrations();
 
   // Register the initial project path when one is passed as a positional arg
   // (the harness + the `sculptor <path>` invocation open a repo to start with),
