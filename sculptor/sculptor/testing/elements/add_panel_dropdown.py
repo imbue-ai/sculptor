@@ -141,33 +141,45 @@ _DEFAULT_SEEDED_SECTION: dict[str, str] = {"files": "left", "changes": "left", "
 def open_panel(page: Page, panel_id: str, sub_section: str = "center") -> Locator:
     """Bring a single-instance panel into ``sub_section`` and return its section root.
 
-    Idempotent and section-honouring: if the panel already lives in ``sub_section`` it is
-    just re-activated; if it lives in another section (e.g. the default layout seeds
-    Files/Changes/Commits in the left section — SEC-02) it is closed there first so the
-    add-panel dropdown offers it again, then opened into ``sub_section`` via the section
-    `+` the way a user does. Returns the requested section's root locator so callers can
-    construct the panel's POM scoped to it (the Files / Changes / Commits list and viewer
-    are siblings under the section).
+    Seeded panels (Files/Changes/Commits — seeded into the left section, SEC-02) are
+    never center panels, so a request for their seeded section OR the default ``center``
+    means "reveal it where it lives": expand the seeded section and activate its tab,
+    waiting for the tab (never the dropdown). Only an explicit request for a DIFFERENT
+    real section (right/bottom) moves a seeded panel — closing it from its home first so
+    the dropdown offers it again. Non-seeded panels always open via the section `+`.
+    Returns the owning section's root locator so callers can scope the panel's POM to it.
     """
-    section = PlaywrightWorkspaceSection(page, sub_section)
-    # Non-center sections (right/bottom) start collapsed, so their PanelSection — and
-    # therefore the header `+` / panel tabs — aren't mounted yet. Expand first
-    # (idempotent; a no-op for the always-expanded center).
-    section.expand_section()
+    seeded_section = _DEFAULT_SEEDED_SECTION.get(panel_id)
+    target_section = section_of(sub_section)
 
-    # Already open in the requested section: just activate its tab (idempotent re-open).
-    target_tab = section.get_panel_tab(panel_id)
-    if target_tab.count() > 0:
-        target_tab.click()
+    # Reveal a seeded panel in its home section (the common case: callers pass the seeded
+    # section or the default ``center``, neither of which moves it). Waiting on the tab —
+    # not a non-blocking count() right after expand — avoids a race where a slow-rendering
+    # tab falls through to a dropdown that won't offer a still-open panel.
+    if seeded_section is not None and target_section in (seeded_section, "center"):
+        home = PlaywrightWorkspaceSection(page, seeded_section)
+        home.expand_section()
+        tab = home.get_panel_tab(panel_id)
+        expect(tab).to_be_visible()
+        tab.click()
+        home_root = home.get_section()
+        expect(home_root).to_be_visible()
+        return home_root
+
+    # Open into an explicitly-requested section. Non-center sections start collapsed, so
+    # their PanelSection — and the header `+` / tabs — aren't mounted; expand first.
+    section = PlaywrightWorkspaceSection(page, sub_section)
+    section.expand_section()
+    existing_tab = section.get_panel_tab(panel_id)
+    if existing_tab.count() > 0:
+        existing_tab.click()
         section_root = section.get_section()
         expect(section_root).to_be_visible()
         return section_root
 
-    # Open in a DIFFERENT section than where it is seeded (a seeded panel in its home
-    # section): a single-instance panel can't be duplicated and the dropdown won't offer
-    # it while it is open, so close it from its seeded section first.
-    current_section = _DEFAULT_SEEDED_SECTION.get(panel_id)
-    if current_section is not None and current_section != section_of(sub_section):
+    # A seeded panel can't be duplicated and the dropdown won't offer it while it is open,
+    # so close it from its seeded section before re-adding it here.
+    if seeded_section is not None and seeded_section != target_section:
         close_seeded_panel(page, panel_id)
 
     dropdown = PlaywrightAddPanelDropdownElement(page, sub_section)
