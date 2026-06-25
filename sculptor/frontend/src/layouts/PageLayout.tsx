@@ -2,8 +2,9 @@ import { Flex } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useMemo, useState } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 
+import { useIsMobile } from "../common/hooks/useLayoutMode.ts";
 import { useSyncActiveTabFromRoute } from "../common/hooks/useSyncActiveTabFromRoute.ts";
 import { useActiveProjectID } from "../common/NavigateUtils.ts";
 import { backendStatusAtom } from "../common/state/atoms/backend.ts";
@@ -65,6 +66,15 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
   const projectID = useActiveProjectID();
   const currentProject = useProject(projectID ?? "");
   const [isRepoPathDialogOpen, setIsRepoPathDialogOpen] = useState(false);
+  const isMobile = useIsMobile();
+  const { pathname } = useLocation();
+  // On mobile, the Workspace view, the Settings page, and the Home view each
+  // carry their own header (S2) and the top safe-area inset (H4), so the global
+  // TopBar is suppressed for `/ws/*`, `/settings`, and `/home`.
+  const isMobileWorkspaceRoute = isMobile && pathname.startsWith("/ws/");
+  const isMobileSettingsRoute = isMobile && pathname.startsWith("/settings");
+  const isMobileHomeRoute = isMobile && pathname.startsWith("/home");
+  const shouldHideGlobalTopBar = isMobileWorkspaceRoute || isMobileSettingsRoute || isMobileHomeRoute;
 
   useUnifiedStream();
   usePageLayoutKeyboardShortcuts();
@@ -117,13 +127,26 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
         width="100vw"
         position="relative"
         overflow="hidden"
-        style={{ background: "var(--gray-2)" }}
+        style={{
+          background: "var(--gray-2)",
+          // Keep content clear of the iOS home indicator when the app runs
+          // full-screen from the home screen (viewport-fit=cover in
+          // index.html); the inset is 0 off iOS. box-sizing keeps the shell
+          // exactly --app-height tall so the padding eats into the content
+          // rather than overflowing past the bottom of the screen.
+          boxSizing: "border-box",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
       >
         {/* TopBar stays mounted (display:none) in zen mode so that workspace
-            tab-cycling keyboard shortcuts (Cmd+[, Cmd+]) remain active. */}
-        <div style={isZenModeActive ? { display: "none" } : undefined}>
-          <TopBar />
-        </div>
+            tab-cycling keyboard shortcuts (Cmd+[, Cmd+]) remain active. On the
+            mobile Workspace and Settings views it is suppressed entirely — the
+            mobile header owns the top chrome and safe-area inset (S2/H4). */}
+        {!shouldHideGlobalTopBar && (
+          <div style={isZenModeActive ? { display: "none" } : undefined}>
+            <TopBar />
+          </div>
+        )}
         {/* In zen mode, render a draggable region so the top window edge
             remains draggable. */}
         {isZenModeActive && <TitleBar className={styles.zenTitleBar} />}
@@ -132,7 +155,7 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
         <PanelRegistryProvider panels={combinedPanels} defaultLayout={workspaceDefaultLayout}>
           <Outlet />
         </PanelRegistryProvider>
-        {showVersionIndicator && !isZenModeActive && (
+        {showVersionIndicator && !isZenModeActive && !shouldHideGlobalTopBar && (
           <Flex align="center" mx="3" mb="2" flexShrink="0" style={{ background: "var(--gray-2)" }}>
             <Flex flexBasis="0" flexGrow="1" />
             <Flex flexBasis="0" flexGrow="1" justify="center">

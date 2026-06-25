@@ -36,7 +36,12 @@ type TerminalInstanceProps = {
   onOutput?: () => void;
 };
 
-const TerminalInstance = ({ workspaceID, terminalIndex, isVisible, onOutput }: TerminalInstanceProps): ReactElement => {
+export const TerminalInstance = ({
+  workspaceID,
+  terminalIndex,
+  isVisible,
+  onOutput,
+}: TerminalInstanceProps): ReactElement => {
   const { terminalContainerRef } = useTerminal({
     terminalPath: `/api/v1/workspaces/${workspaceID}/terminal/${terminalIndex}/ws`,
     isVisible,

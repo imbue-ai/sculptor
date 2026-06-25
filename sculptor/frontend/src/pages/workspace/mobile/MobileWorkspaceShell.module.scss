@@ -1,0 +1,68 @@
+/* =============================================================================
+   MOBILE WORKSPACE SHELL — single-column layout (S1-S5).
+
+   The mobile tokens live in src/styles/mobile-theme.css (.mobileTheme); this
+   module references only var() tokens (Radix + --mobile-*) so it passes
+   `npm run lint:styles`. The reused chat / review-all / terminal use the
+   standard app theme (no token remap), following the user's light/dark setting.
+   ============================================================================= */
+
+.shell {
+  /* The workspace column (header + chat + input + pager) is one continuous
+     surface that matches the reused chat body (--gray-2), so there's no seam
+     between the chrome and the stream. */
+  background: var(--mobile-surface-2);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+/* Chat fills the remaining space. AlphaChatInterface sizes itself via flex and
+   requires a min-height:0 parent (the spike confirmed this contract). */
+.chatArea {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+}
+
+/* Status row floating over the top of the chat: the agent switcher (left) and
+   the changes pill (right) share one line. Its background is transparent and it
+   is click-through (`pointer-events: none`) so the chat stream scrolls behind
+   the pills; each pill re-enables pointer events on itself. It's also the
+   positioning context for the changes pill's expanded list (C2). */
+.statusRow {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  justify-content: space-between;
+  left: 0;
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: var(--z-above);
+}
+
+/* Dimmed backdrop behind the drawer (D1). Dropdowns (Radix ⋮ / +) supply their
+   own transparent click-catcher and do NOT use this. */
+.backdrop {
+  background: var(--mobile-overlay);
+  inset: 0;
+  opacity: 0%;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity var(--duration-slow) var(--ease-default);
+  z-index: var(--z-sticky);
+}
+
+.backdrop.open {
+  opacity: 100%;
+  pointer-events: auto;
+}
