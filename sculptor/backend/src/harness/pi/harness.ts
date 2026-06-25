@@ -169,6 +169,7 @@ class PiHarnessProcess implements HarnessProcess {
   >();
   private currentTurn: CurrentTurn | undefined;
   private interruptPending = false;
+  private interruptEscalationTimers: ReturnType<typeof setTimeout>[] = [];
   private pendingUiRequestId: string | null = null;
   private readonly pendingAnswerRequestIds: string[] = [];
 
@@ -218,7 +219,23 @@ class PiHarnessProcess implements HarnessProcess {
       return;
     }
     this.interruptPending = true;
+    // Graceful first: pi acknowledges `abort` and ends the turn with an
+    // aborted agent_end. Escalate for a CLI that doesn't (or a turn wedged
+    // before it can poll the abort flag): SIGTERM → SIGKILL, which closes the
+    // process and resolves the turn (onClose → RequestSuccess interrupted).
     this.sendRpc(buildAbortCommand());
+    this.clearInterruptEscalation();
+    this.interruptEscalationTimers.push(
+      setTimeout(() => this.killChildGroup("SIGTERM"), 2_000),
+      setTimeout(() => this.killChildGroup("SIGKILL"), 6_000),
+    );
+  }
+
+  private clearInterruptEscalation(): void {
+    for (const timer of this.interruptEscalationTimers) {
+      clearTimeout(timer);
+    }
+    this.interruptEscalationTimers = [];
   }
 
   // /clear: tell the running pi CLI to start a fresh session so prior turns are
@@ -311,6 +328,10 @@ class PiHarnessProcess implements HarnessProcess {
 
     const turn = this.currentTurn;
     this.currentTurn = undefined;
+    // The turn ended (pi honored the abort, or it finished on its own) — cancel
+    // any pending SIGTERM/SIGKILL so a graceful interrupt doesn't kill the
+    // still-useful process a beat later (which would break continue-after-stop).
+    this.clearInterruptEscalation();
     multiplexer.finalize();
     this.finalizePendingAnswers(!turn?.error);
 
@@ -532,6 +553,11 @@ class PiHarnessProcess implements HarnessProcess {
 
   private onClose(): void {
     this.child = undefined;
+    this.clearInterruptEscalation();
+    // The persistent process is gone (crash or interrupt-kill); let the next
+    // message relaunch it (and resume the session via the on-disk session id).
+    this.started = false;
+    this.startPromise = undefined;
     const turn = this.currentTurn;
     if (turn !== undefined) {
       if (!this.interruptPending && turn.error === undefined) {
