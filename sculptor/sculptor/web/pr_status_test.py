@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 from pathlib import Path
 from unittest.mock import patch
@@ -12,6 +13,9 @@ from sculptor.primitives.ids import WorkspaceID
 from sculptor.web.cli_status_utils import CliStatusError
 from sculptor.web.pr_status import _GRAPHQL_PR_QUERY
 from sculptor.web.pr_status import _PR_QUERY_LIMIT
+from sculptor.web.pr_status import _SEARCH_PAGE_SIZE
+from sculptor.web.pr_status import _SEARCH_PR_QUERY
+from sculptor.web.pr_status import _SEARCH_QUERY_STRING
 from sculptor.web.pr_status import build_status_from_open_nodes
 from sculptor.web.pr_status import fetch_open_prs_for_token
 from sculptor.web.pr_status import fetch_pr_status
@@ -649,3 +653,78 @@ def test_build_status_from_open_nodes_conflicting_sets_has_conflicts() -> None:
 
     assert result.pr_state == "open"
     assert result.has_conflicts is True
+
+
+# ---------------------------------------------------------------------------
+# Cost-regression guard for the production search query (design Risk-4, Goal-2).
+#
+# GraphQL charges a connection by its parent cardinality times what nests
+# beneath it, so an added nested `first:`/`last:` connection silently balloons
+# the per-round point cost — and the governor's projections assume a known cost.
+# The structural guard below runs always (no `gh`) and fails loudly if a new
+# nested connection creeps in; the opt-in live test re-measures the real cost.
+# ---------------------------------------------------------------------------
+
+
+def test_search_query_has_no_unexpected_nested_connections() -> None:
+    # The complete set of paginated connections in the production search query.
+    # `reviewThreads`/`comments` are the only cost-multiplying nest; adding any
+    # other `first:`/`last:` here is what blows up the per-round cost.
+    expected_pagination = sorted(
+        [
+            "first: $prCount",  # search(...) page size
+            "last: 1",  # commits(last: 1)
+            "first: 20",  # latestReviews — cost-free (no nested connection)
+            "first: 10",  # reviewThreads — the dominant cost term (Change-1b)
+            "first: 1",  # comments under reviewThreads
+        ]
+    )
+    found = sorted(
+        f"{keyword}: {value}" for keyword, value in re.findall(r"\b(first|last):\s*([^\s,)]+)", _SEARCH_PR_QUERY)
+    )
+    assert found == expected_pagination, (
+        f"search query pagination changed: {found} != {expected_pagination}; "
+        + "a new nested first:/last: connection would balloon the per-round GraphQL cost"
+    )
+    # Lock the two page sizes that matter for cost (trimmed) and coverage.
+    assert "reviewThreads(first: 10)" in _SEARCH_PR_QUERY
+    assert "latestReviews(first: 20)" in _SEARCH_PR_QUERY
+
+
+# Measured production cost (per design): ~3 points at reviewThreads(first: 10)
+# for ~20 open PRs (~7 at first: 30). The ceiling has headroom for fleet-size
+# variation; the authority for the governor's projections is this *measured*
+# live cost, not the projection itself (Risk-4) — re-measure if it trips.
+_SEARCH_QUERY_COST_CEILING = 10
+
+
+@pytest.mark.skipif(
+    not os.environ.get("SCULPTOR_PR_STATUS_LIVE_GH_TEST"),
+    reason="opt-in: set SCULPTOR_PR_STATUS_LIVE_GH_TEST=1 to measure cost against real GitHub",
+)
+def test_search_query_cost_within_band() -> None:
+    if shutil.which("gh") is None:
+        pytest.skip("gh CLI not available")
+    result = run_blocking(
+        [
+            "gh",
+            "api",
+            "graphql",
+            "-f",
+            f"query={_SEARCH_PR_QUERY}",
+            "-f",
+            f"q={_SEARCH_QUERY_STRING}",
+            "-F",
+            f"prCount={_SEARCH_PAGE_SIZE}",
+        ],
+        timeout=30.0,
+        is_checked=False,
+        cwd=Path(__file__).parent,
+    )
+    assert result.returncode == 0, f"gh api graphql rejected the search query: {result.stderr}"
+    payload = json.loads(result.stdout)
+    cost = payload["data"]["rateLimit"]["cost"]
+    assert cost <= _SEARCH_QUERY_COST_CEILING, (
+        f"search query cost {cost} exceeds the expected band (<= {_SEARCH_QUERY_COST_CEILING}); "
+        + "re-measure and re-check the governor's projections (design Risk-4)"
+    )
