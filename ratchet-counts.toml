@@ -30,7 +30,7 @@
 "." = 0
 
 [no-implicit-string-concat]
-"." = 24
+"." = 25
 
 [no-inline-functions]
 "." = 33
@@ -108,7 +108,7 @@
 "." = 0
 
 [no-raw-html-button]
-"." = 17
+"." = 21
 
 [no-relative-imports]
 "." = 0

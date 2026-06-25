@@ -6,7 +6,6 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from typing import Generator
-from typing import Iterator
 from typing import cast
 from unittest.mock import patch
 from uuid import uuid4
@@ -92,7 +91,7 @@ def environment(
     test_root_concurrency_group: ConcurrencyGroup,
 ) -> Generator[LocalEnvironment, None, None]:
     code_dir, _ = initial_commit_repo
-    workspace_dir = LOCAL_WORKSPACE_DIR / str(uuid4().hex)
+    workspace_dir = LOCAL_WORKSPACE_DIR / uuid4().hex
     workspace_dir.mkdir(parents=True, exist_ok=True)
 
     environment = LocalEnvironment.create(
@@ -200,7 +199,7 @@ def test_outer_handler_emits_acquired_and_released_messages(
     )
 
     @contextmanager
-    def fake_environment_context(self: DefaultWorkspaceService, **kwargs: Any) -> Iterator[Any]:
+    def fake_environment_context(self: DefaultWorkspaceService, **kwargs: Any) -> Generator[Any, None, None]:
         yield agent_env
 
     def fake_inner(**kwargs: Any) -> None:

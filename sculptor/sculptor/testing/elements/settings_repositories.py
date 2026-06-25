@@ -23,6 +23,9 @@ class PlaywrightRepositoriesSettingsElement(PlaywrightIntegrationTestElement):
         dialog = self._page.get_by_test_id(ElementIDs.ADD_REPO_DIALOG)
         expect(dialog).to_be_visible()
 
+        # Dialog defaults to GitHub; switch to Local so the path input is visible.
+        self._page.get_by_test_id(ElementIDs.ADD_REPO_SOURCE_LOCAL).click()
+
         path_input = self._page.get_by_test_id(ElementIDs.ADD_REPO_PATH_INPUT)
         path_input.fill(path)
         # Use Ctrl/Cmd+Enter to submit — PathAutocomplete handles this as

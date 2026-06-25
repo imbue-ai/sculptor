@@ -216,9 +216,18 @@ const activePanelInZoneAtomMap = new Map<ZoneId, Atom<PanelDefinition | undefine
     atom<PanelDefinition | undefined>((get) => {
       const registry = get(panelRegistryAtom);
       const activePanel = get(activePanelPerZoneAtom);
+      const enabled = get(panelEnabledAtom);
+      const isEnabled = (def: PanelDefinition): boolean =>
+        (def.isBuiltin ?? false) || (enabled[def.id] ?? def.defaultEnabled ?? true);
+
       const panelId = activePanel[zoneId];
-      if (!panelId) return undefined;
-      return registry.find((p) => p.id === panelId);
+      const active = panelId ? registry.find((p) => p.id === panelId) : undefined;
+      // Never render a disabled panel, even if it is the persisted active one
+      // (stale localStorage can point at a panel the user has since toggled
+      // off). Fall back to the first enabled panel in the zone instead.
+      if (active && isEnabled(active)) return active;
+      const fallbackId = get(panelsInZoneAtomMap.get(zoneId)!)[0];
+      return fallbackId ? registry.find((p) => p.id === fallbackId) : undefined;
     }),
   ]),
 );

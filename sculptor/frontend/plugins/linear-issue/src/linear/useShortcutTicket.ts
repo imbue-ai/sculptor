@@ -19,21 +19,23 @@ export type ShortcutTicket = {
 /**
  * Resolves the single issue the banner widget shows: the explicitly-assigned
  * shortcut when set, otherwise the branch's primary issue. The default path
- * reuses the panel's `["primary", branch]` query key, so an open panel and the
- * widget dedupe to one request and always agree on the branch ticket.
+ * reuses the panel's `["primary", branch, pullRequestUrl]` query key, so an open
+ * panel and the widget dedupe to one request and always agree on the branch
+ * ticket — which means `pullRequestUrl` must be passed identically here.
  */
 export const useShortcutTicket = (inputs: {
   apiKey: string;
   branch: string | null;
+  pullRequestUrl: string | null;
   shortcutId: string | null;
 }): ShortcutTicket => {
-  const { apiKey, branch, shortcutId } = inputs;
+  const { apiKey, branch, pullRequestUrl, shortcutId } = inputs;
 
   const primaryQuery = useQuery({
-    queryKey: [PLUGIN_ID, "primary", branch],
+    queryKey: [PLUGIN_ID, "primary", branch, pullRequestUrl],
     queryFn: ({ signal }) => {
       if (!branch) throw new Error("No workspace branch");
-      return fetchPrimaryIssue({ apiKey, branch, ticketFallback: parseTicket(branch), signal });
+      return fetchPrimaryIssue({ apiKey, branch, ticketFallback: parseTicket(branch), pullRequestUrl, signal });
     },
     enabled: Boolean(apiKey && branch && !shortcutId),
     staleTime: STALE_TIME,

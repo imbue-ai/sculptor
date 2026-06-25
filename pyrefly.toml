@@ -25,3 +25,14 @@ search_path = [
 ]
 
 python_version = "3.11"
+
+# Colocated unit tests (`*_test.py`) deliberately assert on literal runtime state
+# (e.g. `assert agent._is_in_plan_mode is False`). Pyrefly over-narrows such an
+# attribute to a literal type after an earlier assignment and then flags the
+# assertion as an "always true/false" comparison — a false positive, since it
+# cannot see the mutation that happens through the method call under test.
+# Disable only that check for test files; it stays active for production code.
+[[sub_config]]
+matches = "**/*_test.py"
+[sub_config.errors]
+unnecessary-comparison = false

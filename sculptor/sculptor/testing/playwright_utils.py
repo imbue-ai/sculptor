@@ -347,6 +347,11 @@ def start_task_and_wait_for_ready(
     # that assert post-creation focus rely on this.
     if model_name is not None:
         select_model_by_name(chat_panel=chat_panel, model_name=model_name)
+        # The model selector is a Radix Select; closing it restores focus to its
+        # trigger asynchronously (FocusScope onUnmountAutoFocus -> trigger.focus()).
+        # Wait for that restore to land before focusing the chat input below, so the
+        # late refocus can't steal focus back from it.
+        expect(chat_panel.get_model_selector()).to_be_focused()
     chat_input = chat_panel.get_chat_input()
     chat_input.focus()
 
@@ -386,6 +391,44 @@ def start_task_and_wait_for_ready(
             expect(chat_panel.get_thinking_indicator(), "to finish outputting data").not_to_be_visible()
 
     return task_page
+
+
+def add_agent_and_wait_for_ready(page: Page) -> PlaywrightTaskPage:
+    """Click the agent tab "+" to add an agent and wait until the new agent is
+    the active one, with a chat input ready to receive a message.
+
+    Returns a ``PlaywrightTaskPage`` bound to the new (now-active) agent.
+
+    Adding an agent navigates to it only after an async create request
+    resolves, but the agent-tab count flips to N+1 as soon as the agent-list
+    query refreshes — which can happen before that navigation lands.  Callers
+    must not type into the chat input until the switch completes, or the text
+    lands in the outgoing agent's editor (or no editor, mid-remount).  Waiting
+    for the URL to point at a different agent id is the settle signal.
+    """
+    task_page = PlaywrightTaskPage(page=page)
+    previous_agent_id = task_page.get_task_id()
+    agent_tab_bar = task_page.get_agent_tab_bar()
+    existing_tab_count = agent_tab_bar.get_agent_tabs().count()
+
+    agent_tab_bar.get_add_agent_button().click()
+    expect(agent_tab_bar.get_agent_tabs()).to_have_count(existing_tab_count + 1)
+
+    # The create-agent POST and clone/setup can be slow on contended runners.
+    page.wait_for_function(
+        r"""(previousAgentId) => {
+            const match = window.location.href.match(/\/agent\/([A-Za-z0-9_-]+)/);
+            return match !== null && match[1] !== previousAgentId;
+        }""",
+        arg=previous_agent_id,
+        timeout=60_000,
+    )
+
+    new_task_page = PlaywrightTaskPage(page=page)
+    # The chat input is keyed by agent id, so it remounts for the new agent;
+    # wait for it to attach before callers type into it.
+    expect(new_task_page.get_chat_panel().get_chat_input()).to_be_visible()
+    return new_task_page
 
 
 def navigate_to_frontend(page: Page, url: str, retry_seconds: float = 60) -> Page:

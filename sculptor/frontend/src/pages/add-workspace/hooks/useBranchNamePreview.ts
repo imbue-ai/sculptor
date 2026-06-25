@@ -43,12 +43,23 @@ export function useBranchNamePreview({
   const isManuallyEdited = override !== null;
   const displayedValue = override ?? preview;
 
+  // The preview only fetches in auto mode for a non-in-place strategy with a
+  // project; otherwise there is nothing in flight, so loading is forced false
+  // during render rather than reset via a synchronous setState in the effect.
+  const shouldFetchPreview = mode !== Strategy.IN_PLACE && Boolean(projectId) && !isManuallyEdited;
+  if (!shouldFetchPreview && isLoading) {
+    setIsLoading(false);
+  }
+
   useEffect(() => {
-    if (mode === Strategy.IN_PLACE || !projectId || isManuallyEdited) {
-      setIsLoading(false);
+    if (!shouldFetchPreview || projectId === null) {
       return;
     }
     const myId = ++previewRequestId.current;
+    // Show the spinner immediately when a debounced fetch is queued; the async
+    // finally clears it. This is the start signal of external async work, not a
+    // value derivable during render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(true);
     const timer = window.setTimeout(() => {
       void (async (): Promise<void> => {
@@ -71,16 +82,19 @@ export function useBranchNamePreview({
     return (): void => {
       window.clearTimeout(timer);
     };
-  }, [projectId, workspaceName, mode, isManuallyEdited]);
+  }, [projectId, workspaceName, mode, shouldFetchPreview]);
+
+  // A collision check only runs for a non-in-place strategy with a project and a
+  // non-empty branch name; otherwise there is no result to report, so collision is
+  // forced "unknown" during render rather than reset by a synchronous setState.
+  const trimmedBranchName = displayedValue.trim();
+  const shouldCheckCollision = mode !== Strategy.IN_PLACE && Boolean(projectId) && trimmedBranchName !== "";
+  if (!shouldCheckCollision && collision !== "unknown") {
+    setCollision("unknown");
+  }
 
   useEffect(() => {
-    if (mode === Strategy.IN_PLACE || !projectId) {
-      setCollision("unknown");
-      return;
-    }
-    const trimmed = displayedValue.trim();
-    if (!trimmed) {
-      setCollision("unknown");
+    if (!shouldCheckCollision || projectId === null) {
       return;
     }
     const myId = ++collisionRequestId.current;
@@ -89,7 +103,7 @@ export function useBranchNamePreview({
         try {
           const result = await branchExists({
             path: { project_id: projectId },
-            query: { name: trimmed },
+            query: { name: trimmedBranchName },
           });
           if (myId === collisionRequestId.current && result.data) {
             setCollision(result.data.exists ? "exists" : "available");
@@ -104,7 +118,7 @@ export function useBranchNamePreview({
     return (): void => {
       window.clearTimeout(timer);
     };
-  }, [projectId, displayedValue, mode]);
+  }, [projectId, trimmedBranchName, shouldCheckCollision]);
 
   return { preview, displayedValue, isLoading, collision };
 }

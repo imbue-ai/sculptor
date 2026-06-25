@@ -54,15 +54,19 @@ export const usePerWorkspacePanelLayout = (workspaceId: string): void => {
   const prevWorkspaceIdRef = useRef<string | null>(null);
   const isInitialRef = useRef(true);
 
-  // Keep refs in sync so the workspace-switch effect always saves current values
+  // Keep refs in sync so the workspace-switch effect always saves current values.
+  // Written in an effect (not during render) so reads in the switch effect see
+  // the committed values without touching refs in the render body.
   const zoneVisibilityRef = useRef(zoneVisibility);
-  zoneVisibilityRef.current = zoneVisibility;
   const zoneSizesRef = useRef(zoneSizes);
-  zoneSizesRef.current = zoneSizes;
   const isDiffPanelOpenRef = useRef(isDiffPanelOpen);
-  isDiffPanelOpenRef.current = isDiffPanelOpen;
   const diffPanelSplitRatioRef = useRef(diffPanelSplitRatio);
-  diffPanelSplitRatioRef.current = diffPanelSplitRatio;
+  useEffect(() => {
+    zoneVisibilityRef.current = zoneVisibility;
+    zoneSizesRef.current = zoneSizes;
+    isDiffPanelOpenRef.current = isDiffPanelOpen;
+    diffPanelSplitRatioRef.current = diffPanelSplitRatio;
+  });
 
   // Always track the active workspace ID
   useEffect(() => {

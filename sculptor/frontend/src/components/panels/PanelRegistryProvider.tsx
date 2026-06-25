@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 
 import {
   activePanelPerZoneAtom,
+  panelEnabledAtom,
   panelRegistryAtom,
   zoneAssignmentsAtom,
   zoneOrderAtom,
@@ -32,6 +33,7 @@ export const PanelRegistryProvider = ({
 
   const zoneAssignments = useAtomValue(zoneAssignmentsAtom);
   const zoneOrder = useAtomValue(zoneOrderAtom);
+  const panelEnabled = useAtomValue(panelEnabledAtom);
   const setZoneAssignments = useSetAtom(zoneAssignmentsAtom);
   const setActivePanelPerZone = useSetAtom(activePanelPerZoneAtom);
   const setZoneVisibility = useSetAtom(zoneVisibilityAtom);
@@ -95,11 +97,21 @@ export const PanelRegistryProvider = ({
           newOrder[zone as ZoneId] = order.filter((id) => !staleSet.has(id));
         }
       }
+
+      // The fallback must skip disabled panels: a panel can sit in a zone's
+      // order while toggled off (e.g. the Browser panel, defaultEnabled:false).
+      // Picking it would render a panel the user never enabled, so fall back to
+      // the first *enabled* sibling instead (matching panelsInZoneAtom).
+      const isEnabled = (panelId: PanelId): boolean => {
+        const def = panels.find((p) => p.id === panelId);
+        if (def?.isBuiltin ?? false) return true;
+        return panelEnabled[panelId] ?? def?.defaultEnabled ?? true;
+      };
       setActivePanelPerZone((prev) => {
         const cleaned = { ...prev };
         for (const [zone, panelId] of Object.entries(cleaned)) {
           if (panelId && staleSet.has(panelId)) {
-            const remaining = (newOrder[zone as ZoneId] ?? []).filter((id) => !staleSet.has(id));
+            const remaining = (newOrder[zone as ZoneId] ?? []).filter((id) => !staleSet.has(id) && isEnabled(id));
             cleaned[zone as ZoneId] = remaining[0] as PanelId | undefined;
           }
         }
@@ -127,7 +139,16 @@ export const PanelRegistryProvider = ({
 
     setZoneAssignments(newAssignments);
     setZoneOrder(newOrder);
-  }, [defaultLayout, panels, zoneAssignments, zoneOrder, setZoneAssignments, setActivePanelPerZone, setZoneOrder]);
+  }, [
+    defaultLayout,
+    panels,
+    zoneAssignments,
+    zoneOrder,
+    panelEnabled,
+    setZoneAssignments,
+    setActivePanelPerZone,
+    setZoneOrder,
+  ]);
 
   return <>{children}</>;
 };

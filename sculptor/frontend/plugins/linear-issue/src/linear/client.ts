@@ -121,17 +121,26 @@ export const fetchIssueByTicket = async (inputs: {
 };
 
 /**
- * The workspace's issue. Asks Linear which issue is linked to this VCS branch
- * (authoritative — Linear's own link), falling back to parsing an identifier
- * out of the branch name when Linear has no link yet.
+ * The workspace's issue, resolved through three tiers, cheapest/most
+ * authoritative first:
+ *
+ *  1. `issueVcsBranchSearch` — Linear's own branch→issue link.
+ *  2. an identifier parsed out of the branch name (e.g. `scu-1234`).
+ *  3. the workspace's PR URL via `attachmentsForURL` — Sculptor-generated branch
+ *     names carry no issue identifier and no Linear VCS link, but the workspace's
+ *     PR does (Linear links it from the `[SCU-####]` PR title), and Linear
+ *     resolves a PR URL to its issue authoritatively.
+ *
+ * Each tier is tried only when the previous one comes up empty.
  */
 export const fetchPrimaryIssue = async (inputs: {
   apiKey: string;
   branch: string;
   ticketFallback: Ticket | null;
+  pullRequestUrl: string | null;
   signal: AbortSignal;
 }): Promise<LinearIssue | null> => {
-  const { apiKey, branch, ticketFallback, signal } = inputs;
+  const { apiKey, branch, ticketFallback, pullRequestUrl, signal } = inputs;
   const data = await linearRequest<{ issueVcsBranchSearch: RawIssue | null }>({
     apiKey,
     query: `query ($branch: String!) { issueVcsBranchSearch(branchName: $branch) { ${ISSUE_FIELDS} } }`,
@@ -139,7 +148,14 @@ export const fetchPrimaryIssue = async (inputs: {
     signal,
   });
   if (data.issueVcsBranchSearch) return normalizeIssue(data.issueVcsBranchSearch);
-  if (ticketFallback) return fetchIssueByTicket({ apiKey, ticket: ticketFallback, signal });
+  if (ticketFallback) {
+    const byTicket = await fetchIssueByTicket({ apiKey, ticket: ticketFallback, signal });
+    if (byTicket) return byTicket;
+  }
+  if (pullRequestUrl) {
+    const linked = await fetchIssuesForUrl({ apiKey, url: pullRequestUrl, signal });
+    return linked[0] ?? null;
+  }
   return null;
 };
 

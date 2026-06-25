@@ -24,11 +24,9 @@ export const TextAreaSettingRow = ({
   textAreaTestId,
   disabled = false,
 }: TextAreaSettingRowProps): ReactElement => {
+  // Local draft of the textarea, resynced during render whenever the committed
+  // value prop changes (e.g. a save elsewhere updates the underlying setting).
   const [localValue, setLocalValue] = useState(value);
-
-  // Re-sync the buffered edit when the saved value changes externally. Adjusting
-  // state during render (instead of in an effect) avoids the extra post-commit
-  // render cycle that would briefly show the stale value.
   const [syncedValue, setSyncedValue] = useState(value);
   if (syncedValue !== value) {
     setSyncedValue(value);

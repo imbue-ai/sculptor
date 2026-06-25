@@ -2,7 +2,7 @@ from contextlib import contextmanager
 from typing import Any
 from typing import Callable
 from typing import Generator
-from typing import Iterator
+from typing import NoReturn
 
 import pytest
 from loguru import logger
@@ -16,7 +16,7 @@ class IncorrectErrorsLoggedDuringTesting(Exception):
 
 
 @contextmanager
-def check_logged_errors(check_func: Callable[[list[str]], None]) -> Iterator[None]:
+def check_logged_errors(check_func: Callable[[list[str]], None]) -> Generator[None, None, None]:
     """Context manager that monkey patches logger._log to accumulate error messages instead of logging them.
     Then it runs the check function on the accumulated errors."""
     # pyrefly: ignore [missing-attribute]
@@ -69,7 +69,7 @@ def at_least_check_maker(expected_errors_set: set[str]) -> Callable[[list[str]],
 
 
 @contextmanager
-def expect_at_least_logged_errors(expected_errors: set[str]) -> Iterator[None]:
+def expect_at_least_logged_errors(expected_errors: set[str]) -> Generator[None, None, None]:
     """Context manager that monkey patches logger._log to accumulate error messages instead of logging them.
     Checks that all expected errors are in the accumulated errors, in no particular order."""
     check_func = at_least_check_maker(expected_errors)
@@ -95,7 +95,7 @@ def exact_check_maker(expected_errors: list[str]) -> Callable[[list[str]], None]
 
 
 @contextmanager
-def expect_exact_logged_errors(expected_errors: list[str]) -> Iterator[None]:
+def expect_exact_logged_errors(expected_errors: list[str]) -> Generator[None, None, None]:
     """Context manager that monkey patches logger._log to accumulate error messages instead of logging them.
     Checks that all expected errors are in the accumulated errors, in the same order."""
     check_func = exact_check_maker(expected_errors)
@@ -103,10 +103,15 @@ def expect_exact_logged_errors(expected_errors: list[str]) -> Iterator[None]:
         yield
 
 
+def _raise_zero_division() -> NoReturn:
+    """Raise a ZeroDivisionError to exercise error-handling paths."""
+    raise ZeroDivisionError("division by zero")
+
+
 def test_log_exception() -> None:
     with expect_exact_logged_errors(["Test log_exception"]):
         try:
-            x = 1 / 0
+            _raise_zero_division()
         except Exception as e:
             log_exception(e, "Test log_exception")
             assert True
@@ -118,7 +123,7 @@ def test_log_exception_with_priority() -> None:
     # ensure_core_log_levels_configured auto-used in conftest
     with expect_exact_logged_errors(["Test log_exception"]):
         try:
-            x = 1 / 0
+            _raise_zero_division()
         except Exception as e:
             log_exception(e, "Test log_exception", priority=ExceptionPriority.LOW_PRIORITY)
             assert True

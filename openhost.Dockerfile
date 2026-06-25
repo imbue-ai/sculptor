@@ -16,15 +16,30 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # libnss-wrapper lets the entrypoint present a passwd/group entry for the
 # arbitrary runtime UID without making /etc/passwd writable (see entrypoint below).
+# build-essential supplies a C compiler/linker (cc): Python deps with native
+# extensions (e.g. typeid-python's Rust module) compile from sdist whenever no
+# prebuilt wheel matches the interpreter, and uv/maturin's on-demand Rust install
+# still needs a system C toolchain to link.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        git curl ca-certificates xz-utils libnss-wrapper && \
+        git curl ca-certificates xz-utils libnss-wrapper build-essential && \
     rm -rf /var/lib/apt/lists/*
 
 # Node.js 24 — for the frontend build and the API-client codegen. Matches the
 # version the rest of the repo pins (24.17.0 via nvm / .nvmrc).
 RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+# GitHub CLI (gh) — used by the Add Repository remote-clone flow and signed in
+# via the in-app auth flow. Installed from GitHub's official apt repo.
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        -o /usr/share/keyrings/githubcli-archive-keyring.gpg && \
+    chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        > /etc/apt/sources.list.d/github-cli.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends gh && \
     rm -rf /var/lib/apt/lists/*
 
 # pnpm via Corepack (ships with Node). The pinned version comes from the
@@ -81,6 +96,9 @@ ENV SCULPTOR_API_PORT=5050
 ENV SCULPTOR_FOLDER=/data/app_data/sculptor
 # Persist Claude Code's OAuth credentials (written by the in-app sign-in flow).
 ENV CLAUDE_CONFIG_DIR=/data/app_data/sculptor/claude
+# Persist the GitHub CLI's auth token (written by the in-app gh sign-in flow) so
+# it survives rebuilds / "update and reload" like the Claude credentials do.
+ENV GH_CONFIG_DIR=/data/app_data/sculptor/gh
 
 # A minimal git repo for Sculptor to open as a project on first run.
 WORKDIR /workspace
@@ -121,4 +139,4 @@ ENTRYPOINT ["/usr/local/bin/openhost-entrypoint.sh"]
 # The venv lives at the uv *workspace* root (/app/.venv), not /app/sculptor.
 # No --no-serve-static: the backend serves the web UI built above (resolved via
 # the 'sculptor' package's editable install at /app/sculptor/frontend/dist).
-CMD ["sh", "-c", "mkdir -p \"$SCULPTOR_FOLDER\" \"$CLAUDE_CONFIG_DIR\" && exec /app/.venv/bin/python -m sculptor.cli.main --no-open-browser /workspace"]
+CMD ["sh", "-c", "mkdir -p \"$SCULPTOR_FOLDER\" \"$CLAUDE_CONFIG_DIR\" \"$GH_CONFIG_DIR\" && exec /app/.venv/bin/python -m sculptor.cli.main --no-open-browser /workspace"]

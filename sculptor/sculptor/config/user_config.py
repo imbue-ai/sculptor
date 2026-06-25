@@ -49,8 +49,8 @@ class DependencyPaths(SerializableModel):
     user explicitly configures a value in Settings, it is persisted to the config
     file and takes precedence over the environment variable.
 
-    The ``git`` field is an optional override path; when ``None``, git is
-    resolved from the system PATH.
+    The ``git`` and ``gh`` fields are optional override paths; when ``None``,
+    the binary is resolved from the system PATH.
 
     The ``pi`` field is a unified mode + path value mirroring ``claude``:
       - ``"MANAGED"`` (default): Sculptor downloads and version-pins the pi CLI.
@@ -64,6 +64,7 @@ class DependencyPaths(SerializableModel):
     """
 
     git: str | None = None
+    gh: str | None = None
     claude: str = Field(default_factory=lambda: os.environ.get("SCULPTOR_CLAUDE_BINARY_DEFAULT_OVERRIDE", "MANAGED"))
     pi: str = "MANAGED"
 
@@ -131,25 +132,25 @@ BabysitterAgentChoice = Annotated[
 
 
 class CIBabysitterConfig(SerializableModel):
-    """Settings for the CI Babysitter — Sculptor watches open MRs and prompts an
+    """Settings for the CI Babysitter — Sculptor watches open PRs and prompts an
     agent to fix pipeline failures and merge conflicts. Experimental; off by default.
     """
 
     enabled: bool = Field(
         default=False,
-        description="Whether the CI Babysitter watches MRs and prompts an agent to fix pipeline failures and merge conflicts. Experimental; off by default.",
+        description="Whether the CI Babysitter watches PRs and prompts an agent to fix pipeline failures and merge conflicts. Experimental; off by default.",
     )
     retry_cap: int = Field(
         default=3,
-        description="After this many babysitter prompts for an MR without a passing pipeline, no further prompts are sent until the pipeline next passes.",
+        description="After this many babysitter prompts for a PR without a passing pipeline, no further prompts are sent until the pipeline next passes.",
     )
     pipeline_failed_prompt: str = Field(
-        default="Investigate the failing pipeline for this MR, identify the root cause, fix the code, commit, and push.",
-        description="Prompt sent to the CI Babysitter agent when an MR's pipeline transitions to failed.",
+        default="Investigate the failing pipeline for this PR, identify the root cause, fix the code, commit, and push.",
+        description="Prompt sent to the CI Babysitter agent when a PR's pipeline transitions to failed.",
     )
     merge_conflict_prompt: str = Field(
-        default="This MR has a merge conflict with its base branch. Fetch the latest, then rebase against the base branch, resolve all conflicts, and force-push the result.",
-        description="Prompt sent to the CI Babysitter agent when an MR develops a merge conflict with its base branch.",
+        default="This PR has a merge conflict with its base branch. Fetch the latest, then rebase against the base branch, resolve all conflicts, and force-push the result.",
+        description="Prompt sent to the CI Babysitter agent when a PR develops a merge conflict with its base branch.",
     )
     agent: BabysitterAgentChoice = Field(
         default_factory=BabysitterAgentMRU,
@@ -205,12 +206,12 @@ class UserConfig(SerializableModel):
         description="Custom action buttons configuration",
     )
     pr_creation_prompt: str = Field(
-        default="Push my changes to origin and create a pull request. Check whether the repo uses GitHub (gh) or GitLab (glab) and use the appropriate tool. Write a clear description summarizing the changes.",
+        default="Push my changes to origin and create a pull request using the GitHub CLI (gh). Write a clear description summarizing the changes.",
         description="Default prompt sent to the agent when Create PR is clicked",
     )
     pr_polling_enabled: bool = Field(
         default=True,
-        description="Whether to poll for PR/MR status at all. When disabled, the workspace banner shows the last cached status and stops issuing gh/glab calls.",
+        description="Whether to poll for PR status at all. When disabled, the workspace banner shows the last cached status and stops issuing gh calls.",
     )
     pr_poll_interval_seconds: int = Field(
         default=30,

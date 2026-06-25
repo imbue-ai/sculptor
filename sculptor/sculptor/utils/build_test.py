@@ -69,7 +69,7 @@ def test_get_sculpt_bin_dir_warns_loudly_when_target_missing(tmp_path: Path) -> 
     finally:
         logger.remove(handler_id)
 
-    assert any("sculpt" in str(message).lower() for message in warnings), (
+    assert any("sculpt" in message.lower() for message in warnings), (
         "must log a loud warning when the sculpt target is missing"
     )
 

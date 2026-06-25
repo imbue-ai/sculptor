@@ -20,7 +20,7 @@ def test_ci_babysitter_defaults() -> None:
     assert config.ci_babysitter.enabled is False
     assert config.ci_babysitter.retry_cap == 3
     assert config.ci_babysitter.pipeline_failed_prompt.startswith("Investigate the failing pipeline")
-    assert config.ci_babysitter.merge_conflict_prompt.startswith("This MR has a merge conflict")
+    assert config.ci_babysitter.merge_conflict_prompt.startswith("This PR has a merge conflict")
     assert UserConfigField["CI_BABYSITTER"].value == "ciBabysitter"
 
 

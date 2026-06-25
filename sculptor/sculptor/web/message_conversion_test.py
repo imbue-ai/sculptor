@@ -3716,6 +3716,104 @@ def test_background_task_notification_for_bash_does_not_synthesize_child() -> No
     assert [m for m in state.chat_messages if m.parent_tool_use_id == bash_tool_use_id] == []
 
 
+def test_background_bash_notification_in_later_batch_does_not_synthesize_child() -> None:
+    """A background Bash whose completion arrives in a LATER batch (after the
+    launching turn was finalized) must still be recognised as a Bash and skip
+    child synthesis — otherwise the bash block silently turns into a subagent
+    pill and vanishes once the turn is done.
+
+    Real Claude keeps its process alive while a ``run_in_background`` Bash is
+    pending, so the completion normally arrives in the same request. But if the
+    user STOPS the turn while the command runs, ``RequestStopped`` finalizes the
+    turn (flushing the Bash ToolUseBlock to history) and the detached command's
+    completion is delivered on a later invocation — a SEPARATE conversion batch
+    in which the parent Bash is no longer in ``in_progress`` nor in the
+    per-batch completed list, only in the cross-batch history. The notification
+    handler must find it there and NOT synthesize a child (which AlphaToolGroup
+    would treat as ``children.length > 0`` and render as a subagent pill).
+    """
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    user_message = ChatInputUserMessage(
+        text="Profile the backend",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+    bash_tool_use_id = "toolu-bg-bash-pyspy"
+
+    request_started = RequestStartedAgentMessage(request_id=user_message.message_id)
+    response_block = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=AssistantMessageID("assistant-bg-bash"),
+        message_id=AgentMessageID(),
+        content=(
+            ToolUseBlock(
+                id=ToolUseID(bash_tool_use_id),
+                name="Bash",
+                input={"command": "sudo py-spy record --pid 123", "description": "Profile", "run_in_background": True},
+            ),
+        ),
+    )
+    task_started = BackgroundTaskStartedAgentMessage(
+        background_task_id="bg-task-pyspy",
+        tool_use_id=bash_tool_use_id,
+        description="Profile",
+    )
+
+    # Batch 1: the turn launches the background Bash and the user Stops it. The
+    # RequestStopped finalizes the turn, flushing the Bash to history.
+    state = convert_agent_messages_to_task_update(
+        [
+            user_message,
+            request_started,
+            response_block,
+            task_started,
+            RequestStoppedAgentMessage(
+                request_id=user_message.message_id, error=_make_serialized_exception("stopped")
+            ),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+    assert state.in_progress_chat_message is None
+
+    # Batch 2 (later invocation): the detached command finished and its
+    # notification is delivered. The parent Bash is only in cross-batch history.
+    notification = BackgroundTaskNotificationAgentMessage(
+        background_task_id="bg-task-pyspy",
+        tool_use_id=bash_tool_use_id,
+        status="completed",
+        summary="Profile",
+    )
+    state = convert_agent_messages_to_task_update(
+        [notification],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+
+    # Assert against the cross-batch history (``completed_by_id``), which is what
+    # the frontend merges — the batch-2 ``state.chat_messages`` is only the
+    # incremental update and would not carry batch-1's Bash either way.
+    #
+    # No synthetic child attached to the Bash tool_use_id: the parent was found
+    # in history and recognised as a Bash, so synthesis was skipped. Without the
+    # cross-batch lookup, a child would be appended here and the frontend would
+    # render the Bash as a subagent pill instead of a bash block.
+    assert [m for m in completed_by_id.values() if m.parent_tool_use_id == bash_tool_use_id] == []
+    # The Bash ToolUseBlock itself is still present in history (still rendered).
+    all_tool_use_ids = {
+        block.id
+        for message in completed_by_id.values()
+        for block in message.content
+        if isinstance(block, ToolUseBlock)
+    }
+    assert bash_tool_use_id in all_tool_use_ids
+
+
 def test_background_task_started_is_noop() -> None:
     """BackgroundTaskStartedAgentMessage should not affect message state."""
     task_id = TaskID()

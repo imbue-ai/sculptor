@@ -588,8 +588,7 @@ return <div>{count}</div>;
 ```
 
 **Exceptions:**
-- Lazy initialization (`if (!ref.current) { ref.current = new Thing(); }`) during render is acceptable — it runs once and is effectively side-effect-free.
-- Syncing a ref with state or props (`ref.current = value`) during render to give event handlers or callbacks access to the latest value is the standard "latest ref" pattern. Do not wrap this in a `useEffect` — the effect runs after commit, creating a window where the ref is stale. The direct assignment is synchronous and always up-to-date.
+- Lazy initialization with a strict null check — `if (ref.current === null) { ref.current = createThing(); }` — is acceptable: it runs once and the value is consumed later in handlers/effects, not read back during render.
 
 ---
 

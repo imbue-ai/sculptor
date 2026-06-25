@@ -70,7 +70,7 @@ def environment(
     """
     code_dir, _ = initial_commit_repo
     # Create workspace directory for state/artifacts
-    workspace_dir = LOCAL_WORKSPACE_DIR / str(uuid4().hex)
+    workspace_dir = LOCAL_WORKSPACE_DIR / uuid4().hex
     workspace_dir.mkdir(parents=True, exist_ok=True)
 
     environment = LocalEnvironment.create(

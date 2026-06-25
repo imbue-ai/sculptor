@@ -86,7 +86,7 @@ def get_repo_url_from_folder(repo_path: Path) -> str:
         repo_url = f"https://{repo_url[4:]}"
     if "https://oauth2:" in repo_url:
         # strip the oauth2 credentials left over from an oauth2 clone,
-        # e.g. https://oauth2:{token}@gitlab.com/.../.git -> https://gitlab.com/.../.git
+        # e.g. https://oauth2:{token}@github.com/.../.git -> https://github.com/.../.git
         suffix = repo_url.split("@")[-1]
         repo_url = "https://" + suffix
     return repo_url

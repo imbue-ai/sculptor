@@ -53,7 +53,7 @@ export const SCULPTOR_QUERY_KEY_PREFIX = "sculptor";
  * `["sculptor", "workspace", workspaceId, …]`. Git-derived caches (diff, files,
  * commits, file content) are grouped one level deeper under `"git"` so the
  * diff-update cascade can invalidate just that subtree, leaving any future
- * non-git workspace queries (e.g. MR status) untouched.
+ * non-git workspace queries (e.g. PR status) untouched.
  *
  *   ["sculptor", "workspace", id]                 ← whole-workspace scope (close/delete)
  *   ["sculptor", "workspace", id, "git"]          ← git-derived scope (diffUpdatedAt cascade)

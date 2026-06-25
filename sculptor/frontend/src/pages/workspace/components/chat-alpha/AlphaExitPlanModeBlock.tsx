@@ -2,7 +2,7 @@ import { Badge } from "@radix-ui/themes";
 import { useSetAtom } from "jotai";
 import { ChevronRightIcon } from "lucide-react";
 import type { ReactElement } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 import type { ToolUseBlock } from "~/api";
 import { ElementIds } from "~/api";
@@ -27,15 +27,21 @@ export const AlphaExitPlanModeBlock = ({ toolBlock }: { toolBlock: ToolUseBlock 
   const isPending = pendingUserQuestion?.toolUseId === toolBlock.id;
   const matchingAnswers = submittedQuestionAnswers[toolBlock.id];
 
+  // Default the revision block to expanded the first time an answer arrives,
+  // while still letting the user toggle it afterward. Adjust during render
+  // (with a prev-value guard) rather than in an effect to avoid a stale
+  // collapsed frame before re-expanding.
+  const [prevMatchingAnswers, setPrevMatchingAnswers] = useState({ exists: Boolean(matchingAnswers) });
+  if (Boolean(matchingAnswers) !== prevMatchingAnswers.exists) {
+    setPrevMatchingAnswers({ exists: Boolean(matchingAnswers) });
+    if (matchingAnswers) setIsExpanded(true);
+  }
+
   // The plan file path now flows on the question payload (set by the backend
   // output processor when ExitPlanMode fires). Auto-open is event-driven via
   // openFileFromUiEventAtom; this lookup powers click-to-reopen across the
   // pending → answered → historical states.
   const planFilePath = pendingUserQuestion?.planFilePath ?? matchingAnswers?.questionData?.planFilePath;
-
-  useEffect(() => {
-    if (matchingAnswers) setIsExpanded(true);
-  }, [matchingAnswers]);
 
   const handleOpenPlanFile = useCallback((): void => {
     if (planFilePath) openFileViewTab({ workspaceId: workspaceID, filePath: planFilePath });

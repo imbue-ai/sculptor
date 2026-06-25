@@ -1,0 +1,140 @@
+// cmdk's <Command> root — own the column layout so the input + results
+// match the previous Flex direction="column" gap="2" wrapper.
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+// Mimics Radix Themes TextField.Root size="2" variant="surface" so the
+// input visually matches what we had before, while letting Command.Input
+// own the combobox ARIA + keyboard semantics.
+.inputWrapper {
+  align-items: center;
+  background-color: var(--color-surface);
+  border-radius: var(--radius-2);
+  box-shadow: inset 0 0 0 1px var(--gray-a7);
+  box-sizing: border-box;
+  display: flex;
+  gap: var(--space-2);
+  height: var(--space-6);
+  padding: 0 var(--space-3);
+  width: 100%;
+
+  &:focus-within {
+    // Single inset shadow follows border-radius cleanly — a layered
+    // inset+outset stack produced a sharp outer corner against the
+    // rounded inner edge.
+    box-shadow: inset 0 0 0 2px var(--focus-8);
+  }
+}
+
+.searchIcon {
+  color: var(--gray-a10);
+  flex-shrink: 0;
+}
+
+.input {
+  background: transparent;
+  border: 0;
+  color: var(--gray-12);
+  flex: 1 1 auto;
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-2);
+  line-height: var(--line-height-2);
+  min-width: 0;
+  outline: none;
+  padding: 0;
+
+  &::placeholder {
+    color: var(--gray-a10);
+  }
+}
+
+.spinnerSlot {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.results {
+  background-color: var(--gray-2);
+  border: 1px solid var(--gray-5);
+  border-radius: var(--radius-3);
+  // cmdk Command.List defaults
+  list-style: none;
+  margin: 0;
+  outline: none;
+  overflow: hidden;
+  padding: 0;
+}
+
+.row {
+  align-items: center;
+  border-bottom: 1px solid var(--gray-4);
+  cursor: pointer;
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  position: relative;
+
+  // Match the parent's rounded corners so the row's background and the
+  // data-selected inset ring follow the curve instead of poking into it.
+  &:first-child {
+    border-top-left-radius: var(--radius-3);
+    border-top-right-radius: var(--radius-3);
+  }
+
+  &:last-child {
+    border-bottom: none;
+    border-bottom-left-radius: var(--radius-3);
+    border-bottom-right-radius: var(--radius-3);
+  }
+
+  // Driven by our own selectedValue rather than cmdk's data-selected, so
+  // cmdk's auto-select-first-on-list-refresh doesn't light up the first row
+  // every time the user types. Inset ring overlays the existing borders
+  // without shifting layout, matching what a Radix Select would render.
+  &.rowSelected {
+    box-shadow: inset 0 0 0 2px var(--accent-9);
+  }
+}
+
+.rowInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  overflow: hidden;
+  // Radix Link picks an accent-tinted underline by default; force it to match
+  // the high-contrast text color so the hover underline reads as white.
+  text-decoration-color: currentColor;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lockIcon {
+  color: var(--gray-9);
+  flex-shrink: 0;
+
+  // Override the global .lucide { width/height: var(--font-size-3) } rule so
+  // the lock glyph stays compact next to the repo name.
+  &.lockIcon {
+    height: 12px;
+    width: 12px;
+  }
+}
+
+.dot {
+  flex-shrink: 0;
+}
+
+.date {
+  flex-shrink: 0;
+}
+
+.placeholder {
+  justify-content: center;
+  padding: var(--space-4);
+}

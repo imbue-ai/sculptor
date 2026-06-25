@@ -65,7 +65,7 @@ export type CommandRunArgs = {
  *   - **Sentence case** for `title`, `subtitle`, `placeholder`, and
  *     `disabledReason`. First word capitalized; subsequent words
  *     lowercase unless they are proper nouns (e.g. "Finder", "VS Code",
- *     "PR", "MR") or single-word value labels that read as labels in
+ *     "PR") or single-word value labels that read as labels in
  *     their own right (e.g. "Light", "Dark", "System" appearance modes).
  *   - **Title Case** is reserved for group `heading`s in `groups.ts`,
  *     which are categorical labels rather than commands.

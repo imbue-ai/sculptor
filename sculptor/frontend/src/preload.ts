@@ -20,7 +20,6 @@ import {
   GET_FILE_DATA_CHANNEL_NAME,
   GET_SESSION_TOKEN_CHANNEL_NAME,
   IS_CUSTOM_COMMAND_MODE_CHANNEL_NAME,
-  SAVE_FILE_CHANNEL_NAME,
   SELECT_PROJECT_DIRECTORY_CHANNEL_NAME,
   SET_CUSTOM_BACKEND_SETTINGS_CHANNEL_NAME,
   TEST_BROWSER_WEBVIEW_EXECUTE_CHANNEL_NAME,
@@ -66,9 +65,8 @@ contextBridge.exposeInMainWorld("sculptor", {
   removeBackendStatusListener: () => ipcRenderer.removeAllListeners(BACKEND_STATUS_CHANGE_CHANNEL_NAME),
   getSessionToken: () => ipcRenderer.invoke(GET_SESSION_TOKEN_CHANNEL_NAME),
   getBackendPort: () => ipcRenderer.invoke(BACKEND_PORT_CHANNEL_NAME),
-  // File storage operations
-  saveFile: (fileData: ArrayBuffer, filename: string): Promise<string> =>
-    ipcRenderer.invoke(SAVE_FILE_CHANNEL_NAME, fileData, filename),
+  // File storage: retained to read legacy desktop attachments (absolute paths
+  // saved before uploads moved to the backend). New uploads go over HTTP.
   getFileData: (filePath: string): Promise<string> => ipcRenderer.invoke(GET_FILE_DATA_CHANNEL_NAME, filePath),
   // Auto-update status (pull initial + push updates)
   getAutoUpdateStatus: () => ipcRenderer.invoke(GET_AUTO_UPDATE_STATUS_CHANNEL_NAME),

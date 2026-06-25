@@ -20,6 +20,7 @@ from typing import ParamSpec
 from typing import TypeVar
 
 import sqlalchemy
+import sqlalchemy.exc
 from filelock import BaseFileLock
 from filelock import Timeout
 from filelock import UnixFileLock

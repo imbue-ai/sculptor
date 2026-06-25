@@ -28,6 +28,7 @@ from sculptor.foundation.processes.local_process import RunningProcess
 from sculptor.foundation.processes.local_process import run_background
 from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.foundation.subprocess_utils import ProcessError
+from sculptor.foundation.subprocess_utils import ProcessTimeoutError
 from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.primitives.service import Service
@@ -37,6 +38,7 @@ from sculptor.services.managed_tools import ResolvedDistribution
 from sculptor.services.managed_tools import VersionRange
 from sculptor.services.managed_tools import get_managed_tool
 from sculptor.services.managed_tools import get_managed_tools
+from sculptor.services.pi_version import PI_PINNED_VERSION
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.utils.build import get_internal_folder
 from sculptor.web.data_types import AuthResult
@@ -63,11 +65,13 @@ class DependencyCheckResult(FrozenModel):
 
 
 # Pinned-single-version range — Sculptor refuses to talk to a pi outside this pin
-# so the RPC schema stays known.
+# so the RPC schema stays known. The version string is sourced from the
+# dependency-free ``pi_version`` module so ``fake_pi`` can report it without
+# importing this heavy module.
 PI_VERSION_RANGE = VersionRange(
-    min_version="0.78.0",
-    max_version="0.78.0",
-    recommended_version="0.78.0",
+    min_version=PI_PINNED_VERSION,
+    max_version=PI_PINNED_VERSION,
+    recommended_version=PI_PINNED_VERSION,
 )
 
 DEPENDENCIES_DIR_NAME = "dependencies"
@@ -119,11 +123,21 @@ def parse_pi_version(stdout: str) -> str | None:
     return match.group(1) if match else None
 
 
+def _parse_remote_cli_version(stdout: str) -> str | None:
+    """Extract a semver from the gh --version output.
+
+    Handles the ``gh version 2.65.0 (2024-...)`` shape with a generic semver match.
+    """
+    match = re.search(r"(\d+\.\d+\.\d+\S*)", stdout)
+    return match.group(1) if match else None
+
+
 def _parse_version_for_tool(tool: Dependency, stdout: str) -> str | None:
     """Dispatch to the per-tool version parser.
 
     CLAUDE/PI route through their ``ManagedTool`` seam (one shared semver parse); GIT
-    has no conformer and keeps its own ``git version`` parser.
+    has no conformer and keeps its own ``git version`` parser; GH is an unmanaged
+    remote-host CLI whose ``--version`` output we parse with a generic semver match.
     """
     managed_tool = get_managed_tool(tool)
     if managed_tool is not None:
@@ -131,6 +145,8 @@ def _parse_version_for_tool(tool: Dependency, stdout: str) -> str | None:
     match tool:
         case Dependency.GIT:
             return _parse_git_version(stdout)
+        case Dependency.GH:
+            return _parse_remote_cli_version(stdout)
         case Dependency():
             raise ValueError(f"Unhandled dependency: {tool}")
         case _ as unreachable:
@@ -199,6 +215,9 @@ def _version_from_dir_name(name: str) -> Version:
 
 # Regex for the sign-in URL the CLI prints to stdout/stderr.
 _AUTH_URL_RE = re.compile(r"(https://\S+)")
+# Regex for the device-flow one-time code `gh auth login --web` prints, e.g.
+# "! First copy your one-time code: ABCD-1234".
+_GH_DEVICE_CODE_RE = re.compile(r"one-time code:\s*(\S+)")
 # How long to wait for the CLI to emit its sign-in URL before giving up on start.
 _AUTH_URL_WAIT_SECONDS = 30.0
 # Overall cap on the spawned 'auth login' process (it idles waiting on stdin).
@@ -252,6 +271,34 @@ def _auth_error_text(process: RunningProcess, fallback: str = "Authentication fa
     return (process.read_stderr() or process.read_stdout() or fallback).strip()
 
 
+def _await_gh_device_code(process: RunningProcess) -> tuple[str | None, str | None]:
+    """Poll a running ``gh auth login --web`` process for its device-flow prompt.
+
+    ``gh`` prints a one-time ``user_code`` and a verification URL, then polls
+    GitHub until the user authorizes (so the process stays alive). Returns
+    ``(user_code, auth_url)`` once both appear, or ``(None, None)`` if the
+    process exits first or neither shows within ``_AUTH_URL_WAIT_SECONDS``.
+    """
+    deadline = time.monotonic() + _AUTH_URL_WAIT_SECONDS
+    while True:
+        output = process.read_stdout() + process.read_stderr()
+        code_match = _GH_DEVICE_CODE_RE.search(output)
+        url_match = _AUTH_URL_RE.search(output)
+        if code_match and url_match:
+            return code_match.group(1), url_match.group(1)
+        if process.is_finished():
+            output = process.read_stdout() + process.read_stderr()
+            code_match = _GH_DEVICE_CODE_RE.search(output)
+            url_match = _AUTH_URL_RE.search(output)
+            return (
+                code_match.group(1) if code_match else None,
+                url_match.group(1) if url_match else None,
+            )
+        if time.monotonic() >= deadline:
+            return None, None
+        time.sleep(0.2)
+
+
 class DependencyManagementService(Service):
     # Serializes the download+verify+stage operation. Held by the background
     # download thread for the entire duration of _download_verify_stage.
@@ -262,6 +309,11 @@ class DependencyManagementService(Service):
     # can be written to it. Only the brief reads and swaps of this field hold
     # _claude_auth_lock — never the blocking subprocess waits.
     _claude_auth_session: RunningProcess | None = PrivateAttr(default=None)
+    # The live `gh auth login --web` process: after start_auth_login(GH) it stays
+    # alive polling GitHub until the user authorizes the device code, then exits.
+    # Completion is observed via check_authenticated(GH); guarded by _gh_auth_lock.
+    _gh_auth_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
+    _gh_auth_session: RunningProcess | None = PrivateAttr(default=None)
     # Guards _install_progress, _installing, _install_error, and
     # _progress_notifier_thread.
     # Acquired briefly, never held during I/O.
@@ -434,8 +486,8 @@ class DependencyManagementService(Service):
                 return self._resolve_git_path()
             case Dependency.PI:
                 return self._resolve_pi_path()
-            case Dependency():
-                raise ValueError(f"Unhandled dependency: {tool}")
+            case Dependency.GH:
+                return self._resolve_gh_path()
             case _ as unreachable:
                 assert_never(unreachable)
 
@@ -444,6 +496,12 @@ class DependencyManagementService(Service):
         if config.dependency_paths.git:
             return config.dependency_paths.git
         return shutil.which("git")
+
+    def _resolve_gh_path(self) -> str | None:
+        config = get_user_config_instance()
+        if config.dependency_paths.gh:
+            return config.dependency_paths.gh
+        return shutil.which("gh")
 
     def _resolve_pi_path(self) -> str | None:
         config = get_user_config_instance()
@@ -476,8 +534,6 @@ class DependencyManagementService(Service):
                     logger.info("Invalid custom Claude binary path: {!r}, ignoring", custom_value)
                     return None
                 return shutil.which(custom_value)
-            case BinaryMode():
-                raise ValueError(f"Unhandled claude binary mode: {mode}")
             case _ as unreachable:
                 assert_never(unreachable)
 
@@ -553,20 +609,31 @@ class DependencyManagementService(Service):
     def check_authenticated(self, tool: Dependency) -> bool | None:
         """Check whether a dependency is authenticated.
 
-        Currently only Claude supports authentication checks. Returns None for
-        unsupported tools or when the tool is not installed.
+        Returns None for tools with no auth concept (git, pi — neither has an
+        ``auth status`` subcommand), when the tool is not installed, or when the
+        probe itself times out (so callers don't get a misleading
+        "unauthenticated" reading from a hung subprocess). For tools that do
+        support it (claude, gh) it runs ``<binary> auth status`` and returns
+        ``True`` on success, ``False`` on a non-zero exit.
         """
-        if tool != Dependency.CLAUDE:
+        if tool not in (Dependency.CLAUDE, Dependency.GH):
             return None
         binary = self.resolve_binary_path(tool)
         if binary is None:
             return None
+        # `<tool> auth status` may contact the host to validate the stored token
+        # (not just read the local credentials file), so keep the timeout tight:
+        # this runs from `_get_status` on every status snapshot, and a slow or
+        # unreachable host shouldn't stall a status read. A timed-out probe maps
+        # to None (unknown) below rather than a misleading "unauthenticated".
         try:
             self.concurrency_group.run_process_to_completion(
                 [binary, "auth", "status"],
-                timeout=10.0,
+                timeout=3.0,
             )
             return True
+        except ProcessTimeoutError:
+            return None
         except ProcessError:
             return False
 
@@ -582,8 +649,11 @@ class DependencyManagementService(Service):
         localhost-loopback login on its own and needs no pasted code; that case
         returns ``success=True`` with ``needs_code=False``.
 
-        Currently only Claude supports authentication. Other tools return an error.
+        ``gh`` uses a browser device flow instead (see :meth:`_start_gh_auth_login`).
+        Other tools do not support authentication and return an error.
         """
+        if tool == Dependency.GH:
+            return self._start_gh_auth_login()
         if tool != Dependency.CLAUDE:
             return AuthStartResult(error=f"Authentication not supported for {tool.value}")
         binary = self.resolve_binary_path(tool)
@@ -686,6 +756,62 @@ class DependencyManagementService(Service):
         if process is None or process is self._claude_auth_session:
             self._claude_auth_session = None
 
+    def _start_gh_auth_login(self) -> AuthStartResult:
+        """Begin the GitHub CLI browser device-flow sign-in.
+
+        Spawns ``gh auth login --web`` (which over a non-interactive pipe prints a
+        one-time ``user_code`` and a verification URL, then polls GitHub until the
+        user authorizes). The process is kept alive so its polling can complete;
+        the frontend watches ``gh``'s auth status for completion rather than
+        pasting a code back. ``--hostname``/``--git-protocol`` are pinned so ``gh``
+        never blocks on an interactive prompt.
+        """
+        binary = self.resolve_binary_path(Dependency.GH)
+        if binary is None:
+            return AuthStartResult(error="gh CLI not installed")
+
+        with self._gh_auth_lock:
+            self._terminate_gh_auth_session_locked()
+            # Spawn through the concurrency group (like _spawn_auth_process) so the
+            # group owns and reaps the process. `gh auth login --web` deliberately
+            # stays alive polling GitHub while the user authorizes the device code,
+            # so a shutdown mid-sign-in would otherwise orphan it.
+            process = self.concurrency_group.start_background_process_from_factory(
+                lambda: run_background(
+                    [binary, "auth", "login", "--hostname", "github.com", "--git-protocol", "https", "--web"],
+                    open_stdin=True,
+                    timeout=_AUTH_PROCESS_TIMEOUT_SECONDS,
+                    isolate_process_group=True,
+                )
+            )
+            # Non-interactive gh skips the "Press Enter" prompt, but nudge stdin so
+            # any default prompt is answered rather than blocking the poll loop.
+            try:
+                process.write_stdin("\n")
+            except Exception as e:
+                logger.debug("Could not nudge gh auth stdin: {}", e)
+
+            user_code, auth_url = _await_gh_device_code(process)
+            if user_code is None or auth_url is None:
+                error = (process.read_stderr() or process.read_stdout() or "Could not start GitHub sign-in").strip()
+                self._terminate_gh_auth_session_locked(process)
+                return AuthStartResult(error=error)
+
+            self._gh_auth_session = process
+            return AuthStartResult(auth_url=auth_url, user_code=user_code, needs_code=False)
+
+    def _terminate_gh_auth_session_locked(self, process: RunningProcess | None = None) -> None:
+        """Tear down the gh device-flow session and clear the stored handle.
+
+        Must be called while holding ``_gh_auth_lock``. Mirrors
+        :meth:`_terminate_auth_session_locked` for the ``gh`` poll process.
+        """
+        session = process if process is not None else self._gh_auth_session
+        if session is not None:
+            _terminate_process(session)
+        if process is None or process is self._gh_auth_session:
+            self._gh_auth_session = None
+
     def _get_status(self) -> DependenciesStatus:
         """Compute the current status of all dependencies (no side effects)."""
         git_check = self.check_installed(Dependency.GIT)
@@ -754,10 +880,29 @@ class DependencyManagementService(Service):
             install_error=error_by_tool.get(Dependency.PI),
         )
 
+        gh_info = self._get_remote_cli_info(Dependency.GH)
+
         return DependenciesStatus(
             git=git_info,
             claude=claude_info,
             pi=pi_info,
+            gh=gh_info,
+        )
+
+    def _get_remote_cli_info(self, tool: Dependency) -> DependencyInfo:
+        """Build a DependencyInfo for the gh remote-host CLI.
+
+        This has no managed binary, no version range, and no per-tool mode;
+        we just surface install + auth state so the frontend can decide
+        whether the Add Repository → GitHub flow is usable.
+        """
+        check = self.check_installed(tool)
+        is_authenticated = self.check_authenticated(tool) if check.installed else None
+        return DependencyInfo(
+            installed=check.installed,
+            path=check.path,
+            version=check.version,
+            is_authenticated=is_authenticated,
         )
 
     def get_status(self) -> DependenciesStatus:

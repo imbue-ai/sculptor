@@ -193,11 +193,16 @@ export const AlphaToolPillRow = ({
   // the rect closure adapts: anchor on the active row in expanded mode,
   // anchor on the row container in default mode.
   const openPillIdRef = useRef(openPillId);
-  openPillIdRef.current = openPillId;
   const isExpandedRef = useRef(isExpanded);
-  isExpandedRef.current = isExpanded;
   const pillDataListRef = useRef(pillDataList);
-  pillDataListRef.current = pillDataList;
+  // Mirror the latest values into refs so the virtualRef measurable callback
+  // and per-pill click handlers (both invoked outside render) read current
+  // state without re-subscribing.
+  useEffect(() => {
+    openPillIdRef.current = openPillId;
+    isExpandedRef.current = isExpanded;
+    pillDataListRef.current = pillDataList;
+  });
 
   const anchorMeasurableRef = useRef<Measurable>({
     getBoundingClientRect: (): DOMRect => {

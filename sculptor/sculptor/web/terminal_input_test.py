@@ -161,7 +161,7 @@ def test_single_line_prompt_is_bracketed_paste_then_separate_submit(
     _seed_run_start(services, task.object_id)
     _seed_signal(services, task.object_id, TerminalStatusSignal.IDLE)
 
-    prompt = "Investigate the failing pipeline for this MR, identify the root cause, fix the code, commit, and push."
+    prompt = "Investigate the failing pipeline for this PR, identify the root cause, fix the code, commit, and push."
     with _registered_manager(task.object_id, tmp_path) as manager:
         response = _post_input(client, task, {"text": prompt})
         assert response.status_code == 204, response.text

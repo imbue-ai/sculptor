@@ -123,8 +123,15 @@ export function useAgentStatus(props: UseAgentStatusProps): AgentStatusResult {
   const rawState = deriveRawState(props);
 
   const [displayedState, setDisplayedState] = useState<AgentState>(rawState);
-  const lastChangeTimeRef = useRef<number>(Date.now());
+  const lastChangeTimeRef = useRef<number>(0);
   const pendingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Start the debounce clock at mount. Kept out of useRef's initializer so
+  // render stays free of impure calls (Date.now()); the ref is only read from
+  // effects, which run after this one sets it.
+  useEffect(() => {
+    lastChangeTimeRef.current = Date.now();
+  }, []);
 
   const applyState = useCallback((state: AgentState) => {
     setDisplayedState(state);
@@ -152,11 +159,15 @@ export function useAgentStatus(props: UseAgentStatusProps): AgentStatusResult {
         clearTimeout(pendingTimeoutRef.current);
         pendingTimeoutRef.current = null;
       }
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       applyState(rawState);
       return;
     }
 
-    // When stopping transitions to idle, show "Stopped" briefly first
+    // When stopping transitions to idle, show "Stopped" briefly first.
+    // Timer-driven state machine: this synchronous transition kicks off the
+    // 1500ms "Stopped" linger timer below. Deriving it during render would
+    // require reproducing the debounce timing impurely and risks the behavior.
     if (rawState === "idle" && displayedState === "stopping") {
       if (pendingTimeoutRef.current !== null) {
         clearTimeout(pendingTimeoutRef.current);

@@ -11,6 +11,7 @@ type ImbueNavigationFunctions = {
   navigateToHome: () => void;
   navigateToGlobalSettings: (section?: string) => void;
   navigateToRepoSetupCommand: (projectId: string) => void;
+  navigateToPanelSettings: (panelId: string) => void;
   navigateToComponentGallery: () => void;
   navigateToRoot: () => void;
 };
@@ -58,7 +59,13 @@ export const useImbueNavigate = (): ImbueNavigationFunctions => {
     ),
     navigateToRepoSetupCommand: useCallback(
       (projectId: string): void => {
-        navigate(`/settings?section=repositories&focusRepo=${encodeURIComponent(projectId)}`);
+        navigate(`/settings?section=REPOSITORIES&focusRepo=${encodeURIComponent(projectId)}`);
+      },
+      [navigate],
+    ),
+    navigateToPanelSettings: useCallback(
+      (panelId: string): void => {
+        navigate(`/settings?section=PANELS&panel=${encodeURIComponent(panelId)}`);
       },
       [navigate],
     ),
