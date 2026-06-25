@@ -29,11 +29,17 @@ describe("getAgentDotStatus", () => {
     expect(getAgentDotStatus(TaskStatus.READY, null, UPDATED_AT_LATER)).toBe("unread");
   });
 
-  it("reports the focused agent as read even when content is newer than the last read", () => {
-    // The user is actively viewing this agent, so its updates are seen by
-    // definition — it reads as "read".
+  it("reports the focused agent as read when content is newer than the last read", () => {
+    // Focused agent with a prior read timestamp: suppress the racy
+    // "updatedAt > lastReadAt" so the open agent doesn't flash unread while the
+    // debounced mark-read settles.
     expect(getAgentDotStatus(TaskStatus.READY, READ_AT, UPDATED_AT_LATER, true)).toBe("read");
-    expect(getAgentDotStatus(TaskStatus.READY, null, UPDATED_AT_LATER, true)).toBe("read");
+  });
+
+  it("honors an explicit mark-unread on the focused agent", () => {
+    // lastReadAt === null means the user marked it unread; that must win even
+    // while the agent is focused, so focus does not override it back to read.
+    expect(getAgentDotStatus(TaskStatus.READY, null, UPDATED_AT_LATER, true)).toBe("unread");
   });
 
   it("does not let focus override an in-flight or errored status", () => {
