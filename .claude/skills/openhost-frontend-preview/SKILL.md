@@ -34,9 +34,9 @@ does not apply — use normal `pnpm run dev` / `just frontend` there instead.
   band, served with `base=/proxy/<port>/`, dialing HMR back over
   `wss://...:443/proxy/<port>/`. Its `/api` + `/ws` calls are same-origin absolute,
   so they hit the ONE shared backend — there is no per-preview backend.
-- So this previews **frontend** changes. Full-stack per-workspace instances are
-  not supported on one origin (the session cookie collides) — see the repo's
-  cookie-scoping notes if you need that.
+- So this previews **frontend** changes. Full-stack per-workspace instances (each
+  with its own backend) are not supported on one origin: every backend would set
+  the same session cookie on the same origin, and they collide.
 
 ## Run a preview
 
