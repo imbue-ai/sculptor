@@ -111,8 +111,7 @@ def test_signal_server_404_exits_nonzero(runner: CliRunner) -> None:
 
 @respx.mock
 def test_signal_client_pins_explicit_timeout_above_httpx_default() -> None:
-    # httpx silently defaults to a 5s timeout; a momentarily slow local backend
-    # POST can exceed it and be dropped, so the client must pin a longer ceiling.
+    # 5s is httpx's silent default; the client must pin a longer explicit ceiling.
     _mock_session()
 
     client = get_authenticated_client(_BASE_URL)
@@ -145,8 +144,8 @@ def test_signal_session_id_retries_transient_5xx_until_persisted(
 def test_signal_session_id_retries_read_timeout_until_persisted(
     runner: CliRunner, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # A read timeout (the failure mode behind the old 5s default) is transient;
-    # the report must be retried rather than silently lost.
+    # A read timeout is transient backend slowness; the report must be retried
+    # rather than silently lost.
     monkeypatch.setattr(signal, "_RETRY_BACKOFF_SECONDS", 0.0)
     _mock_session()
     route = respx.post(f"{_BASE_URL}/api/v1/agents/{_AGENT_ID}/signal").mock(

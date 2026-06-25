@@ -27,12 +27,10 @@ signal_app = typer.Typer(help="Report terminal-agent integration signals to Scul
 _AGENT_OPTION = typer.Option(None, "--agent", help="Agent ID (or set SCULPT_AGENT_ID)")
 _JSON_OPTION = typer.Option(False, "--json", help="Output as JSON")
 
-# A registered terminal agent reports its session id from a hook; if that POST is
-# dropped, the agent relaunches instead of resuming after a backend restart. Retry
-# the report through transient backend trouble — connect/read timeouts, a refused
-# connection during a restart, or a 5xx — before giving up. A permanent client
-# error (4xx) is not retried. Other signals are momentary state pings where a
-# dropped report self-corrects on the next transition, so they post once.
+# A registered terminal agent reports its session id from a hook; a dropped report
+# means it relaunches instead of resuming after a backend restart, so the report is
+# worth retrying. Other signals are momentary state pings that self-correct on the
+# next transition, so they post once.
 _SESSION_ID_MAX_ATTEMPTS = 5
 _RETRY_BACKOFF_SECONDS = 0.5
 _RETRYABLE_EXCEPTIONS = (httpx.TimeoutException, httpx.ConnectError)

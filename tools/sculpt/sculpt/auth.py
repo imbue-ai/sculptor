@@ -13,9 +13,8 @@ from sculpt.session import get_session_token
 DEFAULT_PORT = 5050
 
 # httpx silently defaults to a 5s request timeout, which a momentarily slow local
-# backend can exceed (e.g. a large POST while the backend is busy), dropping the
-# request. Pin a longer, explicit ceiling so transient slowness isn't mistaken for
-# failure.
+# backend can exceed, dropping the request. Pin a longer, explicit ceiling so
+# transient slowness isn't mistaken for failure.
 _HTTP_TIMEOUT_SECONDS = 30.0
 
 
