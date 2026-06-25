@@ -103,6 +103,11 @@ export const useBrowserWebview = (
       const id = webview.getWebContentsId();
       setWebContentsId(id);
       publishStatus({ webContentsId: id });
+      // A freshly-attached guest has not fired dom-ready yet, so loadURL is not
+      // usable until it does. Clearing the flag keeps "isReadyRef true" meaning
+      // "the currently-attached guest has reached dom-ready" even when a guest
+      // is recreated and re-attaches.
+      isReadyRef.current = false;
     };
 
     const handleDomReady = (): void => {
