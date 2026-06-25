@@ -30,6 +30,7 @@ const createMockVirtualizer = (virtualItems: Array<VirtualItem>): Virtualizer<HT
   return {
     getVirtualItems: vi.fn(() => virtualItems),
     scrollToIndex: vi.fn(),
+    options: { paddingEnd: 0 },
   } as unknown as Virtualizer<HTMLDivElement, Element>;
 };
 

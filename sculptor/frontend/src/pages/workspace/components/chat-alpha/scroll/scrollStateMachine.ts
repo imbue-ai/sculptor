@@ -29,6 +29,14 @@ export type ScrollMachineState = {
   authority: ScrollAuthority;
   layout: LayoutPhase;
   isSuppressed: boolean;
+  /**
+   * The most recent sampled answer to "is the viewport within the at-bottom
+   * threshold of the content bottom", written by the scroll/resize observers.
+   * It is a captured observation of external geometry (like scrollTop itself),
+   * not a mode — `projectAtBottom` only consults it for the phases where being
+   * at the bottom is not already implied by the authority.
+   */
+  geometryAtBottom: boolean;
 };
 
 /**
@@ -46,11 +54,27 @@ const SUPPRESSIBLE_EVENTS: ReadonlySet<ScrollEvent["kind"]> = new Set(["newUserT
 export const isScrollSettled = (state: ScrollMachineState): boolean =>
   (state.authority.kind === "userControlled" || state.authority.kind === "following") && state.layout.kind === "stable";
 
+/**
+ * Whether the viewport is at the bottom, as the jump-to-bottom button and the
+ * pin-to-bottom logic see it. Derived, never stored as its own flag: `following`
+ * is at the bottom by definition (we are pinning there), `anchoringTurn` never is
+ * (a new turn sits at the top while its response fills in below), and every other
+ * phase defers to the last sampled geometry. Keeping the phase override here is
+ * what stops the button from ever disagreeing with the scroll mode.
+ */
+export const projectAtBottom = (state: ScrollMachineState): boolean => {
+  if (state.authority.kind === "following") return true;
+  if (state.authority.kind === "anchoringTurn") return false;
+  return state.geometryAtBottom;
+};
+
 export type ScrollStateMachine = {
   getState: () => ScrollMachineState;
   dispatch: (event: ScrollEvent) => void;
   dispatchLayout: (event: LayoutEvent) => void;
   setSuppressed: (suppressed: boolean) => void;
+  /** Record the latest sampled at-bottness (from the scroll/resize observers). */
+  setGeometryAtBottom: (atBottom: boolean) => void;
   subscribe: (listener: () => void) => () => void;
   /** Point the machine at the scroll container so it can reflect state to the DOM. */
   attach: (element: HTMLElement | null) => void;
@@ -61,6 +85,7 @@ export const createScrollStateMachine = (): ScrollStateMachine => {
     authority: initialAuthority,
     layout: initialLayout,
     isSuppressed: false,
+    geometryAtBottom: true,
   };
   let element: HTMLElement | null = null;
   const listeners = new Set<() => void>();
@@ -93,6 +118,10 @@ export const createScrollStateMachine = (): ScrollStateMachine => {
     setSuppressed: (isSuppressed): void => {
       if (isSuppressed === state.isSuppressed) return;
       commit({ ...state, isSuppressed });
+    },
+    setGeometryAtBottom: (geometryAtBottom): void => {
+      if (geometryAtBottom === state.geometryAtBottom) return;
+      commit({ ...state, geometryAtBottom });
     },
     subscribe: (listener): (() => void) => {
       listeners.add(listener);

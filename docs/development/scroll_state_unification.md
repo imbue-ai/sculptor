@@ -306,12 +306,37 @@ export const nextLayout = (
 ): LayoutPhase => (e.kind === "invalidated" ? { kind: "measuring", sinceTaskId: e.taskId } : { kind: "stable" });
 ```
 
-### 3. At-bottom-ness is a derived *observation*, not a state
+### 3. At-bottom-ness is a derived projection over the phase
 
-Whether the viewport is at the bottom drives only the jump-to-bottom button. It
-is a function of geometry (`scrollHeight - scrollTop - clientHeight <=
-THRESHOLD`), so it is **computed**, never stored as a mode. Storing it was the
-source of "the button says one thing while the scroll says another."
+Whether the viewport is at the bottom drives the jump-to-bottom button (and the
+active-dot stick-to-bottom). It is **derived, never an independent mode** — a pure
+projection of the authority phase over one sampled geometry bit
+(`projectAtBottom`):
+
+- `following` ⇒ at the bottom (we are pinning there by definition);
+- `anchoringTurn` ⇒ not at the bottom (a new turn sits at the top while its
+  response fills in below);
+- every other phase ⇒ the last sampled geometry.
+
+The phase override is the whole point: the button can no longer disagree with the
+scroll mode (an independent stored at-bottom flag was the source of "the button
+says one thing while the scroll says another"). The only thing stored is the raw
+geometry *sample* — `geometryAtBottom`, written by the scroll/resize observers —
+an observation of external reality like `scrollTop` itself, not a mode.
+
+The sample measures distance to the *content* bottom, not `scrollHeight`:
+
+```ts
+distanceFromContentBottom = scrollHeight - paddingEnd - scrollTop - clientHeight
+```
+
+The virtualizer inflates the container with a dynamic `paddingEnd` so a freshly
+anchored user message can reach the top of the viewport; that padding is empty
+space below the last message. Measuring against `scrollHeight` (which includes the
+padding) made the viewport read as "not at the bottom" while visibly at the bottom
+— most visibly, the jump-to-bottom button staying lit after a non-streaming jump.
+Subtracting `paddingEnd` is the single correction, shared by every at-bottom check
+as the one `distanceFromContentBottom` primitive.
 
 ### 4. Search suppression is a top-level guard
 
@@ -333,8 +358,11 @@ precisely to avoid re-rendering the virtualized list (and tearing down the
 `ResizeObserver`) on every such tick. So the machine lives in a **ref-backed
 external store** that:
 
-- holds `{ authority, layout, isSuppressed }`,
-- exposes `dispatch(event)`, `getState()`, and `subscribe(listener)`,
+- holds `{ authority, layout, isSuppressed, geometryAtBottom }` — the first three
+  are modes; `geometryAtBottom` is the raw at-bottom *sample* the observers write,
+  projected (never read directly) through `projectAtBottom`,
+- exposes `dispatch(event)`, `getState()`, `setGeometryAtBottom(atBottom)`, and
+  `subscribe(listener)`,
 - mirrors the authority kind onto the scroll container as `data-scroll-phase`
   and a derived `data-scroll-settled` on every transition,
 - is read by React components that genuinely must re-render (e.g. the
@@ -372,8 +400,11 @@ sleeps. `wait_for_alpha_scroll_idle` and friends are deleted.
 
 These were settled during design review:
 
-1. **At-bottom is derived geometry, kept orthogonal to the authority union.**
-   It never becomes a stored mode.
+1. **At-bottom is a derived projection over the phase, never an independent mode.**
+   `projectAtBottom` folds the authority phase (`following` ⇒ true,
+   `anchoringTurn` ⇒ false) over one stored geometry *sample*; only the raw sample
+   is stored, and it measures distance to the *content* bottom (paddingEnd
+   excluded) via the shared `distanceFromContentBottom` primitive.
 2. **Sub-pixel-exact settle is *not* required.** Observable authority quiescence
    is the contract. We do not patch or instrument TanStack Virtual's internal
    async scroll corrections; `restoreSettled` / `converged` are emitted from our
@@ -405,14 +436,20 @@ These were settled during design review:
    `restoring`; drive `data-scroll-phase`. Behavior identical.
 4. **Virtualizer settle:** replace `isSettlingRef` + `settleGeneration` with the
    `LayoutPhase` machine.
-5. **Auto-scroll:** replace `isEngagedRef` / `isFillingRef` / `isAtBottomRef`
-   with `following` / `anchoringTurn` + derived at-bottom; emit `userScrolled`.
-   (Largest step.)
+5. **Auto-scroll:** replace `isEngagedRef` / `isFillingRef` with `following` /
+   `anchoringTurn`; emit `userScrolled`. (Largest step.) At-bottom is moved onto
+   the machine but still stored as a flag here — step 8 finishes the job.
 6. **Prompt nav + suppression:** replace `isNavigatingRef` and the 500 ms freeze
    with the `navigating` phase; model search suppression as the top-level guard.
 7. **Tests + cleanup:** migrate integration tests to await `data-scroll-phase` /
    `data-scroll-settled`; delete `wait_for_alpha_scroll_idle` and every dead
    ref/flag. Full `just check` + scroll integration suite.
+8. **At-bottom fold:** introduce the `distanceFromContentBottom` primitive (one
+   distance, `paddingEnd` excluded) and make at-bottom the `projectAtBottom`
+   projection over a single `geometryAtBottom` sample — deleting the stored
+   `isAtBottom` state, its ref, and the scattered imperative writes step 5 left
+   behind. Fixes the residual jump-to-bottom flake at its source (the distance
+   primitive) and makes decision #1 actually true in the code.
 
 ## How to extend this later
 

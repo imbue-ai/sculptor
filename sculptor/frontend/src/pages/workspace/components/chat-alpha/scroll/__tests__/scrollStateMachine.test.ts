@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createScrollStateMachine,
   isScrollSettled,
+  projectAtBottom,
   SCROLL_PHASE_ATTR,
   SCROLL_SETTLED_ATTR,
 } from "../scrollStateMachine.ts";
@@ -14,6 +15,7 @@ describe("createScrollStateMachine", () => {
       authority: { kind: "userControlled" },
       layout: { kind: "stable" },
       isSuppressed: false,
+      geometryAtBottom: true,
     });
     expect(isScrollSettled(m.getState())).toBe(true);
   });
@@ -59,14 +61,20 @@ describe("createScrollStateMachine", () => {
   });
 
   it("treats following as settled but anchoringTurn/restoring/navigating as busy", () => {
-    expect(isScrollSettled({ authority: { kind: "following" }, layout: { kind: "stable" }, isSuppressed: false })).toBe(
-      true,
-    );
+    expect(
+      isScrollSettled({
+        authority: { kind: "following" },
+        layout: { kind: "stable" },
+        isSuppressed: false,
+        geometryAtBottom: true,
+      }),
+    ).toBe(true);
     expect(
       isScrollSettled({
         authority: { kind: "anchoringTurn", anchorIndex: 1 },
         layout: { kind: "stable" },
         isSuppressed: false,
+        geometryAtBottom: false,
       }),
     ).toBe(false);
     expect(
@@ -74,6 +82,7 @@ describe("createScrollStateMachine", () => {
         authority: { kind: "navigating", promptIndex: 0 },
         layout: { kind: "stable" },
         isSuppressed: false,
+        geometryAtBottom: false,
       }),
     ).toBe(false);
   });
@@ -89,6 +98,68 @@ describe("createScrollStateMachine", () => {
 
     m.dispatchLayout({ kind: "converged" });
     expect(el.getAttribute(SCROLL_SETTLED_ATTR)).toBe("true");
+  });
+
+  describe("projectAtBottom", () => {
+    it("is true while following regardless of the sampled geometry", () => {
+      expect(
+        projectAtBottom({
+          authority: { kind: "following" },
+          layout: { kind: "stable" },
+          isSuppressed: false,
+          geometryAtBottom: false,
+        }),
+      ).toBe(true);
+    });
+
+    it("is false while anchoring a turn regardless of the sampled geometry", () => {
+      expect(
+        projectAtBottom({
+          authority: { kind: "anchoringTurn", anchorIndex: 3 },
+          layout: { kind: "stable" },
+          isSuppressed: false,
+          geometryAtBottom: true,
+        }),
+      ).toBe(false);
+    });
+
+    it("defers to the sampled geometry in every other phase", () => {
+      for (const authority of [
+        { kind: "userControlled" } as const,
+        { kind: "restoring", taskId: "t" } as const,
+        { kind: "navigating", promptIndex: 0 } as const,
+      ]) {
+        expect(
+          projectAtBottom({ authority, layout: { kind: "stable" }, isSuppressed: false, geometryAtBottom: true }),
+        ).toBe(true);
+        expect(
+          projectAtBottom({ authority, layout: { kind: "stable" }, isSuppressed: false, geometryAtBottom: false }),
+        ).toBe(false);
+      }
+    });
+  });
+
+  describe("setGeometryAtBottom", () => {
+    it("notifies subscribers when the sampled geometry changes", () => {
+      const m = createScrollStateMachine();
+      const listener = vi.fn();
+      m.subscribe(listener);
+
+      m.setGeometryAtBottom(false);
+      expect(m.getState().geometryAtBottom).toBe(false);
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not notify when the sampled geometry is unchanged", () => {
+      const m = createScrollStateMachine();
+      const listener = vi.fn();
+      m.subscribe(listener);
+
+      // Starts true — re-asserting true is a no-op (matters for the per-frame
+      // resize sampling during `following`, which must not churn re-renders).
+      m.setGeometryAtBottom(true);
+      expect(listener).not.toHaveBeenCalled();
+    });
   });
 
   describe("search suppression (top-level guard)", () => {

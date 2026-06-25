@@ -5,6 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 import { alphaScrollPositionAtomFamily } from "~/common/state/atoms/alphaScroll.ts";
 
+import { distanceFromContentBottom } from "../scroll/geometry.ts";
 import type { ScrollStateMachine } from "../scroll/scrollStateMachine.ts";
 
 /** Cancel all pending rAFs tracked in the set and clear it. */
@@ -55,7 +56,10 @@ export const useAlphaScrollPersistence = (
         setScrollPosition({
           firstVisibleMessageId: message.id,
           pixelOffset: scrollTop - firstVisible.start,
-          distanceFromBottom: el.scrollHeight - scrollTop - el.clientHeight,
+          // Distance to the real content bottom (paddingEnd excluded), so a user
+          // pinned at the bottom while the virtualizer is padded still restores
+          // to the bottom rather than into the empty tail padding.
+          distanceFromBottom: distanceFromContentBottom(el, virtualizer),
         });
       });
     };
@@ -89,8 +93,11 @@ export const useAlphaScrollPersistence = (
       // flash at the message-top position before the offset is applied.
       el.scrollTop += scrollPosition.pixelOffset;
     } else {
-      // Fallback: use distance from bottom (synchronous for the same reason).
-      el.scrollTop = el.scrollHeight - el.clientHeight - scrollPosition.distanceFromBottom;
+      // Fallback: use distance from the content bottom (synchronous for the same
+      // reason). Inverse of distanceFromContentBottom — paddingEnd is excluded so
+      // this matches how the distance was recorded above.
+      const paddingEnd = virtualizer.options.paddingEnd ?? 0;
+      el.scrollTop = el.scrollHeight - paddingEnd - el.clientHeight - scrollPosition.distanceFromBottom;
     }
   }, [scrollContainerRef, virtualizer, filteredMessages, scrollPosition]);
 

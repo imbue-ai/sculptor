@@ -42,6 +42,9 @@ const setScrollPosition = (el: HTMLDivElement, scrollTop: number, scrollHeight: 
 const createMockVirtualizer = (): Virtualizer<HTMLDivElement, Element> => {
   return {
     scrollToIndex: vi.fn(),
+    // paddingEnd: 0 keeps distanceFromContentBottom == scrollHeight-based distance
+    // for the tests that drive geometry purely through the mock container.
+    options: { paddingEnd: 0 },
   } as unknown as Virtualizer<HTMLDivElement, Element>;
 };
 
