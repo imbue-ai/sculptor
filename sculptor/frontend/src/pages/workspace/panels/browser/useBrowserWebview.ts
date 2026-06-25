@@ -33,11 +33,18 @@ export const useBrowserWebview = (
   // slot. The ref holds the running value so partial updates can merge.
   const statusRef = useRef<BrowserViewStatus>({ ...INITIAL_STATUS, currentUrl: initialUrl });
 
-  // A navigation requested before the guest <webview> has fired did-attach.
-  // loadURL throws "WebView must be attached to the DOM and the dom-ready
-  // event emitted" until then, so navigate() stashes the URL here instead of
-  // losing it, and handleDidAttach replays it once the guest attaches.
+  // A navigation requested before the guest <webview> is ready to accept
+  // loadURL. navigate() stashes the URL here instead of losing it, and
+  // handleDomReady replays it once the guest fires dom-ready.
   const pendingNavigationUrlRef = useRef<string | null>(null);
+
+  // Whether the guest has fired dom-ready. <webview>.loadURL throws "WebView
+  // must be attached to the DOM and the dom-ready event emitted" until then, so
+  // did-attach (which yields the webContentsId) is necessary but not
+  // sufficient. navigate() gates on this so a URL requested in the brief
+  // did-attach -> dom-ready window is held and replayed rather than sent to
+  // loadURL, where it would reject and be silently swallowed.
+  const isReadyRef = useRef(false);
 
   // Latest-ref pattern: the event-listener effect runs once with [], so it
   // captures the originally-passed callbacks. Reading via ref keeps it
@@ -96,9 +103,21 @@ export const useBrowserWebview = (
       const id = webview.getWebContentsId();
       setWebContentsId(id);
       publishStatus({ webContentsId: id });
-      // Replay a navigation requested before the guest attached (loadURL
-      // would have thrown then). This also overrides the initial
-      // src="about:blank" load so the user's first typed URL wins.
+      // A freshly-attached guest has not fired dom-ready yet, so loadURL is not
+      // usable until it does. Clearing the flag keeps "isReadyRef true" meaning
+      // "the currently-attached guest has reached dom-ready" even when a guest
+      // is recreated and re-attaches.
+      isReadyRef.current = false;
+    };
+
+    const handleDomReady = (): void => {
+      // dom-ready is the first point at which <webview>.loadURL is usable
+      // (did-attach yields the webContentsId but the guest document is not yet
+      // ready). Mark the guest ready and replay a navigation requested in the
+      // did-attach -> dom-ready window, which would otherwise have been lost.
+      // Replaying here also overrides the initial src="about:blank" load so the
+      // user's first typed URL wins.
+      isReadyRef.current = true;
       const pendingUrl = pendingNavigationUrlRef.current;
       if (pendingUrl !== null) {
         pendingNavigationUrlRef.current = null;
@@ -112,6 +131,7 @@ export const useBrowserWebview = (
     webview.addEventListener("did-stop-loading", handleStopLoading);
     webview.addEventListener("did-fail-load", handleDidFailLoad);
     webview.addEventListener("did-attach", handleDidAttach);
+    webview.addEventListener("dom-ready", handleDomReady);
 
     return (): void => {
       webview.removeEventListener("did-navigate", handleDidNavigate);
@@ -120,6 +140,7 @@ export const useBrowserWebview = (
       webview.removeEventListener("did-stop-loading", handleStopLoading);
       webview.removeEventListener("did-fail-load", handleDidFailLoad);
       webview.removeEventListener("did-attach", handleDidAttach);
+      webview.removeEventListener("dom-ready", handleDomReady);
     };
   }, []);
 
@@ -155,12 +176,12 @@ export const useBrowserWebview = (
 
   const navigate = useCallback((url: string): void => {
     const webview = webviewRef.current;
-    // Until the guest has fired did-attach (webContentsId still null),
-    // loadURL throws and the navigation is silently lost. Stash the URL so
-    // handleDidAttach can replay it once the guest attaches — mirroring the
-    // agent-command gate in BrowserViewSlot. Last write wins, so the user's
-    // most recent typed URL is the one that loads.
-    if (!webview || statusRef.current.webContentsId === null) {
+    // Until the guest has fired dom-ready, loadURL throws ("WebView must be
+    // attached to the DOM and the dom-ready event emitted") and the navigation
+    // is silently lost. Stash the URL so handleDomReady can replay it once the
+    // guest is ready. Last write wins, so the user's most recent typed URL is
+    // the one that loads.
+    if (!webview || !isReadyRef.current) {
       pendingNavigationUrlRef.current = url;
       return;
     }
