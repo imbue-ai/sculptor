@@ -138,3 +138,16 @@ export function saveSettings(config: UserConfig, file: string = configPath()): v
   writeFileSync(tmp, stringifyToml(stripNullish(config) as Record<string, unknown>));
   renameSync(tmp, file);
 }
+
+// The server-side SculptorSettings (config/settings.py) surfaced to the frontend
+// on the stream's user_update.settings. The frontend reads TESTING.INTEGRATION_ENABLED
+// to gate testing-only affordances (e.g. the Fake Claude model in the switcher);
+// it is true exactly when the integration harness sets TESTING__INTEGRATION_ENABLED
+// (server_utils.get_testing_environment), mirroring the Python settings env binding.
+export function getServerSettings(): Record<string, unknown> {
+  return {
+    TESTING: {
+      INTEGRATION_ENABLED: process.env.TESTING__INTEGRATION_ENABLED === "true",
+    },
+  };
+}

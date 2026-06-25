@@ -99,8 +99,8 @@ describe("agent lifecycle routes", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().objectType).toBe("CodingAgentTaskView");
-    expect(res.json().taskId.startsWith("agt_")).toBe(true);
-    return res.json().taskId as string;
+    expect(res.json().id.startsWith("agt_")).toBe(true);
+    return res.json().id as string;
   }
 
   it("creates a waiting agent and lists it", async () => {
@@ -110,7 +110,7 @@ describe("agent lifecycle routes", () => {
       url: `/api/v1/workspaces/${workspaceId}/agents`,
     });
     expect(
-      (list.json() as { taskId: string }[]).map((a) => a.taskId),
+      (list.json() as { id: string }[]).map((a) => a.id),
     ).toContain(id);
   });
 
@@ -156,7 +156,7 @@ describe("agent lifecycle routes", () => {
       url: `/api/v1/workspaces/${workspaceId}/agents`,
     });
     expect(
-      (list.json() as { taskId: string }[]).map((a) => a.taskId),
+      (list.json() as { id: string }[]).map((a) => a.id),
     ).not.toContain(id);
   });
 

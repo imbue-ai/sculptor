@@ -85,7 +85,7 @@ describe("agent interaction routes", () => {
       url: `/api/v1/workspaces/${workspaceId}/agents`,
       payload: { agentType: "claude" },
     });
-    agentId = agent.json().taskId;
+    agentId = agent.json().id;
     // No-harness config so message-sending does not launch a real CLI.
     updateAgent(createOrm(getDatabase()), agentId, {
       agentConfig: { object_type: "TerminalAgentConfig" },

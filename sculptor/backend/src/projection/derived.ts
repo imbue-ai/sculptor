@@ -20,7 +20,15 @@ import type { AgentRow } from "~/db/schema/agent";
 import type { RawMessage } from "~/projection/message_log";
 import { objectType } from "~/projection/message_log";
 import { computeStatus } from "~/projection/status";
-import type { CodingAgentTaskView, TaskStatus } from "~/projection/view_types";
+import type {
+  CodingAgentTaskView,
+  HarnessCapabilities,
+  ModelOption,
+  TaskInterface,
+  TaskState,
+  TaskStatus,
+  WorkspacePeekAgentStatus,
+} from "~/projection/view_types";
 
 // The terminal-agent config discriminators (interfaces/agents/agent.py
 // `TERMINAL_AGENT_CONFIG_TYPES`).
@@ -270,6 +278,212 @@ function computeErrorDetail(
   return FRIENDLY_ERROR_NAMES[error.exception] ?? error.exception;
 }
 
+// --- Harness identity (capabilities / model switcher) ---------------------
+//
+// Ported from each harness's `capabilities()` (claude/pi/terminal/hello). The
+// view resolves these by the agent config's harness kind without instantiating a
+// harness (the registry's runtime deps aren't available in the projection).
+
+function harnessKindForView(
+  agentConfig: Record<string, unknown>,
+): "claude" | "pi" | "hello" | "terminal" {
+  switch (agentConfig["object_type"]) {
+    case "PiAgentConfig":
+      return "pi";
+    case "HelloAgentConfig":
+      return "hello";
+    case "TerminalAgentConfig":
+    case "RegisteredTerminalAgentConfig":
+      return "terminal";
+    default:
+      return "claude";
+  }
+}
+
+function capabilities(flags: Partial<HarnessCapabilities>): HarnessCapabilities {
+  return {
+    supports_chat_interface: false,
+    supports_interactive_backchannel: false,
+    supports_skills: false,
+    supports_sub_agents: false,
+    supports_image_input: false,
+    supports_fast_mode: false,
+    supports_context_reset: false,
+    supports_compaction: false,
+    supports_background_tasks: false,
+    supports_session_resume: false,
+    supports_tool_use_rendering: false,
+    supports_file_attachments: false,
+    supports_interruption: false,
+    supports_file_references: false,
+    supports_model_selection: false,
+    ...flags,
+  };
+}
+
+const ALL_CAPABILITIES_TRUE: HarnessCapabilities = capabilities({
+  supports_chat_interface: true,
+  supports_interactive_backchannel: true,
+  supports_skills: true,
+  supports_sub_agents: true,
+  supports_image_input: true,
+  supports_fast_mode: true,
+  supports_context_reset: true,
+  supports_compaction: true,
+  supports_background_tasks: true,
+  supports_session_resume: true,
+  supports_tool_use_rendering: true,
+  supports_file_attachments: true,
+  supports_interruption: true,
+  supports_file_references: true,
+  supports_model_selection: true,
+});
+
+function harnessCapabilities(
+  kind: "claude" | "pi" | "hello" | "terminal",
+): HarnessCapabilities {
+  switch (kind) {
+    case "claude":
+      return ALL_CAPABILITIES_TRUE;
+    case "pi":
+      // pi mirrors claude except fast mode (pi_agent/harness.py).
+      return capabilities({ ...ALL_CAPABILITIES_TRUE, supports_fast_mode: false });
+    case "hello":
+      return capabilities({ supports_chat_interface: true });
+    case "terminal":
+      // Terminal agents have no chat stream — uniformly false.
+      return capabilities({});
+  }
+}
+
+// The LLMModel wire values that support smooth (partial-message) streaming
+// (`CodingAgentTaskView.is_smooth_streaming_supported`). Every current Claude /
+// fake model qualifies.
+const SMOOTH_STREAMING_MODELS: ReadonlySet<string> = new Set([
+  "CLAUDE-4-OPUS",
+  "CLAUDE-4-OPUS-200K",
+  "CLAUDE-4-7-OPUS",
+  "CLAUDE-4-7-OPUS-200K",
+  "CLAUDE-4-6-OPUS",
+  "CLAUDE-4-6-OPUS-200K",
+  "CLAUDE-4-SONNET",
+  "CLAUDE-4-SONNET-200K",
+  "CLAUDE-4-HAIKU",
+  "CLAUDE-FABLE-5",
+  "FAKE_CLAUDE",
+  "FAKE_CLAUDE_2",
+]);
+
+// The model wire value the switcher reflects: the most recent user message that
+// carried an explicit selection, then the creation default, then CLAUDE-FABLE-5
+// (CodingAgentTaskView.model).
+const DEFAULT_MODEL = "CLAUDE-FABLE-5";
+
+function resolveModel(agent: AgentRow, messages: readonly RawMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message === undefined) {
+      continue;
+    }
+    if (objectType(message) === "ChatInputUserMessage") {
+      const modelName = (message as Record<string, unknown>)["model_name"];
+      if (typeof modelName === "string" && modelName !== "") {
+        return modelName;
+      }
+    }
+  }
+  return agent.defaultModel ?? DEFAULT_MODEL;
+}
+
+// `updated_at`: the latest user-visible content message time, else created_at
+// (derived.py `updated_at`). Content excludes user messages and request
+// lifecycle bookkeeping (ephemeral messages are not persisted into the log).
+const NON_CONTENT_MESSAGE_TYPES: ReadonlySet<string> = new Set([
+  "RequestStartedAgentMessage",
+  "PersistentRequestCompleteAgentMessage",
+  "RemoveQueuedMessageAgentMessage",
+  "RequestSuccessAgentMessage",
+  "RequestFailureAgentMessage",
+  "RequestStoppedAgentMessage",
+  "RequestSkippedAgentMessage",
+]);
+
+function isContentMessage(message: RawMessage): boolean {
+  const record = message as Record<string, unknown>;
+  if (record["source"] === "USER") {
+    return false;
+  }
+  return !NON_CONTENT_MESSAGE_TYPES.has(objectType(message) ?? "");
+}
+
+function resolveUpdatedAt(agent: AgentRow, messages: readonly RawMessage[]): string {
+  if (messages.length === 0) {
+    return agent.createdAt;
+  }
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message !== undefined && isContentMessage(message)) {
+      const time = (message as Record<string, unknown>)["approximate_creation_time"];
+      if (typeof time === "string") {
+        return time;
+      }
+    }
+  }
+  const first = messages[0] as Record<string, unknown> | undefined;
+  const firstTime = first?.["approximate_creation_time"];
+  return typeof firstTime === "string" ? firstTime : agent.createdAt;
+}
+
+function resolveAutoCompacting(messages: readonly RawMessage[]): boolean {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const type = objectType(messages[i] as RawMessage);
+    if (type === "AutoCompactingDoneAgentMessage") {
+      return false;
+    }
+    if (type === "AutoCompactingAgentMessage") {
+      return true;
+    }
+  }
+  return false;
+}
+
+function resolveArtifactNames(messages: readonly RawMessage[]): string[] {
+  const names = new Set<string>();
+  for (const message of messages) {
+    if (objectType(message) === "UpdatedArtifactAgentMessage") {
+      const artifact = (message as Record<string, unknown>)["artifact"];
+      const name = (artifact as Record<string, unknown> | undefined)?.["name"];
+      if (typeof name === "string") {
+        names.add(name);
+      }
+    }
+  }
+  return [...names];
+}
+
+// Maps the derived UI status to the workspace-tab peek status, with SUCCEEDED
+// run_state overriding to COMPLETED (derived.py `_compute_workspace_peek_status`).
+function workspacePeekStatus(
+  runState: TaskState,
+  status: TaskStatus,
+): WorkspacePeekAgentStatus {
+  if (runState === "SUCCEEDED") {
+    return "COMPLETED";
+  }
+  switch (status) {
+    case "BUILDING":
+    case "RUNNING":
+      return "WORKING";
+    case "WAITING":
+      return "WAITING";
+    case "ERROR":
+    case "REQUEST_ERROR":
+      return "ERROR";
+    case "READY":
+      return "IDLE";
+  }
+}
+
 // --- computeAgentView -----------------------------------------------------
 
 // Compute the derived per-agent view from the agent row + its raw message log.
@@ -280,12 +494,49 @@ export function computeAgentView(agent: AgentRow, messages: readonly RawMessage[
   // always "has state" (Python's `task_state is not None`).
   const status = computeStatus(agent.runState, isTerminal, messages, true);
   const artifact = getLastTaskListArtifact(messages);
+  const kind = harnessKindForView(agent.agentConfig);
+  const goal = computeGoal(messages);
+  const title = agent.title ?? null;
+  const model = resolveModel(agent, messages);
+  const agentConfig = agent.agentConfig;
+  const acceptsAutomatedPrompts =
+    agentConfig["object_type"] === "RegisteredTerminalAgentConfig" &&
+    agentConfig["accepts_automated_prompts"] === true;
+  const availableModels: ModelOption[] =
+    kind === "pi" && Array.isArray(agent.availableModels)
+      ? (agent.availableModels as ModelOption[])
+      : [];
+  const selectedModelId =
+    kind === "pi"
+      ? ((agent.currentModel as ModelOption | null)?.model_id ?? null)
+      : null;
+  const taskInterface: TaskInterface = isTerminal ? "TERMINAL" : "API";
 
   return {
     object_type: "CodingAgentTaskView",
+    id: agent.objectId,
+    project_id: agent.projectId,
+    workspace_id: agent.workspaceId ?? null,
+    created_at: agent.createdAt,
+    updated_at: resolveUpdatedAt(agent, messages),
+    task_status: agent.runState as TaskState,
+    title,
+    title_or_something_like_it: title ?? goal,
+    goal,
+    initial_prompt: goal,
+    interface: taskInterface,
+    model,
+    selected_model_id: selectedModelId,
+    available_models: availableModels,
+    harness_capabilities: harnessCapabilities(kind),
+    accepts_automated_prompts: acceptsAutomatedPrompts,
+    is_smooth_streaming_supported: SMOOTH_STREAMING_MODELS.has(model),
+    is_auto_compacting: resolveAutoCompacting(messages),
+    artifact_names: resolveArtifactNames(messages),
+    is_deleted: agent.isDeleted || agent.isDeleting,
+    last_read_at: agent.lastReadAt ?? null,
+    workspace_peek_status: workspacePeekStatus(agent.runState as TaskState, status),
     status,
-    title: agent.title ?? null,
-    goal: computeGoal(messages),
     current_activity: findLatestActivity(messages, false),
     last_activity: findLatestActivity(messages, true),
     task_completed: artifact === null ? 0 : artifact.tasks.filter((t) => t.status === "completed").length,

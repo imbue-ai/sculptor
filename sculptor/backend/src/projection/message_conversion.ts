@@ -538,9 +538,19 @@ export interface FoldState {
   pendingTurnMetrics: TurnMetrics | null;
   pendingUserQuestion: AskUserQuestionData | null;
   submittedQuestionToolUseIds: Set<string>;
+  // Answered questions keyed by tool_use_id, carrying the data the frontend
+  // needs to render the answered AUQ/plan tool block in history (the question +
+  // the user's selection). Mirrors TaskUpdate.submitted_question_answers.
+  submittedQuestionAnswers: Map<string, SubmittedQuestionAnswer>;
   pendingBackgroundTaskIds: Set<string>;
   recentPlanFilePath: string | null;
   streaming: StreamingState;
+}
+
+export interface SubmittedQuestionAnswer {
+  question_data: AskUserQuestionData;
+  answers: Record<string, string>;
+  tool_use_id: string;
 }
 
 export function createFoldState(): FoldState {
@@ -553,6 +563,7 @@ export function createFoldState(): FoldState {
     pendingTurnMetrics: null,
     pendingUserQuestion: null,
     submittedQuestionToolUseIds: new Set(),
+    submittedQuestionAnswers: new Map(),
     pendingBackgroundTaskIds: new Set(),
     recentPlanFilePath: null,
     streaming: newStreamingState(),
@@ -963,7 +974,13 @@ export function applyMessage(state: FoldState, message: RawMessage): FoldState {
     }
     state.pendingUserQuestion = null;
     state.currentRequestId = asString(message["message_id"]);
-    state.submittedQuestionToolUseIds.add(asString(message["tool_use_id"]));
+    const toolUseId = asString(message["tool_use_id"]);
+    state.submittedQuestionToolUseIds.add(toolUseId);
+    state.submittedQuestionAnswers.set(toolUseId, {
+      question_data: message["question_data"] as AskUserQuestionData,
+      answers: (message["answers"] as Record<string, string> | undefined) ?? {},
+      tool_use_id: toolUseId,
+    });
   }
   // Unhandled message types (artifacts, plan-mode, ephemeral lifecycle, etc.)
   // do not affect the ChatMessage list and are intentionally ignored.

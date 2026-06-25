@@ -8,6 +8,7 @@ import {
   SESSION_TOKEN_HEADER_NAME,
   WEBSOCKET_INVALID_SESSION_TOKEN_CLOSE_CODE,
 } from "~/auth/session_token";
+import { getServerSettings } from "~/config/settings";
 import { getOrm } from "~/db/orm";
 import { eventBus } from "~/events";
 import type { BusEvent } from "~/events/types";
@@ -65,13 +66,20 @@ export async function registerStreamWsRoutes(app: FastifyInstance): Promise<void
 
     const orm = getOrm();
     const context = buildScopeContext(orm, scope);
+    const serverSettings = getServerSettings();
 
     // Snapshot MUST precede any delta (REQ-NFR-001). Always build the full
-    // (ScopeAll) snapshot then narrow uniformly for this connection.
-    const snapshot = narrowToScope(buildSnapshot(orm, toSnapshotScope({ kind: "all" })), scope, context);
+    // (ScopeAll) snapshot then narrow uniformly for this connection. The server
+    // settings (SculptorSettings) ride on user_update.settings so the frontend
+    // can gate testing-only affordances (Fake Claude model, etc.).
+    const snapshot = narrowToScope(
+      buildSnapshot(orm, toSnapshotScope({ kind: "all" }), { serverSettings }),
+      scope,
+      context,
+    );
     socket.send(JSON.stringify(streamingUpdateToWire(snapshot)));
 
-    const builder = new DeltaBuilder({ orm });
+    const builder = new DeltaBuilder({ orm, serverSettings });
     const unsubscribe = eventBus.subscribe((event: BusEvent) => {
       // Keep the agent->workspace map fresh from agent-carrying events so newly
       // created agents narrow correctly without a re-query.

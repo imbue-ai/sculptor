@@ -4,6 +4,7 @@ import os
 import selectors
 import signal
 import subprocess
+import sys
 import time
 from collections.abc import Generator
 from collections.abc import Sequence
@@ -197,6 +198,15 @@ def get_testing_environment(
     environment["CLAUDECODE"] = None
     environment["CLAUDE_CODE_ENTRYPOINT"] = None
 
+    # Point the TypeScript backend at the Python `fake_claude.py` CLI so the
+    # FAKE_CLAUDE / FAKE_CLAUDE_2 test models launch it instead of the real
+    # `claude` binary (the Python backend computes this from its own source
+    # location via sys.executable; the bundled TS backend cannot, so we inject
+    # it). Harmless for the Python backend, which ignores these.
+    fake_claude_script = get_git_repo_root() / "sculptor" / "sculptor" / "agents" / "testing" / "fake_claude.py"
+    environment["SCULPTOR_FAKE_CLAUDE_SCRIPT"] = str(fake_claude_script)
+    environment["SCULPTOR_FAKE_CLAUDE_PYTHON"] = sys.executable
+
     if hide_keys:
         environment["ANTHROPIC_API_KEY"] = "sk-HIDDEN-FOR-TESTING"
         environment["OPENAI_API_KEY"] = "sk-HIDDEN-FOR-TESTING"
@@ -217,10 +227,43 @@ def get_testing_environment(
 SCULPTOR_BACKEND_OVERRIDE_ENV_FLAG = "SCULPTOR_BACKEND"
 TYPESCRIPT_BACKEND_OVERRIDE_VALUE = "ts"
 
+# The TS backend is built (and its native deps, e.g. node-pty, compiled) against
+# this pinned Node, matching `nvm_use` in the justfile and the packaged sidecar.
+# The bundle MUST run under the same Node ABI, otherwise native modules fail to
+# load (NODE_MODULE_VERSION mismatch). An explicit override wins for unusual setups.
+PINNED_NODE_VERSION = "24.17.0"
+SCULPTOR_TS_NODE_OVERRIDE_ENV_FLAG = "SCULPTOR_TS_NODE"
+
 
 def get_typescript_backend_bundle_path() -> Path:
     """Path to the esbuild bundle produced by `just build-backend-ts`."""
     return get_git_repo_root() / "sculptor" / "backend" / "dist" / "backend.cjs"
+
+
+def resolve_pinned_node_command() -> str:
+    """Resolve the Node binary that matches the pinned build ABI.
+
+    Mirrors the justfile's `nvm_use`: prefer an explicit override, then a `node`
+    already on PATH at the pinned version (CI provisions it directly), then the
+    nvm-installed pinned Node, falling back to bare `node`.
+    """
+    override = os.environ.get(SCULPTOR_TS_NODE_OVERRIDE_ENV_FLAG)
+    if override:
+        return override
+
+    try:
+        active_version = subprocess.run(["node", "-v"], capture_output=True, text=True, check=False).stdout.strip()
+    except (FileNotFoundError, OSError):
+        active_version = ""
+    if active_version == f"v{PINNED_NODE_VERSION}":
+        return "node"
+
+    nvm_dir = Path(os.environ.get("NVM_DIR", Path.home() / ".nvm"))
+    nvm_node = nvm_dir / "versions" / "node" / f"v{PINNED_NODE_VERSION}" / "bin" / "node"
+    if nvm_node.is_file():
+        return str(nvm_node)
+
+    return "node"
 
 
 def get_sculptor_command_backend_only(
@@ -236,7 +279,7 @@ def get_sculptor_command_backend_only(
             )
             raise RuntimeError(message)
         command = [
-            "node",
+            resolve_pinned_node_command(),
             str(bundle_path),
             "--no-open-browser",
             f"--port={port}",

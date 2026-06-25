@@ -92,6 +92,15 @@ export const MODEL_SHORTNAME_MAP: Readonly<Record<string, string>> = {
   "CLAUDE-FABLE-5": "claude-fable-5",
 };
 
+// The test-only model wire values that route the harness to the Python
+// `fake_claude.py` CLI instead of the real `claude` binary (LLMModel.FAKE_CLAUDE
+// / FAKE_CLAUDE_2; process_manager.py `_is_fake_claude`). Gated to integration
+// runs by TESTING__INTEGRATION_ENABLED, exactly as the Python backend gates them.
+export const FAKE_CLAUDE_MODEL_NAMES: ReadonlySet<string> = new Set([
+  "FAKE_CLAUDE",
+  "FAKE_CLAUDE_2",
+]);
+
 // Default reasoning effort (process_manager.py self._effort = "xhigh").
 export const DEFAULT_EFFORT = "xhigh";
 

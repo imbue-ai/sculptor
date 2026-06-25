@@ -45,11 +45,18 @@ export interface ClaudeCommandOptions {
   fastMode?: boolean;
   effort?: string | null;
   pluginDirs?: readonly string[];
+  // Test-only: when set, launch the Python `fake_claude.py` CLI (`<python>
+  // <script>`) instead of the real `claude` binary, mirroring
+  // process_manager_utils.get_claude_command's `is_fake_claude` branch.
+  fakeClaude?: { python: string; script: string } | null;
 }
 
 // Returns the full argv: `["bash", "-c", "<command string>"]`.
 export function getClaudeCommand(options: ClaudeCommandOptions): string[] {
-  const executable = `env IS_SANDBOX=1 ${shellQuote(options.binaryPath)}`;
+  const executable =
+    options.fakeClaude != null
+      ? `${shellQuote(options.fakeClaude.python)} ${shellQuote(options.fakeClaude.script)}`
+      : `env IS_SANDBOX=1 ${shellQuote(options.binaryPath)}`;
 
   // `exec` replaces bash with claude so SIGTERM/SIGKILL reach claude. The MCP
   // config registers Sculptor's in-process SDK server; --disallowed-tools

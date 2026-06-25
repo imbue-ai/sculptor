@@ -29,7 +29,7 @@ function toCamel(key: string): string {
 
 // Recursively camelize object KEYS. Safe ONLY for subtrees with no opaque
 // payloads and no data-keyed maps (the model-field-only structures below).
-function camelizeDeep(value: unknown): unknown {
+export function camelizeDeep(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(camelizeDeep);
   }

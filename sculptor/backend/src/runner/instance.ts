@@ -13,6 +13,7 @@ import {
   statePath,
   workingDirectory,
 } from "~/environment/paths";
+import { FAKE_CLAUDE_MODEL_NAMES } from "~/harness/claude/constants";
 import type { ClaudeHarnessEnvironment } from "~/harness/claude/harness";
 import type { PiHarnessEnvironment } from "~/harness/pi/harness";
 import { createHarnessResolver } from "~/harness/registry";
@@ -63,6 +64,24 @@ function strategyForAgent(agent: AgentRow): WorkspaceInitializationStrategy {
   return workspaceForAgent(agent)?.initializationStrategy ?? "IN_PLACE";
 }
 
+// Test-only: when a fake-claude model is selected and the integration harness
+// has injected the script + interpreter paths, launch `fake_claude.py` instead
+// of the real `claude` binary (mirrors process_manager's `_is_fake_claude`).
+// Returns null in production (env vars unset), so real models are unaffected.
+function resolveFakeClaudeCommand(
+  modelName: string | null,
+): { python: string; script: string } | null {
+  if (modelName === null || !FAKE_CLAUDE_MODEL_NAMES.has(modelName)) {
+    return null;
+  }
+  const script = process.env.SCULPTOR_FAKE_CLAUDE_SCRIPT;
+  const python = process.env.SCULPTOR_FAKE_CLAUDE_PYTHON;
+  if (script === undefined || python === undefined) {
+    return null;
+  }
+  return { python, script };
+}
+
 function claudeEnvironmentFor(agent: AgentRow): ClaudeHarnessEnvironment {
   const workspace = workspaceForAgent(agent);
   const root = workspace?.environmentId ?? "";
@@ -104,6 +123,7 @@ export function getAgentRunner(): AgentRunner {
     const harnessFor = createHarnessResolver({
       claude: {
         resolveBinaryPath: () => resolveBinaryPath("CLAUDE") ?? undefined,
+        resolveFakeClaudeCommand,
         environmentFor: claudeEnvironmentFor,
         initializationStrategyFor: strategyForAgent,
         enableEntityMentions: config.enable_entity_mentions,

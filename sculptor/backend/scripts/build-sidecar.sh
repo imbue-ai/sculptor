@@ -35,8 +35,8 @@ node_dist_slug() {
     macos-arm64) echo "darwin-arm64" ;;
     linux-x64) echo "linux-x64" ;;
     host)
-      local os arch
-      os="$(uname -s)"; arch="$(uname -m)"
+      local os
+      os="$(uname -s)"
       [[ "$os" == "Darwin" ]] && echo "darwin-arm64" || echo "linux-x64"
       ;;
     *) echo "unsupported target: $1" >&2; exit 1 ;;

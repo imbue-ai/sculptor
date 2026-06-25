@@ -33,10 +33,9 @@ export function foldStateToTaskUpdate(taskId: string, state: FoldState): TaskUpd
     streamed_assistant_message_ids: [...streaming.streamedAssistantMessageIds],
     streamed_segment_first_response_id: streaming.currentSegmentFirstResponseId,
     pending_user_question: state.pendingUserQuestion,
-    // Submitted answers are reconstructed by the interaction endpoint (Phase 6);
-    // the fold tracks only the answered tool_use ids, so the snapshot carries an
-    // empty map here.
-    submitted_question_answers: {},
+    // Answered AUQ/plan questions, keyed by tool_use_id, so the frontend renders
+    // the answered tool block in history (the question + the user's selection).
+    submitted_question_answers: Object.fromEntries(state.submittedQuestionAnswers),
     is_in_plan_mode: state.recentPlanFilePath !== null,
     pending_turn_metrics: state.pendingTurnMetrics,
     pending_background_task_ids: [...state.pendingBackgroundTaskIds],

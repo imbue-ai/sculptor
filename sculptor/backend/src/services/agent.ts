@@ -1,6 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
+import { z } from "zod";
+
 import { getOrm } from "~/db/orm";
 import {
   appendAgentMessage,
@@ -21,6 +23,8 @@ import { artifactsPath, workingDirectory } from "~/environment/paths";
 import { revParseHead } from "~/git";
 import { newAgentId, newAgentMessageId } from "~/ids";
 import { projectionCache } from "~/projection/cache";
+import { computeAgentView } from "~/projection/derived";
+import { camelizeDeep } from "~/projection/to_wire";
 import { getRepo } from "~/db/repositories";
 import { localPathFromRepo } from "~/services/project";
 import { getAgentRunner } from "~/runner/instance";
@@ -49,45 +53,101 @@ const AGENT_CONFIG_OBJECT_TYPE: Record<AgentTypeName, string> = {
   registered: "RegisteredTerminalAgentConfig",
 };
 
-export interface AgentViewWire {
-  objectType: "CodingAgentTaskView";
-  taskId: string;
-  workspaceId: string | null;
-  projectId: string;
-  status: string;
-  title: string | null;
-  goal: string;
-  model: string | null;
-  currentActivity: string | null;
-  lastActivity: string | null;
-  taskCompleted: number;
-  taskTotal: number;
-  currentTaskSubject: string | null;
-  waitingDetail: string | null;
-  errorDetail: string | null;
+// The full camelCase CodingAgentTaskView wire shape (RW-API-3). It is the
+// camelization of the internal snake-case view, identical to the stream's
+// task_views entries (to_wire.ts), so REST and stream agree byte-for-byte. The
+// schema is the single source of truth shared with the agent routes (so the
+// response serializer emits every field and the OpenAPI overlay's shape holds).
+const HarnessCapabilitiesSchema = z.object({
+  supportsChatInterface: z.boolean(),
+  supportsInteractiveBackchannel: z.boolean(),
+  supportsSkills: z.boolean(),
+  supportsSubAgents: z.boolean(),
+  supportsImageInput: z.boolean(),
+  supportsFastMode: z.boolean(),
+  supportsContextReset: z.boolean(),
+  supportsCompaction: z.boolean(),
+  supportsBackgroundTasks: z.boolean(),
+  supportsSessionResume: z.boolean(),
+  supportsToolUseRendering: z.boolean(),
+  supportsFileAttachments: z.boolean(),
+  supportsInterruption: z.boolean(),
+  supportsFileReferences: z.boolean(),
+  supportsModelSelection: z.boolean(),
+});
+
+const ModelOptionSchema = z.object({
+  provider: z.string(),
+  modelId: z.string(),
+  displayName: z.string(),
+});
+
+export const AgentViewSchema = z.object({
+  objectType: z.literal("CodingAgentTaskView"),
+  id: z.string(),
+  projectId: z.string(),
+  workspaceId: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  taskStatus: z.string(),
+  title: z.string().nullable(),
+  titleOrSomethingLikeIt: z.string(),
+  goal: z.string(),
+  initialPrompt: z.string(),
+  interface: z.string(),
+  model: z.string(),
+  selectedModelId: z.string().nullable(),
+  availableModels: z.array(ModelOptionSchema),
+  harnessCapabilities: HarnessCapabilitiesSchema,
+  acceptsAutomatedPrompts: z.boolean(),
+  isSmoothStreamingSupported: z.boolean(),
+  isAutoCompacting: z.boolean(),
+  artifactNames: z.array(z.string()),
+  isDeleted: z.boolean(),
+  lastReadAt: z.string().nullable(),
+  workspacePeekStatus: z.string(),
+  status: z.string(),
+  currentActivity: z.string().nullable(),
+  lastActivity: z.string().nullable(),
+  taskCompleted: z.number().int(),
+  taskTotal: z.number().int(),
+  currentTaskSubject: z.string().nullable(),
+  waitingDetail: z.string().nullable(),
+  errorDetail: z.string().nullable(),
+});
+
+export type AgentViewWire = z.infer<typeof AgentViewSchema>;
+
+// Build the wire view from the warm projection cache (Task 4.3 + the full view
+// fields). camelizeDeep matches the /stream/ws task-view serialization exactly.
+export function agentViewWire(agent: AgentRow): AgentViewWire {
+  const view = projectionCache.ensure(getOrm(), agent.objectId)?.view;
+  if (view === undefined) {
+    return camelizeDeep(computeAgentView(agent, [])) as AgentViewWire;
+  }
+  return camelizeDeep(view) as AgentViewWire;
 }
 
-// Build the wire view from the warm projection cache (Task 4.3) + the agent row.
-export function agentViewWire(agent: AgentRow): AgentViewWire {
-  const entry = projectionCache.ensure(getOrm(), agent.objectId);
-  const view = entry?.view;
-  return {
-    objectType: "CodingAgentTaskView",
-    taskId: agent.objectId,
-    workspaceId: agent.workspaceId ?? null,
+// Record a user-authored message (chat input, question answer): persist it,
+// fold it into the warm cache, and publish it on the stream — the same three
+// effects the supervisor's MessageWriter applies to harness messages. Without
+// the cache/stream steps the message is persisted but never reaches a live
+// client (the warm cache was folded at connect, before the message existed), so
+// the user's own message silently vanishes until a reconnect re-folds from disk.
+function recordUserMessage(
+  orm: ReturnType<typeof getOrm>,
+  agent: AgentRow,
+  message: Record<string, unknown>,
+): void {
+  appendAgentMessage(orm, agent.objectId, message);
+  projectionCache.applyMessage(orm, agent.objectId, message);
+  eventBus.publish({
+    kind: "agent_message",
+    agentId: agent.objectId,
+    workspaceId: agent.workspaceId ?? undefined,
     projectId: agent.projectId,
-    status: view?.status ?? "READY",
-    title: view?.title ?? agent.title ?? null,
-    goal: view?.goal ?? "",
-    model: agent.defaultModel ?? null,
-    currentActivity: view?.current_activity ?? null,
-    lastActivity: view?.last_activity ?? null,
-    taskCompleted: view?.task_completed ?? 0,
-    taskTotal: view?.task_total ?? 0,
-    currentTaskSubject: view?.current_task_subject ?? null,
-    waitingDetail: view?.waiting_detail ?? null,
-    errorDetail: view?.error_detail ?? null,
-  };
+    message,
+  });
 }
 
 export interface CreateAgentInput {
@@ -168,6 +228,17 @@ export class AgentService {
       runState: "QUEUED",
     });
 
+    // Surface the freshly-created agent on the stream immediately (even before it
+    // starts, e.g. a workspace's first agent created without a prompt), so the
+    // client's task_views include it and can navigate to its chat. Without this
+    // an agent that never starts (no prompt) would never reach the frontend.
+    eventBus.publish({
+      kind: "agent_status",
+      agentId,
+      workspaceId,
+      projectId: workspace.projectId,
+    });
+
     if (prompt !== null && prompt !== "") {
       const message: Record<string, unknown> = {
         object_type: "ChatInputUserMessage",
@@ -181,7 +252,7 @@ export class AgentService {
         effort: input.effort ?? "xhigh",
         sent_via: input.sentVia ?? null,
       };
-      appendAgentMessage(orm, agentId, message);
+      recordUserMessage(orm, agent, message);
       const runner = getAgentRunner();
       runner.startAgent(agentId);
       runner.sendUserMessage(agentId, message);
@@ -255,7 +326,7 @@ export class AgentService {
     },
   ): void {
     const orm = getOrm();
-    this.requireAgent(agentId);
+    const agent = this.requireAgent(agentId);
     const message: Record<string, unknown> = {
       object_type: "ChatInputUserMessage",
       message_id: newAgentMessageId(),
@@ -269,7 +340,7 @@ export class AgentService {
       effort: input.effort ?? "xhigh",
       sent_via: input.sentVia ?? null,
     };
-    appendAgentMessage(orm, agentId, message);
+    recordUserMessage(orm, agent, message);
     const runner = getAgentRunner();
     runner.startAgent(agentId);
     runner.sendUserMessage(agentId, message);
@@ -285,7 +356,7 @@ export class AgentService {
     },
   ): void {
     const orm = getOrm();
-    this.requireAgent(agentId);
+    const agent = this.requireAgent(agentId);
     const message: Record<string, unknown> = {
       object_type: "UserQuestionAnswerMessage",
       message_id: newAgentMessageId(),
@@ -295,7 +366,7 @@ export class AgentService {
       question_data: input.questionData,
       tool_use_id: input.toolUseId,
     };
-    appendAgentMessage(orm, agentId, message);
+    recordUserMessage(orm, agent, message);
     getAgentRunner().sendUserMessage(agentId, message);
   }
 

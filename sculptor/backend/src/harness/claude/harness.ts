@@ -66,6 +66,12 @@ export interface ClaudeHarnessEnvironment {
 export interface ClaudeHarnessDeps {
   // Resolve the host `claude` binary path (or undefined when not installed).
   resolveBinaryPath: () => string | undefined;
+  // Test-only: resolve the `fake_claude.py` launch command for a model wire
+  // value, or null for a real model. Mirrors process_manager's `_is_fake_claude`
+  // branch; the runner wires this from the test harness's env (Task 9.5).
+  resolveFakeClaudeCommand?: (
+    modelName: string | null,
+  ) => { python: string; script: string } | null;
   // Resolve the execution environment for an agent (paths + file ops).
   environmentFor: (agent: AgentRow) => ClaudeHarnessEnvironment;
   // The workspace initialization strategy (drives the environment-mode prompt).
@@ -223,12 +229,21 @@ class ClaudeHarnessProcess implements HarnessProcess {
       request_id: requestId,
     });
 
-    let binaryPath: string;
-    try {
-      binaryPath = resolveClaudeBinary(this.deps.resolveBinaryPath);
-    } catch (error) {
-      this.failTurnFatally(requestId, error);
-      return;
+    const modelName =
+      typeof message.model_name === "string"
+        ? message.model_name
+        : this.agent.defaultModel;
+    const fakeClaude =
+      this.deps.resolveFakeClaudeCommand?.(modelName ?? null) ?? null;
+
+    let binaryPath = "";
+    if (fakeClaude === null) {
+      try {
+        binaryPath = resolveClaudeBinary(this.deps.resolveBinaryPath);
+      } catch (error) {
+        this.failTurnFatally(requestId, error);
+        return;
+      }
     }
 
     const userInstructions = getUserInstructions({
@@ -249,16 +264,16 @@ class ClaudeHarnessProcess implements HarnessProcess {
       binaryPath,
       systemPrompt,
       sessionId,
-      modelShortname: modelShortnameFor(
-        typeof message.model_name === "string"
-          ? message.model_name
-          : this.agent.defaultModel,
-      ),
+      // fake_claude.py takes the raw model wire value (Python passes it verbatim);
+      // real models map to the CLI `--model` shortname.
+      modelShortname:
+        fakeClaude !== null ? modelName : modelShortnameFor(modelName),
       enableStreaming: true,
       fastMode: message.fast_mode === true,
       effort:
         typeof message.effort === "string" ? message.effort : DEFAULT_EFFORT,
       pluginDirs: this.deps.pluginDirs,
+      fakeClaude,
     });
 
     const outputProcessor = new ClaudeOutputProcessor({

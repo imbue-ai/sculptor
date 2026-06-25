@@ -7,6 +7,7 @@ import { getAgent, markAgentRead, updateAgent } from "~/db/repositories";
 import { eventBus } from "~/events";
 import {
   AgentError,
+  AgentViewSchema,
   agentViewWire,
   getAgentService,
   type AgentTypeName,
@@ -16,23 +17,6 @@ import { getWorkspaceService, WorkspaceError } from "~/services/workspace";
 // Agent lifecycle endpoints (web/app.py). camelCase wire (RW-API-3). Includes
 // the legacy POST /projects/{id}/tasks create (deferred here from Task 6.3).
 
-const AgentViewSchema = z.object({
-  objectType: z.literal("CodingAgentTaskView"),
-  taskId: z.string(),
-  workspaceId: z.string().nullable(),
-  projectId: z.string(),
-  status: z.string(),
-  title: z.string().nullable(),
-  goal: z.string(),
-  model: z.string().nullable(),
-  currentActivity: z.string().nullable(),
-  lastActivity: z.string().nullable(),
-  taskCompleted: z.number().int(),
-  taskTotal: z.number().int(),
-  currentTaskSubject: z.string().nullable(),
-  waitingDetail: z.string().nullable(),
-  errorDetail: z.string().nullable(),
-});
 
 const ErrorResponseSchema = z.object({ detail: z.string() });
 const errorResponses = {

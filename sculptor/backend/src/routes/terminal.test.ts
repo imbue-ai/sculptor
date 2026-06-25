@@ -137,7 +137,7 @@ describe("terminal routes", () => {
       url: `/api/v1/workspaces/${workspaceId}/agents`,
       payload: { agentType: "claude" },
     });
-    const agentId = agent.json().taskId;
+    const agentId = agent.json().id;
     const res = await app.inject({
       method: "POST",
       url: `/api/v1/agents/${agentId}/signal`,
