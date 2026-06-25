@@ -1,14 +1,14 @@
-import { Select, Theme } from "@radix-ui/themes";
-import { cleanup, render, type RenderResult, screen, within } from "@testing-library/react";
+import { Button, DropdownMenu, Select, Theme } from "@radix-ui/themes";
+import { cleanup, fireEvent, render, type RenderResult, screen, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ElementIds, LlmModel, type ModelOption } from "~/api";
-import { routeModelChange } from "~/common/modelConstants.ts";
+import { getModelLongName, routeModelChange } from "~/common/modelConstants.ts";
 
 import { ModelSelectOptions } from "./ModelSelectOptions";
-import { ModelSelector } from "./ModelSelector";
+import { BackendModelItems, ClaudeModelItems, ModelSelector } from "./ModelSelector";
 
 const PI_MODELS: ReadonlyArray<ModelOption> = [
   { provider: "anthropic", modelId: "claude-opus-4-8", displayName: "Claude Opus 4.8" },
@@ -31,7 +31,7 @@ const withStore = (children: ReactNode): ReactElement => (
 );
 
 beforeAll(() => {
-  // Radix Select calls scrollIntoView on open; jsdom does not implement it.
+  // Radix Select/DropdownMenu call scrollIntoView on open; jsdom does not implement it.
   Element.prototype.scrollIntoView = (): void => {};
 });
 
@@ -126,8 +126,10 @@ describe("ModelSelector", () => {
           model={LlmModel.CLAUDE_4_OPUS_200K}
           onModelChange={() => {}}
           capabilityValue={true}
+          sourcesBackendModels={true}
           backendModels={PI_MODELS}
           selectedModelId="claude-sonnet-4-6"
+          onAuthenticate={() => {}}
         />,
       ),
     );
@@ -136,7 +138,14 @@ describe("ModelSelector", () => {
 
   it("keeps the Claude short-name label when no backend models are present", () => {
     render(
-      withStore(<ModelSelector model={LlmModel.CLAUDE_FABLE_5} onModelChange={() => {}} capabilityValue={true} />),
+      withStore(
+        <ModelSelector
+          model={LlmModel.CLAUDE_FABLE_5}
+          onModelChange={() => {}}
+          capabilityValue={true}
+          onAuthenticate={() => {}}
+        />,
+      ),
     );
     const trigger = screen.getByTestId(ElementIds.MODEL_SELECTOR);
     // The Claude path must not show a raw model_id; it renders the short name.
@@ -145,7 +154,14 @@ describe("ModelSelector", () => {
 
   it("renders the disabled-with-tooltip treatment when the capability is false", () => {
     render(
-      withStore(<ModelSelector model={LlmModel.CLAUDE_FABLE_5} onModelChange={() => {}} capabilityValue={false} />),
+      withStore(
+        <ModelSelector
+          model={LlmModel.CLAUDE_FABLE_5}
+          onModelChange={() => {}}
+          capabilityValue={false}
+          onAuthenticate={() => {}}
+        />,
+      ),
     );
     expect(screen.getByTestId(ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION)).toBeInTheDocument();
     expect(screen.queryByTestId(ElementIds.MODEL_SELECTOR)).not.toBeInTheDocument();
@@ -158,8 +174,10 @@ describe("ModelSelector", () => {
           model={LlmModel.CLAUDE_4_OPUS_200K}
           onModelChange={() => {}}
           capabilityValue={true}
+          sourcesBackendModels={true}
           backendModels={[PI_MODELS[0]]}
           selectedModelId="claude-opus-4-8"
+          onAuthenticate={() => {}}
         />,
       ),
     );
@@ -169,6 +187,149 @@ describe("ModelSelector", () => {
     expect(trigger).toHaveTextContent("Claude Opus 4.8");
     expect(trigger).toBeDisabled();
     expect(screen.queryByTestId(ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION)).not.toBeInTheDocument();
+  });
+
+  it("prompts to authenticate when a backend harness has no providers", () => {
+    render(
+      withStore(
+        <ModelSelector
+          model={LlmModel.CLAUDE_4_OPUS_200K}
+          onModelChange={() => {}}
+          capabilityValue={true}
+          sourcesBackendModels={true}
+          backendModels={[]}
+          onAuthenticate={() => {}}
+        />,
+      ),
+    );
+    // No model list and no built-in fallback for this harness: prompt to
+    // authenticate instead of showing the switcher.
+    expect(screen.getByTestId(ElementIds.MODEL_SELECTOR_AUTH_PROMPT)).toBeInTheDocument();
+    expect(screen.queryByTestId(ElementIds.MODEL_SELECTOR)).not.toBeInTheDocument();
+  });
+
+  it("invokes onAuthenticate when the no-providers prompt is clicked", () => {
+    const onAuthenticate = vi.fn();
+    render(
+      withStore(
+        <ModelSelector
+          model={LlmModel.CLAUDE_4_OPUS_200K}
+          onModelChange={() => {}}
+          capabilityValue={true}
+          sourcesBackendModels={true}
+          backendModels={[]}
+          onAuthenticate={onAuthenticate}
+        />,
+      ),
+    );
+    fireEvent.click(screen.getByTestId(ElementIds.MODEL_SELECTOR_AUTH_PROMPT));
+    expect(onAuthenticate).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the interactive switcher (not the auth prompt) when a backend harness has providers", () => {
+    render(
+      withStore(
+        <ModelSelector
+          model={LlmModel.CLAUDE_4_OPUS_200K}
+          onModelChange={() => {}}
+          capabilityValue={true}
+          sourcesBackendModels={true}
+          backendModels={PI_MODELS}
+          selectedModelId="claude-opus-4-8"
+          onAuthenticate={() => {}}
+        />,
+      ),
+    );
+    expect(screen.getByTestId(ElementIds.MODEL_SELECTOR)).toBeInTheDocument();
+    expect(screen.queryByTestId(ElementIds.MODEL_SELECTOR_AUTH_PROMPT)).not.toBeInTheDocument();
+  });
+});
+
+describe("BackendModelItems", () => {
+  // The menu body only mounts when the DropdownMenu is open; render it inside a
+  // controlled-open menu to inspect the items.
+  const renderItems = (models: ReadonlyArray<ModelOption>, selectedModelId?: string): RenderResult =>
+    render(
+      withStore(
+        <DropdownMenu.Root open>
+          <DropdownMenu.Trigger>
+            <Button>trigger</Button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content>
+            <BackendModelItems models={models} selectedModelId={selectedModelId} onValueChange={() => {}} />
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>,
+      ),
+    );
+
+  it("groups a single provider's models under one non-selectable header", () => {
+    renderItems(PI_MODELS, "claude-opus-4-8");
+    // The provider name leads the list as a non-selectable label.
+    expect(screen.getByText("Anthropic")).toBeInTheDocument();
+    // Both models are selectable options keyed by model_id, shown inline (no cascade).
+    expect(screen.getByTestId(`${ElementIds.MODEL_OPTION}-claude-opus-4-8`)).toHaveTextContent("Claude Opus 4.8");
+    expect(screen.getByTestId(`${ElementIds.MODEL_OPTION}-claude-sonnet-4-6`)).toHaveTextContent("Claude Sonnet 4.6");
+    // A single provider is not rendered as a cascading sub-trigger.
+    expect(screen.queryByTestId(new RegExp(`^${ElementIds.MODEL_PROVIDER_OPTION}-`))).not.toBeInTheDocument();
+  });
+
+  it("renders a cascading per-provider menu for multiple providers", () => {
+    renderItems(MULTI_PROVIDER_MODELS, "anthropic-new");
+    // One top-level sub-trigger per distinct provider, ordered by first appearance.
+    const providers = screen.getAllByTestId(new RegExp(`^${ElementIds.MODEL_PROVIDER_OPTION}-`));
+    expect(providers.map((item) => item.textContent)).toEqual(["Anthropic", "OpenRouter"]);
+    expect(screen.getByTestId(`${ElementIds.MODEL_PROVIDER_OPTION}-anthropic`)).toBeInTheDocument();
+    expect(screen.getByTestId(`${ElementIds.MODEL_PROVIDER_OPTION}-openrouter`)).toBeInTheDocument();
+    // The models live behind their provider's submenu, so they are not rendered
+    // until the user opens it.
+    expect(screen.queryByTestId(`${ElementIds.MODEL_OPTION}-anthropic-new`)).not.toBeInTheDocument();
+  });
+});
+
+describe("ClaudeModelItems", () => {
+  // The menu body only mounts when the DropdownMenu is open; render it inside a
+  // controlled-open menu to inspect the items.
+  const renderClaude = (selectedModel: LlmModel): RenderResult =>
+    render(
+      withStore(
+        <DropdownMenu.Root open>
+          <DropdownMenu.Trigger>
+            <Button>trigger</Button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content>
+            <ClaudeModelItems
+              models={[LlmModel.CLAUDE_4_OPUS_200K, LlmModel.CLAUDE_4_HAIKU]}
+              selectedModel={selectedModel}
+              onValueChange={() => {}}
+            />
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>,
+      ),
+    );
+
+  it("renders the built-in Claude models as a flat radio list keyed by model id", () => {
+    renderClaude(LlmModel.CLAUDE_4_OPUS_200K);
+    // Each model is a selectable option keyed by its LlmModel id and labelled by long name.
+    expect(screen.getByTestId(`${ElementIds.MODEL_OPTION}-${LlmModel.CLAUDE_4_OPUS_200K}`)).toHaveTextContent(
+      getModelLongName(LlmModel.CLAUDE_4_OPUS_200K),
+    );
+    expect(screen.getByTestId(`${ElementIds.MODEL_OPTION}-${LlmModel.CLAUDE_4_HAIKU}`)).toHaveTextContent(
+      getModelLongName(LlmModel.CLAUDE_4_HAIKU),
+    );
+    // The built-in Claude path is always flat — never a cascading provider menu.
+    expect(screen.queryByTestId(new RegExp(`^${ElementIds.MODEL_PROVIDER_OPTION}-`))).not.toBeInTheDocument();
+  });
+
+  it("marks the current model as the selected radio item", () => {
+    renderClaude(LlmModel.CLAUDE_4_HAIKU);
+    expect(screen.getByTestId(`${ElementIds.MODEL_OPTION}-${LlmModel.CLAUDE_4_HAIKU}`)).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByTestId(`${ElementIds.MODEL_OPTION}-${LlmModel.CLAUDE_4_OPUS_200K}`)).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
   });
 });
 

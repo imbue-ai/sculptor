@@ -149,6 +149,10 @@ def test_pi_harness_get_available_models_empty_when_unpopulated_or_none() -> Non
     assert PI_HARNESS.get_available_models(None) == []
 
 
+def test_pi_harness_sources_backend_models_is_true() -> None:
+    assert PI_HARNESS.sources_backend_models() is True
+
+
 def test_pi_harness_get_selected_model_id_reads_current_model() -> None:
     opus = ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Claude Opus 4.8")
     state = _task_state_with_models([opus], current_model=opus)

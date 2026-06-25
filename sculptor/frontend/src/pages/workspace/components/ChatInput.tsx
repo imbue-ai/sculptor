@@ -36,7 +36,7 @@ import {
   setWorkspaceAgentModel,
 } from "../../../api";
 import { CHAT_INPUT_ELEMENT_ID } from "../../../common/Constants.ts";
-import { useWorkspacePageParams } from "../../../common/NavigateUtils.ts";
+import { useImbueNavigate, useWorkspacePageParams } from "../../../common/NavigateUtils.ts";
 import { shouldHandleKeybinding, useModifiedEnter } from "../../../common/ShortcutUtils.ts";
 import { closeBtwPopupAtom, openBtwPopupAtom } from "../../../common/state/atoms/btwPopup.ts";
 import type { InsertSkillArg } from "../../../common/state/atoms/chatActions.ts";
@@ -61,6 +61,7 @@ import {
   useTaskAvailableModels,
   useTaskModel,
   useTaskSelectedModelId,
+  useTaskSourcesBackendModels,
   useTaskSupportsContextReset,
   useTaskSupportsFastMode,
   useTaskSupportsFileAttachments,
@@ -74,6 +75,7 @@ import type { FileUploadHandle } from "../../../components/FileUpload.tsx";
 import { FileUpload } from "../../../components/FileUpload.tsx";
 import { Toast, type ToastContent, ToastType } from "../../../components/Toast.tsx";
 import { TooltipIconButton } from "../../../components/TooltipIconButton.tsx";
+import { SettingsSection } from "../../settings/sections.ts";
 import { stripHtml } from "../utils/utils.ts";
 import styles from "./ChatInput.module.scss";
 
@@ -116,11 +118,14 @@ export const ChatInput = ({
   const dragCounterRef = useRef<number>(0);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const { workspaceID, agentID: taskID } = useWorkspacePageParams();
+  const { navigateToGlobalSettings } = useImbueNavigate();
   const taskModel = useTaskModel(taskID ?? "");
-  // Harness-supplied model list + selection (pi); empty/undefined for Claude, in
-  // which case the switcher falls back to its built-in list and localModel.
+  // Harness-supplied model list + selection (pi). hasBackendModelSource
+  // distinguishes a pi task from Claude, which falls back to its built-in list
+  // and localModel.
   const backendModels = useTaskAvailableModels(taskID ?? "");
   const selectedModelId = useTaskSelectedModelId(taskID ?? "");
+  const hasBackendModelSource = useTaskSourcesBackendModels(taskID ?? "");
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
   const userConfig = useAtomValue(userConfigAtom);
@@ -436,6 +441,11 @@ export const ChatInput = ({
     [taskID, workspaceID],
   );
 
+  // The no-providers prompt sends the user to pi settings to authenticate a provider.
+  const handleAuthenticate = useCallback((): void => {
+    navigateToGlobalSettings(SettingsSection.PI);
+  }, [navigateToGlobalSettings]);
+
   const handleMentionPicker = useCallback((): void => {
     if (!editorRef.current) return;
     const editor = editorRef.current;
@@ -707,6 +717,8 @@ export const ChatInput = ({
                   backendModels={backendModels}
                   selectedModelId={selectedModelId}
                   onBackendModelChange={handleBackendModelChange}
+                  sourcesBackendModels={hasBackendModelSource}
+                  onAuthenticate={handleAuthenticate}
                 />
               </Flex>
               <SendButton

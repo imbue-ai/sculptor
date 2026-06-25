@@ -174,6 +174,10 @@ class PiHarness(Harness):
             return None
         return task_state.current_model.model_id
 
+    def sources_backend_models(self) -> bool:
+        # Pi sources its catalog from its authenticated providers.
+        return True
+
     def is_ask_user_question_tool(self, tool_name: str) -> bool:
         return tool_name == ASK_USER_QUESTION_TOOL_NAME
 

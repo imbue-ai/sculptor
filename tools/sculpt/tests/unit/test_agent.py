@@ -83,6 +83,7 @@ def _task_response_dict(
         },
         "availableModels": [],
         "selectedModelId": None,
+        "sourcesBackendModels": False,
         "fastMode": False,
         "effort": "medium",
         "isSmoothStreamingSupported": True,

@@ -432,6 +432,13 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
 
     @computed_field
     @property
+    def sources_backend_models(self) -> bool:
+        """Whether the harness sources its switcher catalog from a backend (pi);
+        when False the frontend uses its built-in Claude list."""
+        return self._resolve_harness().sources_backend_models()
+
+    @computed_field
+    @property
     def accepts_automated_prompts(self) -> bool:
         # Stamped from the registration TOML at creation: only opted-in
         # registered terminal agents can receive automated prompts through
