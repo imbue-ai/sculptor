@@ -43,7 +43,6 @@ def fetch_pr_status(
             workspace_id=workspace_id,
             pr_state="none",
             error_category=e.category,
-            error_provider="github",
             error_message=str(e),
         )
 

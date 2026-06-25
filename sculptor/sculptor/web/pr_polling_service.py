@@ -885,7 +885,6 @@ class PrPollingService(Service):
                     workspace_id=workspace_id,
                     pr_state="none",
                     error_category="cli_missing",
-                    error_provider="github",
                     error_message="gh CLI not found in PATH",
                 ),
             )
@@ -1193,7 +1192,6 @@ class PrPollingService(Service):
                     workspace_id=workspace_id,
                     pr_state="none",
                     error_category="cli_missing",
-                    error_provider="github",
                     error_message="gh CLI not found in PATH",
                 )
             deferred = self._respect_throttle()

@@ -614,9 +614,7 @@ def test_note_rate_limit_starts_cooldown_only_for_rate_limited() -> None:
     svc._note_rate_limit(ok)
     assert svc._throttle.cooldown_remaining() == 0.0
 
-    limited = PrStatusInfo(
-        workspace_id=workspace_id, pr_state="none", error_category="rate_limited", error_provider="github"
-    )
+    limited = PrStatusInfo(workspace_id=workspace_id, pr_state="none", error_category="rate_limited")
     svc._note_rate_limit(limited)
     assert svc._throttle.cooldown_remaining() > 0.0
 
@@ -656,9 +654,7 @@ def test_rate_limited_result_re_enqueues_after_cooldown() -> None:
 
     # Simulate the cooldown the poll would have set via _note_rate_limit.
     svc._throttle.enter_cooldown(_RATE_LIMIT_COOLDOWN_SECONDS)
-    limited = PrStatusInfo(
-        workspace_id=workspace_id, pr_state="none", error_category="rate_limited", error_provider="github"
-    )
+    limited = PrStatusInfo(workspace_id=workspace_id, pr_state="none", error_category="rate_limited")
     config = _make_user_config(pr_poll_interval_seconds=30)
 
     with patch("sculptor.web.pr_polling_service.get_user_config_instance", return_value=config):

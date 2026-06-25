@@ -358,7 +358,6 @@ def test_transient_cli_failure_surfaces_error() -> None:
 
     assert result.pr_state == "none"
     assert result.error_category == "transient"
-    assert result.error_provider == "github"
 
 
 # ---------------------------------------------------------------------------
@@ -389,7 +388,6 @@ def test_rate_limit_surfaces_error() -> None:
 
     assert result.pr_state == "none"
     assert result.error_category == "rate_limited"
-    assert result.error_provider == "github"
 
 
 def test_secondary_rate_limit_surfaces_error() -> None:
@@ -400,7 +398,6 @@ def test_secondary_rate_limit_surfaces_error() -> None:
         result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
 
     assert result.error_category == "rate_limited"
-    assert result.error_provider == "github"
 
 
 # ---------------------------------------------------------------------------

@@ -101,7 +101,6 @@ class PrStatusInfo(SerializableModel):
     error_category: (
         Literal["cli_missing", "not_authenticated", "no_access", "network_error", "rate_limited", "transient"] | None
     ) = None
-    error_provider: Literal["github"] | None = None
     error_message: str | None = None
     mismatched_pr_iid: int | None = None
     mismatched_pr_target_branch: str | None = None
