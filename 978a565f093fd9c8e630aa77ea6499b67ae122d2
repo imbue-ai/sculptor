@@ -1,9 +1,12 @@
 {
+  "offload.toml": {
+    "image_id": "im-xrAp7KufvXaLNDrRncawEv"
+  },
   "offload-electron.toml": {
     "image_id": "im-xrAp7KufvXaLNDrRncawEv"
   },
-  "offload.toml": {
-    "image_id": "im-xrAp7KufvXaLNDrRncawEv"
+  "offload-scroll-jump.toml": {
+    "image_id": "im-jcCxtezc8r3sBvuhJcj1ZL"
   },
   "offload-scroll-sweep.toml": {
     "image_id": "im-jcCxtezc8r3sBvuhJcj1ZL"
