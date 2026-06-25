@@ -106,16 +106,24 @@ describe("fetchPrStatus", () => {
     (stdout: string): CliRunner =>
     async () => ({ code: 0, stdout, stderr: "" });
 
-  it("maps a GitHub open PR with a passing pipeline", async () => {
+  const githubGraphql = (nodes: unknown[]): string =>
+    JSON.stringify({
+      data: { repository: { pullRequests: { nodes } } },
+    });
+
+  it("maps a GitHub open PR (matching target) with a passing pipeline", async () => {
     const runner = okRunner(
-      JSON.stringify([
+      githubGraphql([
         {
           number: 5,
           title: "Add feature",
           url: "https://x/pr/5",
           state: "OPEN",
+          baseRefName: "main",
           mergeable: "MERGEABLE",
-          statusCheckRollup: [{ state: "SUCCESS" }],
+          commits: {
+            nodes: [{ commit: { statusCheckRollup: { state: "SUCCESS" } } }],
+          },
         },
       ]),
     );
@@ -123,6 +131,7 @@ describe("fetchPrStatus", () => {
       "github",
       "ws_1",
       "feat",
+      "main",
       "/tmp",
       runner,
     );
@@ -132,13 +141,38 @@ describe("fetchPrStatus", () => {
     expect(status.has_conflicts).toBe(false);
   });
 
+  it("reports an open PR against a different target as mismatched none", async () => {
+    const status = await fetchPrStatus(
+      "github",
+      "ws_1",
+      "feat",
+      "main",
+      "/tmp",
+      okRunner(
+        githubGraphql([
+          {
+            number: 9,
+            title: "Wrong target",
+            url: "https://x/pr/9",
+            state: "OPEN",
+            baseRefName: "develop",
+          },
+        ]),
+      ),
+    );
+    expect(status.pr_state).toBe("none");
+    expect(status.mismatched_pr_iid).toBe(9);
+    expect(status.mismatched_pr_target_branch).toBe("develop");
+  });
+
   it("returns pr_state none when there is no PR", async () => {
     const status = await fetchPrStatus(
       "github",
       "ws_1",
       "feat",
+      "main",
       "/tmp",
-      okRunner("[]"),
+      okRunner(githubGraphql([])),
     );
     expect(status.pr_state).toBe("none");
     expect(status.error_category).toBeUndefined();
@@ -152,6 +186,7 @@ describe("fetchPrStatus", () => {
       "github",
       "ws_1",
       "feat",
+      "main",
       "/tmp",
       runner,
     );
@@ -169,6 +204,7 @@ describe("fetchPrStatus", () => {
       "github",
       "ws_1",
       "feat",
+      "main",
       "/tmp",
       runner,
     );

@@ -22,6 +22,9 @@ export interface PrStatusInfo {
   pr_title?: string | null;
   pr_web_url?: string | null;
   pipeline_status?: PipelineStatus | null;
+  mismatched_pr_iid?: number | null;
+  mismatched_pr_target_branch?: string | null;
+  mismatched_pr_web_url?: string | null;
   error_category?: string | null;
   error_provider?: GitProvider | null;
   error_message?: string | null;
@@ -50,49 +53,146 @@ function mergeableToConflicts(mergeable: string | undefined): boolean | null {
   return null;
 }
 
-async function fetchGithub(
-  workspaceId: string,
-  branch: string,
-  cwd: string,
-  runner: CliRunner,
-): Promise<PrStatusInfo> {
-  const result = await runCli(
-    [
-      "gh",
-      "pr",
-      "list",
-      "--head",
-      branch,
-      "--state",
-      "all",
-      "--json",
-      "number,title,url,state,mergeable,statusCheckRollup",
-    ],
-    cwd,
-    runner,
-  );
-  const prs = JSON.parse(result.stdout || "[]") as Array<
-    Record<string, unknown>
-  >;
-  if (prs.length === 0) {
-    return { workspace_id: workspaceId, pr_state: "none" };
+// Strip a single remote prefix from a branch ref ("origin/main" → "main"),
+// matching web/pr_status.py strip_remote_prefix.
+function stripRemotePrefix(branch: string): string {
+  const slash = branch.indexOf("/");
+  return slash === -1 ? branch : branch.slice(slash + 1);
+}
+
+const PR_QUERY_LIMIT = 5;
+
+// One GraphQL request returns every PR on this source branch (all states) with
+// its check/conflict detail, so we group by state and dispatch locally —
+// mirrors web/pr_status.py (_GRAPHQL_PR_QUERY). The simple `gh pr list` form
+// doesn't carry baseRefName for target matching, so the contract uses graphql.
+const GRAPHQL_PR_QUERY = `
+query($owner: String!, $name: String!, $branch: String!, $limit: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequests(headRefName: $branch, first: $limit, orderBy: {field: UPDATED_AT, direction: DESC}) {
+      nodes {
+        number
+        title
+        url
+        state
+        baseRefName
+        mergeable
+        commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+      }
+    }
   }
-  const pr = prs[0]!;
-  const state = String(pr.state ?? "").toUpperCase();
-  const prState: PrState =
-    state === "MERGED" ? "merged" : state === "CLOSED" ? "closed" : "open";
-  const rollup = Array.isArray(pr.statusCheckRollup)
-    ? (pr.statusCheckRollup[0] as { state?: string } | undefined)
-    : undefined;
+}
+`;
+
+function firstMatchingTarget(
+  prs: Array<Record<string, unknown>>,
+  target: string,
+): Record<string, unknown> | undefined {
+  return prs.find((pr) => pr.baseRefName === target);
+}
+
+function checkStatusOf(pr: Record<string, unknown>): PipelineStatus | null {
+  const commitNodes = ((pr.commits as { nodes?: unknown[] } | undefined)
+    ?.nodes ?? []) as Array<Record<string, unknown>>;
+  if (commitNodes.length === 0) {
+    return null;
+  }
+  const rollup = (
+    (commitNodes[0]!.commit as Record<string, unknown> | undefined) ?? {}
+  ).statusCheckRollup as { state?: string } | null | undefined;
+  return rollupToPipeline(rollup?.state);
+}
+
+function identityStatus(
+  workspaceId: string,
+  prState: PrState,
+  pr: Record<string, unknown>,
+): PrStatusInfo {
   return {
     workspace_id: workspaceId,
     pr_state: prState,
     pr_iid: typeof pr.number === "number" ? pr.number : null,
     pr_title: typeof pr.title === "string" ? pr.title : null,
     pr_web_url: typeof pr.url === "string" ? pr.url : null,
-    has_conflicts: mergeableToConflicts(pr.mergeable as string | undefined),
-    pipeline_status: rollupToPipeline(rollup?.state),
   };
+}
+
+async function fetchGithub(
+  workspaceId: string,
+  branch: string,
+  targetBranch: string,
+  cwd: string,
+  runner: CliRunner,
+): Promise<PrStatusInfo> {
+  const result = await runCli(
+    [
+      "gh",
+      "api",
+      "graphql",
+      "-f",
+      `query=${GRAPHQL_PR_QUERY}`,
+      "-F",
+      "owner={owner}",
+      "-F",
+      "name={repo}",
+      "-f",
+      `branch=${branch}`,
+      "-F",
+      `limit=${PR_QUERY_LIMIT}`,
+    ],
+    cwd,
+    runner,
+  );
+  const payload = JSON.parse(result.stdout || "{}") as Record<string, unknown>;
+  const repository = (payload.data as Record<string, unknown> | undefined)
+    ?.repository as Record<string, unknown> | undefined;
+  const nodes = ((repository?.pullRequests as { nodes?: unknown[] } | undefined)
+    ?.nodes ?? []) as Array<Record<string, unknown>>;
+
+  const target = stripRemotePrefix(targetBranch);
+  const openPrs = nodes.filter((pr) => pr.state === "OPEN");
+  const mergedPrs = nodes.filter((pr) => pr.state === "MERGED");
+  const closedPrs = nodes.filter((pr) => pr.state === "CLOSED");
+
+  // An open PR against the exact target gets the full treatment.
+  const openMatch = firstMatchingTarget(openPrs, target);
+  if (openMatch !== undefined) {
+    return {
+      workspace_id: workspaceId,
+      pr_state: "open",
+      pr_iid: typeof openMatch.number === "number" ? openMatch.number : null,
+      pr_title: typeof openMatch.title === "string" ? openMatch.title : null,
+      pr_web_url: typeof openMatch.url === "string" ? openMatch.url : null,
+      has_conflicts: mergeableToConflicts(openMatch.mergeable as string),
+      pipeline_status: checkStatusOf(openMatch),
+    };
+  }
+  // Prefer a terminal state for the exact target (merged wins over closed).
+  const mergedMatch = firstMatchingTarget(mergedPrs, target);
+  if (mergedMatch !== undefined) {
+    return identityStatus(workspaceId, "merged", mergedMatch);
+  }
+  const closedMatch = firstMatchingTarget(closedPrs, target);
+  if (closedMatch !== undefined) {
+    return identityStatus(workspaceId, "closed", closedMatch);
+  }
+  // An open PR against a *different* target — surface it for "switch target".
+  if (openPrs.length > 0) {
+    const mismatched = openPrs[0]!;
+    return {
+      workspace_id: workspaceId,
+      pr_state: "none",
+      mismatched_pr_iid:
+        typeof mismatched.number === "number" ? mismatched.number : null,
+      mismatched_pr_target_branch:
+        typeof mismatched.baseRefName === "string"
+          ? mismatched.baseRefName
+          : null,
+      mismatched_pr_web_url:
+        typeof mismatched.url === "string" ? mismatched.url : null,
+    };
+  }
+  return { workspace_id: workspaceId, pr_state: "none" };
 }
 
 async function fetchGitlab(
@@ -131,12 +231,13 @@ export async function fetchPrStatus(
   provider: GitProvider,
   workspaceId: string,
   branch: string,
+  targetBranch: string,
   cwd: string,
   runner: CliRunner,
 ): Promise<PrStatusInfo> {
   try {
     return provider === "github"
-      ? await fetchGithub(workspaceId, branch, cwd, runner)
+      ? await fetchGithub(workspaceId, branch, targetBranch, cwd, runner)
       : await fetchGitlab(workspaceId, branch, cwd, runner);
   } catch (error) {
     if (error instanceof CliStatusError) {

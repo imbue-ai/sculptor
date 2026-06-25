@@ -40,6 +40,7 @@ import {
   type WireUserSettings,
   type WireWorkspace,
 } from "~/projection/streaming_update_types";
+import { getPrStatusByWorkspaceId } from "~/services/pr_polling/store";
 
 // Minimal scope marker. The full Scope union (ScopeAll/Project/Workspace/Agent)
 // and its narrowing live in Task 4.5; here we only need to know whether this is
@@ -177,6 +178,11 @@ export function buildSnapshot(
       entry.foldState,
     );
   }
+
+  // The PR/CI poller publishes pr_status as live deltas; a fresh client also
+  // needs the current value in its initial snapshot (else the PR badge is blank
+  // until the next poll). Scope narrowing (scope.ts) filters this per-workspace.
+  update.pr_status_by_workspace_id = getPrStatusByWorkspaceId();
 
   // user_update + dependencies_status are ScopeAll-only (streams.py L484-487 /
   // L427/L436). Task 4.5 narrowing drops them for scoped connections; here we

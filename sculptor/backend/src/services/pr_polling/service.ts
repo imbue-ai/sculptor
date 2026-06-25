@@ -22,6 +22,7 @@ import {
   WORKER_POOL_SIZE,
 } from "~/services/pr_polling/pool";
 import { detectProvider } from "~/services/pr_polling/provider";
+import { setPrStatus } from "~/services/pr_polling/store";
 import { fetchPrStatus, type PrStatusInfo } from "~/services/pr_polling/status";
 
 // PR/CI status polling service (web/pr_polling_service.py). Schedules per-open-
@@ -96,6 +97,7 @@ export class PrPollingService {
         provider,
         workspace.objectId,
         branch,
+        workspace.targetBranch ?? branch,
         cwd,
         this.deps.runner,
       ),
@@ -105,6 +107,8 @@ export class PrPollingService {
   }
 
   private emit(workspace: WorkspaceRow, status: PrStatusInfo | null): void {
+    // Mirror into the snapshot store so a fresh client gets it on connect.
+    setPrStatus(workspace.objectId, status);
     eventBus.publish({
       kind: "pr_status",
       workspaceId: workspace.objectId,
