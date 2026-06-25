@@ -25,6 +25,7 @@ import { newAgentId, newAgentMessageId } from "~/ids";
 import { projectionCache } from "~/projection/cache";
 import { computeAgentView } from "~/projection/derived";
 import { camelizeDeep } from "~/projection/to_wire";
+import { getRegistration } from "~/services/terminal_agent_registry/registry";
 import { getRepo } from "~/db/repositories";
 import { localPathFromRepo } from "~/services/project";
 import { getAgentRunner } from "~/runner/instance";
@@ -45,13 +46,6 @@ export class AgentError extends Error {
 }
 
 export type AgentTypeName = "claude" | "pi" | "terminal" | "registered";
-
-const AGENT_CONFIG_OBJECT_TYPE: Record<AgentTypeName, string> = {
-  claude: "ClaudeCodeSDKAgentConfig",
-  pi: "PiAgentConfig",
-  terminal: "TerminalAgentConfig",
-  registered: "RegisteredTerminalAgentConfig",
-};
 
 // The full camelCase CodingAgentTaskView wire shape (RW-API-3). It is the
 // camelization of the internal snake-case view, identical to the stream's
@@ -160,21 +154,47 @@ export interface CreateAgentInput {
   effort?: string;
   sentVia?: string | null;
   agentType?: AgentTypeName;
+  registrationId?: string | null;
 }
 
-// The default-name prefix for an agent type ("Claude 1", "Pi 2", "Terminal 1").
-// Ports app.py `_default_agent_name_prefix` (registered terminal agents would
-// name from their registration; not yet wired here, so they fall back to Agent).
-function defaultAgentNamePrefix(agentType: AgentTypeName): string {
+// Resolve the requested agent type into a stamped agent_config + its default-name
+// prefix. Ports `_agent_config_for_request` (web/app.py): registered terminal
+// agents look up their registration so the config stays self-describing and the
+// tab names from the registration's display name.
+function resolveAgentConfig(
+  agentType: AgentTypeName,
+  registrationId: string | null,
+): { config: Record<string, unknown>; namePrefix: string } {
   switch (agentType) {
-    case "claude":
-      return "Claude";
-    case "pi":
-      return "Pi";
     case "terminal":
-      return "Terminal";
+      return { config: { object_type: "TerminalAgentConfig" }, namePrefix: "Terminal" };
+    case "pi":
+      return { config: { object_type: "PiAgentConfig" }, namePrefix: "Pi" };
+    case "registered": {
+      if (registrationId === null || registrationId === "") {
+        throw new AgentError(422, "registered terminal agents require a registration_id");
+      }
+      const registration = getRegistration(registrationId);
+      if (registration === null) {
+        throw new AgentError(
+          422,
+          `Terminal-agent registration '${registrationId}' not found`,
+        );
+      }
+      return {
+        config: {
+          object_type: "RegisteredTerminalAgentConfig",
+          registration_id: registration.registrationId,
+          display_name: registration.displayName,
+          launch_command: registration.launchCommand,
+          resume_command_template: registration.resumeCommandTemplate,
+          accepts_automated_prompts: registration.acceptsAutomatedPrompts,
+        },
+        namePrefix: registration.displayName,
+      };
+    }
     default:
-      return "Agent";
+      return { config: { object_type: "ClaudeCodeSDKAgentConfig" }, namePrefix: "Claude" };
   }
 }
 
@@ -244,9 +264,6 @@ export class AgentService {
         "A model is required when a prompt is provided",
       );
     }
-    if (agentType === "terminal" && (prompt === null || prompt === "")) {
-      throw new AgentError(422, "Terminal agents require a prompt");
-    }
 
     const repo = getRepo(orm, workspace.projectId);
     const workDir = workspaceWorkingDir(workspace);
@@ -259,18 +276,20 @@ export class AgentService {
       }
     }
 
+    const { config: agentConfig, namePrefix } = resolveAgentConfig(
+      agentType,
+      input.registrationId ?? null,
+    );
     const agentId = newAgentId();
     const agent = createAgent(orm, {
       objectId: agentId,
       projectId: workspace.projectId,
       workspaceId,
-      agentConfig: { object_type: AGENT_CONFIG_OBJECT_TYPE[agentType] },
+      agentConfig,
       startingGitHash,
       systemPrompt: repo?.defaultSystemPrompt ?? null,
       defaultModel: input.model ?? null,
-      title:
-        input.name ??
-        computeNextAgentName(orm, workspaceId, defaultAgentNamePrefix(agentType)),
+      title: input.name ?? computeNextAgentName(orm, workspaceId, namePrefix),
       runState: "QUEUED",
     });
 
