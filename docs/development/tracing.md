@@ -36,8 +36,8 @@ spawned Python backend.
 The `--trace-to` flag traces from boot and writes once, on clean shutdown.
 When you instead need to profile a backend that is *already running* — most
 importantly a signed production build, which `py-spy`/`lldb` cannot attach to
-because of the hardened runtime — arm and disarm viztracer at runtime over
-HTTP. These commands live under `sculpt debug` because they exist for Sculptor
+without re-signing it (the hardened runtime blocks `task_for_pid`; see the
+py-spy route below) — arm and disarm viztracer at runtime over HTTP. These commands live under `sculpt debug` because they exist for Sculptor
 development only, not as end-user functionality:
 
 ```sh
@@ -79,6 +79,20 @@ sculpt debug threads        # Python traceback for every live thread
 This hits `GET /api/v1/debug/threads`, which renders `sys._current_frames()`.
 It is greenlet-safe (no signals, no C-stack walk — the reason the old
 `faulthandler`/`SIGUSR1` route was dropped) and effectively free.
+
+### Other route: py-spy (CPU sampling)
+
+The tracing described here is the *in-process* route. For **sampled CPU
+profiles, flamegraphs, or native (C) frames** of a live backend, use `py-spy`
+instead. It cannot attach to a notarized build until that build's
+`sculptor_backend` is re-signed with `get-task-allow`; local **dev builds
+(`just pkg-dev`) ship the sidecar already signed** for attach (see
+`sculptor/frontend/config/entitlements.dev.plist`). Use `py-spy dump`/`top` —
+**avoid `py-spy record`**, whose suspend-based continuous sampling heavily blocks
+the backend (for CPU-over-time, prefer the viztracer trace above). The full
+agent-driven procedure (re-sign, sudo, and the patched py-spy from
+benfred/py-spy#858, which fixes attaching to PyInstaller onedir bundles) lives in
+the `profile-sculptor-backend` skill (`.claude/skills/profile-sculptor-backend/`).
 
 ## What you get
 
