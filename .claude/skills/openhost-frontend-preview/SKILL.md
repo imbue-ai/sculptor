@@ -54,8 +54,10 @@ while one is alive:
   worktree has no `node_modules`, so run `pnpm install` there once first (slow),
   then launch.
 
-`launch-preview.sh <port>` sets `SCULPTOR_FRONTEND_PORT` + `SCULPTOR_PROXY_BASE`
-and runs `pnpm run dev`. First start pre-bundles deps (~tens of seconds) — watch
+`launch-preview.sh <port>` sets `SCULPTOR_FRONTEND_PORT` + `SCULPTOR_OPENHOST_PROXY`
+and runs `pnpm run dev -- --base=/proxy/<port>/` (base is a native Vite flag; the
+env var only drives the OpenHost wss/HMR override). First start pre-bundles deps
+(~tens of seconds) — watch
 `/tmp/vite-<port>.log` for `ready in`. Then open, on any logged-in browser:
 
     https://sculptor.<your-zone>/proxy/51731/
