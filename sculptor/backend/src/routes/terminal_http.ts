@@ -5,7 +5,18 @@ import { z } from "zod";
 import { getOrm } from "~/db/orm";
 import { getAgent, updateAgent } from "~/db/repositories";
 import { getTerminalManager } from "~/terminal/instance";
+import { getAgentService } from "~/services/agent";
 import { listRegistrations } from "~/services/terminal_agent_registry/registry";
+
+// Terminal-agent status events → the projection's terminal-signal status.
+const TERMINAL_SIGNAL_STATUS_BY_EVENT: Record<
+  string,
+  "BUSY" | "IDLE" | "WAITING"
+> = {
+  busy: "BUSY",
+  idle: "IDLE",
+  "waiting-on-input": "WAITING",
+};
 
 // Terminal HTTP endpoints (web/app.py): automated input to a terminal agent,
 // the terminal-agent signal event API, terminal close, and the registrations
@@ -74,7 +85,13 @@ export async function registerTerminalHttpRoutes(
       if (agent === undefined || agent.isDeleted) {
         return notFound(reply, "Agent not found");
       }
-      if (
+      const statusSignal = TERMINAL_SIGNAL_STATUS_BY_EVENT[request.body.event];
+      if (statusSignal !== undefined) {
+        getAgentService().recordTerminalSignal(
+          request.params.agent_id,
+          statusSignal,
+        );
+      } else if (
         request.body.event === "session-id" &&
         request.body.sessionId != null &&
         SESSION_ID_PATTERN.test(request.body.sessionId)

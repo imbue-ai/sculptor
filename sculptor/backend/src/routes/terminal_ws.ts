@@ -8,6 +8,8 @@ import {
   SESSION_TOKEN_HEADER_NAME,
   WEBSOCKET_INVALID_SESSION_TOKEN_CLOSE_CODE,
 } from "~/auth/session_token";
+import { getSculptorFolder } from "~/config/sculptor_folder";
+import { resolvePort } from "~/config/port";
 import { getOrm } from "~/db/orm";
 import { getAgent, getWorkspace } from "~/db/repositories";
 import { getTerminalManager } from "~/terminal/instance";
@@ -17,6 +19,37 @@ import { localPathFromRepo } from "~/services/project";
 import { getRepo } from "~/db/repositories";
 import { workingDirectory } from "~/environment/paths";
 import { resolveEnv } from "~/services/env_injection/env";
+import {
+  getRegistrationsDir,
+  renderTerminalCommand,
+} from "~/services/terminal_agent_registry/registry";
+
+// A registered terminal agent runs its registration's launch command (or resume
+// command, when the program reported a session id) in the freshly-spawned shell;
+// plain terminal agents get a bare shell. Ports run_terminal_agent
+// launch_command_for_start + write_launch_command.
+function launchCommandForAgentTerminal(
+  agentConfig: Record<string, unknown>,
+  terminalSessionId: string | null,
+): string | null {
+  if (agentConfig["object_type"] !== "RegisteredTerminalAgentConfig") {
+    return null;
+  }
+  const context = {
+    sculptorDirectory: getSculptorFolder(),
+    terminalAgentsDirectory: getRegistrationsDir(),
+    sessionId: terminalSessionId ?? undefined,
+  };
+  const resumeTemplate = agentConfig["resume_command_template"];
+  if (terminalSessionId !== null && typeof resumeTemplate === "string") {
+    return renderTerminalCommand(resumeTemplate, context);
+  }
+  const launchCommand = agentConfig["launch_command"];
+  if (typeof launchCommand !== "string") {
+    return null;
+  }
+  return renderTerminalCommand(launchCommand, context);
+}
 
 // Terminal WebSocket channels (web/app.py). The xterm contract (RW-API-2):
 //   server -> client: raw PTY output as BINARY frames.
@@ -171,12 +204,35 @@ export async function registerTerminalWsRoutes(
                 ? (localPathFromRepo(repo) ?? undefined)
                 : undefined,
             );
-      const pty = getTerminalManager().getOrCreateAgentTerminal(agentId, {
+      const manager = getTerminalManager();
+      const isNewTerminal = manager.getAgentTerminal(agentId) === undefined;
+      // The SCULPT_* identity vars so a bare `sculpt signal …` inside the agent's
+      // terminal reaches this backend and targets this agent (build.py
+      // sculpt_identity_env; agent-scoped, so it includes SCULPT_AGENT_ID).
+      const sculptEnv: Record<string, string> = {
+        SCULPT_API_PORT: String(resolvePort()),
+        SCULPT_AGENT_ID: agentId,
+      };
+      if (workspace !== undefined) {
+        sculptEnv["SCULPT_WORKSPACE_ID"] = workspace.objectId;
+        sculptEnv["SCULPT_PROJECT_ID"] = workspace.projectId;
+      }
+      const pty = manager.getOrCreateAgentTerminal(agentId, {
         cwd,
-        extraEnv: resolveEnv(
-          repo !== undefined ? localPathFromRepo(repo) : null,
-        ),
+        extraEnv: {
+          ...resolveEnv(repo !== undefined ? localPathFromRepo(repo) : null),
+          ...sculptEnv,
+        },
       });
+      if (isNewTerminal) {
+        const launchCommand = launchCommandForAgentTerminal(
+          agent.agentConfig,
+          agent.terminalSessionId ?? null,
+        );
+        if (launchCommand !== null) {
+          pty.write(`${launchCommand}\n`);
+        }
+      }
       bridge(socket, pty);
     },
   );

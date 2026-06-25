@@ -306,6 +306,25 @@ export class AgentService {
       projectId: workspace.projectId,
     });
 
+    // Terminal agents have no harness turn: their "run" is the PTY the terminal
+    // WebSocket spawns. Mark the run started and emit the EnvironmentAcquired
+    // anchor so they leave BUILDING and the terminal-signal status scan (busy/
+    // idle/waiting → dot) has a run to attach to.
+    const configType = agentConfig.object_type;
+    if (
+      configType === "TerminalAgentConfig" ||
+      configType === "RegisteredTerminalAgentConfig"
+    ) {
+      updateAgent(orm, agentId, { runState: "RUNNING" });
+      recordUserMessage(orm, getAgent(orm, agentId) ?? agent, {
+        object_type: "EnvironmentAcquiredRunnerMessage",
+        message_id: newAgentMessageId(),
+        source: "RUNNER",
+        approximate_creation_time: new Date().toISOString(),
+        environment: null,
+      });
+    }
+
     if (prompt !== null && prompt !== "") {
       const message: Record<string, unknown> = {
         object_type: "ChatInputUserMessage",
@@ -475,6 +494,25 @@ export class AgentService {
       agentId,
       workspaceId: agent.workspaceId ?? undefined,
       projectId: agent.projectId,
+    });
+  }
+
+  // A terminal-agent integration reported a status signal (busy/idle/waiting):
+  // record it as a run-scoped runner message so the projection's
+  // scanTerminalSignalState drives the derived status + dot. Ports app.py
+  // post_agent_signal's status-event branch (TerminalAgentSignalRunnerMessage).
+  recordTerminalSignal(
+    agentId: string,
+    signal: "BUSY" | "IDLE" | "WAITING",
+  ): void {
+    const orm = getOrm();
+    const agent = this.requireAgent(agentId);
+    recordUserMessage(orm, agent, {
+      object_type: "TerminalAgentSignalRunnerMessage",
+      message_id: newAgentMessageId(),
+      source: "RUNNER",
+      approximate_creation_time: new Date().toISOString(),
+      signal,
     });
   }
 
