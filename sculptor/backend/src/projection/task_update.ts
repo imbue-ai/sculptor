@@ -24,9 +24,11 @@ export function foldStateToTaskUpdate(taskId: string, state: FoldState): TaskUpd
     updated_artifacts: [],
     in_progress_chat_message: state.inProgressChatMessage,
     queued_chat_messages: [...state.queuedChatMessages],
-    // The fold tracks the in-progress message but not a distinct
-    // user-message-id pointer (the frontend reads it off the message itself).
-    in_progress_user_message_id: null,
+    // The id of the user message whose request is currently in flight (the
+    // "working" turn). The frontend's status pill needs it to show "Thinking…"
+    // while a RUNNING agent has produced no streamed content yet
+    // (message_conversion.py L841: in_progress_user_message_id = current_request_id).
+    in_progress_user_message_id: state.currentRequestId,
     streaming_start_index: streaming.startIndex,
     is_streaming_active: streaming.isActive,
     in_progress_message_was_streamed: streaming.messageWasStreamed,
