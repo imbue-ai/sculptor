@@ -48,6 +48,10 @@ const EXIT_PLAN_MODE_TOOL_NAMES = new Set<string>([
   "ExitPlanMode",
   "mcp__sculptor__exit_plan_mode",
 ]);
+const ENTER_PLAN_MODE_TOOL_NAMES = new Set<string>([
+  "EnterPlanMode",
+  "mcp__sculptor__enter_plan_mode",
+]);
 const PLAN_FILE_WRITE_TOOL_NAMES = new Set<string>(["Write", "Edit", "MultiEdit"]);
 const PLAN_FILE_SEGMENT = ".claude/plans/";
 
@@ -57,6 +61,10 @@ function isAskUserQuestionTool(name: string): boolean {
 
 function isExitPlanModeTool(name: string): boolean {
   return EXIT_PLAN_MODE_TOOL_NAMES.has(name);
+}
+
+function isEnterPlanModeTool(name: string): boolean {
+  return ENTER_PLAN_MODE_TOOL_NAMES.has(name);
 }
 
 function classifyToolUiRole(name: string): ToolUseBlock["interactive_role"] {
@@ -544,6 +552,10 @@ export interface FoldState {
   submittedQuestionAnswers: Map<string, SubmittedQuestionAnswer>;
   pendingBackgroundTaskIds: Set<string>;
   recentPlanFilePath: string | null;
+  // Whether the agent is currently in plan mode. Set by the EnterPlanMode tool
+  // and the user's enter_plan_mode/exit_plan_mode chat-input flags; cleared by
+  // ExitPlanMode. Distinct from recentPlanFilePath (a written plan file).
+  isInPlanMode: boolean;
   streaming: StreamingState;
 }
 
@@ -566,6 +578,7 @@ export function createFoldState(): FoldState {
     submittedQuestionAnswers: new Map(),
     pendingBackgroundTaskIds: new Set(),
     recentPlanFilePath: null,
+    isInPlanMode: false,
     streaming: newStreamingState(),
   };
 }
@@ -638,6 +651,13 @@ export function applyMessage(state: FoldState, message: RawMessage): FoldState {
   const streaming = state.streaming;
 
   if (type === "ChatInputUserMessage") {
+    // Reflect the plan-mode toggle from the user message immediately, before the
+    // agent processes it (message_conversion.py L249-252).
+    if (message["enter_plan_mode"] === true) {
+      state.isInPlanMode = true;
+    } else if (message["exit_plan_mode"] === true) {
+      state.isInPlanMode = false;
+    }
     const text = asString(message["text"]);
     const content: ContentBlock[] = [{ object_type: "TextBlock", type: "text", text }];
     const files = message["files"];
@@ -831,11 +851,14 @@ export function applyMessage(state: FoldState, message: RawMessage): FoldState {
             state.pendingUserQuestion = reconstructed;
           }
         }
+      } else if (block.object_type === "ToolUseBlock" && isEnterPlanModeTool(block.name)) {
+        state.isInPlanMode = true;
       } else if (block.object_type === "ToolUseBlock" && isExitPlanModeTool(block.name)) {
         if (!state.submittedQuestionToolUseIds.has(block.id)) {
           state.pendingUserQuestion = makePlanApprovalQuestion(block.id, state.recentPlanFilePath);
         }
         state.recentPlanFilePath = null;
+        state.isInPlanMode = false;
       }
     }
   } else if (type === "StreamingMessageCompleteAgentMessage") {
