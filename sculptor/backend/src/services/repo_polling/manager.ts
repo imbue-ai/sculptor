@@ -1,10 +1,11 @@
 import { existsSync } from "node:fs";
 
 import { getOrm } from "~/db/orm";
-import { getRepo, listRecentWorkspaces } from "~/db/repositories";
+import { getRepo, getWorkspace, listRecentWorkspaces } from "~/db/repositories";
 import type { WorkspaceRow } from "~/db/schema";
 import { workingDirectory } from "~/environment/paths";
 import { eventBus } from "~/events";
+import type { BusEvent } from "~/events/types";
 import { runGit } from "~/git";
 import { localPathFromRepo } from "~/services/project";
 
@@ -41,6 +42,7 @@ export class RepoPollingManager {
   private readonly deps: RepoPollingDeps;
   private readonly timers = new Map<string, ReturnType<typeof setInterval>>();
   private running = false;
+  private unsubscribe: (() => void) | undefined;
 
   constructor(deps: Partial<RepoPollingDeps> = {}) {
     this.deps = {
@@ -129,10 +131,30 @@ export class RepoPollingManager {
     )) {
       this.startWorkspace(workspace);
     }
+    // Workspaces created after boot (the common case — the backend starts with
+    // none) must also be polled, so pick them up from their data_model_change.
+    this.unsubscribe = eventBus.subscribe((event: BusEvent) => {
+      if (event.kind !== "data_model_change") {
+        return;
+      }
+      for (const ref of event.changedEntities ?? []) {
+        if (ref.type !== "workspace") {
+          continue;
+        }
+        const workspace = getWorkspace(getOrm(), ref.id);
+        if (workspace !== undefined && !workspace.isDeleted && workspace.isOpen) {
+          this.startWorkspace(workspace);
+        } else {
+          this.stopWorkspace(ref.id);
+        }
+      }
+    });
   }
 
   stop(): void {
     this.running = false;
+    this.unsubscribe?.();
+    this.unsubscribe = undefined;
     for (const timer of this.timers.values()) {
       clearInterval(timer);
     }
