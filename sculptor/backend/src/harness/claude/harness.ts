@@ -88,6 +88,11 @@ export interface ClaudeHarnessDeps {
   // (Task 5.4 step 5). The on-disk state file is the authoritative resume
   // pointer; this is the additional row-level mirror.
   onSessionIdReported?: (agent: AgentRow, sessionId: string) => void;
+  // Re-resolve the injected `.env` for the agent at the start of each turn, so a
+  // var added to `.sculptor/.env` after the agent launched is picked up on its
+  // next message (the launch-time context.env is otherwise stale). Falls back to
+  // context.env when omitted.
+  resolveEnvForAgent?: (agent: AgentRow) => Record<string, string>;
   now?: () => number;
 }
 
@@ -448,10 +453,13 @@ class ClaudeHarnessProcess implements HarnessProcess {
     userInstructions: string,
     outputProcessor: ClaudeOutputProcessor,
   ): Promise<void> {
+    // Re-resolve the .env each turn so a var added after launch is picked up.
+    const injectedEnv =
+      this.deps.resolveEnvForAgent?.(this.agent) ?? this.context.env;
     return new Promise<void>((resolve) => {
       const child = spawn(argv[0] as string, argv.slice(1), {
         cwd: this.environment.getWorkingDirectory(),
-        env: { ...process.env, ...this.context.env },
+        env: { ...process.env, ...injectedEnv },
         stdio: ["pipe", "pipe", "pipe"],
         detached: true,
       });

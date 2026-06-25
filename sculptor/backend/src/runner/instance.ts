@@ -135,6 +135,8 @@ export function getAgentRunner(): AgentRunner {
         // it and Task 5.4 resume has the row-level pointer.
         onSessionIdReported: (agent, sessionId) =>
           updateAgent(getOrm(), agent.objectId, { claudeSessionId: sessionId }),
+        // Re-read .env per turn so a var added after launch is picked up.
+        resolveEnvForAgent: (agent) => resolveEnv(repoLocalPathForAgent(agent)),
       },
       pi: {
         resolveBinaryPath: () => resolveBinaryPath("PI") ?? undefined,

@@ -17,6 +17,23 @@ export function repoEnvPath(repoLocalPath: string): string {
   return path.join(repoLocalPath, ".sculptor", ".env");
 }
 
+// Variables the agent's runtime owns — a `.env` must not override them (the
+// agent sets PATH itself: real PATH + managed tool bins, run_agent/v1.py
+// _build_agent_path). Dropping them here keeps the child's inherited value.
+const RESERVED_ENV_VARS: ReadonlySet<string> = new Set(["PATH"]);
+
+function withoutReserved(
+  env: Record<string, string>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(env)) {
+    if (!RESERVED_ENV_VARS.has(name)) {
+      out[name] = value;
+    }
+  }
+  return out;
+}
+
 // The merged env for a repo: global first, then per-repo so the repo wins on a
 // name collision (REQ-INT-050). A repo with no local path gets the global set.
 export function resolveEnv(
@@ -24,9 +41,12 @@ export function resolveEnv(
 ): Record<string, string> {
   const global = parseEnvFile(globalEnvPath());
   if (repoLocalPath === null) {
-    return global;
+    return withoutReserved(global);
   }
-  return { ...global, ...parseEnvFile(repoEnvPath(repoLocalPath)) };
+  return withoutReserved({
+    ...global,
+    ...parseEnvFile(repoEnvPath(repoLocalPath)),
+  });
 }
 
 export function globalEnvVarNames(): string[] {
