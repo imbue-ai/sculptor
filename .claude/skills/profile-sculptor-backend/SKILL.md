@@ -23,7 +23,7 @@ CPU sampling or when the running build predates the in-process debug endpoints.
 | **Privileges** | None (HTTP + session token) | `sudo` + a one-time codesign re-sign of the bundle |
 | **Works on** | Only builds that ship the trace/debug endpoints (probe first) | Any build, including the shipped notarized one |
 | **Safe inside Sculptor?** | Yes — never touches the process | Re-sign/restart are the user's; the agent only attaches |
-| **Best for** | "What is every thread doing right now?", a wedged backend, a bounded call-tree trace, CPU-over-time | Instant all-thread stacks (`dump`), a live `top` glance, native (C) frames. (`record` heavily blocks the backend — prefer Route A for over-time CPU.) |
+| **Best for** | "What is every thread doing right now?", a wedged backend, a bounded call-tree trace, CPU-over-time | Instant all-thread stacks (`dump`), a live `top` glance, native (C) frames, CPU profile / flamegraph (`record`). (`record` suspends the target by default — pass `--nonblocking` to avoid freezing a live session; Route A is still richer for over-time CPU.) |
 
 > **Why two routes:** macOS blocks `task_for_pid` on the hardened-runtime,
 > notarized app, so py-spy can't attach until the target is re-signed with
@@ -210,15 +210,27 @@ fi
 $RUN "$PYSPY" dump --pid "$BACKEND_PID"   # one-shot all-thread stacks (brief pause)
 $RUN "$PYSPY" top  --pid "$BACKEND_PID"   # live top-functions view
 # add --native for C frames
+
+# CPU profile / flamegraph over time. --nonblocking is essential against a live
+# backend (see note below): it samples without suspending the process.
+$RUN "$PYSPY" record --pid "$BACKEND_PID" --nonblocking --rate 50 --duration 20 \
+  --output ~/sculptor-backend-flame.svg                       # open in any browser
+# Scrubbable timeline instead of a flat flamegraph (open at https://speedscope.app):
+$RUN "$PYSPY" record --pid "$BACKEND_PID" --nonblocking --rate 50 --duration 20 \
+  --format speedscope --output ~/sculptor-backend-profile.speedscope.json
 ```
 
-**Avoid `py-spy record` against the backend.** py-spy samples by *suspending*
-the target, and `record`'s continuous sampling over a duration blocks the
-backend heavily (observed on macOS) — enough to disrupt a live session. `dump`
-and `top` pause only briefly and are fine. For a **CPU profile over time, use
-Route A viztracer instead** — it runs in-process (no suspend-based sampling) and
-gives a richer call tree. If you truly must `record`, use a low `--rate` and a
-short `-d`, and expect the backend to stutter.
+**`py-spy record` against the backend: pass `--nonblocking`.** By default py-spy
+samples by *suspending* the target, and `record`'s continuous suspend-sample over
+a duration blocks the backend heavily on macOS — enough to freeze a live session
+(and inside Sculptor that's the very session you're running in). `--nonblocking`
+reads stacks without pausing the process, so it doesn't freeze anything; the
+tradeoff is occasional partial/inconsistent stacks and higher sampling error,
+which is usually fine for a hotspot flamegraph. Keep `--rate` modest and
+`--duration` bounded regardless. For the **richest over-time CPU picture, Route A
+viztracer is still better** — it runs in-process with a full call tree — but when
+Route A is absent (the build that pushed you to Route B), `--nonblocking record`
+is the right fallback. `dump`/`top` pause only briefly and don't need the flag.
 
 ## Cleanup
 
@@ -233,6 +245,7 @@ short `-d`, and expect the backend to stutter.
 - **pid/port change on restart** — re-discover them (Step 0) after any relaunch.
 - **Inspect before re-signing** (B2) — the binary may already be attachable.
 - **Stock py-spy fails** with `0.0.0` on our bundle — use the patched fork (B1).
-- **`py-spy record` blocks the backend** (suspend-based continuous sampling) —
-  use `dump`/`top`, or Route A viztracer for sustained CPU profiling (B5).
+- **`py-spy record` blocks the backend by default** (suspend-based continuous
+  sampling) — pass **`--nonblocking`** to sample without pausing the process, or
+  use Route A viztracer for the richest sustained CPU profile (B5).
 - **One Route-A trace at a time** (`start` → 409 if already running).
