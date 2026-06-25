@@ -2,9 +2,12 @@
 
 import json
 
+import httpx
 import pytest
 import respx
 from httpx import Response
+from sculpt.auth import get_authenticated_client
+from sculpt.commands import signal
 from sculpt.main import app
 from typer.testing import CliRunner
 
@@ -104,3 +107,66 @@ def test_signal_server_404_exits_nonzero(runner: CliRunner) -> None:
 
     assert result.exit_code == 1
     assert "404" in result.stderr
+
+
+@respx.mock
+def test_signal_client_pins_explicit_timeout_above_httpx_default() -> None:
+    # httpx silently defaults to a 5s timeout; a momentarily slow local backend
+    # POST can exceed it and be dropped, so the client must pin a longer ceiling.
+    _mock_session()
+
+    client = get_authenticated_client(_BASE_URL)
+
+    timeout = client.get_httpx_client().timeout
+    assert timeout.read is not None and timeout.read > 5.0
+    assert timeout.connect is not None and timeout.connect > 5.0
+
+
+@respx.mock
+def test_signal_session_id_retries_transient_5xx_until_persisted(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A 5xx is transient backend trouble; the session id is too important to drop,
+    # so it must be retried until the backend accepts it.
+    monkeypatch.setattr(signal, "_RETRY_BACKOFF_SECONDS", 0.0)
+    _mock_session()
+    route = respx.post(f"{_BASE_URL}/api/v1/agents/{_AGENT_ID}/signal").mock(
+        side_effect=[Response(503), Response(503), Response(204)]
+    )
+
+    result = runner.invoke(app, ["signal", "session-id", "sess-xyz", "--agent", _AGENT_ID])
+
+    assert result.exit_code == 0, result.stderr
+    assert route.call_count == 3
+    assert json.loads(route.calls.last.request.content) == {"event": "session-id", "sessionId": "sess-xyz"}
+
+
+@respx.mock
+def test_signal_session_id_retries_read_timeout_until_persisted(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A read timeout (the failure mode behind the old 5s default) is transient;
+    # the report must be retried rather than silently lost.
+    monkeypatch.setattr(signal, "_RETRY_BACKOFF_SECONDS", 0.0)
+    _mock_session()
+    route = respx.post(f"{_BASE_URL}/api/v1/agents/{_AGENT_ID}/signal").mock(
+        side_effect=[httpx.ReadTimeout("backend slow"), Response(204)]
+    )
+
+    result = runner.invoke(app, ["signal", "session-id", "sess-xyz", "--agent", _AGENT_ID])
+
+    assert result.exit_code == 0, result.stderr
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_signal_session_id_does_not_retry_permanent_4xx(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    # A 4xx is a permanent client error; retrying it would only waste attempts.
+    monkeypatch.setattr(signal, "_RETRY_BACKOFF_SECONDS", 0.0)
+    _mock_session()
+    route = respx.post(f"{_BASE_URL}/api/v1/agents/{_AGENT_ID}/signal").mock(return_value=Response(404))
+
+    result = runner.invoke(app, ["signal", "session-id", "sess-xyz", "--agent", _AGENT_ID])
+
+    assert result.exit_code == 1
+    assert route.call_count == 1
