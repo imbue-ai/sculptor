@@ -129,6 +129,12 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
 
         if self.get_by_test_id(ElementIDs.EMPTY_FIRST_RUN_PAGE).is_visible():
             create_zero_agent_workspace(self._page)
+            # Global shortcuts + the Cmd+K palette stay disabled until the workspace
+            # LIST is non-empty (FIRST-03, driven by workspacesArrayAtom). The create
+            # above navigates onto the new workspace, but that list atom can lag the
+            # WebSocket sync, so a palette open / shortcut fired immediately can no-op.
+            # Wait for the sidebar row (same workspace list) so callers don't race it.
+            expect(self.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW).first).to_be_visible()
 
     def open_command_palette(self) -> PlaywrightCommandPaletteElement:
         """Open the command palette by clicking the sidebar Cmd+K link.
