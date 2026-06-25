@@ -22,19 +22,21 @@ def test_drag_panel_from_center_to_right(sculptor_instance_: SculptorInstance) -
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="DnD Smoke WS")
 
-    # Bring Files into the center section, then expand the right section so it renders a
-    # drop target.
-    open_panel(page, "files", "center")
+    # Bring Notes into the center section, then expand the right section so it renders a
+    # drop target. Notes is a single-instance panel not seeded into the default layout,
+    # so opening it via the section ``+`` genuinely lands it in the center (the seeded
+    # Files/Changes/Commits live in the left section and are only revealed there).
+    open_panel(page, "notes", "center")
     center = PlaywrightWorkspaceSection(page, "center")
-    expect(center.get_panel_tab("files")).to_be_visible()
+    expect(center.get_panel_tab("notes")).to_be_visible()
 
     PlaywrightWorkspaceSection(page, "right").expand_section()
 
-    drag_panel_to_section(page, "files", "center", "right", "right")
+    drag_panel_to_section(page, "notes", "center", "right", "right")
 
     right = PlaywrightWorkspaceSection(page, "right")
-    expect(right.get_panel_tab("files")).to_be_visible()
-    expect(center.get_panel_tab("files")).to_have_count(0)
+    expect(right.get_panel_tab("notes")).to_be_visible()
+    expect(center.get_panel_tab("notes")).to_have_count(0)
 
 
 @user_story("to drop a panel onto a collapsed section to expand it")
@@ -44,17 +46,19 @@ def test_drag_panel_to_collapsed_section_expands(sculptor_instance_: SculptorIns
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="DnD Collapsed WS")
 
-    open_panel(page, "files", "center")
+    # Notes is not seeded into the default layout, so opening it via the section ``+``
+    # genuinely lands it in the center (the seeded Files/Changes/Commits stay in left).
+    open_panel(page, "notes", "center")
     center = PlaywrightWorkspaceSection(page, "center")
-    expect(center.get_panel_tab("files")).to_be_visible()
+    expect(center.get_panel_tab("notes")).to_be_visible()
 
     # The bottom section is collapsed by default; dropping onto its drop rail (which
     # only appears mid-drag) expands the section and lands the panel there.
     bottom = PlaywrightWorkspaceSection(page, "bottom")
     expect(bottom.get_header()).to_have_count(0)
 
-    drag_panel_to_section(page, "files", "center", "bottom", "down")
+    drag_panel_to_section(page, "notes", "center", "bottom", "down")
 
     expect(bottom.get_header()).to_be_visible()
-    expect(bottom.get_panel_tab("files")).to_be_visible()
-    expect(center.get_panel_tab("files")).to_have_count(0)
+    expect(bottom.get_panel_tab("notes")).to_be_visible()
+    expect(center.get_panel_tab("notes")).to_have_count(0)

@@ -151,8 +151,12 @@ function withOpenPanel(layout: WorkspaceLayoutState, { panelId, in: target }: Op
   if (!isMultiInstancePanel(panelId)) {
     const existing = layout.placement[panelId];
     if (existing !== undefined) {
-      // Single-instance already open: activate it in place, do not duplicate.
-      return { ...layout, activePanel: { ...layout.activePanel, [existing]: panelId } };
+      // Single-instance already open: activate it in place (do not duplicate) and
+      // expand its host section so re-opening a panel that lives in a collapsed
+      // section reveals it. Without the expand, opening an already-placed panel in
+      // a collapsed section would be a silent no-op visually.
+      const activated = { ...layout, activePanel: { ...layout.activePanel, [existing]: panelId } };
+      return withExpandedSection(activated, toSection(existing));
     }
   }
   const order = {

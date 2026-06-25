@@ -84,27 +84,29 @@ def test_center_section_cannot_collapse(sculptor_instance_: SculptorInstance) ->
 def test_cycle_panels_within_section_wraps(sculptor_instance_: SculptorInstance) -> None:
     """The panel-cycle hotkey wraps across the active section's panels (SEC-20).
 
-    Open a second panel (Files) in the center alongside the agent. Files is active
+    Open a second panel (Notes) in the center alongside the agent. Notes is active
     after opening; cycling next moves to the agent and cycling next again wraps back
-    to Files.
+    to Notes. Notes is not seeded into the default layout, so opening it via the
+    section ``+`` genuinely lands it in the center as a second panel (the seeded
+    Files/Changes/Commits live in the left section and are only revealed there).
     """
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Cycle Panels WS")
     center = PlaywrightWorkspaceSection(page, "center")
 
-    open_panel(page, "files", "center")
+    open_panel(page, "notes", "center")
     expect(center.get_panel_tabs()).to_have_count(2)
-    # Opening Files makes it the active center panel.
-    expect(center.get_active_tab()).to_have_attribute("data-panel-id", "files")
+    # Opening Notes makes it the active center panel.
+    expect(center.get_active_tab()).to_have_attribute("data-panel-id", "notes")
 
     # Cycle next -> the agent tab becomes active (the other of the two panels).
     cycle_panels(page, "next")
-    expect(center.get_active_tab()).not_to_have_attribute("data-panel-id", "files")
+    expect(center.get_active_tab()).not_to_have_attribute("data-panel-id", "notes")
 
-    # Cycle next again -> wraps back to Files.
+    # Cycle next again -> wraps back to Notes.
     cycle_panels(page, "next")
-    expect(center.get_active_tab()).to_have_attribute("data-panel-id", "files")
+    expect(center.get_active_tab()).to_have_attribute("data-panel-id", "notes")
 
 
 @user_story("to have the panel-cycle hotkey do nothing in a single-panel section")

@@ -3,11 +3,25 @@ import { atomFamily, atomWithStorage } from "jotai/utils";
 
 import { atomWithDebouncedStorage } from "~/common/state/atoms/atomWithDebouncedStorage.ts";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
+import { jumpToSectionAtom, openPanelAtom } from "~/components/sections/sectionActions.ts";
+import type { PanelId, SubSectionId } from "~/components/sections/sectionTypes.ts";
 import { getUncommittedFileStatusMap } from "~/pages/workspace/panels/fileBrowser/atoms.ts";
 import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
 
 import type { DiffPanelTabState, DiffScope, DiffTab } from "./types.ts";
 import { COMBINED_REVIEW_PATH, COMMIT_DIFF_PREFIX, FILE_VIEW_PREFIX, TARGET_BRANCH_DIFF_PREFIX } from "./types.ts";
+
+// The single-instance panel (and its default section) that hosts the active diff/
+// file-view tab in the new section shell. file-view tabs surface in the Files
+// panel; single/combined diffs surface in the Changes panel; commit-scoped diffs
+// surface in the Commits panel. Each panel's embedded DiffViewer renders the active
+// tab (DIFF_PANEL); revealing the panel here is what makes that viewer visible.
+const HOST_PANEL_BY_KIND: Record<SetActiveDiffPayload["kind"], { panelId: PanelId; section: SubSectionId }> = {
+  single: { panelId: "changes", section: "left" },
+  combined: { panelId: "changes", section: "left" },
+  "file-view": { panelId: "files", section: "left" },
+  "commit-diff": { panelId: "commits", section: "left" },
+};
 
 /** Transient per-workspace scope for the combined diff view. Resets on page refresh. */
 export const diffScopeAtomFamily = atomFamily((_workspaceId: string) => atom<DiffScope>("uncommitted"));
@@ -169,6 +183,16 @@ export const setActiveDiffTabAtom = atom(null, (get, set, payload: SetActiveDiff
       activeTabPath: tabPath,
     });
   }
+
+  // Reveal the host panel in the new section shell: open + expand its section and
+  // make it active so the embedded DiffViewer (DIFF_PANEL) becomes visible. In the
+  // old docking shell this was a single `diffPanelOpenAtom` flag; that atom is dead
+  // in the section shell (no component consumes it), so revealing the host panel in
+  // the section layout is what actually surfaces the viewer. The legacy flag is
+  // still written below for backwards compatibility with code/tests that read it.
+  const host = HOST_PANEL_BY_KIND[payload.kind];
+  set(openPanelAtom, { panelId: host.panelId, in: host.section });
+  set(jumpToSectionAtom, { subSection: host.section });
   set(diffPanelOpenAtom, true);
 
   // When opening a combined tab with a default scope, set the scope atom.

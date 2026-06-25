@@ -25,6 +25,17 @@ def _navigate_to_keybindings(sculptor_instance_: SculptorInstance):
     return settings_page.click_on_keybindings()
 
 
+def _ensure_workspace(sculptor_instance_: SculptorInstance) -> None:
+    """Leave the empty first-run state so global shortcuts fire.
+
+    FIRST-03 suppresses every global keyboard shortcut (Cmd+K, Cmd+/, ...) while
+    the workspace list is empty, which is exactly the state the shared instance's
+    per-test cleanup leaves behind. Tests that press a global shortcut must first
+    create a workspace; this is idempotent (a no-op once one exists).
+    """
+    PlaywrightProjectLayoutPage(page=sculptor_instance_.page).ensure_workspace_exists()
+
+
 @pytest.mark.release
 @user_story("to see all keybinding categories in settings")
 def test_keybindings_section_renders_all_categories(sculptor_instance_: SculptorInstance) -> None:
@@ -243,6 +254,9 @@ def test_starting_second_recording_cancels_first(sculptor_instance_: SculptorIns
 @user_story("to see customized keybindings in the help dialog")
 def test_help_dialog_reflects_customized_bindings(sculptor_instance_: SculptorInstance) -> None:
     """After changing a keybinding in settings, the help dialog should show the new binding."""
+    # The help shortcut (Cmd+/) is suppressed in the empty first-run state, so
+    # create a workspace before exercising it (FIRST-03).
+    _ensure_workspace(sculptor_instance_)
     keybindings = _navigate_to_keybindings(sculptor_instance_)
     page = sculptor_instance_.page
     mod = get_playwright_modifier_key()
@@ -277,6 +291,9 @@ def test_help_dialog_reflects_customized_bindings(sculptor_instance_: SculptorIn
 @user_story("to not see unbound keybindings in the help dialog")
 def test_help_dialog_hides_unbound(sculptor_instance_: SculptorInstance) -> None:
     """Unbound keybindings should not appear in the help dialog."""
+    # The help shortcut (Cmd+/) is suppressed in the empty first-run state, so
+    # create a workspace before exercising it (FIRST-03).
+    _ensure_workspace(sculptor_instance_)
     keybindings = _navigate_to_keybindings(sculptor_instance_)
     page = sculptor_instance_.page
     mod = get_playwright_modifier_key()
@@ -324,6 +341,11 @@ def test_keybindings_suppressed_when_overlay_open(sculptor_instance_: SculptorIn
     page = sculptor_instance_.page
     mod = get_playwright_modifier_key()
 
+    # The help shortcut (Cmd+/) is suppressed in the empty first-run state, so
+    # create a workspace first (before the workspace-row count is captured) so
+    # the shortcut fires and the count stays stable (FIRST-03).
+    _ensure_workspace(sculptor_instance_)
+
     # Reset keybindings and navigate away from settings
     keybindings = _navigate_to_keybindings(sculptor_instance_)
     keybindings.reset_all_to_defaults()
@@ -360,6 +382,10 @@ def test_default_command_palette_keybinding_works(sculptor_instance_: SculptorIn
     """Pressing the default Command palette shortcut (Meta+K) should open the search modal."""
     page = sculptor_instance_.page
 
+    # Cmd+K is suppressed in the empty first-run state, so create a workspace
+    # before exercising it (FIRST-03).
+    _ensure_workspace(sculptor_instance_)
+
     # Reset keybindings to defaults (earlier tests may have changed them)
     keybindings = _navigate_to_keybindings(sculptor_instance_)
     keybindings.reset_all_to_defaults()
@@ -383,6 +409,10 @@ def test_customized_keybinding_is_honored(sculptor_instance_: SculptorInstance) 
     """After remapping Command palette to Meta+J, Meta+J should open the modal and Meta+K should not."""
     page = sculptor_instance_.page
     mod = get_playwright_modifier_key()
+
+    # Cmd+K / Cmd+J (the remapped palette shortcut) are suppressed in the empty
+    # first-run state, so create a workspace before exercising them (FIRST-03).
+    _ensure_workspace(sculptor_instance_)
 
     # Change "Command palette" from Meta+K to Meta+J in settings. Meta+J
     # is unbound by default; Meta+P would now collide with open_workspace

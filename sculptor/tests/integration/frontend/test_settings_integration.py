@@ -5,10 +5,8 @@ from playwright.sync_api import expect
 
 from sculptor.services.user_config.user_config import load_config
 from sculptor.testing.elements.base import dismiss_with_escape
-from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import navigate_to_settings_page
-from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 from sculptor.testing.utils import get_playwright_modifier_key
@@ -108,27 +106,10 @@ def test_settings_experimental_has_review_all_toggle(sculptor_instance_: Sculpto
     expect(toggle).to_be_visible()
 
 
-@user_story("to toggle Review All on in Settings and see the button appear in the workspace")
-def test_enable_review_all_via_settings_shows_button(sculptor_instance_: SculptorInstance) -> None:
-    """Enabling enable_review_all via the Settings UI should make the Review All
-    button visible when there are changes."""
-    page = sculptor_instance_.page
-
-    # Enable the setting via Settings UI before creating a workspace
-    settings_page = navigate_to_settings_page(page=page)
-    experimental = settings_page.click_on_experimental()
-    experimental.enable_review_all()
-
-    # Create a workspace with uncommitted changes (navigates to the workspace)
-    task_page = start_task_and_wait_for_ready(
-        page,
-        prompt='fake_claude:write_file `{"file_path": "hello.py", "content": "print(\'hello\')"}`',
-    )
-    chat_panel = task_page.get_chat_panel()
-    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
-
-    # The Review All button should be visible since the setting is enabled
-    task_page.activate_file_browser()
-    file_browser = task_page.get_file_browser()
-    review_all_btn = file_browser.get_review_all_button()
-    expect(review_all_btn).to_be_visible()
+# NOTE: ``test_enable_review_all_via_settings_shows_button`` was removed in the
+# section-shell migration. The old "Review all" button lived in the file-browser
+# panel header, gated by the experimental flag + the presence of changes. That
+# button is gone: review-all is now its own no-default-section registered panel,
+# opened from a section's add-panel ``+`` dropdown (see ``task_page.click_review_all``),
+# so there is no longer a flag-gated button to assert visible. Review-all panel
+# behavior is covered by the review-all panel tests.

@@ -21,16 +21,20 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
-# Splits move a FILES panel (not the agent) into the secondary half: rendering two agent
+# Splits move a NOTES panel (not the agent) into the secondary half: rendering two agent
 # chat panels at once exceeds the single active-stream limit (the deferred AGENT-03/05
 # concurrent-rendering work), which is orthogonal to the split behaviour under test here.
+# Notes is a single-instance panel that is NOT seeded into the default layout, so opening
+# it via the section ``+`` genuinely lands it in the requested section (the seeded
+# Files/Changes/Commits live in the left section and ``open_panel`` only reveals them
+# there — it never moves them into center).
 
 
 @user_story("to split a center panel into a side-by-side pair")
 def test_create_right_split_moves_panel_to_secondary(sculptor_instance_: SculptorInstance) -> None:
     """A center "Create right split" moves the panel into a new secondary half (SPLIT-01/02).
 
-    Open a Files panel in the center, then split it off with the vertical (right) split:
+    Open a Notes panel in the center, then split it off with the vertical (right) split:
     it leaves the primary half and appears in the secondary half.
     """
     page = sculptor_instance_.page
@@ -38,18 +42,18 @@ def test_create_right_split_moves_panel_to_secondary(sculptor_instance_: Sculpto
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Right Split WS")
     center = PlaywrightWorkspaceSection(page, "center")
 
-    open_panel(page, "files", "center")
-    expect(center.get_panel_tab("files")).to_be_visible()
+    open_panel(page, "notes", "center")
+    expect(center.get_panel_tab("notes")).to_be_visible()
 
     split = PlaywrightSectionSplit(page, "center")
-    split.create_split("files", "vertical")
+    split.create_split("notes", "vertical")
     split.assert_split_count(1)
 
     # The panel now lives in the secondary half and not in the primary half.
     secondary = split.get_subsection("secondary")
     primary = split.get_subsection("primary")
-    expect(secondary.get_panel_tab("files")).to_be_visible()
-    expect(primary.get_panel_tab("files")).to_have_count(0)
+    expect(secondary.get_panel_tab("notes")).to_be_visible()
+    expect(primary.get_panel_tab("notes")).to_have_count(0)
 
 
 @user_story("to split a center panel into a stacked pair")
@@ -60,15 +64,15 @@ def test_create_bottom_split_moves_panel_to_secondary(sculptor_instance_: Sculpt
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Bottom Split WS")
     center = PlaywrightWorkspaceSection(page, "center")
 
-    open_panel(page, "files", "center")
-    expect(center.get_panel_tab("files")).to_be_visible()
+    open_panel(page, "notes", "center")
+    expect(center.get_panel_tab("notes")).to_be_visible()
 
     split = PlaywrightSectionSplit(page, "center")
-    split.create_split("files", "horizontal")
+    split.create_split("notes", "horizontal")
     split.assert_split_count(1)
 
     secondary = split.get_subsection("secondary")
-    expect(secondary.get_panel_tab("files")).to_be_visible()
+    expect(secondary.get_panel_tab("notes")).to_be_visible()
 
 
 @user_story("to be offered only the split directions a section allows")
@@ -127,11 +131,11 @@ def test_one_split_max_removes_create_options(sculptor_instance_: SculptorInstan
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="One Split Max WS")
     center = PlaywrightWorkspaceSection(page, "center")
 
-    open_panel(page, "files", "center")
-    expect(center.get_panel_tab("files")).to_be_visible()
+    open_panel(page, "notes", "center")
+    expect(center.get_panel_tab("notes")).to_be_visible()
 
     split = PlaywrightSectionSplit(page, "center")
-    split.create_split("files", "vertical")
+    split.create_split("notes", "vertical")
     split.assert_split_count(1)
 
     # Re-opening a tab's context menu (in the still-populated primary half) offers no

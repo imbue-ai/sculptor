@@ -12,10 +12,13 @@
 // useWorkspaceDynamicPanels. A restored snapshot is never re-seeded (SWITCH-04 preserves
 // what the user was looking at).
 
-import { useSetAtom, useStore } from "jotai";
-import { useEffect, useLayoutEffect } from "react";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { useEffect, useLayoutEffect, useMemo } from "react";
 
+import { ensureAgentPanelsPlacedAtom } from "~/common/state/agentPanelPlacement.ts";
+import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { useMarkRead } from "~/common/state/hooks/useMarkRead";
+import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
 import { seedFirstVisitTerminal } from "~/components/sections/addPanelCore.ts";
 import { buildDefaultWorkspaceLayout } from "~/components/sections/persistence/defaultLayout.ts";
 import { makeAgentPanelId, makeTerminalPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
@@ -27,6 +30,7 @@ import {
   workspaceLayoutFamily,
 } from "~/components/sections/sectionAtoms.ts";
 import { activeSectionRingNonceAtom } from "~/components/sections/transientAtoms.ts";
+import { useAddPanelActions } from "~/components/sections/useAddPanelActions.ts";
 import { useArtifactSync } from "~/pages/workspace/hooks/useArtifactSync";
 
 import { useWorkspaceDynamicPanels } from "./useWorkspaceDynamicPanels.ts";
@@ -39,9 +43,26 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
   const openPanel = useSetAtom(openPanelAtom);
   const setActivePanel = useSetAtom(setActivePanelAtom);
   const bumpRingNonce = useSetAtom(activeSectionRingNonceAtom);
+  const ensureAgentPanelsPlaced = useSetAtom(ensureAgentPanelsPlacedAtom);
+  const tasks = useAtomValue(tasksArrayAtom);
+  const { createRecentAgent } = useAddPanelActions();
 
   // Keep the registry in sync with this workspace's agents.
   useWorkspaceDynamicPanels(workspaceId);
+
+  // Back the Cmd+K "New agent" command (nav.new_agent → runtime.ui.createAgent →
+  // the agent.create action) with the same create-in-center flow as the add-panel
+  // "+" / the new_agent keybinding. The legacy AgentTabs registered this; that
+  // surface is gone in the section shell, so register it here — the bootstrap is the
+  // single per-workspace mount that always has the add-panel actions in scope.
+  useRegisterCommandAction("agent.create", createRecentAgent);
+
+  // This workspace's agent task ids, recomputed only when the set of ids changes,
+  // so the auto-open effect below fires on an agent appearing/disappearing rather
+  // than on every per-task field tick.
+  const workspaceAgentIds = useMemo(() => {
+    return (tasks ?? []).filter((task) => task.workspaceId === workspaceId).map((task) => task.id);
+  }, [tasks, workspaceId]);
 
   // Per-viewed-agent data effects that the old workspace page owned: sync the
   // viewed agent's artifacts and mark it read while it is shown in the center.
@@ -78,6 +99,18 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
       setActivePanel({ panelId, in: placement });
     }
   }, [workspaceId, taskId, store, openPanel, setActivePanel]);
+
+  // Auto-open every agent for this workspace as a center panel tab. The active-agent
+  // effect above only places the route's agent; an agent that appears WITHOUT a
+  // navigation (a CI-babysitter the backend spawns, or a second agent created from
+  // the add-panel "+" / Cmd+K) would otherwise be registered but never placed, so no
+  // tab rendered. This reconcile is additive only — it never changes the active panel,
+  // so a background agent surfaces as a new tab without stealing focus from the agent
+  // the user is currently viewing. Runs as a layout effect so a freshly-created agent's
+  // tab is committed in the same pre-paint flush as its navigation.
+  useLayoutEffect(() => {
+    ensureAgentPanelsPlaced(workspaceAgentIds);
+  }, [workspaceAgentIds, ensureAgentPanelsPlaced]);
 
   // Pulse the active-section ring on workspace entry (SEC-11). A PASSIVE effect (not a
   // layout effect) so it bumps the nonce AFTER useActiveSectionRing's mount guard has

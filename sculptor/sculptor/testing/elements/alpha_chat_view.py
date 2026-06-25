@@ -235,26 +235,6 @@ def click_visible_in_chat_viewport(page: Page, test_id: str) -> None:
     )
 
 
-class PlaywrightDebugChatViewElement(PlaywrightIntegrationTestElement):
-    """Page Object Model for the debug chat view."""
-
-    def get_blocks(self) -> Locator:
-        """Get all block entries in the debug view."""
-        return self.get_by_test_id(ElementIDs.DEBUG_CHAT_BLOCK)
-
-
-def switch_to_debug_view(page: Page, agent_tab_name: str = "Claude 1") -> None:
-    """Toggle debug view on for an agent via the tab context menu.
-
-    Right-clicks the agent tab, opens the Diagnostics submenu, and clicks
-    the Debug View toggle.
-    """
-    tab = page.get_by_role("tab", name=agent_tab_name)
-    tab.click(button="right")
-    page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_DIAGNOSTICS).click()
-    page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_DEBUG_VIEW).click()
-
-
 def get_intro_bottom_offset(page: Page) -> float:
     """Return the intro block's bottom edge relative to the scroll container's top.
 
@@ -274,9 +254,3 @@ def get_alpha_chat_view(page: Page) -> PlaywrightAlphaChatViewElement:
     """Get the alpha chat view element from the page."""
     locator = page.get_by_test_id(ElementIDs.ALPHA_CHAT_VIEW)
     return PlaywrightAlphaChatViewElement(locator=locator, page=page)
-
-
-def get_debug_chat_view(page: Page) -> PlaywrightDebugChatViewElement:
-    """Get the debug chat view element from the page."""
-    locator = page.get_by_test_id(ElementIDs.DEBUG_CHAT_VIEW)
-    return PlaywrightDebugChatViewElement(locator=locator, page=page)

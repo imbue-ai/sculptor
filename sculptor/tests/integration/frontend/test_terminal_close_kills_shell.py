@@ -34,6 +34,7 @@ from sculptor.testing.elements.terminal import get_terminal_tabs
 from sculptor.testing.elements.terminal import get_xterm_buffer_text
 from sculptor.testing.elements.terminal import open_terminal_and_wait
 from sculptor.testing.elements.terminal import run_command_in_active_terminal
+from sculptor.testing.elements.terminal import wait_for_xterm_buffer_nonempty
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -136,6 +137,13 @@ def test_close_terminal_tab_kills_shell_process(sculptor_instance_: SculptorInst
     add_terminal(page)
     terminal_tabs = get_terminal_tabs(page)
     expect(terminal_tabs).to_have_count(2)
+
+    # In the section shell only the active panel mounts, so adding the second tab
+    # unmounts the first terminal's xterm and mounts a fresh one (now the active
+    # window.__xterm). Wait for that new xterm to actually connect and render its
+    # shell prompt before typing into it — otherwise the PID echo can be dropped
+    # on a not-yet-connected terminal and the read below times out.
+    wait_for_xterm_buffer_nonempty(page)
 
     # The second tab is active by default after add. Capture its pid too
     # so we can prove ONLY the first tab's shell was killed.

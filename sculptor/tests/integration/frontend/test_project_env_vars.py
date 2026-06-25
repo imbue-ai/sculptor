@@ -19,6 +19,7 @@ from sculptor.testing.elements.terminal import add_terminal
 from sculptor.testing.elements.terminal import get_terminal_tabs
 from sculptor.testing.elements.terminal import open_terminal_and_wait
 from sculptor.testing.elements.terminal import run_command_in_active_terminal
+from sculptor.testing.elements.terminal import wait_for_xterm_buffer_nonempty
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_to_settings_page
@@ -209,8 +210,14 @@ def test_terminal_picks_up_newly_added_env_var(sculptor_instance_: SculptorInsta
 
     add_terminal(page)
     expect(get_terminal_tabs(page)).to_have_count(2)
-    expect(page.get_by_label("Terminal input")).to_have_count(2)
+    # In the section shell only the ACTIVE panel mounts its component, so exactly
+    # one terminal xterm (the newly-added, now-active tab) is in the DOM — the
+    # inactive first terminal is unmounted while its tab is backgrounded.
+    expect(page.get_by_label("Terminal input")).to_have_count(1)
 
+    # Wait for the new terminal's xterm to connect and render its shell prompt
+    # before typing, so the echo isn't dropped on a not-yet-connected terminal.
+    wait_for_xterm_buffer_nonempty(page)
     run_command_in_active_terminal(page, 'echo "TERM_LATE_CHECK:${SCTEST_LATE_TERMINAL_VAR:-MISSING}"')
     wait_for_xterm_substring(page, "TERM_LATE_CHECK:terminal_loaded_after")
 

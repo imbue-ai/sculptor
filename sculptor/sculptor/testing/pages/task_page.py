@@ -117,10 +117,16 @@ class PlaywrightTaskPage(PlaywrightProjectLayoutPage):
         return self._page.get_by_test_id(ElementIDs.CHANGES_COMMIT_BUTTON)
 
     def click_review_all(self) -> None:
-        """Click the Review All button in the changes panel."""
-        review_all_btn = self._page.get_by_test_id(ElementIDs.CHANGES_REVIEW_ALL_BTN)
-        expect(review_all_btn).to_be_visible()
-        review_all_btn.click()
+        """Reveal the Review All panel (the combined multi-file diff).
+
+        In the section shell there is no "Review all" button on the Changes panel:
+        review-all is its own no-default-section registered panel, opened from a
+        section's add-panel ``+`` dropdown like any other single-instance panel.
+        Open it into the left section (where the review surfaces live) and wait for
+        its root so callers can interact with the combined diff.
+        """
+        section_root = open_panel(self._page, "review-all", "left")
+        expect(section_root.get_by_test_id(ElementIDs.REVIEW_ALL_PANEL)).to_be_visible()
 
     def activate_actions_panel(self) -> None:
         """Reveal the Actions panel (a registered panel) in the right section."""

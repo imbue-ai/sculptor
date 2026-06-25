@@ -128,7 +128,7 @@ def test_maximize_via_hotkey(sculptor_instance_: SculptorInstance) -> None:
 def test_maximized_split_shows_one_subsection(sculptor_instance_: SculptorInstance) -> None:
     """A maximized split section renders only its primary half (SPLIT-06).
 
-    Split the center (two agents, one moved into the secondary half), then maximize:
+    Split the center (a Notes panel moved into the secondary half), then maximize:
     only the primary sub-section renders, so the secondary's header is gone.
     """
     page = sculptor_instance_.page
@@ -136,13 +136,15 @@ def test_maximized_split_shows_one_subsection(sculptor_instance_: SculptorInstan
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Maximized Split WS")
     center = PlaywrightWorkspaceSection(page, "center")
 
-    # Open a Files panel and split it into the secondary half (a Files panel, not the
-    # agent, to stay within the single active-stream limit — see AGENT-03/05).
-    open_panel(page, "files", "center")
-    expect(center.get_panel_tab("files")).to_be_visible()
+    # Open a Notes panel and split it into the secondary half (a Notes panel, not the
+    # agent, to stay within the single active-stream limit — see AGENT-03/05). Notes is
+    # not seeded into the default layout, so opening it via the section ``+`` genuinely
+    # lands it in the center (the seeded Files/Changes/Commits stay in the left section).
+    open_panel(page, "notes", "center")
+    expect(center.get_panel_tab("notes")).to_be_visible()
 
     split = PlaywrightSectionSplit(page, "center")
-    split.create_split("files", "vertical")
+    split.create_split("notes", "vertical")
     secondary = split.get_subsection("secondary")
     expect(secondary.get_header()).to_be_visible()
 

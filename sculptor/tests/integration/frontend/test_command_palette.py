@@ -147,8 +147,11 @@ def test_command_palette_escape_closes(sculptor_instance_: SculptorInstance) -> 
 def test_command_palette_keyboard_suppressed_when_overlay_open(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
     mod = get_playwright_modifier_key()
-    blur_active_element(page)
     layout = _layout(sculptor_instance_)
+    # Cmd+/ (help) and Cmd+K are suppressed in the empty first-run state, so
+    # create a workspace before exercising them (FIRST-03).
+    layout.ensure_workspace_exists()
+    blur_active_element(page)
 
     # Open the help dialog so the overlay-suppression rule kicks in.
     layout.press_keyboard_shortcut(f"{mod}+/")

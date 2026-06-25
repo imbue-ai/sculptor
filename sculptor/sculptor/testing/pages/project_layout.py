@@ -107,13 +107,38 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         palette = self.get_by_test_id(ElementIDs.COMMAND_PALETTE)
         return PlaywrightCommandPaletteElement(locator=palette, page=self._page)
 
+    def ensure_workspace_exists(self) -> None:
+        """Leave the empty first-run state so global shortcuts are live.
+
+        FIRST-03 deliberately disables the command palette AND every global
+        keyboard shortcut while no workspace exists: ``areGlobalShortcutsDisabled``
+        (derived from an empty workspace list) makes ``useCommandPalette().toggle``
+        and ``usePageLayoutKeyboardShortcuts`` no-op, so the sidebar Cmd+K link,
+        Cmd+K and Cmd+/ all do nothing. The shared instance's per-test cleanup
+        deletes every workspace and lands on the empty first-run page, so a test
+        that opens the palette or fires a shortcut must first create a workspace.
+
+        Idempotent: a no-op once any workspace exists (e.g. a test that already
+        ran ``start_task_and_wait_for_ready``), so it never disturbs callers that
+        are past first-run.
+        """
+        # Function-local import: project_layout is imported by task_page /
+        # settings_page, which playwright_utils imports, so a module-level
+        # import here would close that cycle.
+        from sculptor.testing.playwright_utils import create_zero_agent_workspace
+
+        if self.get_by_test_id(ElementIDs.EMPTY_FIRST_RUN_PAGE).is_visible():
+            create_zero_agent_workspace(self._page)
+
     def open_command_palette(self) -> PlaywrightCommandPaletteElement:
         """Open the command palette by clicking the sidebar Cmd+K link.
 
         The open path moved from the old top-bar search button to the sidebar
         ``SIDEBAR_CMDK_LINK`` (SIDE-02); the method signature is unchanged so
-        existing callers keep working.
+        existing callers keep working. A workspace is ensured first because the
+        open affordance is disabled in the empty first-run state (FIRST-03).
         """
+        self.ensure_workspace_exists()
         cmdk_link = self.get_workspace_sidebar().get_cmdk_link()
         expect(cmdk_link).to_be_visible()
         cmdk_link.click()
@@ -122,7 +147,12 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         return palette
 
     def open_command_palette_with_keyboard(self) -> PlaywrightCommandPaletteElement:
-        """Open the command palette using its default keyboard shortcut."""
+        """Open the command palette using its default keyboard shortcut.
+
+        A workspace is ensured first because Cmd+K is suppressed in the empty
+        first-run state (FIRST-03).
+        """
+        self.ensure_workspace_exists()
         mod_key = get_playwright_modifier_key()
         self.press_keyboard_shortcut(f"{mod_key}+k")
         palette = self.get_command_palette()
