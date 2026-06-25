@@ -53,6 +53,7 @@ import { ChatScrollProvider } from "./hooks/useChatScroll.tsx";
 import { useJumpToBottom } from "./hooks/useJumpToBottom.ts";
 import { useViewportStability } from "./hooks/useViewportStability.ts";
 import { JumpToBottomButton } from "./JumpToBottomButton.tsx";
+import { useScrollStateMachine } from "./scroll/useScrollStateMachine.ts";
 import { StatusPill } from "./StatusPill.tsx";
 
 type AlphaChatInterfaceProps = ChatData & {
@@ -183,6 +184,10 @@ export const AlphaChatInterface = ({
     isProgrammaticScrollRef,
   );
 
+  // Single owner of scroll state (authority + layout settle + suppression).
+  // Declared before the scroll hooks so its attach layout effect runs first.
+  const scrollMachine = useScrollStateMachine(scrollContainerRef);
+
   const density = useAtomValue(chatToolDensityAtom);
 
   const inProgressMessageId = smoothInProgressChatMessage?.id ?? null;
@@ -204,7 +209,7 @@ export const AlphaChatInterface = ({
 
   // Scroll position persistence per task
   const filteredMessageRefs = useMemo(() => filteredNodes.map((n) => ({ id: n.message.id })), [filteredNodes]);
-  useAlphaScrollPersistence(scrollContainerRef, virtualizer, taskID ?? "", filteredMessageRefs);
+  useAlphaScrollPersistence(scrollContainerRef, virtualizer, taskID ?? "", filteredMessageRefs, scrollMachine);
 
   // Prompt navigation: ArrowUp/Down to cycle through user prompts
   const filteredChatMessages = useMemo(() => filteredNodes.map((n) => n.message), [filteredNodes]);

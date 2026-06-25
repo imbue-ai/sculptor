@@ -5,6 +5,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 import { alphaScrollPositionAtomFamily } from "~/common/state/atoms/alphaScroll.ts";
 
+import type { ScrollStateMachine } from "../scroll/scrollStateMachine.ts";
+
 /** Cancel all pending rAFs tracked in the set and clear it. */
 const cancelPendingRafs = (ids: Set<number>): void => {
   for (const id of ids) cancelAnimationFrame(id);
@@ -20,9 +22,9 @@ export const useAlphaScrollPersistence = (
   virtualizer: Virtualizer<HTMLDivElement, Element>,
   taskId: string,
   filteredMessages: ReadonlyArray<MessageRef>,
+  machine: ScrollStateMachine,
 ): void => {
   const [scrollPosition, setScrollPosition] = useAtom(alphaScrollPositionAtomFamily(taskId));
-  const isRestoringRef = useRef(false);
   const prevTaskIdRef = useRef(taskId);
   const pendingRafsRef = useRef(new Set<number>());
 
@@ -34,7 +36,9 @@ export const useAlphaScrollPersistence = (
     let rafId: number | null = null;
 
     const handleScroll = (): void => {
-      if (isRestoringRef.current) return;
+      // Don't record positions the restore itself produces — the machine is in
+      // `restoring` for the whole restore window.
+      if (machine.getState().authority.kind === "restoring") return;
 
       if (rafId !== null) cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
@@ -61,7 +65,7 @@ export const useAlphaScrollPersistence = (
       el.removeEventListener("scroll", handleScroll);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [scrollContainerRef, virtualizer, filteredMessages, setScrollPosition]);
+  }, [scrollContainerRef, virtualizer, filteredMessages, setScrollPosition, machine]);
 
   // Apply the saved scroll position to the container. Resolves the saved anchor
   // (message index + pixel offset, or distance-from-bottom) against the
@@ -97,7 +101,9 @@ export const useAlphaScrollPersistence = (
 
     // Cancel any in-flight rAFs from a previous restore call
     cancelPendingRafs(pendingRafsRef.current);
-    isRestoringRef.current = true;
+    // Enter `restoring`: the machine now owns "a restore is in flight", which
+    // suppresses position saves and is reflected to the DOM as data-scroll-phase.
+    machine.dispatch({ kind: "taskSwitched", taskId });
 
     // First apply: resolves the anchor against the virtualizer's *estimated*
     // heights — on a task switch the virtualizer is mid-settle and the items
@@ -108,24 +114,30 @@ export const useAlphaScrollPersistence = (
     // Re-assert after the virtualizer has settled. useAlphaVirtualizer's layout
     // effect runs before this hook's (by call order) and schedules its settle
     // double-rAF first, so this double-rAF's inner frame fires after it: by then
-    // `isSettlingRef` has cleared and the visible items have re-measured to
-    // their real heights. Re-applying re-resolves the anchor against those
-    // measurements, so the target message lands where intended instead of being
-    // left at a stale estimate-based pixel — which, in a virtualized list, can
-    // scroll the target out of the rendered window entirely (the flake this
-    // fixes). isRestoringRef stays true across the whole window so this
-    // re-assert's scroll events aren't saved back as a new position.
+    // the visible items have re-measured to their real heights. Re-applying
+    // re-resolves the anchor against those measurements, so the target message
+    // lands where intended instead of being left at a stale estimate-based pixel
+    // — which, in a virtualized list, can scroll the target out of the rendered
+    // window entirely.
     const id1 = requestAnimationFrame(() => {
       pendingRafsRef.current.delete(id1);
       const id2 = requestAnimationFrame(() => {
         pendingRafsRef.current.delete(id2);
-        applyScrollPosition();
-        isRestoringRef.current = false;
+        // Only re-assert while the machine is still `restoring`. A genuine user
+        // scroll during the restore window flips authority to `userControlled`
+        // (see useScrollStateMachine), so this skips the re-assert rather than
+        // snapping the view back to the saved anchor and clobbering them.
+        if (machine.getState().authority.kind === "restoring") {
+          applyScrollPosition();
+        }
+        // Settle: returns authority to `userControlled` (a no-op if the user
+        // already took over).
+        machine.dispatch({ kind: "restoreSettled" });
       });
       pendingRafsRef.current.add(id2);
     });
     pendingRafsRef.current.add(id1);
-  }, [scrollContainerRef, filteredMessages, applyScrollPosition]);
+  }, [scrollContainerRef, filteredMessages, applyScrollPosition, machine, taskId]);
 
   // Restore scroll position synchronously before paint so the user never
   // sees the old scroll position flash before jumping to the saved one.
