@@ -25,7 +25,7 @@ import {
   modelShortnameFor,
   resolveClaudeBinary,
 } from "~/harness/claude/launch";
-import { SculptorMcpServer } from "~/harness/claude/mcp";
+import { SculptorMcpServer, type UserQuestionAnswer } from "~/harness/claude/mcp";
 import { ClaudeOutputProcessor } from "~/harness/claude/output_processor";
 import {
   getTasksPath as resolveTasksPath,
@@ -149,6 +149,11 @@ class ClaudeHarnessProcess implements HarnessProcess {
   private stdoutBuffer = "";
   private interrupted = false;
   private controlRequestCounter = 0;
+  // AUQ/plan answers delivered mid-turn via the MCP backchannel: their
+  // RequestStarted is emitted on delivery, but the matching RequestSuccess is
+  // deferred until the in-flight CLI invocation completes (the answer continues
+  // the same turn). Mirrors process_manager's `_pending_answer_request_ids`.
+  private readonly pendingAnswerRequestIds: string[] = [];
 
   constructor(
     private readonly deps: ClaudeHarnessDeps,
@@ -176,6 +181,35 @@ class ClaudeHarnessProcess implements HarnessProcess {
   sendUserMessage(message: Record<string, unknown>): void {
     if (this.finished) {
       return;
+    }
+    // A mid-turn answer to an AUQ / ExitPlanMode dialog resolves the held MCP
+    // `tools/call` that paused the running CLI — it must NOT start a new turn.
+    // Only when there is no pending call (e.g. the answer arrives after the call
+    // already resolved) does it fall through to a queued turn.
+    if (message.object_type === "UserQuestionAnswerMessage") {
+      const toolUseId = message.tool_use_id;
+      if (
+        typeof toolUseId === "string" &&
+        this.mcpServer.hasPendingCall(toolUseId)
+      ) {
+        // Bracket the answer as its own request keyed by its message_id: emit
+        // RequestStarted now and defer RequestSuccess until the turn completes,
+        // so the derived status (which requires every chat-input id to have a
+        // finished request) settles to READY. Ports `_try_deliver_answer_to_mcp`.
+        const answerRequestId =
+          typeof message.message_id === "string"
+            ? message.message_id
+            : newAgentMessageId();
+        this.emit({
+          object_type: "RequestStartedAgentMessage",
+          message_id: newAgentMessageId(),
+          source: "AGENT",
+          request_id: answerRequestId,
+        });
+        this.pendingAnswerRequestIds.push(answerRequestId);
+        this.mcpServer.deliverAnswer(message as unknown as UserQuestionAnswer);
+        return;
+      }
     }
     this.queue.push(message);
     void this.pump();
@@ -292,6 +326,22 @@ class ClaudeHarnessProcess implements HarnessProcess {
     );
 
     await this.spawnAndDrive(argv, userInstructions, outputProcessor);
+
+    // Settle any mid-turn answers delivered during this invocation: their
+    // deferred RequestSuccess closes the request started at delivery time so the
+    // derived status no longer treats them as in-flight.
+    const interrupted = this.interrupted;
+    while (this.pendingAnswerRequestIds.length > 0) {
+      const answerRequestId = this.pendingAnswerRequestIds.shift() as string;
+      this.emit({
+        object_type: "RequestSuccessAgentMessage",
+        message_id: newAgentMessageId(),
+        source: "AGENT",
+        request_id: answerRequestId,
+        interrupted,
+        approximate_creation_time: new Date(this.now()).toISOString(),
+      });
+    }
 
     const finalRequestId = requestId;
     if (this.interrupted) {
