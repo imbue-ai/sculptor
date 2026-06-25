@@ -6,7 +6,7 @@
 // long-lived `HarnessProcess` contract.
 
 import { spawn, type ChildProcess } from "node:child_process";
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join as joinPath } from "node:path";
 
 import type { AgentRow, WorkspaceInitializationStrategy } from "~/db/schema";
@@ -133,6 +133,11 @@ export class ClaudeHarness implements Harness {
     return new ClaudeHarnessProcess(this.deps, context);
   }
 }
+
+// Marker file (in the agent state dir) recording that the conversation's first
+// user message has been processed, so the env-var reminder fires only once and
+// not again after an app restart.
+const ENV_REMINDER_MARKER_FILE = "env_var_reminder_emitted";
 
 // One long-lived process per supervised Claude agent. Each user message starts a
 // fresh `claude` CLI turn (matching Python's per-turn invocation), bracketed by
@@ -311,6 +316,14 @@ class ClaudeHarnessProcess implements HarnessProcess {
       }
     }
 
+    // The env-var reminder is appended to the first chat message of the
+    // conversation when the project has configured env vars. A marker file in
+    // the agent state dir makes "first message" survive an app restart, so it is
+    // not re-emitted on resume (process_manager is_first_user_message_of_conversation).
+    const statePath = this.environment.getStatePath(this.agent.objectId);
+    const reminderMarker = joinPath(statePath, ENV_REMINDER_MARKER_FILE);
+    const isChatInput = message.object_type === "ChatInputUserMessage";
+    const isFirstMessage = isChatInput && !existsSync(reminderMarker);
     // An answer turn (the agent's AUQ/plan dialog already resolved, so this is a
     // fresh CLI invocation) feeds the user's answers back as the prompt — the
     // message has no `text` (process_manager_utils.get_user_instructions).
@@ -324,7 +337,24 @@ class ClaudeHarnessProcess implements HarnessProcess {
               : undefined,
             enterPlanMode: message.enter_plan_mode === true,
             exitPlanMode: message.exit_plan_mode === true,
+            envVarNames: Object.keys(this.context.env ?? {}),
+            isFirstMessage,
           });
+    // Persist the instructions the CLI received (diagnostics + the env-var-reminder
+    // tests read state/tasks/<id>/user_instructions_<id>.txt) and mark the
+    // conversation as started so the reminder fires only once.
+    try {
+      mkdirSync(statePath, { recursive: true });
+      writeFileSync(
+        joinPath(statePath, `user_instructions_${requestId}.txt`),
+        userInstructions,
+      );
+      if (isChatInput) {
+        writeFileSync(reminderMarker, "");
+      }
+    } catch {
+      // Best-effort; never block a turn on these side files.
+    }
     const systemPrompt = getCombinedSystemPrompt({
       initializationStrategy: this.deps.initializationStrategyFor(this.agent),
       userSystemPrompt: this.agent.systemPrompt,
