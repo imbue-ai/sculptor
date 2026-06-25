@@ -616,13 +616,41 @@ function attachTurnMetrics(
   return { ...message, turn_metrics: turnMetrics };
 }
 
+// Strict per-question shape check (mcp _validate_arguments / isQuestionShape):
+// the CLI input is camelCase (`multiSelect`). A malformed question (e.g.
+// multiSelect as a string) must be rejected so no panel reconstructs from it.
+function isValidAskUserQuestionShape(question: unknown): boolean {
+  if (typeof question !== "object" || question === null) {
+    return false;
+  }
+  const q = question as Record<string, unknown>;
+  if (typeof q.question !== "string" || typeof q.header !== "string") {
+    return false;
+  }
+  if (typeof q.multiSelect !== "boolean") {
+    return false;
+  }
+  if (!Array.isArray(q.options)) {
+    return false;
+  }
+  return q.options.every((option) => {
+    if (typeof option !== "object" || option === null) {
+      return false;
+    }
+    const o = option as Record<string, unknown>;
+    return typeof o.label === "string" && typeof o.description === "string";
+  });
+}
+
 function reconstructPendingAskUserQuestion(block: ToolUseBlock): AskUserQuestionData | null {
   // Claude's MCP AskUserQuestion tool input carries the AskUserQuestionData
-  // fields directly. The Python harness strict-validates the questions; here we
-  // require a `questions` array. (The malformed-input fixtures exercise the
-  // rejection.)
+  // fields directly. Strict-validate each question (matching the MCP server's
+  // rejection) so a malformed tool call never reconstructs an interactive panel.
   const questions = block.input["questions"];
-  if (!Array.isArray(questions)) {
+  if (!Array.isArray(questions) || questions.length === 0) {
+    return null;
+  }
+  if (!questions.every(isValidAskUserQuestionShape)) {
     return null;
   }
   return {
