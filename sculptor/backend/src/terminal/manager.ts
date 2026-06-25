@@ -18,18 +18,38 @@ export function reapStalePid(pid: number): void {
 export class TerminalManager {
   private readonly byIndex = new Map<number, PtyProcess>();
   private readonly byAgent = new Map<string, PtyProcess>();
+  // The workspace each plain (by-index) terminal belongs to, so a workspace
+  // deletion can close exactly its terminals (the index alone is not scoped).
+  private readonly workspaceByIndex = new Map<number, string>();
 
-  getOrCreateTerminal(index: number, options: SpawnPtyOptions): PtyProcess {
+  getOrCreateTerminal(
+    index: number,
+    options: SpawnPtyOptions,
+    workspaceId?: string,
+  ): PtyProcess {
     const existing = this.byIndex.get(index);
     if (existing !== undefined) {
       return existing;
     }
     const terminal = spawnPty(options);
     this.byIndex.set(index, terminal);
+    if (workspaceId !== undefined) {
+      this.workspaceByIndex.set(index, workspaceId);
+    }
     terminal.onExit(() => {
       this.byIndex.delete(index);
+      this.workspaceByIndex.delete(index);
     });
     return terminal;
+  }
+
+  // Close every plain terminal belonging to a workspace (deletion teardown).
+  closeWorkspaceTerminals(workspaceId: string): void {
+    for (const [index, ws] of this.workspaceByIndex) {
+      if (ws === workspaceId) {
+        this.closeTerminal(index);
+      }
+    }
   }
 
   getTerminal(index: number): PtyProcess | undefined {
@@ -41,6 +61,7 @@ export class TerminalManager {
     if (terminal !== undefined) {
       terminal.kill();
       this.byIndex.delete(index);
+      this.workspaceByIndex.delete(index);
     }
   }
 

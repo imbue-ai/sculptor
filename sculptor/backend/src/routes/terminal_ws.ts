@@ -165,6 +165,7 @@ export async function registerTerminalWsRoutes(
       const pty = getTerminalManager().getOrCreateTerminal(
         Number.parseInt(index, 10),
         { cwd, extraEnv: repoEnvForWorkspace(workspaceId) },
+        workspaceId,
       );
       bridge(socket, pty);
     },

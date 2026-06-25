@@ -23,6 +23,8 @@ import {
 import { eventBus } from "~/events";
 import { previewBranchName, runGit, setupWorkspace } from "~/git";
 import { newWorkspaceId } from "~/ids";
+import { getAgentRunner } from "~/runner/instance";
+import { getTerminalManager } from "~/terminal/instance";
 import type {
   WorkspaceRow,
   WorkspaceInitializationStrategy,
@@ -366,22 +368,32 @@ export class WorkspaceService {
     }
   }
 
-  delete(workspaceId: string): void {
+  async delete(workspaceId: string): Promise<void> {
     const orm = getOrm();
     const row = getWorkspace(orm, workspaceId);
     if (row === undefined || row.isDeleted) {
       throw new WorkspaceError(404, "Workspace not found");
     }
-    // Tear down the environment before soft-deleting: cancel any setup, remove
-    // the worktree, drop the workspace dir.
+    // Tear down the environment before soft-deleting: cancel any setup, stop
+    // every agent's live process (chat harness + terminal PTY) so nothing holds
+    // the worktree, then remove the worktree and drop the workspace dir. Killing
+    // the processes first is what lets the worktree removal actually succeed.
     this.setupRunner.cancel(workspaceId);
+    for (const agent of listAgentsByWorkspace(orm, workspaceId)) {
+      getAgentRunner().stopAgent(agent.objectId);
+      getTerminalManager().closeAgentTerminal(agent.objectId);
+    }
+    getTerminalManager().closeWorkspaceTerminals(workspaceId);
     if (row.environmentId !== null) {
       if (row.initializationStrategy === "WORKTREE") {
         const repo = getRepo(orm, row.projectId);
         const repoHostPath =
           repo !== undefined ? localPathFromRepo(repo) : null;
         if (repoHostPath !== null) {
-          void runGit(
+          // Await so the worktree is actually unregistered before we return (the
+          // test polls `git worktree list`); prune cleans any stale metadata if
+          // the dir was already gone.
+          await runGit(
             [
               "worktree",
               "remove",
@@ -390,6 +402,7 @@ export class WorkspaceService {
             ],
             repoHostPath,
           );
+          await runGit(["worktree", "prune"], repoHostPath);
         }
       }
       rmSync(row.environmentId, { recursive: true, force: true });

@@ -306,7 +306,7 @@ export async function registerWorkspaceRoutes(
     },
     async (request, reply) => {
       try {
-        service.delete(request.params.workspace_id);
+        await service.delete(request.params.workspace_id);
         return reply.code(200).send(null);
       } catch (error) {
         return handleError(error, reply);
