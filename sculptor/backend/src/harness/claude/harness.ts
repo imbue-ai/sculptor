@@ -6,6 +6,8 @@
 // long-lived `HarnessProcess` contract.
 
 import { spawn, type ChildProcess } from "node:child_process";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { join as joinPath } from "node:path";
 
 import type { AgentRow, WorkspaceInitializationStrategy } from "~/db/schema";
 import { newAgentMessageId } from "~/ids";
@@ -153,6 +155,7 @@ class ClaudeHarnessProcess implements HarnessProcess {
   // The model from the most recent message that carried one, so a later turn
   // without an explicit model (an answer turn) reuses it.
   private lastModelName: string | null = null;
+  private transcriptSequence = 0;
   // AUQ/plan answers delivered mid-turn via the MCP backchannel: their
   // RequestStarted is emitted on delivery, but the matching RequestSuccess is
   // deferred until the in-flight CLI invocation completes (the answer continues
@@ -432,6 +435,7 @@ class ClaudeHarnessProcess implements HarnessProcess {
           const line = this.stdoutBuffer.slice(0, newlineIndex);
           this.stdoutBuffer = this.stdoutBuffer.slice(newlineIndex + 1);
           if (line.trim()) {
+            this.recordTranscript("OUT", line);
             outputProcessor.processLine(line);
             if (outputProcessor.isTurnComplete()) {
               child.stdin?.end();
@@ -572,10 +576,43 @@ class ClaudeHarnessProcess implements HarnessProcess {
   }
 
   private writeStdin(line: string): void {
+    this.recordTranscript("IN", line);
     try {
       this.child?.stdin?.write(line);
     } catch {
       // The stdin pipe may already be closed (e.g. after interrupt); ignore.
+    }
+  }
+
+  // Append a diagnostic record of one piped line to the agent's transcript
+  // (artifacts/tasks/<id>/transcript.jsonl), the file the diagnostics endpoint
+  // surfaces. Best-effort — a transcript write must never break a turn. Ports
+  // transcript_collector.TranscriptCollector (the fields Sculptor never parses).
+  private recordTranscript(direction: "IN" | "OUT", line: string): void {
+    try {
+      const dir = this.environment.getArtifactsPath(this.agent.objectId);
+      mkdirSync(dir, { recursive: true });
+      let msgType = "non_json";
+      try {
+        const parsed = JSON.parse(line) as { type?: unknown };
+        if (typeof parsed.type === "string") {
+          msgType = parsed.type;
+        } else {
+          msgType = "non_object";
+        }
+      } catch {
+        // Non-JSON line (verbose noise) — recorded as-is.
+      }
+      const entry = {
+        sequence: this.transcriptSequence,
+        direction,
+        timestamp: this.now() / 1000,
+        msg_type: msgType,
+      };
+      appendFileSync(joinPath(dir, "transcript.jsonl"), JSON.stringify(entry) + "\n");
+      this.transcriptSequence += 1;
+    } catch {
+      // Best-effort only.
     }
   }
 
