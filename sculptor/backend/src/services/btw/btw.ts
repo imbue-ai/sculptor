@@ -4,6 +4,8 @@ import { getOrm } from "~/db/orm";
 import { getAgent, getWorkspace } from "~/db/repositories";
 import type { AgentRow } from "~/db/schema";
 import { eventBus } from "~/events";
+import { resolveFakeClaudeCommand } from "~/harness/claude/launch";
+import { projectionCache } from "~/projection/cache";
 import { getRepo } from "~/db/repositories";
 import { workingDirectory } from "~/environment/paths";
 import { localPathFromRepo } from "~/services/project";
@@ -34,7 +36,9 @@ export interface BtwUpdate extends Record<string, unknown> {
 // Runs one forked-session Claude turn and resolves the answer text. Injected so
 // tests don't spawn a real claude. `signal` aborts the in-flight subprocess.
 export type BtwRunner = (args: {
-  binaryPath: string;
+  // The executable + any leading args: [claudeBinary] for a real model, or
+  // [python, fakeClaudeScript] for a FAKE_CLAUDE agent.
+  command: string[];
   sessionId: string;
   question: string;
   cwd: string;
@@ -68,18 +72,23 @@ function buildBtwArgs(sessionId: string, question: string): string[] {
 // stream-json output. Read-only — no session is persisted (--no-session-
 // persistence + --fork-session).
 const defaultBtwRunner: BtwRunner = ({
-  binaryPath,
+  command,
   sessionId,
   question,
   cwd,
   signal,
 }) =>
   new Promise<string>((resolve, reject) => {
-    const child = spawn(binaryPath, buildBtwArgs(sessionId, question), {
-      cwd,
-      env: { ...process.env, IS_SANDBOX: "1" },
-      signal,
-    });
+    const [executable, ...leadingArgs] = command;
+    const child = spawn(
+      executable as string,
+      [...leadingArgs, ...buildBtwArgs(sessionId, question)],
+      {
+        cwd,
+        env: { ...process.env, IS_SANDBOX: "1" },
+        signal,
+      },
+    );
     let answer = "";
     let buffer = "";
     child.stdout.setEncoding("utf8");
@@ -139,21 +148,67 @@ function workingDirForAgent(agent: AgentRow): string | null {
 // without an installed claude binary.
 export interface BtwContext {
   sessionId: string;
-  binaryPath: string;
+  command: string[];
   cwd: string;
 }
 
-export type BtwContextResolver = (agentId: string) => BtwContext | null;
+export type BtwContextResolver = (
+  agentId: string,
+) => BtwContext | null | Promise<BtwContext | null>;
 
-const defaultContextResolver: BtwContextResolver = (agentId) => {
+// Cold-start race: the user can fire /btw after the thinking indicator appears
+// but before the main agent's first `system/init` has reported the session id.
+// When the agent has been started, wait briefly to absorb that gap; when it has
+// never been started, no init is coming — fail fast so the "/btw unavailable"
+// toast shows immediately (btw_service/api.py wait_for_session_id).
+const SESSION_WAIT_TIMEOUT_MS = 15_000;
+const SESSION_POLL_INTERVAL_MS = 100;
+
+async function waitForClaudeSession(agentId: string): Promise<string | null> {
+  const deadline = Date.now() + SESSION_WAIT_TIMEOUT_MS;
+  for (;;) {
+    const sessionId = getAgent(getOrm(), agentId)?.claudeSessionId ?? null;
+    if (sessionId !== null) {
+      return sessionId;
+    }
+    if (Date.now() >= deadline) {
+      return null;
+    }
+    await new Promise((resolve) => setTimeout(resolve, SESSION_POLL_INTERVAL_MS));
+  }
+}
+
+const defaultContextResolver: BtwContextResolver = async (agentId) => {
   const agent = getAgent(getOrm(), agentId);
-  const sessionId = agent?.claudeSessionId ?? null;
-  const binaryPath = resolveBinaryPath("CLAUDE") ?? undefined;
   const cwd = agent !== undefined ? workingDirForAgent(agent) : null;
-  if (sessionId === null || binaryPath === undefined || cwd === null) {
+  if (agent === undefined || cwd === null) {
     return null;
   }
-  return { sessionId, binaryPath, cwd };
+  // QUEUED means never started — no init is coming, so don't wait.
+  const sessionId =
+    agent.runState === "QUEUED"
+      ? (agent.claudeSessionId ?? null)
+      : await waitForClaudeSession(agentId);
+  if (sessionId === null) {
+    return null;
+  }
+  // FAKE_CLAUDE agents fork the Python fake_claude CLI; real agents the host
+  // claude binary (matching the per-turn launch). Use the EFFECTIVE model (the
+  // latest selection from the message log), not defaultModel — a chat-panel
+  // model switch lands on the message, not the agent row.
+  const effectiveModel =
+    projectionCache.ensure(getOrm(), agentId)?.view.model ??
+    agent.defaultModel ??
+    null;
+  const fakeClaude = resolveFakeClaudeCommand(effectiveModel);
+  if (fakeClaude !== null) {
+    return { sessionId, command: [fakeClaude.python, fakeClaude.script], cwd };
+  }
+  const binaryPath = resolveBinaryPath("CLAUDE") ?? undefined;
+  if (binaryPath === undefined) {
+    return null;
+  }
+  return { sessionId, command: [binaryPath], cwd };
 };
 
 export interface BtwServiceDeps {
@@ -201,15 +256,8 @@ export class BtwService {
       error_message: errorMessage,
     });
 
-    const context = this.resolveContext(agentId);
-    if (context === null) {
-      this.publish(
-        base("error", "", "No active Claude session for this agent"),
-      );
-      return;
-    }
-
-    // Second /btw for the same agent replaces the first.
+    // Second /btw for the same agent replaces the first (abort before the
+    // possibly-waiting context resolve, so a fast follow-up cancels the wait).
     const previous = this.inFlight.get(agentId);
     if (previous !== undefined) {
       previous.abort();
@@ -217,24 +265,40 @@ export class BtwService {
     const controller = new AbortController();
     this.inFlight.set(agentId, controller);
 
-    this.publish(base("running", "", null));
-    void this.runner({
-      binaryPath: context.binaryPath,
-      sessionId: context.sessionId,
-      question,
-      cwd: context.cwd,
-      signal: controller.signal,
-    })
-      .then((answer) => {
-        if (this.inFlight.get(agentId) === controller) {
-          this.inFlight.delete(agentId);
-        }
+    const clear = (): void => {
+      if (this.inFlight.get(agentId) === controller) {
+        this.inFlight.delete(agentId);
+      }
+    };
+
+    void (async () => {
+      // Resolving the context may wait for the agent's first session id
+      // (cold-start race). A null result means no session is coming — surface
+      // the "unavailable" error without ever showing a running popup.
+      const context = await Promise.resolve(this.resolveContext(agentId)).catch(
+        () => null,
+      );
+      if (context === null) {
+        clear();
+        this.publish(
+          base("error", "", "No active Claude session for this agent"),
+        );
+        return;
+      }
+      // The session is ready: show the popup, then stream the forked answer.
+      this.publish(base("running", "", null));
+      try {
+        const answer = await this.runner({
+          command: context.command,
+          sessionId: context.sessionId,
+          question,
+          cwd: context.cwd,
+          signal: controller.signal,
+        });
+        clear();
         this.publish(base("done", answer, null));
-      })
-      .catch((error: unknown) => {
-        if (this.inFlight.get(agentId) === controller) {
-          this.inFlight.delete(agentId);
-        }
+      } catch (error: unknown) {
+        clear();
         const aborted = error instanceof Error && error.name === "AbortError";
         this.publish(
           base(
@@ -247,7 +311,8 @@ export class BtwService {
                 : String(error),
           ),
         );
-      });
+      }
+    })();
   }
 }
 

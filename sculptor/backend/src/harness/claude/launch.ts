@@ -6,6 +6,7 @@
 
 import {
   DISABLED_BUILTIN_TOOLS,
+  FAKE_CLAUDE_MODEL_NAMES,
   MCP_SERVER_NAME,
   MODEL_SHORTNAME_MAP,
 } from "~/harness/claude/constants";
@@ -144,6 +145,25 @@ export function buildInterruptControlRequest(requestId: string): string {
       request: { subtype: "interrupt" },
     }) + "\n"
   );
+}
+
+// Resolve the Python `fake_claude.py` launch command for a model wire value, or
+// null for a real model / when the integration harness hasn't injected the
+// script + interpreter paths. Shared by the agent harness (per-turn launch) and
+// the /btw service (forked side-question), so both route FAKE_CLAUDE models to
+// fake_claude instead of the real `claude` binary.
+export function resolveFakeClaudeCommand(
+  modelName: string | null,
+): { python: string; script: string } | null {
+  if (modelName === null || !FAKE_CLAUDE_MODEL_NAMES.has(modelName)) {
+    return null;
+  }
+  const script = process.env.SCULPTOR_FAKE_CLAUDE_SCRIPT;
+  const python = process.env.SCULPTOR_FAKE_CLAUDE_PYTHON;
+  if (script === undefined || python === undefined) {
+    return null;
+  }
+  return { python, script };
 }
 
 // Map the persisted LLMModel wire value to a `--model` shortname (omitted when

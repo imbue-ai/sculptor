@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 
 import { getOrm } from "~/db/orm";
-import { getWorkspace, setWorkspaceDiffStatus } from "~/db/repositories";
+import { getWorkspace, setWorkspaceDiffStatus, updateAgent } from "~/db/repositories";
 import { eventBus } from "~/events";
 import type {
   AgentRow,
@@ -14,7 +14,7 @@ import {
   statePath,
   workingDirectory,
 } from "~/environment/paths";
-import { FAKE_CLAUDE_MODEL_NAMES } from "~/harness/claude/constants";
+import { resolveFakeClaudeCommand } from "~/harness/claude/launch";
 import type { ClaudeHarnessEnvironment } from "~/harness/claude/harness";
 import type { PiHarnessEnvironment } from "~/harness/pi/harness";
 import { createHarnessResolver } from "~/harness/registry";
@@ -69,20 +69,6 @@ function strategyForAgent(agent: AgentRow): WorkspaceInitializationStrategy {
 // has injected the script + interpreter paths, launch `fake_claude.py` instead
 // of the real `claude` binary (mirrors process_manager's `_is_fake_claude`).
 // Returns null in production (env vars unset), so real models are unaffected.
-function resolveFakeClaudeCommand(
-  modelName: string | null,
-): { python: string; script: string } | null {
-  if (modelName === null || !FAKE_CLAUDE_MODEL_NAMES.has(modelName)) {
-    return null;
-  }
-  const script = process.env.SCULPTOR_FAKE_CLAUDE_SCRIPT;
-  const python = process.env.SCULPTOR_FAKE_CLAUDE_PYTHON;
-  if (script === undefined || python === undefined) {
-    return null;
-  }
-  return { python, script };
-}
-
 // A file-changing tool (Write/Edit/...) ran for this agent: bump the workspace's
 // diff marker and publish a workspace change so the frontend invalidates its
 // git-derived queries (the file tree + diff) and re-fetches (the `diffUpdatedAt`
@@ -145,6 +131,10 @@ export function getAgentRunner(): AgentRunner {
         initializationStrategyFor: strategyForAgent,
         enableEntityMentions: config.enable_entity_mentions,
         onDiffNeeded: markWorkspaceDiffChanged,
+        // Mirror the CLI-reported session id onto the agent row so /btw can fork
+        // it and Task 5.4 resume has the row-level pointer.
+        onSessionIdReported: (agent, sessionId) =>
+          updateAgent(getOrm(), agent.objectId, { claudeSessionId: sessionId }),
       },
       pi: {
         resolveBinaryPath: () => resolveBinaryPath("PI") ?? undefined,

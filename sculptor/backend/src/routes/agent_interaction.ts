@@ -2,6 +2,8 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 
+import { getOrm } from "~/db/orm";
+import { getAgent } from "~/db/repositories";
 import { AgentError, getAgentService } from "~/services/agent";
 import { getBtwService } from "~/services/btw/btw";
 
@@ -190,6 +192,19 @@ export async function registerAgentInteractionRoutes(
       },
     },
     async (request, reply) => {
+      const agent = getAgent(getOrm(), request.params.agent_id);
+      if (agent === undefined || agent.isDeleted) {
+        return reply.code(404).send({ detail: "Agent not found" });
+      }
+      // A never-started agent has no Claude session to fork — no init is coming,
+      // so fast-fail with 409 (the frontend toasts "/btw is unavailable until
+      // you've sent a message"). A started agent's session is awaited in the
+      // service. Mirrors btw_service/api.py's is_main_agent_started branch.
+      if (agent.runState === "QUEUED" && agent.claudeSessionId === null) {
+        return reply
+          .code(409)
+          .send({ detail: "No active Claude session for this agent" });
+      }
       getBtwService().runBtwForAgent(
         request.params.workspace_id,
         request.params.agent_id,

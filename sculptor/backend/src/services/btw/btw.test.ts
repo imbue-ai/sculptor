@@ -24,7 +24,7 @@ function captureBtw(): { events: BtwUpdate[]; stop: () => void } {
 
 const context: BtwContext = {
   sessionId: "sess-1",
-  binaryPath: "/fake/claude",
+  command: ["/fake/claude"],
   cwd: "/tmp",
 };
 
@@ -70,11 +70,18 @@ describe("BtwService", () => {
     stop = capture.stop;
     const runner: BtwRunner = ({ signal }) =>
       new Promise<string>((resolve, reject) => {
-        signal.addEventListener("abort", () => {
+        const abort = (): void => {
           const error = new Error("aborted");
           error.name = "AbortError";
           reject(error);
-        });
+        };
+        // The context resolve is async, so the first request's signal may
+        // already be aborted by the replacing request before the runner starts.
+        if (signal.aborted) {
+          abort();
+          return;
+        }
+        signal.addEventListener("abort", abort);
       });
     const service = new BtwService({ runner, resolveContext: () => context });
 
