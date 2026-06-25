@@ -373,6 +373,14 @@ export class AgentService {
   ): void {
     const orm = getOrm();
     const agent = this.requireAgent(agentId);
+    // A pending AskUserQuestion must be answered (or dismissed) first; a plain
+    // message would be ambiguous against the held tools/call (web/app.py L2166).
+    if (projectionCache.ensure(orm, agentId)?.foldState.pendingUserQuestion != null) {
+      throw new AgentError(
+        409,
+        "Cannot send a message while the agent is waiting for a response to AskUserQuestion.",
+      );
+    }
     const message: Record<string, unknown> = {
       object_type: "ChatInputUserMessage",
       message_id: newAgentMessageId(),
