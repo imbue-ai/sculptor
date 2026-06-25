@@ -9,8 +9,12 @@ set -eu
 APP=sculptor
 HOST=${1:?usage: verify.sh <host> (e.g. sculptor.<your-zone>); see SKILL.md "Config"}
 
-echo "== app status (confirm branch + sha match what you deployed) =="
-oh app status "$APP"
+echo "== app status (expect 'running') =="
+# `oh app status`/`logs` address the app by name. An instance older than the CLI
+# keys these endpoints on an opaque app_id instead and rejects the name with
+# "Invalid app_id" — see SKILL.md "Gotchas" for the version skew and how to fetch
+# the id. Don't let that abort the rest of the checks (set -eu).
+oh app status "$APP" || echo "  (status failed — if 'Invalid app_id', your instance predates name-based status; see SKILL.md Gotchas)"
 
 echo
 echo "== serving: https://$HOST/ =="
@@ -23,7 +27,7 @@ esac
 
 echo
 echo "== boot markers =="
-logs=$(oh app logs "$APP")
+logs=$(oh app logs "$APP" 2>/dev/null || true)
 printf '%s\n' "$logs" | grep -q "Uvicorn running on" &&
     echo "  ok  Uvicorn running" || echo "  --  'Uvicorn running' not found yet"
 printf '%s\n' "$logs" | grep -q "Application startup complete" &&

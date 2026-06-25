@@ -13,4 +13,4 @@ BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 echo "Redeploying '$APP' at $REPO@$BRANCH (keeping data)..."
 oh app remove "$APP" --keep-data
-exec oh app deploy "$REPO@$BRANCH" --name "$APP" --grant-permissions-v2 --wait
+exec oh app deploy "$REPO@$BRANCH" --name "$APP" --wait

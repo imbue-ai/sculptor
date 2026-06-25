@@ -9,4 +9,4 @@ REPO=https://github.com/imbue-ai/sculptor
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 echo "Deploying $REPO@$BRANCH as app '$APP' (~10 min build)..."
-exec oh app deploy "$REPO@$BRANCH" --name "$APP" --grant-permissions-v2 --wait
+exec oh app deploy "$REPO@$BRANCH" --name "$APP" --wait
