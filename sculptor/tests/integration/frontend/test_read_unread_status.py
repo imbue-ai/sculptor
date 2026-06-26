@@ -12,6 +12,7 @@ import re
 
 from playwright.sync_api import expect
 
+from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
@@ -254,3 +255,94 @@ def test_read_status_persists_after_restart(
         # and trigger useMarkRead — which would re-mark the agent as read,
         # masking the persistence bug.
         expect(workspace_tabs.first).to_have_attribute("data-has-unread", "false")
+
+
+@user_story("to see my idle terminal agent stay read (idle) after restarting Sculptor")
+def test_terminal_agent_read_status_persists_after_restart(
+    sculptor_instance_factory_: SculptorInstanceFactory,
+) -> None:
+    """A restored, idle terminal agent must show read (grey), not unread (green).
+
+    Regression test for SCU-1611. Terminal agents have no chat content
+    messages, so CodingAgentTaskView.updated_at fell back to the *earliest*
+    message's timestamp. On restart the only message present is the ephemeral
+    EnvironmentAcquiredRunnerMessage, re-emitted with a fresh timestamp — so
+    updated_at advanced past last_read_at and the idle terminal lit up green
+    (unread) instead of staying grey (read). This is the terminal-agent
+    counterpart of test_read_status_persists_after_restart above.
+
+    Steps:
+    1. Start Sculptor, create a chat agent and a terminal agent, view both
+       (so both are read), and let the debounced mark_read persist.
+    2. Restart Sculptor against the same database.
+    3. Without viewing the terminal (viewing re-marks it read and masks the
+       bug), wait for it to re-acquire its environment, then assert its tab
+       dot is "read".
+    """
+    # === First instance: create a terminal agent and mark it read ===
+    with sculptor_instance_factory_.spawn_instance() as instance:
+        page = instance.page
+
+        task_page = start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Terminal Restart WS")
+        chat_panel = task_page.get_chat_panel()
+        wait_for_completed_message_count(chat_panel, expected_message_count=2)
+
+        agent_tab_bar = PlaywrightAgentTabBarElement(page)
+        agent_tabs = agent_tab_bar.get_agent_tabs()
+        expect(agent_tabs).to_have_count(1)
+
+        # Add a terminal agent (creating it navigates to it, so it is viewed).
+        agent_tab_bar.open_agent_type_menu()
+        agent_tab_bar.get_agent_type_menu_item_terminal().click()
+        expect(agent_tabs).to_have_count(2)
+        terminal_tab = agent_tab_bar.get_agent_tab_by_name("Terminal 1").first
+        expect(terminal_tab).to_be_visible()
+
+        # The idle terminal settles to read (grey) once its environment is
+        # acquired and the debounced mark_read has run.
+        expect(terminal_tab).to_have_attribute("data-dot-status", "read")
+
+        # Return to the chat agent and leave it focused: it (not the terminal)
+        # is then the restored active agent after restart, so the terminal is
+        # never viewed in the second instance (viewing it would re-mark it read
+        # and mask the bug). Re-focusing also re-marks the chat read after the
+        # switch away.
+        agent_tabs.first.click()
+        expect(chat_panel.get_thinking_indicator()).not_to_be_visible()
+
+        # With both agents read, the whole workspace shows read before the restart.
+        workspace_tabs = task_page.get_workspace_tabs()
+        expect(workspace_tabs.first).to_have_attribute("data-has-unread", "false")
+
+        # Give the debounced mark_read POSTs time to persist to the database.
+        page.wait_for_timeout(2000)
+
+    # === Second instance: the restored idle terminal must still be read ===
+    with sculptor_instance_factory_.spawn_instance() as instance:
+        page = instance.page
+
+        task_page = PlaywrightTaskPage(page=page)
+        workspace_tabs = task_page.get_workspace_tabs()
+        expect(workspace_tabs.first).to_be_visible()
+        workspace_tabs.first.click()
+
+        agent_tab_bar = PlaywrightAgentTabBarElement(page)
+        agent_tabs = agent_tab_bar.get_agent_tabs()
+        expect(agent_tabs).to_have_count(2)
+        # Keep the chat agent focused; never view the terminal (viewing it would
+        # re-mark it read and mask the bug).
+        agent_tabs.first.click()
+
+        terminal_tab = agent_tab_bar.get_agent_tab_by_name("Terminal 1").first
+        expect(terminal_tab).to_be_visible()
+
+        # Gate on the terminal re-acquiring its environment after restart: a
+        # restored terminal shows "running" (BUILDING) until the run-start
+        # EnvironmentAcquiredRunnerMessage is re-emitted, after which an idle
+        # terminal is neutral (read/unread).
+        expect(terminal_tab).to_have_attribute("data-dot-status", re.compile(r"^(read|unread)$"))
+
+        # The fix: the re-emitted ephemeral EnvironmentAcquired must NOT advance
+        # updated_at past last_read_at, so the restored idle terminal stays read
+        # (grey) rather than lighting up unread (green).
+        expect(terminal_tab).to_have_attribute("data-dot-status", "read")

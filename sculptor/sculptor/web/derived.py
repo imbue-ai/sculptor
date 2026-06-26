@@ -342,9 +342,18 @@ class TaskView(LimitedBaseTaskView[TaskInputType, TaskStateType], Generic[TaskIn
         for msg in reversed(self._messages):
             if _is_content_message(msg):
                 return msg.approximate_creation_time
-        # No content messages yet (e.g. freshly created task with only a user input)
-        # — use the earliest message.
-        return self._messages[0].approximate_creation_time
+        # No content messages: fall back to the earliest NON-ephemeral message
+        # (e.g. a freshly created chat task whose only message is the user's
+        # first input). Ephemeral messages (environment lifecycle, runner
+        # signals) are re-created with fresh timestamps on every restart, so
+        # using one here would push updated_at past last_read_at and make an
+        # idle, already-read terminal agent — whose only message is the
+        # ephemeral EnvironmentAcquiredRunnerMessage — look unread. With no
+        # non-ephemeral message, fall back to created_at.
+        for msg in self._messages:
+            if not msg.is_ephemeral:
+                return msg.approximate_creation_time
+        return self.created_at
 
     def add_message(self, message: Message) -> None:
         """During each update, we add the new messages"""
