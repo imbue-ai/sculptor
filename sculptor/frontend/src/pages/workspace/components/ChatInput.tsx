@@ -89,10 +89,11 @@ const MENTION_TOOLTIP_DELAY_MS = 500;
 
 // A normal send resolves in well under a second, so a spinner on every send is
 // just noise. Lock the input immediately but only reveal the spinner once a send
-// has stayed in flight this long (a slow backend), then hold it briefly so it
-// doesn't flash if the response lands right after it appears.
+// has stayed in flight this long (a slow backend). No trailing min-hold: the
+// backend echoes the message over the WebSocket just before the POST resolves,
+// so once it's in the chat and the agent is streaming, a lingering spinner only
+// distracts — drop it the instant the send completes.
 const SEND_SPINNER_START_DELAY_MS = 1_000;
-const SEND_SPINNER_MIN_HOLD_MS = 500;
 
 /**
  * Cheap predicate used to decide whether the SendButton / handleSend should
@@ -185,8 +186,9 @@ export const ChatInput = ({
   const [isSending, setIsSending] = useState(false);
   const isSendingRef = useRef(false);
   // The lock/read-only state tracks `isSending` directly (instant), but the
-  // spinner is gated through a timed latch so only slow sends ever show it.
-  const shouldShowSendSpinner = useTimedLatch(isSending, SEND_SPINNER_MIN_HOLD_MS, SEND_SPINNER_START_DELAY_MS);
+  // spinner is gated through a start-delay latch so only slow sends ever show
+  // it; the 0 min-hold drops the spinner as soon as the send completes.
+  const shouldShowSendSpinner = useTimedLatch(isSending, 0, SEND_SPINNER_START_DELAY_MS);
   const isAlwaysInterruptAndSend = useAtomValue(isAlwaysInterruptAndSendAtom);
   const sendMessageBinding = useKeybinding("send_message");
   const sendHint = useKeybindingDisplayText("send_message");
