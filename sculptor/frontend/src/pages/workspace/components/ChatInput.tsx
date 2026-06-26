@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { HTTPException } from "~/common/Errors.ts";
 import { isTextBlock } from "~/common/Guards.ts";
+import { useTimedLatch } from "~/common/Hooks.ts";
 import { useKeybinding, useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
 import { getModelCapabilities } from "~/common/modelCapabilities.ts";
 import { type ParsedPseudoSkillCommand, parsePseudoSkillCommand } from "~/common/pseudoSkills.ts";
@@ -85,6 +86,13 @@ const CLEAR_CONTEXT_TIMEOUT_MS = 30_000;
 const HTTP_STATUS_CONFLICT = 409;
 // Delay before the mention-picker tooltip appears, to avoid flicker on hover.
 const MENTION_TOOLTIP_DELAY_MS = 500;
+
+// A normal send resolves in well under a second, so a spinner on every send is
+// just noise. Lock the input immediately but only reveal the spinner once a send
+// has stayed in flight this long (a slow backend), then hold it briefly so it
+// doesn't flash if the response lands right after it appears.
+const SEND_SPINNER_START_DELAY_MS = 1_000;
+const SEND_SPINNER_MIN_HOLD_MS = 500;
 
 /**
  * Cheap predicate used to decide whether the SendButton / handleSend should
@@ -176,6 +184,9 @@ export const ChatInput = ({
   // the ref flips synchronously and is read before any new send proceeds.
   const [isSending, setIsSending] = useState(false);
   const isSendingRef = useRef(false);
+  // The lock/read-only state tracks `isSending` directly (instant), but the
+  // spinner is gated through a timed latch so only slow sends ever show it.
+  const shouldShowSendSpinner = useTimedLatch(isSending, SEND_SPINNER_MIN_HOLD_MS, SEND_SPINNER_START_DELAY_MS);
   const isAlwaysInterruptAndSend = useAtomValue(isAlwaysInterruptAndSendAtom);
   const sendMessageBinding = useKeybinding("send_message");
   const sendHint = useKeybindingDisplayText("send_message");
@@ -756,7 +767,7 @@ export const ChatInput = ({
               <SendButton
                 onClick={handleSend}
                 disabled={isSending || (isDisabled && !draftIsBypassCommand(promptDraft)) || !promptDraft?.trim()}
-                loading={isSending}
+                loading={shouldShowSendSpinner}
                 tooltip={`${sendHint} to send message`}
                 ariaLabel="Send message"
                 testId={ElementIds.SEND_BUTTON}

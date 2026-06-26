@@ -1,8 +1,9 @@
 """In-flight send contract: while a `POST .../messages` is outstanding, the
-send button shows a spinner and is disabled, the editor goes read-only while
-keeping the typed prompt, and a second send attempt is a no-op so the same
-message can't be queued twice. Once the POST resolves, the editor clears and
-the in-flight state lifts.
+send button disables and the editor goes read-only immediately (keeping the
+typed prompt), the spinner appears once the send is slow enough to outlast its
+start delay, and a second send attempt is a no-op so the same message can't be
+queued twice. Once the POST resolves, the editor clears and the in-flight state
+lifts.
 
 Regression: the send was fire-and-forget with no in-flight feedback or
 re-entrancy guard, so on a slow backend the user saw nothing happen and a
@@ -56,13 +57,15 @@ def test_in_flight_send_shows_spinner_locks_editor_and_blocks_double_send(
         expect(send_button).to_be_enabled()
         send_button.click()
 
-        # While the POST is held: the button spins and is disabled, and the
-        # editor is read-only but still shows the typed prompt (not lost, not
+        # The input locks immediately: the send button disables and the editor
+        # goes read-only while still showing the typed prompt (not lost, not
         # cleared until the send succeeds).
-        expect(send_button).to_have_attribute("data-loading", "true")
         expect(send_button).to_be_disabled()
         expect(chat_input).to_have_attribute("contenteditable", "false")
         expect(chat_input).to_have_text("second message")
+        # The spinner is latched behind a start delay so quick sends never flash
+        # it. This send is held in flight, so it appears once the delay elapses.
+        expect(send_button).to_have_attribute("data-loading", "true")
 
         # Try to send again while the first send is still in flight. The button
         # is disabled (can't be clicked) and the keyboard path is guarded. A
