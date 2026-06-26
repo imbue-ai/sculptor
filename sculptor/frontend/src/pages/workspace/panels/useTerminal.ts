@@ -76,10 +76,7 @@ const TERMINAL_OUTPUT_DECODER = new TextDecoder();
 // response is unlikely to fall inside it.
 const SOLICITED_QUERY_RESPONSE_WINDOW_MS = 1000;
 
-// A fresh terminal WebSocket can close with this code when the backend has the
-// terminal URL but hasn't started the PTY yet (e.g. workspace just created,
-// first agent still starting). We retry the connection after a short delay.
-const TERMINAL_NOT_STARTED_CLOSE_CODE = 4404;
+// Delay before retrying the terminal WebSocket after an unexpected close.
 const TERMINAL_RECONNECT_RETRY_DELAY_MS = 2000;
 
 /**
@@ -559,18 +556,22 @@ export const useTerminal = ({
         console.error("Terminal WebSocket error:", error);
       };
 
-      // If the terminal isn't running yet (4404), retry after a delay.
-      // This handles the case where the frontend has the terminal URL
-      // (derived from environment ID) but the backend hasn't started the
-      // PTY yet (e.g., workspace just created, first agent still starting).
-      ws.onclose = (event: CloseEvent): void => {
-        if (!isCleanedUp && event.code === TERMINAL_NOT_STARTED_CLOSE_CODE) {
-          setTimeout(() => {
-            if (!isCleanedUp) {
-              connectWebSocket(wsUrl);
-            }
-          }, TERMINAL_RECONNECT_RETRY_DELAY_MS);
-        }
+      // Reconnect on any unexpected close. The PTY is kept alive on the backend
+      // across disconnects and replays its buffered session on reconnect, so
+      // reconnecting restores a responsive terminal. This covers both a terminal
+      // not started yet (the backend closes with code 4404 while the PTY is still
+      // registering — e.g. workspace just created, first agent still starting)
+      // and a connection dropped out from under us (code 1006 — e.g. the host
+      // sleeping or a backend restart), which would otherwise leave the terminal
+      // frozen. Our own teardown (unmount, terminalPath change) skips this via
+      // isCleanedUp.
+      ws.onclose = (): void => {
+        if (isCleanedUp) return;
+        setTimeout(() => {
+          if (!isCleanedUp) {
+            connectWebSocket(wsUrl);
+          }
+        }, TERMINAL_RECONNECT_RETRY_DELAY_MS);
       };
     };
 
