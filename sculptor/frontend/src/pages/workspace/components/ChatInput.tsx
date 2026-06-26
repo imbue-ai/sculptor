@@ -684,6 +684,11 @@ export const ChatInput = ({
           <Editor
             wrapperClassName={styles.editorInner}
             placeholder="Enter a prompt..."
+            // On mobile, don't auto-focus on mount / agent switch — that would pop
+            // the virtual keyboard and trigger a relayout just from checking on an
+            // agent. The user focuses the input by tapping it. Desktop keeps
+            // auto-focus (no keyboard cost).
+            autoFocus={!isMobile}
             value={getDraft() ?? ""}
             onChange={setPromptDraft}
             onKeyDown={handleKeyPress}

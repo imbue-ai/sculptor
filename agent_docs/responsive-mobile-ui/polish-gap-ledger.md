@@ -91,6 +91,11 @@ Screenshot: `0052_get.png`. Header/back, nav-as-dropdown collapse, and theme seg
   - Gotcha learned: Fast Refresh chokes on a function→`memo` HOC change (shows `TypeError: Component is not a function`); a full reload clears it — always reload-test memo/HOC edits in the harness.
 - **BE2 (T1)** Chat autoscroll "snaps to bottom too early" — the reused virtualizer/autoscroll running in the mobile flex container rather than its docked parent. Needs investigation in `useAlphaAutoScroll` against the mobile shell layout.
 
+## Mobile browser / keyboard (user-reported on real Firefox Android)
+
+- **KB1 (T1) ✅ DONE** — Switching agents auto-focused the chat input → popped the virtual keyboard → relayout just from checking on an agent. The reused `Editor` defaults `autoFocus=true` and remounts per agent (keyed by taskID). Fixed: `ChatInput` passes `autoFocus={!isMobile}` so mobile only focuses on tap; desktop keeps autofocus. (Verify on device.)
+- **KB2 (T1) ✅ DONE** — Mobile browser chrome (address bar) obscured the bottom of the chat input. `--app-height` (and `body`) used `100vh`, which is the chrome-HIDDEN height, so the app overflowed the visible area. Switched to `100dvh` (dynamic viewport, chrome-aware; `vh` fallback retained; `dvh==vh` on desktop/Electron). (Verify on device.)
+
 ## Cross-cutting
 
 - **X1** Mobile components (except `MobileNewWorkspace`) lack `data-testid`/`ElementIds` — blocks the e2e suite AND made this QA harder (had to click by coordinates). Adding them is a prerequisite for Phase C automated verification.
