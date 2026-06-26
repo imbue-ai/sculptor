@@ -65,8 +65,8 @@ Screenshot: `0048_get.png`. Header is clean (replaces TopBar, centered title, sa
 
 - **E1 (T1)** No new-workspace CTA on Home itself — the only "+ New workspace" is pinned in the drawer (behind the hamburger). The most-expected Home action has no visible affordance. Add a visible button/FAB.
 - **E2 (T1) [DESKTOP-REACHING]** `WorkspaceRow` touch target <44px (`min-height:24px` + `--space-3` ≈ 40px). Shared component → fix in the desktop-reaching cluster (or a mobile row variant).
-- **E3 (T2) [DESKTOP-REACHING]** `WorkspaceRow` delete button + repo column are **hover-gated** (`opacity:0` until `:hover`) → permanently invisible/unreachable on touch; the repo column still reserves 80px dead width. The row was reused, not reflowed for mobile.
-- **E4 (T2) [DESKTOP-REACHING]** Row metadata is desktop-shaped (fixed `.time 60px` / `.repo 80px`), wasteful at 390px — big empty gap between name and "1h ago".
+- **E3 (T2) ✅ DONE (pending device confirm)** — `WorkspaceRow` delete button + repo column were **hover-gated** (`opacity:0` until `:hover`) → unreachable on touch. Fix: a `@media (hover: none), (pointer: coarse)` block in `WorkspaceRow.module.scss` reveals `.repo` + `.deleteButton`, and the same block in `ClosedWorkspaceRow.module.scss` reveals its `.actions` cluster (which was double-gated with `visibility:hidden`). Pure-CSS, fires ONLY when the pointer can't hover → desktop untouched at any window width. USER to confirm on device (Home recent list + closed-workspaces list: delete/action affordances visible without hover). The repo column's 80px reserved width is folded into E4.
+- **E4 (T2) [DESKTOP-REACHING]** Row metadata is desktop-shaped (fixed `.time 60px` / `.repo 80px`), wasteful at 390px — big empty gap between name and "1h ago". (E3's CSS now makes the 80px repo column always-visible on touch; whether to instead reflow/collapse it stays open here.)
 - **E5 (T3)** Sparse one-item body: ~80% empty void, no anchor/CTA (EmptyState only renders at zero items).
 - **E6 (T3)** Search bar sits flush under the header — a little more top breathing room would help.
 
