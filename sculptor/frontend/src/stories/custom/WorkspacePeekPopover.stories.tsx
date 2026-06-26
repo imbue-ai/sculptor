@@ -88,7 +88,6 @@ function makeTask(overrides: Partial<CodingAgentTaskView> & { id: string }): Cod
       supportsInterruption: true,
       supportsFileReferences: true,
       supportsModelSelection: true,
-      usesBackendModelCatalog: false,
     },
     availableModels: [],
     selectedModelId: null,

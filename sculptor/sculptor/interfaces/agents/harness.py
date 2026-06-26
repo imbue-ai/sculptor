@@ -93,9 +93,6 @@ class HarnessCapabilities(SerializableModel):
     supports_interruption: bool
     supports_file_references: bool
     supports_model_selection: bool
-    # True when the harness sources its own model list (pi): an empty list then means
-    # "no authenticated providers", not "fall back to the built-in default models".
-    uses_backend_model_catalog: bool
 
 
 class AgentRunContext(BaseModel):
@@ -147,7 +144,6 @@ class Harness(BaseModel, abc.ABC):
             supports_interruption=False,
             supports_file_references=False,
             supports_model_selection=False,
-            uses_backend_model_catalog=False,
         )
 
     def get_available_models(self, task_state: AgentTaskStateV2 | None) -> list[ModelOption]:

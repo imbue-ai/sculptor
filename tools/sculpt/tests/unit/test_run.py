@@ -95,7 +95,6 @@ def _task_response_dict(
             "supportsInterruption": True,
             "supportsFileReferences": True,
             "supportsModelSelection": True,
-            "usesBackendModelCatalog": False,
         },
         "availableModels": [],
         "selectedModelId": None,

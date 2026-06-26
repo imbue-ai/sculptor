@@ -150,9 +150,6 @@ class ClaudeCodeHarness(Harness):
             supports_interruption=True,
             supports_file_references=True,
             supports_model_selection=True,
-            # Claude's switcher uses the frontend's built-in PRODUCTION_MODELS list, not
-            # a backend-sourced catalog.
-            uses_backend_model_catalog=False,
         )
 
     def is_ask_user_question_tool(self, tool_name: str) -> bool:

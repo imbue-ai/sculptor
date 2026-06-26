@@ -32,7 +32,6 @@ def test_pi_harness_capabilities() -> None:
         supports_interruption=True,
         supports_file_references=True,
         supports_model_selection=True,
-        uses_backend_model_catalog=True,
     )
 
 

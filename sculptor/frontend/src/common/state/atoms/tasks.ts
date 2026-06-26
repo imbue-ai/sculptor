@@ -191,10 +191,6 @@ export const taskSupportsModelSelectionAtomFamily = atomFamily<string, Atom<bool
   atom((get) => get(taskAtomFamily(taskId))?.harnessCapabilities.supportsModelSelection),
 );
 
-export const taskUsesBackendModelCatalogAtomFamily = atomFamily<string, Atom<boolean | undefined>>((taskId) =>
-  atom((get) => get(taskAtomFamily(taskId))?.harnessCapabilities.usesBackendModelCatalog),
-);
-
 export const taskAcceptsAutomatedPromptsAtomFamily = atomFamily<string, Atom<boolean | undefined>>((taskId) =>
   atom((get) => get(taskAtomFamily(taskId))?.acceptsAutomatedPrompts),
 );

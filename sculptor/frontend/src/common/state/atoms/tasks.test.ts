@@ -151,7 +151,6 @@ describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
         supportsInterruption: true,
         supportsFileReferences: true,
         supportsModelSelection: true,
-        usesBackendModelCatalog: false,
       },
     });
     store.set(taskAtomFamily("task-1"), task);
@@ -179,7 +178,6 @@ describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
         supportsInterruption: false,
         supportsFileReferences: false,
         supportsModelSelection: false,
-        usesBackendModelCatalog: false,
       },
     });
     store.set(taskAtomFamily("task-1"), task);
@@ -208,7 +206,6 @@ describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
         supportsInterruption: true,
         supportsFileReferences: true,
         supportsModelSelection: true,
-        usesBackendModelCatalog: false,
       },
     });
     store.set(taskAtomFamily("task-1"), task);
@@ -262,7 +259,6 @@ describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
         supportsInterruption: true,
         supportsFileReferences: true,
         supportsModelSelection: true,
-        usesBackendModelCatalog: false,
       },
     });
     store.set(taskAtomFamily("task-1"), task);
