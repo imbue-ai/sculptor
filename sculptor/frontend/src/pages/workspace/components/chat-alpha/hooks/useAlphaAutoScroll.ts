@@ -613,6 +613,40 @@ export const useAlphaAutoScroll = (
     isFollowing,
   ]);
 
+  // Stay glued to the bottom across content-size changes while idle — e.g. a
+  // viewport-width reflow that grows the message text. The streaming observer
+  // above handles the engaged case; when idle, narrowing grows content without
+  // firing a scroll event, so an at-bottom view would otherwise drift up and the
+  // end of the latest message would slide below the fold. Active only when NOT
+  // streaming, so exactly one content observer is ever connected.
+  useLayoutEffect(() => {
+    if (isStreaming || isSuppressed) return;
+    const el = scrollContainerRef.current;
+    const content = el?.firstElementChild;
+    if (!el || !content) return;
+
+    const observer = new ResizeObserver(() => {
+      if (messageCount === 0) return;
+      const state = machine.getState();
+      // Only the idle, user-controlled phase is ours; restoring/anchoringTurn/
+      // navigating manage their own scroll position.
+      if (state.authority.kind !== "userControlled") return;
+      if (projectAtBottom(state)) {
+        // We were at the bottom — re-pin so the reflow keeps the last message's
+        // end in view (stay glued).
+        isProgrammaticScroll.current = true;
+        virtualizer.scrollToIndex(messageCount - 1, { align: "end" });
+        machine.setGeometryAtBottom(true);
+      } else {
+        // Not at the bottom — refresh the sample so the jump-to-bottom button
+        // tracks the bottom moving relative to the held reading position.
+        machine.setGeometryAtBottom(distanceFromContentBottom(el, virtualizer) <= BOTTOM_THRESHOLD);
+      }
+    });
+    observer.observe(content);
+    return (): void => observer.disconnect();
+  }, [isStreaming, isSuppressed, messageCount, virtualizer, scrollContainerRef, machine, isProgrammaticScroll]);
+
   const scrollToBottom = useCallback((): void => {
     if (messageCount === 0) return;
     isProgrammaticScroll.current = true;
