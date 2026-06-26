@@ -149,6 +149,13 @@ export class ClaudeHarness implements Harness {
 // not again after an app restart.
 const ENV_REMINDER_MARKER_FILE = "env_var_reminder_emitted";
 
+// Instruction used to resume an interrupted in-flight turn after a restart
+// (RW-DATA-6 crash recovery). The model already has the prior conversation via
+// `--resume`, so we only nudge it to finish — replaying the original prompt would
+// duplicate any output it already streamed before the shutdown.
+const RESUME_INTERRUPTED_TURN_INSTRUCTION =
+  "Your previous turn was interrupted before it finished. Please continue from where you left off and complete it.";
+
 // One long-lived process per supervised Claude agent. Each user message starts a
 // fresh `claude` CLI turn (matching Python's per-turn invocation), bracketed by
 // RequestStarted/RequestSuccess|Failure so the fold (Task 4.2) finalizes turns.
@@ -321,7 +328,7 @@ class ClaudeHarnessProcess implements HarnessProcess {
       try {
         binaryPath = resolveClaudeBinary(this.deps.resolveBinaryPath);
       } catch (error) {
-        this.failTurnFatally(requestId, error);
+        this.failTurnRecoverably(requestId, error);
         return;
       }
     }
@@ -332,13 +339,19 @@ class ClaudeHarnessProcess implements HarnessProcess {
     // not re-emitted on resume (process_manager is_first_user_message_of_conversation).
     const statePath = this.environment.getStatePath(this.agent.objectId);
     const reminderMarker = joinPath(statePath, ENV_REMINDER_MARKER_FILE);
-    const isChatInput = message.object_type === "ChatInputUserMessage";
+    // A resume turn (RW-DATA-6): re-supervision after a restart re-delivers an
+    // interrupted in-flight message to finalize its turn. The model already saw
+    // the original prompt via the resumed session, so we send only a continue
+    // nudge and never re-run the prompt or re-fire the first-message reminders.
+    const isResume = message.is_resume === true;
+    const isChatInput = message.object_type === "ChatInputUserMessage" && !isResume;
     const isFirstMessage = isChatInput && !existsSync(reminderMarker);
     // An answer turn (the agent's AUQ/plan dialog already resolved, so this is a
     // fresh CLI invocation) feeds the user's answers back as the prompt — the
     // message has no `text` (process_manager_utils.get_user_instructions).
-    const userInstructions =
-      message.object_type === "UserQuestionAnswerMessage"
+    const userInstructions = isResume
+      ? RESUME_INTERRUPTED_TURN_INSTRUCTION
+      : message.object_type === "UserQuestionAnswerMessage"
         ? buildAnswerInstructions(message)
         : getUserInstructions({
             text: typeof message.text === "string" ? message.text : "",
@@ -551,18 +564,21 @@ class ClaudeHarnessProcess implements HarnessProcess {
     });
   }
 
-  private failTurnFatally(requestId: string, error: unknown): void {
-    const serialized = serializeError(error);
+  // A missing/invalid Claude binary fails just this turn, not the whole agent:
+  // emit the friendly RequestFailure (the frontend renders
+  // ClaudeBinaryNotFoundError as "Claude Not Available" + a Settings link) and
+  // keep the harness alive so the user can install Claude and send again. Mirrors
+  // the Python wrapper, which caught ClaudeBinaryNotFoundError per turn rather
+  // than tearing the agent down (which would strand it behind a "restore" banner).
+  private failTurnRecoverably(requestId: string, error: unknown): void {
     this.emit({
       object_type: "RequestFailureAgentMessage",
       message_id: newAgentMessageId(),
       source: "AGENT",
       request_id: requestId,
-      error: serialized,
+      error: serializeError(error),
       approximate_creation_time: new Date(this.now()).toISOString(),
     });
-    this.finished = true;
-    this.exitCb?.({ error: serialized });
   }
 
   // --- Session id (Task 5.4: validation + corrupt-tail + resume) ------------

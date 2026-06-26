@@ -20,8 +20,13 @@ from sculptor.testing.user_stories import user_story
 # Short initial text so the first response finishes quickly
 _SHORT_TEXT = "Hello, this is a short reply."
 
+# One sentence, repeated to form a long streamed response. Kept separate so a
+# test can stream many repeats from a SHORT prompt via stream_text's ``repeat``
+# arg (a small user-message bubble, but a response that still overflows).
+_STREAM_SENTENCE = "The quick brown fox jumps over the lazy dog. "
+
 # Long streaming text to trigger overflow and pin-to-bottom transition
-_LONG_STREAM_TEXT = "The quick brown fox jumps over the lazy dog. " * 112  # ~5040 chars
+_LONG_STREAM_TEXT = _STREAM_SENTENCE * 112  # ~5040 chars
 
 
 def _expect_jump_button_hidden(jump_btn: Locator) -> None:
@@ -58,9 +63,16 @@ def test_scroll_to_top_on_send(sculptor_instance_: SculptorInstance) -> None:
     # upper portion of the viewport (scroll-to-top behavior). The exact offset
     # depends on timing and virtualizer corrections, so we verify the message
     # appears in the top half of the viewport rather than at the bottom.
+    #
+    # Use a SHORT prompt with ``repeat`` so the streamed RESPONSE overflows while
+    # the user-message bubble stays small. A bubble taller than the viewport gets
+    # swept off the top by pin-to-bottom the instant the response starts (see
+    # test_scroll_to_top_first_message), leaving an unobservably short window; a
+    # small bubble stays anchored at the top through the filling phase, so the
+    # assertion below catches it reliably.
     send_chat_message(
         chat_panel,
-        f'fake_claude:stream_text `{{"text": "{_LONG_STREAM_TEXT}", "chunk_size": 100, "delay_seconds": 0.05}}`',
+        f'fake_claude:stream_text `{{"text": "{_STREAM_SENTENCE}", "repeat": 112, "chunk_size": 100, "delay_seconds": 0.05}}`',
     )
 
     # Poll for the user message (data-index=2) to appear in the top half of

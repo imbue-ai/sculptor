@@ -59,7 +59,8 @@ export function runMigrations(db: DatabaseConnection, migrationsFolder: string =
   const applied = appliedMigrationCount(db);
   if (applied > known) {
     throw new Error(
-      `Database schema is newer than this backend (${applied} migrations applied, ${known} known). ` +
+      `Sculptor database is not compatible with this version of Sculptor: the schema is ` +
+        `newer than this backend (${applied} migrations applied, ${known} known). ` +
         "Refusing to start to avoid corrupting a forward-migrated store (REQ-DATA-011).",
     );
   }

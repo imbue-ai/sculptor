@@ -179,7 +179,7 @@ describe("ClaudeHarness — end-to-end turn against a fake binary", () => {
   );
 
   it(
-    "fails the agent when the binary is missing",
+    "fails just the turn, recoverably, when the binary is missing",
     async () => {
       const harness = new ClaudeHarness({
         resolveBinaryPath: () => undefined,
@@ -193,14 +193,18 @@ describe("ClaudeHarness — end-to-end turn against a fake binary", () => {
       process.onExit((r) => (exit = r));
       process.sendUserMessage({ message_id: "agm_user_1", text: "hello" });
 
-      await waitFor(() => exit !== undefined);
+      await waitFor(() => messages.some((m) => m.object_type === "RequestFailureAgentMessage"));
       expect(messages.map((m) => m.object_type)).toEqual([
         "RequestStartedAgentMessage",
         "RequestFailureAgentMessage",
       ]);
-      expect((exit?.error as { exception: string }).exception).toBe(
+      const failure = messages.find((m) => m.object_type === "RequestFailureAgentMessage");
+      expect((failure?.error as { exception: string }).exception).toBe(
         "ClaudeBinaryNotFoundError",
       );
+      // The turn failed, but the agent is NOT torn down: the user can install
+      // Claude and send again without restoring the agent.
+      expect(exit).toBeUndefined();
     },
     E2E_TIMEOUT_MS,
   );

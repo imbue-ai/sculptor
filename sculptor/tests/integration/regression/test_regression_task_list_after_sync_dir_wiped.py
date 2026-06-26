@@ -1,19 +1,21 @@
-"""Regression test: task list should survive even if the host-side cache is wiped.
+"""Regression test: the agent task list must survive a backend restart.
 
-Bug (SCU-1245): the host-side artifact cache (`task_sync_dir`) used to live
-under `gettempdir()`. macOS's periodic jobs prune `$TMPDIR`, so a restart
-after a prune surfaced an empty agent-tasks popover even though the
-per-emit PLAN-* files in the workspace's stable artifacts dir were intact.
+Bug origin (SCU-1245): the Python backend kept a host-side artifact cache
+(`task_sync_dir`) under `gettempdir()` that the agent-tasks popover read
+from. macOS's periodic jobs prune `$TMPDIR`, so a restart after a prune
+surfaced an empty popover even though the per-emit PLAN-* snapshots were
+intact.
 
-The fix has two parts: (1) move the cache somewhere stable (covered by the
-unit test in sculptor/sculptor/config/test_settings.py), and (2) backfill
-the cache from the workspace's stable artifacts dir when the cache file
-is missing. This test exercises (2) end-to-end by deleting the entire
-task_sync directory between Sculptor restarts and asserting the popover
-still repopulates from the source-of-truth files.
+The TypeScript backend removes that failure mode by construction: with the
+single local environment (RW-SIMP-1) there is no remote-to-host artifact
+sync and no reapable `$TMPDIR` cache. The agent's task list is written once
+to the workspace's stable artifacts dir
+(`<workspace>/artifacts/tasks/<agent>/PLAN-tasks.json`) and served straight
+from there, and the `UpdatedArtifactAgentMessage` that points at it is in the
+append-only log. So the popover repopulates from durable state on every
+restart with nothing to back-fill. This test pins that end-to-end: create a
+task list, restart, and assert it is still there.
 """
-
-import shutil
 
 from playwright.sync_api import expect
 
@@ -29,20 +31,20 @@ _VISIBILITY_TIMEOUT_MS = 10 * SECONDS_MS
 _BUILD_TIMEOUT_MS = 90 * SECONDS_MS
 
 
-@user_story("to recover my agent's task list even after the host-side cache is wiped")
+@user_story("to keep my agent's task list after Sculptor restarts")
 def test_task_list_survives_task_sync_dir_deletion(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
-    """Task list items should reappear after restart even when task_sync is empty.
+    """Task list items must reappear after a restart, read from durable state.
 
     Steps:
     1. Start a task that creates tasks via TaskCreate.
     2. Verify the tasks appear in the StatusPill popover.
     3. Shut down Sculptor (exit context).
-    4. Delete the task_sync cache directory entirely, simulating an OS reap.
-    5. Restart Sculptor against the same sculptor_folder and verify the tasks
-       are still visible — proving the backfill from the workspace's stable
-       artifacts dir works.
+    4. Restart Sculptor against the same sculptor_folder and verify the tasks
+       are still visible — proving they are served from the workspace's stable
+       artifacts dir (and the persisted UpdatedArtifactAgentMessage), not from
+       a transient cache.
     """
     with sculptor_instance_factory_.spawn_instance() as instance:
         task_page = start_task_and_wait_for_ready(
@@ -70,17 +72,9 @@ fake_claude:multi_step `{
         expect(rows.nth(1)).to_contain_text("Write a failing test")
         expect(rows.nth(2)).to_contain_text("Implement the fix")
 
-        sculptor_folder = instance.sculptor_folder
-
-    # Wipe the task_sync cache while Sculptor is down. The per-emit PLAN-*
-    # snapshots under the workspace's own artifacts dir are untouched, so a
-    # correct backfill path will repopulate the popover on the next start.
-    task_sync_dir = sculptor_folder / "internal" / "artifacts" / "task_sync"
-    assert task_sync_dir.exists(), (
-        f"Expected task_sync cache to exist after phase 1 at {task_sync_dir}; if the default location changed, update this test."
-    )
-    shutil.rmtree(task_sync_dir)
-
+    # Sculptor is now down. The task list lives only in durable state (the
+    # workspace's stable PLAN-tasks.json artifact plus the persisted
+    # UpdatedArtifactAgentMessage); restarting must surface it again.
     with sculptor_instance_factory_.spawn_instance() as instance:
         workspace_tab = instance.page.get_by_test_id(ElementIDs.WORKSPACE_TAB).first
         expect(workspace_tab).to_be_visible(timeout=_VISIBILITY_TIMEOUT_MS)

@@ -112,6 +112,10 @@ export class AgentRunner {
             current = { ...current, runState: "QUEUED" };
           }
           this.supervise(current);
+          // Re-deliver any turn that was in-flight or queued at shutdown so the
+          // agent resumes and leaves RUNNING (RW-DATA-6). Only on this resupervise
+          // path — a fresh start delivers its first message explicitly.
+          this.supervisors.get(current.objectId)?.replayUnprocessedMessages();
         }),
       ),
     );

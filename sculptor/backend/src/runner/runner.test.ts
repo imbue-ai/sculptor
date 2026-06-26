@@ -7,7 +7,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openDatabase, type DatabaseConnection } from "~/db/connection";
 import { runMigrations } from "~/db/migrate";
 import { createOrm, type Orm } from "~/db/orm";
-import { createAgent, createRepo, createWorkspace, getAgent, listAgentMessages } from "~/db/repositories";
+import {
+  appendAgentMessage,
+  createAgent,
+  createRepo,
+  createWorkspace,
+  getAgent,
+  listAgentMessages,
+} from "~/db/repositories";
 import { eventBus } from "~/events";
 import type { BusEvent } from "~/events/types";
 import { projectionCache } from "~/projection/cache";
@@ -140,5 +147,25 @@ describe("AgentRunner / AgentSupervisor", () => {
     expect(getAgent(orm, "tsk_run")?.runState).toBe("RUNNING");
     // The terminal agent was not touched.
     expect(getAgent(orm, "tsk_done")?.runState).toBe("SUCCEEDED");
+  });
+
+  it("resuperviseOnStartup replays the in-flight turn and the queued follow-up", async () => {
+    createAgent(orm, { objectId: "tsk_x", projectId: "prj_1", workspaceId: "ws_1", agentConfig: {}, runState: "RUNNING" });
+    // An in-flight turn (started, never finished) followed by a queued follow-up.
+    appendAgentMessage(orm, "tsk_x", { object_type: "ChatInputUserMessage", message_id: "msg_a", source: "USER", text: "first", model_name: "opus" });
+    appendAgentMessage(orm, "tsk_x", { object_type: "RequestStartedAgentMessage", message_id: "rs_a", source: "AGENT", request_id: "msg_a" });
+    appendAgentMessage(orm, "tsk_x", { object_type: "ChatInputUserMessage", message_id: "msg_b", source: "USER", text: "follow-up" });
+
+    const harness = new StubHarness();
+    const runner = new AgentRunner({ orm, harnessFor: () => harness });
+    await runner.resuperviseOnStartup();
+
+    const sent = harness.last!.sent;
+    expect(sent).toHaveLength(2);
+    // In-flight message resumes (continue, not a prompt replay), keyed to its id.
+    expect(sent[0]).toMatchObject({ message_id: "msg_a", is_resume: true });
+    expect(sent[0]).not.toHaveProperty("text");
+    // The follow-up is re-dispatched fresh, after the resume.
+    expect(sent[1]).toMatchObject({ message_id: "msg_b", text: "follow-up" });
   });
 });

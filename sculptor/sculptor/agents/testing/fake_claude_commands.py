@@ -239,11 +239,16 @@ def handle_stream_text(args: dict, emit_streaming: bool) -> list[dict]:
     to observe auto-scroll, progressive rendering, etc.
 
     Args:
-        text: The full text to stream.
+        text: The text to stream.
+        repeat: How many times to repeat ``text`` to form the streamed response
+            (default: 1). Lets a test produce a long streamed response from a
+            short prompt — keeping the user-message bubble small while the
+            response still overflows — without embedding a huge string in the
+            prompt itself.
         chunk_size: Number of characters per streaming chunk (default: 20).
         delay_seconds: Seconds to wait between chunks (default: 0.1).
     """
-    text = args["text"]
+    text = args["text"] * args.get("repeat", 1)
     chunk_size: int = args.get("chunk_size", 20)
     delay_seconds: float = args.get("delay_seconds", 0.1)
 

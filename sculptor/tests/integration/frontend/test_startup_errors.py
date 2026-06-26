@@ -10,17 +10,15 @@ screen.
 
 import hashlib
 import os
+import sqlite3
 from pathlib import Path
 
 import pytest
-import sqlalchemy
 from playwright.sync_api import expect
 
 import sculptor.primitives.ids
 from sculptor.config.user_config import DependencyPaths
 from sculptor.config.user_config import UserConfig
-from sculptor.database.core import create_new_engine
-from sculptor.database.core import initialize_db
 from sculptor.foundation.async_monkey_patches_test import expect_at_least_logged_errors
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.pages.error_page import PlaywrightErrorPage
@@ -28,7 +26,9 @@ from sculptor.testing.resources import custom_sculptor_folder_populator
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
 
-_UNKNOWN_REVISION = "unknown_future_revision_xyz"
+# More applied drizzle migrations than any real build knows about, so the
+# backend's forward-migration guard (REQ-DATA-011) always trips.
+_UNKNOWN_MIGRATION_COUNT = 9999
 
 
 def _make_test_user_config() -> UserConfig:
@@ -48,27 +48,33 @@ def _make_test_user_config() -> UserConfig:
 
 
 def _populate_folder_with_unknown_migration_head(folder_path: Path) -> None:
-    """Seed the factory's sculptor folder with a DB stamped at an unreachable revision.
+    """Seed the factory's sculptor folder with a DB the running build can't migrate.
 
     The DB lives at ``internal/database.db`` — the path the packaged backend
-    binary derives from ``SCULPTOR_FOLDER``. The browser-mode factory fixture
-    points ``DATABASE_URL`` at the same path so both launch modes see the
-    seeded DB.
+    binary derives from ``SCULPTOR_FOLDER``. The TypeScript backend's drizzle
+    runner refuses to start when the store reports more applied migrations than
+    the build knows about (``__drizzle_migrations`` rowcount > journal entries,
+    REQ-DATA-011) — the drizzle equivalent of an unknown alembic head. We stamp
+    the table with an implausibly large applied count so every build is "older"
+    than this DB.
     """
     internal = folder_path / "internal"
     internal.mkdir(parents=True, exist_ok=True)
     save_config(_make_test_user_config(), internal / "config.toml")
 
-    database_url = f"sqlite:///{internal / 'database.db'}"
-    engine = create_new_engine(database_url)
+    connection = sqlite3.connect(internal / "database.db")
     try:
-        initialize_db(engine)
-        with engine.begin() as connection:
-            connection.execute(
-                sqlalchemy.text("UPDATE alembic_version SET version_num = :rev").bindparams(rev=_UNKNOWN_REVISION)
-            )
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS __drizzle_migrations "
+            "(id INTEGER PRIMARY KEY AUTOINCREMENT, hash text NOT NULL, created_at numeric)"
+        )
+        connection.executemany(
+            "INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)",
+            [(f"unknown-future-migration-{index}", 0) for index in range(_UNKNOWN_MIGRATION_COUNT)],
+        )
+        connection.commit()
     finally:
-        engine.dispose()
+        connection.close()
 
 
 @user_story("to see an early error instead of a hang when my DB has a newer migration than this Sculptor build")
@@ -76,7 +82,7 @@ def _populate_folder_with_unknown_migration_head(folder_path: Path) -> None:
 def test_unknown_migration_head_causes_backend_to_exit_not_hang(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
-    """Spawn the backend with a DB stamped at an unknown alembic revision and
+    """Spawn the backend against a DB that reports unknown future migrations and
     assert it refuses to start with the expected "database is not compatible"
     message rather than hanging on the loading screen.
     """
@@ -100,9 +106,9 @@ def test_unknown_migration_head_causes_backend_to_exit_not_hang(
 def test_unknown_migration_head_renders_backend_error_page(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
-    """Under the packaged Electron binary, seed the DB with an unknown alembic
-    revision and assert the renderer lands on ``BACKEND_ERROR_PAGE`` (via
-    ``BackendStatusBoundary``) after the Python backend exits with the
+    """Under the packaged Electron binary, seed the DB with unknown future
+    migrations and assert the renderer lands on ``BACKEND_ERROR_PAGE`` (via
+    ``BackendStatusBoundary``) after the backend exits with the
     irrecoverable-error code.
 
     This end-to-end-validates the fix for the startup hang: the backend exits

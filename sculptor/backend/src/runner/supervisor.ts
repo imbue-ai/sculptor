@@ -1,4 +1,4 @@
-import { updateAgent } from "~/db/repositories";
+import { listAgentMessages, updateAgent } from "~/db/repositories";
 import type { Orm } from "~/db/orm";
 import type { AgentRow, RunState } from "~/db/schema";
 import { eventBus } from "~/events";
@@ -7,6 +7,7 @@ import { newAgentMessageId } from "~/ids";
 import type { ProjectionCache } from "~/projection/cache";
 import type { Harness, HarnessExitResult, HarnessProcess } from "~/runner/harness";
 import { MessageWriter } from "~/runner/message_writer";
+import { computeReplayPlan } from "~/runner/replay";
 
 export const TERMINAL_RUN_STATES: ReadonlySet<RunState> = new Set<RunState>([
   "SUCCEEDED",
@@ -86,6 +87,20 @@ export class AgentSupervisor {
     // Make any buffered partial durable before finalizing.
     this.writer.flush();
     this.finalize(result.error !== undefined ? "FAILED" : "SUCCEEDED", result.error ?? null);
+  }
+
+  // Crash recovery (RW-DATA-6): after a restart the relaunched harness starts
+  // with an empty queue, so re-deliver any user message whose turn did not finish
+  // before the shutdown. An interrupted in-flight turn is resumed (continue, not a
+  // prompt replay) so it reaches a terminal Request* and the agent leaves RUNNING;
+  // a follow-up that was queued behind it is dispatched fresh. Called by the
+  // runner right after re-supervising on startup — NOT on a fresh agent start,
+  // where the first message is delivered explicitly via sendUserMessage.
+  replayUnprocessedMessages(): void {
+    const messages = listAgentMessages(this.deps.orm, this.agentId).map((row) => row.message);
+    for (const message of computeReplayPlan(messages)) {
+      this.process?.sendUserMessage(message);
+    }
   }
 
   // --- Control ops (called by the interaction endpoints, Task 6.8) ---
