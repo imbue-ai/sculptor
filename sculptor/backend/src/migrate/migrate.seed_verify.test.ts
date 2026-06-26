@@ -154,7 +154,7 @@ function seedOldStore(dbPath: string): void {
   db.close();
 }
 
-describe("migration seed -> migrate -> verify (RW-DATA-3/5/6/8)", () => {
+describe("migration seed -> migrate -> verify", () => {
   let dir: string;
   let sourceDb: string;
   let targetDb: string;
@@ -216,7 +216,7 @@ describe("migration seed -> migrate -> verify (RW-DATA-3/5/6/8)", () => {
       defaultModel: "CLAUDE-4-OPUS",
       title: "Fix the bug",
       lastProcessedMessageId: "agm_last",
-      terminalSessionId: "sess-xyz", // session id carried into the new column (RW-DATA-6)
+      terminalSessionId: "sess-xyz", // session id carried into the new column
       terminalShellPid: 4242,
     });
     expect(agent?.agentConfig).toEqual({
@@ -239,7 +239,7 @@ describe("migration seed -> migrate -> verify (RW-DATA-3/5/6/8)", () => {
     expect(getUserSettings(orm)?.objectId).toBe("usr_settings");
   });
 
-  it("leaves config.toml byte-for-byte untouched (RW-DATA-4)", () => {
+  it("leaves config.toml byte-for-byte untouched", () => {
     const configToml = path.join(dir, "config.toml");
     const original =
       'user_email = "dev@example.com"\nis_product_analytics_enabled = true\n';
@@ -252,7 +252,7 @@ describe("migration seed -> migrate -> verify (RW-DATA-3/5/6/8)", () => {
     expect(readFileSync(configToml, "utf8")).toBe(original);
   });
 
-  it("fails loud on a store that already has new-schema tables (RW-DATA-8)", () => {
+  it("fails loud on a store that already has new-schema tables", () => {
     const db = new Database(sourceDb);
     db.exec("CREATE TABLE agent (object_id TEXT)");
     db.close();

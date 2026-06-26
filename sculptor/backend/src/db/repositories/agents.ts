@@ -5,7 +5,7 @@ import type { RunState } from "~/db/schema";
 import { agent, type AgentRow, type NewAgentRow } from "~/db/schema";
 
 // Non-deleted agents that are not in a terminal run state (QUEUED/RUNNING) —
-// the set the runner re-supervises on startup (Task 5.1, RW-DATA-6).
+// the set the runner re-supervises on startup.
 const NON_TERMINAL_RUN_STATES: RunState[] = ["QUEUED", "RUNNING"];
 
 export function listNonTerminalAgents(orm: Orm): AgentRow[] {

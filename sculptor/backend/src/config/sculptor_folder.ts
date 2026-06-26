@@ -4,7 +4,7 @@ import path from "node:path";
 
 // On-disk Sculptor folder layout, mirroring sculptor/sculptor/utils/build.py.
 // The override env var name MUST match Python's exactly, or the integration
-// harness's per-test folder isolation breaks (REQ-DATA-001/002).
+// harness's per-test folder isolation breaks.
 export const SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG = "SCULPTOR_FOLDER";
 export const SCULPTOR_WORKSPACES_FOLDER_OVERRIDE_ENV_FLAG = "SCULPTOR_WORKSPACES_FOLDER";
 
@@ -46,9 +46,9 @@ const SOURCE_REPO_ROOT = findRepoRoot(REPO_ROOT_SEARCH_START);
 //      env var).
 //   3. Otherwise → ~/.sculptor (packaged production default).
 // NOTE: the packaged *dev*-build variant (~/.dev-sculptor) is still driven by
-// the launcher setting SCULPTOR_FOLDER (Task 9.1), not detected here — a
-// packaged install has no repo root above the bundle, so it lands on (3) unless
-// the launcher overrides.
+// the launcher setting SCULPTOR_FOLDER, not detected here — a packaged install
+// has no repo root above the bundle, so it lands on (3) unless the launcher
+// overrides.
 export function resolveSculptorFolder(
   env: NodeJS.ProcessEnv,
   sourceRepoRoot: string | null,

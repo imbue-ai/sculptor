@@ -6,19 +6,23 @@ import { migrateDatabase, type MigrationSummary } from "~/migrate/run";
 // Standalone one-time migration CLI (run once at upgrade). It NEVER mutates the
 // old DB in place: the old file is backed up + retained (trivial rollback), the
 // new file is written separately and swapped in. The on-disk layout (workspaces,
-// uploads, artifacts, session files, config.toml) is untouched (RW-DATA-5) — only
-// the DB is rewritten. config.toml is the source of truth for user
-// email/consent/defaults, so preserving it carries those across (RW-DATA-4).
+// uploads, artifacts, session files, config.toml) is untouched — only the DB is
+// rewritten. config.toml is the source of truth for user email/consent/defaults,
+// so preserving it carries those across.
 
 const BACKUP_SUFFIX = ".pre-ts-migration.bak";
 const TEMP_SUFFIX = ".migrated.tmp";
 const WAL_SUFFIXES = ["-wal", "-shm"];
 
-function removeWithSidecars(path: string): void {
-  rmSync(path, { force: true });
+function removeSidecars(path: string): void {
   for (const suffix of WAL_SUFFIXES) {
     rmSync(path + suffix, { force: true });
   }
+}
+
+function removeWithSidecars(path: string): void {
+  rmSync(path, { force: true });
+  removeSidecars(path);
 }
 
 export function runMigrationCli(
@@ -42,9 +46,13 @@ export function runMigrationCli(
     targetDbPath: tempPath,
   });
 
-  // Retain the old DB as a backup, then swap the new file into place.
+  // Retain the old DB as a backup, then swap the new file into place. renameSync
+  // replaces the destination atomically on POSIX, so we only clear the live DB's
+  // now-stale -wal/-shm sidecars (which would otherwise be replayed onto the new
+  // file) — we do NOT delete the live DB first, which would needlessly widen the
+  // crash window.
   copyFileSync(dbPath, backupPath);
-  removeWithSidecars(dbPath);
+  removeSidecars(dbPath);
   renameSync(tempPath, dbPath);
   // The temp WAL/shm (if any) belong to the now-renamed new DB; leave them.
 

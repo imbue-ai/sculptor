@@ -4,8 +4,7 @@ import type { Orm } from "~/db/orm";
 import { userSettings, type UserSettingsRow } from "~/db/schema";
 
 // The DB carries only the local user identity; the real config lives in
-// config.toml (Task 1.5). There is a single local user, so these read/upsert
-// the one row.
+// config.toml. There is a single local user, so these read/upsert the one row.
 
 export function getUserSettings(orm: Orm): UserSettingsRow | undefined {
   return orm.select().from(userSettings).get();

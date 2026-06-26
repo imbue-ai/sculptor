@@ -3,9 +3,9 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 // Plain current-state table for a repository, mirroring Project in
 // sculptor/sculptor/database/models.py. INTERNAL→WIRE NAME MAPPING: the table
 // is named `repo` internally, but the HTTP/WebSocket API still serializes it as
-// `project` / `project_id` (RW-API-3, ~214 frontend refs). The API layer
-// (Phase 6) owns that mapping. The multi-tenancy organization_reference column
-// is dropped (local-first single-user, REQ-SEC-002).
+// `project` / `project_id` (the frontend depends on this). The API layer owns
+// that mapping. The multi-tenancy organization_reference column is dropped
+// (local-first single-user).
 export const repo = sqliteTable("repo", {
   objectId: text("object_id").primaryKey(),
   createdAt: text("created_at")

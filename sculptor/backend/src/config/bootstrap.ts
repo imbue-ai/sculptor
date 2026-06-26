@@ -9,8 +9,8 @@ export const FORMAT_VERSION = "1";
 // Ensures the Sculptor data folder has the expected structure and version
 // marker. Idempotent: returns early if the marker is already present, so an
 // existing populated folder is never clobbered. Bootstraps a fresh or
-// unversioned folder otherwise (REQ-DATA-022). Does NOT create database.db —
-// Phase 2 owns DB open/PRAGMA.
+// unversioned folder otherwise. Does NOT create database.db — the DB layer owns
+// DB open/PRAGMA.
 export function ensureSculptorFolderReady(env: NodeJS.ProcessEnv = process.env): void {
   const root = getSculptorFolder(env);
   const marker = formatVersionPath(env);

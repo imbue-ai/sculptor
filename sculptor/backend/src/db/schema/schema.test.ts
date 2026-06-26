@@ -9,8 +9,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openDatabase, type DatabaseConnection } from "~/db/connection";
 import * as schema from "~/db/schema";
 
-// Applies the drizzle-kit-generated DDL. The formal migration runner is Task 2.3;
-// this inline apply keeps the schema test self-contained.
+// Applies the drizzle-kit-generated DDL. The formal migration runner lives in
+// db/migrate.ts; this inline apply keeps the schema test self-contained.
 function applyGeneratedSchema(db: DatabaseConnection): void {
   const dir = path.resolve(process.cwd(), "drizzle");
   for (const file of readdirSync(dir)

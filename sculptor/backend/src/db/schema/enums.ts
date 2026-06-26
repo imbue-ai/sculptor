@@ -14,8 +14,7 @@ export const diffStatusSchema = z.enum(DIFF_STATUSES);
 
 // The agent run lifecycle, mirroring TaskState in interfaces/agents/tasks.py.
 // Stored as agent.run_state (the Python field was the misleadingly-named
-// `outcome`). The UI-facing `status` is computed in the projection (Task 4.3),
-// not stored.
+// `outcome`). The UI-facing `status` is computed in the projection, not stored.
 export const RUN_STATES = ["QUEUED", "RUNNING", "FAILED", "CANCELLED", "DELETED", "SUCCEEDED"] as const;
 export type RunState = (typeof RUN_STATES)[number];
 export const runStateSchema = z.enum(RUN_STATES);

@@ -11,14 +11,14 @@ import {
 
 // The user-config service: the TS equivalent of
 // sculptor/sculptor/services/user_config/user_config.py. config.toml is the
-// source of truth (REQ-DATA-002); the in-memory "current config" is re-derived
+// source of truth; the in-memory "current config" is re-derived
 // from disk on each read and persisted on each write, so the observable
 // behavior matches Python's global-instance model without mutable module state.
 //
 // Internally UserConfig is snake_case (the on-disk + service representation,
 // settings.ts). The HTTP API serializes it camelCase (Pydantic's
 // alias_generator=to_camel); userConfigToWire / wirePartialToInternal are that
-// boundary (RW-API-3).
+// boundary.
 
 // A per-process random id identifying this run of Sculptor. Mirrors
 // _EXECUTION_INSTANCE_ID; used as the anonymous user's identity before

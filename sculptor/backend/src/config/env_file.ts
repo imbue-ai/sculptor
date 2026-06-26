@@ -3,8 +3,8 @@ import { existsSync, readFileSync } from "node:fs";
 // Parse a `.env` file into a mapping of variable names to values. Mirrors
 // sculptor/sculptor/services/workspace_service/environment_manager/env_file_parser.py:
 // supports `export` prefixes, single/double quoted values, and inline comments.
-// Returns an empty mapping if the file does not exist. (Task 7.6 layers the
-// global/project precedence on top of this primitive.)
+// Returns an empty mapping if the file does not exist. (The global/project
+// precedence is layered on top of this primitive elsewhere.)
 
 function extractValue(rawValue: string): string {
   if (rawValue.startsWith('"')) {

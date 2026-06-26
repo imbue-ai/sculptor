@@ -7,12 +7,11 @@ import { z } from "zod";
 import { configPath } from "~/config/sculptor_folder";
 
 // Zod schema for the backend's view of config.toml — the on-disk mirror of the
-// user_settings row (REQ-DATA-002), written by the Python backend and NOT
-// rewritten by the migration (Task 8.1). It mirrors UserConfig in
-// sculptor/sculptor/config/user_config.py for the fields the backend reads, with
-// defaults filling gaps, and .passthrough() so any legacy/unversioned field an
-// older config carries loads without error and round-trips on save
-// (REQ-DATA-022). Loosely-typed nested values (keybindings, panel_layout,
+// user_settings row, written by the Python backend and NOT rewritten by the
+// migration. It mirrors UserConfig in sculptor/sculptor/config/user_config.py for
+// the fields the backend reads, with defaults filling gaps, and .passthrough() so
+// any legacy/unversioned field an older config carries loads without error and
+// round-trips on save. Loosely-typed nested values (keybindings, panel_layout,
 // custom_actions, ci_babysitter.agent) are kept permissive so a malformed
 // legacy value never fails the whole load.
 

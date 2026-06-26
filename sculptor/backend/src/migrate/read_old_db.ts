@@ -37,8 +37,8 @@ function tableNames(db: Database.Database): Set<string> {
   return new Set(rows.map((row) => row.name));
 }
 
-// Forward-only guard (RW-DATA-8): fail loud rather than partially migrate a
-// store that is already migrated, newer, or not an old Python store at all.
+// Forward-only guard: fail loud rather than partially migrate a store that is
+// already migrated, newer, or not an old Python store at all.
 export function assertMigratable(sourceDbPath: string): void {
   const db = new Database(sourceDbPath, { readonly: true });
   try {

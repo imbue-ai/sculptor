@@ -23,7 +23,11 @@ export function getPluginsBaseDir(
   if (override !== undefined && override !== "") {
     return override;
   }
-  return path.resolve(__dirname, "..", "..");
+  // The CJS bundle exposes `__dirname`; under ESM/tsx it is undefined, so fall
+  // back to cwd (same guard as config/sculptor_folder.ts). `typeof` is safe on
+  // the undeclared identifier (it does not throw).
+  const baseDir = typeof __dirname !== "undefined" ? __dirname : process.cwd();
+  return path.resolve(baseDir, "..", "..");
 }
 
 // The bundled plugin directories that exist on disk, in load order.

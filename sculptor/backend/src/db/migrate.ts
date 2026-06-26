@@ -7,10 +7,10 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import type { DatabaseConnection } from "~/db/connection";
 
 // The drizzle-kit migration runner — the ONGOING schema runner that replaces
-// Alembic (REQ-DATA-011/012). Distinct from the one-time data migration tool
-// (Task 8.1). Applies the generated SQL forward-only at startup and fails loud
-// if the store reports more applied migrations than this binary knows about
-// (i.e. an older binary against a newer DB).
+// Alembic. Distinct from the one-time data migration tool (migrate/). Applies
+// the generated SQL forward-only at startup and fails loud if the store reports
+// more applied migrations than this binary knows about (i.e. an older binary
+// against a newer DB).
 
 interface MigrationJournal {
   entries: { idx: number; tag: string }[];
@@ -61,7 +61,7 @@ export function runMigrations(db: DatabaseConnection, migrationsFolder: string =
     throw new Error(
       `Sculptor database is not compatible with this version of Sculptor: the schema is ` +
         `newer than this backend (${applied} migrations applied, ${known} known). ` +
-        "Refusing to start to avoid corrupting a forward-migrated store (REQ-DATA-011).",
+        "Refusing to start to avoid corrupting a forward-migrated store.",
     );
   }
   migrate(drizzle(db), { migrationsFolder });

@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import type {
   NewAgentMessageRow,
   NewAgentRow,
@@ -6,11 +8,12 @@ import type {
   NewUserSettingsRow,
   NewWorkspaceRow,
 } from "~/db/schema";
-import type {
-  AgentMessageSource,
-  NotificationImportance,
-  RunState,
-  WorkspaceInitializationStrategy,
+import {
+  agentMessageSourceSchema,
+  diffStatusSchema,
+  notificationImportanceSchema,
+  runStateSchema,
+  workspaceInitializationStrategySchema,
 } from "~/db/schema/enums";
 import type { OldStore, RawRow } from "~/migrate/read_old_db";
 
@@ -42,14 +45,47 @@ function num(value: unknown): number | null {
   return typeof value === "number" ? value : null;
 }
 
-function parseJson(value: unknown): Record<string, unknown> | null {
+function parseJson(
+  value: unknown,
+  entity: string,
+  objectId: string,
+  column: string,
+): Record<string, unknown> | null {
   if (value === null || value === undefined) {
     return null;
   }
   if (typeof value === "string") {
-    return JSON.parse(value) as Record<string, unknown>;
+    try {
+      return JSON.parse(value) as Record<string, unknown>;
+    } catch (error) {
+      throw new Error(
+        `Migration: ${entity} '${objectId}' has corrupt JSON in ${column}: ` +
+          `${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
   return value as Record<string, unknown>;
+}
+
+// Validate a legacy enum value through its Zod schema so a malformed value fails
+// loud at migration time (with entity + id + column context) rather than being
+// written verbatim and surfacing later. The old Python UpperCaseStrEnums use the
+// same value sets as enums.ts, so no value-mapping is required.
+function enumValue<T extends string>(
+  schema: z.ZodType<T>,
+  raw: unknown,
+  entity: string,
+  objectId: string,
+  column: string,
+): T {
+  const parsed = schema.safeParse(String(raw));
+  if (!parsed.success) {
+    throw new Error(
+      `Migration: ${entity} '${objectId}' has an unrecognized ${column} value ` +
+        `${JSON.stringify(raw)} — ${parsed.error.issues[0]?.message ?? "not an allowed enum value"}.`,
+    );
+  }
+  return parsed.data;
 }
 
 function transformRepo(row: RawRow): NewRepoRow {
@@ -67,14 +103,19 @@ function transformRepo(row: RawRow): NewRepoRow {
 }
 
 function transformWorkspace(row: RawRow): NewWorkspaceRow {
+  const objectId = String(row.object_id);
   return {
-    objectId: String(row.object_id),
+    objectId,
     createdAt: String(row.created_at),
     projectId: String(row.project_id),
     description: String(row.description),
-    initializationStrategy: String(
+    initializationStrategy: enumValue(
+      workspaceInitializationStrategySchema,
       row.initialization_strategy,
-    ) as WorkspaceInitializationStrategy,
+      "workspace",
+      objectId,
+      "initialization_strategy",
+    ),
     sourceBranch: str(row.source_branch),
     targetBranch: str(row.target_branch),
     environmentId: str(row.environment_id),
@@ -90,20 +131,28 @@ function transformWorkspace(row: RawRow): NewWorkspaceRow {
     setupFinishedAt: num(row.setup_finished_at),
     setupLogPath: str(row.setup_log_path),
     setupLogTruncated: bool(row.setup_log_truncated),
-    diffStatus: String(row.diff_status) as NewWorkspaceRow["diffStatus"],
+    diffStatus: enumValue(
+      diffStatusSchema,
+      row.diff_status,
+      "workspace",
+      objectId,
+      "diff_status",
+    ),
     diffUpdatedAt: str(row.diff_updated_at),
     requestedBranchName: str(row.requested_branch_name),
   };
 }
 
 function transformAgent(row: RawRow): NewAgentRow {
-  const input = parseJson(row.input_data) ?? {};
-  const state = parseJson(row.current_state) ?? {};
+  const objectId = String(row.object_id);
+  const input = parseJson(row.input_data, "agent", objectId, "input_data") ?? {};
+  const state =
+    parseJson(row.current_state, "agent", objectId, "current_state") ?? {};
   const agentConfig = (input.agent_config as
     | Record<string, unknown>
     | undefined) ?? { object_type: "TerminalAgentConfig" };
   return {
-    objectId: String(row.object_id),
+    objectId,
     createdAt: String(row.created_at),
     projectId: String(row.project_id),
     workspaceId: str(state.workspace_id),
@@ -111,8 +160,8 @@ function transformAgent(row: RawRow): NewAgentRow {
     startingGitHash: str(input.git_hash),
     systemPrompt: str(input.system_prompt),
     defaultModel: str(input.default_model),
-    runState: String(row.outcome) as RunState,
-    error: parseJson(row.error),
+    runState: enumValue(runStateSchema, row.outcome, "agent", objectId, "outcome"),
+    error: parseJson(row.error, "agent", objectId, "error"),
     title: str(state.title),
     lastProcessedMessageId: str(state.last_processed_message_id),
     // Claude/Pi session ids resume from on-disk state files (preserved), not DB.
@@ -132,22 +181,36 @@ function transformAgent(row: RawRow): NewAgentRow {
 }
 
 function transformMessage(row: RawRow): NewAgentMessageRow {
+  const objectId = String(row.object_id);
   return {
-    objectId: String(row.object_id),
+    objectId,
     createdAt: String(row.created_at),
     agentId: String(row.task_id),
-    message: parseJson(row.message) ?? {},
-    source: String(row.source) as AgentMessageSource,
+    message: parseJson(row.message, "agent_message", objectId, "message") ?? {},
+    source: enumValue(
+      agentMessageSourceSchema,
+      row.source,
+      "agent_message",
+      objectId,
+      "source",
+    ),
     isPartial: bool(row.is_partial),
   };
 }
 
 function transformNotification(row: RawRow): NewNotificationRow {
+  const objectId = String(row.object_id);
   return {
-    objectId: String(row.object_id),
+    objectId,
     createdAt: String(row.created_at),
     message: String(row.message),
-    importance: String(row.importance) as NotificationImportance,
+    importance: enumValue(
+      notificationImportanceSchema,
+      row.importance,
+      "notification",
+      objectId,
+      "importance",
+    ),
     agentId: str(row.task_id),
     projectId: str(row.project_id),
   };

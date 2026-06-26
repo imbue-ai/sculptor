@@ -7,9 +7,9 @@ import { workspace } from "~/db/schema/workspace";
 // Plain current-state table for an agent — the first-class entity that the
 // vestigial Python `Task` (models.py) becomes. The versioned
 // TaskInputs/TaskState object_type-discriminated unions and the frozen-schema
-// guard are dropped (RW-SIMP-3); their useful fields are flattened onto this
-// row. `run_state` replaces the misleadingly-named `outcome`. The UI `status`
-// is computed in the projection (Task 4.3), not stored. Multi-tenancy columns
+// guard are dropped; their useful fields are flattened onto this row.
+// `run_state` replaces the misleadingly-named `outcome`. The UI `status` is
+// computed in the projection, not stored. Multi-tenancy columns
 // (organization_reference/user_reference) and max_seconds are dropped.
 export const agent = sqliteTable("agent", {
   objectId: text("object_id").primaryKey(),
@@ -35,7 +35,7 @@ export const agent = sqliteTable("agent", {
   // From AgentTaskStateV2 (resume state).
   title: text("title"),
   lastProcessedMessageId: text("last_processed_message_id"),
-  // Harness session ids used for --resume (Claude / Pi), populated by Task 5.4.
+  // Harness session ids used for --resume (Claude / Pi).
   claudeSessionId: text("claude_session_id"),
   piSessionId: text("pi_session_id"),
   // Terminal agents only.
