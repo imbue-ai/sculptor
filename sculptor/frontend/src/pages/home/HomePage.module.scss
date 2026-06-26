@@ -14,3 +14,41 @@
   min-height: 0;
   width: 100%;
 }
+
+/* ---- Mobile (single-column shell, mirrors MobileWorkspaceShell) ---- */
+.mobileShell {
+  background: var(--mobile-surface-2);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+/* Fills the space under the header and gives RecentWorkspaces (flex:1) its
+   height context. */
+.mobileContent {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: var(--space-3) var(--space-4) var(--space-2);
+}
+
+/* Dimmed backdrop behind the drawer (D1), matching the workspace shell. */
+.backdrop {
+  background: var(--mobile-overlay);
+  inset: 0;
+  opacity: 0%;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity var(--duration-slow) var(--ease-default);
+  z-index: var(--z-sticky);
+}
+
+.backdrop.open {
+  opacity: 100%;
+  pointer-events: auto;
+}

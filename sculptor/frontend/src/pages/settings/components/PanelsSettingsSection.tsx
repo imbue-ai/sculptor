@@ -166,7 +166,12 @@ export const PanelsSettingsSection = ({ onSettingChange }: PanelsSettingsSection
             data-panel-row-id={panel.id}
             data-testid={`${ElementIds.SETTINGS_PANELS_ROW}-${panel.id}`}
           >
-            <Flex justify="between" align="center" gap="3">
+            <Flex
+              justify="between"
+              gap="3"
+              direction={{ initial: "column", sm: "row" }}
+              align={{ initial: "stretch", sm: "center" }}
+            >
               <Flex align="center" gap="3" style={{ flex: 1, minWidth: 0 }}>
                 <Icon size={18} />
                 <Flex direction="column" style={{ minWidth: 0 }}>

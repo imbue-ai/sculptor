@@ -11,6 +11,12 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { ChatMessageRole } from "~/api";
 
 const BOTTOM_THRESHOLD = 200;
+// On short (mobile) viewports, 200px is ~1/4 of the screen, so pin-to-bottom
+// re-engages "too early" when scrolling down — require getting closer to the
+// actual bottom there. Keyed off the scroll container's own height so it's
+// driven by the layout, not a separate mobile flag.
+const MOBILE_BOTTOM_THRESHOLD = 80;
+const SHORT_VIEWPORT_PX = 700;
 // Tighter threshold for re-engaging auto-scroll. The user must scroll to
 // essentially the very bottom — not just "near" it — to opt back in.
 const REENGAGE_THRESHOLD = 5;
@@ -217,7 +223,8 @@ export const useAlphaAutoScroll = (
       const isScrollingDown = prevScrollTop !== -1 && currentScrollTop >= prevScrollTop;
 
       const distance = el.scrollHeight - currentScrollTop - el.clientHeight;
-      const isNearBottom = distance <= BOTTOM_THRESHOLD;
+      const bottomThreshold = el.clientHeight < SHORT_VIEWPORT_PX ? MOBILE_BOTTOM_THRESHOLD : BOTTOM_THRESHOLD;
+      const isNearBottom = distance <= bottomThreshold;
       // During filling phase, don't mark as "at bottom" — virtualizer size
       // corrections can temporarily shrink scrollHeight so the scroll-to-top
       // position appears near the bottom.  Allowing isAtBottomRef to flip

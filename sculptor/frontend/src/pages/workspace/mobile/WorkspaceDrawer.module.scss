@@ -1,0 +1,243 @@
+/* WorkspaceDrawer (D1-D6). Slides in from the left over the chat; the dimmed
+   backdrop lives in the shell. */
+.drawer {
+  background: var(--mobile-surface);
+  border-right: 1px solid var(--mobile-line);
+  bottom: 0;
+  box-shadow: var(--mobile-shadow);
+  display: flex;
+  flex-direction: column;
+  left: 0;
+  max-width: 86%;
+  padding-top: env(safe-area-inset-top);
+  position: absolute;
+  top: 0;
+  transform: translateX(-100%);
+  transition: transform var(--duration-slow) var(--ease-default);
+  width: 300px;
+  z-index: var(--z-modal);
+}
+
+.drawer.open {
+  transform: translateX(0);
+}
+
+.header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-4) var(--space-3);
+}
+
+.wordmark {
+  color: var(--mobile-ink);
+  font-size: var(--font-size-6);
+  font-weight: var(--font-weight-bold);
+}
+
+.avatar {
+  align-items: center;
+  background: var(--mobile-press);
+  border-radius: var(--mobile-radius-full);
+  color: var(--mobile-ink-2);
+  display: flex;
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-bold);
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-1) var(--space-2);
+}
+
+.navItem {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius-3);
+  color: var(--mobile-ink);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: var(--font-size-3);
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  width: 100%;
+}
+
+.navItem:hover {
+  background: var(--mobile-press);
+}
+
+.navCurrent {
+  background: var(--mobile-press);
+  font-weight: var(--font-weight-semibold);
+}
+
+.workspaceList {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-1) var(--space-2);
+}
+
+.repoGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.repoHeader {
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--mobile-ink);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-bold);
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  text-align: left;
+  width: 100%;
+}
+
+.chevron {
+  color: var(--mobile-ink-3);
+  flex: 0 0 auto;
+  transition: transform var(--duration-normal) var(--ease-default);
+}
+
+.repoHeader.collapsed .chevron {
+  transform: rotate(-90deg);
+}
+
+.repoFolder {
+  color: var(--mobile-ink-3);
+  flex: 0 0 auto;
+}
+
+.repoName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repoCount {
+  color: var(--mobile-ink-3);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-semibold);
+  margin-left: auto;
+}
+
+.workspaceRow {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius-3);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3) var(--space-2) calc(var(--space-3) + var(--space-4));
+  text-align: left;
+  width: 100%;
+}
+
+.workspaceRow:hover,
+.workspaceRow.current {
+  background: var(--mobile-press);
+}
+
+.workspaceDot {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.workspaceInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.workspaceName {
+  color: var(--mobile-ink);
+  display: block;
+  font-size: var(--font-size-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspaceBranch {
+  color: var(--mobile-ink-3);
+  display: block;
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-3);
+  justify-content: center;
+  padding: var(--space-6) var(--space-5);
+  text-align: center;
+}
+
+.emptyIcon {
+  align-items: center;
+  background: var(--mobile-press);
+  border-radius: var(--mobile-radius-full);
+  color: var(--mobile-ink-3);
+  display: flex;
+  height: 60px;
+  justify-content: center;
+  width: 60px;
+}
+
+.emptyTitle {
+  color: var(--mobile-ink);
+  font-size: var(--font-size-4);
+  font-weight: var(--font-weight-semibold);
+}
+
+.emptyDesc {
+  color: var(--mobile-ink-2);
+  font-size: var(--font-size-2);
+  line-height: 1.5;
+  max-width: 220px;
+}
+
+.newWorkspace {
+  align-items: center;
+  background: var(--mobile-ink);
+  border: none;
+  border-radius: var(--radius-4);
+  color: var(--mobile-surface);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: var(--font-size-3);
+  font-weight: var(--font-weight-semibold);
+  gap: var(--space-2);
+  justify-content: center;
+  margin: var(--space-3) var(--space-3) calc(var(--space-4) + env(safe-area-inset-bottom));
+  min-height: 48px;
+  padding: var(--space-3) var(--space-5);
+}

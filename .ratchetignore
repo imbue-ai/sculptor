@@ -8,6 +8,11 @@
 # N = active worktrees. Excluded here so ratchets only count the main tree.
 .claude/worktrees/**
 
+# Skill tooling under .claude/skills/ is agent/QA scaffolding (helper scripts,
+# fixtures), not shipped product code, so it should not consume product ratchet
+# budgets. Same rationale as the worktrees exclusion above.
+.claude/skills/**
+
 # test excludes
 imbue_core/imbue_core/ratchets/ratchet_rules.py
 imbue_core/imbue_core/ratchets/test_ratchet_excludes.py

@@ -52,6 +52,22 @@
   margin-left: var(--space-4);
 }
 
+// On narrow / touch viewports the "Remove repo & agents" button + Configure link
+// are too wide to share a row with the repo name+path, squeezing the text into a
+// cramped, badly-wrapping column. Stack the actions below the info instead.
+// Desktop (wider than 767px, fine pointer) keeps the side-by-side row.
+@media (pointer: coarse), (width <= 767px) {
+  .repoRowHeader {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .repoActions {
+    margin-left: 0;
+  }
+}
+
 .repoRowConfig {
   margin-top: var(--space-3);
 }

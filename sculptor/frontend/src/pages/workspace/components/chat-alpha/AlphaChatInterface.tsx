@@ -15,6 +15,7 @@ import {
   sendWorkspaceAgentMessages,
   TaskStatus,
 } from "~/api";
+import { useIsMobile } from "~/common/hooks/useLayoutMode.ts";
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
 import { chatSearchVisibleAtom } from "~/common/state/atoms/chatSearch.ts";
@@ -35,8 +36,7 @@ import { AlphaChatIntro } from "./AlphaChatIntro.tsx";
 import { AlphaMessageNode } from "./AlphaChatView.tsx";
 import {
   buildToolResultMap,
-  hasOnlySubagentResults,
-  hasOnlyToolResults,
+  filterRenderableNodes,
   mergeChatAndQueuedMessages,
   omitMessagesAlreadyInChat,
 } from "./alphaMessageUtils.ts";
@@ -59,12 +59,20 @@ type AlphaChatInterfaceProps = ChatData & {
   appendTextRef?: React.MutableRefObject<((text: string) => void) | null>;
   insertSkillRef?: React.MutableRefObject<((skill: InsertSkillArg) => void) | null>;
   editorRef?: React.MutableRefObject<TipTapEditor | null>;
+  /**
+   * Suppress the built-in input region (ChatInput / AskUserQuestion /
+   * ErrorInput) entirely — e.g. a read-only embedding. Mobile does NOT use this:
+   * it renders the real ChatInput, which adapts to a compact toolbar itself.
+   * Defaults to false; currently no caller sets it true.
+   */
+  hideChatInput?: boolean;
 };
 
 export const AlphaChatInterface = ({
   appendTextRef,
   insertSkillRef,
   editorRef,
+  hideChatInput = false,
   chatMessages,
   smoothInProgressChatMessage,
   isStreaming,
@@ -98,6 +106,7 @@ export const AlphaChatInterface = ({
   // `pendingUserQuestion` is null (see below), so the value it sees is unchanged.
   const isAgentBusy =
     (taskStatus === TaskStatus.RUNNING && workingUserMessageId !== null) || pendingUserQuestion !== null;
+  const isMobile = useIsMobile();
   const effectiveQueuedMessages = useMemo(
     () => (isAgentBusy ? omitMessagesAlreadyInChat(queuedChatMessages, chatMessages) : []),
     [chatMessages, isAgentBusy, queuedChatMessages],
@@ -119,10 +128,7 @@ export const AlphaChatInterface = ({
     [effectiveChatMessages],
   );
 
-  const filteredNodes = useMemo(
-    () => messageTree.filter((node) => !hasOnlyToolResults(node.message) && !hasOnlySubagentResults(node.message)),
-    [messageTree],
-  );
+  const filteredNodes = useMemo(() => filterRenderableNodes(messageTree), [messageTree]);
 
   // Build a map from filtered index to the previous filtered node (for isNewCycle detection)
   const prevNodeMap = useMemo(() => {
@@ -615,14 +621,22 @@ export const AlphaChatInterface = ({
               />
             </div>
           </div>
-          <AlphaPromptNavigator
-            userMessages={userMessages}
-            scrollContainerRef={scrollContainerRef}
-            activePromptIndex={activePromptIndex.index}
-            onNavigate={handlePromptNavigate}
-          />
-          <QueuedMessages messages={effectiveQueuedMessages} />
-          {taskStatus !== TaskStatus.ERROR &&
+          {/* The prompt-navigator rail is a desktop-only companion to the input
+              (↑↓ keyboard nav); mobile has no hardware arrows, so it's hidden
+              there. The queued-messages strip shows on both. */}
+          {!hideChatInput && !isMobile && (
+            <AlphaPromptNavigator
+              userMessages={userMessages}
+              scrollContainerRef={scrollContainerRef}
+              activePromptIndex={activePromptIndex.index}
+              onNavigate={handlePromptNavigate}
+            />
+          )}
+          {!hideChatInput && <QueuedMessages messages={effectiveQueuedMessages} />}
+          {/* The real ChatInput renders on mobile too (it adapts to a compact
+              toolbar internally); only the desktop shell ever passes hideChatInput. */}
+          {!hideChatInput &&
+            taskStatus !== TaskStatus.ERROR &&
             (pendingUserQuestion ? (
               <AskUserQuestion
                 key={pendingUserQuestion.toolUseId}
@@ -639,10 +653,12 @@ export const AlphaChatInterface = ({
                 appendTextRef={appendTextRef}
                 insertSkillRef={insertSkillRef}
                 editorRef={editorRef}
-                showPromptNavHint
+                showPromptNavHint={!isMobile}
               />
             ))}
-          {taskStatus === TaskStatus.ERROR && <ErrorInput workspaceId={workspaceID} taskId={taskID ?? ""} />}
+          {!hideChatInput && taskStatus === TaskStatus.ERROR && (
+            <ErrorInput workspaceId={workspaceID} taskId={taskID ?? ""} />
+          )}
         </Flex>
       </ChatScrollProvider>
       <Toast open={!!toast} onOpenChange={handleToastOpenChange} title={toast?.title} type={toast?.type} />
