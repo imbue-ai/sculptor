@@ -5,7 +5,7 @@ import type { WorkspaceInitializationStrategy } from "~/db/schema";
 
 // On-disk workspace layout, mirroring interfaces/environments/base.py +
 // LocalEnvironment. MUST match the Python layout exactly — the one-time
-// migration (Task 8.1) preserves these directories and ids, so a different
+// migration preserves these directories and ids, so a different
 // scheme would orphan existing workspaces and break Claude/Pi session-file
 // resolution. The workspace root is the absolute path stored as the workspace's
 // environment_id (a `workspaces/<uuid-hex>` directory).

@@ -1,8 +1,8 @@
 import { type ProcessResult, runProcessToCompletion } from "~/environment/process";
 
-// Typed wrapper around the system `git` binary (REQ-COMPAT-021 — git is already
-// required; no native libgit2 binding). Shells out via the Task 3.1 process
-// helper so cwd/env handling stays consistent.
+// Typed wrapper around the system `git` binary (git is already required; no
+// native libgit2 binding). Shells out via the process helper so cwd/env
+// handling stays consistent.
 
 export class GitCommandError extends Error {
   constructor(
@@ -45,11 +45,13 @@ export async function branchExists(cwd: string, branch: string): Promise<boolean
 }
 
 export async function createBranch(cwd: string, branch: string, startPoint?: string): Promise<void> {
-  await git(["checkout", "-b", branch, ...(startPoint === undefined ? [] : [startPoint])], cwd);
+  // Trailing `--` ends the ref list so a start-point ref can't be read as a
+  // pathspec (the safe pattern from git/discard.ts).
+  await git(["checkout", "-b", branch, ...(startPoint === undefined ? [] : [startPoint]), "--"], cwd);
 }
 
 export async function checkout(cwd: string, ref: string): Promise<void> {
-  await git(["checkout", ref], cwd);
+  await git(["checkout", ref, "--"], cwd);
 }
 
 // `git -C <repo> worktree add -b <branch> <dest> <baseRef>` — a real worktree
@@ -70,8 +72,8 @@ export async function removeWorktree(userRepoPath: string, destination: string):
 // Clone sharing the source's object store via --reference (isolated working
 // dir, shared objects). NOTE: this is simplified vs the Python clone_strategy's
 // full multi-remote replay — the clone's origin points at the local source.
-// Full remote mirroring for the opt-in/off-by-default clone mode is refined
-// when Phase 6 wires it.
+// Full remote mirroring for the opt-in/off-by-default clone mode is not yet
+// wired.
 export async function cloneShared(sourceRepoPath: string, destination: string, targetBranch?: string): Promise<void> {
   await git(["clone", "--reference", sourceRepoPath, sourceRepoPath, destination]);
   if (targetBranch !== undefined) {

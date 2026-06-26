@@ -4,7 +4,7 @@
 // `get_tool_invocation_string`) and the tool-content synthesis in
 // `process_manager_utils.py` (`_create_tool_content` /
 // `_create_synthetic_*_diff`). Produces typed `Parsed*` objects whose content
-// blocks are the plain JSON dicts the message log stores and the fold (Task 4.2)
+// blocks are the plain JSON dicts the message log stores and the fold
 // consumes — `object_type`/`type` discriminators reproduced exactly.
 //
 // The diff-tracker fast path (live `git diff` per tool, `diff_tracker.py`) is

@@ -1,7 +1,7 @@
 // The per-turn event multiplexer — ported from `pi_agent/agent_wrapper.py`'s
 // `_dispatch_event` + `_handle_*` + `_TurnState`. It folds pi's three RPC lanes
 // (response / extension_ui_request / session events) into the persistent-message
-// dicts the supervisor (Task 5.1) persists and the fold (Task 4.2) consumes:
+// dicts the supervisor persists and the fold consumes:
 // streaming text → PartialResponseBlock, finalized messages + tool results →
 // ResponseBlock, dialogs → AskUserQuestion, compaction → AutoCompacting,
 // subagent/background lifecycle → BackgroundTask*.

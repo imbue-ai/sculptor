@@ -1,5 +1,5 @@
 // Parses the Claude CLI's stream-json stdout into the persistent-message dicts
-// the supervisor (Task 5.1) persists and the fold (Task 4.2) consumes. Ported
+// the supervisor persists and the fold consumes. Ported
 // from `claude_code_sdk/output_processor.py` (`ClaudeOutputProcessor`): the
 // streaming partial assembler, the control protocol (auto-approve permissions,
 // PreCompact hook callback, SDK-MCP routing), compaction detection, background

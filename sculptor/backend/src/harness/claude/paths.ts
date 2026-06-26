@@ -1,5 +1,5 @@
-// Claude on-disk path resolution, shared by the harness (Task 5.3) and session
-// resume (Task 5.4). Ports `harness.py`'s `compute_claude_jsonl_directory` /
+// Claude on-disk path resolution, shared by the harness and session
+// resume. Ports `harness.py`'s `compute_claude_jsonl_directory` /
 // `_get_claude_config_dir` / `get_tasks_path`. Kept in its own module so both
 // `harness.ts` and `session.ts` can import it without a cycle.
 

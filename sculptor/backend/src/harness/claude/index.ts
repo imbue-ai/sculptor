@@ -1,4 +1,4 @@
-// The Claude Code harness (Task 5.3): launch wiring + stream-json I/O.
+// The Claude Code harness: launch wiring + stream-json I/O.
 
 export * from "~/harness/claude/constants";
 export * from "~/harness/claude/errors";

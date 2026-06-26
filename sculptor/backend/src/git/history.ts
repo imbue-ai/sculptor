@@ -1,7 +1,7 @@
 import { runGit } from "~/git/git";
 
 // Commit-history shapes, matching CommitInfo / CommitFileInfo in
-// web/data_types.py (frontend contract, RW-API-3).
+// web/data_types.py (frontend contract).
 
 const MAX_COMMITS = 500;
 

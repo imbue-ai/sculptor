@@ -1,12 +1,12 @@
 // Builds the `pi --mode rpc` launch command + API-key env injection, ported from
 // `pi_agent/agent_wrapper.py:start`. Unlike Claude, pi is NOT wrapped in
 // `bash -c`; it is executed directly as a long-lived RPC subprocess. Pins pi
-// 0.78.0 (REQ-COMPAT-022).
+// 0.78.0.
 
 import { PiBinaryNotFoundError } from "~/harness/errors";
 
 // Resolve the host `pi` binary, raising the specific, surfaced
-// PiBinaryNotFoundError when it is absent (REQ-INT-023).
+// PiBinaryNotFoundError when it is absent.
 export function resolvePiBinary(resolver: () => string | undefined): string {
   const binaryPath = resolver();
   if (binaryPath === undefined) {
@@ -37,7 +37,7 @@ export interface PiCommandOptions {
 
 // Returns the full argv. `--no-extensions` disables pi's own extension
 // discovery while the explicit `-e <path>` still loads the pinned set (the
-// immutability guarantee, REQ-EXT-3).
+// immutability guarantee).
 export function getPiCommand(options: PiCommandOptions): string[] {
   const extensionArgs = (options.extensionPaths ?? []).flatMap((p) => [
     "-e",
@@ -62,7 +62,7 @@ export function getPiCommand(options: PiCommandOptions): string[] {
 
 // Collect the configured API-key env vars present in the process environment,
 // to inject into the pi child's env. Values live only in the child's
-// environment and are never persisted (REQ-SEC-002). Mirrors
+// environment and are never persisted. Mirrors
 // `_collect_api_key_secrets`.
 export function collectApiKeySecrets(
   apiKeyEnvVarNames: readonly string[] = DEFAULT_PI_API_KEY_ENV_VAR_NAMES,

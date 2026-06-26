@@ -1,4 +1,4 @@
-// The pi harness: the `Harness` implementation the supervisor (Task 5.1) drives,
+// The pi harness: the `Harness` implementation the supervisor drives,
 // plus pi's identity surface (capabilities, model catalog, tool classification).
 // Ports `pi_agent/harness.py` (identity) and the long-lived RPC lifecycle of
 // `pi_agent/agent_wrapper.py` (one `pi --mode rpc` process; a `prompt` per turn,
@@ -535,12 +535,19 @@ class PiHarnessProcess implements HarnessProcess {
           turn.resolve();
         }
       } catch (error) {
-        if (error instanceof PiCrashError) {
-          turn.error = error;
-          turn.resolve();
-        } else {
-          throw error;
+        // Any handler error must end the turn cleanly rather than escape this
+        // stdout `data` callback uncaught (which would wedge the turn promise
+        // forever). A PiCrashError is the expected turn-failure path; anything
+        // else (an unexpected parse/shape bug) is logged and folded into the
+        // same failure so the turn still resolves.
+        if (!(error instanceof PiCrashError)) {
+          console.error("pi: unexpected error handling turn event", error);
         }
+        turn.error =
+          error instanceof PiCrashError
+            ? error
+            : new PiCrashError(error instanceof Error ? error.message : String(error));
+        turn.resolve();
       }
       return;
     }
@@ -555,11 +562,12 @@ class PiHarnessProcess implements HarnessProcess {
           this.finishOutOfBandTurn();
         }
       } catch (error) {
-        if (error instanceof PiCrashError) {
-          this.finishOutOfBandTurn();
-        } else {
-          throw error;
+        // As above: end the out-of-band turn rather than let an error escape the
+        // stdout `data` callback uncaught.
+        if (!(error instanceof PiCrashError)) {
+          console.error("pi: unexpected error handling out-of-band event", error);
         }
+        this.finishOutOfBandTurn();
       }
       return;
     }

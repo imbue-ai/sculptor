@@ -3,9 +3,9 @@ import path from "node:path";
 import * as pty from "node-pty";
 
 // PTY-backed terminals via node-pty, which retires the Python posix_spawn /
-// fork-lock PTY-helper machinery (RW-SIMP-1) — node-pty handles the fork safely
-// inside a multi-threaded process. Defaults + env scrubbing mirror
-// spawned_pty_process.py so the frontend xterm client sees the same protocol.
+// fork-lock PTY-helper machinery — node-pty handles the fork safely inside a
+// multi-threaded process. Defaults + env scrubbing mirror spawned_pty_process.py
+// so the frontend xterm client sees the same protocol.
 
 export const DEFAULT_TERMINAL_COLS = 80;
 export const DEFAULT_TERMINAL_ROWS = 24;
@@ -42,7 +42,11 @@ export function buildShellEnv(
   }
   for (const [key, value] of Object.entries(extraEnv)) {
     if (key === "PATH") {
-      env.PATH = value + path.delimiter + (env.PATH ?? "");
+      // Only join with the base PATH when it's non-empty: appending a delimiter
+      // to an empty base yields a trailing-empty element, which many shells read
+      // as the current directory — an unintended (and unsafe) PATH entry.
+      const basePath = env.PATH ?? "";
+      env.PATH = basePath === "" ? value : value + path.delimiter + basePath;
     } else if (envVarOverride || !(key in env)) {
       env[key] = value;
     }

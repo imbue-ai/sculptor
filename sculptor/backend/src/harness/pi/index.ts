@@ -1,4 +1,4 @@
-// The pi harness (Task 5.5): `pi --mode rpc` launch + channel multiplexing.
+// The pi harness: `pi --mode rpc` launch + channel multiplexing.
 
 export * from "~/harness/pi/background";
 export * from "~/harness/pi/backchannel";

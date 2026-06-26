@@ -1,6 +1,6 @@
 // The harness registry — the single point that maps an agent's stored
-// `agent_config` to the harness that supervises it (Task 5.6, ports
-// `agents/harness_registry.py`). The supervisor (Task 5.1) must never hardcode a
+// `agent_config` to the harness that supervises it (ports
+// `agents/harness_registry.py`). The supervisor must never hardcode a
 // harness; it asks the registry's resolver. Terminal agents are not
 // chat-supervised here (the runner skips them), so they resolve to `undefined`.
 

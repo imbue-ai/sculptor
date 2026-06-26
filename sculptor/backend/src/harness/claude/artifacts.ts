@@ -1,11 +1,11 @@
 // Artifact production for the Claude harness: the per-turn transcript
 // (`transcript_collector.py`) and the task-list plan artifact
 // (`artifact_creation.py` + `harness.get_tasks_path`). These write under the
-// agent's `internal/artifacts/` layout (Task 3.1) so the derived view (Task 4.3)
-// reads, and the endpoints (Task 6.7) serve, real artifacts.
+// agent's `internal/artifacts/` layout so the derived view
+// reads, and the endpoints serve, real artifacts.
 //
 // The git diff-tracker artifact (`diff_tracker.py`) is workspace-level state the
-// diff endpoint (Task 6.5) recomputes from git on demand, so it is not
+// diff endpoint recomputes from git on demand, so it is not
 // reproduced here; `should_send_diff_and_branch_name_artifacts` drives that
 // refresh via the harness's `onDiffNeeded` hook instead.
 

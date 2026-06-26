@@ -1,7 +1,7 @@
 // The hello/test harness — a trivial echo harness the integration suite uses
 // for non-Claude/non-Pi agent paths (ports `agents/hello_agent`). Each user
 // message is bracketed by RequestStarted/RequestSuccess with a single echoed
-// assistant ResponseBlock, so the projection (Task 4.2) renders a turn without a
+// assistant ResponseBlock, so the projection renders a turn without a
 // real CLI.
 
 import { newAgentMessageId } from "~/ids";

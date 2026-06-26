@@ -1,7 +1,7 @@
-// The Claude Code harness: the `Harness` implementation the supervisor (Task
-// 5.1) drives, plus the Claude-specific identity surface (tool classification,
-// model catalog, the session-file JSONL directory) the projection (Task 4.3)
-// and resume (Task 5.4) read. Ports `claude_code_sdk/harness.py` (identity) and
+// The Claude Code harness: the `Harness` implementation the supervisor
+// drives, plus the Claude-specific identity surface (tool classification,
+// model catalog, the session-file JSONL directory) the projection
+// and resume read. Ports `claude_code_sdk/harness.py` (identity) and
 // the per-turn lifecycle of `process_manager.py` (launch wiring) onto the
 // long-lived `HarnessProcess` contract.
 
@@ -56,7 +56,7 @@ import type {
 // Re-exported so callers (and tests) keep importing it from the harness module.
 export { computeClaudeJsonlDirectory } from "~/harness/claude/paths";
 
-// The subset of `LocalEnvironment` (Task 3.1) the Claude harness uses; declared
+// The subset of `LocalEnvironment` the Claude harness uses; declared
 // structurally so the harness stays decoupled from the concrete environment.
 export interface ClaudeHarnessEnvironment {
   getUserHomeDirectory(): string;
@@ -72,7 +72,7 @@ export interface ClaudeHarnessDeps {
   resolveBinaryPath: () => string | undefined;
   // Test-only: resolve the `fake_claude.py` launch command for a model wire
   // value, or null for a real model. Mirrors process_manager's `_is_fake_claude`
-  // branch; the runner wires this from the test harness's env (Task 9.5).
+  // branch; the runner wires this from the test harness's env.
   resolveFakeClaudeCommand?: (
     modelName: string | null,
   ) => { python: string; script: string } | null;
@@ -87,7 +87,7 @@ export interface ClaudeHarnessDeps {
   // Called when a file-changing tool ran, so the workspace diff can refresh.
   onDiffNeeded?: (agent: AgentRow) => void;
   // Called when the CLI reports its session id, so the agent row can persist it
-  // (Task 5.4 step 5). The on-disk state file is the authoritative resume
+  // The on-disk state file is the authoritative resume
   // pointer; this is the additional row-level mirror.
   onSessionIdReported?: (agent: AgentRow, sessionId: string) => void;
   // Re-resolve the injected `.env` for the agent at the start of each turn, so a
@@ -125,7 +125,7 @@ export class ClaudeHarness implements Harness {
     return agent.defaultModel ?? null;
   }
 
-  // The session-file directory for an agent's working directory (Task 5.4 resume
+  // The session-file directory for an agent's working directory (resume
   // reads `<dir>/<session_id>.jsonl`). Resolves symlinks like the CLI does.
   getJsonlPathForWorkingDirectory(
     home: string,
@@ -150,7 +150,7 @@ export class ClaudeHarness implements Harness {
 const ENV_REMINDER_MARKER_FILE = "env_var_reminder_emitted";
 
 // Instruction used to resume an interrupted in-flight turn after a restart
-// (RW-DATA-6 crash recovery). The model already has the prior conversation via
+// (crash recovery). The model already has the prior conversation via
 // `--resume`, so we only nudge it to finish — replaying the original prompt would
 // duplicate any output it already streamed before the shutdown.
 const RESUME_INTERRUPTED_TURN_INSTRUCTION =
@@ -158,7 +158,7 @@ const RESUME_INTERRUPTED_TURN_INSTRUCTION =
 
 // One long-lived process per supervised Claude agent. Each user message starts a
 // fresh `claude` CLI turn (matching Python's per-turn invocation), bracketed by
-// RequestStarted/RequestSuccess|Failure so the fold (Task 4.2) finalizes turns.
+// RequestStarted/RequestSuccess|Failure so the fold finalizes turns.
 class ClaudeHarnessProcess implements HarnessProcess {
   private messageCb: ((message: Record<string, unknown>) => void) | undefined;
   private exitCb: ((result: HarnessExitResult) => void) | undefined;
@@ -339,7 +339,7 @@ class ClaudeHarnessProcess implements HarnessProcess {
     // not re-emitted on resume (process_manager is_first_user_message_of_conversation).
     const statePath = this.environment.getStatePath(this.agent.objectId);
     const reminderMarker = joinPath(statePath, ENV_REMINDER_MARKER_FILE);
-    // A resume turn (RW-DATA-6): re-supervision after a restart re-delivers an
+    // A resume turn: re-supervision after a restart re-delivers an
     // interrupted in-flight message to finalize its turn. The model already saw
     // the original prompt via the resumed session, so we send only a continue
     // nudge and never re-run the prompt or re-fire the first-message reminders.
@@ -581,7 +581,7 @@ class ClaudeHarnessProcess implements HarnessProcess {
     });
   }
 
-  // --- Session id (Task 5.4: validation + corrupt-tail + resume) ------------
+  // --- Session id (validation + corrupt-tail + resume) ------------
 
   // Resolve the session id to pass to `claude --resume` for this turn. The
   // on-disk `session_id` state file is the authoritative pointer (the CLI

@@ -8,7 +8,7 @@
 //   - mcp_server.py (_MCP_PROTOCOL_VERSION / _MCP_SERVER_VERSION / JSON-RPC codes)
 //
 // Flag values track the upstream Claude CLI compatibility window
-// (REQ-COMPAT-020, recommended 2.1.170); the *contract* is what's fixed.
+// (recommended 2.1.170); the *contract* is what's fixed.
 
 // https://docs.anthropic.com/en/api/errors — codes Sculptor treats as
 // retryable (the turn raises an AgentTransientError rather than a hard failure).
@@ -25,7 +25,7 @@ export const CLAUDE_TASKS_SUBDIRECTORY = "tasks";
 export const CLAUDE_CONFIG_DIR_ENV_VAR = "CLAUDE_CONFIG_DIR";
 
 // The session-id state file the output processor writes under the agent's
-// state path once the CLI reports its session id (used by Task 5.4 resume).
+// state path once the CLI reports its session id (used by resume).
 export const SESSION_ID_STATE_FILE_NAME = "session_id";
 export const VALIDATED_SESSION_ID_STATE_FILE_NAME = "validated_session_id";
 
@@ -39,7 +39,7 @@ export const MCP_ASK_TOOL_FQN = `mcp__${MCP_SERVER_NAME}__${MCP_ASK_TOOL_NAME}`;
 export const MCP_EXIT_PLAN_MODE_TOOL_FQN = `mcp__${MCP_SERVER_NAME}__${MCP_EXIT_PLAN_MODE_TOOL_NAME}`;
 
 // The built-in tools Sculptor disables so it renders those interactions itself
-// (load-bearing — see plan §Gotchas). Passed as a single comma-joined argument
+// (load-bearing). Passed as a single comma-joined argument
 // to --disallowed-tools.
 export const DISABLED_BUILTIN_TOOLS: readonly string[] = [
   "AskUserQuestion",

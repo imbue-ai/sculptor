@@ -17,7 +17,6 @@ import {
   runProcessToCompletion,
   spawnBackgroundProcess,
 } from "~/environment/process";
-import { TerminalManager } from "~/terminal/manager";
 
 export interface LocalEnvironmentOptions {
   // The workspace root (the absolute path stored as the workspace's
@@ -30,14 +29,13 @@ export interface LocalEnvironmentOptions {
 
 // The single concrete local execution environment. The Python abstract
 // Environment / AgentExecutionEnvironment / ComputingEnvironment interfaces,
-// their capability flags, and the registry indirection are all dropped
-// (RW-SIMP-1): there is exactly one implementation, this one.
+// their capability flags, and the registry indirection are all dropped: there
+// is exactly one implementation, this one.
 export class LocalEnvironment {
   private readonly root: string;
   private readonly initializationStrategy: WorkspaceInitializationStrategy;
   private readonly repoHostPath: string | undefined;
   private readonly backgroundProcesses = new Set<BackgroundProcess>();
-  private terminalManager: TerminalManager | undefined;
 
   constructor(options: LocalEnvironmentOptions) {
     this.root = options.root;
@@ -125,7 +123,16 @@ export class LocalEnvironment {
   }
 
   runProcessInBackground(command: readonly string[], options: RunOptions = {}): BackgroundProcess {
-    const handle = spawnBackgroundProcess(command, { cwd: this.getWorkingDirectory(), ...options });
+    const handle = spawnBackgroundProcess(command, {
+      cwd: this.getWorkingDirectory(),
+      ...options,
+      // Drop the handle and surface a spawn failure (ENOENT/EACCES) rather than
+      // letting it crash the backend as an uncaught 'error' event.
+      onError: (error) => {
+        this.backgroundProcesses.delete(handle);
+        options.onError?.(error);
+      },
+    });
     this.backgroundProcesses.add(handle);
     handle.child.once("close", () => this.backgroundProcesses.delete(handle));
     return handle;
@@ -135,22 +142,17 @@ export class LocalEnvironment {
     return handle.child.exitCode === null && handle.child.signalCode === null && !handle.child.killed;
   }
 
-  // --- Terminals (node-pty) ---
+  // --- Teardown ---
 
-  startTerminalManager(): TerminalManager {
-    this.terminalManager ??= new TerminalManager();
-    return this.terminalManager;
-  }
+  // Terminals (node-pty) are owned by the process-wide TerminalManager singleton
+  // (src/terminal/instance.ts) that the terminal routes/services use, not by the
+  // environment: a reconnecting xterm must outlive any single request. Workspace
+  // deletion reaps them there (WorkspaceService.deleteWorkspace). The environment
+  // only owns its background processes.
 
-  stopTerminalManager(): void {
-    this.terminalManager?.closeAll();
-    this.terminalManager = undefined;
-  }
-
-  // close() and destroy() both terminate tracked background processes and
-  // terminals so nothing outlives the environment.
+  // close() and destroy() both terminate tracked background processes so nothing
+  // outlives the environment.
   close(): void {
-    this.stopTerminalManager();
     for (const handle of this.backgroundProcesses) {
       handle.child.kill("SIGTERM");
     }

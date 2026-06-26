@@ -1,4 +1,4 @@
-// Claude session validation + corrupt-tail tolerance (Task 5.4). Ports
+// Claude session validation + corrupt-tail tolerance. Ports
 // `process_manager_utils.py:is_session_id_valid`: a session is resumable iff its
 // on-disk JSONL file holds at least one user/assistant line whose `sessionId`
 // matches. A corrupt tail (malformed JSON line) is tolerated while the session

@@ -22,7 +22,7 @@ export interface SetupWorkspaceResult {
 }
 
 // Builds a workspace's working tree per its initialization strategy, then
-// captures source_git_hash (the diff base, Task 3.3). The working-dir layout
+// captures source_git_hash (the diff base). The working-dir layout
 // matches the Python LocalEnvironment (workspaces/<id>/code for worktree/clone,
 // the user's repo for in-place) — the migration preserves these paths.
 export async function setupWorkspace(params: SetupWorkspaceParams): Promise<SetupWorkspaceResult> {

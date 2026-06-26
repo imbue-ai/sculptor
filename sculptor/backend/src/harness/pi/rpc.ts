@@ -3,7 +3,7 @@
 // distinguished by the top-level `type`: command `response` envelopes,
 // `extension_ui_request` dialog calls, and the `AgentSessionEvent` union. The
 // wire is camelCase; we read it directly. Unknown/malformed payloads parse to a
-// `unknown` event the dispatcher ignores (RPC §5.3 forward-compat).
+// `unknown` event the dispatcher ignores (forward-compat).
 
 // --- Agent message (the `message` field of message_* events) --------------
 
@@ -19,8 +19,14 @@ function asAgentMessage(raw: unknown): PiAgentMessage {
   const m = (raw ?? {}) as Record<string, unknown>;
   return {
     role: typeof m.role === "string" ? m.role : "",
+    // Drop null/non-object content elements: a malformed frame must not make
+    // downstream consumers (extractAssistantText / buildInterleavedContent)
+    // throw a TypeError on `element.type`.
     content: Array.isArray(m.content)
-      ? (m.content as Record<string, unknown>[])
+      ? m.content.filter(
+          (b): b is Record<string, unknown> =>
+            typeof b === "object" && b !== null,
+        )
       : [],
     stopReason: typeof m.stopReason === "string" ? m.stopReason : null,
     model: typeof m.model === "string" ? m.model : null,
@@ -70,7 +76,9 @@ export function humanizePiFailureReason(
   const cleaned = (reason ?? "").trim();
   const lowered = cleaned.toLowerCase();
   if (AUTH_FAILURE_MARKERS.some((m) => lowered.includes(m))) {
-    return `${AUTH_FAILURE_MESSAGE}\n\nDetails: ${cleaned}`;
+    // Redact the raw provider text on the auth path: it can carry a credential
+    // or token that must not surface in the UI.
+    return AUTH_FAILURE_MESSAGE;
   }
   if (UNKNOWN_MODEL_MARKERS.some((m) => lowered.includes(m))) {
     return `${UNKNOWN_MODEL_MESSAGE}\n\nDetails: ${cleaned}`;

@@ -27,10 +27,18 @@ export interface AssembledAttachments {
   instructions: string;
 }
 
-// An absolute entry is used as-is; otherwise it is an upload id under
-// internal/uploads/ (web/app.py upload-file stores `<uuid><ext>` there).
-function resolveUploadPath(entry: string): string {
-  return path.isAbsolute(entry) ? entry : path.join(uploadsDir(), entry);
+// An entry is an upload id under internal/uploads/ (web/app.py upload-file
+// stores `<uuid><ext>` there). Resolve it strictly within the uploads dir so a
+// crafted entry — an absolute path or a `../` traversal — can't read an
+// arbitrary file off the host. Returns null for an entry that escapes (skipped
+// like a missing source). Mirrors the containment check in git/discard.ts.
+function resolveUploadPath(entry: string): string | null {
+  const root = path.resolve(uploadsDir());
+  const resolved = path.resolve(root, entry);
+  if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+    return null;
+  }
+  return resolved;
 }
 
 function imageMimeType(filePath: string): string | undefined {
@@ -57,6 +65,10 @@ export function assemblePiAttachments(
   const pathAttachments: string[] = [];
   for (const entry of files) {
     const resolved = resolveUploadPath(entry);
+    if (resolved === null) {
+      // Entry escapes the uploads dir — skip rather than read off-host.
+      continue;
+    }
     const mimeType = imageMimeType(resolved);
     if (mimeType !== undefined) {
       try {

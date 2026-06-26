@@ -2,7 +2,7 @@
 // `process_manager_utils.py:get_claude_command`. The harness runs the CLI via
 // `bash -c "exec env IS_SANDBOX=1 <binary> …"` so signals reach claude directly
 // (not bash) and the stdin control protocol stays open. Flag values track the
-// upstream CLI compatibility window (REQ-COMPAT-020); the contract is fixed.
+// upstream CLI compatibility window; the contract is fixed.
 
 import {
   DISABLED_BUILTIN_TOOLS,
@@ -13,7 +13,7 @@ import {
 import { ClaudeBinaryNotFoundError } from "~/harness/errors";
 
 // Resolve the host `claude` binary, raising the specific, surfaced
-// ClaudeBinaryNotFoundError when it is absent (REQ-INT-023) rather than a
+// ClaudeBinaryNotFoundError when it is absent rather than a
 // generic failure.
 export function resolveClaudeBinary(
   resolver: () => string | undefined,

@@ -1,10 +1,10 @@
 import { runProcessToCompletion } from "~/environment/process";
-import { runGit } from "~/git/git";
+import { GitCommandError, runGit } from "~/git/git";
 
 // The workspace diff is the RAW unified-diff text (DiffArtifact in
-// interfaces/agents/artifacts.py) — the frontend counts lines to gate at >500
-// (REQ-NFR-050); there is no backend line-count field. Field names/structure
-// are the frontend contract (RW-API-3).
+// interfaces/agents/artifacts.py) — the frontend counts lines to gate at >500;
+// there is no backend line-count field. Field names/structure are the frontend
+// contract.
 
 const DEFAULT_DIFF_CONTEXT_LINES = 3;
 
@@ -55,17 +55,31 @@ async function getMergeBase(workingDir: string, targetBranch: string): Promise<s
 }
 
 async function diffAgainst(workingDir: string, baseRef: string, contextFlag: string): Promise<string> {
-  const result = await runProcessToCompletion(
-    ["bash", "-c", `git --no-pager diff -M ${contextFlag} ${baseRef}; ${UNTRACKED_FILES_DIFF_CMD}`],
-    { cwd: workingDir },
-  );
-  return result.stdout.trim();
+  // The tracked diff runs as an arg-array (no shell) so `baseRef` can't be
+  // re-interpreted and its exit code is meaningful: 0 (clean) and 1 (changes
+  // present) are both normal for `git diff`; anything else (a bad ref or a
+  // corrupt repo) is a real failure that must surface, not be reported as a
+  // clean tree.
+  const tracked = await runGit(["--no-pager", "diff", "-M", contextFlag, baseRef], workingDir);
+  if (tracked.exitCode !== 0 && tracked.exitCode !== 1) {
+    throw new GitCommandError(["diff", "-M", contextFlag, baseRef], tracked.exitCode, tracked.stderr);
+  }
+  // The untracked-files diff is an intrinsically shell-shaped pipeline
+  // (ls-files | xargs find | xargs git diff --no-index); keep it on bash, but
+  // it only appends new-file diffs, so its noisy exit code is best-effort.
+  const untracked = await runProcessToCompletion(["bash", "-c", UNTRACKED_FILES_DIFF_CMD], { cwd: workingDir });
+  return (tracked.stdout + untracked.stdout).trim();
 }
 
 // uncommitted_diff = working tree vs HEAD + untracked files; target_branch_diff
 // = merge-base(target, HEAD) vs working tree. Mirrors _create_diff_artifact_local.
 export async function workspaceDiff(params: WorkspaceDiffParams): Promise<DiffArtifact> {
   const contextLines = params.contextLines ?? DEFAULT_DIFF_CONTEXT_LINES;
+  // `-U<number>` requires an integer; reject anything else so a bad value can't
+  // be smuggled into the diff flag.
+  if (!Number.isInteger(contextLines) || contextLines < 0) {
+    throw new Error(`contextLines must be a non-negative integer, got ${contextLines}`);
+  }
   const contextFlag = `-U${contextLines}`;
 
   const uncommittedDiff = await diffAgainst(params.workingDir, "HEAD", contextFlag);
@@ -113,7 +127,11 @@ export async function commitDiff(workingDir: string, commitHash: string): Promis
       ? ["--no-pager", "diff", "-M", `${parentHash}..${resolvedHash}`]
       : ["--no-pager", "diff-tree", "-p", "--root", "-M", resolvedHash];
   const diffResult = await runGit(diffArgs, workingDir);
-  const diff = diffResult.exitCode !== null && diffResult.exitCode <= 1 ? diffResult.stdout : "";
-
-  return { diff, commit_hash: resolvedHash, parent_hash: parentHash };
+  // 0/1 are the normal "no changes"/"changes present" codes; >1 is a real
+  // failure (the commit resolved but the diff itself broke) that must surface
+  // rather than be flattened to an empty diff.
+  if (diffResult.exitCode !== 0 && diffResult.exitCode !== 1) {
+    throw new GitCommandError(diffArgs, diffResult.exitCode, diffResult.stderr);
+  }
+  return { diff: diffResult.stdout, commit_hash: resolvedHash, parent_hash: parentHash };
 }

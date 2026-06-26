@@ -406,7 +406,16 @@ export class SculptorMcpServer {
       return;
     }
     if (toolUseId === null) {
-      // No registered tool_use_id (out-of-order assistant stream); drop.
+      // No registered tool_use_id (out-of-order assistant stream) and no cached
+      // answer. Dropping it silently would leave the CLI blocked forever on a
+      // tools/call that can never be matched to a UI panel, wedging the turn
+      // until it's killed. Unblock it with a tool-error result so the agent can
+      // continue instead.
+      this.respondWithErrorText(
+        controlRequestId,
+        message.id as number | string,
+        "This question could not be presented to the user. Continue without it.",
+      );
       return;
     }
     this.pending.set(toolUseId, {
@@ -462,6 +471,22 @@ export class SculptorMcpServer {
         jsonrpc: "2.0",
         id: mcpMessageId,
         result: { content: [{ type: "text", text }], isError: false },
+      },
+    });
+  }
+
+  // A successful JSON-RPC result whose tool payload is flagged as an error, used
+  // to unblock a tools/call we cannot route to a UI panel.
+  private respondWithErrorText(
+    controlRequestId: string,
+    mcpMessageId: number | string,
+    text: string,
+  ): void {
+    this.respond(controlRequestId, {
+      mcp_response: {
+        jsonrpc: "2.0",
+        id: mcpMessageId,
+        result: { content: [{ type: "text", text }], isError: true },
       },
     });
   }

@@ -1,11 +1,11 @@
-// The centralized harness error taxonomy (Task 5.6), ported from
+// The centralized harness error taxonomy, ported from
 // `interfaces/agents/errors.py`. The missing-binary errors must be distinct and
-// surfaced (REQ-INT-023) so the API/projection render a clear startup-error
+// surfaced so the API/projection render a clear startup-error
 // message rather than a generic failure. `claude/errors.ts` and `pi/errors.ts`
 // re-export from here so existing import paths keep working.
 
 // A SerializedException-shaped object, matching what `message_conversion.ts`
-// (Task 4.2) folds out of RequestFailure / crash messages.
+// folds out of RequestFailure / crash messages.
 export interface SerializedException {
   exception: string;
   args: unknown[];

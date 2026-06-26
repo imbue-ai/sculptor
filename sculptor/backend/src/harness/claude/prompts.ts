@@ -1,6 +1,6 @@
 // System-prompt + user-instruction assembly for the Claude harness. Ports the
 // load-bearing prompt content from the Python backend so the agent behaves
-// identically (REQ-INT-021): `harness.py:_HIDDEN_SYSTEM_PROMPT` /
+// identically: `harness.py:_HIDDEN_SYSTEM_PROMPT` /
 // `_SCULPTOR_MCP_SYSTEM_PROMPT_ADDENDUM`, the per-mode prompts and entity-mention
 // block from `agents/default/constants.py`, and the user-instruction wrapping in
 // `process_manager_utils.py:get_user_instructions`.
@@ -9,7 +9,7 @@ import type { WorkspaceInitializationStrategy } from "~/db/schema";
 
 // The MCP addendum is the contract that tells the model to use the
 // `mcp__sculptor__*` replacements for the disabled built-in AskUserQuestion /
-// ExitPlanMode tools (load-bearing — see Task 5.3 §Gotchas).
+// ExitPlanMode tools (load-bearing).
 export const SCULPTOR_MCP_SYSTEM_PROMPT_ADDENDUM = `
 You are running inside Sculptor. The built-in AskUserQuestion and ExitPlanMode tools are unavailable. When you need to ask the user multiple-choice questions (with optional freeform text), call \`mcp__sculptor__ask_user_question\` — same input schema as the built-in. When you have a concrete implementation plan ready for user review, call \`mcp__sculptor__exit_plan_mode\`. These tools behave identically to their built-in counterparts; prefer them whenever you would otherwise use AskUserQuestion or ExitPlanMode.
 `;
@@ -228,7 +228,7 @@ export interface UserInstructionsOptions {
 
 // Build the user-instruction text written to the CLI on stdin, mirroring the
 // `ChatInputUserMessage` branch of `get_user_instructions`. The resume/answer
-// branches are handled by Task 5.4 / Task 6.8 and are not ported here.
+// branches are handled elsewhere and are not ported here.
 export function getUserInstructions(options: UserInstructionsOptions): string {
   let instructions = stripAndUnescapeHtml(options.text);
   const skillMatch = SKILL_INVOCATION_RE.exec(instructions);
