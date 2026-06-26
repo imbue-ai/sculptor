@@ -224,17 +224,23 @@ packaging Sculptor):
 
 ---
 
-## 4. Data persistence, durability & migration (→ SPEC §9.5, §10.8)
+## 4. Data persistence, durability & migration (→ SPEC §9.5, §10.9)
 
 `SPEC.md` quarantines SQLite/Alembic as implementation. They are first-class here because the product
 makes durability and upgrade-survival guarantees (§9.5) that rest directly on this layer.
 
 ### 4.1 On-disk layout & store
 
-- **REQ-DATA-001 (MUST).** User data lives in a single **Sculptor folder**: `~/.sculptor` (stable),
-  `~/.dev-sculptor` (dev builds), or `<repo>/.dev_sculptor` (running from source), overridable via the
-  `SCULPTOR_FOLDER` env var; the workspaces path is separately overridable via
-  `SCULPTOR_WORKSPACES_FOLDER` (`sculptor/sculptor/utils/build.py`).
+- **REQ-DATA-001 (MUST).** User data lives in a single **Sculptor folder**, resolved from **build
+  context** in strict precedence (`get_sculptor_folder()`, `sculptor/sculptor/utils/build.py`): (1) the
+  **`SCULPTOR_FOLDER` env var**, if set, wins outright; else (2) **running from source** — detected by
+  walking parents for a `.git` directory — uses `<repo>/.dev_sculptor` (or `~/.dev-sculptor` if no repo
+  root is found); else (3) a **packaged dev build** — detected by a `.dev` version suffix — uses
+  `~/.dev-sculptor`; else (4) a **packaged production build** uses `~/.sculptor`. "Packaged" means a
+  PyInstaller bundle (`hasattr(sys, "frozen")`), mirrored on the Electron side as `app.isPackaged`. The
+  workspaces sub-path is separately overridable via `SCULPTOR_WORKSPACES_FOLDER`. The Electron shell
+  resolves the same folder independently and **must stay consistent** with the backend
+  (`sculptor/frontend/src/electron/logger.ts` `getSculptorFolder`).
 - **REQ-DATA-002 (MUST).** Within it: `internal/database.db` (SQLite), `internal/config.toml`
   (settings), `internal/logs/`, `internal/uploads/`, `internal/artifacts/`, `workspaces/`, and a
   top-level `.format_version` marker (`sculptor/sculptor/utils/build.py`, `sculptor/sculptor/utils/migration.py`).
@@ -245,6 +251,14 @@ makes durability and upgrade-survival guarantees (§9.5) that rest directly on t
 - **REQ-DATA-004 (MUST).** Persisted entities: **UserSettings, Project, Workspace, Task,
   SavedAgentMessage, Notification** (`sculptor/sculptor/database/models.py`). _("Task" is the vestigial internal
   primitive backing an Agent — see `SPEC.md` §6; it is a storage concern, not a product concept.)_
+- **REQ-DATA-005 (MUST).** The `SCULPTOR_FOLDER` override is the **test/dev isolation lever** the test
+  substrate rests on (→ `SPEC.md` §10.8): every integration-test backend is launched with
+  `SCULPTOR_FOLDER` pointed at a throwaway temp dir (`get_testing_environment`,
+  `sculptor/sculptor/testing/server_utils.py`), so tests never read or mutate a developer's real
+  `~/.sculptor`/`~/.dev-sculptor` and can run reproducibly in parallel; the `custom_sculptor_folder`
+  pytest marker (`SPEC.md` §10.3) tags tests that require their own folder. Because
+  `get_sculptor_folder()` is process-cached (`functools.cache`), tests that vary the env must clear the
+  cache (`get_sculptor_folder.cache_clear()`).
 
 ### 4.2 Durability & upgrade survival
 

@@ -950,16 +950,30 @@ file-hygiene and shell checks.
 Sculptor has three surfaces over one backend (GUI, CLI, API), kept from drifting by **generation
 rather than hand-maintenance**: TypeScript types and the frontend API client are generated from the
 FastAPI/OpenAPI schema, the `sculpt` client is generated similarly, and a **frozen model-schema
-snapshot** (→ §10.8) detects unintended backend-model changes. A backend-model change that isn't reflected across surfaces shows
+snapshot** (→ §10.9) detects unintended backend-model changes. A backend-model change that isn't reflected across surfaces shows
 up as a regenerated diff or a failing check, not a runtime surprise.
 
-#### 10.8 Data-durability machinery
+#### 10.8 Build-context data-folder resolution & isolation
+Where Sculptor keeps its data is resolved from **build context**, not hardcoded. A single
+`get_sculptor_folder()` routine picks `<repo>/.dev_sculptor` when **running from source** (detected by
+walking up the tree for a `.git` directory), `~/.dev-sculptor` for a **packaged dev build** (detected
+by a `.dev` version suffix), and `~/.sculptor` for a **packaged production build** — where "packaged"
+means a PyInstaller bundle (`sys.frozen`), mirrored on the Electron side as `app.isPackaged` so the
+shell resolves the same path. Above all of these, a **`SCULPTOR_FOLDER` env override wins outright**,
+and that override is the **isolation lever the whole test substrate rests on**: each test — and each
+parallel sandbox on offload (§10.5) — runs against a throwaway temp folder (the `custom_sculptor_folder`
+marker, §10.3), so suites never touch or race on a developer's real `~/.sculptor` state, and a source
+checkout, a dev build, and the shipped app can coexist on one machine without colliding. This
+build-context split is exactly what lets the harness run hundreds of backends in parallel against
+isolated state.
+
+#### 10.9 Data-durability machinery
 User data lives in a local SQLite database, and migrations are first-class: every Alembic migration
 ships with a **version test** that exercises the upgrade against representative data, and a frozen
 Pydantic-schema snapshot is wired in to guard the versioned JSON fields against unintended change. This is what lets the product evolve its
 data model across releases without corrupting users' existing state.
 
-#### 10.9 Diagnosability
+#### 10.10 Diagnosability
 Finally, infrastructure for understanding failures that escape the tests: distributed **tracing**,
 **Sentry** error reporting, structured logging conventions, in-app **debug / diagnostics** views
 (per-agent diagnostics, the chat debug view), the **auto-qa** headless-browser harness for
@@ -1008,7 +1022,7 @@ inconsistent about the §9-product-behavior vs. §10-engineering-substrate line:
 
 - **Do user-facing diagnostics belong in §7 or §10?** The diagnostics a user can actually open — the
   chat **debug view** (and its timestamp toggle), per-agent **diagnostics** from the agent context
-  menu, and the **diagnostics** in the version popover — are currently filed under §10.9
+  menu, and the **diagnostics** in the version popover — are currently filed under §10.10
   (Diagnosability) as engineering substrate, yet they're user-visible features that would otherwise
   belong in §7. They're documented in neither place right now. Decide the rule (user-openable ⇒ §7?)
   and apply it.
