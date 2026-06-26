@@ -25,6 +25,18 @@ export const SCROLL_PHASE_ATTR = "data-scroll-phase";
 /** "true" once authority is quiescent AND layout has converged. */
 export const SCROLL_SETTLED_ATTR = "data-scroll-settled";
 
+/**
+ * A captured reading position: the message at the top of the viewport and how
+ * far the message's own top sits below the viewport top (in px). Like
+ * `geometryAtBottom`, it is a sampled OBSERVATION — written by the scroll
+ * observers on genuine user scrolls, never a mode — that `projectReflow` consults
+ * to decide what a content reflow should keep stationary.
+ */
+export type ReadingAnchor = {
+  messageIndex: number;
+  viewportOffset: number;
+};
+
 export type ScrollMachineState = {
   authority: ScrollAuthority;
   layout: LayoutPhase;
@@ -37,6 +49,12 @@ export type ScrollMachineState = {
    * at the bottom is not already implied by the authority.
    */
   geometryAtBottom: boolean;
+  /**
+   * The most recent reading anchor sampled on a genuine user scroll, or null
+   * before the user has scrolled this task. Consulted only by `projectReflow`
+   * (for the scrolled-up `userControlled` phase); never drives a render.
+   */
+  readingAnchor: ReadingAnchor | null;
 };
 
 /**
@@ -68,6 +86,53 @@ export const projectAtBottom = (state: ScrollMachineState): boolean => {
   return state.geometryAtBottom;
 };
 
+/**
+ * What a content reflow (a viewport width change that re-wraps text, an
+ * above-fold item growing, a streamed token) should do to the scroll position.
+ * One typed policy keyed on the authority phase, derived the same way
+ * `projectAtBottom` is — so the resize handling lives in the machine rather than
+ * as scattered per-observer conditionals. Every phase has exactly one response:
+ *
+ *  - `following`              ⇒ keep pinned to the bottom;
+ *  - `anchoringTurn`          ⇒ keep the anchored user turn at the top (and let
+ *                               the caller hand off to `following` on overflow);
+ *  - `restoring` / `navigating` ⇒ leave scrollTop to that phase's own owner;
+ *  - `userControlled`         ⇒ idle at the bottom: keep glued there; scrolled up
+ *                               (or disengaged mid-stream): hold the reading anchor
+ *                               stationary (the fix for the width-reflow jump), or
+ *                               ignore until an anchor has been sampled.
+ *
+ * `isStreaming` is the one bit not in the machine: while the stream runs, being
+ * `following` is the only way to be pinned to the live tail, so a `userControlled`
+ * user is deliberately disengaged and content growth must never pull them back —
+ * even within the at-bottom threshold. The idle "stay glued at the bottom" re-pin
+ * therefore applies only when not streaming.
+ */
+export type ReflowAction =
+  | { kind: "pinBottom" }
+  | { kind: "holdAnchor"; anchor: ReadingAnchor }
+  | { kind: "holdTurn"; anchorIndex: number }
+  | { kind: "ignore" };
+
+export const projectReflow = (state: ScrollMachineState, isStreaming: boolean): ReflowAction => {
+  switch (state.authority.kind) {
+    case "following":
+      return { kind: "pinBottom" };
+    case "anchoringTurn":
+      return { kind: "holdTurn", anchorIndex: state.authority.anchorIndex };
+    case "restoring":
+    case "navigating":
+      return { kind: "ignore" };
+    case "userControlled":
+      if (!isStreaming && projectAtBottom(state)) return { kind: "pinBottom" };
+      return state.readingAnchor === null ? { kind: "ignore" } : { kind: "holdAnchor", anchor: state.readingAnchor };
+    default: {
+      const unreachable: never = state.authority;
+      throw new Error(`Unhandled scroll authority in projectReflow: ${JSON.stringify(unreachable)}`);
+    }
+  }
+};
+
 export type ScrollStateMachine = {
   getState: () => ScrollMachineState;
   dispatch: (event: ScrollEvent) => void;
@@ -75,6 +140,8 @@ export type ScrollStateMachine = {
   setSuppressed: (suppressed: boolean) => void;
   /** Record the latest sampled at-bottness (from the scroll/resize observers). */
   setGeometryAtBottom: (atBottom: boolean) => void;
+  /** Record the latest reading anchor (from a genuine user scroll), or clear it. */
+  setReadingAnchor: (anchor: ReadingAnchor | null) => void;
   subscribe: (listener: () => void) => () => void;
   /** Point the machine at the scroll container so it can reflect state to the DOM. */
   attach: (element: HTMLElement | null) => void;
@@ -86,6 +153,7 @@ export const createScrollStateMachine = (): ScrollStateMachine => {
     layout: initialLayout,
     isSuppressed: false,
     geometryAtBottom: true,
+    readingAnchor: null,
   };
   let element: HTMLElement | null = null;
   const listeners = new Set<() => void>();
@@ -122,6 +190,13 @@ export const createScrollStateMachine = (): ScrollStateMachine => {
     setGeometryAtBottom: (geometryAtBottom): void => {
       if (geometryAtBottom === state.geometryAtBottom) return;
       commit({ ...state, geometryAtBottom });
+    },
+    setReadingAnchor: (readingAnchor): void => {
+      // A sample consulted only by projectReflow inside the resize observer; it
+      // never feeds data-scroll-* or a selector, so it updates state in place
+      // without reflecting to the DOM or notifying subscribers (which would churn
+      // a re-render on every user-scroll frame).
+      state = { ...state, readingAnchor };
     },
     subscribe: (listener): (() => void) => {
       listeners.add(listener);

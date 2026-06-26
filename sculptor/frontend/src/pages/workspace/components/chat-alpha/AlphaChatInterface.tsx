@@ -51,7 +51,6 @@ import { useAlphaSearch } from "./hooks/useAlphaSearch.ts";
 import { useAlphaVirtualizer } from "./hooks/useAlphaVirtualizer.ts";
 import { ChatScrollProvider } from "./hooks/useChatScroll.tsx";
 import { useJumpToBottom } from "./hooks/useJumpToBottom.ts";
-import { useViewportStability } from "./hooks/useViewportStability.ts";
 import { JumpToBottomButton } from "./JumpToBottomButton.tsx";
 import { useScrollStateMachine } from "./scroll/useScrollStateMachine.ts";
 import { StatusPill } from "./StatusPill.tsx";
@@ -206,9 +205,6 @@ export const AlphaChatInterface = ({
     scrollMachine,
     isProgrammaticScrollRef,
   );
-
-  // Viewport stability: compensate scrollTop when items above viewport change height
-  useViewportStability(scrollContainerRef, virtualizer, isProgrammaticScrollRef);
 
   // Scroll position persistence per task
   const filteredMessageRefs = useMemo(() => filteredNodes.map((n) => ({ id: n.message.id })), [filteredNodes]);

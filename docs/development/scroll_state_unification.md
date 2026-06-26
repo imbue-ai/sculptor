@@ -350,6 +350,81 @@ pinning or anchoring. Completion events (`turnAnchored`, `streamingStopped`,
 still apply, so the machine can always reach a settled state. This keeps the
 union strictly about *authority*.
 
+### 5. Reflow restoration is a derived projection over the phase
+
+A content reflow — a viewport **width** change that re-wraps the paragraph text, an
+above-fold item growing, a streamed token — changes geometry under whatever the
+authority phase is. What scrollTop should do in response is **not** a new mode; it
+is a pure projection over the phase, exactly like `projectAtBottom`. Collapsing it
+into one typed policy is what replaced two phase-specific `ResizeObserver`s (a
+streaming "pin/anchor" observer and an idle "stay-glued" observer) whose scattered
+`isEngaged` / `projectAtBottom` / `authority === userControlled` conditionals were
+the same illegal-state soup the rest of this migration removed.
+
+```ts
+export type ReflowAction =
+  | { kind: "pinBottom" }                          // keep the last message's end in view
+  | { kind: "holdAnchor"; anchor: ReadingAnchor }  // keep the reading anchor at its offset
+  | { kind: "holdTurn"; anchorIndex: number }      // keep the anchored turn at the top
+  | { kind: "ignore" };                            // a restore/nav owner drives scrollTop
+
+export const projectReflow = (state: ScrollMachineState, isStreaming: boolean): ReflowAction => {
+  switch (state.authority.kind) {
+    case "following":              return { kind: "pinBottom" };
+    case "anchoringTurn":          return { kind: "holdTurn", anchorIndex: state.authority.anchorIndex };
+    case "restoring":
+    case "navigating":             return { kind: "ignore" };
+    case "userControlled":
+      if (!isStreaming && projectAtBottom(state)) return { kind: "pinBottom" };
+      return state.readingAnchor === null ? { kind: "ignore" } : { kind: "holdAnchor", anchor: state.readingAnchor };
+  }
+};
+```
+
+A single content `ResizeObserver` (connected whenever search is not suppressing
+auto-scroll) samples at-bottness, then performs the one action `projectReflow`
+chose: `pinBottom` re-pins the last message (following the stream, or staying glued
+when idle at the bottom); `holdTurn` keeps the freshly-anchored user message at the
+top and hands off to `following` once its response overflows; `holdAnchor` restores
+the reading anchor; `ignore` leaves scrollTop to the restore/nav owner.
+
+**The one bit not in the machine is `isStreaming`.** While the stream runs,
+`following` is the *only* way to be pinned to the live tail, so a `userControlled`
+user is deliberately disengaged — content growth must never pull them back, even
+within the at-bottom threshold. The idle "stay glued at the bottom" re-pin
+therefore applies only when not streaming; mid-stream a `userControlled` user holds
+their anchor.
+
+#### The reading anchor, and why `holdAnchor` is not just per-item compensation
+
+`ReadingAnchor = { messageIndex, viewportOffset }` is a **sample**, written by the
+scroll observer on genuine user scrolls only (a correction scroll during the reflow
+must not overwrite the position we are preserving), stored on the machine beside
+`geometryAtBottom` and read **only** by `projectReflow` — it never drives a render,
+so it updates state in place without notifying subscribers.
+
+TanStack Virtual already preserves scroll across item-size changes via
+`shouldAdjustScrollPositionOnItemSizeChange`: when an item *entirely above* the fold
+grows, it shifts scrollTop by the same delta. Two reasons that is not enough on its
+own:
+
+1. It had an off-by-`delta` bug. The predicate is handed the *cached* (pre-growth)
+   measurement, so `item.start + item.size` is already the pre-growth end; the old
+   code subtracted `delta` again, which drove the pre-growth end negative when an
+   in-view item grew by more than its own height — wrongly classifying the reading
+   anchor as "above the fold" and compensating it. On a narrowing reflow that is
+   exactly the symptom: the top message re-wraps much taller and the view jumps down
+   a full message height. Removing the stray `- delta` is the root-cause fix (SCU-1566).
+2. The first message sits below a **non-virtualized intro** reserved by `paddingStart`.
+   That intro re-wraps taller when narrowed too, and per-item compensation cannot see
+   it (it is not a virtual item). `holdAnchor` restores scrollTop *absolutely* from
+   the anchor message's fresh `start` minus its sampled `viewportOffset`, so it holds
+   the reader steady across the intro and any above-fold items uniformly.
+
+This also retired `useViewportStability` — a third, unwired implementation of the
+same "preserve the reading position" idea (it compensated only strictly-above-fold
+items and was never called in production).
+
 ### The store: one writer, ref-backed, selectively reactive
 
 A `useReducer`/`useState` machine is **not** viable here: the `following` phase
@@ -358,11 +433,12 @@ precisely to avoid re-rendering the virtualized list (and tearing down the
 `ResizeObserver`) on every such tick. So the machine lives in a **ref-backed
 external store** that:
 
-- holds `{ authority, layout, isSuppressed, geometryAtBottom }` — the first three
-  are modes; `geometryAtBottom` is the raw at-bottom *sample* the observers write,
-  projected (never read directly) through `projectAtBottom`,
-- exposes `dispatch(event)`, `getState()`, `setGeometryAtBottom(atBottom)`, and
-  `subscribe(listener)`,
+- holds `{ authority, layout, isSuppressed, geometryAtBottom, readingAnchor }` —
+  the first three are modes; `geometryAtBottom` and `readingAnchor` are raw
+  *samples* the observers write, read only through the projections
+  (`projectAtBottom`, `projectReflow`) and never directly,
+- exposes `dispatch(event)`, `getState()`, `setGeometryAtBottom(atBottom)`,
+  `setReadingAnchor(anchor)`, and `subscribe(listener)`,
 - mirrors the authority kind onto the scroll container as `data-scroll-phase`
   and a derived `data-scroll-settled` on every transition,
 - is read by React components that genuinely must re-render (e.g. the
@@ -415,6 +491,17 @@ These were settled during design review:
    `measuring` layout phase exist.
 5. **The migration is incremental** — every commit stays green — **but the
    entire migration is completed by the final commit.**
+6. **Reflow handling is a derived projection over the phase, never an independent
+   mode** (SCU-1566). `projectReflow` folds the authority phase (plus the one
+   external `isStreaming` bit) over the `readingAnchor` sample into one of
+   `pinBottom` / `holdAnchor` / `holdTurn` / `ignore`, driven by a **single**
+   content `ResizeObserver`. This replaced the two phase-specific observers and
+   retired `useViewportStability`. The narrowing reading-anchor jump had two
+   causes, both fixed here: an off-by-`delta` bug in
+   `shouldAdjustScrollPosition` (the predicate is handed the *cached* pre-growth
+   size, so it must not subtract `delta`), and the non-virtualized intro padding
+   that per-item compensation cannot see — `holdAnchor` restores scrollTop
+   absolutely from the anchor's fresh `start`, covering both.
 
 ## What this buys us
 

@@ -62,13 +62,23 @@ describe("shouldAdjustScrollPosition", () => {
     expect(shouldAdjustScrollPosition(item, 20, instance)).toBe(true);
   });
 
-  it("does NOT adjust when item's pre-growth end was at viewport but growth extended it into viewport", () => {
-    // Item: start=100, current size=420 (after growth of 50).
-    // Pre-growth size = 420 - 50 = 370, pre-growth end = 470.
-    // scrollOffset=400. Pre-growth end (470) > scrollOffset → item was visible → no adjust.
+  it("does NOT adjust an in-view item that grew, regardless of delta", () => {
+    // TanStack hands the predicate the *cached* (pre-growth) measurement, so
+    // item.size=420 is the size before this resize and the pre-growth end is
+    // start + size = 520. scrollOffset=400 → the item was visible → no adjust.
     const item = createMockItem(100, 420);
     const instance = createMockInstance(400);
     expect(shouldAdjustScrollPosition(item, 50, instance)).toBe(false);
+  });
+
+  it("does NOT adjust the in-view reading anchor even when it grew by more than its height (SCU-1566)", () => {
+    // The reading anchor at the top: start=277, cached (pre-growth) size=2588,
+    // scrollOffset=0. Pre-growth end = 277 + 2588 = 2865 > 0 → in view → no adjust.
+    // The old formula subtracted delta (277 + 2588 - 3150 = -285 ≤ 0) and wrongly
+    // compensated, jumping the view down ~3150px on a narrowing width reflow.
+    const item = createMockItem(277, 2588);
+    const instance = createMockInstance(0);
+    expect(shouldAdjustScrollPosition(item, 3150, instance)).toBe(false);
   });
 });
 

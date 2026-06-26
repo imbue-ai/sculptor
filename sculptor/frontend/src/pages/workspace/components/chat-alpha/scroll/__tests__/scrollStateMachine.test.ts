@@ -1,12 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { ScrollMachineState } from "../scrollStateMachine.ts";
 import {
   createScrollStateMachine,
   isScrollSettled,
   projectAtBottom,
+  projectReflow,
   SCROLL_PHASE_ATTR,
   SCROLL_SETTLED_ATTR,
 } from "../scrollStateMachine.ts";
+
+const stateWith = (over: Partial<ScrollMachineState>): ScrollMachineState => ({
+  authority: { kind: "userControlled" },
+  layout: { kind: "stable" },
+  isSuppressed: false,
+  geometryAtBottom: true,
+  readingAnchor: null,
+  ...over,
+});
 
 describe("createScrollStateMachine", () => {
   it("starts userControlled / stable / not suppressed and settled", () => {
@@ -16,6 +27,7 @@ describe("createScrollStateMachine", () => {
       layout: { kind: "stable" },
       isSuppressed: false,
       geometryAtBottom: true,
+      readingAnchor: null,
     });
     expect(isScrollSettled(m.getState())).toBe(true);
   });
@@ -67,6 +79,7 @@ describe("createScrollStateMachine", () => {
         layout: { kind: "stable" },
         isSuppressed: false,
         geometryAtBottom: true,
+        readingAnchor: null,
       }),
     ).toBe(true);
     expect(
@@ -75,6 +88,7 @@ describe("createScrollStateMachine", () => {
         layout: { kind: "stable" },
         isSuppressed: false,
         geometryAtBottom: false,
+        readingAnchor: null,
       }),
     ).toBe(false);
     expect(
@@ -83,6 +97,7 @@ describe("createScrollStateMachine", () => {
         layout: { kind: "stable" },
         isSuppressed: false,
         geometryAtBottom: false,
+        readingAnchor: null,
       }),
     ).toBe(false);
   });
@@ -108,6 +123,7 @@ describe("createScrollStateMachine", () => {
           layout: { kind: "stable" },
           isSuppressed: false,
           geometryAtBottom: false,
+          readingAnchor: null,
         }),
       ).toBe(true);
     });
@@ -119,6 +135,7 @@ describe("createScrollStateMachine", () => {
           layout: { kind: "stable" },
           isSuppressed: false,
           geometryAtBottom: true,
+          readingAnchor: null,
         }),
       ).toBe(false);
     });
@@ -130,10 +147,22 @@ describe("createScrollStateMachine", () => {
         { kind: "navigating", promptIndex: 0 } as const,
       ]) {
         expect(
-          projectAtBottom({ authority, layout: { kind: "stable" }, isSuppressed: false, geometryAtBottom: true }),
+          projectAtBottom({
+            authority,
+            layout: { kind: "stable" },
+            isSuppressed: false,
+            geometryAtBottom: true,
+            readingAnchor: null,
+          }),
         ).toBe(true);
         expect(
-          projectAtBottom({ authority, layout: { kind: "stable" }, isSuppressed: false, geometryAtBottom: false }),
+          projectAtBottom({
+            authority,
+            layout: { kind: "stable" },
+            isSuppressed: false,
+            geometryAtBottom: false,
+            readingAnchor: null,
+          }),
         ).toBe(false);
       }
     });
@@ -159,6 +188,86 @@ describe("createScrollStateMachine", () => {
       // resize sampling during `following`, which must not churn re-renders).
       m.setGeometryAtBottom(true);
       expect(listener).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("setReadingAnchor", () => {
+    it("records the sampled anchor without notifying subscribers", () => {
+      const m = createScrollStateMachine();
+      const listener = vi.fn();
+      m.subscribe(listener);
+
+      m.setReadingAnchor({ messageIndex: 3, viewportOffset: 120 });
+
+      expect(m.getState().readingAnchor).toEqual({ messageIndex: 3, viewportOffset: 120 });
+      // It is a sample read only by projectReflow inside the resize observer —
+      // never a selector input — so it must not churn a re-render per scroll frame.
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it("clears the anchor when set to null", () => {
+      const m = createScrollStateMachine();
+      m.setReadingAnchor({ messageIndex: 1, viewportOffset: 0 });
+      m.setReadingAnchor(null);
+      expect(m.getState().readingAnchor).toBeNull();
+    });
+  });
+
+  describe("projectReflow", () => {
+    it("pins to the bottom while following (streaming or not)", () => {
+      expect(projectReflow(stateWith({ authority: { kind: "following" } }), true)).toEqual({ kind: "pinBottom" });
+      expect(projectReflow(stateWith({ authority: { kind: "following" } }), false)).toEqual({ kind: "pinBottom" });
+    });
+
+    it("holds the anchored turn at the top while anchoringTurn", () => {
+      expect(projectReflow(stateWith({ authority: { kind: "anchoringTurn", anchorIndex: 4 } }), true)).toEqual({
+        kind: "holdTurn",
+        anchorIndex: 4,
+      });
+    });
+
+    it("leaves scrollTop to the owner while restoring or navigating", () => {
+      expect(projectReflow(stateWith({ authority: { kind: "restoring", taskId: "t" } }), false)).toEqual({
+        kind: "ignore",
+      });
+      expect(projectReflow(stateWith({ authority: { kind: "navigating", promptIndex: 0 } }), false)).toEqual({
+        kind: "ignore",
+      });
+    });
+
+    it("pins to the bottom while idle (not streaming) and userControlled at the bottom", () => {
+      expect(
+        projectReflow(stateWith({ authority: { kind: "userControlled" }, geometryAtBottom: true }), false),
+      ).toEqual({ kind: "pinBottom" });
+    });
+
+    it("does NOT pin a disengaged user mid-stream, even within the at-bottom threshold", () => {
+      // While streaming, userControlled means deliberately disengaged from the
+      // live tail — content growth must not pull them back to the bottom.
+      expect(projectReflow(stateWith({ authority: { kind: "userControlled" }, geometryAtBottom: true }), true)).toEqual(
+        {
+          kind: "ignore",
+        },
+      );
+    });
+
+    it("holds the reading anchor while userControlled, scrolled up, with an anchor sampled", () => {
+      const anchor = { messageIndex: 2, viewportOffset: 277 };
+      expect(
+        projectReflow(
+          stateWith({ authority: { kind: "userControlled" }, geometryAtBottom: false, readingAnchor: anchor }),
+          false,
+        ),
+      ).toEqual({ kind: "holdAnchor", anchor });
+    });
+
+    it("ignores while userControlled, scrolled up, before any anchor is sampled", () => {
+      expect(
+        projectReflow(
+          stateWith({ authority: { kind: "userControlled" }, geometryAtBottom: false, readingAnchor: null }),
+          false,
+        ),
+      ).toEqual({ kind: "ignore" });
     });
   });
 

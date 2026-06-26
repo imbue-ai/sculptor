@@ -11,7 +11,13 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExter
 import { ChatMessageRole } from "~/api";
 
 import { distanceFromContentBottom } from "../scroll/geometry.ts";
-import { createScrollStateMachine, projectAtBottom, type ScrollStateMachine } from "../scroll/scrollStateMachine.ts";
+import type { ReadingAnchor } from "../scroll/scrollStateMachine.ts";
+import {
+  createScrollStateMachine,
+  projectAtBottom,
+  projectReflow,
+  type ScrollStateMachine,
+} from "../scroll/scrollStateMachine.ts";
 
 const BOTTOM_THRESHOLD = 200;
 // Tighter threshold for re-engaging auto-scroll. The user must scroll to
@@ -108,10 +114,6 @@ export const useAlphaAutoScroll = (
   const isFollowing = useCallback((): boolean => machine.getState().authority.kind === "following", [machine]);
   const isAnchoring = useCallback((): boolean => machine.getState().authority.kind === "anchoringTurn", [machine]);
   const isEngaged = useCallback((): boolean => isFollowing() || isAnchoring(), [isFollowing, isAnchoring]);
-  const anchorIndex = useCallback((): number => {
-    const authority = machine.getState().authority;
-    return authority.kind === "anchoringTurn" ? authority.anchorIndex : -1;
-  }, [machine]);
 
   // Reactive projection of "engaged" for consumers (and tests). Re-renders only
   // when the authority crosses into/out of an engaged phase — not on the
@@ -124,6 +126,23 @@ export const useAlphaAutoScroll = (
   // the reactive value handed to the jump-to-bottom button and the dot rail.
   const atBottom = useCallback((): boolean => projectAtBottom(machine.getState()), [machine]);
   const isAtBottom = useSyncExternalStore(machine.subscribe, atBottom);
+
+  // Record the reading anchor — the top-visible message and how far its own top
+  // sits below the viewport top — from a scrollTop the user produced. The reflow
+  // policy (projectReflow ⇒ holdAnchor) restores this exact framing after a
+  // content reflow, even across the non-virtualized intro padding above the first
+  // message, which per-item compensation can't see. Sampling only on genuine user
+  // scrolls keeps a correction scroll during the reflow from overwriting the
+  // position we are preserving.
+  const captureReadingAnchor = useCallback(
+    (scrollTop: number): void => {
+      const items = virtualizer.getVirtualItems();
+      if (items.length === 0) return;
+      const topVisible = items.find((it) => it.start + it.size > scrollTop) ?? items[0];
+      machine.setReadingAnchor({ messageIndex: topVisible.index, viewportOffset: topVisible.start - scrollTop });
+    },
+    [virtualizer, machine],
+  );
 
   // Suppress the jump-to-bottom button between message send and response arrival.
   const [isJumpSuppressed, setIsJumpSuppressed] = useState(false);
@@ -251,6 +270,9 @@ export const useAlphaAutoScroll = (
       // Ignore non-user scrolls (TanStack corrections, ResizeObserver, etc.)
       if (!isUserScrollingRef.current) return;
 
+      // Remember where the user is reading so a later reflow can hold it.
+      captureReadingAnchor(currentScrollTop);
+
       // A user scroll while following/anchoring hands control back to the user.
       // (Wheel/touch already did this via the machine's own listener; this
       // covers the keyboard-driven scroll path. Leaving the anchoring phase
@@ -269,7 +291,7 @@ export const useAlphaAutoScroll = (
 
     el.addEventListener("scroll", handleScroll, { passive: true });
     return (): void => el.removeEventListener("scroll", handleScroll);
-  }, [scrollContainerRef, isSuppressed, virtualizer, isProgrammaticScroll, machine, isEngaged]);
+  }, [scrollContainerRef, isSuppressed, virtualizer, isProgrammaticScroll, machine, isEngaged, captureReadingAnchor]);
 
   // Reset auto-scroll state on task switch.  Without this, stale state from
   // the previous agent leaks into the new agent's first render — e.g. a stale
@@ -286,6 +308,9 @@ export const useAlphaAutoScroll = (
       // before its saved position is restored. A restore that lands at the
       // bottom re-samples true via the resulting scroll event.
       machine.setGeometryAtBottom(false);
+      // Drop the outgoing task's reading anchor — its message index/offset is
+      // meaningless for the incoming task. The first user scroll re-samples it.
+      machine.setReadingAnchor(null);
       prevScrollTopRef.current = -1;
       // The authority (following/anchoring) is reset by the machine's
       // taskSwitched -> restoring transition (dispatched by the persistence
@@ -505,100 +530,134 @@ export const useAlphaAutoScroll = (
     prevStreamingForSuppressRef.current = isStreaming;
   }, [isStreaming, isAnchoring]);
 
-  // Streaming ResizeObserver: single observer handles both at-bottom sampling
-  // and auto-scroll.  A single observer avoids redundant DOM reads — both tasks
-  // need the same `distance` calculation on every content resize.
-  //
-  // At-bottom sampling: records the latest at-bottness into the machine so the
-  // "jump to bottom" button appears as soon as the bottom goes out of sight (no
-  // scroll event needed).
-  //
-  // Auto-scroll: when engaged, scrolls to bottom on content growth.  Reads the
-  // engaged/anchoring phase from the machine (via stable getters) rather than
-  // from the dep array, so the observer is not torn down and recreated on every
-  // engage/disengage or anchoring transition.
+  // One reflow restore in flight at a time, reading the freshest measurements.
+  const reflowRestoreRafRef = useRef(0);
+
+  // Restore the captured reading anchor after a content reflow. Runs on the next
+  // frame so the virtualizer's item measurements reflect the reflowed sizes, then
+  // sets scrollTop so the anchor message sits back at its sampled viewport offset.
+  // Assigning scrollTop absolutely (rather than relying on TanStack's per-item
+  // compensation) is what holds the anchor steady even when the non-virtualized
+  // intro padding above the first message reflowed taller.
+  const restoreReadingAnchor = useCallback(
+    (anchor: ReadingAnchor): void => {
+      cancelAnimationFrame(reflowRestoreRafRef.current);
+      reflowRestoreRafRef.current = requestAnimationFrame(() => {
+        reflowRestoreRafRef.current = 0;
+        const el = scrollContainerRef.current;
+        if (!el) return;
+        // Force the measurements memo to reflect the reflowed sizes before reading.
+        virtualizer.getVirtualItems();
+        const item = virtualizer.measurementsCache[anchor.messageIndex];
+        if (!item) return;
+        const desired = Math.max(0, item.start - anchor.viewportOffset);
+        if (Math.abs(el.scrollTop - desired) > 1) {
+          isProgrammaticScroll.current = true;
+          el.scrollTop = desired;
+        }
+        machine.setGeometryAtBottom(distanceFromContentBottom(el, virtualizer) <= BOTTOM_THRESHOLD);
+      });
+    },
+    [scrollContainerRef, virtualizer, machine, isProgrammaticScroll],
+  );
+
+  // Perform the one typed reflow action projectReflow chose for the current
+  // authority phase. This is the single executor the unified content observer
+  // drives — projectReflow decides, applyReflow performs — replacing the former
+  // streaming + idle observers' scattered engaged/at-bottom/authority branches.
+  const applyReflow = useCallback(
+    (el: HTMLElement, distance: number): void => {
+      const action = projectReflow(machine.getState(), isStreamingRef.current);
+      switch (action.kind) {
+        case "ignore":
+          return;
+        case "holdAnchor":
+          // Scrolled up and reading — keep the anchor message at its offset.
+          restoreReadingAnchor(action.anchor);
+          return;
+        case "pinBottom": {
+          // Following the stream, or idle at the bottom — keep the end in view.
+          // A user actively scrolling away during a stream hands control back.
+          if (distance > BOTTOM_THRESHOLD && isUserScrollingRef.current) {
+            machine.dispatch({ kind: "userScrolled" });
+            return;
+          }
+          if (messageCount === 0) return;
+          isProgrammaticScroll.current = true;
+          virtualizer.scrollToIndex(messageCount - 1, { align: "end" });
+          machine.setGeometryAtBottom(true);
+          return;
+        }
+
+        case "holdTurn": {
+          // A fresh user turn is anchored at the top while its response fills in
+          // below. Do nothing until the response overflows the viewport — then
+          // hand off to following. Viewport stability (shouldAdjustScrollPosition
+          // in useAlphaVirtualizer) keeps the user message at the top meanwhile,
+          // so we never re-anchor on each token (that produced visible jitter).
+          const anchorIdx = action.anchorIndex;
+          if (anchorIdx < 0 || messageCount <= anchorIdx + 1) return;
+          const anchorItem = virtualizer.measurementsCache[anchorIdx];
+          const anchorSize = anchorItem?.size ?? 0;
+          const anchorEnd = anchorItem ? anchorItem.start + anchorSize : 0;
+          const contentBottom = virtualizer.getTotalSize() - (virtualizer.options.paddingEnd ?? 0);
+          const tailHeight = contentBottom - anchorEnd;
+          // Compare against (clientHeight - anchorSize): the user message already
+          // occupies the top portion of the viewport.
+          if (tailHeight >= el.clientHeight - anchorSize - FILLING_OVERFLOW_BUFFER) {
+            isProgrammaticScroll.current = true;
+            machine.dispatch({ kind: "turnAnchored" });
+            virtualizer.scrollToIndex(messageCount - 1, { align: "end" });
+          }
+          return;
+        }
+
+        default: {
+          const unreachable: never = action;
+          throw new Error(`Unhandled reflow action: ${JSON.stringify(unreachable)}`);
+        }
+      }
+    },
+    [machine, virtualizer, messageCount, isProgrammaticScroll, restoreReadingAnchor],
+  );
+
+  // Unified content-resize observer. One observer, always connected while not
+  // suppressed, drives the typed reflow policy for every authority phase. On any
+  // content size change — a streamed token, a viewport width reflow, an above-fold
+  // item growing — it samples at-bottness and applies projectReflow's single
+  // action: pin to the bottom (following / at-bottom), hold the reading anchor
+  // (scrolled up), hold the anchored turn at the top (anchoringTurn), or leave
+  // scrollTop to a restore/nav owner. This replaces the former streaming + idle
+  // observers and their scattered conditionals with the machine's one policy.
   useLayoutEffect(() => {
-    if (!isStreaming || isSuppressed) return;
+    if (isSuppressed) return;
     const el = scrollContainerRef.current;
     const content = el?.firstElementChild;
     if (!el || !content) return;
 
     const observer = new ResizeObserver(() => {
-      // Only user messages trigger scroll-to-top style scrolls.  During the
-      // filling phase we intentionally do NOT re-anchor on each resize —
-      // that produced visible scroll jitter every time the assistant
-      // streamed a token or a subagent finished.  Viewport stability for
-      // items above the fold is handled by shouldAdjustScrollPositionOnItemSizeChange
-      // in useAlphaVirtualizer, which is enough to keep the user message
-      // pinned at the top without firing scroll events on every resize.
-
-      // Re-sample at-bottness on every content resize so the jump-to-bottom
-      // button tracks the bottom going out of sight without a scroll event.
-      // projectAtBottom applies the anchoring/following phase override.
+      if (messageCount === 0) return;
       const distance = distanceFromContentBottom(el, virtualizer);
       machine.setGeometryAtBottom(distance <= BOTTOM_THRESHOLD);
-
-      // Auto-scroll logic — only when engaged (following or anchoring) with messages.
-      if (!isEngaged() || messageCount === 0) return;
-
-      if (isAnchoring()) {
-        // Only check for overflow when the response has started arriving
-        // (items exist after the anchor).  The user message itself may be
-        // taller than the viewport — that's not an overflow of the response.
-        const anchorIdx = anchorIndex();
-        if (anchorIdx < 0 || messageCount <= anchorIdx + 1) return;
-
-        // Overflow = the content BELOW the anchor message (the response)
-        // is taller than the viewport.  We compare the height from the
-        // anchor's end to the content bottom against clientHeight.
-        // This avoids false positives when the anchor message itself is
-        // taller than the viewport.
-        const anchorItem = virtualizer.measurementsCache[anchorIdx];
-        const anchorSize = anchorItem?.size ?? 0;
-        const anchorEnd = anchorItem ? anchorItem.start + anchorSize : 0;
-        const contentBottom = virtualizer.getTotalSize() - (virtualizer.options.paddingEnd ?? 0);
-        const tailHeight = contentBottom - anchorEnd;
-        // Overflow = response fills the remaining viewport space below the user message.
-        // Compare tailHeight to (clientHeight - anchorSize), not full clientHeight —
-        // the user message already occupies the top portion of the viewport.
-        if (tailHeight >= el.clientHeight - anchorSize - FILLING_OVERFLOW_BUFFER) {
-          // Response has overflowed — transition from anchoring to following.
-          // The leave-anchoring subscription clears jump suppression and the
-          // scroll-to-top animation.
-          isProgrammaticScroll.current = true;
-          machine.dispatch({ kind: "turnAnchored" });
-          virtualizer.scrollToIndex(messageCount - 1, { align: "end" });
-        }
-        // Otherwise response fits below the anchor — don't scroll, stay anchored.
-        return;
-      }
-
-      // Only disengage if the user is actively scrolling away. Content growth
-      // during streaming can temporarily push distance above the threshold even
-      // though no user scroll happened (e.g. right after scrollToBottom()
-      // re-engaged auto-scroll). The scroll event handler already disengages
-      // on any user-initiated scroll, so this guard prevents false positives
-      // from content-growth-induced distance spikes.
-      if (distance > BOTTOM_THRESHOLD && isUserScrollingRef.current) {
-        machine.dispatch({ kind: "userScrolled" });
-        return;
-      }
-      isProgrammaticScroll.current = true;
-      virtualizer.scrollToIndex(messageCount - 1, { align: "end" });
+      applyReflow(el, distance);
     });
 
-    // Initial scroll when engaging — skip while anchoring (scroll-to-top
-    // already positioned the viewport).
-    if (isFollowing() && messageCount > 0) {
-      const liveDistance = distanceFromContentBottom(el, virtualizer);
-      if (liveDistance <= BOTTOM_THRESHOLD) {
+    // Initial pin when a stream (re)connects already pinned to the bottom —
+    // covers a stream starting while the content already overflowed, where no
+    // further resize would otherwise fire the pin. Idle reconnects don't pin
+    // here; a resize drives their stay-glued via the observer's pinBottom path.
+    if (isStreaming && messageCount > 0 && projectReflow(machine.getState(), isStreaming).kind === "pinBottom") {
+      if (distanceFromContentBottom(el, virtualizer) <= BOTTOM_THRESHOLD) {
         isProgrammaticScroll.current = true;
         virtualizer.scrollToIndex(messageCount - 1, { align: "end" });
       }
     }
 
     observer.observe(content);
-    return (): void => observer.disconnect();
+    return (): void => {
+      observer.disconnect();
+      cancelAnimationFrame(reflowRestoreRafRef.current);
+    };
   }, [
     isStreaming,
     isSuppressed,
@@ -607,45 +666,8 @@ export const useAlphaAutoScroll = (
     scrollContainerRef,
     isProgrammaticScroll,
     machine,
-    isEngaged,
-    isAnchoring,
-    anchorIndex,
-    isFollowing,
+    applyReflow,
   ]);
-
-  // Stay glued to the bottom across content-size changes while idle — e.g. a
-  // viewport-width reflow that grows the message text. The streaming observer
-  // above handles the engaged case; when idle, narrowing grows content without
-  // firing a scroll event, so an at-bottom view would otherwise drift up and the
-  // end of the latest message would slide below the fold. Active only when NOT
-  // streaming, so exactly one content observer is ever connected.
-  useLayoutEffect(() => {
-    if (isStreaming || isSuppressed) return;
-    const el = scrollContainerRef.current;
-    const content = el?.firstElementChild;
-    if (!el || !content) return;
-
-    const observer = new ResizeObserver(() => {
-      if (messageCount === 0) return;
-      const state = machine.getState();
-      // Only the idle, user-controlled phase is ours; restoring/anchoringTurn/
-      // navigating manage their own scroll position.
-      if (state.authority.kind !== "userControlled") return;
-      if (projectAtBottom(state)) {
-        // We were at the bottom — re-pin so the reflow keeps the last message's
-        // end in view (stay glued).
-        isProgrammaticScroll.current = true;
-        virtualizer.scrollToIndex(messageCount - 1, { align: "end" });
-        machine.setGeometryAtBottom(true);
-      } else {
-        // Not at the bottom — refresh the sample so the jump-to-bottom button
-        // tracks the bottom moving relative to the held reading position.
-        machine.setGeometryAtBottom(distanceFromContentBottom(el, virtualizer) <= BOTTOM_THRESHOLD);
-      }
-    });
-    observer.observe(content);
-    return (): void => observer.disconnect();
-  }, [isStreaming, isSuppressed, messageCount, virtualizer, scrollContainerRef, machine, isProgrammaticScroll]);
 
   const scrollToBottom = useCallback((): void => {
     if (messageCount === 0) return;
@@ -675,6 +697,9 @@ export const useAlphaAutoScroll = (
     // (exits following/anchoring; the leave-anchoring subscription clears jump
     // suppression).
     machine.setGeometryAtBottom(false);
+    // Anchor reading at the first message so a subsequent reflow holds the top.
+    // scrollToIndex(0, "start") lands scrollTop at ~0, so the offset is its start.
+    machine.setReadingAnchor({ messageIndex: 0, viewportOffset: virtualizer.measurementsCache[0]?.start ?? 0 });
     machine.dispatch({ kind: "userScrolled" });
   }, [messageCount, virtualizer, isProgrammaticScroll, machine]);
 

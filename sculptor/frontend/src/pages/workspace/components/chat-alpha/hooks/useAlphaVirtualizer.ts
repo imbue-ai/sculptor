@@ -59,9 +59,14 @@ export const touchLRU = <TK, TV>(map: Map<TK, TV>, key: TK, maxSize: number): vo
  * That causes visible jitter because every growth delta shifts scrollTop,
  * moving the content the user is reading.
  *
- * By comparing the item's *pre-growth* end (`item.start + item.size - delta`)
- * against `scrollOffset`, we only compensate when the item was completely
- * out of view above the viewport.
+ * The `item` TanStack hands this predicate is the *cached* measurement, so
+ * `item.start + item.size` is the item's end *before* this resize — its
+ * pre-growth end.  We compensate only when that pre-growth end was at or above
+ * `scrollOffset`, i.e. the item was completely out of view above the viewport.
+ * (`delta` is the size change; it is intentionally not subtracted — doing so
+ * treated `item.size` as the post-growth size and, when an in-view item grew by
+ * more than its own height, drove the pre-growth end negative and wrongly
+ * compensated the reading anchor, jumping the view down. SCU-1566.)
  */
 export const shouldAdjustScrollPosition = (
   item: VirtualItem,
@@ -69,7 +74,7 @@ export const shouldAdjustScrollPosition = (
   instance: Virtualizer<HTMLDivElement, Element>,
 ): boolean => {
   const scrollOffset = instance.scrollOffset ?? 0;
-  const previousEnd = item.start + item.size - delta;
+  const previousEnd = item.start + item.size;
   return previousEnd <= scrollOffset;
 };
 
