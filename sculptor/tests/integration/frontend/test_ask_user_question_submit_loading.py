@@ -51,7 +51,7 @@ def test_in_flight_answer_submit_locks_button_and_blocks_double_submit(
         wait_for_agent_to_finish=False,
     )
     ask_panel = get_ask_user_question_panel(page)
-    expect(ask_panel).to_be_visible(timeout=30_000)
+    expect(ask_panel).to_be_visible()
 
     submit_button = ask_panel.get_submit_button()
     expect(submit_button).to_be_disabled()
@@ -94,10 +94,12 @@ def test_in_flight_answer_submit_locks_button_and_blocks_double_submit(
         # dispatched synchronously at the Enter above, so by the time the first
         # POST has round-tripped it would already have hit the route counter.
         state["release"] = True
-        expect(ask_panel).not_to_be_visible(timeout=30_000)
+        expect(ask_panel).not_to_be_visible()
         assert state["post_count"] == 1, f"expected a single answer submit, saw {state['post_count']}"
     finally:
-        # Release in case an assertion above failed while the POST was still held,
-        # then tear down the route.
+        # Release in case an assertion above failed while the POST was still
+        # held, and give the handler a beat to observe the flag and reach
+        # route.continue_() before tearing the route down.
         state["release"] = True
+        page.wait_for_timeout(100)
         page.unroute(_ANSWER_PATTERN, hold_answer)

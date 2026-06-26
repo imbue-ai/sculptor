@@ -283,7 +283,8 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
     } finally {
       // On success the panel unmounts (the WebSocket clears the pending
       // question), so this is moot; on failure it re-enables the button so the
-      // user can retry. setState after unmount is a no-op in React 19.
+      // user can retry. React ignores a state update on an unmounted component,
+      // so this needs no is-mounted guard.
       isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
