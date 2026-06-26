@@ -1,3 +1,4 @@
+import fastifyCors from "@fastify/cors";
 import fastifyMultipart from "@fastify/multipart";
 import fastifySwagger from "@fastify/swagger";
 import fastifyWebsocket from "@fastify/websocket";
@@ -76,6 +77,35 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   // generators (RW-API-4).
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
+
+  // CORS — parity with the Python backend's CORSMiddleware (web/app.py). In dev
+  // the renderer loads from a separate frontend origin (the backend runs
+  // --no-serve-static and the SPA is served by the Vite/Electron dev server),
+  // so every API call is cross-origin and the browser sends an OPTIONS
+  // preflight; without this the preflight 404s and the renderer sees "Failed to
+  // fetch". (Integration tests in the default `browser` launch mode load the SPA
+  // from the backend's own origin, so they never exercised this.) Allow the
+  // local frontend/backend origins, file:// renderers ("null"), and the packaged
+  // custom protocol. `credentials: true` + an origin callback reflect the
+  // specific origin (never a bare `*`), and leaving `allowedHeaders` unset
+  // reflects the requested headers — matching FastAPI's allow_headers=["*"] +
+  // allow_credentials=True behavior.
+  void app.register(fastifyCors, {
+    origin: (origin, cb) => {
+      // Same-origin and non-browser requests carry no Origin header.
+      if (origin === undefined) {
+        cb(null, true);
+        return;
+      }
+      const allowed =
+        origin === "null" || // file:// renderer reports origin "null"
+        origin === "sculptor://app" || // packaged renderer custom protocol
+        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin); // dev frontend / api on any localhost port
+      cb(null, allowed);
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  });
 
   void app.register(fastifySwagger, {
     openapi: {
