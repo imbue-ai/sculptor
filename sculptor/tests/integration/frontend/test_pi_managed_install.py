@@ -31,11 +31,11 @@ from pathlib import Path
 from playwright.sync_api import Route
 from playwright.sync_api import expect
 
-from sculptor.testing.backend_contract import DEPENDENCIES_DIR_NAME
-from sculptor.testing.backend_contract import PI_VERSION_RANGE
-from sculptor.testing.backend_contract import _VERSION_DIR_PREFIX
 from sculptor.services.user_config.user_config import load_config
 from sculptor.services.user_config.user_config import save_config
+from sculptor.testing.backend_contract import DEPENDENCIES_DIR_NAME
+from sculptor.testing.backend_contract import PI_VERSION_RANGE
+from sculptor.testing.backend_contract import VERSION_DIR_PREFIX
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.fake_pi import install_fake_pi_binary
 from sculptor.testing.playwright_utils import navigate_to_settings_page
@@ -83,7 +83,7 @@ def _stage_fake_pi_managed_binary(factory: SculptorInstanceFactory) -> None:
         / "internal"
         / DEPENDENCIES_DIR_NAME
         / "pi"
-        / f"{_VERSION_DIR_PREFIX}{PI_VERSION_RANGE.recommended_version}"
+        / f"{VERSION_DIR_PREFIX}{PI_VERSION_RANGE.recommended_version}"
     )
     pi_tree = version_dir / "pi"
     pi_tree.mkdir(parents=True, exist_ok=True)
