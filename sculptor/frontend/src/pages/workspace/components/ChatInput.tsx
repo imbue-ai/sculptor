@@ -199,7 +199,20 @@ export const ChatInput = ({
   const draftAtom = useMemo(() => promptDraftAtomFamily(taskID ?? ""), [taskID]);
   const writeDraftAtom = useSetAtom(draftAtom);
   const draftStore = useStore();
-  const getDraft = useCallback((): string | null => draftStore.get(draftAtom), [draftStore, draftAtom]);
+  // Reads the LIVE editor content (the draft atom is debounced on mobile, so it can
+  // lag what's typed); falls back to the persisted atom before the editor mounts.
+  const getDraft = useCallback((): string | null => {
+    const editor = editorRef.current;
+    if (editor) {
+      const md = editor.getMarkdown();
+      return md === "​" ? "" : md;
+    }
+    return draftStore.get(draftAtom);
+  }, [editorRef, draftStore, draftAtom]);
+  // Stable per-task initial content for the editor. The editor is uncontrolled after
+  // mount (its value prop doesn't track the debounced atom — that would fight typing);
+  // external draft writes reach it via the store subscription below.
+  const initialDraft = useMemo(() => draftStore.get(draftAtom) ?? "", [draftStore, draftAtom]);
   const [draftFlags, setDraftFlags] = useState<DraftFlags>(() => deriveDraftFlags(draftStore.get(draftAtom)));
   // The last draft value THIS editor wrote — lets the external-write subscription
   // below tell our own keystrokes apart from EXTERNAL writes without serializing
@@ -428,8 +441,9 @@ export const ChatInput = ({
         has_attached_files: attachedFiles.length > 0,
         is_plan_first: isPlanFirst,
       });
-      setPromptDraft(null);
-      setAttachedFiles([]);
+      // The editor is uncontrolled (stable value prop), so clearing the draft atom
+      // alone no longer empties it — clearEditor() also clears the editor content.
+      clearEditor();
     } catch (error) {
       console.error("Failed to send message:", error);
       // Editor is intentionally left populated so the user does not lose
@@ -458,8 +472,7 @@ export const ChatInput = ({
     isFastMode,
     modelCapabilities,
     effort,
-    setPromptDraft,
-    setAttachedFiles,
+    clearEditor,
     executePseudoSkill,
     setLastSendError,
     editorRef,
@@ -716,8 +729,12 @@ export const ChatInput = ({
             // agent. The user focuses the input by tapping it. Desktop keeps
             // auto-focus (no keyboard cost).
             autoFocus={!isMobile}
-            value={getDraft() ?? ""}
+            // Stable initial content (uncontrolled after mount — see initialDraft).
+            value={initialDraft}
             onChange={setPromptDraft}
+            // Coalesce the draft serialization on mobile so per-keystroke markdown
+            // serialization doesn't lag typing / IME; flushed on blur + unmount.
+            changeDebounceMs={isMobile ? 150 : 0}
             onKeyDown={handleKeyPress}
             tagName="CHAT_INPUT"
             editorRef={editorRef}
