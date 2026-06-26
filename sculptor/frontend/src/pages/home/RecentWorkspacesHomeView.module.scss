@@ -1,0 +1,16 @@
+.container {
+  background: var(--gray-2);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: var(--space-9) var(--space-5) var(--space-6) var(--space-5);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: min(850px, 90%);
+  min-height: 0;
+  width: 100%;
+}

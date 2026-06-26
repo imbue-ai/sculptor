@@ -83,8 +83,9 @@ the exact set the import map provides, derived from `RUNTIME_MODULE_SPECIFIERS`
 - `openExternal(url)` — open a URL in the user's browser (a new tab on the web;
   the system browser in the desktop app). Use this rather than `window.open`.
 - `PanelHeader`, domain types, and the `PluginHostApi` / `PanelDefinition` /
-  `WorkspaceWidgetDefinition` registration types (so plugins type `activate(api)`
-  against the host contract instead of re-declaring it).
+  `WorkspaceWidgetDefinition` / `HomeViewDefinition` registration types (so
+  plugins type `activate(api)` against the host contract instead of re-declaring
+  it).
 
 ### Contribution points (`activate(api)`)
 
@@ -99,6 +100,12 @@ the exact set the import map provides, derived from `RUNTIME_MODULE_SPECIFIERS`
   the host's own banner items occupy a few small integers. The name is
   placement-agnostic on purpose — the same registration is what a future
   per-workspace vertical-tabs layout would render.
+- `registerHomeView(def)` — a full-page alternative homepage body. The homepage
+  shows a view switcher whenever at least one is registered; picking one replaces
+  the built-in recent-workspaces list with the plugin's component. The choice is
+  remembered (per browser) and falls back to the built-in view if the plugin is
+  unloaded. Like an overlay it is app-global (no `WorkspacePluginContext`), so it
+  reads app state through the SDK hooks.
 
 ## Caching fetched data (`@tanstack/react-query`)
 

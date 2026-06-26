@@ -13,6 +13,7 @@ import { PluginErrorBoundary } from "./PluginErrorBoundary.tsx";
 import {
   pluginDisabledSourcesAtom,
   pluginEnabledSourcesAtom,
+  pluginHomeViewsAtom,
   pluginOverlaysAtom,
   pluginPanelsAtom,
   pluginSettingsComponentsAtom,
@@ -23,6 +24,7 @@ import {
   pluginWorkspaceWidgetsAtom,
 } from "./pluginRegistry.ts";
 import type {
+  HomeViewDefinition,
   LoadedPlugin,
   OverlayDefinition,
   PluginHostApi,
@@ -858,6 +860,31 @@ export class PluginManager {
         store.set(pluginWorkspaceWidgetsAtom, (prev) => [...prev.filter((w) => w.id !== widget.id), entry]);
         const undo = (): void => {
           store.set(pluginWorkspaceWidgetsAtom, (prev) => prev.filter((w) => w !== entry));
+        };
+        loadDisposers.push(undo);
+        return undo;
+      },
+      registerHomeView: (view: HomeViewDefinition): (() => void) => {
+        // App-global like an overlay: wrap in the error boundary and
+        // PluginContext, but no WorkspacePluginContext — the homepage is not
+        // scoped to a workspace, so the view reads app state through SDK hooks.
+        const PluginComponent = view.component;
+        // Attribute crashes to the owning plugin (manifest), matching the other
+        // register paths — not to the home-view contribution id.
+        const Wrapped = (): ReactElement => (
+          <PluginErrorBoundary pluginId={manifest.id} pluginName={manifest.name}>
+            <PluginContext.Provider value={{ pluginId: manifest.id }}>
+              <PluginComponent />
+            </PluginContext.Provider>
+          </PluginErrorBoundary>
+        );
+        Wrapped.displayName = `PluginHomeView(${view.id})`;
+        const entry = { id: view.id, title: view.title, icon: view.icon, component: Wrapped };
+
+        // Replace-by-id; undo by instance (see the panel undo above).
+        store.set(pluginHomeViewsAtom, (prev) => [...prev.filter((v) => v.id !== view.id), entry]);
+        const undo = (): void => {
+          store.set(pluginHomeViewsAtom, (prev) => prev.filter((v) => v !== entry));
         };
         loadDisposers.push(undo);
         return undo;
