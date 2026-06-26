@@ -201,8 +201,13 @@ export const ChatInput = ({
   const draftStore = useStore();
   const getDraft = useCallback((): string | null => draftStore.get(draftAtom), [draftStore, draftAtom]);
   const [draftFlags, setDraftFlags] = useState<DraftFlags>(() => deriveDraftFlags(draftStore.get(draftAtom)));
+  // The last draft value THIS editor wrote — lets the external-write subscription
+  // below tell our own keystrokes apart from EXTERNAL writes without serializing
+  // the editor on every keystroke.
+  const lastEditorEmitRef = useRef<string | null>(draftStore.get(draftAtom));
   const setPromptDraft = useCallback(
     (value: string | null): void => {
+      lastEditorEmitRef.current = value;
       writeDraftAtom(value);
       setDraftFlags((prev) => {
         const next = deriveDraftFlags(value);
@@ -211,9 +216,31 @@ export const ChatInput = ({
     },
     [writeDraftAtom],
   );
-  // This component doesn't subscribe to the draft atom, so re-sync the bailout
-  // flags when the active task (and thus its persisted draft) changes.
+  // ChatInput no longer subscribes to the draft atom for renders, so an EXTERNAL
+  // write (e.g. QueuedMessages restoring an overwritten draft) would never reach
+  // the editor. Subscribe manually and push external writes into the editor
+  // imperatively; our own writes (typing) are skipped via lastEditorEmitRef, so a
+  // keystroke never triggers a re-serialize or setContent here.
   useEffect(() => {
+    return draftStore.sub(draftAtom, () => {
+      const next = draftStore.get(draftAtom);
+      if (next === lastEditorEmitRef.current) return; // our own write — already in the editor
+      lastEditorEmitRef.current = next;
+      const editor = editorRef.current;
+      if (editor) {
+        if (next) {
+          editor.commands.setContent(next, { contentType: "markdown" });
+        } else {
+          editor.commands.clearContent();
+        }
+      }
+      setDraftFlags(deriveDraftFlags(next));
+    });
+  }, [draftStore, draftAtom, editorRef]);
+  // Re-sync the emit ref + bailout flags when the active task (and its persisted
+  // draft) changes; this component doesn't subscribe to the atom for renders.
+  useEffect(() => {
+    lastEditorEmitRef.current = draftStore.get(draftAtom);
     // eslint-disable-next-line react-hooks/set-state-in-effect -- sync flags to the new task's persisted draft on task switch; not derivable during render without subscribing
     setDraftFlags(deriveDraftFlags(draftStore.get(draftAtom)));
   }, [draftAtom, draftStore]);
