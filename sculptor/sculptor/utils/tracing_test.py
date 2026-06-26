@@ -7,6 +7,7 @@ and merge.
 """
 
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,7 @@ def _reset_tracing_state() -> None:
     tracing._internal_trace_path = None
     tracing._dropped_event_count = 0
     tracing._invalid_event_count = 0
+    tracing._external_events_accepting = False
     with tracing._external_events_lock:
         tracing._external_events.clear()
 
@@ -80,12 +82,60 @@ def test_start_stop_writes_combined_trace(tmp_path: Path) -> None:
 
 def test_start_tracing_is_idempotent(tmp_path: Path) -> None:
     out = tmp_path / "trace.json"
-    tracing.start_tracing(out)
+    assert tracing.start_tracing(out) is True  # armed a fresh session
     first_tracer = tracing._tracer
-    tracing.start_tracing(out)
+    assert tracing.start_tracing(out) is False  # already running → no-op, reports it didn't arm
     assert tracing._tracer is first_tracer
     # Tear down so the autouse fixture's reset is clean.
     tracing.stop_and_write_trace()
+
+
+def test_stop_returns_result_with_counts(tmp_path: Path) -> None:
+    out = tmp_path / "trace.json"
+    tracing.start_tracing(out)
+    tracing.add_external_events(
+        [
+            {"ph": "X", "name": "renderer.a", "ts": 0, "dur": 1},
+            {"ph": "X", "name": "renderer.b", "ts": 1, "dur": 1},
+        ],
+        tracing.RENDERER_PID,
+    )
+    result = tracing.stop_and_write_trace()
+    assert result is not None
+    assert result.path == out.resolve()
+    assert result.external_event_count == 2
+    # viztracer always records at least its own frames, so this is non-zero.
+    assert result.backend_event_count > 0
+
+
+def test_stop_when_disabled_returns_none() -> None:
+    assert tracing.stop_and_write_trace() is None
+
+
+def test_rearm_after_stop_starts_fresh_session(tmp_path: Path) -> None:
+    """The whole point of runtime arm/disarm: after a flush the module must be
+    ready to arm a brand-new session to a different file. Pins that
+    stop_and_write_trace resets state and that a second start builds a fresh
+    tracer rather than no-opping (which is what the idempotency guard would do
+    if the prior tracer were not cleared)."""
+    first = tmp_path / "first.json"
+    tracing.start_tracing(first)
+    first_tracer = tracing._tracer
+    assert tracing.stop_and_write_trace() is not None
+    # Disarmed and reset.
+    assert tracing.is_tracing_enabled() is False
+    assert tracing.get_trace_to_path() is None
+    assert tracing._tracer is None
+
+    second = tmp_path / "second.json"
+    tracing.start_tracing(second)
+    assert tracing.is_tracing_enabled() is True
+    assert tracing._tracer is not None
+    assert tracing._tracer is not first_tracer
+    assert tracing.get_trace_to_path() == second.resolve()
+    result = tracing.stop_and_write_trace()
+    assert result is not None and result.path == second.resolve()
+    assert first.exists() and second.exists()
 
 
 def test_temp_directory_cleaned_up_after_write(tmp_path: Path) -> None:
@@ -302,4 +352,79 @@ def test_concurrent_overflow_counts_accurately(tmp_path: Path, monkeypatch: pyte
     # One invalid event per batch, no losses.
     assert invalid_now == n_threads
 
+    tracing.stop_and_write_trace()
+
+
+def test_concurrent_start_creates_one_tracer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pins the session-lock fix in ``start_tracing``.
+
+    The runtime trace-control endpoints run on FastAPI worker threads, so two
+    ``POST /api/v1/trace/start`` calls can race the ``_tracer is None`` check. Without
+    ``_trace_session_lock`` both threads pass the guard and each builds a
+    ``VizTracer``, leaking the first. A counting fake (which sleeps before the
+    module assigns ``_tracer``, widening the race window) asserts exactly one
+    instance is ever constructed under concurrent starts.
+    """
+    instances: list[Any] = []
+
+    class _CountingTracer:
+        def __init__(self, *, output_file: str, **_kwargs: Any) -> None:
+            # Delay before returning so that, absent the lock, every concurrent
+            # caller would observe `_tracer is None` and construct. With the
+            # lock, only the first caller reaches here.
+            time.sleep(0.02)
+            instances.append(self)
+            self._output_file = output_file
+
+        def start(self) -> None: ...
+
+        def stop(self) -> None: ...
+
+        def save(self) -> None:
+            Path(self._output_file).write_text('{"traceEvents": []}')
+
+    monkeypatch.setattr("viztracer.VizTracer", _CountingTracer)
+
+    out = tmp_path / "trace.json"
+    n_threads = 8
+    with ThreadPoolExecutor(max_workers=n_threads) as pool:
+        futures = [pool.submit(tracing.start_tracing, out) for _ in range(n_threads)]
+        for f in futures:
+            f.result()
+
+    assert len(instances) == 1, f"expected exactly one VizTracer under concurrent start, got {len(instances)}"
+    assert tracing._tracer is instances[0]
+
+    tracing.stop_and_write_trace()
+
+
+def test_external_batch_during_flush_is_not_buffered(tmp_path: Path) -> None:
+    """A /api/v1/trace/batch arriving mid-flush must be dropped, not buffered.
+
+    stop_and_write_trace holds the session lock across the flush, so the trace
+    stays "armed" (path set, `is_tracing_enabled()` true) until the very end —
+    which is what keeps a racing start at the 409 gate. But that also means
+    add_external_events' cheap `_trace_to_path is None` fast-path does NOT
+    short-circuit during the flush. The `_external_events_accepting` flag (flipped
+    False under `_external_events_lock` at snapshot time) is what stops a late
+    batch from buffering into the just-finished session and leaking into the
+    next. This reproduces that mid-disarm window directly: path still set, but no
+    longer accepting.
+    """
+    tracing._trace_to_path = tmp_path / "x.json"  # so the fast-path does not fire
+    tracing._external_events_accepting = False  # snapshot already taken; disarming
+
+    tracing.add_external_events([{"ph": "X", "name": "late", "ts": 0}], tracing.RENDERER_PID)
+
+    with tracing._external_events_lock:
+        assert tracing._external_events == [], "late batch must be dropped, not buffered into a dead session"
+
+
+def test_external_batch_buffered_while_accepting(tmp_path: Path) -> None:
+    """Sanity counterpart: while a session is armed and accepting, batches buffer
+    as before (the new flag gate doesn't reject the happy path)."""
+    tracing.start_tracing(tmp_path / "out.json")
+    tracing.add_external_events([{"ph": "X", "name": "live", "ts": 0}], tracing.RENDERER_PID)
+    with tracing._external_events_lock:
+        assert len(tracing._external_events) == 1
     tracing.stop_and_write_trace()
