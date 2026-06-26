@@ -1,10 +1,10 @@
-import { Flex, Skeleton, Tooltip } from "@radix-ui/themes";
+import { Badge, Flex, Skeleton, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import { GitBranchIcon, PanelBottom, PanelLeft, PanelRight } from "lucide-react";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { ElementIds, updateWorkspace } from "~/api";
+import { ElementIds, updateWorkspace, WorkspaceInitializationStrategy } from "~/api";
 import { useActiveProjectID, useWorkspacePageParams } from "~/common/NavigateUtils";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus";
 import { prDefaultTargetBranchAtom } from "~/common/state/atoms/userConfig";
@@ -25,6 +25,15 @@ import { PrButton } from "./components/PrButton";
 import { TargetBranchSelector } from "./components/TargetBranchSelector";
 import { useWorkspaceTargetBranches } from "./hooks/useWorkspaceTargetBranches";
 import styles from "./WorkspaceHeader.module.scss";
+
+// Per-mode badge label. Worktree is the product default and shows no badge; the
+// non-default modes are surfaced so the user knows a workspace edits files in place
+// (in-place) or in a clone. Mirrors the old RepoSegment rule (strategy !== WORKTREE).
+const MODE_BADGE_LABEL: Record<WorkspaceInitializationStrategy, string> = {
+  [WorkspaceInitializationStrategy.IN_PLACE]: "in-place",
+  [WorkspaceInitializationStrategy.CLONE]: "clone",
+  [WorkspaceInitializationStrategy.WORKTREE]: "worktree",
+};
 
 type SectionToggleProps = {
   section: SectionId;
@@ -187,6 +196,11 @@ export const WorkspaceHeader = (): ReactElement | null => {
   const canCreatePr = gitProvider !== null;
   const isMismatched = mismatchForSelector != null;
 
+  // Surface the workspace's init mode next to the branch — but only for the
+  // non-default strategies (worktree is the default and stays unlabeled).
+  const modeStrategy = workspace.initializationStrategy;
+  const shouldShowModeBadge = modeStrategy !== WorkspaceInitializationStrategy.WORKTREE;
+
   return (
     <div
       className={styles.header}
@@ -217,6 +231,13 @@ export const WorkspaceHeader = (): ReactElement | null => {
         </Tooltip>
       ) : (
         <Skeleton width="160px" height="16px" />
+      )}
+
+      {/* Workspace init-mode badge (non-default modes only). */}
+      {shouldShowModeBadge && (
+        <Badge size="1" color="gray" variant="solid" data-testid={ElementIds.TASK_MODE_BADGE}>
+          {MODE_BADGE_LABEL[modeStrategy]}
+        </Badge>
       )}
 
       {/* Arrow + target branch */}

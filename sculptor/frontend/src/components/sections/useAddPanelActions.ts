@@ -33,7 +33,7 @@ import {
   createTerminalInLocation,
   openStaticPanelInLocation,
 } from "./addPanelCore.ts";
-import { STATIC_PANEL_METADATA } from "./registry/panelRegistry.ts";
+import { type PanelDefinition, panelRegistryAtom } from "./registry/panelRegistry.ts";
 import { workspaceLayoutAtom } from "./sectionAtoms.ts";
 import type { PanelId, SubSectionId } from "./sectionTypes.ts";
 
@@ -81,6 +81,10 @@ export const useAddPanelActions = (): AddPanelActions => {
   // (The Cmd+K path stays on the imperative listAvailableStaticPanels(store), which
   // runs outside React.)
   const layout = useAtomValue(workspaceLayoutAtom);
+  // Subscribe to the registry so plugin-contributed static panels appear in the
+  // re-add list once their plugin loads (the registry, not STATIC_PANEL_METADATA,
+  // is the source of truth — see listAvailableStaticPanelsFromRegistry).
+  const registry = useAtomValue(panelRegistryAtom);
 
   // A stored "pi" is unusable once pi-agent is turned off — fall back to Claude.
   const defaultAgentType: StoredAgentType =
@@ -133,8 +137,8 @@ export const useAddPanelActions = (): AddPanelActions => {
   const recentAgentLabel = agentTypeDisplayLabel(defaultAgentType, registrations);
   const agentTypeOptions = buildAgentTypeOptions({ isPiAgentEnabled, registrations });
   const availableStaticPanels = useMemo(
-    () => listAvailableStaticPanelsFromPlacement(layout.placement),
-    [layout.placement],
+    () => listAvailableStaticPanelsFromRegistry(registry, layout.placement),
+    [registry, layout.placement],
   );
 
   return {
@@ -201,17 +205,16 @@ function buildAgentTypeOptions(inputs: {
 }
 
 // React-side mirror of addPanelCore's listAvailableStaticPanels: single-instance
-// static panels not currently open anywhere — the re-add list. Takes the subscribed
-// layout's placement (rather than reading the store imperatively) so the add-panel
-// surfaces recompute whenever panels open/close. Dynamic agent/terminal ids never
-// appear in STATIC_PANEL_METADATA, so they are inherently excluded.
-function listAvailableStaticPanelsFromPlacement(
+// static panels not currently open anywhere — the re-add list. Reads the subscribed
+// registry (so plugin-contributed static panels appear once loaded) and the
+// subscribed layout's placement (so it recomputes whenever panels open/close).
+// The kind === "static" filter excludes the multi-instance agent/terminal panels.
+function listAvailableStaticPanelsFromRegistry(
+  registry: ReadonlyArray<PanelDefinition>,
   placement: Partial<Record<PanelId, SubSectionId>>,
 ): ReadonlyArray<AvailableStaticPanel> {
   const openPanelIds = new Set<PanelId>(Object.keys(placement) as ReadonlyArray<PanelId>);
-  return STATIC_PANEL_METADATA.filter((meta) => !openPanelIds.has(meta.id)).map((meta) => ({
-    id: meta.id,
-    displayName: meta.displayName,
-    icon: meta.icon,
-  }));
+  return registry
+    .filter((def) => def.kind === "static" && !openPanelIds.has(def.id))
+    .map((def) => ({ id: def.id, displayName: def.displayName, icon: def.icon }));
 }

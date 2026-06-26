@@ -21,9 +21,14 @@ import { useMarkRead } from "~/common/state/hooks/useMarkRead";
 import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
 import { seedFirstVisitTerminal } from "~/components/sections/addPanelCore.ts";
 import { buildDefaultWorkspaceLayout } from "~/components/sections/persistence/defaultLayout.ts";
-import { makeAgentPanelId, makeTerminalPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
+import {
+  AGENT_PANEL_ID_PREFIX,
+  makeAgentPanelId,
+  makeTerminalPanelId,
+} from "~/components/sections/registry/dynamicPanels.tsx";
 import { openPanelAtom, setActivePanelAtom } from "~/components/sections/sectionActions.ts";
 import {
+  activePanelIdInSubSectionAtom,
   isEmptyLayout,
   switchActiveWorkspaceAtom,
   workspaceLayoutAtom,
@@ -67,8 +72,20 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
 
   // Per-viewed-agent data effects that the old workspace page owned: sync the
   // viewed agent's artifacts and mark it read while it is shown in the center.
-  useArtifactSync(workspaceId, taskId);
-  useMarkRead(workspaceId, taskId);
+  //
+  // The "viewed agent" is the active CENTER panel's agent, not the route's. Switching
+  // agents via the center tab bar only flips the active panel (handleActivate →
+  // setActivePanel) — it does not navigate, so the route's taskId stays on the
+  // last-navigated agent. Keying these off the route would leave the agent you just
+  // switched to unsynced and wrongly marked unread when it receives an update. Falls
+  // back to the route's taskId when the active center panel isn't an agent (e.g. before
+  // the layout settles). Matches ChatInput's per-panel-agent isolation.
+  const activeCenterPanelId = useAtomValue(activePanelIdInSubSectionAtom("center"));
+  const viewedAgentId = activeCenterPanelId?.startsWith(AGENT_PANEL_ID_PREFIX)
+    ? activeCenterPanelId.slice(AGENT_PANEL_ID_PREFIX.length)
+    : taskId;
+  useArtifactSync(workspaceId, viewedAgentId);
+  useMarkRead(workspaceId, viewedAgentId);
 
   // Switch the layout scope to this workspace, seeding the default on the
   // workspace's first visit (switchActiveWorkspaceAtom only seeds when the snapshot is

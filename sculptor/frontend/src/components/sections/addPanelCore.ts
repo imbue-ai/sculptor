@@ -20,7 +20,7 @@ import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import { getNextTerminalLabel } from "~/pages/workspace/panels/terminalLabelUtils.ts";
 
 import { makeAgentPanelId, makeTerminalPanelId } from "./registry/dynamicPanels.tsx";
-import { type PanelDefinition, STATIC_PANEL_METADATA } from "./registry/panelRegistry.ts";
+import { type PanelDefinition, panelRegistryAtom } from "./registry/panelRegistry.ts";
 import { jumpToSectionAtom, openPanelAtom, setActivePanelAtom } from "./sectionActions.ts";
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "./sectionAtoms.ts";
 import type { PanelId, SectionId, SubSectionId } from "./sectionTypes.ts";
@@ -69,16 +69,16 @@ export function listAvailableLocations(store: AppStore): ReadonlyArray<AddPanelL
 }
 
 // Single-instance static panels not currently open anywhere — the re-add list.
-// Dynamic agent/terminal ids never appear in STATIC_PANEL_METADATA, so they are
-// inherently excluded.
+// Sourced from the live registry (not STATIC_PANEL_METADATA) so plugin-contributed
+// panels — also kind "static" — are offered too; the multi-instance agent/terminal
+// panels are excluded by the kind filter.
 export function listAvailableStaticPanels(store: AppStore): ReadonlyArray<AvailableStaticPanel> {
   const layout = store.get(workspaceLayoutAtom);
   const openPanelIds = new Set<PanelId>(Object.keys(layout.placement));
-  return STATIC_PANEL_METADATA.filter((meta) => !openPanelIds.has(meta.id)).map((meta) => ({
-    id: meta.id,
-    displayName: meta.displayName,
-    icon: meta.icon,
-  }));
+  return store
+    .get(panelRegistryAtom)
+    .filter((def) => def.kind === "static" && !openPanelIds.has(def.id))
+    .map((def) => ({ id: def.id, displayName: def.displayName, icon: def.icon }));
 }
 
 export function openStaticPanelInLocation(store: AppStore, panelId: PanelId, subSection: SubSectionId): void {

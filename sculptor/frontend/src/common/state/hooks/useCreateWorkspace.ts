@@ -7,6 +7,7 @@ import { createWorkspaceAgent, createWorkspaceV2, WorkspaceInitializationStrateg
 import { HTTPException } from "~/common/Errors.ts";
 import { useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { parseStoredAgentType, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
+import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import { lastWorkspaceCreationSettingsAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 
 /** Everything the create flow needs from its caller's form state. */
@@ -61,6 +62,7 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
   // State and hooks
   const { navigateToAgent } = useImbueNavigate();
   const setLastWorkspaceCreationSettings = useSetAtom(lastWorkspaceCreationSettingsAtom);
+  const setUserConfig = useSetAtom(userConfigAtom);
   const [isCreating, setIsCreating] = useState<boolean>(false);
 
   // Functions and callbacks
@@ -127,6 +129,12 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
           initStrategy: args.mode,
         });
 
+        // Optimistically record the chosen harness as the most-recently-used type so the
+        // add-panel "New {recent} agent" row reflects it immediately. The backend persists
+        // it on create too, but there is no live user-config push — without this the
+        // surfaces lag until a reload. Mirrors the add-panel path (addPanelCore.createAgentInCenter).
+        setUserConfig((prev) => (prev ? { ...prev, lastUsedAgentType: effectiveAgentTypeValue } : prev));
+
         posthog.capture("workspace.created", {
           workspace_id: workspaceId,
           agent_id: agentResponse.data.id,
@@ -150,7 +158,7 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
         setIsCreating(false);
       }
     },
-    [navigateToAgent, setLastWorkspaceCreationSettings],
+    [navigateToAgent, setLastWorkspaceCreationSettings, setUserConfig],
   );
 
   return { isCreating, createWorkspace };
