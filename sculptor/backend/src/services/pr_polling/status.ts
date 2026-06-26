@@ -22,6 +22,7 @@ export interface PrStatusInfo {
   pr_title?: string | null;
   pr_web_url?: string | null;
   pipeline_status?: PipelineStatus | null;
+  pipeline_id?: number | null;
   mismatched_pr_iid?: number | null;
   mismatched_pr_target_branch?: string | null;
   mismatched_pr_web_url?: string | null;
@@ -117,6 +118,22 @@ function identityStatus(
   };
 }
 
+// A terminal-state GitLab MR (merged/closed) carries only identity fields,
+// keyed by glab's `iid`/`web_url` (vs GitHub's `number`/`url`).
+function gitlabIdentityStatus(
+  workspaceId: string,
+  prState: PrState,
+  mr: Record<string, unknown>,
+): PrStatusInfo {
+  return {
+    workspace_id: workspaceId,
+    pr_state: prState,
+    pr_iid: typeof mr.iid === "number" ? mr.iid : null,
+    pr_title: typeof mr.title === "string" ? mr.title : null,
+    pr_web_url: typeof mr.web_url === "string" ? mr.web_url : null,
+  };
+}
+
 async function fetchGithub(
   workspaceId: string,
   branch: string,
@@ -195,34 +212,149 @@ async function fetchGithub(
   return { workspace_id: workspaceId, pr_state: "none" };
 }
 
+// Map GitLab pipeline status strings to the simplified three-state model
+// (web/mr_status.py _normalize_pipeline_status).
+function normalizeGitlabPipeline(raw: unknown): PipelineStatus | null {
+  if (raw === "success") {
+    return "passed";
+  }
+  if (raw === "failed" || raw === "canceled") {
+    return "failed";
+  }
+  if (
+    raw === "running" ||
+    raw === "pending" ||
+    raw === "created" ||
+    raw === "preparing" ||
+    raw === "waiting_for_resource" ||
+    raw === "scheduled" ||
+    raw === "manual"
+  ) {
+    return "running";
+  }
+  return null;
+}
+
+async function glabMrList(
+  cwd: string,
+  runner: CliRunner,
+  args: string[],
+): Promise<Array<Record<string, unknown>>> {
+  const result = await runCli(["glab", "mr", "list", ...args], cwd, runner);
+  return JSON.parse(result.stdout || "[]") as Array<Record<string, unknown>>;
+}
+
+// Fetch the pipeline id/status for an open MR via `glab mr view` (web/mr_status.py
+// _fetch_pipeline_info). A view failure or pipeline-less MR yields nulls.
+async function fetchGitlabPipeline(
+  cwd: string,
+  runner: CliRunner,
+  mrIid: number,
+): Promise<{ status: PipelineStatus | null; id: number | null }> {
+  try {
+    const result = await runCli(
+      ["glab", "mr", "view", String(mrIid), "-F", "json"],
+      cwd,
+      runner,
+    );
+    const data = JSON.parse(result.stdout || "{}") as Record<string, unknown>;
+    const pipeline = data.pipeline as
+      | Record<string, unknown>
+      | null
+      | undefined;
+    if (pipeline === null || pipeline === undefined) {
+      return { status: null, id: null };
+    }
+    return {
+      status: normalizeGitlabPipeline(pipeline.status),
+      id: typeof pipeline.id === "number" ? pipeline.id : null,
+    };
+  } catch {
+    return { status: null, id: null };
+  }
+}
+
 async function fetchGitlab(
   workspaceId: string,
   branch: string,
+  targetBranch: string,
   cwd: string,
   runner: CliRunner,
 ): Promise<PrStatusInfo> {
-  const result = await runCli(
-    ["glab", "mr", "list", "--source-branch", branch, "-F", "json"],
-    cwd,
-    runner,
-  );
-  const mrs = JSON.parse(result.stdout || "[]") as Array<
-    Record<string, unknown>
-  >;
-  if (mrs.length === 0) {
-    return { workspace_id: workspaceId, pr_state: "none" };
+  const target = stripRemotePrefix(targetBranch);
+  const openMrs = await glabMrList(cwd, runner, [
+    `--source-branch=${branch}`,
+    "-F",
+    "json",
+    "--per-page",
+    "5",
+  ]);
+  const openMatch = openMrs.find((mr) => mr.target_branch === target);
+  if (openMatch !== undefined) {
+    const mrIid = typeof openMatch.iid === "number" ? openMatch.iid : null;
+    const pipeline =
+      mrIid !== null
+        ? await fetchGitlabPipeline(cwd, runner, mrIid)
+        : { status: null, id: null };
+    return {
+      workspace_id: workspaceId,
+      pr_state: "open",
+      has_conflicts:
+        typeof openMatch.has_conflicts === "boolean"
+          ? openMatch.has_conflicts
+          : null,
+      pr_iid: mrIid,
+      pr_title: typeof openMatch.title === "string" ? openMatch.title : null,
+      pr_web_url:
+        typeof openMatch.web_url === "string" ? openMatch.web_url : null,
+      pipeline_status: pipeline.status,
+      pipeline_id: pipeline.id,
+    };
   }
-  const mr = mrs[0]!;
-  const state = String(mr.state ?? "").toLowerCase();
-  const prState: PrState =
-    state === "merged" ? "merged" : state === "closed" ? "closed" : "open";
-  return {
-    workspace_id: workspaceId,
-    pr_state: prState,
-    pr_iid: typeof mr.iid === "number" ? mr.iid : null,
-    pr_title: typeof mr.title === "string" ? mr.title : null,
-    pr_web_url: typeof mr.web_url === "string" ? mr.web_url : null,
-  };
+
+  // No open MR matches the exact target — check a merged, then a closed, MR.
+  const mergedMrs = await glabMrList(cwd, runner, [
+    `--source-branch=${branch}`,
+    `--target-branch=${target}`,
+    "--merged",
+    "-F",
+    "json",
+    "--per-page",
+    "1",
+  ]);
+  if (mergedMrs.length > 0) {
+    return gitlabIdentityStatus(workspaceId, "merged", mergedMrs[0]!);
+  }
+  const closedMrs = await glabMrList(cwd, runner, [
+    `--source-branch=${branch}`,
+    `--target-branch=${target}`,
+    "--closed",
+    "-F",
+    "json",
+    "--per-page",
+    "1",
+  ]);
+  if (closedMrs.length > 0) {
+    return gitlabIdentityStatus(workspaceId, "closed", closedMrs[0]!);
+  }
+
+  // An open MR against a *different* target — surface it for "switch target".
+  if (openMrs.length > 0) {
+    const mismatched = openMrs[0]!;
+    return {
+      workspace_id: workspaceId,
+      pr_state: "none",
+      mismatched_pr_iid:
+        typeof mismatched.iid === "number" ? mismatched.iid : null,
+      mismatched_pr_target_branch:
+        typeof mismatched.target_branch === "string"
+          ? mismatched.target_branch
+          : null,
+      mismatched_pr_web_url:
+        typeof mismatched.web_url === "string" ? mismatched.web_url : null,
+    };
+  }
+  return { workspace_id: workspaceId, pr_state: "none" };
 }
 
 // Fetch status, converting any CLI failure into a PrStatusInfo carrying the
@@ -238,7 +370,7 @@ export async function fetchPrStatus(
   try {
     return provider === "github"
       ? await fetchGithub(workspaceId, branch, targetBranch, cwd, runner)
-      : await fetchGitlab(workspaceId, branch, cwd, runner);
+      : await fetchGitlab(workspaceId, branch, targetBranch, cwd, runner);
   } catch (error) {
     if (error instanceof CliStatusError) {
       return {

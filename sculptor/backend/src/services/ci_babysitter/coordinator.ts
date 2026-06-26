@@ -1,13 +1,26 @@
 import { getCurrentUserConfig } from "~/config/user_config";
+import { getOrm } from "~/db/orm";
+import { getWorkspace } from "~/db/repositories/workspaces";
 import { eventBus } from "~/events";
 import type { Unsubscribe } from "~/events/bus";
+import {
+  type BabysitterDriver,
+  createDefaultBabysitterDriver,
+} from "~/services/ci_babysitter/driver";
+import {
+  classifyTransitions,
+  type PrStatusLike,
+  type Transition,
+} from "~/services/ci_babysitter/transitions";
 
 // CI babysitter coordinator (services/ci_babysitter_service/coordinator.py).
-// An off-by-default, per-workspace observer that turns CI pipeline failures into
-// agent retries, capped at retry_cap (REQ-NFR-062, default 3). It coordinates
-// with PR/CI polling (Task 7.1) by consuming pr_status events rather than
-// querying CI itself. The actual agent drive is delegated to an injected hook;
-// the state machine (default-off, cap, pause, idempotency) lives here.
+// An off-by-default, per-workspace observer that turns CI pipeline failures and
+// MR/PR merge conflicts into agent retries, capped at retry_cap (REQ-NFR-062,
+// default 3). It consumes pr_status events from PR/CI polling (Task 7.1) rather
+// than querying CI itself, runs the pure transition classifier on each update,
+// and delegates the agent drive to an injected driver. The policy (baseline,
+// dedup, pause, cap, retire) lives here; "which agent and how" lives in the
+// driver.
 
 interface BabysitterState {
   workspaceId: string;
@@ -15,7 +28,10 @@ interface BabysitterState {
   paused: boolean;
   retryCount: number;
   retired: boolean;
+  prevStatus: PrStatusLike | null;
   lastDispatchedPipelineFailedId: number | null;
+  lastDispatchedMergeConflict: boolean;
+  transientDisabledReason: string | null;
 }
 
 export interface BabysitterStateView {
@@ -29,19 +45,18 @@ export interface BabysitterStateView {
   disabledReasonIsTransient: boolean;
 }
 
-// Called to drive a retry (kick the workspace's agent with the failure prompt).
-// Injected so the coordinator stays decoupled from the runner/terminal driving.
-export type RetryDispatcher = (
-  workspaceId: string,
-  projectId: string,
-  prompt: string,
-) => void;
+function pipelineId(status: PrStatusLike): number | null {
+  return typeof status.pipeline_id === "number" ? status.pipeline_id : null;
+}
 
 export class CIBabysitterCoordinator {
   private readonly states = new Map<string, BabysitterState>();
+  private readonly driver: BabysitterDriver;
   private unsubscribe: Unsubscribe | undefined;
 
-  constructor(private readonly dispatchRetry: RetryDispatcher = () => {}) {}
+  constructor(driver: BabysitterDriver = createDefaultBabysitterDriver()) {
+    this.driver = driver;
+  }
 
   private ensureState(workspaceId: string, projectId: string): BabysitterState {
     let state = this.states.get(workspaceId);
@@ -52,7 +67,10 @@ export class CIBabysitterCoordinator {
         paused: false,
         retryCount: 0,
         retired: false,
+        prevStatus: null,
         lastDispatchedPipelineFailedId: null,
+        lastDispatchedMergeConflict: false,
+        transientDisabledReason: null,
       };
       this.states.set(workspaceId, state);
     }
@@ -64,13 +82,17 @@ export class CIBabysitterCoordinator {
   }
 
   setPaused(workspaceId: string, projectId: string, paused: boolean): void {
-    this.ensureState(workspaceId, projectId).paused = paused;
+    let resolvedProjectId = projectId;
+    if (resolvedProjectId === "") {
+      const workspace = getWorkspace(getOrm(), workspaceId);
+      resolvedProjectId = workspace?.projectId ?? "";
+    }
+    this.ensureState(workspaceId, resolvedProjectId).paused = paused;
   }
 
-  // Decision core: a fresh failed pipeline drives one retry while enabled,
-  // un-paused, not retired, and below the cap; reaching the cap retires the
-  // workspace. Idempotent on pipeline_id so re-observing the same failure is a
-  // no-op.
+  // The single entry point: fold one pr_status observation into the per-
+  // workspace state and dispatch prompts for actionable transitions. When the
+  // babysitter is disabled, no state is created (off by default is invisible).
   onPrStatus(
     workspaceId: string,
     projectId: string,
@@ -80,36 +102,89 @@ export class CIBabysitterCoordinator {
     if (!config.ci_babysitter.enabled || status === null) {
       return;
     }
-    const pipelineStatus = status.pipeline_status;
-    const pipelineId =
-      typeof status.pipeline_id === "number" ? status.pipeline_id : null;
-    if (pipelineStatus !== "failed") {
-      return;
-    }
+    const next = status as PrStatusLike;
     const state = this.ensureState(workspaceId, projectId);
-    if (state.paused || state.retired) {
+    const prev = state.prevStatus;
+
+    // Transient "lost MR" gap: when the workspace's branch flips, polling can't
+    // match the workspace to an MR and emits pr_state="none". Treating it as a
+    // real transition would clobber prevStatus and make the next poll look like
+    // a fresh edge. Suppress: don't update prevStatus and don't dispatch.
+    if (next.pr_state === "none" && prev !== null && prev.pr_state !== "none") {
       return;
     }
-    if (
-      pipelineId !== null &&
-      pipelineId === state.lastDispatchedPipelineFailedId
-    ) {
-      return; // already handled this pipeline
+    state.prevStatus = next;
+    // Re-arm the merge-conflict dedup the moment we observe an explicit "no
+    // conflict" state, so a later re-conflict re-prompts as expected.
+    if (next.has_conflicts === false) {
+      state.lastDispatchedMergeConflict = false;
+    }
+
+    const transitions = classifyTransitions(prev, next);
+    // Lifecycle transitions first, so a same-cycle merge/close retires the
+    // babysitter before any pipeline_failed / merge_conflict dispatches a
+    // spurious prompt.
+    for (const transition of transitions) {
+      if (transition === "PIPELINE_PASSED") {
+        state.retryCount = 0;
+        state.transientDisabledReason = null;
+      } else if (transition === "MR_MERGED" || transition === "MR_CLOSED") {
+        state.retired = true;
+        state.transientDisabledReason = null;
+      }
+    }
+    for (const transition of transitions) {
+      if (transition === "PIPELINE_FAILED" || transition === "MERGE_CONFLICT") {
+        this.dispatchPrompt(state, transition, next);
+      }
+    }
+  }
+
+  private dispatchPrompt(
+    state: BabysitterState,
+    transition: Transition,
+    next: PrStatusLike,
+  ): void {
+    const config = getCurrentUserConfig();
+    if (!config.ci_babysitter.enabled || state.retired || state.paused) {
+      return;
     }
     if (state.retryCount >= config.ci_babysitter.retry_cap) {
-      state.retired = true;
       return;
     }
+    // Per-id dedup: never resend the same prompt for the same underlying state.
+    if (transition === "PIPELINE_FAILED") {
+      const id = pipelineId(next);
+      if (id !== null && id === state.lastDispatchedPipelineFailedId) {
+        return;
+      }
+    } else if (transition === "MERGE_CONFLICT") {
+      if (state.lastDispatchedMergeConflict) {
+        return;
+      }
+    }
+
+    const prompt =
+      transition === "PIPELINE_FAILED"
+        ? config.ci_babysitter.pipeline_failed_prompt
+        : config.ci_babysitter.merge_conflict_prompt;
+
+    const resolved = this.driver.resolve(state.workspaceId, state.projectId);
+    if (resolved.kind === "disabled") {
+      // No spawn, no task. The reason surfaces to the UI on every status read.
+      return;
+    }
+
+    this.driver.deliver(state.workspaceId, state.projectId, resolved, prompt);
+
+    // The attempt counts against retry_cap whether or not delivery ultimately
+    // lands (a terminal drive may fail later).
     state.retryCount += 1;
-    state.lastDispatchedPipelineFailedId = pipelineId;
-    if (state.retryCount >= config.ci_babysitter.retry_cap) {
-      state.retired = true;
+    if (transition === "PIPELINE_FAILED") {
+      state.lastDispatchedPipelineFailedId = pipelineId(next);
+    } else {
+      state.lastDispatchedMergeConflict = true;
     }
-    this.dispatchRetry(
-      workspaceId,
-      projectId,
-      config.ci_babysitter.pipeline_failed_prompt,
-    );
   }
 
   buildView(workspaceId: string): BabysitterStateView {
@@ -128,6 +203,19 @@ export class CIBabysitterCoordinator {
         disabledReasonIsTransient: false,
       };
     }
+
+    // Recompute the persistent reason on every read so it appears before any
+    // failure and self-heals when the user changes the MRU or fixes the config.
+    let disabledReason: string | null = null;
+    let disabledReasonIsTransient = false;
+    const resolved = this.driver.resolve(workspaceId, state.projectId);
+    if (resolved.kind === "disabled" && !resolved.transient) {
+      disabledReason = resolved.reason;
+    } else if (state.transientDisabledReason !== null) {
+      disabledReason = state.transientDisabledReason;
+      disabledReasonIsTransient = true;
+    }
+
     return {
       workspaceId,
       paused: state.paused,
@@ -135,8 +223,8 @@ export class CIBabysitterCoordinator {
       retryCap,
       retired: state.retired,
       atCap: state.retryCount >= retryCap,
-      disabledReason: null,
-      disabledReasonIsTransient: false,
+      disabledReason,
+      disabledReasonIsTransient,
     };
   }
 
