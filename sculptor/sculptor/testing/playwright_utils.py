@@ -249,6 +249,10 @@ def navigate_to_add_workspace_page(page: Page) -> None:
     shortcut opens the create button.
     """
     create_button = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_CREATE_BUTTON)
+    # The center section is the "we are on a workspace" signal — present whatever the
+    # active panel is. CHAT_PANEL alone misses a workspace whose active agent is a
+    # terminal (no chat panel), which would leave the settle below with nothing to match.
+    workspace_shell = page.get_by_test_id(ElementIDs.SECTION_CENTER)
     chat_panel = page.get_by_test_id(ElementIDs.CHAT_PANEL)
     settings_page = page.get_by_test_id(ElementIDs.SETTINGS_PAGE)
     # The empty-first-run page (no workspaces anywhere) hosts the inline create form,
@@ -278,9 +282,9 @@ def navigate_to_add_workspace_page(page: Page) -> None:
     # so the bare ``or_`` chain resolves to >1 element and a strict-mode
     # ``to_be_visible()`` raises "resolved to N elements". ``.first`` makes the wait
     # mean "at least one of these surfaces is visible", which is the intent.
-    expect(create_button.or_(chat_panel).or_(settings_page).or_(empty_first_run).or_(home_list).first).to_be_visible(
-        timeout=45_000
-    )
+    expect(
+        create_button.or_(chat_panel).or_(workspace_shell).or_(settings_page).or_(empty_first_run).or_(home_list).first
+    ).to_be_visible(timeout=45_000)
     # Parked on Settings (no create affordance) — route Home, which settles on a
     # definite Home surface: the empty-first-run inline form (no workspaces) or the
     # Home workspace list. navigate_to_home_page waits for Home to land, so no extra

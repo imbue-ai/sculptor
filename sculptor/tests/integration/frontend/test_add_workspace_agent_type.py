@@ -95,9 +95,9 @@ def test_first_agent_type_defaults_to_shared_last_used(
     )
 
     # The form's creation recorded the MRU — a plain + click (no menu) now
-    # creates another Terminal in the tab bar. The form persists the MRU on the
-    # backend (lastUsedAgentType) and the pinned "New {recent} agent" row picks it
-    # up via the user-config WebSocket sync, which can lag the create round-trip.
+    # creates another Terminal in the tab bar. createWorkspace optimistically sets
+    # lastUsedAgentType in userConfigAtom (and the backend persists it on create),
+    # so the pinned "New {recent} agent" row reflects it without a reload.
     # Open the center dropdown and wait for the pinned row to read "Terminal"
     # before clicking it, so the click isn't raced against a still-"Claude" MRU.
     agent_tab_bar = PlaywrightAgentTabBarElement(page)

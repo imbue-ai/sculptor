@@ -29,6 +29,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.terminal import add_terminal
+from sculptor.testing.elements.terminal import confirm_close_terminal
 from sculptor.testing.elements.terminal import get_tab_close_button
 from sculptor.testing.elements.terminal import get_terminal_tabs
 from sculptor.testing.elements.terminal import get_xterm_buffer_text
@@ -157,10 +158,12 @@ def test_close_terminal_tab_kills_shell_process(sculptor_instance_: SculptorInst
     assert second_pid > 0 and second_pid != first_pid
 
     # Close the FIRST tab (index 0) — explicitly not the active one, so
-    # we can keep typing in the second tab afterward.
+    # we can keep typing in the second tab afterward. Closing a terminal tab opens a
+    # confirmation dialog (mirrors agent delete); confirm it to actually kill the shell.
     first_tab = terminal_tabs.first
     close_button = get_tab_close_button(first_tab)
     close_button.click()
+    confirm_close_terminal(page)
 
     # Only the second tab remains.
     expect(terminal_tabs).to_have_count(1)

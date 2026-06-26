@@ -58,6 +58,11 @@ def test_worktree_on_local_only_repo_shows_all_tab_and_uncommitted_changes(
     expect(branch_input).to_be_visible()
     expect(branch_input).not_to_have_value("")
 
+    # Clear the empty-first-run prompt prefill (`/sculptor:help`) so the first agent is
+    # created promptless — otherwise it runs an extra turn with the default model and the
+    # message-count assertion below sees 4 messages instead of 2.
+    add_workspace_page.get_task_input().fill("")
+
     add_workspace_page.submit_and_wait_for_chat_panel()
 
     task_page = PlaywrightTaskPage(page=page)
