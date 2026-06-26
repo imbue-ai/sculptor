@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -9,10 +9,12 @@ import { defaultUserConfig, loadSettings, saveSettings } from "~/config/settings
 import {
   configPath,
   databasePath,
+  findRepoRoot,
   formatVersionPath,
   getSculptorFolder,
   getWorkspacesFolder,
   logsDir,
+  resolveSculptorFolder,
   SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG,
 } from "~/config/sculptor_folder";
 
@@ -30,6 +32,46 @@ describe("sculptor folder resolution", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it("resolveSculptorFolder follows env > source-checkout > production, mirroring Python", () => {
+    // 1. Override env wins.
+    expect(resolveSculptorFolder({ [SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG]: "/x/y" }, "/repo", "/home")).toBe(
+      path.resolve("/x/y"),
+    );
+    // 2. Running from a source checkout → <repo>/.dev_sculptor.
+    expect(resolveSculptorFolder({}, "/repo", "/home")).toBe(path.join("/repo", ".dev_sculptor"));
+    // 3. Packaged (no repo root) → ~/.sculptor.
+    expect(resolveSculptorFolder({}, null, "/home")).toBe(path.join("/home", ".sculptor"));
+    // An empty override string is ignored (falls through to source/production).
+    expect(resolveSculptorFolder({ [SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG]: "" }, "/repo", "/home")).toBe(
+      path.join("/repo", ".dev_sculptor"),
+    );
+  });
+
+  it("findRepoRoot walks up to the nearest ancestor containing .git", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "sculptor-reporoot-"));
+    try {
+      const nested = path.join(tmp, "a", "b", "c");
+      mkdirSync(nested, { recursive: true });
+      // No .git in our temp tree yet — the walk doesn't stop at `tmp`.
+      expect(findRepoRoot(nested)).not.toBe(tmp);
+      // Create the marker at the temp root; now the walk stops there.
+      mkdirSync(path.join(tmp, ".git"));
+      expect(findRepoRoot(nested)).toBe(tmp);
+      expect(findRepoRoot(tmp)).toBe(tmp);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("with no override, getSculptorFolder uses <repo>/.dev_sculptor when run from a checkout", () => {
+    // The test runs inside the repo, so the source-checkout branch applies.
+    const repoRoot = findRepoRoot(process.cwd());
+    if (repoRoot === null) {
+      return; // not a checkout (shouldn't happen in CI) — nothing to assert.
+    }
+    expect(getSculptorFolder({})).toBe(path.join(repoRoot, ".dev_sculptor"));
   });
 });
 
