@@ -4317,7 +4317,8 @@ def post_trace_start(
     settings: SculptorSettings = Depends(get_settings),
 ) -> TraceStatusResponse:
     """Arm viztracer on the running backend, writing to a fresh timestamped
-    file under ``{LOG_PATH}/traces``. 409 if a trace is already running.
+    file under ``{LOG_PATH}/traces``. 409 if a trace is already running (the
+    response reports where that trace is writing).
 
     Renderer / Electron-main events are only captured if the renderer learned
     tracing was on at boot (it reads ``window.__SCULPTOR_TRACING__`` once);
@@ -4325,12 +4326,6 @@ def post_trace_start(
     the point of this endpoint — profiling a live (e.g. production) backend
     without a restart. Requires the session token (not exempt like
     ``/trace/batch``)."""
-    if is_tracing_enabled():
-        raise HTTPException(
-            status_code=409,
-            detail="A trace is already running. Stop it first with POST /api/v1/trace/stop.",
-        )
-
     tracer_entries = payload.tracer_entries if payload.tracer_entries is not None else DEFAULT_ADHOC_TRACER_ENTRIES
     if tracer_entries <= 0 or tracer_entries > DEFAULT_TRACER_ENTRIES:
         raise HTTPException(
@@ -4343,7 +4338,17 @@ def post_trace_start(
     # os.replace would silently overwrite the previous session's trace.
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     output_path = _adhoc_trace_dir(settings) / f"trace-{timestamp}.json"
-    start_tracing(output_path, tracer_entries=tracer_entries)
+    # Atomic check-and-arm: start_tracing returns False if a trace was already
+    # running. Gating the 409 on its return (rather than a separate, racy
+    # is_tracing_enabled() pre-check) means concurrent/duplicate starts get a
+    # truthful 409 pointing at the active trace, instead of all reporting
+    # "armed" for the one session that actually won.
+    if not start_tracing(output_path, tracer_entries=tracer_entries):
+        active = get_trace_to_path()
+        raise HTTPException(
+            status_code=409,
+            detail=f"A trace is already running, writing to {active}. Stop it first with `sculpt debug trace stop`.",
+        )
     # Report the resolved path that start_tracing stored, so it matches what
     # /trace/status and /trace/stop later report (start_tracing resolves it,
     # e.g. /tmp -> /private/tmp on macOS).

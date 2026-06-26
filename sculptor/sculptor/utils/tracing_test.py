@@ -82,9 +82,9 @@ def test_start_stop_writes_combined_trace(tmp_path: Path) -> None:
 
 def test_start_tracing_is_idempotent(tmp_path: Path) -> None:
     out = tmp_path / "trace.json"
-    tracing.start_tracing(out)
+    assert tracing.start_tracing(out) is True  # armed a fresh session
     first_tracer = tracing._tracer
-    tracing.start_tracing(out)
+    assert tracing.start_tracing(out) is False  # already running → no-op, reports it didn't arm
     assert tracing._tracer is first_tracer
     # Tear down so the autouse fixture's reset is clean.
     tracing.stop_and_write_trace()
