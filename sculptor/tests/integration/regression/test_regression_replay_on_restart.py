@@ -45,13 +45,13 @@ from playwright.sync_api import Locator
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
+from sculptor.testing.backend_contract import TaskStatus
 from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
-from sculptor.testing.backend_contract import TaskStatus
 
 _SECONDS_MS = 1000
 

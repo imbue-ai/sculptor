@@ -27,8 +27,8 @@ from websockets.exceptions import ConnectionClosed
 from websockets.exceptions import InvalidStatus
 from websockets.sync.client import connect as ws_connect
 
-from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.backend_contract import WEBSOCKET_INVALID_SESSION_TOKEN_CLOSE_CODE
+from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 
 _SESSION_TOKEN = "integration-test-secret-token"
 # Generous, matching the sculpt CLI's own initial-dump wait — the backend

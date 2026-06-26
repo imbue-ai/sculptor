@@ -4,10 +4,10 @@ from playwright.sync_api import Locator
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.backend_contract import TaskStatus
 from sculptor.testing.constants import BUILD_TIMEOUT_SECONDS
 from sculptor.testing.constants import RUNNING_TIMEOUT_SECONDS
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
-from sculptor.testing.backend_contract import TaskStatus
 
 
 class PlaywrightTaskListElement(PlaywrightIntegrationTestElement):
