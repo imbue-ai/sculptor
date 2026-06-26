@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { AskUserQuestionData } from "~/api";
 import { ElementIds } from "~/api";
+import { useTimedLatch } from "~/common/Hooks.ts";
 import { useKeybinding } from "~/common/keybindings/hooks.ts";
 import { useModifiedEnter } from "~/common/ShortcutUtils";
 import { draftQuestionStateAtomFamily, EMPTY_DRAFT_QUESTION_STATE } from "~/common/state/atoms/taskDetails";
@@ -18,10 +19,18 @@ import styles from "./AskUserQuestion.module.scss";
 const OTHER_OPTION_LABEL = "Provide an alternative";
 const OTHER_PLACEHOLDER = "Provide an alternative";
 
+// Submitting answers locks the button immediately, but the spinner only appears
+// once the submit has stayed in flight this long (a slow backend); a normal
+// submit resolves well under this, so the common case shows no spinner. There's
+// no trailing hold — the panel unmounts on success, and on failure the button
+// should re-enable at once.
+const SUBMIT_SPINNER_START_DELAY_MS = 1_000;
+
 type AskUserQuestionProps = {
   taskId: string;
   questionData: AskUserQuestionData;
-  onSubmit: (answers: Record<string, string>, notes: Record<string, string>) => void;
+  // May be async; `handleSubmit` awaits it to drive the in-flight state.
+  onSubmit: (answers: Record<string, string>, notes: Record<string, string>) => void | Promise<void>;
   onDismiss?: () => void;
 };
 
@@ -59,6 +68,14 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
   const otherInputRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const sendMessageBinding = useKeybinding("send_message");
+
+  // True while the answer POST is in flight. Drives the disabled state (instant
+  // lock). The ref is the actual re-entrancy guard: setState is async, so a fast
+  // second click or Enter would slip past a state-only check and submit twice.
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
+  // Gate the spinner through a start-delay latch so only slow submits show it.
+  const shouldShowSubmitSpinner = useTimedLatch(isSubmitting, 0, SUBMIT_SPINNER_START_DELAY_MS);
 
   const currentQuestion = questions[currentIndex];
   const isMultiSelect = currentQuestion.multiSelect;
@@ -239,8 +256,11 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
     containerRef.current?.focus();
   }, [questions, hasAnswer]);
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     if (!isAllAnswered) return;
+    // Ignore re-entrant submits while a POST is already in flight (e.g. a second
+    // Enter on a slow backend) so the same answers can't be submitted twice.
+    if (isSubmittingRef.current) return;
     // Build the per-question `notes` map: whenever the user typed freeform
     // text in the "Other" textarea (and Other is selected), surface that
     // text as a separate annotation. The backend formatter renders it as
@@ -256,7 +276,17 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
         }
       }
     }
-    onSubmit(Object.fromEntries(answers), notes);
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
+    try {
+      await onSubmit(Object.fromEntries(answers), notes);
+    } finally {
+      // On success the panel unmounts (the WebSocket clears the pending
+      // question), so this is moot; on failure it re-enables the button so the
+      // user can retry. setState after unmount is a no-op in React 19.
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
+    }
   }, [isAllAnswered, answers, questions, otherSelected, otherTexts, onSubmit]);
 
   const handleModifiedEnter = useModifiedEnter({
@@ -523,9 +553,11 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
             {!hasUnansweredElsewhere ? (
               <Button
                 className={styles.submitButton}
-                disabled={!isAllAnswered}
+                disabled={!isAllAnswered || isSubmitting}
+                loading={shouldShowSubmitSpinner}
                 onClick={handleSubmit}
                 data-testid={ElementIds.ASK_USER_QUESTION_SUBMIT}
+                {...(shouldShowSubmitSpinner ? { "data-loading": "true" } : {})}
               >
                 Submit
               </Button>
