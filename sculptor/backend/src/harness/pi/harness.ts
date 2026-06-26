@@ -5,6 +5,7 @@
 // driven to `agent_end`) onto the `HarnessProcess` contract.
 
 import { spawn, type ChildProcess } from "node:child_process";
+import { mkdirSync } from "node:fs";
 import path from "node:path";
 
 import type { AgentRow, WorkspaceInitializationStrategy } from "~/db/schema";
@@ -38,6 +39,7 @@ import {
   isPlanApproval,
 } from "~/harness/pi/backchannel";
 import { parseBackgroundCompletion } from "~/harness/pi/background";
+import { assemblePiAttachments } from "~/harness/pi/prompt_assembly";
 import { parseSubagentCompletion } from "~/harness/pi/subagent";
 import {
   buildAbortCommand,
@@ -168,6 +170,12 @@ class PiHarnessProcess implements HarnessProcess {
     (event: Extract<PiEvent, { kind: "response" }>) => void
   >();
   private currentTurn: CurrentTurn | undefined;
+  // A reaction turn pi runs out-of-band when the extension wakes the agent after
+  // a completion (sub-agent auto-resume): wrapped in its own request envelope so
+  // the fold renders it as a standalone reply.
+  private outOfBandTurn:
+    | { multiplexer: PiTurnMultiplexer; requestId: string }
+    | undefined;
   private interruptPending = false;
   private interruptEscalationTimers: ReturnType<typeof setTimeout>[] = [];
   private pendingUiRequestId: string | null = null;
@@ -222,12 +230,14 @@ class PiHarnessProcess implements HarnessProcess {
     // Graceful first: pi acknowledges `abort` and ends the turn with an
     // aborted agent_end. Escalate for a CLI that doesn't (or a turn wedged
     // before it can poll the abort flag): SIGTERM → SIGKILL, which closes the
-    // process and resolves the turn (onClose → RequestSuccess interrupted).
+    // process and resolves the turn (onClose → RequestSuccess interrupted). The
+    // grace matches Python's _INTERRUPT_ESCALATION_GRACE_SECONDS (5s): a shorter
+    // window flakes under load when the abort-induced agent_end lands late.
     this.sendRpc(buildAbortCommand());
     this.clearInterruptEscalation();
     this.interruptEscalationTimers.push(
-      setTimeout(() => this.killChildGroup("SIGTERM"), 2_000),
-      setTimeout(() => this.killChildGroup("SIGKILL"), 6_000),
+      setTimeout(() => this.killChildGroup("SIGTERM"), 5_000),
+      setTimeout(() => this.killChildGroup("SIGKILL"), 11_000),
     );
   }
 
@@ -316,14 +326,15 @@ class PiHarnessProcess implements HarnessProcess {
       now: () => this.now(),
     });
 
+    const files = Array.isArray(message.files)
+      ? (message.files as string[])
+      : [];
+    const { images, instructions } = assemblePiAttachments(files);
+    const promptText =
+      instructions + (typeof message.text === "string" ? message.text : "");
     await new Promise<void>((resolve) => {
       this.currentTurn = { multiplexer, resolve };
-      this.sendRpc(
-        buildPromptCommand(
-          promptId,
-          typeof message.text === "string" ? message.text : "",
-        ),
-      );
+      this.sendRpc(buildPromptCommand(promptId, promptText, images));
     });
 
     const turn = this.currentTurn;
@@ -451,6 +462,10 @@ class PiHarnessProcess implements HarnessProcess {
       // Not yet created — mint below.
     }
     const minted = newAgentMessageId();
+    // Ensure the state dir exists first: without it the write below silently
+    // fails, the id is never persisted, and the next launch (e.g. after a
+    // restart) mints a fresh id instead of resuming the prior pi session.
+    mkdirSync(statePath, { recursive: true });
     await this.environment.writeFile(stateFile, minted).catch(() => undefined);
     return minted;
   }
@@ -529,7 +544,29 @@ class PiHarnessProcess implements HarnessProcess {
       }
       return;
     }
-    // Idle (between turns): out-of-band background/subagent completions.
+    // Idle (between turns). pi emits two kinds of out-of-band traffic here:
+    // completion notifications, and a full reaction turn (agent_start … agent_end)
+    // when the extension wakes the agent after a completion (sub-agent
+    // auto-resume). Drive an in-flight reaction turn first.
+    const oob = this.outOfBandTurn;
+    if (oob !== undefined) {
+      try {
+        if (oob.multiplexer.handleEvent(event)) {
+          this.finishOutOfBandTurn();
+        }
+      } catch (error) {
+        if (error instanceof PiCrashError) {
+          this.finishOutOfBandTurn();
+        } else {
+          throw error;
+        }
+      }
+      return;
+    }
+    if (event.kind === "agent_start") {
+      this.startOutOfBandTurn();
+      return;
+    }
     if (event.kind === "extension_ui_request" && event.method === "notify") {
       const background = parseBackgroundCompletion(event.message);
       if (background !== null) {
@@ -549,6 +586,42 @@ class PiHarnessProcess implements HarnessProcess {
         );
       }
     }
+  }
+
+  // Open an out-of-band reaction turn: a fresh request envelope whose content is
+  // driven by a dedicated multiplexer until its agent_end.
+  private startOutOfBandTurn(): void {
+    const requestId = newAgentMessageId();
+    this.emit({
+      object_type: "RequestStartedAgentMessage",
+      message_id: newAgentMessageId(),
+      source: "AGENT",
+      request_id: requestId,
+    });
+    const multiplexer = new PiTurnMultiplexer({
+      emit: (m) => this.emit(m),
+      promptId: this.nextControlId("oob"),
+      isAbortExpected: () => false,
+      onPendingDialog: () => undefined,
+      onDiffNeeded: this.deps.onDiffNeeded
+        ? () => this.deps.onDiffNeeded?.(this.agent)
+        : undefined,
+      loadedExtensionPaths: this.deps.extensionPaths,
+      now: () => this.now(),
+    });
+    this.outOfBandTurn = { multiplexer, requestId };
+  }
+
+  private finishOutOfBandTurn(): void {
+    const oob = this.outOfBandTurn;
+    if (oob === undefined) {
+      return;
+    }
+    this.outOfBandTurn = undefined;
+    oob.multiplexer.finalize();
+    this.emitTerminal("RequestSuccessAgentMessage", oob.requestId, {
+      interrupted: false,
+    });
   }
 
   private onClose(): void {
