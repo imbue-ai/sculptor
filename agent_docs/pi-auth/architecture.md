@@ -131,7 +131,7 @@ Established facts that shape the design (from the phase-0 spike, pi 0.78.0):
 
   PER-AGENT PICKER, authenticated-only
    available_models now = curated ∩ authenticated set
-   empty + uses_backend_model_catalog → ModelSelector EMPTY STATE (H):
+   empty + sources_backend_models → ModelSelector EMPTY STATE (H):
      "No models available — please log in to authenticate" + "Open pi login" CTA
    failed turn (auth reason) → existing test_pi_turn_error block, CTA → login
 ```
@@ -278,14 +278,14 @@ to authenticate":
 
 - **Empty picker (start-time 0-models).** Today an empty pi catalog leaves
   `available_models` empty, so `ModelSelector` wrongly falls back to the Claude
-  `PRODUCTION_MODELS` list. The fix is a **backend-catalog signal**: a new
-  harness flag (e.g. `uses_backend_model_catalog`, true for pi / false for
-  Claude), surfaced to the frontend the same way `supports_model_selection`
-  already is (a capability/view field, read through the existing gate — not a
-  direct harness-capability read, honoring that ratchet). `ModelSelector` then
-  branches: `usesBackendCatalog && backendModels empty` → the empty state
-  (verbatim copy + "Open pi login" CTA, which opens D); otherwise → the Claude
-  `PRODUCTION_MODELS` fallback, unchanged (REQ-COMPAT-1).
+  `PRODUCTION_MODELS` list. The fix is a **backend-catalog signal**: the
+  harness's `sources_backend_models()` method (true for pi / false for Claude),
+  provided by the graduated model-selection work and surfaced to the frontend
+  the same way `supports_model_selection` already is (a derived view field, read
+  through the existing gate — not a direct harness-capability read, honoring that
+  ratchet). `ModelSelector` then branches: `sourcesBackendModels && backendModels
+  empty` → the empty state (verbatim copy + "Open pi login" CTA, which opens D);
+  otherwise → the Claude `PRODUCTION_MODELS` fallback, unchanged (REQ-COMPAT-1).
 - **Failed turn.** `test_pi_turn_error.py` already renders a clean per-turn
   error block with a "Try another model" CTA when a turn fails on a provider
   with no/invalid key. Extend it so an auth-shaped failure's CTA also
@@ -304,10 +304,10 @@ Providers with the login pane open.
   (catalog entry × {in auth.json?, env-detected?, group}); a paste-key request
   (provider id + key value/kind). Regenerate FE types (`just generate-api`);
   any new `ElementIds` for tests also require regeneration.
-- **New picker signal (chosen):** a new harness flag (e.g.
-  `uses_backend_model_catalog`, true for pi / false for Claude) distinguishes
-  "pi agent, empty authenticated catalog" from "Claude," surfaced to the
-  frontend the same way `supports_model_selection` is, so empty ≠ Claude
+- **Picker signal (reused):** the harness's `sources_backend_models()` method
+  (true for pi / false for Claude), from the graduated model-selection work,
+  distinguishes "pi agent, empty authenticated catalog" from "Claude," surfaced
+  to the frontend the same way `supports_model_selection` is, so empty ≠ Claude
   fallback (H). Avoids overloading `available_models` emptiness.
 - **No `PiConfig` schema growth required** for v1 (auth.json is the store, not
   config). The existing `api_key_env_var_names` continues to drive env
@@ -346,8 +346,9 @@ fetch/refresh.
 - `sculptor/agents/pi_agent/agent_wrapper.py` — authenticated-set computation;
   apply the filter in `_fetch_models_into_state` + `fetch_available_models_probe`
   (the `_curate_models` chokepoint); add the refresh-models input handler (G).
-- `sculptor/agents/pi_agent/harness.py` — the new `uses_backend_model_catalog`
-  flag (H).
+- `sculptor/agents/pi_agent/harness.py` — `sources_backend_models()` already
+  returns True for pi (the signal H; reused from the graduated model-selection
+  work, not added here).
 - `frontend/.../PiSettingsSection.tsx` — host the new Providers area.
 - `frontend/.../ModelSelector.tsx` + `ModelSelectOptions.tsx` — empty-state copy
   + "Open pi login" CTA, gated by the backend-catalog flag (H).
@@ -402,7 +403,7 @@ fetch/refresh.
   `write_launch_command`, and `_connect_terminal_websocket` rather than new PTY
   plumbing.
 - **Empty-catalog falls back to the Claude list (wrong for pi).** Mitigated by
-  the `uses_backend_model_catalog` signal (H) so a pi agent with 0 authenticated
+  the `sources_backend_models` signal (H) so a pi agent with 0 authenticated
   providers shows the CTA, not Claude models.
 - **Stray ambient provider keys.** The whole point of REQ-FILTER — the
   authenticated-set filter removes providers the user did not deliberately
@@ -439,7 +440,7 @@ Risks). All three architecture-level questions are now resolved:
    trigger (REQ-FILTER-3): PTY teardown / paste write → **broadcast** re-read +
    re-probe + re-emit to all running pi agents (G).
 2. **Empty/error wiring (REQ-UI-5, REQ-ERR-1) — both surfaces** (empty picker +
-   failed-turn block), gated by a new `uses_backend_model_catalog` flag so
+   failed-turn block), gated by the `sources_backend_models` signal so
    empty ≠ Claude fallback; both CTAs route into D (H).
 3. **Test split — the drafted fake_pi / real_pi split** (see Testing Strategy).
 
