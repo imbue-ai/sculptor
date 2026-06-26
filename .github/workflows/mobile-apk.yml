@@ -13,6 +13,14 @@ on:
   push:
     tags:
       - "mobile-v*"
+  # TEMPORARY (SCU-1617): build the APK on every push to a PR that touches the
+  # shell, so the in-review branch has a downloadable artifact to sideload
+  # before this is merged to the default branch (where workflow_dispatch only
+  # then becomes available). Remove this pull_request trigger before merge.
+  pull_request:
+    paths:
+      - "mobile/**"
+      - ".github/workflows/mobile-apk.yml"
 
 permissions:
   contents: write
