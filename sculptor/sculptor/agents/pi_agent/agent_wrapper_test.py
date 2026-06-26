@@ -3346,7 +3346,10 @@ def test_handle_refresh_models_re_fetches_and_re_emits_catalog() -> None:
     agent = _make_agent()
     current_raw = {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"}
     agent._process = _make_process([_models_response(_RAW_PI_MODELS), _state_response_with_model(current_raw)])
-    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]):
+    with (
+        patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]),
+        patch("sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value={"anthropic"}),
+    ):
         agent._handle_refresh_models(RefreshModelsUserMessage(message_id=AgentMessageID()))
 
     emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
