@@ -27,6 +27,15 @@ const config: StorybookConfig = {
     config.resolve.alias = Array.isArray(existingAlias)
       ? [...existingAlias, { find: /^~\//, replacement: `${SRC_DIR}/` }]
       : { ...existingAlias, "~": SRC_DIR };
+    // Mirror the app's Sass load path (vite.base.config.ts) so SCSS modules that
+    // `@use "scrollbar"` (e.g. TabBar) resolve the shared partials under
+    // src/styles; without this those components fail to compile under Storybook.
+    config.css = config.css ?? {};
+    config.css.preprocessorOptions = config.css.preprocessorOptions ?? {};
+    config.css.preprocessorOptions.scss = {
+      ...config.css.preprocessorOptions.scss,
+      loadPaths: [resolve(SRC_DIR, "styles")],
+    };
     return config;
   },
 };

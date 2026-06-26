@@ -13,36 +13,15 @@ import {
 } from "~/common/state/atoms/terminalTabs";
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { terminalPanelMountedAtom } from "~/components/panels/atoms.ts";
-import { BlandCircle, PulsingCircle } from "~/components/PulsingCircle.tsx";
+import { PulsingCircle } from "~/components/PulsingCircle.tsx";
 import { TabBar } from "~/components/tabs/TabBar";
 import type { TabDefinition } from "~/components/tabs/types";
 
+import { getTabStatusIcon } from "./TerminalConnectionIndicator";
 import { getNextTerminalLabel } from "./terminalLabelUtils";
 import styles from "./TerminalPanel.module.scss";
 import type { TerminalConnectionStatus } from "./useTerminal";
 import { useTerminal } from "./useTerminal";
-
-// A connection-issue indicator for a terminal tab, or null when the connection
-// is healthy (or still opening). Reconnecting is transient (amber, pulsing);
-// disconnected won't recover on its own (red, static).
-const getTabStatusIcon = (status: TerminalConnectionStatus | undefined): ReactNode => {
-  if (status === "reconnecting") {
-    return (
-      <span className={styles.statusReconnecting} title="Reconnecting…">
-        <PulsingCircle size={7} />
-      </span>
-    );
-  }
-
-  if (status === "disconnected") {
-    return (
-      <span className={styles.statusDisconnected} title="Disconnected">
-        <BlandCircle size={7} />
-      </span>
-    );
-  }
-  return null;
-};
 
 // TerminalInstance — one xterm.js + WebSocket per tab
 
