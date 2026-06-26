@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 
-// CLI failure taxonomy + classifier (REQ-INT-003), ported from
+// CLI failure taxonomy + classifier, ported from
 // web/cli_status_utils.py. Each category must stay distinct so the UI can
 // prompt for auth, show an access error, or wait out a throttle — collapsing
 // them regresses the contract. `cli_missing` (the binary isn't on PATH) is a

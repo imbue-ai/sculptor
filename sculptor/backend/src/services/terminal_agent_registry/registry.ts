@@ -7,7 +7,7 @@ import { getSculptorFolder } from "~/config/sculptor_folder";
 
 // Terminal-agent registry (services/terminal_agent_registry/registry.py).
 // Registrations are ordinary user-owned TOML files under
-// {sculptor_folder}/terminal_agents, RE-READ ON DEMAND (REQ-INT-030): the
+// {sculptor_folder}/terminal_agents, RE-READ ON DEMAND: the
 // list is never cached for the process lifetime so edits are picked up (params
 // are stamped at agent creation, so running agents are unaffected). The
 // registration_id IS the filename stem (claude-code.toml -> "claude-code").
@@ -96,7 +96,7 @@ function parseRegistration(
   };
 }
 
-// List all registrations, re-reading the directory each call (REQ-INT-030). A
+// List all registrations, re-reading the directory each call. A
 // malformed or mis-named file is skipped rather than failing the whole list.
 export function listRegistrations(): TerminalAgentRegistration[] {
   const dir = getRegistrationsDir();
@@ -141,7 +141,7 @@ export interface RenderContext {
   sessionId?: string;
 }
 
-// Render a registration command by LITERAL string replacement (REQ-INT-031),
+// Render a registration command by LITERAL string replacement,
 // NOT a format/template engine: a value containing `{}` or `%` passes through
 // unharmed. {session_id} is only substituted when a session id is supplied.
 export function renderTerminalCommand(

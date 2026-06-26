@@ -33,9 +33,9 @@ import { repo as repoTable, type RepoRow } from "~/db/schema";
 // Project (internally `repo`) service: the TS port of
 // sculptor/sculptor/services/project_service/ + the web/app.py project handlers.
 // The wire keeps the `project`/`project_id` names even though the table is
-// `repo` (RW-API-3); this layer owns that mapping.
+// `repo`; this layer owns that mapping.
 
-// The rewrite is local-first single-org (REQ-SEC-002): the org column was
+// The rewrite is local-first single-org: the org column was
 // dropped, but the wire Project still carries organizationReference (the
 // frontend's typed client reads it). A stable constant satisfies it.
 export const LOCAL_ORGANIZATION_REFERENCE = "local";

@@ -7,7 +7,7 @@ import {
 } from "~/services/terminal_agent_registry/registry";
 
 // Stamp a registered terminal agent's resolved params at agent creation
-// (REQ-INT-031). The launch command is rendered by literal substitution NOW, so
+// The launch command is rendered by literal substitution NOW, so
 // a later TOML edit does not retroactively change a running agent — the stamped
 // command is persisted into the agent's config and reused on resume.
 
@@ -52,7 +52,7 @@ export function stampTerminalAgentParams(
 }
 
 // Render the resume command for a stamped agent, substituting the live session
-// id (literal replacement, REQ-INT-031). Returns null when the registration has
+// id (literal replacement). Returns null when the registration has
 // no resume template.
 export function renderResumeCommand(
   params: StampedTerminalAgentParams,

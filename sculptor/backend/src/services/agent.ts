@@ -38,7 +38,7 @@ import { getAgentRunner } from "~/runner/instance";
 
 // Agent (internally was "Task") lifecycle service (web/app.py). Create persists
 // an `agent` row, the optional first user message, and starts a supervisor via
-// the wired runner (Task 6.7 part 1). The wire keeps the camelCase
+// the wired runner. The wire keeps the camelCase
 // CodingAgentTaskView (a subset in the rewrite — the model-switcher / harness
 // capability fields are computed elsewhere).
 
@@ -53,7 +53,7 @@ export class AgentError extends Error {
 
 export type AgentTypeName = "claude" | "pi" | "terminal" | "registered";
 
-// The full camelCase CodingAgentTaskView wire shape (RW-API-3). It is the
+// The full camelCase CodingAgentTaskView wire shape. It is the
 // camelization of the internal snake-case view, identical to the stream's
 // task_views entries (to_wire.ts), so REST and stream agree byte-for-byte. The
 // schema is the single source of truth shared with the agent routes (so the
@@ -118,7 +118,7 @@ export const AgentViewSchema = z.object({
 
 export type AgentViewWire = z.infer<typeof AgentViewSchema>;
 
-// Build the wire view from the warm projection cache (Task 4.3 + the full view
+// Build the wire view from the warm projection cache (plus the full view
 // fields). camelizeDeep matches the /stream/ws task-view serialization exactly.
 export function agentViewWire(agent: AgentRow): AgentViewWire {
   const view = projectionCache.ensure(getOrm(), agent.objectId)?.view;
@@ -400,7 +400,7 @@ export class AgentService {
     softDeleteAgent(orm, agentId);
   }
 
-  // --- interaction (Task 6.8) ------------------------------------------------
+  // --- interaction ------------------------------------------------------------
 
   private requireAgent(agentId: string): AgentRow {
     const agent = getAgent(getOrm(), agentId);

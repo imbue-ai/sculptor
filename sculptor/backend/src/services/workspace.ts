@@ -37,9 +37,9 @@ import {
 } from "~/services/workspace_setup";
 
 // Workspace lifecycle service (web/app.py workspace handlers +
-// services/workspace_service/). Create builds the working tree (Task 3.2),
+// services/workspace_service/). Create builds the working tree,
 // resolves the diff target branch, and kicks off the setup-command runner; the
-// wire keeps the camelCase Workspace shapes (RW-API-3).
+// wire keeps the camelCase Workspace shapes.
 
 export class WorkspaceError extends Error {
   constructor(

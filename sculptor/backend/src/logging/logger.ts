@@ -8,7 +8,7 @@ import { logsDir } from "~/config/sculptor_folder";
 // Process-wide structured logger, mirroring sculptor/sculptor/utils/logs.py:
 // JSONL to internal/logs/server/logs.jsonl plus stderr, at a configurable
 // level. The on-disk path + JSONL format are the contract the diagnostics
-// upload (Task 7.8) bundles; the rotation policy is a comparable (not
+// upload bundles; the rotation policy is a comparable (not
 // byte-identical) approximation of the Python ~0.1 GB / 10-file policy.
 
 const DEFAULT_LOG_LEVEL = "debug";

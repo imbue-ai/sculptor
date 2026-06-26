@@ -10,11 +10,11 @@ import { runGit } from "~/git";
 import { localPathFromRepo } from "~/services/project";
 
 // Repo-polling manager (web/repo_polling_manager.py). Refreshes each open
-// workspace's local branch + remote-branch info on a fixed 3 s cadence
-// (REQ-NFR-061) and emits the events that feed
-// workspace_branch_by_workspace_id / workspace_remote_branches_by_workspace_id
-// (Tasks 4.1/4.4). A workspace whose checkout has been torn down stops being
-// polled (avoids the tight-loop-on-removed-repo hang, scu-1429).
+// workspace's local branch + remote-branch info on a fixed 3 s cadence and
+// emits the events that feed
+// workspace_branch_by_workspace_id / workspace_remote_branches_by_workspace_id.
+// A workspace whose checkout has been torn down stops being polled (avoids the
+// tight-loop-on-removed-repo hang).
 
 export const WORKSPACE_BRANCH_POLL_SECONDS = 3;
 export const WORKSPACE_REMOTE_BRANCHES_POLL_SECONDS = 3;

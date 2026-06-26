@@ -28,7 +28,7 @@ import { fetchPrStatus, type PrStatusInfo } from "~/services/pr_polling/status";
 // PR/CI status polling service (web/pr_polling_service.py). Schedules per-open-
 // workspace polls through the bounded pool + global spacing throttle, detects
 // the provider from `origin`, queries status via gh/glab, and emits pr_status
-// events that feed pr_status_by_workspace_id (Tasks 4.1/4.4).
+// events that feed pr_status_by_workspace_id.
 
 export interface PrPollingDeps {
   runner: CliRunner;
@@ -102,6 +102,11 @@ export class PrPollingService {
         this.deps.runner,
       ),
     );
+    // A poll dispatched just before stop() can still resolve after the service
+    // has stopped; don't emit a stale pr_status in that case.
+    if (!this.running) {
+      return status;
+    }
     this.emit(workspace, status);
     return status;
   }
@@ -118,6 +123,11 @@ export class PrPollingService {
   }
 
   private schedule(workspace: WorkspaceRow, delaySeconds: number): void {
+    // Never arm a new timer once stopped — an in-flight poll's reschedule can
+    // resolve after stop() has already cleared the timer set.
+    if (!this.running) {
+      return;
+    }
     const timer = setTimeout(() => {
       this.timers.delete(timer);
       if (!this.running) {

@@ -38,7 +38,7 @@ export function classifyTransitions(
     }
   }
 
-  // MERGE_CONFLICT must surface on first observation (SCU-1361), unlike
+  // MERGE_CONFLICT must surface on first observation, unlike
   // PIPELINE_FAILED. A conflict is commonly already present the first time the
   // MR is observed and has no pipeline_id to re-arm on, so fire on prev null too.
   // The true->true repeat is suppressed here; the coordinator's

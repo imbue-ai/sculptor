@@ -1,6 +1,6 @@
 import type { PrState } from "~/services/pr_polling/status";
 
-// Bounded scheduling for PR polling (REQ-NFR-011, REQ-NFR-060):
+// Bounded scheduling for PR polling:
 //   - at most WORKER_POOL_SIZE (4) polls in flight,
 //   - a global minimum spacing (1.5 s) between successive CLI dispatches so
 //     concurrent workers stagger their gh/glab calls,
@@ -79,7 +79,11 @@ export class BoundedPool {
   constructor(private readonly size: number) {}
 
   async run<T>(task: () => Promise<T>): Promise<T> {
-    if (this.active >= this.size) {
+    // Re-check capacity after every wakeup: a freed slot can be claimed by a
+    // fresh synchronous run() inside the wakeup microtask window, so a woken
+    // waiter must not blindly take the slot or the cap could be exceeded. It
+    // re-queues instead, and the next slot release wakes it again.
+    while (this.active >= this.size) {
       await new Promise<void>((resolve) => this.waiters.push(resolve));
     }
     this.active += 1;

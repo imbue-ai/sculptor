@@ -1,4 +1,4 @@
-// Detect the git host provider from an `origin` remote URL (REQ-INT-001).
+// Detect the git host provider from an `origin` remote URL.
 // Handles the SSH scp-like form (git@host:owner/repo), ssh:// URLs, and
 // https:// URLs. Anything that isn't recognizably GitHub or GitLab is null.
 

@@ -358,7 +358,7 @@ async function fetchGitlab(
 }
 
 // Fetch status, converting any CLI failure into a PrStatusInfo carrying the
-// distinct error_category (REQ-INT-003) rather than throwing.
+// distinct error_category rather than throwing.
 export async function fetchPrStatus(
   provider: GitProvider,
   workspaceId: string,

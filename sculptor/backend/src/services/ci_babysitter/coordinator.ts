@@ -15,8 +15,8 @@ import {
 
 // CI babysitter coordinator (services/ci_babysitter_service/coordinator.py).
 // An off-by-default, per-workspace observer that turns CI pipeline failures and
-// MR/PR merge conflicts into agent retries, capped at retry_cap (REQ-NFR-062,
-// default 3). It consumes pr_status events from PR/CI polling (Task 7.1) rather
+// MR/PR merge conflicts into agent retries, capped at retry_cap (default 3).
+// It consumes pr_status events from PR/CI polling rather
 // than querying CI itself, runs the pure transition classifier on each update,
 // and delegates the agent drive to an injected driver. The policy (baseline,
 // dedup, pause, cap, retire) lives here; "which agent and how" lives in the
