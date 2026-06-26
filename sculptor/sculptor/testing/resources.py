@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shlex
 import shutil
-import sys
 import tempfile
 import time
 from contextlib import contextmanager
@@ -505,11 +505,12 @@ def _create_custom_command_instance(
     reads a URL from its stdout, and enters custom-command mode where file
     uploads use HTTP instead of Electron IPC.
     """
-    # Build a custom command that prints the URL then execs the backend.
-    # Use sys.executable so the custom command runs in the same virtualenv
-    # as the test process (the Electron child inherits a different PATH).
-    python = sys.executable
-    custom_backend_cmd = f"echo http://localhost:{backend_port} && exec {python} -m sculptor.cli.main --no-open-browser --port {backend_port} {repo_path}"
+    # Build a custom command that prints the URL then execs the backend. The
+    # backend is the TypeScript bundle (the Python backend was deleted at
+    # cutover, Task 9.6); get_sculptor_command_backend_only resolves the pinned
+    # Node + bundle path.
+    backend_command = get_sculptor_command_backend_only(repo_path, port=backend_port)
+    custom_backend_cmd = f"echo http://localhost:{backend_port} && exec {shlex.join(backend_command)}"
 
     # Convert the testing environment dict to strings, filtering out None
     # values (which represent env vars to unset).  These are passed as

@@ -624,7 +624,7 @@ frontend-custom:
 
     # A minimal "custom backend command" that runs the backend from source.
     # It prints the URL to stdout (so Electron can discover it) then execs the backend.
-    export SCULPTOR_CUSTOM_BACKEND_CMD="echo http://localhost:${PORT} && cd ${REPO_ROOT}/sculptor && exec uv run python -m sculptor.cli.main --no-open-browser --port ${PORT}"
+    export SCULPTOR_CUSTOM_BACKEND_CMD="echo http://localhost:${PORT} && cd ${REPO_ROOT}/sculptor/backend && exec node dist/backend.cjs --no-open-browser --port ${PORT}"
 
     just _patch-electron-app-name "Sculptor (from source)"
     export SCULPTOR_ICON_LABEL="src"
@@ -649,14 +649,16 @@ backend repo_path=".":
     # agents resolve `sculpt` to the source build instead of a stale packaged
     # binary (SCU-1360). Run from the repo root, before the cd into sculptor/.
     just generate-sculpt-client
+    just build-backend-ts
+    {{ nvm_use }}
     echo "Starting backend server..."
-    cd "{{justfile_directory()}}/sculptor"
+    cd "{{justfile_directory()}}/sculptor/backend"
     if [ "{{repo_path}}" = "none" ]; then
       echo "Starting without initial project..."
-      uv run --project sculptor python -m sculptor.cli.main --no-open-browser --no-serve-static
+      node dist/backend.cjs --no-open-browser --no-serve-static
     else
       echo "Using repository path: {{repo_path}}"
-      uv run --project sculptor python -m sculptor.cli.main --no-open-browser --no-serve-static "{{justfile_directory()}}/{{repo_path}}"
+      node dist/backend.cjs --no-open-browser --no-serve-static "{{justfile_directory()}}/{{repo_path}}"
     fi
 
 [group("dev")]

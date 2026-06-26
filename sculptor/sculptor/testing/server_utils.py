@@ -270,28 +270,18 @@ def get_sculptor_command_backend_only(
     repo_path: Path | None,
     port: int,
 ) -> tuple[str, ...]:
-    if os.environ.get(SCULPTOR_BACKEND_OVERRIDE_ENV_FLAG) == TYPESCRIPT_BACKEND_OVERRIDE_VALUE:
-        bundle_path = get_typescript_backend_bundle_path()
-        if not bundle_path.is_file():
-            message = (
-                f"{SCULPTOR_BACKEND_OVERRIDE_ENV_FLAG}={TYPESCRIPT_BACKEND_OVERRIDE_VALUE} but the TypeScript backend"
-                + f" bundle is missing at {bundle_path}. Build it first with `just build-backend-ts`."
-            )
-            raise RuntimeError(message)
-        command = [
-            resolve_pinned_node_command(),
-            str(bundle_path),
-            "--no-open-browser",
-            f"--port={port}",
-        ]
-        if repo_path is not None:
-            command.append(str(repo_path))
-        return tuple(command)
-
+    # The TypeScript backend is the only backend (the Python backend was deleted
+    # at cutover, Task 9.6). The legacy SCULPTOR_BACKEND env flag is now a no-op.
+    bundle_path = get_typescript_backend_bundle_path()
+    if not bundle_path.is_file():
+        message = (
+            f"The TypeScript backend bundle is missing at {bundle_path}."
+            + " Build it first with `just build-backend-ts`."
+        )
+        raise RuntimeError(message)
     command = [
-        "python",
-        "-m",
-        "sculptor.cli.main",
+        resolve_pinned_node_command(),
+        str(bundle_path),
         "--no-open-browser",
         f"--port={port}",
     ]

@@ -92,5 +92,7 @@ RUN chmod +x /usr/local/bin/container-entrypoint.sh
 USER sculptor
 ENTRYPOINT ["/usr/local/bin/container-entrypoint.sh"]
 
-# Default command: run the backend from the mounted source, auto-opening the sample project
-CMD ["sh", "-c", "cd sculptor && uv run python -m sculptor.cli.main --no-open-browser --no-serve-static /workspace/sample-project"]
+# Default command: run the TypeScript backend bundle from the mounted source,
+# auto-opening the sample project (the Python backend was deleted at cutover,
+# Task 9.6; build the bundle with `just build-backend-ts`).
+CMD ["sh", "-c", "exec node sculptor/backend/dist/backend.cjs --no-open-browser --no-serve-static /workspace/sample-project"]

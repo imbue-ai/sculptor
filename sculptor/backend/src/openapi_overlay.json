@@ -6291,7 +6291,6 @@
         "data": {
           "type": "string",
           "contentEncoding": "base64",
-          "contentMediaType": "application/octet-stream",
           "title": "Data"
         }
       },

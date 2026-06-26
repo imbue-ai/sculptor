@@ -20,7 +20,6 @@ from sculptor.testing.browser_panel_fixture_server import browser_panel_fixture_
 from sculptor.testing.port_manager import PortManager
 from sculptor.utils.logs import setup_default_test_logging
 from sculptor.utils.shutdown import GLOBAL_SHUTDOWN_EVENT
-from sculptor.web.middleware import shutdown_event
 
 # It is important that these fixtures are imported, so that tests in subdirectories have access to them.
 # This line is necessary to prevent the formatter from deleting the import statements
@@ -243,5 +242,4 @@ def test_root_concurrency_group() -> Generator[ConcurrencyGroup, None, None]:
 def reset_shutdown_event() -> Generator[None, None, None]:
     # Without this, the shutdown event remains set after the first test that uses it.
     yield
-    shutdown_event().clear()
     GLOBAL_SHUTDOWN_EVENT.clear()
