@@ -16,7 +16,7 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  OFFLOAD_VERSION: "0.9.8"
+  OFFLOAD_VERSION: "0.9.10"
   # HCP Vault address + namespace. Mirrors the values in scripts/export-vault-env.
   VAULT_ADDR: https://vault-cluster-public-vault-df29b16f.9b573ab7.z1.hashicorp.cloud:8200
   VAULT_NAMESPACE: admin

@@ -45,7 +45,7 @@ RUN bash -c "source /root/.nvm/nvm.sh && nvm use $NODE_VERSION && corepack enabl
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
         | sh -s -- -y --default-toolchain stable --profile minimal \
     && . "$HOME/.cargo/env" \
-    && cargo install offload@0.9.5 \
+    && cargo install offload@0.9.10 \
     && mv /root/.cargo/bin/offload /usr/local/bin/offload \
     && rustup self uninstall -y \
     && rm -rf /root/.cargo /root/.rustup
