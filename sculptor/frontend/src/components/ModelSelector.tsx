@@ -1,5 +1,5 @@
 import { Flex, Select, Text, Tooltip } from "@radix-ui/themes";
-import type { ReactElement } from "react";
+import { memo, type ReactElement } from "react";
 
 import type { LlmModel, ModelOption } from "~/api";
 import { ElementIds } from "~/api";
@@ -29,14 +29,17 @@ type ModelSelectorProps = {
   onBackendModelChange?: (option: ModelOption) => void;
 };
 
-export const ModelSelector = ({
+// Memoized: ChatInput re-renders on every keystroke (it subscribes to the prompt
+// draft). The model props here are atom-backed (stable refs) + useCallback handlers,
+// so memo lets this Radix Select subtree bail out of that per-keystroke churn.
+export const ModelSelector = memo(function ModelSelector({
   model,
   onModelChange,
   capabilityValue,
   backendModels,
   selectedModelId,
   onBackendModelChange,
-}: ModelSelectorProps): ReactElement => {
+}: ModelSelectorProps): ReactElement {
   const gate = useCapabilityGate(capabilityValue, ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION);
   const hasBackendModels = backendModels !== undefined && backendModels.length > 0;
   // A backend list with a single model has nothing to switch to, so the switcher
@@ -113,4 +116,4 @@ export const ModelSelector = ({
       </Select.Content>
     </Select.Root>
   );
-};
+});
