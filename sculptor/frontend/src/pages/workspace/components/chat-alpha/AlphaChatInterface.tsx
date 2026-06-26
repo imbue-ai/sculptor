@@ -36,8 +36,7 @@ import { AlphaChatIntro } from "./AlphaChatIntro.tsx";
 import { AlphaMessageNode } from "./AlphaChatView.tsx";
 import {
   buildToolResultMap,
-  hasOnlySubagentResults,
-  hasOnlyToolResults,
+  filterRenderableNodes,
   mergeChatAndQueuedMessages,
   omitMessagesAlreadyInChat,
 } from "./alphaMessageUtils.ts";
@@ -129,10 +128,7 @@ export const AlphaChatInterface = ({
     [effectiveChatMessages],
   );
 
-  const filteredNodes = useMemo(
-    () => messageTree.filter((node) => !hasOnlyToolResults(node.message) && !hasOnlySubagentResults(node.message)),
-    [messageTree],
-  );
+  const filteredNodes = useMemo(() => filterRenderableNodes(messageTree), [messageTree]);
 
   // Build a map from filtered index to the previous filtered node (for isNewCycle detection)
   const prevNodeMap = useMemo(() => {
