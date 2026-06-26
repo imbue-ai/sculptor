@@ -105,7 +105,7 @@ jobs:
         # Only Modal credentials are needed: the integration groups filter out
         # the real_claude / real_pi tests, so the harness runs with a placeholder
         # API key (see offload.toml) and never reads a host ANTHROPIC_API_KEY.
-        uses: imbue-ai/vault/.github/actions/export-secrets@main
+        uses: imbue-ai/use-vault-secrets@main
         with:
           role: ${{ env.VAULT_AUTH_ROLE }}
           secrets: |
@@ -239,7 +239,7 @@ jobs:
 
       - name: Export Modal credentials
         # Same Modal-only credential set as the browser lane above.
-        uses: imbue-ai/vault/.github/actions/export-secrets@main
+        uses: imbue-ai/use-vault-secrets@main
         with:
           role: ${{ env.VAULT_AUTH_ROLE }}
           secrets: |
