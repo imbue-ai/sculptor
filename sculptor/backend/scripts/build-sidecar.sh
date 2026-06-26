@@ -43,6 +43,16 @@ node_dist_slug() {
   esac
 }
 
+# Compute the sha256 of a file using whichever tool the platform provides
+# (sha256sum on Linux, shasum on macOS). Prints the bare hex digest.
+node_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
 echo "==> Building esbuild bundle"
 npm run build
 
@@ -82,6 +92,28 @@ else
   TMP="$(mktemp -d)"
   echo "    downloading $URL"
   curl -fsSL "$URL" -o "$TMP/$TARBALL"
+
+  # Verify the downloaded tarball against the official SHASUMS256.txt before it
+  # is extracted, staged, and (on macOS) codesigned into the shipped sidecar.
+  # The runtime is fetched over the network, so an unverified tarball would let
+  # a compromised mirror/MITM ship a tampered Node into the signed bundle.
+  echo "    verifying $TARBALL against SHASUMS256.txt"
+  curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt" -o "$TMP/SHASUMS256.txt"
+  EXPECTED_SHA="$(awk -v f="$TARBALL" '$2 == f {print $1}' "$TMP/SHASUMS256.txt")"
+  if [[ -z "$EXPECTED_SHA" ]]; then
+    echo "ERROR: $TARBALL not listed in SHASUMS256.txt for Node v${NODE_VERSION}" >&2
+    rm -rf "$TMP"
+    exit 1
+  fi
+  ACTUAL_SHA="$(node_sha256 "$TMP/$TARBALL")"
+  if [[ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]]; then
+    echo "ERROR: checksum mismatch for $TARBALL" >&2
+    echo "  expected: $EXPECTED_SHA" >&2
+    echo "  actual:   $ACTUAL_SHA" >&2
+    rm -rf "$TMP"
+    exit 1
+  fi
+
   tar -xzf "$TMP/$TARBALL" -C "$TMP"
   cp "$TMP/node-v${NODE_VERSION}-${SLUG}/bin/node" "$OUT_DIR/node"
   rm -rf "$TMP"

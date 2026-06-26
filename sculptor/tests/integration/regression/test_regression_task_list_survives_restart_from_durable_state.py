@@ -32,7 +32,7 @@ _BUILD_TIMEOUT_MS = 90 * SECONDS_MS
 
 
 @user_story("to keep my agent's task list after Sculptor restarts")
-def test_task_list_survives_task_sync_dir_deletion(
+def test_task_list_survives_restart_from_durable_state(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
     """Task list items must reappear after a restart, read from durable state.
