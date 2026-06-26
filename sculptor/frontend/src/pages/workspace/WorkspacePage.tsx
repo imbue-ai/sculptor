@@ -18,6 +18,7 @@ import { usePanelLayoutSync } from "../../common/state/hooks/usePanelLayoutSync.
 import { usePerWorkspacePanelLayout } from "../../common/state/hooks/usePerWorkspacePanelLayout.ts";
 import { useWorkspaceFiles } from "../../common/state/hooks/useWorkspaceFiles.ts";
 import { DockingLayout } from "../../components/panels/DockingLayout";
+import { useWorkspaceTabActions } from "../../components/useWorkspaceTabActions.ts";
 import { AgentTabs } from "./components/AgentTabs.tsx";
 import { BottomBar } from "./components/BottomBar";
 import { ChatPanelContent } from "./components/ChatPanelContent.tsx";
@@ -74,7 +75,8 @@ const WorkspacePageContent = ({ taskID }: { taskID: string }): ReactElement => {
 
 export const WorkspacePage = (): ReactElement | null => {
   const { workspaceID, agentID: agentIDFromUrl } = useWorkspacePageParams();
-  const { navigateToAgent, navigateToAddWorkspace } = useImbueNavigate();
+  const { navigateToAgent } = useImbueNavigate();
+  const { navigateToNextTab } = useWorkspaceTabActions();
   const tasks = useAtomValue(tasksArrayAtom);
   const workspaceIds = useAtomValue(workspaceIdsAtom);
   const savedAgentIdAtom = useMemo(() => agentIdForWorkspaceAtomFamily(workspaceID), [workspaceID]);
@@ -89,9 +91,16 @@ export const WorkspacePage = (): ReactElement | null => {
   useEffect(() => {
     if (workspaceIds === undefined) return; // first WS snapshot hasn't arrived
     if (!workspaceIds.includes(workspaceID)) {
-      // Workspace was deleted between sessions — drop the tab and bail out.
+      // The workspace backing this route is gone. This fires when the workspace
+      // was deleted out from under us — either the active tab we just deleted
+      // (whose confirmation drops it from workspaceIds while this route still
+      // holds the stale param) or a deletion from another session. Drop the now-
+      // stale tab and land on the next surviving tab; navigateToNextTab only
+      // falls back to the add-workspace page when no tabs remain. Routing
+      // through it (instead of always going to /ws/new) keeps us on a sibling
+      // workspace and avoids spawning a phantom new-workspace tab.
       removeTab(workspaceID);
-      navigateToAddWorkspace();
+      navigateToNextTab(workspaceID);
       return;
     }
     if (agentIDFromUrl) return; // URL is authoritative, nothing to fix up
@@ -114,7 +123,7 @@ export const WorkspacePage = (): ReactElement | null => {
     tasks,
     savedAgentId,
     navigateToAgent,
-    navigateToAddWorkspace,
+    navigateToNextTab,
     setAgentForWorkspace,
     removeTab,
   ]);
