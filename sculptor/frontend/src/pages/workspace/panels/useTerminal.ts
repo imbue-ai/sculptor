@@ -79,6 +79,19 @@ const SOLICITED_QUERY_RESPONSE_WINDOW_MS = 1000;
 // Delay before retrying the terminal WebSocket after an unexpected close.
 const TERMINAL_RECONNECT_RETRY_DELAY_MS = 2000;
 
+// Close codes we do NOT retry, because reconnecting can't recover the session:
+// - 1000 is a normal, intentional close — nothing went wrong, so don't loop.
+// - 4401 is the backend rejecting our session token (it mirrors HTTP 401). The
+//   token is still invalid on a retry, so reconnecting would spin forever until
+//   the user re-authenticates. Mirrors the backend's
+//   WEBSOCKET_INVALID_SESSION_TOKEN_CLOSE_CODE.
+const WEBSOCKET_NORMAL_CLOSE_CODE = 1000;
+const TERMINAL_UNAUTHORIZED_CLOSE_CODE = 4401;
+const TERMINAL_NON_RETRYABLE_CLOSE_CODES = new Set<number>([
+  WEBSOCKET_NORMAL_CLOSE_CODE,
+  TERMINAL_UNAUTHORIZED_CLOSE_CODE,
+]);
+
 /**
  * Detect a terminal QUERY in live PTY output that xterm.js will answer with a
  * response `isTerminalQueryResponse` would otherwise filter.
@@ -556,17 +569,22 @@ export const useTerminal = ({
         console.error("Terminal WebSocket error:", error);
       };
 
-      // Reconnect on any unexpected close. The PTY is kept alive on the backend
-      // across disconnects and replays its buffered session on reconnect, so
-      // reconnecting restores a responsive terminal. This covers both a terminal
-      // not started yet (the backend closes with code 4404 while the PTY is still
-      // registering — e.g. workspace just created, first agent still starting)
-      // and a connection dropped out from under us (code 1006 — e.g. the host
-      // sleeping or a backend restart), which would otherwise leave the terminal
-      // frozen. Our own teardown (unmount, terminalPath change) skips this via
-      // isCleanedUp.
-      ws.onclose = (): void => {
-        if (isCleanedUp) return;
+      // Reconnect after an unexpected close so the terminal recovers on its own.
+      // The PTY is kept alive on the backend across disconnects and replays its
+      // buffered session on reconnect, so a fresh connection restores a responsive
+      // terminal. This covers a terminal not started yet (close code 4404 while
+      // the PTY is still registering — e.g. workspace just created, first agent
+      // still starting) and a connection dropped out from under us (code 1006 —
+      // e.g. the host sleeping or a backend restart), both of which would
+      // otherwise leave the terminal frozen.
+      //
+      // Skip the retry when reconnecting can't help: our own teardown (unmount /
+      // terminalPath change, via isCleanedUp) and the non-retryable close codes
+      // (a normal 1000 close, or a 4401 rejected session token that would loop).
+      ws.onclose = (event: CloseEvent): void => {
+        if (isCleanedUp || TERMINAL_NON_RETRYABLE_CLOSE_CODES.has(event.code)) {
+          return;
+        }
         setTimeout(() => {
           if (!isCleanedUp) {
             connectWebSocket(wsUrl);

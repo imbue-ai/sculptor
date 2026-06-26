@@ -1,4 +1,4 @@
-import { render, renderHook, waitFor } from "@testing-library/react";
+import { render, renderHook } from "@testing-library/react";
 import { getDefaultStore } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -389,8 +389,7 @@ class FakeWebSocket {
 
 describe("useTerminal — WebSocket reconnect on close", () => {
   const TERMINAL_PATH = "/api/v1/workspaces/ws_test/terminal/0/ws";
-  const RECONNECT_WAIT_MS = 4500; // comfortably exceeds the hook's 2s retry delay
-  const NO_RECONNECT_WAIT_MS = 2500; // past the 2s retry delay, under the test timeout
+  const RETRY_DELAY_MS = 2000; // mirrors TERMINAL_RECONNECT_RETRY_DELAY_MS
 
   // The hook only initialises xterm once the container reports non-zero
   // dimensions; jsdom reports 0, so force a size for the duration of these tests.
@@ -403,7 +402,26 @@ describe("useTerminal — WebSocket reconnect on close", () => {
     return <div ref={terminalContainerRef} />;
   };
 
+  // The first connection resolves the WS URL through a promise, so drain the
+  // microtask queue before asserting. Promise microtasks run independently of
+  // fake timers, so this works without advancing them.
+  const flushMicrotasks = async (): Promise<void> => {
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+    }
+  };
+
+  const mountAndConnect = async (): Promise<ReturnType<typeof render>> => {
+    const result = render(<ReconnectHarness />);
+    await flushMicrotasks();
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    return result;
+  };
+
   beforeEach(() => {
+    // Fake timers keep the 2s reconnect delay deterministic and near-instant
+    // instead of waiting in real time.
+    vi.useFakeTimers();
     FakeWebSocket.instances = [];
     vi.stubGlobal("WebSocket", FakeWebSocket);
     // resolveTerminalWsBaseUrl reads the API_URL_BASE build-time global; define it
@@ -415,40 +433,57 @@ describe("useTerminal — WebSocket reconnect on close", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientWidth;
     delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientHeight;
   });
 
-  it("reconnects after the connection drops with a non-4404 close (e.g. host sleep, code 1006)", async () => {
-    render(<ReconnectHarness />);
-
-    // The first connection is established asynchronously (the WS URL resolves via a
-    // promise), so wait for it rather than asserting synchronously.
-    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+  it("reconnects after the connection drops with code 1006 (e.g. host sleep)", async () => {
+    await mountAndConnect();
 
     // Simulate the socket being torn down out from under us — the close a macOS
     // sleep produces. The pre-fix handler only retried on code 4404, so this close
-    // left the terminal frozen; the fix retries on any close while still mounted.
+    // left the terminal frozen; the fix retries on any recoverable close.
     FakeWebSocket.instances[0].onclose?.({ code: 1006 } as CloseEvent);
+    vi.advanceTimersByTime(RETRY_DELAY_MS);
 
-    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2), { timeout: RECONNECT_WAIT_MS });
+    expect(FakeWebSocket.instances).toHaveLength(2);
   });
 
   it("still reconnects when the backend has not started the PTY yet (close code 4404)", async () => {
     // The original retry case must keep working after the fix broadened the trigger.
-    render(<ReconnectHarness />);
-    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    await mountAndConnect();
 
     FakeWebSocket.instances[0].onclose?.({ code: 4404 } as CloseEvent);
+    vi.advanceTimersByTime(RETRY_DELAY_MS);
 
-    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2), { timeout: RECONNECT_WAIT_MS });
+    expect(FakeWebSocket.instances).toHaveLength(2);
+  });
+
+  it("does NOT reconnect after a normal close (code 1000)", async () => {
+    // A clean, intentional close means nothing went wrong — retrying would be noise.
+    await mountAndConnect();
+
+    FakeWebSocket.instances[0].onclose?.({ code: 1000 } as CloseEvent);
+    vi.advanceTimersByTime(RETRY_DELAY_MS);
+
+    expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+
+  it("does NOT reconnect when the session token is rejected (code 4401)", async () => {
+    // The token is still invalid on a retry, so reconnecting would loop forever
+    // until the user re-authenticates.
+    await mountAndConnect();
+
+    FakeWebSocket.instances[0].onclose?.({ code: 4401 } as CloseEvent);
+    vi.advanceTimersByTime(RETRY_DELAY_MS);
+
+    expect(FakeWebSocket.instances).toHaveLength(1);
   });
 
   it("does NOT reconnect when the close is our own teardown (unmount)", async () => {
-    const { unmount } = render(<ReconnectHarness />);
-    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
-
+    const { unmount } = await mountAndConnect();
     const initialSocket = FakeWebSocket.instances[0];
 
     // Unmounting flips the effect's `isCleanedUp` guard. A close firing after that
@@ -456,10 +491,8 @@ describe("useTerminal — WebSocket reconnect on close", () => {
     // a terminal would resurrect its connection.
     unmount();
     initialSocket.onclose?.({ code: 1006 } as CloseEvent);
+    vi.advanceTimersByTime(RETRY_DELAY_MS);
 
-    // Give any (erroneously) scheduled retry the full delay to fire, then confirm
-    // no new connection was opened.
-    await new Promise((resolve) => setTimeout(resolve, NO_RECONNECT_WAIT_MS));
     expect(FakeWebSocket.instances).toHaveLength(1);
   });
 });
