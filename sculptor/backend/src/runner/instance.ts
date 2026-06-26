@@ -29,9 +29,9 @@ import { AgentRunner } from "~/runner/runner";
 
 // The shared, fully-wired AgentRunner singleton the API routes drive. index.ts'
 // bootstrap runner was a stub (harnessFor -> undefined); this wires the harness
-// registry (Task 5.6) + per-agent environment so a created agent actually
-// launches. Env-var injection precedence (Task 7.6) and pinned pi extensions
-// are layered on later; until then the harness deps pass the basics.
+// registry + per-agent environment so a created agent actually launches. Env-var
+// injection precedence and pinned pi extensions are layered on later; until then
+// the harness deps pass the basics.
 
 function workspaceForAgent(agent: AgentRow): WorkspaceRow | undefined {
   return agent.workspaceId === null
@@ -133,7 +133,7 @@ export function getAgentRunner(): AgentRunner {
         enableEntityMentions: config.enable_entity_mentions,
         onDiffNeeded: markWorkspaceDiffChanged,
         // Mirror the CLI-reported session id onto the agent row so /btw can fork
-        // it and Task 5.4 resume has the row-level pointer.
+        // it and crash-recovery resume has the row-level pointer.
         onSessionIdReported: (agent, sessionId) =>
           updateAgent(getOrm(), agent.objectId, { claudeSessionId: sessionId }),
         // Re-read .env per turn so a var added after launch is picked up.

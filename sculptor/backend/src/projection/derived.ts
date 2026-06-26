@@ -1,7 +1,7 @@
 // Computes the derived, UI-facing per-agent view (`CodingAgentTaskView`).
 //
 // Ported from `sculptor/sculptor/web/derived.py` — the `CodingAgentTaskView`
-// computed fields owned by Task 4.3: the derived `status`, `title`, `goal`,
+// computed fields: the derived `status`, `title`, `goal`,
 // activity description (`current_activity` / `last_activity`), the latest v2
 // TaskListArtifact progress (`task_completed` / `task_total` /
 // `current_task_subject`), and the WAITING / ERROR detail strings. Ports the

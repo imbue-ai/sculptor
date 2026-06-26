@@ -1,17 +1,19 @@
+import { ZodError } from "zod";
+
 import { appendAgentMessage, isPartialMessage } from "~/db/repositories";
 import type { Orm } from "~/db/orm";
+import { getLogger } from "~/logging/logger";
 import { ProjectionCache, projectionCache } from "~/projection/cache";
 
 // Coalesces high-frequency partial-chunk writes so the synchronous SQLite
-// writer isn't flooded with one row per token (architecture *Persistence
-// engine* mitigation #1). Two rates are decoupled:
+// writer isn't flooded with one row per token. Two rates are decoupled:
 //   - the stream/render rate: every message is pushed to the warm cache + bus
-//     immediately, so live updates stay smooth (REQ-NFR-001) — never throttled.
+//     immediately, so live updates stay smooth — never throttled.
 //   - the DB write rate: partial rows are persisted only at a bounded cadence
 //     (every N chunks or after T ms), with the latest buffered partial always
 //     flushed before a non-partial message and a finalized message written
-//     exactly once. is_partial stays correct so a cold re-fold (Task 4.2) still
-//     folds sensibly.
+//     exactly once. is_partial stays correct so a cold re-fold still folds
+//     sensibly.
 
 const MAX_BUFFERED_PARTIAL_CHUNKS = 20;
 const MAX_PARTIAL_FLUSH_INTERVAL_MS = 250;
@@ -79,9 +81,22 @@ export class MessageWriter {
   private persist(message: Record<string, unknown>): void {
     try {
       appendAgentMessage(this.deps.orm, this.deps.agentId, message);
-    } catch {
-      // A malformed message that fails the append invariants is not persisted;
-      // never let it crash the writer.
+    } catch (error) {
+      if (error instanceof ZodError) {
+        // A malformed message that fails the append-envelope invariants (missing
+        // message_id, unknown source) is intentionally dropped, not persisted —
+        // and must never crash the writer.
+        return;
+      }
+      // Any other failure is a genuine persistence error (SQLite busy/locked,
+      // disk full): it drops a row the warm cache has already folded, breaking
+      // the warm-cache-equals-durable-log invariant. Surface it loudly instead of
+      // swallowing it silently. We still don't rethrow, so a transient DB blip
+      // can't tear down the live supervisor/stream path.
+      getLogger().error(
+        { err: error, agentId: this.deps.agentId, messageId: message.message_id },
+        "Failed to persist agent message",
+      );
     }
   }
 }

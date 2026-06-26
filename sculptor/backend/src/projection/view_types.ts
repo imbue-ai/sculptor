@@ -1,9 +1,9 @@
 // TypeScript types for the derived, UI-facing per-agent view.
 //
 // Ported from `sculptor/sculptor/web/derived.py` (the `TaskStatus` enum and the
-// `CodingAgentTaskView` computed fields). These shapes are the frontend contract
-// (RW-API-3): the per-agent `status` and the view fields the streaming snapshot
-// (Task 4.4) carries. The derived UI `status` is DISTINCT from the stored
+// `CodingAgentTaskView` computed fields). These shapes are the frontend
+// contract: the per-agent `status` and the view fields the streaming snapshot
+// carries. The derived UI `status` is DISTINCT from the stored
 // `agent.run_state` lifecycle (QUEUED/RUNNING/SUCCEEDED/...); do not conflate
 // them.
 
@@ -77,7 +77,7 @@ export interface ModelOption {
 }
 
 // The derived per-agent view computed in `computeAgentView`. The field names and
-// shapes mirror the full `CodingAgentTaskView` the frontend reads (RW-API-3): the
+// shapes mirror the full `CodingAgentTaskView` the frontend reads: the
 // message-derived status fields plus the agent-row / harness-registry fields
 // (id, model switcher, harness capabilities, workspace_peek, lifecycle).
 export interface CodingAgentTaskView {

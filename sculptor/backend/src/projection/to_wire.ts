@@ -8,7 +8,7 @@ import type { StreamingUpdate } from "~/projection/streaming_update_types";
 // models and camelCases ONLY at the WS send boundary via
 // `model_dump(mode="json", by_alias=True)` (app.py `_get_next_elem_for_websocket`).
 // This module is that boundary: it converts the internal snake_case
-// StreamingUpdate to the camelCase wire shape the frontend reads (RW-API-3),
+// StreamingUpdate to the camelCase wire shape the frontend reads,
 // field-aware so it preserves the three things `to_camel` must NOT touch:
 //   1. entity-id MAP KEYS (the `*ByTaskId` / `*ByWorkspaceId` dicts are keyed by
 //      ids like `tsk_…` / `ws_…` — data, not field names).

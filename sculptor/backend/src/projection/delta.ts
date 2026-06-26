@@ -1,19 +1,17 @@
-// eventToDelta — maps a single bus event (Task 4.1) to the minimal
-// `StreamingUpdate` patch the client merges.
+// eventToDelta — maps a single bus event to the minimal `StreamingUpdate` patch
+// the client merges.
 //
-// Ported from `_convert_to_streaming_update` in
-// sculptor/sculptor/web/streams.py L757-869 (the per-event dispatch that folds
+// Ported from `_convert_to_streaming_update` (the per-event dispatch that folds
 // source events into an incremental StreamingUpdate), plus:
 //   - the data-model-change -> user_update + finished_request_ids fold
-//     (`_convert_to_user_update` L872-909, `_process_completed_transaction`
-//     L939-946),
-//   - the dependencies_status DEDUP (L606 / L646-649): only emit when changed,
-//   - the btw_update fold (L826-827).
+//     (`_convert_to_user_update`, `_process_completed_transaction`),
+//   - the dependencies_status DEDUP: only emit when changed,
+//   - the btw_update fold.
 //
 // The dedup is per-connection state in Python (the `last_yielded_deps_status`
 // local in `stream_everything`); here it lives on `DeltaBuilder`, one per
-// /stream/ws connection (Task 4.5). The pure `eventToDelta` covers the
-// stateless cases; the deps dedup MUST go through a builder.
+// /stream/ws connection. The pure `eventToDelta` covers the stateless cases; the
+// deps dedup MUST go through a builder.
 
 import type { Orm } from "~/db/orm";
 import {
@@ -45,12 +43,12 @@ export interface DeltaContext {
   orm: Orm;
   cache?: ProjectionCache;
   // Server settings carried on a user_update delta (the config service owns its
-  // shape, Phase 6). Only emitted when a data_model_change touches settings.
+  // shape). Only emitted when a data_model_change touches settings.
   serverSettings?: WireServerSettings | null;
 }
 
 // Fold a data_model_change event into a user_update + finished_request_ids
-// delta. Mirrors _convert_to_user_update (streams.py L872-909): the changed
+// delta. Mirrors `_convert_to_user_update`: the changed
 // entity refs are resolved to their current rows and grouped by kind; the
 // originating request id (if any) becomes a finished_request_id. Deleted
 // entities are still sent (with is_deleted=true) so the client drops them.
@@ -102,7 +100,7 @@ function dataModelChangeToDelta(
       }
       case "agent":
         // Agent changes flow through the agent_status / agent_message events,
-        // not user_update (streams.py keeps tasks out of _convert_to_user_update).
+        // not user_update (tasks are kept out of `_convert_to_user_update`).
         break;
     }
   }
@@ -111,13 +109,13 @@ function dataModelChangeToDelta(
   user.workspaces = [...workspacesById.values()];
   user.notifications = notifications;
   // SculptorSettings is carried on user_update whenever it accompanies the
-  // change (streams.py L802-803 appends it to user_update_sources).
+  // change (Python appends it to user_update_sources).
   if (ctx.serverSettings !== undefined) {
     user.settings = ctx.serverSettings;
   }
 
-  // _process_completed_transaction (streams.py L944-945): a non-null request id
-  // becomes a finished_request_id.
+  // _process_completed_transaction: a non-null request id becomes a
+  // finished_request_id.
   if (event.requestId !== undefined && event.requestId !== null) {
     delta.finished_request_ids = [event.requestId];
   }
@@ -125,8 +123,8 @@ function dataModelChangeToDelta(
 }
 
 // Per-connection delta builder. Holds the dependencies_status dedup state
-// (streams.py's `last_yielded_deps_status` local). One instance per /stream/ws
-// connection (Task 4.5 owns wiring this to a subscription).
+// (Python's `last_yielded_deps_status` local). One instance per /stream/ws
+// connection (the scope layer owns wiring this to a subscription).
 export class DeltaBuilder {
   private lastDependenciesStatus: DependenciesStatus | null = null;
   private readonly ctx: DeltaContext;
@@ -138,7 +136,7 @@ export class DeltaBuilder {
   }
 
   // Map an event to its StreamingUpdate patch, or null if the event produces no
-  // visible change (e.g. a duplicate dependencies_status — streams.py L646-647).
+  // visible change (e.g. a duplicate dependencies_status).
   eventToDelta(event: BusEvent): StreamingUpdate | null {
     switch (event.kind) {
       case "agent_message": {
@@ -176,7 +174,7 @@ export class DeltaBuilder {
         return dataModelChangeToDelta(event, this.ctx);
       case "dependencies_status": {
         const status = event.status as DependenciesStatus | null;
-        // Dedup (streams.py L646-649): suppress an identical re-emit.
+        // Dedup: suppress an identical re-emit.
         if (deepEqual(status, this.lastDependenciesStatus)) {
           return null;
         }

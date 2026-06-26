@@ -5,7 +5,7 @@ import { emptyUserUpdate, type StreamingUpdate } from "~/projection/streaming_up
 
 // The streaming scope, parsed from the ?scope= query param and used to narrow a
 // StreamingUpdate. Ports the Scope union + parse_scope_query_param +
-// project_for_scope from web/streams.py (L221-450).
+// project_for_scope from the Python streaming layer.
 export type Scope =
   | { kind: "all" }
   | { kind: "project"; projectId: string }
@@ -15,7 +15,7 @@ export type Scope =
 export class ScopeParseError extends Error {}
 
 // "all"/empty -> ScopeAll; "project:<id>" / "workspace:<id>" / "agent:<id>" ->
-// the scoped variants. Mirrors parse_scope_query_param (streams.py L243).
+// the scoped variants. Mirrors parse_scope_query_param.
 export function parseScope(value: string | null | undefined): Scope {
   if (value === undefined || value === null || value === "" || value === "all") {
     return { kind: "all" };
@@ -52,7 +52,7 @@ export interface ScopeContext {
 
 // Resolves the scope's workspace set + agent->workspace map from current state.
 // For ScopeProject the workspace set is computed once at connect (matching the
-// Python snapshot of project_workspace_ids, streams.py L467-473).
+// Python snapshot of project_workspace_ids).
 export function buildScopeContext(orm: Orm, scope: Scope): ScopeContext {
   const scopedWorkspaceIds = new Set<string>();
   const agentWorkspaceById = new Map<string, string | null>();
@@ -82,7 +82,7 @@ function filterRecord<T>(record: Record<string, T>, keep: (key: string) => boole
 }
 
 // Narrows a StreamingUpdate to the data a scope permits, porting
-// project_for_scope (streams.py L400-450): agent-keyed dicts filter on the
+// project_for_scope: agent-keyed dicts filter on the
 // agent's workspace being in scope (or the agent id for ScopeAgent),
 // workspace-keyed dicts filter on the scoped workspace set, and
 // user_update / finished_request_ids / dependencies_status / btw_update are

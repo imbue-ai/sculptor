@@ -1,20 +1,18 @@
 // The warm per-agent projection cache.
 //
-// Why this exists (architecture *Persistence* §2 / plan 04_04 "Why the warm
-// cache"): building a snapshot per connect is cheap for indexed current-state
-// reads, but folding the WHOLE agent_message log -> ChatMessage[] for active
-// agents is the expensive part and would block the synchronous event loop. So
-// we keep a warm in-memory per-agent projection the runner updates
-// incrementally as messages arrive (Task 4.2 incremental fold + Task 4.3 view
-// recompute), so connect serves folded chat from memory.
+// Why this exists: building a snapshot per connect is cheap for indexed
+// current-state reads, but folding the WHOLE agent_message log -> ChatMessage[]
+// for active agents is the expensive part and would block the synchronous event
+// loop. So we keep a warm in-memory per-agent projection the runner updates
+// incrementally as messages arrive, so connect serves folded chat from memory.
 //
-// CRITICAL property (plan 04_04 gotcha): the incremental result MUST equal a
-// full re-fold (`foldMessages`), or reconnect shows different chat than live.
-// cache.test.ts asserts this.
+// CRITICAL property: the incremental result MUST equal a full re-fold
+// (`foldMessages`), or reconnect shows different chat than live. cache.test.ts
+// asserts this.
 //
 // Replaces the per-connection `completed_message_by_task_id` /
-// `task_views_by_task_id` state in sculptor/sculptor/web/streams.py L566-567,
-// hoisting it out of the per-connection generator into one process-wide cache.
+// `task_views_by_task_id` state in the Python streaming generator, hoisting it
+// out of the per-connection generator into one process-wide cache.
 
 import type { Orm } from "~/db/orm";
 import type { AgentRow } from "~/db/schema/agent";
@@ -32,7 +30,7 @@ import type { CodingAgentTaskView } from "~/projection/view_types";
 
 // Bound on how many of the most-recent raw messages we retain per agent for the
 // view recompute (the fold itself keeps its own bounded ChatMessage state). The
-// derived view (Task 4.3) only ever inspects the tail of the log, so we cap the
+// derived view only ever inspects the tail of the log, so we cap the
 // retained raw messages to keep memory flat for very long-running agents.
 const DEFAULT_MAX_RAW_MESSAGES = 2000;
 
@@ -62,7 +60,7 @@ export class ProjectionCache {
 
   // Lazily fold an agent's history from the DB on first need (bounded), then
   // serve all subsequent reads from memory. Mirrors the per-connection initial
-  // fold in streams.py, but done once and shared.
+  // fold in the Python streaming generator, but done once and shared.
   ensure(orm: Orm, agentId: string): CacheEntry | undefined {
     const existing = this.entries.get(agentId);
     if (existing !== undefined) {
@@ -90,8 +88,8 @@ export class ProjectionCache {
     return entry;
   }
 
-  // Apply a single new message incrementally (Task 4.2 incremental fold + Task
-  // 4.3 view recompute). The runner calls this as each message is persisted, so
+  // Apply a single new message incrementally (incremental fold + view
+  // recompute). The runner calls this as each message is persisted, so
   // history is never re-folded on the hot path. Lazily fills from the DB first
   // if the agent is cold, so a message for an unseen agent still folds its prior
   // history exactly once.

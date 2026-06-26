@@ -1,22 +1,21 @@
 // Folds the append-only agent-message log into the frontend's `ChatMessage[]`.
 //
-// Ported faithfully from `convert_agent_messages_to_task_update` in
-// `sculptor/sculptor/web/message_conversion.py` (the partial-chunk streaming
-// fold, tool-use/result pairing, error/warning/context blocks, request
-// finalize/stopped/skip, subagent flushing, turn metrics). This is the #1
-// parity-drift risk in the rewrite, so the behavior is pinned by golden
-// fixtures captured from the real Python function
+// Ported faithfully from `convert_agent_messages_to_task_update` (the
+// partial-chunk streaming fold, tool-use/result pairing, error/warning/context
+// blocks, request finalize/stopped/skip, subagent flushing, turn metrics). This
+// is the #1 parity-drift risk in the rewrite, so the behavior is pinned by
+// golden fixtures captured from the real Python function
 // (message_conversion.golden.test.ts).
 //
 // Two entry points:
 //   - foldMessages(messages): full fold of an entire log -> ChatMessage[].
-//   - applyMessage(state, message): incremental step used by the warm cache
-//     (Task 4.4). Incremental application is equivalent to a full re-fold; the
-//     golden test asserts this property on every fixture.
+//   - applyMessage(state, message): incremental step used by the warm cache.
+//     Incremental application is equivalent to a full re-fold; the golden test
+//     asserts this property on every fixture.
 //
-// Input messages are the raw JSON dicts as stored in agent_message.message
-// (Task 2.3): each carries an `object_type` discriminator and the same field
-// shapes the Python models serialize to.
+// Input messages are the raw JSON dicts as stored in agent_message.message: each
+// carries an `object_type` discriminator and the same field shapes the Python
+// models serialize to.
 
 import type {
   AskUserQuestionData,
@@ -684,7 +683,7 @@ export function applyMessage(state: FoldState, message: RawMessage): FoldState {
 
   if (type === "ChatInputUserMessage") {
     // Reflect the plan-mode toggle from the user message immediately, before the
-    // agent processes it (message_conversion.py L249-252).
+    // agent processes it.
     if (message["enter_plan_mode"] === true) {
       state.isInPlanMode = true;
     } else if (message["exit_plan_mode"] === true) {
@@ -1038,7 +1037,7 @@ export function applyMessage(state: FoldState, message: RawMessage): FoldState {
     });
   } else if (objectType(message) === "UpdatedArtifactAgentMessage") {
     // Record the artifact type (PLAN/DIFF) so task_update.updated_artifacts
-    // signals the frontend to fetch it (message_conversion.py L796-799).
+    // signals the frontend to fetch it.
     const artifact = message["artifact"] as
       | Record<string, unknown>
       | undefined;

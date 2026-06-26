@@ -1,19 +1,18 @@
 // buildSnapshot — the full `StreamingUpdate` connect snapshot.
 //
-// Ported from the connect-snapshot path in sculptor/sculptor/web/streams.py
-// (the initial dump assembled at L571-596, plus `_convert_to_user_update`
-// L872-909 for the initial `user_update`). On connect the client MUST receive a
-// full snapshot before any delta (REQ-NFR-001); this reads current state
-// (non-deleted repos -> workspaces -> agents) and serves each agent's
-// view + chat from the warm cache (Task 4.4) so the whole message log is never
-// re-folded synchronously on the hot path.
+// Ported from the connect-snapshot path in the Python streaming generator (the
+// initial dump folded through `_convert_to_user_update` for the initial
+// `user_update`). On connect the client MUST receive a full snapshot before any
+// delta; this reads current state (non-deleted repos -> workspaces -> agents)
+// and serves each agent's view + chat from the warm cache so the whole message
+// log is never re-folded synchronously on the hot path.
 //
 // Scope: `buildSnapshot` takes a Scope, but the actual narrowing of
-// `user_update` / `dependencies_status` (ScopeAll-only — project_for_scope,
-// streams.py L400/L427/L436) and the per-workspace dicts is Task 4.5. Here we
-// build the full ScopeAll snapshot; the dependencies_status / btw / setup
-// fields the producing services maintain (Phase 7) are left empty until those
-// services exist, exactly as Python emits nothing for them pre-population.
+// `user_update` / `dependencies_status` (ScopeAll-only — `project_for_scope`)
+// and the per-workspace dicts is handled by the scope layer. Here we build the
+// full ScopeAll snapshot; the dependencies_status / btw / setup fields the
+// producing services maintain are left empty until those services exist, exactly
+// as Python emits nothing for them pre-population.
 
 import type { Orm } from "~/db/orm";
 import type { AgentRow } from "~/db/schema/agent";
@@ -43,9 +42,9 @@ import {
 import { getPrStatusByWorkspaceId } from "~/services/pr_polling/store";
 
 // Minimal scope marker. The full Scope union (ScopeAll/Project/Workspace/Agent)
-// and its narrowing live in Task 4.5; here we only need to know whether this is
-// the ScopeAll connection (which alone receives user_update /
-// dependencies_status — streams.py L484-487).
+// and its narrowing live in the scope layer; here we only need to know whether
+// this is the ScopeAll connection (which alone receives user_update /
+// dependencies_status).
 export interface SnapshotScope {
   kind: "all" | "project" | "workspace" | "agent";
 }
@@ -55,17 +54,17 @@ export const SCOPE_ALL: SnapshotScope = { kind: "all" };
 export interface BuildSnapshotOptions {
   cache?: ProjectionCache;
   // Server settings (SculptorSettings) carried on user_update. The config
-  // service (Phase 6) owns its shape; the snapshot just passes it through.
+  // service owns its shape; the snapshot just passes it through.
   serverSettings?: WireServerSettings | null;
-  // Live dependency status (Phase 6/7 dependency service). ScopeAll-only.
+  // Live dependency status (owned by the dependency service). ScopeAll-only.
   dependenciesStatus?: DependenciesStatus | null;
 }
 
 // --- Wire-row projection helpers -------------------------------------------
 //
 // Map the internal current-state rows to their wire shapes (repo -> project on
-// the wire; see repo.ts). _convert_to_user_update (streams.py L903-909) builds
-// the same payload from the equivalent Python models.
+// the wire; see repo.ts). `_convert_to_user_update` builds the same payload from
+// the equivalent Python models.
 
 export function repoRowToWireProject(row: RepoRow): WireProject {
   return {
@@ -123,8 +122,8 @@ function userSettingsRowToWire(objectId: string): WireUserSettings {
 
 // Build the initial `user_update` from current state: all non-deleted
 // projects/workspaces + all current notifications + user_settings + server
-// settings. Mirrors the initial dump (streams.py L571-593) folded through
-// _convert_to_user_update (L872-909). ScopeAll-only.
+// settings. Mirrors the initial dump folded through `_convert_to_user_update`.
+// ScopeAll-only.
 function buildInitialUserUpdate(
   orm: Orm,
   repos: RepoRow[],
@@ -145,8 +144,8 @@ function buildInitialUserUpdate(
 // Read current state into a full StreamingUpdate. Reads are indexed
 // current-state queries; per-agent chat/view come from the warm cache (folded
 // once, lazily). The producing-service fields (branch / PR / setup / btw / deps)
-// are left empty until Phase 7 services populate them, just as Python emits
-// nothing for them before the relevant observer pushes.
+// are left empty until the producing services populate them, just as Python
+// emits nothing for them before the relevant observer pushes.
 export function buildSnapshot(
   orm: Orm,
   scope: SnapshotScope = SCOPE_ALL,
@@ -184,9 +183,9 @@ export function buildSnapshot(
   // until the next poll). Scope narrowing (scope.ts) filters this per-workspace.
   update.pr_status_by_workspace_id = getPrStatusByWorkspaceId();
 
-  // user_update + dependencies_status are ScopeAll-only (streams.py L484-487 /
-  // L427/L436). Task 4.5 narrowing drops them for scoped connections; here we
-  // populate them only for the ScopeAll snapshot.
+  // user_update + dependencies_status are ScopeAll-only. The scope narrowing
+  // drops them for scoped connections; here we populate them only for the
+  // ScopeAll snapshot.
   if (scope.kind === "all") {
     update.user_update = buildInitialUserUpdate(
       orm,

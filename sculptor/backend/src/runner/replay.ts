@@ -1,4 +1,4 @@
-// Crash-recovery message replay (RW-DATA-6). On restart the runner re-supervises
+// Crash-recovery message replay. On restart the runner re-supervises
 // every non-terminal agent (runner.ts) but the relaunched harness comes up with
 // an empty in-memory queue, so any user message that had not finished its turn
 // before the shutdown would be stranded: an interrupted in-flight turn never

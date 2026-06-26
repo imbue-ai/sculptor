@@ -1,17 +1,16 @@
-// Builds a wire `TaskUpdate` from the Task 4.2 fold state.
+// Builds a wire `TaskUpdate` from the fold state.
 //
-// The Python projection (sculptor/sculptor/web/streams.py
-// `_apply_message_updates_to_task_state` L949-974 +
+// The Python projection (`_apply_message_updates_to_task_state` +
 // `convert_agent_messages_to_task_update`) keeps a per-task `TaskUpdate` whose
-// fields it carries across SSE batches. In the rewrite the warm cache (Task 4.4)
-// holds the equivalent `FoldState` (Task 4.2); this module projects that fold
-// state into the wire `TaskUpdate` shape (derived.py L744-808) so the snapshot
-// and the agent_message delta emit the same object.
+// fields it carries across SSE batches. In the rewrite the warm cache holds the
+// equivalent `FoldState`; this module projects that fold state into the wire
+// `TaskUpdate` shape so the snapshot and the agent_message delta emit the same
+// object.
 //
 // For a snapshot the whole current state is sent (all completed messages, the
 // in-progress message, the queue). Incremental deltas reuse the same builder —
-// the frontend's append/replace merge semantics (derived.py L756-760) make a
-// full per-task TaskUpdate idempotent for the keys it carries.
+// the frontend's append/replace merge semantics make a full per-task TaskUpdate
+// idempotent for the keys it carries.
 
 import type { FoldState } from "~/projection/message_conversion";
 import type { TaskUpdate } from "~/projection/streaming_update_types";
@@ -27,7 +26,7 @@ export function foldStateToTaskUpdate(taskId: string, state: FoldState): TaskUpd
     // The id of the user message whose request is currently in flight (the
     // "working" turn). The frontend's status pill needs it to show "Thinking…"
     // while a RUNNING agent has produced no streamed content yet
-    // (message_conversion.py L841: in_progress_user_message_id = current_request_id).
+    // (in_progress_user_message_id = current_request_id).
     in_progress_user_message_id: state.currentRequestId,
     streaming_start_index: streaming.startIndex,
     is_streaming_active: streaming.isActive,

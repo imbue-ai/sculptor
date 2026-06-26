@@ -1,13 +1,13 @@
 import type { AgentRow } from "~/db/schema";
 
-// The Harness contract the AgentSupervisor (Task 5.1) drives. The concrete
-// Claude / Pi harnesses (Tasks 5.3-5.5) implement it; the registry (Task 5.6)
-// resolves an agent to its harness. Decoupling the supervisor from the harness
-// keeps the orchestrator (this phase) independent of the CLI-launch specifics.
+// The Harness contract the AgentSupervisor drives. The concrete Claude / Pi
+// harnesses implement it; the registry resolves an agent to its harness.
+// Decoupling the supervisor from the harness keeps the orchestrator independent
+// of the CLI-launch specifics.
 
 export interface HarnessLaunchContext {
   agent: AgentRow;
-  // The workspace working directory (Task 3.1) the CLI subprocess runs in.
+  // The workspace working directory the CLI subprocess runs in.
   workingDirectory: string;
   env?: Record<string, string>;
 }
@@ -42,6 +42,6 @@ export interface Harness {
 }
 
 // Resolves an agent to the harness that should supervise it, or undefined when
-// the agent is not chat-supervised here (e.g. a terminal agent — Task 3.4 — or
-// an unknown harness). Provided by the registry (Task 5.6).
+// the agent is not chat-supervised here (e.g. a terminal agent or an unknown
+// harness). Provided by the registry.
 export type HarnessResolver = (agent: AgentRow) => Harness | undefined;

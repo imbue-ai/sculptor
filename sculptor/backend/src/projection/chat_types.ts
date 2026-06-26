@@ -1,7 +1,7 @@
 // TypeScript types for the frontend `ChatMessage` wire contract.
 //
 // Ported from `sculptor/sculptor/state/chat_state.py`. These shapes are the
-// frontend contract (RW-API-3): the fold output (Task 4.2) MUST serialize to
+// frontend contract: the fold output MUST serialize to
 // JSON identical to the Python `ChatMessage.model_dump(mode="json")`, modulo
 // non-load-bearing key ordering. Field names, defaults, and the
 // `object_type`/`type` discriminators are therefore reproduced exactly.

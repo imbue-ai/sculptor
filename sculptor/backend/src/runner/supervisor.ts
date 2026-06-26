@@ -23,13 +23,17 @@ export interface AgentSupervisorDeps {
   workingDirectory: string;
   env?: Record<string, string>;
   cache?: ProjectionCache;
+  // Invoked exactly once when the supervisor reaches a terminal state (any of
+  // SUCCEEDED / FAILED / CANCELLED). The runner uses it to evict this supervisor
+  // from its live map so a long-lived server doesn't leak one per finished agent.
+  onDispose?: (supervisor: AgentSupervisor) => void;
 }
 
-// One async supervisor per running agent — on the event loop, no thread, no
-// ConcurrencyGroup (RW-SIMP-1). It launches the harness CLI subprocess,
-// persists each emitted message (append-only log), updates the warm cache,
-// publishes bus events, and maintains run_state. Mirrors the per-task lifecycle
-// of the Python TaskService without the thread/queue machinery.
+// One async supervisor per running agent — on the event loop, no thread. It
+// launches the harness CLI subprocess, persists each emitted message
+// (append-only log), updates the warm cache, publishes bus events, and maintains
+// run_state. Mirrors the per-task lifecycle of the Python TaskService without
+// the thread/queue machinery.
 export class AgentSupervisor {
   private agent: AgentRow;
   private process: HarnessProcess | undefined;
@@ -52,10 +56,10 @@ export class AgentSupervisor {
 
   start(): void {
     this.setRunState("RUNNING");
-    // Record that the agent's environment is ready (run_agent/v1.py emits this
-    // before the first turn). The derived status gates on it: a coding agent
-    // with a user message but no EnvironmentAcquired stays BUILDING. Written
-    // through the writer so it folds into the warm cache + streams.
+    // Record that the agent's environment is ready (the harness emits this before
+    // the first turn). The derived status gates on it: a coding agent with a user
+    // message but no EnvironmentAcquired stays BUILDING. Written through the
+    // writer so it folds into the warm cache + streams.
     this.writer.write({
       object_type: "EnvironmentAcquiredRunnerMessage",
       message_id: newAgentMessageId(),
@@ -76,7 +80,7 @@ export class AgentSupervisor {
 
   private handleMessage(message: Record<string, unknown>): void {
     // The writer streams to the warm cache + bus immediately and persists with
-    // coalescing (Task 5.2).
+    // coalescing.
     this.writer.write(message);
   }
 
@@ -84,18 +88,16 @@ export class AgentSupervisor {
     if (this.finalized) {
       return;
     }
-    // Make any buffered partial durable before finalizing.
-    this.writer.flush();
     this.finalize(result.error !== undefined ? "FAILED" : "SUCCEEDED", result.error ?? null);
   }
 
-  // Crash recovery (RW-DATA-6): after a restart the relaunched harness starts
-  // with an empty queue, so re-deliver any user message whose turn did not finish
-  // before the shutdown. An interrupted in-flight turn is resumed (continue, not a
-  // prompt replay) so it reaches a terminal Request* and the agent leaves RUNNING;
-  // a follow-up that was queued behind it is dispatched fresh. Called by the
-  // runner right after re-supervising on startup — NOT on a fresh agent start,
-  // where the first message is delivered explicitly via sendUserMessage.
+  // Crash recovery: after a restart the relaunched harness starts with an empty
+  // queue, so re-deliver any user message whose turn did not finish before the
+  // shutdown. An interrupted in-flight turn is resumed (continue, not a prompt
+  // replay) so it reaches a terminal Request* and the agent leaves RUNNING; a
+  // follow-up that was queued behind it is dispatched fresh. Called by the runner
+  // right after re-supervising on startup — NOT on a fresh agent start, where the
+  // first message is delivered explicitly via sendUserMessage.
   replayUnprocessedMessages(): void {
     const messages = listAgentMessages(this.deps.orm, this.agentId).map((row) => row.message);
     for (const message of computeReplayPlan(messages)) {
@@ -103,7 +105,7 @@ export class AgentSupervisor {
     }
   }
 
-  // --- Control ops (called by the interaction endpoints, Task 6.8) ---
+  // --- Control ops (called by the interaction endpoints) ---
 
   sendUserMessage(message: Record<string, unknown>): void {
     this.process?.sendUserMessage(message);
@@ -124,6 +126,10 @@ export class AgentSupervisor {
       return;
     }
     this.process?.stop();
+    // finalize() flushes the writer, so the cancelled turn's last buffered
+    // partial chunk is persisted before we record CANCELLED. (Without this the
+    // subsequent harness onExit short-circuits on the finalized guard, dropping
+    // that partial from the durable log.)
     this.finalize("CANCELLED", null);
   }
 
@@ -134,11 +140,24 @@ export class AgentSupervisor {
   // --- State transitions + events ---
 
   private finalize(runState: RunState, error: unknown): void {
+    // Idempotent: a double-finalize (e.g. stop() racing a synchronous harness
+    // onExit) must not overwrite run_state or double-publish status/data-model
+    // events. This guard backstops the per-caller guards in stop()/handleExit().
+    if (this.finalized) {
+      return;
+    }
     this.finalized = true;
+    // Make any buffered partial durable before recording the terminal state, so a
+    // cancelled/exited turn's final streamed content survives in the durable log.
+    this.writer.flush();
     updateAgent(this.deps.orm, this.agentId, { runState, error });
     this.agent = { ...this.agent, runState, error };
     this.publishAgentStatus();
     this.publishDataModelChange([{ type: "agent", id: this.agentId }]);
+    // Evict from the runner's live supervisor map on EVERY terminal outcome, not
+    // just stop(), so finished supervisors don't accumulate over the server's
+    // lifetime.
+    this.deps.onDispose?.(this);
   }
 
   private setRunState(runState: RunState): void {
@@ -148,7 +167,7 @@ export class AgentSupervisor {
   }
 
   // Publish a data-model change (notification / workspace / agent row mutations)
-  // so the projection folds it into user_update / finished_request_ids (Task 4.4).
+  // so the projection folds it into user_update / finished_request_ids.
   // Agent-only refs are a no-op for user_update by design (agent changes flow via
   // agent_status), but a notification/workspace ref or a requestId is delivered.
   publishDataModelChange(changedEntities: ChangedEntityRef[], requestId?: string): void {
