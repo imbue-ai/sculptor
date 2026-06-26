@@ -6,15 +6,16 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 
+import { getPluginDirs, getPluginNamespace } from "~/config/plugins";
 import { getOrm } from "~/db/orm";
 import { getRepo } from "~/db/repositories";
 import { localPathFromRepo } from "~/services/project";
 import { getWorkspaceWorkingDirectory } from "~/services/workspace";
 
-// GET /api/v1/skills (web/skills.py). Discovers SKILL.md skills from the repo's
-// .claude/skills and the user's ~/.claude/skills, deduped by name and sorted.
-// NOTE: plugin-namespaced skills and command (.md) sources are a follow-up; the
-// skills panel's primary source is the repo/home skill directories.
+// GET /api/v1/skills (web/skills.py). Discovers SKILL.md skills from the bundled
+// plugins (namespaced as `<plugin>:<skill>`, source "plugin"), the repo's
+// .claude/skills, and the user's ~/.claude/skills, deduped by (namespaced) name
+// and sorted. Command (.md) sources remain a follow-up.
 
 interface SkillInfoWire {
   name: string;
@@ -46,6 +47,7 @@ function parseFrontmatter(content: string): {
 function scanSkillsDir(
   dir: string,
   source: string,
+  namespace: string | null,
   seen: Set<string>,
   out: SkillInfoWire[],
 ): void {
@@ -60,7 +62,9 @@ function scanSkillsDir(
     const { name, description } = parseFrontmatter(
       readFileSync(skillFile, "utf8"),
     );
-    const skillName = name ?? entry;
+    const baseName = name ?? entry;
+    const skillName =
+      namespace !== null ? `${namespace}:${baseName}` : baseName;
     if (seen.has(skillName)) {
       continue;
     }
@@ -119,19 +123,29 @@ export async function registerSkillRoutes(app: FastifyInstance): Promise<void> {
       const { workspace_id: workspaceId, project_id: projectId } =
         request.query;
       if ((workspaceId === undefined) === (projectId === undefined)) {
-        return reply
-          .code(400)
-          .send({
-            detail: "Exactly one of workspaceId or projectId must be provided",
-          });
+        return reply.code(400).send({
+          detail: "Exactly one of workspaceId or projectId must be provided",
+        });
       }
       const seen = new Set<string>();
       const out: SkillInfoWire[] = [];
+      // Plugins first (namespaced, source "plugin"), then repo, then home —
+      // first-name-wins on the namespaced name (skills.py discover_skills order).
+      for (const pluginDir of getPluginDirs()) {
+        scanSkillsDir(
+          path.join(pluginDir, "skills"),
+          "plugin",
+          getPluginNamespace(pluginDir),
+          seen,
+          out,
+        );
+      }
       const repoRoot = resolveRepoRoot(workspaceId, projectId);
       if (repoRoot !== null) {
         scanSkillsDir(
           path.join(repoRoot, ".claude", "skills"),
           "custom",
+          null,
           seen,
           out,
         );
@@ -139,6 +153,7 @@ export async function registerSkillRoutes(app: FastifyInstance): Promise<void> {
       scanSkillsDir(
         path.join(os.homedir(), ".claude", "skills"),
         "custom",
+        null,
         seen,
         out,
       );
