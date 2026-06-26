@@ -15,7 +15,7 @@ Tiers: **1** = functionality/clearly-wrong · **2** = visual correctness · **3*
 ## Surface A — New-workspace landing (`MobileNewWorkspace.tsx` / `.module.scss`)
 Screenshot: `0003_get.png`
 
-- **A1 (T2)** Pill borders inconsistent: the Branch `.pill` shows a crisp `var(--mobile-line)` border; the reused Radix Select triggers (Repo, Source) read as near-borderless — the Radix trigger styling overrides the group's border. Make `.pillTrigger` match `.pill`.
+- **A1 (T2) ❌ NOT REPRODUCIBLE** — all three pills already use the same border: `RepoSelector` (Repo) renders `Select.Trigger variant="ghost"`, `BranchSelectorCore` (Source) gets `triggerVariant="ghost"`, and Branch is a custom `.pill` div — all share `.pill/.pillTrigger { border: 1.5px solid var(--mobile-line) }`. No Radix surface box overriding it. Any perceived difference is very subtle (opaque `.pill` bg vs transparent ghost trigger), not a border bug.
 - **A2 (T2)** Pill content asymmetric across the 3 rows: Source has a "source" label, Repo doesn't; right-edge affordance differs (chevron vs. shuffle/regenerate vs. chevron). Unify.
 - **A3 (T3)** Large dead band above the title — centered group sits low; vertical balance feels lopsided/"jammed at top".
 - **A4 (T2)** Pill surfaces don't lift above the page base — both near-identical dark tone; the intended `--gray-2` page / `--gray-3` control contrast isn't visible.
