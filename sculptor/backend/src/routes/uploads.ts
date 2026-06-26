@@ -18,10 +18,10 @@ import { spawnBackgroundProcess } from "~/environment/process";
 import { uploadDiagnostics } from "~/services/diagnostics/upload";
 
 // Upload + open-path endpoints (web/app.py). Uploads land in internal/uploads/
-// (Task 1.5) so migrated files resolve (RW-DATA-5). upload-diagnostics is the
-// one upload that delegates to the S3 service (Task 7.8) and is wired there.
+// so migrated files resolve. upload-diagnostics is the one upload that delegates
+// to the S3 service and is wired there.
 
-const MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024; // 20MB (REQ-NFR-051)
+const MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024; // 20MB
 
 function expandUser(input: string): string {
   return input === "~" || input.startsWith("~/")

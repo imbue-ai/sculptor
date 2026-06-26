@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getCIBabysitterCoordinator } from "~/services/ci_babysitter/coordinator";
 
 // CI babysitter status + pause endpoints (web/app.py). Off-by-default with a
-// retry cap (REQ-NFR-062) is enforced by the coordinator; these routes expose
+// retry cap is enforced by the coordinator; these routes expose
 // its per-workspace view and the pause toggle.
 
 const StateViewSchema = z.object({

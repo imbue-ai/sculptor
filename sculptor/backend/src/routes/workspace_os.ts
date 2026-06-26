@@ -15,7 +15,7 @@ import {
 } from "~/services/workspace";
 
 // open-in-os + discard-file (web/app.py). open-in-os shells out to the platform
-// file opener (open / xdg-open); discard-file restores a file via git (Task 3.3).
+// file opener (open / xdg-open); discard-file restores a file via git.
 
 const ErrorResponseSchema = z.object({ detail: z.string() });
 const errorResponses = { 400: ErrorResponseSchema, 404: ErrorResponseSchema };

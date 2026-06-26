@@ -27,7 +27,7 @@ function firstHeaderValue(value: string | string[] | undefined): string | undefi
 
 // Enforces the session token at the WS handshake (the global guard skips WS
 // upgrades). Accept-then-close 4401 on failure so the browser sees a real close
-// frame (Task 1.3 / web/auth.py). Returns true when authorized.
+// frame (web/auth.py). Returns true when authorized.
 function authorize(socket: WebSocket, request: FastifyRequest, searchParams: URLSearchParams): boolean {
   const expected = getExpectedSessionToken();
   if (expected === undefined) {
@@ -47,7 +47,7 @@ function authorize(socket: WebSocket, request: FastifyRequest, searchParams: URL
 
 // GET /api/v1/stream/ws: on connect, send a full snapshot then scope-narrowed
 // deltas from the event bus until close. Replaces the Python per-task queue
-// fan-out with a single bus subscription (Task 4.1) + narrowing (project_for_scope).
+// fan-out with a single bus subscription + narrowing (project_for_scope).
 export async function registerStreamWsRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/v1/stream/ws", { websocket: true }, (socket: WebSocket, request: FastifyRequest) => {
     const url = new URL(request.url, "http://localhost");
@@ -70,7 +70,7 @@ export async function registerStreamWsRoutes(app: FastifyInstance): Promise<void
     const context = buildScopeContext(orm, scope);
     const serverSettings = getServerSettings();
 
-    // Snapshot MUST precede any delta (REQ-NFR-001). Always build the full
+    // Snapshot MUST precede any delta. Always build the full
     // (ScopeAll) snapshot then narrow uniformly for this connection. The server
     // settings (SculptorSettings) ride on user_update.settings so the frontend
     // can gate testing-only affordances (Fake Claude model, etc.).
@@ -88,7 +88,11 @@ export async function registerStreamWsRoutes(app: FastifyInstance): Promise<void
       scope,
       context,
     );
-    socket.send(JSON.stringify(streamingUpdateToWire(snapshot)));
+    // Guard every send: the socket can close between subscription and dispatch,
+    // and ws throws on a send to a non-open socket.
+    if (socket.readyState === socket.OPEN) {
+      socket.send(JSON.stringify(streamingUpdateToWire(snapshot)));
+    }
 
     const builder = new DeltaBuilder({ orm, serverSettings });
     const unsubscribe = eventBus.subscribe((event: BusEvent) => {
@@ -107,7 +111,9 @@ export async function registerStreamWsRoutes(app: FastifyInstance): Promise<void
       if (isEmptyUpdate(narrowed)) {
         return;
       }
-      socket.send(JSON.stringify(streamingUpdateToWire(narrowed)));
+      if (socket.readyState === socket.OPEN) {
+        socket.send(JSON.stringify(streamingUpdateToWire(narrowed)));
+      }
     });
 
     socket.on("close", unsubscribe);

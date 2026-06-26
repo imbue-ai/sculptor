@@ -24,13 +24,13 @@ import { eventBus } from "~/events";
 import { getDependencyService } from "~/services/dependencies";
 
 // Config / onboarding endpoints (web/app.py). config.toml (UserConfig) is the
-// source of truth; the wire shape is camelCase (RW-API-3). These routes require
+// source of truth; the wire shape is camelCase. These routes require
 // a session token (the global guard already protects /api/); none are on the
 // auth exempt list.
 
 const SCULPTOR_VERSION = "0.0.0";
 
-// --- Wire schemas (camelCase; the OpenAPI source for both clients, RW-API-4) --
+// --- Wire schemas (camelCase; the OpenAPI source for both clients) ---
 //
 // The internal UserConfig (settings.ts) is snake_case; this mirrors it
 // field-for-field in camelCase. A unit test pins the two key sets together so
@@ -196,7 +196,7 @@ function buildTelemetryInfo(
   };
 }
 
-// Notify ScopeAll stream connections that user settings changed (Task 4.1/4.4).
+// Notify ScopeAll stream connections that user settings changed.
 // A no-op for the wire when no user_settings row exists, but kept faithful to
 // the data-model-change contract.
 function publishUserSettingsChanged(): void {
@@ -221,7 +221,7 @@ export async function registerConfigRoutes(
       const config = getCurrentUserConfig();
       const hasProject = listActiveRepos(getOrm()).length > 0;
       // deps_passing = git installed AND claude installed AND claude version
-      // not out-of-range (None counts as passing — Python web/app.py L2558-2560).
+      // not out-of-range (None counts as passing — Python web/app.py).
       const deps = await getDependencyService().getStatus();
       const hasDependenciesPassing =
         deps.git.installed &&

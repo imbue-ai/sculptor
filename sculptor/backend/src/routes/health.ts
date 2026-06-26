@@ -5,7 +5,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 
 // Mirrors HealthCheckResponse in sculptor/sculptor/web/data_types.py. The field
-// names and types are part of the held-fixed API contract (RW-API-1); the
+// names and types are part of the held-fixed API contract; the
 // service-derived values (disk, task count, dependencies) stay at their
 // defaults until the relevant services land in later phases.
 export const HealthCheckResponseSchema = z.object({

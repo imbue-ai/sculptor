@@ -1,14 +1,14 @@
 // The typed event taxonomy — one variant per StreamingUpdate field source in
 // web/streams.py. Every event carries the owning scope ids (project/workspace/
-// agent) so the projection's scope narrowing (Task 4.5) is a pure filter.
+// agent) so the projection's scope narrowing is a pure filter.
 // Payloads are kept minimal: the projection reads current state from the
-// repositories / warm cache (Task 4.4) rather than carrying full snapshots —
+// repositories / warm cache rather than carrying full snapshots —
 // the exceptions are events whose data is itself the thing to fold (the new
 // message, a setup-output chunk, the dependency status, the btw update, and the
 // data-model change's request id + changed rows).
 
 // Drives task_update_by_task_id: a new agent_message row to fold into the chat
-// (the partial-chunk folding in Task 4.2 depends on emit order).
+// (the partial-chunk folding depends on emit order).
 export interface AgentMessageEvent {
   kind: "agent_message";
   agentId: string;
@@ -27,7 +27,7 @@ export interface AgentStatusEvent {
 
 // Drives user_update + finished_request_ids. ScopeAll-only (user_update is
 // dropped for scoped connections). The ONLY source of notifications and of live
-// project/workspace/settings changes — Phase 6 mutation paths publish it. It
+// project/workspace/settings changes — the mutation paths publish it. It
 // carries the originating request id and the changed entity refs.
 export interface ChangedEntityRef {
   type: "repo" | "workspace" | "agent" | "notification" | "user_settings";
@@ -46,7 +46,7 @@ export interface WorkspaceBranchEvent {
   workspaceId: string;
   projectId?: string;
   // WorkspaceBranchInfo (snake_case) or null to clear. Camelized at the WS
-  // boundary (projection/to_wire.ts). Filled by repo polling (Task 7.2).
+  // boundary (projection/to_wire.ts). Filled by repo polling.
   status?: Record<string, unknown> | null;
 }
 
@@ -76,7 +76,7 @@ export interface DependenciesStatusEvent {
 }
 
 // Drives workspace_setup_status_by_workspace_id. Carries the WorkspaceSetupStatus
-// snapshot the setup runner (Task 6.4) produces on each state transition.
+// snapshot the setup runner produces on each state transition.
 export interface WorkspaceSetupStatusEvent {
   kind: "workspace_setup_status";
   workspaceId: string;
@@ -134,6 +134,6 @@ export type BusEvent =
 export type BusEventKind = BusEvent["kind"];
 
 // The kinds with no per-workspace key — user_update / dependencies_status are
-// dropped for scoped (non-ScopeAll) connections (Task 4.5 applies this).
+// dropped for scoped (non-ScopeAll) connections.
 export const SCOPE_ALL_ONLY_EVENT_KINDS: ReadonlySet<BusEventKind> =
   new Set<BusEventKind>(["data_model_change", "dependencies_status"]);

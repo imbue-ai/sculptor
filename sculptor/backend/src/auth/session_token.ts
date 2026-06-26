@@ -5,9 +5,44 @@
 // the x-session-token header, the same-named query param, or the same-named
 // cookie. When SESSION_TOKEN is unset, auth is disabled and all requests pass
 // (matching the Python `expected_token is None` short-circuit). The token lives
-// in process memory only and is never persisted (REQ-SEC-002).
+// in process memory only and is never persisted.
 
 export const SESSION_TOKEN_HEADER_NAME = "x-session-token";
+
+// Query-param names whose value is a session token. The token is accepted as a
+// query param because browsers cannot set custom headers on a WebSocket
+// handshake, but that means it rides in the request URL — so it must be redacted
+// before the URL lands in any log line. We cover the header-derived name plus
+// the generic aliases a client might use.
+const REDACTED_TOKEN_QUERY_PARAM_NAMES: ReadonlySet<string> = new Set([
+  SESSION_TOKEN_HEADER_NAME,
+  "session_token",
+  "token",
+]);
+const REDACTED_TOKEN_PLACEHOLDER = "REDACTED";
+
+// Replace any session-token query-param value in a request URL with a redaction
+// placeholder, leaving the path and all other params intact. Returns the URL
+// unchanged when it carries no token param (so non-token requests log verbatim).
+export function redactSessionTokenInUrl(rawUrl: string): string {
+  const queryStart = rawUrl.indexOf("?");
+  if (queryStart === -1) {
+    return rawUrl;
+  }
+  const pathPart = rawUrl.slice(0, queryStart);
+  const params = new URLSearchParams(rawUrl.slice(queryStart + 1));
+  let redacted = false;
+  for (const name of REDACTED_TOKEN_QUERY_PARAM_NAMES) {
+    if (params.has(name)) {
+      params.set(name, REDACTED_TOKEN_PLACEHOLDER);
+      redacted = true;
+    }
+  }
+  if (!redacted) {
+    return rawUrl;
+  }
+  return `${pathPart}?${params.toString()}`;
+}
 
 // WebSocket close code used when a handshake is rejected for a bad/missing
 // token. 4401 mirrors HTTP 401 in the application-private 4000-4999 range; WS

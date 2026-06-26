@@ -9,8 +9,7 @@ import { getBtwService } from "~/services/btw/btw";
 
 // Agent-interaction endpoints (web/app.py): send message, answer question,
 // clear context, interrupt, set model, delete a message. Effects stream back
-// over /stream/ws (REQ-NFR-001). NOTE: the /btw side-question endpoint lands in
-// Task 7.4 alongside the btw service it delegates to.
+// over /stream/ws. The /btw side-question endpoint delegates to the btw service.
 
 const ErrorResponseSchema = z.object({ detail: z.string() });
 const errorResponses = {
@@ -179,7 +178,7 @@ export async function registerAgentInteractionRoutes(
     },
   );
 
-  // POST /btw — a read-only side-question (Task 7.4). Fire-and-forget: the
+  // POST /btw — a read-only side-question. Fire-and-forget: the
   // answer streams back via btw_update on /stream/ws. It never mutates the
   // agent's messages or run_state.
   typed.post(

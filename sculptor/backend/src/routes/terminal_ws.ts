@@ -51,11 +51,18 @@ function launchCommandForAgentTerminal(
   return renderTerminalCommand(launchCommand, context);
 }
 
-// Terminal WebSocket channels (web/app.py). The xterm contract (RW-API-2):
+// Terminal WebSocket channels (web/app.py). The xterm contract:
 //   server -> client: raw PTY output as BINARY frames.
 //   client -> server: BINARY frames are keystrokes (written to the PTY);
 //                     TEXT frames are JSON {type:"resize", cols, rows}.
 const TERMINAL_NOT_FOUND_CLOSE_CODE = 4404;
+
+// A terminal `:index` is a non-negative integer. Reject anything else rather
+// than letting Number.parseInt coerce it to NaN (which would collapse every
+// malformed request onto one shared NaN-keyed terminal).
+function parseTerminalIndex(index: string): number | null {
+  return /^\d+$/.test(index) ? Number.parseInt(index, 10) : null;
+}
 
 function firstHeaderValue(
   value: string | string[] | undefined,
@@ -92,6 +99,15 @@ function authorize(
 // shell exits (so the frontend renders the "[Process exited]" notice the PTY
 // emitted just before). The PTY stays alive across a disconnect, so a reopen
 // replays the buffer and shows the prior prompt.
+// node-pty's onExit registers a listener with no removal handle, and a PTY
+// outlives the individual sockets that attach to it (it stays alive across a
+// disconnect so a reconnect can replay the buffer). So the exit->close bridge is
+// installed once per PTY, with the currently-attached socket tracked separately
+// — re-registering an exit listener on every connect would leak one per
+// reconnect on a reused PTY.
+const activeSocketByPty = new WeakMap<PtyProcess, WebSocket>();
+const exitBridgedPtys = new WeakSet<PtyProcess>();
+
 function bridge(socket: WebSocket, pty: PtyProcess): void {
   const sendOutput = (data: string): void => {
     if (socket.readyState === socket.OPEN) {
@@ -102,15 +118,29 @@ function bridge(socket: WebSocket, pty: PtyProcess): void {
   if (buffered) {
     sendOutput(buffered);
   }
-  socket.on("close", unsubscribe);
-  pty.onExit(() => {
-    if (
-      socket.readyState === socket.OPEN ||
-      socket.readyState === socket.CONNECTING
-    ) {
-      socket.close();
+  activeSocketByPty.set(pty, socket);
+  socket.on("close", () => {
+    unsubscribe();
+    if (activeSocketByPty.get(pty) === socket) {
+      activeSocketByPty.delete(pty);
     }
   });
+  if (!exitBridgedPtys.has(pty)) {
+    exitBridgedPtys.add(pty);
+    // The shell exits at most once; close whichever socket is attached at that
+    // point so the frontend renders the "[Process exited]" notice the PTY
+    // emitted just before.
+    pty.onExit(() => {
+      const attached = activeSocketByPty.get(pty);
+      if (
+        attached !== undefined &&
+        (attached.readyState === attached.OPEN ||
+          attached.readyState === attached.CONNECTING)
+      ) {
+        attached.close();
+      }
+    });
+  }
   socket.on("message", (data: Buffer, isBinary: boolean) => {
     if (isBinary) {
       pty.write(data.toString("utf8"));
@@ -143,8 +173,8 @@ function workspaceWorkingDirOrNull(workspaceId: string): string | null {
   }
 }
 
-// The `.env`-injected environment for a workspace's repo (Task 7.6, per-repo
-// over global), merged into the terminal subprocess.
+// The `.env`-injected environment for a workspace's repo (per-repo over
+// global), merged into the terminal subprocess.
 function repoEnvForWorkspace(workspaceId: string): Record<string, string> {
   const workspace = getWorkspace(getOrm(), workspaceId);
   const repo =
@@ -169,6 +199,14 @@ export async function registerTerminalWsRoutes(
         workspace_id: string;
         index: string;
       };
+      const terminalIndex = parseTerminalIndex(index);
+      if (terminalIndex === null) {
+        socket.close(
+          TERMINAL_NOT_FOUND_CLOSE_CODE,
+          `Terminal ${index} not found`,
+        );
+        return;
+      }
       const cwd = workspaceWorkingDirOrNull(workspaceId);
       if (cwd === null) {
         socket.close(
@@ -178,7 +216,7 @@ export async function registerTerminalWsRoutes(
         return;
       }
       const pty = getTerminalManager().getOrCreateTerminal(
-        Number.parseInt(index, 10),
+        terminalIndex,
         { cwd, extraEnv: repoEnvForWorkspace(workspaceId) },
         workspaceId,
       );

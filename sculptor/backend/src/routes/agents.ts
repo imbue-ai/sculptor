@@ -14,8 +14,8 @@ import {
 } from "~/services/agent";
 import { getWorkspaceService, WorkspaceError } from "~/services/workspace";
 
-// Agent lifecycle endpoints (web/app.py). camelCase wire (RW-API-3). Includes
-// the legacy POST /projects/{id}/tasks create (deferred here from Task 6.3).
+// Agent lifecycle endpoints (web/app.py). camelCase wire. Includes the legacy
+// POST /projects/{id}/tasks create.
 
 
 const ErrorResponseSchema = z.object({ detail: z.string() });
@@ -228,7 +228,7 @@ export async function registerAgentRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // Legacy create-under-project (web/app.py:476). Uses an existing workspace or
+  // Legacy create-under-project (web/app.py). Uses an existing workspace or
   // creates an implicit IN_PLACE one, then creates the agent.
   typed.post(
     "/api/v1/projects/:project_id/tasks",
@@ -288,7 +288,7 @@ export async function registerAgentRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // PATCH an agent's title (rename) / read state. The codegen contract for these
-  // operations is the snapshot overlay (Task 9.4); the agent_status event
+  // operations is the snapshot overlay; the agent_status event
   // refreshes the projection. Each returns the updated CodingAgentTaskView.
   const refreshedView = (
     reply: FastifyReply,

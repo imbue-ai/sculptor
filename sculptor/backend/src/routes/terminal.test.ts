@@ -123,7 +123,7 @@ describe("terminal routes", () => {
     expect(res.statusCode).toBe(200);
   });
 
-  it("lists terminal-agent registrations (empty until Task 7.5)", async () => {
+  it("lists terminal-agent registrations (empty when none are installed)", async () => {
     const res = await app.inject({
       method: "GET",
       url: "/api/v1/terminal-agent-registrations",

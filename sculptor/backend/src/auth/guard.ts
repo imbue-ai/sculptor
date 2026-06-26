@@ -5,11 +5,36 @@ import {
   hasValidToken,
   isProtectedPath,
   parseCookies,
+  redactSessionTokenInUrl,
   SESSION_TOKEN_HEADER_NAME,
 } from "~/auth/session_token";
 
 function firstHeaderValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
+}
+
+// Request log serializer mirroring Fastify's built-in `req` serializer, but with
+// the session token stripped from the logged URL. Fastify's auto request logging
+// records `req.url` verbatim, and that URL can carry the token as a query param
+// (browsers cannot set custom headers on a WebSocket handshake), so without this
+// the raw token would land in the app logs. Installed on the logger instance so
+// it overrides the default serializer for every request log line.
+export function redactingRequestLogSerializer(request: FastifyRequest): {
+  method: string;
+  url: string;
+  version: string | undefined;
+  host: string | undefined;
+  remoteAddress: string | undefined;
+  remotePort: number | undefined;
+} {
+  return {
+    method: request.method,
+    url: redactSessionTokenInUrl(request.url),
+    version: firstHeaderValue(request.headers["accept-version"]),
+    host: request.host,
+    remoteAddress: request.ip,
+    remotePort: request.socket?.remotePort,
+  };
 }
 
 // Global onRequest guard enforcing the session token on protected HTTP routes.

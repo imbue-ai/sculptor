@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getDependencyService, type Dependency } from "~/services/dependencies";
 
 // Dependency-management endpoints (web/app.py): status, managed install, and the
-// two-step Claude device-code auth. Wire shapes are camelCase (RW-API-3); the
+// two-step Claude device-code auth. Wire shapes are camelCase; the
 // service already produces them.
 
 const VersionRangeInfoSchema = z.object({

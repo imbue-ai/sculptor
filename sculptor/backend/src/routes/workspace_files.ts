@@ -22,9 +22,9 @@ import {
 } from "~/services/workspace";
 
 // Read-side workspace endpoints (web/app.py): diff, commits, commit-diff,
-// read-file, read-file-at-ref, files. They surface the git layer (Task 3.3)
-// over HTTP. The git layer returns snake_case internal shapes; the wire is
-// camelCase (RW-API-3), converted here.
+// read-file, read-file-at-ref, files. They surface the git layer over HTTP. The
+// git layer returns snake_case internal shapes; the wire is camelCase, converted
+// here.
 
 const DiffArtifactSchema = z.object({
   objectType: z.literal("DiffArtifact"),

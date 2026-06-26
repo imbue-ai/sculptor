@@ -20,8 +20,7 @@ const TERMINAL_SIGNAL_STATUS_BY_EVENT: Record<
 
 // Terminal HTTP endpoints (web/app.py): automated input to a terminal agent,
 // the terminal-agent signal event API, terminal close, and the registrations
-// listing. NOTE: terminal-agent-registrations reads the registry built in Task
-// 7.5; until then it reports an empty list.
+// listing (terminal-agent-registrations reads the on-disk registry).
 
 const ErrorResponseSchema = z.object({ detail: z.string() });
 const errorResponses = { 404: ErrorResponseSchema };
@@ -65,8 +64,8 @@ export async function registerTerminalHttpRoutes(
   );
 
   // The local HTTP event API terminal-agent integrations post to. The rich
-  // status/files-changed handling lands with the terminal-agent service (Task
-  // 7.5); here we persist the session id (for resume) and accept the rest.
+  // status/files-changed handling lives in the terminal-agent service; here we
+  // persist the session id (for resume) and accept the rest.
   typed.post(
     "/api/v1/agents/:agent_id/signal",
     {
@@ -109,10 +108,15 @@ export async function registerTerminalHttpRoutes(
     {
       schema: {
         params: z.object({ workspace_id: z.string(), index: z.string() }),
-        response: { 200: z.null() },
+        response: { 200: z.null(), ...errorResponses },
       },
     },
     async (request, reply) => {
+      // Reject a non-numeric index rather than letting Number.parseInt coerce it
+      // to NaN (which would target a single shared NaN-keyed terminal).
+      if (!/^\d+$/.test(request.params.index)) {
+        return notFound(reply, "Terminal not found");
+      }
       getTerminalManager().closeTerminal(
         Number.parseInt(request.params.index, 10),
       );
@@ -140,7 +144,7 @@ export async function registerTerminalHttpRoutes(
       },
     },
     async () => {
-      // Re-read on demand (REQ-INT-030) — no process-lifetime cache.
+      // Re-read on demand — no process-lifetime cache.
       return { registrations: listRegistrations() };
     },
   );

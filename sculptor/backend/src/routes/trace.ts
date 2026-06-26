@@ -6,7 +6,7 @@ import { TelemetryEvent } from "~/telemetry/events";
 import { capture } from "~/telemetry/posthog";
 
 // POST /api/v1/trace/batch (web/app.py). Accepts the frontend's trace batch and
-// forwards it through the consent gate + masking (Task 7.7). capture() no-ops
+// forwards it through the consent gate + masking. capture() no-ops
 // unless analytics consent is granted and a backend token is configured, so a
 // fresh / consent-declined instance emits nothing.
 

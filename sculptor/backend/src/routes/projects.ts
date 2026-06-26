@@ -16,8 +16,8 @@ import {
 
 // Project (internally `repo`) endpoints (web/app.py). The wire keeps
 // `projects`/`project_id`; the service owns the repo->project mapping.
-// NOTE: POST /api/v1/projects/{id}/tasks (legacy create-agent) lands in Task 6.7
-// alongside the agent-creation path it reuses.
+// NOTE: POST /api/v1/projects/{id}/tasks (legacy create-agent) lives alongside
+// the agent-creation path it reuses.
 
 const ProjectWireSchema = z.object({
   createdAt: z.string(),
@@ -183,7 +183,7 @@ export async function registerProjectRoutes(
       },
     },
     async (request, reply) => {
-      // Tri-state (web/app.py L2861): null resets to default; "" (or blank,
+      // Tri-state (web/app.py): null resets to default; "" (or blank,
       // which strips to "") disables; a value is the custom command. Note ""
       // is stored AS "" — distinct from null — so resolve() can skip it.
       const raw = request.body.workspaceSetupCommand;

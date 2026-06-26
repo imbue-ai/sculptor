@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 
 import { buildApp } from "~/app";
+import { redactingRequestLogSerializer } from "~/auth/guard";
 import { ensureSculptorFolderReady } from "~/config/bootstrap";
 import { resolveBindHost, resolvePort } from "~/config/port";
 import { closeDatabase, getDatabase } from "~/db/connection";
@@ -13,6 +14,7 @@ import { getProjectService } from "~/services/project";
 import { getPrPollingService } from "~/services/pr_polling/service";
 import { getRepoPollingManager } from "~/services/repo_polling/manager";
 import { installBundledRegistrations } from "~/services/terminal_agent_registry/bundled";
+import { shutdownTelemetry } from "~/telemetry/posthog";
 
 // The integration harness scrapes stdout for this exact string to decide the
 // backend is ready (READY_MESSAGE_V1 in sculptor/sculptor/testing/server_utils.py).
@@ -43,11 +45,13 @@ function installShutdownHandlers(app: FastifyInstance): void {
   // still bounded.
   const shutdown = (): void => {
     void app.close().then(
-      () => {
+      async () => {
+        await shutdownTelemetry();
         closeDatabase();
         process.exit(0);
       },
-      () => {
+      async () => {
+        await shutdownTelemetry();
         closeDatabase();
         process.exit(1);
       },
@@ -74,6 +78,12 @@ export async function main(
   // configure logging so all later startup logs are captured, then open the DB.
   ensureSculptorFolderReady();
   const logger = setupLogging();
+  // Redact the session token from Fastify's auto-logged request URLs (it can
+  // ride in a WebSocket query param). Fastify merges a logger instance's
+  // serializers over its defaults, so this overrides the built-in `req` one.
+  (logger as unknown as { serializers?: Record<string, unknown> }).serializers = {
+    req: redactingRequestLogSerializer,
+  };
   const db = getDatabase();
   runMigrations(db);
 

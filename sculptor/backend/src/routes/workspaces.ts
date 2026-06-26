@@ -12,7 +12,7 @@ import {
   WorkspaceError,
 } from "~/services/workspace";
 
-// Workspace lifecycle endpoints (web/app.py). camelCase wire shapes (RW-API-3).
+// Workspace lifecycle endpoints (web/app.py). camelCase wire shapes.
 
 const SetupSnapshotSchema = z.object({
   status: z.enum([
@@ -233,8 +233,8 @@ export async function registerWorkspaceRoutes(
   );
 
   // PATCH a workspace's mutable fields (description / target branch / open
-  // state). The codegen contract for this operation is the snapshot overlay
-  // (Task 9.4); the data_model_change refreshes the projection.
+  // state). The codegen contract for this operation is the snapshot overlay;
+  // the data_model_change refreshes the projection.
   typed.patch(
     "/api/v1/workspaces/:workspace_id",
     {
