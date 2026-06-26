@@ -38,6 +38,18 @@ export const pluginWorkspaceWidgetsAtom = atom<
 >([]);
 
 /**
+ * Full-page home views contributed by plugins via `registerHomeView`. The
+ * homepage shows a switcher (built-in recent-workspaces view plus each of
+ * these) whenever this list is non-empty, and renders the selected one in place
+ * of the built-in list. Each entry's component is already wrapped by the loader
+ * in an error boundary and the plugin's PluginContext (no WorkspacePluginContext
+ * — the homepage is not workspace-scoped).
+ */
+export const pluginHomeViewsAtom = atom<
+  ReadonlyArray<{ id: string; title: string; icon?: ComponentType; component: ComponentType }>
+>([]);
+
+/**
  * User-added plugin sources, persisted to localStorage. A source is a URL or
  * directory that contains a `manifest.json` (e.g. `http://localhost:5174/my-plugin`
  * or `/plugins/my-plugin`). Built-in sources are loaded separately and are not
