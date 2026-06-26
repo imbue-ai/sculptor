@@ -52,8 +52,8 @@ Screenshot: `0016_get.png`
 ## Surface D — AgentSheet (`AgentSheet.tsx` / `.module.scss`)
 Screenshot: `0043_get.png` (bottom sheet, opened from the agent switcher pill — this is the B3 "pager" replacement; it works)
 
-- **D1 (T2)** Sheet barely reads as a layer over the chat — even with the `--black-a9` scrim, over near-black chat the dim is subtle and the sheet surface (`--mobile-surface`) is only a hair lighter than the page; the 1px top border does all the separation. Add a sheet **shadow** (`--mobile-shadow`) like the drawer fix; consider a slightly lifted surface.
-- **D2 (T2)** "New agent" row sits flush against the screen's bottom edge — bottom padding/safe-area reads as ~0, cramping the touch target. Add bottom inset.
+- **D1 (T2) ~PARTIAL** — added `box-shadow: var(--mobile-shadow)` to the sheet (light-theme elevation + consistency with the drawer). Validation showed the shadow is invisible in DARK theme (dark shadow over near-black). Dark-theme top-edge separation is still subtle → see **X2** (cross-cutting).
+- **D2 (T2) — likely harness-only** — the "New agent" row looked flush at the bottom, but `.sheet` already has `padding-bottom: calc(--space-3 + env(safe-area-inset-bottom))`; the harness reports 0 safe-area, so on a real phone the home-indicator inset adds the breathing room. Deferred (re-check on device).
 - **D3 (T3)** Sheet title ("Agents in …") is `--mobile-ink-3` at `--font-size-1` — same dim as the "1h ago" subline, so it reads as de-emphasized rather than a heading.
 - **D4 (T3)** Large empty gap between the single agent row and the separator/New-agent block (under-filled with one agent).
 - **D5 (T3)** Status dot small + far-left, reads as detached from the agent name.
@@ -91,6 +91,7 @@ Screenshot: `0052_get.png`. Header/back, nav-as-dropdown collapse, and theme seg
 ## Cross-cutting
 
 - **X1** Mobile components (except `MobileNewWorkspace`) lack `data-testid`/`ElementIds` — blocks the e2e suite AND made this QA harder (had to click by coordinates). Adding them is a prerequisite for Phase C automated verification.
+- **X2 (elevation in dark theme)** Drop-shadows are invisible over near-black, so mobile overlays (drawer, sheet) don't separate from a dimmed dark chat via shadow alone. The drawer is OK now because the strengthened scrim dims its background; the bottom sheet's top edge over the dimmed chat is still subtle. Wants a holistic treatment for all mobile overlays in dark theme (e.g. a brighter top hairline and/or a lifted surface), not per-surface hacks. Lower priority; needs a small design call.
 
 ## Not yet captured (follow-up pass)
 Home reflow, Settings reflow, the `+` / settings dropdown menus open, agent switcher/sheet,
