@@ -172,11 +172,32 @@ const TerminalPanelContent = ({ workspaceID }: { workspaceID: string }): ReactEl
   }, []);
 
   // Per-tab WebSocket connection state, so the tab bar can flag a terminal whose
-  // connection dropped or won't recover. Keyed by tab id.
+  // connection dropped or won't recover. Keyed by tab id. Only unhealthy states
+  // are stored — a connected/connecting terminal needs no indicator — so the map
+  // stays bounded and never holds stale entries for recovered or closed tabs.
   const [connectionStatuses, setConnectionStatuses] = useState<Record<string, TerminalConnectionStatus>>({});
 
   const handleConnectionStatusChange = useCallback((tabId: string, status: TerminalConnectionStatus): void => {
-    setConnectionStatuses((prev) => (prev[tabId] === status ? prev : { ...prev, [tabId]: status }));
+    setConnectionStatuses((prev) => {
+      const isHealthy = status === "connected" || status === "connecting";
+      if (isHealthy) {
+        if (!(tabId in prev)) return prev;
+        const next = { ...prev };
+        delete next[tabId];
+        return next;
+      }
+      if (prev[tabId] === status) return prev;
+      return { ...prev, [tabId]: status };
+    });
+  }, []);
+
+  const forgetConnectionStatus = useCallback((tabId: string): void => {
+    setConnectionStatuses((prev) => {
+      if (!(tabId in prev)) return prev;
+      const next = { ...prev };
+      delete next[tabId];
+      return next;
+    });
   }, []);
 
   const handleActivate = useCallback(
@@ -221,6 +242,7 @@ const TerminalPanelContent = ({ workspaceID }: { workspaceID: string }): ReactEl
 
   const handleCloseTerminal = useCallback(
     (tabId: string): void => {
+      forgetConnectionStatus(tabId);
       setTabs((prev) => {
         const closed = prev.find((t) => t.id === tabId);
         const remaining = prev.filter((t) => t.id !== tabId);
@@ -252,7 +274,7 @@ const TerminalPanelContent = ({ workspaceID }: { workspaceID: string }): ReactEl
         return remaining;
       });
     },
-    [activeTabId, createFreshTab, setTabs, setActiveTabId, workspaceID],
+    [activeTabId, createFreshTab, forgetConnectionStatus, setTabs, setActiveTabId, workspaceID],
   );
 
   const handleCloseOthers = useCallback(

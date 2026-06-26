@@ -90,8 +90,12 @@ class TerminalSocketCapture:
         """How many terminal WebSockets have been opened so far (incl. reconnects)."""
         return self._page.evaluate("(window.__terminalSockets || []).length")
 
-    def wait_for_additional_connection(self, *, since: int, timeout_ms: int = 15_000) -> None:
-        """Wait until more than ``since`` terminal sockets have been opened (a reconnect)."""
+    def wait_for_additional_connection(self, *, since: int, timeout_ms: int = 30_000) -> None:
+        """Wait until more than ``since`` terminal sockets have been opened (a reconnect).
+
+        Defaults to the harness's standard 30s; reconnect waits ~2s plus the
+        backend's buffer replay, which can run longer under CI load.
+        """
         self._page.wait_for_function(
             "expected => (window.__terminalSockets || []).length > expected",
             arg=since,

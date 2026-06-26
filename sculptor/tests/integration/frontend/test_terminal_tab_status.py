@@ -58,7 +58,8 @@ def test_terminal_tab_shows_reconnecting_then_recovers(
 
     # The backend keeps the PTY alive and replays its buffer on reconnect, so the
     # indicator clears (status back to connected) and the terminal is usable again.
-    expect(indicator).to_have_count(0, timeout=15_000)
+    # Allow the harness's standard 30s — reconnect + replay can run long under CI load.
+    expect(indicator).to_have_count(0, timeout=30_000)
     run_command_in_active_terminal(page, 'm=TABSTAT; echo "${m}_AFTER_OK"')
     wait_for_xterm_substring(page, "TABSTAT_AFTER_OK")
 

@@ -538,6 +538,10 @@ export const useTerminal = ({
     let isCleanedUp = false;
 
     const updateConnectionStatus = (status: TerminalConnectionStatus): void => {
+      // Guard centrally so a late event (e.g. an onopen that fires after this
+      // effect was torn down by unmount / terminalPath change) can't push state
+      // or fire the callback post-cleanup.
+      if (isCleanedUp) return;
       setConnectionStatus(status);
       onConnectionStatusChangeRef.current?.(status);
     };
