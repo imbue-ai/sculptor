@@ -65,22 +65,26 @@ def test_in_flight_send_shows_spinner_locks_editor_and_blocks_double_send(
         expect(chat_input).to_have_text("second message")
 
         # Try to send again while the first send is still in flight. The button
-        # is disabled (can't be clicked) and the keyboard path is guarded, so no
-        # second POST is issued.
+        # is disabled (can't be clicked) and the keyboard path is guarded. A
+        # broken guard would dispatch a second POST here; the count is checked
+        # below once the editor-clear barrier guarantees the network has settled.
         chat_input.click()
         page.keyboard.press("Enter")
-        page.wait_for_timeout(300)
+
+        # Release the held send and wait on a positive condition rather than a
+        # fixed sleep: the editor clears (and re-enables) and the spinner lifts
+        # only after the single send's success response. A stray second request
+        # is dispatched synchronously at the Enter above, so by the time the
+        # first POST has round-tripped it would already have hit the route
+        # counter — making this a reliable happens-after barrier for the assert.
+        state["release"] = True
+        expect(chat_input).to_have_text("")
+        expect(chat_input).to_have_attribute("contenteditable", "true")
+        expect(send_button).not_to_have_attribute("data-loading", "true")
+        # Exactly one message ever hit the network: the re-entrancy guard held.
         assert state["post_count"] == 1, f"expected a single send, saw {state['post_count']}"
     finally:
+        # Release in case an assertion above failed while the send was still held,
+        # then tear down the route.
         state["release"] = True
-        # Let the held request continue before tearing down the route.
-        page.wait_for_timeout(100)
         page.unroute(_SEND_MESSAGE_PATTERN, hold_send)
-
-    # Once the send resolves, the in-flight state lifts: the editor clears and
-    # becomes editable again, and the spinner is gone.
-    expect(chat_input).to_have_text("")
-    expect(chat_input).to_have_attribute("contenteditable", "true")
-    expect(send_button).not_to_have_attribute("data-loading", "true")
-    # Exactly one message ever hit the network.
-    assert state["post_count"] == 1, f"expected a single send, saw {state['post_count']}"
