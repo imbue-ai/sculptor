@@ -245,7 +245,7 @@ def test_notify_first_branch_info_calls_on_workspace_ready() -> None:
     data: list[StreamingUpdateSourceTypes] = [
         WorkspaceBranchInfo(current_branch="feat-1", workspace_id=workspace_id),
     ]
-    _notify_pr_polling_service(svc, data, last_branch)
+    _notify_pr_polling_service(svc, data, last_branch, lambda _workspace_id: True)
 
     svc.on_workspace_ready.assert_called_once_with(workspace_id)
     svc.on_branch_changed.assert_not_called()
@@ -260,7 +260,7 @@ def test_notify_same_branch_does_not_trigger_anything() -> None:
     data: list[StreamingUpdateSourceTypes] = [
         WorkspaceBranchInfo(current_branch="feat-1", workspace_id=workspace_id),
     ]
-    _notify_pr_polling_service(svc, data, last_branch)
+    _notify_pr_polling_service(svc, data, last_branch, lambda _workspace_id: True)
 
     svc.on_workspace_ready.assert_not_called()
     svc.on_branch_changed.assert_not_called()
@@ -274,7 +274,7 @@ def test_notify_branch_change_calls_on_branch_changed() -> None:
     data: list[StreamingUpdateSourceTypes] = [
         WorkspaceBranchInfo(current_branch="feat-2", workspace_id=workspace_id),
     ]
-    _notify_pr_polling_service(svc, data, last_branch)
+    _notify_pr_polling_service(svc, data, last_branch, lambda _workspace_id: True)
 
     svc.on_branch_changed.assert_called_once_with(workspace_id)
     svc.on_workspace_ready.assert_not_called()
@@ -289,7 +289,26 @@ def test_notify_none_service_is_noop() -> None:
     ]
 
     # Should not raise
-    _notify_pr_polling_service(None, data, last_branch)
+    _notify_pr_polling_service(None, data, last_branch, lambda _workspace_id: True)
+
+
+def test_notify_skips_out_of_scope_branch_info() -> None:
+    """A branch info for a workspace outside this stream's scope must not drive
+    PR polling — the process-global scanner fans branch infos out for every
+    workspace, but only the workspace's own in-scope stream notifies for it."""
+    svc = MagicMock(spec=PrPollingService)
+    in_scope_id = WorkspaceID()
+    out_of_scope_id = WorkspaceID()
+    last_branch: dict[WorkspaceID, str] = {}
+
+    data: list[StreamingUpdateSourceTypes] = [
+        WorkspaceBranchInfo(current_branch="feat-1", workspace_id=out_of_scope_id),
+    ]
+    _notify_pr_polling_service(svc, data, last_branch, lambda workspace_id: workspace_id == in_scope_id)
+
+    svc.on_workspace_ready.assert_not_called()
+    svc.on_branch_changed.assert_not_called()
+    assert out_of_scope_id not in last_branch
 
 
 # ---------------------------------------------------------------------------
