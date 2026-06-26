@@ -56,16 +56,40 @@ machines don't carry):
 
 ### Locally
 
-Requires Node, a JDK (17+), and the Android SDK.
+Needs a JDK (21) and the Android SDK (cmdline-tools + platform 35 +
+build-tools 35). On an Apple-silicon Mac with Homebrew, no sudo required:
 
 ```bash
+# One-time toolchain install
+brew install openjdk@21                          # keg-only; no sudo
+brew install --cask android-commandlinetools     # provides sdkmanager
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21
+export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
+yes | sdkmanager --licenses
+sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+echo "sdk.dir=$ANDROID_HOME" > android/local.properties   # gitignored
+
+# Build (JAVA_HOME must be set so Gradle finds the keg-only JDK)
 cd mobile
 npm ci
-npm run build:apk
-# -> android/app/build/outputs/apk/debug/app-debug.apk
+JAVA_HOME=/opt/homebrew/opt/openjdk@21 npm run build:apk
+# -> android/app/build/outputs/apk/debug/app-debug.apk  (~4 MB, debug-signed)
 ```
 
-Or open the native project in Android Studio: `npm run open:android`.
+Install on a device with `adb install -r <path>` (or just open the APK on the
+phone with "install from unknown sources" enabled). Or open the native project
+in Android Studio, which supplies its own JDK/SDK: `npm run open:android`.
+
+### Run in an emulator
+
+On Apple silicon the arm64 system image runs natively via Hypervisor.framework.
+One-time: `sdkmanager "emulator" "system-images;android-35;google_apis;arm64-v8a"`.
+
+`scripts/run-emulator-headless.sh [out.png]` boots a headless emulator (creating
+the AVD on first run), installs the freshly built APK, launches the app, and
+saves a screenshot — handy for verifying the shell renders without a device or a
+display. It reuses an already-running emulator and leaves it up between runs
+(`adb emu kill` to stop it).
 
 ## Open questions / not yet done
 
