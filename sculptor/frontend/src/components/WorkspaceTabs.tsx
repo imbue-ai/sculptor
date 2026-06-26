@@ -70,8 +70,14 @@ export const WorkspaceTabs = (): ReactElement => {
   const keybindingsMap = useAtomValue(keybindingsMapAtom);
   const openNewWorkspaceTabIds = useAtomValue(openNewWorkspaceTabIdsAtom);
   const openNewWorkspaceTab = useSetAtom(openNewWorkspaceTabAtom);
-  const { isAddWorkspaceRoute, addWorkspaceDraftId, isHomeRoute, isSettingsRoute, isComponentGalleryRoute } =
-    useImbueLocation();
+  const {
+    isAddWorkspaceRoute,
+    addWorkspaceDraftId,
+    isHomeRoute,
+    isSettingsRoute,
+    isComponentGalleryRoute,
+    agentId: focusedAgentId,
+  } = useImbueLocation();
 
   const { handleClose, handleCloseOthers, handleCloseAll, navigateToNextTab } = useWorkspaceTabActions();
 
@@ -104,11 +110,11 @@ export const WorkspaceTabs = (): ReactElement => {
 
     for (const workspace of workspaces ?? []) {
       const workspaceTasks = activeTasks.filter((task) => task.workspaceId === workspace.objectId);
-      statusMap.set(workspace.objectId, computeWorkspaceDotStatus(workspaceTasks));
+      statusMap.set(workspace.objectId, computeWorkspaceDotStatus(workspaceTasks, focusedAgentId));
     }
 
     return statusMap;
-  }, [workspaces, tasks]);
+  }, [workspaces, tasks, focusedAgentId]);
 
   const handleRenameCommit = useCallback(
     async (workspaceId: string, newName: string): Promise<void> => {
