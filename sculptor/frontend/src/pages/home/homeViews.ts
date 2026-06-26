@@ -40,7 +40,13 @@ export const homeViewOptionsAtom = atom<ReadonlyArray<HomeViewOption>>((get) => 
   const pluginViews = get(pluginHomeViewsAtom);
   return [
     { id: BUILTIN_HOME_VIEW_ID, title: BUILTIN_HOME_VIEW_TITLE },
-    ...pluginViews.map((view) => ({ id: view.id, title: view.title, icon: view.icon })),
+    // Drop any plugin view that claims the reserved built-in id, so option ids
+    // stay unique — a duplicate would mean duplicate React keys and duplicate
+    // SegmentedControl values, which breaks selection. Registration also rejects
+    // this id (see registerHomeView), so this is a defensive second guard.
+    ...pluginViews
+      .filter((view) => view.id !== BUILTIN_HOME_VIEW_ID)
+      .map((view) => ({ id: view.id, title: view.title, icon: view.icon })),
   ];
 });
 

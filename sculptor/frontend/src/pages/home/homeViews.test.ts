@@ -63,4 +63,19 @@ describe("home view atoms", () => {
     store.set(pluginHomeViewsAtom, []);
     expect(store.get(effectiveHomeViewIdAtom)).toBe(BUILTIN_HOME_VIEW_ID);
   });
+
+  it("keeps option ids unique when a plugin view claims the reserved built-in id", () => {
+    // registerHomeView rejects this id, but guard the options atom too: a stray
+    // entry must not produce duplicate ids (duplicate React keys / segment values).
+    const store = createStore();
+    store.set(pluginHomeViewsAtom, [
+      { id: BUILTIN_HOME_VIEW_ID, title: "Hijacked", component: TasksView },
+      { id: "tasks", title: "Tasks board", component: TasksView },
+    ]);
+    const ids = store.get(homeViewOptionsAtom).map((option) => option.id);
+    expect(ids).toEqual([BUILTIN_HOME_VIEW_ID, "tasks"]);
+    // The built-in title wins the reserved id, not the plugin's "Hijacked".
+    expect(store.get(homeViewOptionsAtom)[0].title).toBe("Recent workspaces");
+    expect(store.get(effectiveHomeViewIdAtom)).toBe(BUILTIN_HOME_VIEW_ID);
+  });
 });
