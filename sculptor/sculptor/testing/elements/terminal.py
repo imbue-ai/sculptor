@@ -28,6 +28,15 @@ def get_terminal_textarea(page: Page) -> Locator:
     return page.locator(".xterm-helper-textarea")
 
 
+def get_terminal_tab_status_indicator(page: Page) -> Locator:
+    """The connection-state dot shown on a terminal tab.
+
+    Present only when a terminal's connection has an issue; the ``data-status``
+    attribute is ``reconnecting`` (transient) or ``disconnected`` (unrecoverable).
+    """
+    return page.get_by_test_id(ElementIDs.TERMINAL_TAB_STATUS_INDICATOR)
+
+
 def run_command_in_active_terminal(page: Page, command: str) -> None:
     """Type ``command`` into the currently-active xterm and press Enter.
 

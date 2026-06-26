@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { ElementIds } from "~/api";
 import { BlandCircle, PulsingCircle } from "~/components/PulsingCircle.tsx";
 
 import styles from "./TerminalConnectionIndicator.module.scss";
@@ -13,7 +14,12 @@ import type { TerminalConnectionStatus } from "./useTerminal";
 export const getTabStatusIcon = (status: TerminalConnectionStatus | undefined): ReactNode => {
   if (status === "reconnecting") {
     return (
-      <span className={styles.statusReconnecting} title="Reconnecting…">
+      <span
+        className={styles.statusReconnecting}
+        title="Reconnecting…"
+        data-testid={ElementIds.TERMINAL_TAB_STATUS_INDICATOR}
+        data-status={status}
+      >
         <PulsingCircle size={7} />
       </span>
     );
@@ -21,7 +27,12 @@ export const getTabStatusIcon = (status: TerminalConnectionStatus | undefined): 
 
   if (status === "disconnected") {
     return (
-      <span className={styles.statusDisconnected} title="Disconnected">
+      <span
+        className={styles.statusDisconnected}
+        title="Disconnected"
+        data-testid={ElementIds.TERMINAL_TAB_STATUS_INDICATOR}
+        data-status={status}
+      >
         <BlandCircle size={7} />
       </span>
     );
