@@ -100,9 +100,12 @@ display. It reuses an already-running emulator and leaves it up between runs
   option is a native menu item so you can switch servers from inside the app.
 - **iOS.** Not scaffolded yet. `npx cap add ios` plus a signing identity; the
   same runtime-URL approach applies.
-- **Native polish.** No plugins yet. Likely wanted before this feels native:
-  `StatusBar` + safe-area insets, `Keyboard` (viewport resize), and routing
-  `target="_blank"` links to the system browser via the `Browser` plugin.
+- **Native polish.** Edge-to-edge / safe areas are handled (the
+  `@capawesome/capacitor-android-edge-to-edge-support` plugin insets the WebView
+  so content stays out from under the Android 15 system bars; tune the bar tint
+  via `EdgeToEdge.backgroundColor` in `capacitor.config.ts`). Still wanted:
+  `Keyboard` (viewport resize) and routing `target="_blank"` links to the system
+  browser via the `Browser` plugin.
 - **Push notifications.** The highest-value mobile-native add ("your agent
   finished / needs input" while backgrounded) — needs a backend signal and is a
   separate effort, not part of this shell.

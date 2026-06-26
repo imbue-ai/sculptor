@@ -14,6 +14,14 @@ import type { CapacitorConfig } from "@capacitor/cli"
 // Loading the live UI over its own origin keeps every API/WebSocket call
 // same-origin, so the backend's localhost-only CORS allow-list never applies,
 // and Sculptor's web-mode session cookie self-bootstraps from the SPA as usual.
+// Android 15 (targetSdk 35) forces edge-to-edge, so the WebView would draw
+// under the status and navigation bars. We load a remote UI we can't add
+// `env(safe-area-inset-*)` CSS to, so the @capawesome edge-to-edge-support
+// plugin handles it natively: it applies the system-bar insets directly to the
+// WebView (content sits between the bars, no remote CSS needed) and paints the
+// bar areas with `backgroundColor`. Preferred over the windowOptOutEdgeToEdge-
+// Enforcement theme flag, which Android 16 removes. Tune backgroundColor to
+// match the served UI's chrome; this dark value matches Sculptor's dark theme.
 const config: CapacitorConfig = {
   appId: "com.imbue.sculptor",
   appName: "Sculptor",
@@ -21,6 +29,11 @@ const config: CapacitorConfig = {
   server: {
     androidScheme: "https",
     allowNavigation: ["*"],
+  },
+  plugins: {
+    EdgeToEdge: {
+      backgroundColor: "#0b0b0d",
+    },
   },
 }
 
