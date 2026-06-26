@@ -51,3 +51,16 @@ cpu_millicores = 4000
 # Claude+gh auth survive rebuilds. Redeploy with `oh app remove <app> --keep-data`
 # to preserve it across the cutover (a plain remove WIPES it).
 app_data = true
+
+# Declare that this app consumes the OpenHost "secrets" v2 service, so the
+# `secrets` shortname resolves and service calls route to the secrets app (rather
+# than 404 `shortname_not_declared`). Deliberately minimal:
+#   - NO grants here — they're managed live via the router's permission API, per
+#     (consumer, service); nothing is baked into git.
+#   - NO runtime fetch yet — how SCULPTOR_*-prefixed secrets actually get loaded
+#     into the app is intentionally deferred (separate, stacked decision).
+# This only puts the declaration in place so it's out of the way.
+[[services.v2.consumes]]
+service   = "github.com/imbue-openhost/openhost/services/secrets"
+shortname = "secrets"
+version   = ">=0.1.0"
