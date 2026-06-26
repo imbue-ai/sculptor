@@ -146,7 +146,10 @@ and flags the targets it does not currently define.
   (`.../diffPanel/LargeDiffGate.tsx`). Binary files and renames/deletes show an explanatory banner
   instead of a diff (`SPEC.md` §7.5).
 - **REQ-NFR-051 (SHOULD).** Max single file/image upload is **20 MB**
-  (`sculptor/frontend/src/components/FileUploadUtils.ts`).
+  (`sculptor/frontend/src/components/FileUploadUtils.ts`). Outside the desktop app (web / OpenHost),
+  attachment uploads and previews are routed **through the backend over HTTP** rather than a desktop
+  IPC handler, so image attachment works in web mode too; an HTTP-uploaded attachment is cleaned up
+  when its task is deleted (`sculptor/sculptor/agents/attachments.py`).
 - **REQ-NFR-052 [Unspecified].** Max **attachment count** per message is not enforced. → OPEN-4 (§7).
 - **REQ-NFR-053 (MAY).** Default file-browser split ratio is **50/50**; split-vs-unified, wrapping,
   and tab-close behavior are user-configurable (`sculptor/sculptor/config/user_config.py`; `SPEC.md` §7.10).
@@ -218,9 +221,10 @@ packaging Sculptor):
 - **REQ-COMPAT-022 (SHOULD).** The **Pi** harness (experimental agent) pins **0.78.0**; platforms
   darwin-arm64, darwin-x64, linux-x64, with per-platform sha256 checksums
   (`sculptor/sculptor/services/managed_tools.py`). A version mismatch fails clearly (REQ-INT-022).
-- **REQ-COMPAT-023 (MUST, conditional).** The PR/MR surface requires the matching provider CLI —
-  **`gh`** (GitHub) or **`glab`** (GitLab) — present and authenticated; absence/non-auth degrades to a
-  documented error state, never a crash (§5.1, `SPEC.md` §7.6).
+- **REQ-COMPAT-023 (MUST, conditional).** The PR surface requires **`gh`** (GitHub CLI) present and
+  authenticated; absence/non-auth degrades to a documented error state, never a crash (§5.1,
+  `SPEC.md` §7.6). `gh` is also the optional credential used for in-app GitHub repo cloning and the
+  onboarding GitHub sign-in (REQ-INT-004; `SPEC.md` §7.1) — optional, not required to launch Sculptor.
 
 ---
 
@@ -259,6 +263,10 @@ makes durability and upgrade-survival guarantees (§9.5) that rest directly on t
   `sculptor/sculptor/database/alembic/version_tests/` (seed → migrate → verify), enforced by
   `test_every_migration_has_a_test_fixture()` (`sculptor/sculptor/database/README.md`) — the process guarantee
   that lets the schema evolve safely.
+- **REQ-DATA-014 (SHOULD).** The **CI babysitter pause** choice is stored per workspace
+  (`Workspace.ci_babysitter_paused`) and **survives an app restart** — a paused babysitter stays paused
+  on relaunch rather than silently resuming (`sculptor/sculptor/services/ci_babysitter_service/coordinator.py`;
+  `SPEC.md` §7.6).
 - **REQ-DATA-013 (MUST).** Versioned JSON columns (e.g. `Task.task_inputs`, `SavedAgentMessage.message`,
   which store unions of agent-message/input variants) are guarded by a **frozen Pydantic-schema
   snapshot** (`alembic/frozen_pydantic_schemas.json`); a model change that isn't reflected fails a test
@@ -268,11 +276,11 @@ makes durability and upgrade-survival guarantees (§9.5) that rest directly on t
 
 - **REQ-DATA-020 [Unspecified].** The product does not state a **back-compat horizon** — how far back
   older data folders / DB versions are guaranteed readable. → OPEN-7 (§7).
-- **REQ-DATA-021 (SHOULD).** A **data-folder migration helper** (`sculptor_migrate`, i.e.
-  `scripts/migrate_sculptor_folder.py`) relocates/restructures the folder (legacy `~/.sculptor_data`
-  → `~/.sculptor`): it is **idempotent** and **resumable** (renames to `.migrating`), backs up the DB
-  via SQLite native backup, rewrites embedded workspace paths (`workspace.environment_id` / `_latest`),
-  migrates Claude session folders to match new workspace paths, and writes `.format_version`.
+- **REQ-DATA-021 [Unspecified].** There is **no automated relocation** of a legacy data folder. A
+  user on an old layout (e.g. `~/.sculptor_data`) is **not** auto-migrated to `~/.sculptor`; only the
+  fresh-folder bootstrap (REQ-DATA-022) runs at startup. This sharpens the open back-compat question
+  (REQ-DATA-020 → OPEN-7): a user with pre-existing data on an older layout has no built-in upgrade
+  path.
 - **REQ-DATA-022 (SHOULD).** Startup tolerates an old/unversioned folder by bootstrapping the
   structure and writing `.format_version` (`sculptor/sculptor/utils/migration.py`); config loading tolerates
   legacy fields via model validators (e.g. old `claude_binary_mode` folding, invalid `custom_actions`
@@ -288,23 +296,28 @@ rules behind them.
 
 ### 5.1 Git host providers
 
-- **REQ-INT-001 (MUST).** The provider is detected from the `origin` remote hostname (parsing SSH and
-  HTTP(S) forms): hostname containing **"github"** → GitHub via **`gh`**; containing **"gitlab"** →
-  GitLab via **`glab`**. Any other host has **no** PR/MR surface (`SPEC.md` §7.6;
-  `sculptor/sculptor/web/pr_polling_service.py`). The **target-branch** selector is *not* gated on the
-  provider, however — it is host-independent and available on every repo, including repos with no
-  remote (which offer the repo's local branches as targets); only opening a PR/MR requires a detected
-  provider (`SPEC.md` §7.2 / §7.5; `sculptor/sculptor/web/repo_polling_manager.py` target-branch
-  fallback).
-- **REQ-INT-002 (MUST).** Operations performed via the provider CLI: **list** requests for a branch,
-  **view** a request's status-check/pipeline rollup, **reviews/approvals**, and **unresolved
-  comments/discussions**; **push** the branch and **open** a request; poll status thereafter. (GitHub:
-  `gh pr list/view`; GitLab: `glab mr list/view` + `glab api …/approvals` and `…/discussions`.)
+- **REQ-INT-001 (MUST).** The PR provider is **GitHub**, detected from the `origin` remote hostname
+  (parsing SSH and HTTP(S) forms): a hostname containing **"github"** → GitHub via **`gh`**. Any other
+  host has **no** PR surface (`SPEC.md` §7.6; `sculptor/sculptor/web/pr_polling_service.py`). The
+  **target-branch** selector is *not* gated on the provider, however — it is host-independent and
+  available on every repo, including repos with no remote (which offer the repo's local branches as
+  targets); only opening a PR requires a detected GitHub remote (`SPEC.md` §7.2 / §7.5;
+  `sculptor/sculptor/web/repo_polling_manager.py` target-branch fallback).
+- **REQ-INT-002 (MUST).** Operations performed via `gh`: **list** PRs for a branch, **view** a PR's
+  status-check rollup, **reviews/approvals**, and **unresolved comments**; **push** the branch and
+  **open** a PR; poll status thereafter (`gh pr list/view`).
 - **REQ-INT-003 (MUST).** The failure taxonomy is classified and surfaced distinctly (not collapsed
   into "error"): **cli_missing**, **not_authenticated**, **rate_limited** (→ 60 s host cooldown),
   **network_error** (permanent) vs **transient** (retried once)
   (`sculptor/sculptor/web/cli_status_utils.py`, `pr_polling_service.py`). Each maps to the actionable
   warning/info button states in `SPEC.md` §7.6.
+- **REQ-INT-004 (SHOULD).** **Remote-repo clone (GitHub).** With `gh` authenticated, Sculptor lists
+  the user's accessible repos via `gh api /user/repos` (browse shows a first page; a non-empty query
+  paginates) and clones a chosen repo — or a pasted HTTP(S)/SSH/`git`-scheme clone URL — into a
+  default parent dir under the Sculptor folder (`repos/`, with a per-provider `github/` subdir),
+  editable before cloning. A missing/unauthenticated `gh` degrades to a "not configured" state offering
+  manual-URL paste, never a crash; a clone whose destination already exists offers an **add-as-local**
+  fallback (`sculptor/sculptor/web/remote_repos.py`; `SPEC.md` §7.1 / §7.2).
 
 ### 5.2 Agent model CLIs
 
@@ -364,7 +377,7 @@ rules behind them.
 ## 6. Security, privacy & telemetry (→ SPEC §9.1, §9.6, §9.7)
 
 - **REQ-SEC-001 (MUST).** **Trust boundary.** By default an agent works only inside its isolated
-  workspace copy and MAY run real shell commands there; **nothing is pushed to a remote and no PR/MR is
+  workspace copy and MAY run real shell commands there; **nothing is pushed to a remote and no PR is
   opened without an explicit user action**. In-place mode (editing the real checkout) and the
   container/remote backend are the deliberate, opt-in exceptions (`SPEC.md` §9.1). This boundary holds
   for both the GUI and `sculpt`.
