@@ -4,7 +4,6 @@ import { useCallback, useState } from "react";
 import { interruptWorkspaceAgent } from "../../../api";
 import { type ToastContent, ToastType } from "../../../components/Toast.tsx";
 import { isInterruptingAtomFamily } from "../atoms/interruptState.ts";
-import { workspaceSetupStatusAtomFamily } from "../atoms/workspaceSetupStatus.ts";
 
 type UseInterruptAgentResult = {
   isInterrupting: boolean;
@@ -38,21 +37,6 @@ export function useInterruptAgent(
     const interruptingAtom = isInterruptingAtomFamily(taskID);
     if (store.get(interruptingAtom)) return;
     store.set(interruptingAtom, true);
-    // A workspace setup command runs as its own process (the backend
-    // SetupCommandRunner), independent of the agent. While it's still running
-    // alongside the agent's turn, interrupting the agent alone leaves it
-    // running — so cancel it too, mirroring the setup card's own Cancel button.
-    // The backend streams the resulting terminal state back, which updates the
-    // setup card in the UI (SCU-1527). Best-effort: a no-op if setup already
-    // finished, and a failure here must not block the agent interrupt below.
-    if (store.get(workspaceSetupStatusAtomFamily(workspaceID))?.status === "running") {
-      try {
-        await fetch(`/api/v1/workspaces/${workspaceID}/setup/cancel`, { method: "POST" });
-      } catch (error) {
-        console.error("Failed to cancel workspace setup:", error);
-      }
-    }
-
     try {
       await interruptWorkspaceAgent({ path: { workspace_id: workspaceID, agent_id: taskID } });
       setToast({ title: "Agent stopped successfully", type: ToastType.SUCCESS });
