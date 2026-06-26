@@ -102,6 +102,22 @@ class TerminalSocketCapture:
             timeout=timeout_ms,
         )
 
+    def wait_for_latest_open(self, *, timeout_ms: int = 30_000) -> None:
+        """Wait until the most recently opened terminal socket has reached OPEN.
+
+        Sockets are captured at construction (before ``onopen``), and the app
+        silently drops keystrokes sent before ``readyState`` is OPEN, so type
+        only after this returns. ``1`` is ``WebSocket.OPEN``.
+        """
+        self._page.wait_for_function(
+            """() => {
+                const sockets = window.__terminalSockets || [];
+                const ws = sockets[sockets.length - 1];
+                return Boolean(ws) && ws.readyState === 1;
+            }""",
+            timeout=timeout_ms,
+        )
+
     def drop_latest(self, *, code: int) -> None:
         """Close the most recently opened terminal WebSocket with ``code``.
 

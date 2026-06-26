@@ -351,9 +351,6 @@ type UseTerminalArgs = {
 
 type UseTerminalResult = {
   terminalContainerRef: React.RefObject<HTMLDivElement | null>;
-  /** The current WebSocket connection state (for an in-pane hint or testing;
-   * the tab indicator is driven via `onConnectionStatusChange`). */
-  connectionStatus: TerminalConnectionStatus;
 };
 
 export const useTerminal = ({
@@ -389,7 +386,6 @@ export const useTerminal = ({
   useEffect(() => {
     onConnectionStatusChangeRef.current = onConnectionStatusChange;
   });
-  const [connectionStatus, setConnectionStatus] = useState<TerminalConnectionStatus>("connecting");
   const appTheme = useResolvedTheme();
   const grayColor = useThemeGrayColor();
   const accentColor = useThemeAccentColor();
@@ -539,10 +535,9 @@ export const useTerminal = ({
 
     const updateConnectionStatus = (status: TerminalConnectionStatus): void => {
       // Guard centrally so a late event (e.g. an onopen that fires after this
-      // effect was torn down by unmount / terminalPath change) can't push state
-      // or fire the callback post-cleanup.
+      // effect was torn down by unmount / terminalPath change) can't fire the
+      // callback post-cleanup.
       if (isCleanedUp) return;
-      setConnectionStatus(status);
       onConnectionStatusChangeRef.current?.(status);
     };
 
@@ -812,5 +807,5 @@ export const useTerminal = ({
     };
   }, [isVisible, setCommandActions]);
 
-  return { terminalContainerRef, connectionStatus };
+  return { terminalContainerRef };
 };

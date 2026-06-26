@@ -50,10 +50,12 @@ def test_terminal_reconnects_after_socket_drop(
     # Drop the live socket the way a machine sleep / backend restart does.
     terminal_socket_capture.drop_latest(code=_RECOVERABLE_CLOSE_CODE)
 
-    # The frontend reconnects after a short delay; wait for a fresh socket, then
-    # confirm the reconnected terminal runs a new command (the backend replayed
-    # the buffered session, so the shell is live again).
+    # The frontend reconnects after a short delay; wait for a fresh socket and for
+    # it to finish opening (keystrokes sent before OPEN are dropped, not resent),
+    # then confirm the reconnected terminal runs a new command (the backend
+    # replayed the buffered session, so the shell is live again).
     terminal_socket_capture.wait_for_additional_connection(since=sockets_before)
+    terminal_socket_capture.wait_for_latest_open()
 
     run_command_in_active_terminal(page, 'm=RECON; echo "${m}_AFTER_OK"')
     wait_for_xterm_substring(page, "RECON_AFTER_OK")
