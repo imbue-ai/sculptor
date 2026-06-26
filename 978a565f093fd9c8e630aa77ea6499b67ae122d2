@@ -1,17 +1,20 @@
 {
-  "offload-scroll-jump.toml": {
+  "offload-scroll-sweep.toml": {
     "image_id": "im-jcCxtezc8r3sBvuhJcj1ZL"
+  },
+  "offload-scroll-regression.toml": {
+    "image_id": "im-W4tCin0mWhaAaYlc1gLEAA"
   },
   "offload-scroll-width.toml": {
     "image_id": "im-g0DLSTeJOjf6oZFCYKFKXw"
+  },
+  "offload-scroll-jump.toml": {
+    "image_id": "im-jcCxtezc8r3sBvuhJcj1ZL"
   },
   "offload.toml": {
     "image_id": "im-xrAp7KufvXaLNDrRncawEv"
   },
   "offload-electron.toml": {
     "image_id": "im-xrAp7KufvXaLNDrRncawEv"
-  },
-  "offload-scroll-sweep.toml": {
-    "image_id": "im-jcCxtezc8r3sBvuhJcj1ZL"
   }
 }
