@@ -56,6 +56,7 @@ from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
+from sculptor.web.derived import is_agent_busy_or_waiting
 from sculptor.web.derived import scan_terminal_signal_state
 from sculptor.web.pr_polling_service import PrPollingService
 from sculptor.web.terminal_input import TerminalDeliveryResult
@@ -310,6 +311,25 @@ class CIBabysitterCoordinator(Service):
             if transition in (Transition.PIPELINE_FAILED, Transition.MERGE_CONFLICT):
                 self._dispatch_prompt(state, transition, new)
 
+    def _are_all_workspace_agents_idle(self, state: CIBabysitterState) -> bool:
+        """True when no non-babysitter agent in the workspace is busy or waiting.
+
+        Reads each agent's *live* messages and asks ``is_agent_busy_or_waiting``,
+        which keys off the same agent status (WORKING/WAITING) the UI shows — so
+        the gate and the status dot never disagree. The babysitter's own task is
+        excluded by ``_workspace_agent_tasks_most_recent_first``. Any
+        busy/waiting agent makes the workspace not-idle, so the babysitter skips
+        this failure (SCU-1601); an idle, errored, or completed agent does not
+        count. A workspace with no prior agent is trivially idle.
+        """
+        with self._data_model_service.open_transaction(RequestID()) as transaction:
+            tasks = self._workspace_agent_tasks_most_recent_first(state.workspace_id, state.project_id, transaction)
+        for task in tasks:
+            messages = self._task_service.get_live_messages_for_task(task.object_id)
+            if is_agent_busy_or_waiting(task, messages):
+                return False
+        return True
+
     def _dispatch_prompt(self, state: CIBabysitterState, transition: Transition, new: PrStatusInfo) -> None:
         config = get_user_config_instance()
         with self._lock:
@@ -341,6 +361,26 @@ class CIBabysitterCoordinator(Service):
                         state.workspace_id,
                     )
                     return
+
+        # All-agents-idle gate (SCU-1601). Never inject a fix prompt while another
+        # agent in the workspace is busy or waiting for input — the babysitter
+        # runs as its own agent, so two agents would then edit the same workspace
+        # at once. Computing agent status does DB I/O, so it runs outside the lock.
+        #
+        # When the workspace isn't idle we DROP this failure rather than queueing
+        # it for later: pouncing the instant the user's agent finishes a turn is
+        # more disruptive than a missed prompt, and the user's own work may have
+        # already made the CI result moot. A still-relevant pipeline failure
+        # re-arms naturally on the next push (a new pipeline_id is a fresh
+        # PIPELINE_FAILED edge); a persistent merge conflict re-arms when it next
+        # clears and recurs. The drop counts no retry and sets no dedup.
+        if not self._are_all_workspace_agents_idle(state):
+            logger.info(
+                "CIBabysitterCoordinator: skipping {} for workspace={} — another agent is busy/waiting",
+                transition,
+                state.workspace_id,
+            )
+            return
 
         if transition is Transition.PIPELINE_FAILED:
             prompt_text = config.ci_babysitter.pipeline_failed_prompt

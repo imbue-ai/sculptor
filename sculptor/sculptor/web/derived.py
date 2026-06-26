@@ -858,3 +858,30 @@ def create_initial_task_view(
     instance._task_container.append(task)
     instance._settings_container.append(settings)
     return instance
+
+
+def is_agent_busy_or_waiting(task: Task, messages: Sequence[Message]) -> bool:
+    """True when a coding agent is actively working (blue/busy) or waiting on the
+    user (yellow/waiting) — i.e. its agent status is ``WORKING`` or ``WAITING``.
+    False when it is idle, errored, or completed.
+
+    This is the "is another agent occupying the workspace right now?" predicate.
+    It is deliberately phrased in terms of the *agent status*
+    (``WorkspacePeekAgentStatus``) the UI surfaces — the status dot and workspace
+    peek — rather than a raw ``TaskStatus``, so callers can't drift from what the
+    user sees. ``WORKING`` covers ``BUILDING``/``RUNNING``; ``WAITING`` is a
+    pending question or plan approval; ``ERROR``/``COMPLETED``/``IDLE`` do not
+    occupy the workspace. The CI babysitter's all-agents-idle gate uses it so it
+    never injects a prompt while a second agent could be editing the tree.
+
+    ``messages`` MUST be the task's *live* messages (e.g. from
+    ``TaskService.get_live_messages_for_task``): the derivation depends on
+    ephemeral run-scoped messages (environment-acquired anchors, terminal-agent
+    signals) that the persisted message log never contains. No
+    ``SculptorSettings`` is needed — the status derivation does not read settings.
+    """
+    view = CodingAgentTaskView()
+    view._task_container.append(task)
+    for message in messages:
+        view.add_message(message)
+    return view.workspace_peek_status in (WorkspacePeekAgentStatus.WORKING, WorkspacePeekAgentStatus.WAITING)
