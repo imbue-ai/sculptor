@@ -22,7 +22,7 @@ from tenacity import wait_fixed
 
 from sculptor.constants import ElementIDs
 from sculptor.foundation.async_monkey_patches import log_exception
-from sculptor.state.messages import LLMModel
+from sculptor.testing.backend_contract import LLMModel
 from sculptor.testing.elements.base import type_into_tiptap
 from sculptor.testing.elements.chat_panel import select_model_by_name
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME

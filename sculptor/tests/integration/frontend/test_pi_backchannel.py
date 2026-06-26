@@ -13,7 +13,7 @@ the agent receives, not on AUQ/ExitPlanMode tool blocks.
 
 from playwright.sync_api import expect
 
-from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_DIALOG_TITLE
+from sculptor.testing.backend_contract import PLAN_APPROVAL_DIALOG_TITLE
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.fake_pi import install_fake_pi_binary

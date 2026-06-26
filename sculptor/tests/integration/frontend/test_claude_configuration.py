@@ -6,8 +6,11 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import expect
 
-from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.constants import ElementIDs
+from sculptor.testing.backend_contract import CLAUDE_COMMANDS_DIRECTORY_NAME
+from sculptor.testing.backend_contract import CLAUDE_JSON_FILENAME
+from sculptor.testing.backend_contract import CLAUDE_LOCAL_SETTINGS_FILENAME
+from sculptor.testing.backend_contract import CLAUDE_SESSION_DIRECTORY_NAME
 from sculptor.testing.elements.base import type_trigger_char
 from sculptor.testing.elements.chat_panel import expect_message_to_have_role
 from sculptor.testing.elements.chat_panel import send_chat_message
@@ -18,10 +21,8 @@ from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
 
-CLAUDE_DIRECTORY = CLAUDE_CODE_HARNESS.session_directory_name
-CLAUDE_JSON_FILENAME = CLAUDE_CODE_HARNESS.claude_json_filename
-CLAUDE_LOCAL_SETTINGS_FILENAME = CLAUDE_CODE_HARNESS.local_settings_filename
-COMMANDS_DIRECTORY = CLAUDE_CODE_HARNESS.commands_directory_name
+CLAUDE_DIRECTORY = CLAUDE_SESSION_DIRECTORY_NAME
+COMMANDS_DIRECTORY = CLAUDE_COMMANDS_DIRECTORY_NAME
 
 
 @pytest.mark.skip(reason="Moving away from Docker-based task environments")

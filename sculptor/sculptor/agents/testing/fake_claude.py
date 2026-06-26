@@ -15,7 +15,6 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
-from sculptor.agents.default.claude_code_sdk.harness import compute_claude_jsonl_directory
 from sculptor.agents.testing.fake_claude_commands import COMMAND_REGISTRY
 from sculptor.agents.testing.fake_claude_commands import UnknownFakeClaudeCommandError
 from sculptor.agents.testing.fake_claude_commands import dispatch_handler
@@ -23,7 +22,7 @@ from sculptor.agents.testing.fake_claude_commands import handle_default
 from sculptor.agents.testing.fake_claude_jsonl import generate_id
 from sculptor.agents.testing.fake_claude_jsonl import make_end_message
 from sculptor.agents.testing.fake_claude_jsonl import make_init_message
-from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_FROM_SIGTERM
+from sculptor.testing.backend_contract import AGENT_EXIT_CODE_FROM_SIGTERM
 
 _FAKE_CLAUDE_PREFIX = "fake_claude:"
 
@@ -115,6 +114,21 @@ def _get_session_id(resume_id: str | None) -> str:
         return resume_id
     generate_id("session")
     return f"session_fakeclaude_{uuid4().hex}"
+
+
+def compute_claude_jsonl_directory(home: Path, working_directory: Path) -> Path:
+    """Claude Code's session-JSONL directory for a working dir.
+
+    Claude sanitizes the path (non-alphanumerics except '-' become '-') and
+    stores session files under ``<config-dir>/projects/./<sanitized>/``, where
+    the config dir honors $CLAUDE_CONFIG_DIR (falling back to ``<home>/.claude``).
+    Copied from the deleted Python claude harness so the fake CLI writes its
+    transcript where the backend looks for it.
+    """
+    custom = os.environ.get("CLAUDE_CONFIG_DIR")
+    config_dir = Path(custom) if custom else home / ".claude"
+    sanitized = re.sub(r"[^a-zA-Z0-9-]", "-", str(working_directory))
+    return config_dir / "projects/./" / sanitized
 
 
 def _get_session_file_path(session_id: str) -> Path:

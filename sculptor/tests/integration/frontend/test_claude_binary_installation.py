@@ -9,7 +9,7 @@ from playwright.sync_api import expect
 
 from sculptor.config.user_config import DependencyPaths
 from sculptor.config.user_config import UserConfig
-from sculptor.services.dependency_management_service import DEPENDENCIES_DIR_NAME
+from sculptor.testing.backend_contract import DEPENDENCIES_DIR_NAME
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.dependency_stubs import DependencyState
 from sculptor.testing.dependency_stubs import stub_dependency

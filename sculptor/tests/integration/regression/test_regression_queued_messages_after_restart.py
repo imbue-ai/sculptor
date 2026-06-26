@@ -57,7 +57,7 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
-from sculptor.web.derived import TaskStatus
+from sculptor.testing.backend_contract import TaskStatus
 
 _SECONDS_MS = 1000
 

@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from sculptor.services.dependency_management_service import CLAUDE_VERSION_RANGE
-from sculptor.services.dependency_management_service import PI_VERSION_RANGE
+from sculptor.testing.backend_contract import CLAUDE_VERSION_RANGE
+from sculptor.testing.backend_contract import PI_VERSION_RANGE
 
 # Session-level opt-out for the default claude stub install. When set, all
 # call sites of ``install_default_claude_stub`` skip the stub write and

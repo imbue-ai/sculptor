@@ -96,7 +96,7 @@ from threading import Event
 from pydantic import Field
 
 from sculptor.foundation.pydantic_serialization import MutableModel
-from sculptor.services.dependency_management_service import PI_VERSION_RANGE
+from sculptor.testing.backend_contract import PI_VERSION_RANGE
 
 # Mirrors FakeClaude's ``fake_claude:`` directive prefix; keeps the grammar
 # parallel so test authors can transplant intuition between the two fakes.

@@ -16,7 +16,6 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.testing.fake_claude_jsonl import generate_id
 from sculptor.agents.testing.fake_claude_jsonl import get_last_session_id
 from sculptor.agents.testing.fake_claude_jsonl import make_assistant_message
@@ -34,14 +33,19 @@ from sculptor.agents.testing.fake_claude_jsonl import make_task_started_message
 from sculptor.agents.testing.fake_claude_jsonl import make_text_block
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_result_message
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_use_block
-from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_FROM_SIGTERM
+from sculptor.testing.backend_contract import AGENT_EXIT_CODE_FROM_SIGTERM
+from sculptor.testing.backend_contract import MCP_ASK_TOOL_FQN
+from sculptor.testing.backend_contract import MCP_ASK_TOOL_NAME
+from sculptor.testing.backend_contract import MCP_EXIT_PLAN_MODE_TOOL_FQN
+from sculptor.testing.backend_contract import MCP_EXIT_PLAN_MODE_TOOL_NAME
+from sculptor.testing.backend_contract import MCP_SERVER_NAME
+from sculptor.testing.backend_contract import PRE_COMPACT_CALLBACK_ID
 
-SCULPTOR_MCP_SERVER_NAME = CLAUDE_CODE_HARNESS.mcp_server_name
-SCULPTOR_MCP_ASK_TOOL_NAME = CLAUDE_CODE_HARNESS.mcp_ask_tool_name
-SCULPTOR_MCP_EXIT_PLAN_MODE_TOOL_NAME = CLAUDE_CODE_HARNESS.mcp_exit_plan_mode_tool_name
-SCULPTOR_MCP_ASK_TOOL_FQN = CLAUDE_CODE_HARNESS.mcp_ask_tool_fqn
-SCULPTOR_MCP_EXIT_PLAN_MODE_TOOL_FQN = CLAUDE_CODE_HARNESS.mcp_exit_plan_mode_tool_fqn
-PRE_COMPACT_CALLBACK_ID = CLAUDE_CODE_HARNESS.pre_compact_callback_id
+SCULPTOR_MCP_SERVER_NAME = MCP_SERVER_NAME
+SCULPTOR_MCP_ASK_TOOL_NAME = MCP_ASK_TOOL_NAME
+SCULPTOR_MCP_EXIT_PLAN_MODE_TOOL_NAME = MCP_EXIT_PLAN_MODE_TOOL_NAME
+SCULPTOR_MCP_ASK_TOOL_FQN = MCP_ASK_TOOL_FQN
+SCULPTOR_MCP_EXIT_PLAN_MODE_TOOL_FQN = MCP_EXIT_PLAN_MODE_TOOL_FQN
 
 _TOOL_TEXT_PREFIX = "I'll do that."
 

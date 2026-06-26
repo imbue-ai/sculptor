@@ -1,7 +1,7 @@
 import subprocess
 from pathlib import Path
 
-from sculptor.services.dependency_management_service import PI_VERSION_RANGE
+from sculptor.testing.backend_contract import PI_VERSION_RANGE
 from sculptor.testing.dependency_stubs import install_default_pi_stub
 
 

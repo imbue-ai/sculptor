@@ -31,9 +31,9 @@ from pathlib import Path
 from playwright.sync_api import Route
 from playwright.sync_api import expect
 
-from sculptor.services.dependency_management_service import DEPENDENCIES_DIR_NAME
-from sculptor.services.dependency_management_service import PI_VERSION_RANGE
-from sculptor.services.dependency_management_service import _VERSION_DIR_PREFIX
+from sculptor.testing.backend_contract import DEPENDENCIES_DIR_NAME
+from sculptor.testing.backend_contract import PI_VERSION_RANGE
+from sculptor.testing.backend_contract import _VERSION_DIR_PREFIX
 from sculptor.services.user_config.user_config import load_config
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.elements.chat_panel import send_chat_message

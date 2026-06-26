@@ -23,7 +23,7 @@ from playwright.sync_api import expect
 
 from sculptor.config.user_config import DependencyPaths
 from sculptor.config.user_config import UserConfig
-from sculptor.services.dependency_management_service import CLAUDE_VERSION_RANGE
+from sculptor.testing.backend_contract import CLAUDE_VERSION_RANGE
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.dependency_stubs import create_claude_version_stub_dir
 from sculptor.testing.pages.onboarding_page import PlaywrightOnboardingPage

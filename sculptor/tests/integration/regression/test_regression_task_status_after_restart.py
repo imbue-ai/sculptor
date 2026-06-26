@@ -23,7 +23,7 @@ from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
-from sculptor.web.derived import TaskStatus
+from sculptor.testing.backend_contract import TaskStatus
 
 SECONDS_MS = 1000
 # Visibility gate for the post-restart page. Generous because in this test

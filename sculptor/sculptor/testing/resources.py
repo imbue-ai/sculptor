@@ -6,7 +6,6 @@ import shlex
 import shutil
 import tempfile
 import time
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable
 from typing import Final
@@ -22,10 +21,8 @@ from sculptor.config.user_config import DependencyPaths
 from sculptor.config.user_config import UserConfig
 from sculptor.constants import ElementIDs
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
-from sculptor.foundation.concurrency_group import ConcurrencyGroupState
 from sculptor.primitives.ids import create_organization_id
 from sculptor.primitives.ids import create_user_id
-from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.dependency_stubs import apply_stubs_from_request
 from sculptor.testing.dependency_stubs import assert_no_stub_dependency_markers
@@ -767,31 +764,6 @@ def test_repo_factory_(
 _DEFAULT_TIMEOUT_MS: Final[int] = 30_000
 
 
-class AlreadyRunningServiceCollection(CompleteServiceCollection):
-    """Wraps an existing already-started CompleteServiceCollection to prevent multiple run_all calls.
-
-    This makes re-using the same service collection in the same process through the FastAPI mock client possible,
-    as otherwise the app's lifespan middleware would restart it repeatedly & fail due to our db lock (among other things).
-
-    For single-process integration tests. For more e2e tests use sculptor_factory_ instead.
-    """
-
-    @classmethod
-    def build(cls, from_collection: CompleteServiceCollection) -> "AlreadyRunningServiceCollection":
-        assert from_collection.data_model_service.concurrency_group._state == ConcurrencyGroupState.ACTIVE
-        return cls(
-            settings=from_collection.settings,
-            data_model_service=from_collection.data_model_service,
-            dependency_management_service=from_collection.dependency_management_service,
-            workspace_service=from_collection.workspace_service,
-            git_repo_service=from_collection.git_repo_service,
-            task_service=from_collection.task_service,
-            project_service=from_collection.project_service,
-            pr_polling_service=from_collection.pr_polling_service,
-            btw_service=from_collection.btw_service,
-            ci_babysitter_service=from_collection.ci_babysitter_service,
-        )
-
-    @contextmanager
-    def run_all(self) -> Generator[None, None, None]:
-        yield
+# (AlreadyRunningServiceCollection removed at cutover — the in-process
+# FastAPI-mock test mode it served no longer exists; tests drive the TS backend
+# subprocess.)
