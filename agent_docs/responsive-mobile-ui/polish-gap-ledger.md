@@ -54,9 +54,9 @@ Screenshot: `0043_get.png` (bottom sheet, opened from the agent switcher pill �
 
 - **D1 (T2) ~PARTIAL** — added `box-shadow: var(--mobile-shadow)` to the sheet (light-theme elevation + consistency with the drawer). Validation showed the shadow is invisible in DARK theme (dark shadow over near-black). Dark-theme top-edge separation is still subtle → see **X2** (cross-cutting).
 - **D2 (T2) — likely harness-only** — the "New agent" row looked flush at the bottom, but `.sheet` already has `padding-bottom: calc(--space-3 + env(safe-area-inset-bottom))`; the harness reports 0 safe-area, so on a real phone the home-indicator inset adds the breathing room. Deferred (re-check on device).
-- **D3 (T3)** Sheet title ("Agents in …") is `--mobile-ink-3` at `--font-size-1` — same dim as the "1h ago" subline, so it reads as de-emphasized rather than a heading.
+- **D3 (T3) ✅ DONE** — sheet title bumped `--mobile-ink-3`→`--mobile-ink-2` so it reads as a heading, not a subline.
 - **D4 (T3)** Large empty gap between the single agent row and the separator/New-agent block (under-filled with one agent).
-- **D5 (T3)** Status dot small + far-left, reads as detached from the agent name.
+- **D5 (T3) ✅ DONE** — tightened the agent row's dot-to-name gap `--space-3`→`--space-2` so the status dot reads as attached to the name.
 - **D6 (T3)** Grabber handle is faint (`--mobile-line` over a near-equal surface).
 - **Clean:** proper bottom sheet w/ grabber + rounded top, current agent checked w/ status dot, clear `+` New agent affordance.
 

@@ -34,7 +34,7 @@
 }
 
 .title {
-  color: var(--mobile-ink-3);
+  color: var(--mobile-ink-2);
   flex: 0 0 auto;
   font-size: var(--font-size-1);
   overflow: hidden;
@@ -60,7 +60,7 @@
   cursor: pointer;
   display: flex;
   font: inherit;
-  gap: var(--space-3);
+  gap: var(--space-2);
   min-height: 48px;
   padding: var(--space-2) var(--space-3);
   text-align: left;
