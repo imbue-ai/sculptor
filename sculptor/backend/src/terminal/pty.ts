@@ -32,7 +32,10 @@ export function buildShellEnv(
     if (value === undefined) {
       continue;
     }
-    if (EXCLUDED_ENV_VAR_NAMES.has(key) || EXCLUDED_ENV_VAR_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+    if (
+      EXCLUDED_ENV_VAR_NAMES.has(key) ||
+      EXCLUDED_ENV_VAR_PREFIXES.some((prefix) => key.startsWith(prefix))
+    ) {
       continue;
     }
     env[key] = value;
@@ -62,6 +65,16 @@ export interface PtyExitEvent {
   signal?: number;
 }
 
+// The terminal output buffer is replayed to every (re)connecting client so the
+// xterm renders the session so far (e.g. the shell's prompt) even on a second
+// connection. Bounded so a chatty long-lived shell can't grow it without limit;
+// the tail is kept (matches what a reconnecting client cares about).
+const MAX_OUTPUT_BUFFER_BYTES = 1_000_000;
+
+// Shown when the shell exits, so the user isn't left staring at a frozen
+// terminal. Mirrors local_terminal_manager.py's `\r\n[Process exited]\r\n`.
+const PROCESS_EXITED_NOTICE = "\r\n[Process exited]\r\n";
+
 export interface PtyProcess {
   readonly pid: number;
   write(data: string): void;
@@ -69,6 +82,14 @@ export interface PtyProcess {
   kill(signal?: string): void;
   onData(callback: (data: string) => void): void;
   onExit(callback: (event: PtyExitEvent) => void): void;
+  // Atomically return the buffered output so far AND register `callback` for
+  // future output (no gap in which output is lost between the two). The returned
+  // `unsubscribe` removes the callback when the consumer (e.g. a closed socket)
+  // goes away.
+  subscribe(callback: (data: string) => void): {
+    buffered: string;
+    unsubscribe: () => void;
+  };
 }
 
 export function spawnPty(options: SpawnPtyOptions): PtyProcess {
@@ -80,16 +101,38 @@ export function spawnPty(options: SpawnPtyOptions): PtyProcess {
     cwd: options.cwd,
     env: buildShellEnv(options.extraEnv, options.envVarOverride),
   });
+  let buffer = "";
+  const listeners = new Set<(data: string) => void>();
+  const emit = (data: string): void => {
+    buffer += data;
+    if (buffer.length > MAX_OUTPUT_BUFFER_BYTES) {
+      buffer = buffer.slice(buffer.length - MAX_OUTPUT_BUFFER_BYTES);
+    }
+    for (const listener of listeners) {
+      listener(data);
+    }
+  };
+  child.onData((data) => emit(data));
+  // Surface the exit in the output stream (so connected clients render it and a
+  // later reconnect replays it) BEFORE any onExit consumer closes its socket.
+  child.onExit(() => emit(PROCESS_EXITED_NOTICE));
   return {
     pid: child.pid,
     write: (data) => child.write(data),
     resize: (cols, rows) => child.resize(cols, rows),
     kill: (signal) => child.kill(signal),
     onData: (callback) => {
-      child.onData(callback);
+      listeners.add(callback);
     },
     onExit: (callback) => {
       child.onExit(callback);
+    },
+    subscribe: (callback) => {
+      listeners.add(callback);
+      return {
+        buffered: buffer,
+        unsubscribe: () => listeners.delete(callback),
+      };
     },
   };
 }

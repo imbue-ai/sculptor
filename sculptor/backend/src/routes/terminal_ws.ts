@@ -87,13 +87,28 @@ function authorize(
   return true;
 }
 
-// Bridge a PTY to the socket: stream output as binary, forward keystrokes, and
-// apply resize JSON. (PtyProcess.onData has no unsubscribe; the readyState
-// guard drops writes after the socket closes.)
+// Bridge a PTY to the socket: replay the session so far, stream new output as
+// binary, forward keystrokes, apply resize JSON, and close the socket when the
+// shell exits (so the frontend renders the "[Process exited]" notice the PTY
+// emitted just before). The PTY stays alive across a disconnect, so a reopen
+// replays the buffer and shows the prior prompt.
 function bridge(socket: WebSocket, pty: PtyProcess): void {
-  pty.onData((data) => {
+  const sendOutput = (data: string): void => {
     if (socket.readyState === socket.OPEN) {
       socket.send(Buffer.from(data, "utf8"), { binary: true });
+    }
+  };
+  const { buffered, unsubscribe } = pty.subscribe(sendOutput);
+  if (buffered) {
+    sendOutput(buffered);
+  }
+  socket.on("close", unsubscribe);
+  pty.onExit(() => {
+    if (
+      socket.readyState === socket.OPEN ||
+      socket.readyState === socket.CONNECTING
+    ) {
+      socket.close();
     }
   });
   socket.on("message", (data: Buffer, isBinary: boolean) => {
