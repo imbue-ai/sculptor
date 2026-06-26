@@ -32,19 +32,25 @@ _JSON_OPTION = typer.Option(False, "--json", help="Output as JSON")
 
 def _request(method: str, path: str, json_output: bool, body: dict | None = None) -> dict:
     """Make an authenticated request to a trace-control endpoint and return the
-    decoded JSON body. Exits with a friendly message on connection failure or a
-    non-2xx response (the backend sends a useful ``detail`` on 409/422)."""
+    decoded JSON body. Exits (code 1) with a friendly message on connection
+    failure or a non-2xx response.
+
+    A 409 from these endpoints is a trace-state conflict (already-running /
+    not-running) whose ``detail`` is already a complete, user-facing sentence —
+    including the active trace's path — so it's surfaced as-is rather than under
+    the generic 'Request failed with status N' framing."""
     client = get_authenticated_client(get_default_base_url())
     try:
         response = client.get_httpx_client().request(method, path, json=body)
     except (httpx.ConnectError, httpx.ConnectTimeout):
         handle_connection_error(json_output)
     if response.status_code >= 400:
-        detail = ""
         try:
             detail = response.json().get("detail", "")
         except (json.JSONDecodeError, ValueError):
             detail = response.text
+        if response.status_code == 409 and detail:
+            cli_error(detail, json_output=json_output)
         cli_error(f"Request failed with status {response.status_code}", detail=detail, json_output=json_output)
     return response.json()
 

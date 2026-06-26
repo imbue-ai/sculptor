@@ -77,9 +77,26 @@ def test_trace_stop_surfaces_409_detail(runner: CliRunner) -> None:
 
     result = runner.invoke(app, ["debug", "trace", "stop"])
 
+    # A 409 is a conflict (operation didn't happen) so it still exits non-zero,
+    # but the backend's detail is a complete user-facing sentence and is shown
+    # as-is, without the generic "Request failed with status 409" framing.
     assert result.exit_code == 1
-    assert "409" in result.stderr
     assert "No trace is running." in result.stderr
+
+
+@respx.mock
+def test_trace_start_409_reports_active_path(runner: CliRunner) -> None:
+    """A duplicate/racing start gets a 409 whose message names where the
+    already-running trace is writing — not a bare 'armed' or generic failure."""
+    _mock_session()
+    detail = "A trace is already running, writing to /logs/traces/trace-X.json. Stop it first with `sculpt debug trace stop`."
+    respx.post(f"{_BASE_URL}/api/v1/trace/start").mock(return_value=Response(409, json={"detail": detail}))
+
+    result = runner.invoke(app, ["debug", "trace", "start"])
+
+    assert result.exit_code == 1
+    assert "already running" in result.stderr
+    assert "/logs/traces/trace-X.json" in result.stderr
 
 
 @respx.mock
