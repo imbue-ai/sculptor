@@ -64,6 +64,10 @@ These were genuine new-shell gaps the harness exposed; fixed to match intended U
 - Passing: 128 → 836 → 888 → 902 → 927 → 958 → 986 (round 6) → **regression** (756,
   714) → **992 / 1005 (final, round 9)** after the strict-mode fix. 13 truly-failed
   + 18 flaky remain (the genuine residual below).
+- **Follow-up debug session (2026-06-26): all residuals triaged + resolved.** Of the
+  13, **11 were real** (the other 2 — `test_open_command_palette_via_topbar_button`,
+  `test_customized_keybinding_is_honored` — are flaky, pass in isolation). All 11 now
+  pass locally (`RUN_ALL=1`, `11 passed`). See "Residual resolution" below.
 
 ## Final residual (13 truly-failed, round 9 — for the review / a live-run debug)
 - **chat message-count (4)**: `test_branch_switching_with_untracked_file`,
@@ -137,3 +141,57 @@ run to diagnose or a deeper product decision, so I stopped autonomous blind edit
   comment-cleanup targets (remove references to agent_docs/ui_refresh).
 - These audit docs (agent_docs/ui_refresh/audit/) are deliverables — KEEP them.
 - `offload.tmp.toml` (repo root, untracked) is a local run artifact — delete before merge.
+
+## Residual resolution (follow-up debug session, 2026-06-26)
+Drilled into each of the 13. The doc's earlier guesses were partly wrong — several
+"chat message-count" failures were OVERSHOOT (4 messages, not undershoot), and two
+"residuals" were just flaky. Final tally: **11 real, fixed + verified; 2 flaky.**
+
+Real fixes (each verified by re-running the affected test under `RUN_ALL=1`):
+- **chat message-count (4)** — root cause was test-side, not a chat regression. The
+  empty-first-run inline form pre-seeds the prompt with `/sculptor:help` (via
+  `NewWorkspaceForm initialPrompt={HOME_PROMPT_PREFILL}`); these tests submitted the
+  form WITHOUT clearing it (unlike `start_task_and_wait_for_ready`), so an extra turn
+  ran at creation with the default model (→ the Claude-stub error turn = 2 extra
+  messages). Fix: clear `get_task_input()` before submit in all four flows.
+- **report-problem popover** — duplicate mount: the sidebar footer rendered the
+  `SIDEBAR_REPORT_BUG` button AND `VersionDisplay → StatusIndicators`'s own
+  `ReportProblemPopover`, both bound to the shared `reportProblemAtom` → two open
+  dialogs (strict-mode "2 elements"). Fix: drop the redundant popover from
+  `StatusIndicators.tsx` (delete its now-dead `.module.scss`).
+- **Linear plugin panel** — the add-panel re-add list was built from the hardcoded
+  `STATIC_PANEL_METADATA`, which excludes plugin panels, so `linear-issue` was never
+  offered. Fix: source the list from `panelRegistryAtom` (`kind === "static"`, which
+  includes plugin panels) in both `addPanelCore.listAvailableStaticPanels` and
+  `useAddPanelActions`.
+- **agent-type default** — `useCreateWorkspace` never optimistically set
+  `lastUsedAgentType`, and there is NO live user-config push to the frontend (the test
+  comment claiming a "WebSocket sync" was wrong). The add-panel path sets it
+  optimistically; the form path didn't. Fix: mirror `addPanelCore.ts`'s optimistic
+  `set(userConfigAtom, …)`; corrected the test comment.
+- **sidebar resize (2)** — not "finicky drag": the handle had ZERO area. The base
+  `.horizontalResizeHandle` (`position:relative; width:1px`) won the cascade over the
+  sidebar's `.resizeHandle` (`position:absolute; top/bottom/right:0`), collapsing it to
+  1px×0 — invisible AND un-grabbable for real users. Fix: scope the sidebar rule under
+  `.sidebar` so its absolute positioning wins.
+- **unread indicator** — `useMarkRead` tracked the ROUTE's agent, but switching agents
+  via the center tab bar only flips the active panel (no navigation), so the focused
+  agent wasn't marked read on update. Fix: `useMarkRead`/`useArtifactSync` follow the
+  active center panel's agent (matches ChatInput's per-panel isolation).
+- **terminal close** — closing a terminal tab now opens a confirmation dialog
+  (intended; mirrors agent delete). The test clicked close but never confirmed. Fix:
+  call the existing `confirm_close_terminal` helper.
+
+Two secondary issues the fixes uncovered (tests ran further than before):
+- `navigate_to_add_workspace_page`'s settle set used `CHAT_PANEL` as the "on a
+  workspace" signal, which a terminal-agent workspace lacks → added `SECTION_CENTER`.
+- **Mode badge was never ported to the new shell** — `RepoSegment` (with
+  `TASK_MODE_BADGE`) was dropped in Task 7.1 and not re-added. Ported a minimal badge
+  into `WorkspaceHeader` with the original rule (shown for non-worktree modes).
+
+Flaky (not real): `test_open_command_palette_via_topbar_button` (also misnamed — its
+POM already uses the sidebar Cmd+K link, not a topbar) and
+`test_customized_keybinding_is_honored`. Both pass in isolation.
+
+Still open (unchanged): the dead `[groups.isolated]` offload group (collects 0 tests).
+Left `offload.toml` untouched; the `offload.tmp.toml` workaround is still needed.
