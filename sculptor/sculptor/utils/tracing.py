@@ -142,26 +142,29 @@ def get_buffered_external_event_count() -> int:
         return len(_external_events)
 
 
-def start_tracing(output_path: Path, tracer_entries: int | None = None) -> None:
+def start_tracing(output_path: Path, tracer_entries: int | None = None) -> bool:
     """Start viztracer, writing the combined trace to ``output_path`` when it is
     later stopped. ``tracer_entries`` sizes viztracer's in-memory ring buffer;
     ``None`` uses ``DEFAULT_TRACER_ENTRIES`` (resolved at call time so tests can
     monkeypatch the constant).
 
-    Idempotent — a second call while a trace is already running is a no-op (it
-    does NOT change the path or buffer size). After ``stop_and_write_trace``
-    has flushed and torn down a session, calling this again arms a fresh one,
-    which is what makes the runtime arm/disarm cycle (`sculpt debug trace start`
-    then `stop` then `start`) work.
+    Returns ``True`` if this call armed a fresh session, or ``False`` if a trace
+    was already running (in which case nothing changed — the existing path and
+    buffer size are kept). After ``stop_and_write_trace`` has flushed and torn
+    down a session, calling this again arms a fresh one, which is what makes the
+    runtime arm/disarm cycle (`sculpt debug trace start` then `stop` then
+    `start`) work.
 
     The check-and-arm runs under ``_trace_session_lock`` so concurrent callers
     (the runtime trace-control endpoints run on worker threads) cannot both pass
-    the ``_tracer is None`` guard and build two VizTracer instances.
+    the ``_tracer is None`` guard and build two VizTracer instances. The boolean
+    return lets the caller distinguish "armed" from "already running" without a
+    separate, racy ``is_tracing_enabled()`` check.
     """
     global _trace_to_path, _tracer, _internal_trace_path, _external_events_accepting
     with _trace_session_lock:
         if _tracer is not None:
-            return
+            return False
         from viztracer import VizTracer
 
         if tracer_entries is None:
@@ -180,6 +183,7 @@ def start_tracing(output_path: Path, tracer_entries: int | None = None) -> None:
         _tracer.start()
         with _external_events_lock:
             _external_events_accepting = True
+        return True
 
 
 def add_external_events(events: Sequence[dict[str, Any]], source_pid: int) -> None:
