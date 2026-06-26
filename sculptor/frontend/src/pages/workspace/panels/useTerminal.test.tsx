@@ -1,10 +1,11 @@
-import { render, renderHook } from "@testing-library/react";
+import { act, render, renderHook } from "@testing-library/react";
 import { getDefaultStore } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { commandActionsAtom } from "~/components/CommandPalette/commandActions.ts";
 
+import type { TerminalConnectionStatus } from "./useTerminal.ts";
 import {
   containsTerminalQuery,
   shouldClearActiveTerminal,
@@ -397,8 +398,16 @@ describe("useTerminal — WebSocket reconnect on close", () => {
 
   // Render a real element that wires the hook's container ref to the DOM, so the
   // terminal-init effect (and therefore the WebSocket effect) actually runs.
-  const ReconnectHarness = (): ReactElement => {
-    const { terminalContainerRef } = useTerminal({ terminalPath: TERMINAL_PATH, isVisible: true });
+  const ReconnectHarness = ({
+    onConnectionStatusChange,
+  }: {
+    onConnectionStatusChange?: (status: TerminalConnectionStatus) => void;
+  }): ReactElement => {
+    const { terminalContainerRef } = useTerminal({
+      terminalPath: TERMINAL_PATH,
+      isVisible: true,
+      onConnectionStatusChange,
+    });
     return <div ref={terminalContainerRef} />;
   };
 
@@ -411,11 +420,21 @@ describe("useTerminal — WebSocket reconnect on close", () => {
     }
   };
 
-  const mountAndConnect = async (): Promise<ReturnType<typeof render>> => {
-    const result = render(<ReconnectHarness />);
+  const mountAndConnect = async (
+    onConnectionStatusChange?: (status: TerminalConnectionStatus) => void,
+  ): Promise<ReturnType<typeof render>> => {
+    const result = render(<ReconnectHarness onConnectionStatusChange={onConnectionStatusChange} />);
     await flushMicrotasks();
     expect(FakeWebSocket.instances).toHaveLength(1);
     return result;
+  };
+
+  // The close handler updates React state (the connection status), so dispatch it
+  // through act() to flush that update and avoid "not wrapped in act" warnings.
+  const fireClose = (socket: FakeWebSocket, code: number): void => {
+    act(() => {
+      socket.onclose?.({ code } as CloseEvent);
+    });
   };
 
   beforeEach(() => {
@@ -445,7 +464,7 @@ describe("useTerminal — WebSocket reconnect on close", () => {
     // Simulate the socket being torn down out from under us — the close a macOS
     // sleep produces. The pre-fix handler only retried on code 4404, so this close
     // left the terminal frozen; the fix retries on any recoverable close.
-    FakeWebSocket.instances[0].onclose?.({ code: 1006 } as CloseEvent);
+    fireClose(FakeWebSocket.instances[0], 1006);
     vi.advanceTimersByTime(RETRY_DELAY_MS);
 
     expect(FakeWebSocket.instances).toHaveLength(2);
@@ -455,7 +474,7 @@ describe("useTerminal — WebSocket reconnect on close", () => {
     // The original retry case must keep working after the fix broadened the trigger.
     await mountAndConnect();
 
-    FakeWebSocket.instances[0].onclose?.({ code: 4404 } as CloseEvent);
+    fireClose(FakeWebSocket.instances[0], 4404);
     vi.advanceTimersByTime(RETRY_DELAY_MS);
 
     expect(FakeWebSocket.instances).toHaveLength(2);
@@ -465,7 +484,7 @@ describe("useTerminal — WebSocket reconnect on close", () => {
     // A clean, intentional close means nothing went wrong — retrying would be noise.
     await mountAndConnect();
 
-    FakeWebSocket.instances[0].onclose?.({ code: 1000 } as CloseEvent);
+    fireClose(FakeWebSocket.instances[0], 1000);
     vi.advanceTimersByTime(RETRY_DELAY_MS);
 
     expect(FakeWebSocket.instances).toHaveLength(1);
@@ -476,7 +495,7 @@ describe("useTerminal — WebSocket reconnect on close", () => {
     // until the user re-authenticates.
     await mountAndConnect();
 
-    FakeWebSocket.instances[0].onclose?.({ code: 4401 } as CloseEvent);
+    fireClose(FakeWebSocket.instances[0], 4401);
     vi.advanceTimersByTime(RETRY_DELAY_MS);
 
     expect(FakeWebSocket.instances).toHaveLength(1);
@@ -490,9 +509,26 @@ describe("useTerminal — WebSocket reconnect on close", () => {
     // (the unmount closes the socket) must NOT schedule a reconnect, or tearing down
     // a terminal would resurrect its connection.
     unmount();
+    // No state update here (the cleanup guard returns before touching status), so
+    // dispatch directly rather than through act().
     initialSocket.onclose?.({ code: 1006 } as CloseEvent);
     vi.advanceTimersByTime(RETRY_DELAY_MS);
 
     expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+
+  it("reports connection status: reconnecting on a recoverable drop, disconnected when unrecoverable", async () => {
+    const statuses: Array<TerminalConnectionStatus> = [];
+    await mountAndConnect((status) => statuses.push(status));
+
+    const lastStatus = (): TerminalConnectionStatus | undefined => statuses[statuses.length - 1];
+
+    // A recoverable drop should read as reconnecting (the terminal will self-heal).
+    fireClose(FakeWebSocket.instances[0], 1006);
+    expect(lastStatus()).toBe("reconnecting");
+
+    // An unrecoverable close should read as disconnected (no self-healing).
+    fireClose(FakeWebSocket.instances[0], 4401);
+    expect(lastStatus()).toBe("disconnected");
   });
 });

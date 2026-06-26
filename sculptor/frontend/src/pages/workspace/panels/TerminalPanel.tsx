@@ -13,13 +13,36 @@ import {
 } from "~/common/state/atoms/terminalTabs";
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { terminalPanelMountedAtom } from "~/components/panels/atoms.ts";
-import { PulsingCircle } from "~/components/PulsingCircle.tsx";
+import { BlandCircle, PulsingCircle } from "~/components/PulsingCircle.tsx";
 import { TabBar } from "~/components/tabs/TabBar";
 import type { TabDefinition } from "~/components/tabs/types";
 
 import { getNextTerminalLabel } from "./terminalLabelUtils";
 import styles from "./TerminalPanel.module.scss";
+import type { TerminalConnectionStatus } from "./useTerminal";
 import { useTerminal } from "./useTerminal";
+
+// A connection-issue indicator for a terminal tab, or null when the connection
+// is healthy (or still opening). Reconnecting is transient (amber, pulsing);
+// disconnected won't recover on its own (red, static).
+const getTabStatusIcon = (status: TerminalConnectionStatus | undefined): ReactNode => {
+  if (status === "reconnecting") {
+    return (
+      <span className={styles.statusReconnecting} title="Reconnecting…">
+        <PulsingCircle size={7} />
+      </span>
+    );
+  }
+
+  if (status === "disconnected") {
+    return (
+      <span className={styles.statusDisconnected} title="Disconnected">
+        <BlandCircle size={7} />
+      </span>
+    );
+  }
+  return null;
+};
 
 // TerminalInstance — one xterm.js + WebSocket per tab
 
@@ -34,13 +57,21 @@ type TerminalInstanceProps = {
   terminalIndex: number;
   isVisible: boolean;
   onOutput?: () => void;
+  onConnectionStatusChange?: (status: TerminalConnectionStatus) => void;
 };
 
-const TerminalInstance = ({ workspaceID, terminalIndex, isVisible, onOutput }: TerminalInstanceProps): ReactElement => {
+const TerminalInstance = ({
+  workspaceID,
+  terminalIndex,
+  isVisible,
+  onOutput,
+  onConnectionStatusChange,
+}: TerminalInstanceProps): ReactElement => {
   const { terminalContainerRef } = useTerminal({
     terminalPath: `/api/v1/workspaces/${workspaceID}/terminal/${terminalIndex}/ws`,
     isVisible,
     onOutput,
+    onConnectionStatusChange,
   });
 
   return (
@@ -159,6 +190,14 @@ const TerminalPanelContent = ({ workspaceID }: { workspaceID: string }): ReactEl
       next.add(tabId);
       return next;
     });
+  }, []);
+
+  // Per-tab WebSocket connection state, so the tab bar can flag a terminal whose
+  // connection dropped or won't recover. Keyed by tab id.
+  const [connectionStatuses, setConnectionStatuses] = useState<Record<string, TerminalConnectionStatus>>({});
+
+  const handleConnectionStatusChange = useCallback((tabId: string, status: TerminalConnectionStatus): void => {
+    setConnectionStatuses((prev) => (prev[tabId] === status ? prev : { ...prev, [tabId]: status }));
   }, []);
 
   const handleActivate = useCallback(
@@ -304,11 +343,15 @@ const TerminalPanelContent = ({ workspaceID }: { workspaceID: string }): ReactEl
         id: t.id,
         label: t.label,
         dataTestId: ElementIds.TERMINAL_TAB,
-        icon: unreadTabIds.has(t.id) ? (
-          <span className={styles.unreadDot}>
-            <PulsingCircle size={7} />
-          </span>
-        ) : undefined,
+        // A connection issue takes precedence over the unread-output dot: a
+        // frozen/dropped terminal is more important to surface than new output.
+        icon:
+          getTabStatusIcon(connectionStatuses[t.id]) ??
+          (unreadTabIds.has(t.id) ? (
+            <span className={styles.unreadDot}>
+              <PulsingCircle size={7} />
+            </span>
+          ) : undefined),
         labelContent:
           renamingTabId === t.id ? (
             <InlineRenameInput
@@ -319,7 +362,7 @@ const TerminalPanelContent = ({ workspaceID }: { workspaceID: string }): ReactEl
             />
           ) : undefined,
       })),
-    [tabs, renamingTabId, unreadTabIds, handleRenameCommit],
+    [tabs, renamingTabId, unreadTabIds, connectionStatuses, handleRenameCommit],
   );
 
   return (
@@ -355,6 +398,7 @@ const TerminalPanelContent = ({ workspaceID }: { workspaceID: string }): ReactEl
             terminalIndex={tab.index}
             isVisible={tab.id === activeTabId}
             onOutput={() => handleTerminalOutput(tab.id)}
+            onConnectionStatusChange={(status) => handleConnectionStatusChange(tab.id, status)}
           />
         ))}
       </div>
