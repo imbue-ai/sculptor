@@ -1,0 +1,11 @@
+// Connection-issue indicators on a terminal tab. Amber pulses while the socket
+// is reconnecting (transient); red is static for a connection that won't recover
+// on its own (a rejected token or a normal close).
+.statusReconnecting {
+  --inner-color: var(--amber-9);
+  --outer-color: var(--amber-a5);
+}
+
+.statusDisconnected {
+  --inner-color: var(--red-9);
+}
