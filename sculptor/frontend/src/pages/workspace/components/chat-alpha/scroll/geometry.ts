@@ -6,10 +6,8 @@ import type { Virtualizer } from "@tanstack/react-virtual";
  * The virtualizer inflates the scroll container with a dynamic `paddingEnd` so a
  * freshly-anchored user message can reach the top of the viewport. That padding
  * is empty space below the last message, so "at the bottom" means the last
- * message is in view — not that the padded scroll range is exhausted. Measuring
- * against `scrollHeight` alone (which includes the padding) is what made the
- * viewport read as "not at the bottom" while visibly at the bottom; subtracting
- * `paddingEnd` is the whole correction.
+ * message is in view — not that the padded scroll range is exhausted. Because
+ * `scrollHeight` includes that padding, the distance subtracts `paddingEnd`.
  *
  * This is the single distance primitive for every "are we at the bottom" check.
  */

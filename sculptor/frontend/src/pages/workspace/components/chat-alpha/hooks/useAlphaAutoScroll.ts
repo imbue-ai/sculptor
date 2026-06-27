@@ -563,8 +563,7 @@ export const useAlphaAutoScroll = (
 
   // Perform the one typed reflow action projectReflow chose for the current
   // authority phase. This is the single executor the unified content observer
-  // drives — projectReflow decides, applyReflow performs — replacing the former
-  // streaming + idle observers' scattered engaged/at-bottom/authority branches.
+  // drives — projectReflow decides, applyReflow performs.
   const applyReflow = useCallback(
     (el: HTMLElement, distance: number): void => {
       const action = projectReflow(machine.getState(), isStreamingRef.current);
@@ -627,8 +626,7 @@ export const useAlphaAutoScroll = (
   // item growing — it samples at-bottness and applies projectReflow's single
   // action: pin to the bottom (following / at-bottom), hold the reading anchor
   // (scrolled up), hold the anchored turn at the top (anchoringTurn), or leave
-  // scrollTop to a restore/nav owner. This replaces the former streaming + idle
-  // observers and their scattered conditionals with the machine's one policy.
+  // scrollTop to a restore/nav owner.
   useLayoutEffect(() => {
     if (isSuppressed) return;
     const el = scrollContainerRef.current;

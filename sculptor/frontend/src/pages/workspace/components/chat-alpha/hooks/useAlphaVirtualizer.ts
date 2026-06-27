@@ -63,10 +63,9 @@ export const touchLRU = <TK, TV>(map: Map<TK, TV>, key: TK, maxSize: number): vo
  * `item.start + item.size` is the item's end *before* this resize — its
  * pre-growth end.  We compensate only when that pre-growth end was at or above
  * `scrollOffset`, i.e. the item was completely out of view above the viewport.
- * (`delta` is the size change; it is intentionally not subtracted — doing so
- * treated `item.size` as the post-growth size and, when an in-view item grew by
- * more than its own height, drove the pre-growth end negative and wrongly
- * compensated the reading anchor, jumping the view down. SCU-1566.)
+ * (`delta`, the size change, is intentionally not subtracted: the cached
+ * `item.size` is already the pre-growth size, so `item.start + item.size` is the
+ * pre-growth end as written.)
  */
 export const shouldAdjustScrollPosition = (
   item: VirtualItem,

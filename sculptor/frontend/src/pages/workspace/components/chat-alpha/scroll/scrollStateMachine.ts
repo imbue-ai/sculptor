@@ -99,8 +99,8 @@ export const projectAtBottom = (state: ScrollMachineState): boolean => {
  *  - `restoring` / `navigating` ⇒ leave scrollTop to that phase's own owner;
  *  - `userControlled`         ⇒ idle at the bottom: keep glued there; scrolled up
  *                               (or disengaged mid-stream): hold the reading anchor
- *                               stationary (the fix for the width-reflow jump), or
- *                               ignore until an anchor has been sampled.
+ *                               stationary, or ignore until an anchor has been
+ *                               sampled.
  *
  * `isStreaming` is the one bit not in the machine: while the stream runs, being
  * `following` is the only way to be pinned to the live tail, so a `userControlled`
