@@ -429,11 +429,15 @@ def test_get_workspace_diff_with_force_refresh(
     assert diff is not None
 
 
-def test_maybe_refresh_workspace_diff_always_refreshes(
+def test_maybe_refresh_workspace_diff_generates_when_missing(
     test_service_collection: CompleteServiceCollection,
     test_project: Project,
 ) -> None:
-    """Test that maybe_refresh_workspace_diff refreshes the diff (always refreshes for now)."""
+    """maybe_refresh_workspace_diff generates a diff when none exists yet.
+
+    Its fingerprint guard only skips when a prior artifact is present and the inputs
+    are unchanged; a fresh workspace has no artifact, so it must regenerate here.
+    """
     with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
         workspace = test_service_collection.workspace_service.create_workspace(
             project=test_project,

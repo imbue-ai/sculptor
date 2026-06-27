@@ -15,8 +15,10 @@ from typing import Callable
 
 from loguru import logger
 
-from sculptor.foundation.processes.local_process import run_blocking
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.subprocess_utils import ProcessError
+from sculptor.services.git_repo_service.git_commands import run_git_command_local
+from sculptor.services.git_repo_service.git_errors import GitCommandFailure
 
 _GIT_TIMEOUT_SECONDS = 5.0
 
@@ -34,10 +36,12 @@ class PeriodicDiffRefresher:
         self,
         working_directory: Path,
         on_change: Callable[[], None],
+        concurrency_group: ConcurrencyGroup,
         interval_seconds: float = 3.0,
     ) -> None:
         self._working_directory = working_directory
         self._on_change = on_change
+        self._concurrency_group = concurrency_group
         self._interval_seconds = interval_seconds
         self._last_check_at: float | None = None
         self._last_fingerprint: str | None = None
@@ -61,31 +65,40 @@ class PeriodicDiffRefresher:
     def _compute_fingerprint(self) -> str | None:
         """Hash of `git status --porcelain` + HEAD, or None on git failure.
 
-        A transient git failure (index lock, repo mid-rewrite) must not kill
-        the agent loop — swallow and retry on the next interval.
+        Runs git through ``run_git_command_local`` so each spawn goes via
+        ``os.posix_spawn`` (cost independent of backend RSS, SCU-1624/SCU-1627) with
+        the working directory folded into ``git -C``. ``check_output=False`` returns
+        the exit code instead of raising on non-zero (e.g. a repo with no commits),
+        and ``is_retry_safe=False`` keeps this 3s poll from retrying. A transient git
+        failure (index lock, repo mid-rewrite, moved working dir) must not kill the
+        agent loop — swallow and retry on the next interval.
         """
         try:
-            status = run_blocking(
-                command=["git", "status", "--porcelain"],
+            status_rc, status_stdout, _status_stderr = run_git_command_local(
+                self._concurrency_group,
+                ["git", "status", "--porcelain"],
                 cwd=self._working_directory,
+                check_output=False,
+                is_retry_safe=False,
                 timeout=_GIT_TIMEOUT_SECONDS,
-                is_checked=False,
             )
-            head = run_blocking(
-                command=["git", "rev-parse", "HEAD"],
+            head_rc, head_stdout, _head_stderr = run_git_command_local(
+                self._concurrency_group,
+                ["git", "rev-parse", "HEAD"],
                 cwd=self._working_directory,
+                check_output=False,
+                is_retry_safe=False,
                 timeout=_GIT_TIMEOUT_SECONDS,
-                is_checked=False,
             )
-        except (OSError, ProcessError) as e:
+        except (OSError, ProcessError, GitCommandFailure) as e:
             logger.debug("Diff-refresh fingerprint failed in {}: {}", self._working_directory, e)
             return None
-        if status.returncode != 0 or head.returncode != 0 or status.is_timed_out or head.is_timed_out:
+        if status_rc != 0 or head_rc != 0:
             logger.debug(
                 "Diff-refresh git commands failed in {} (status rc={}, rev-parse rc={})",
                 self._working_directory,
-                status.returncode,
-                head.returncode,
+                status_rc,
+                head_rc,
             )
             return None
-        return hashlib.sha256((status.stdout + "\x00" + head.stdout).encode()).hexdigest()
+        return hashlib.sha256((status_stdout + "\x00" + head_stdout).encode()).hexdigest()
