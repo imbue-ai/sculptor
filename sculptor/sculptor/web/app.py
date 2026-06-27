@@ -2322,6 +2322,20 @@ def get_workspace_agent_diagnostics(
     )
 
 
+def _raise_for_terminal_delivery_result(result: TerminalDeliveryResult) -> None:
+    """Raise the HTTP 409 that a non-DELIVERED PTY write maps to, or return for
+    DELIVERED. The frontend's enable/disable logic and the integration tests
+    depend on these exact statuses and details, so every endpoint that drives a
+    terminal agent maps results through here to keep them identical.
+    """
+    if result is TerminalDeliveryResult.NOT_OPT_IN:
+        raise HTTPException(status_code=409, detail="this agent does not accept automated prompts")
+    if result is TerminalDeliveryResult.NOT_AT_PROMPT:
+        raise HTTPException(status_code=409, detail="agent is busy or not at its prompt")
+    if result is TerminalDeliveryResult.NO_PTY:
+        raise HTTPException(status_code=409, detail="terminal not running")
+
+
 @router.post("/api/v1/workspaces/{workspace_id}/agents/{agent_id}/messages")
 def send_workspace_agent_messages(
     workspace_id: str,
@@ -2345,45 +2359,64 @@ def send_workspace_agent_messages(
                 detail=[{"loc": ["body", "message"], "msg": "Message required", "type": "value_error.missing"}],
             )
 
-        saved_messages = services.task_service.get_saved_messages_for_task(task.object_id, transaction)
         assert isinstance(task.input_data, AgentTaskInputsV2), (
             f"Expected AgentTaskInputsV2 for agent message endpoint, got {type(task.input_data).__name__}"
         )
-        harness = get_harness_for_config(task.input_data.agent_config)
-        if message_request.enter_plan_mode and not harness.capabilities().supports_interactive_backchannel:
-            raise HTTPException(
-                status_code=400,
-                detail="plan mode requires a harness that supports the interactive backchannel",
+
+        # A registered terminal agent has no chat message stream to queue into;
+        # its delivery is handled below, outside this transaction. Chat agents
+        # take the original queueing path here, unchanged.
+        if not isinstance(task.input_data.agent_config, RegisteredTerminalAgentConfig):
+            saved_messages = services.task_service.get_saved_messages_for_task(task.object_id, transaction)
+            harness = get_harness_for_config(task.input_data.agent_config)
+            if message_request.enter_plan_mode and not harness.capabilities().supports_interactive_backchannel:
+                raise HTTPException(
+                    status_code=400,
+                    detail="plan mode requires a harness that supports the interactive backchannel",
+                )
+            task_state = convert_agent_messages_to_task_update(
+                saved_messages, task_id=task.object_id, completed_message_by_id={}, harness=harness
             )
-        task_state = convert_agent_messages_to_task_update(
-            saved_messages, task_id=task.object_id, completed_message_by_id={}, harness=harness
-        )
-        if task_state.pending_user_question is not None:
-            raise HTTPException(
-                status_code=409,
-                detail="Cannot send a message while the agent is waiting for a response to AskUserQuestion.",
+            if task_state.pending_user_question is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Cannot send a message while the agent is waiting for a response to AskUserQuestion.",
+                )
+
+            message_id = AgentMessageID()
+            logger.info("Sending message {} to agent {}: {}", message_id, agent_id, message_str[:100])
+
+            message = ChatInputUserMessage(
+                message_id=message_id,
+                text=message_str,
+                model_name=message_request.model,
+                files=message_request.files,
+                enter_plan_mode=message_request.enter_plan_mode,
+                exit_plan_mode=message_request.exit_plan_mode,
+                fast_mode=message_request.fast_mode,
+                effort=message_request.effort,
+                sent_via=message_request.sent_via,
             )
 
-        message_id = AgentMessageID()
-        logger.info("Sending message {} to agent {}: {}", message_id, agent_id, message_str[:100])
+            services.task_service.create_message(
+                message=message,
+                task_id=task.object_id,
+                transaction=transaction,
+            )
+            return
 
-        message = ChatInputUserMessage(
-            message_id=message_id,
-            text=message_str,
-            model_name=message_request.model,
-            files=message_request.files,
-            enter_plan_mode=message_request.enter_plan_mode,
-            exit_plan_mode=message_request.exit_plan_mode,
-            fast_mode=message_request.fast_mode,
-            effort=message_request.effort,
-            sent_via=message_request.sent_via,
-        )
-
-        services.task_service.create_message(
-            message=message,
-            task_id=task.object_id,
-            transaction=transaction,
-        )
+    # Registered terminal agent: type the prompt into the PTY via the shared
+    # helper, exactly as POST /agents/{id}/terminal/input and the CI Babysitter
+    # do, so every feature that drives a terminal agent stays identically gated.
+    # Done outside the transaction above — the helper sleeps briefly before the
+    # submit Enter and must not hold a DB transaction while it does.
+    result = deliver_prompt_to_terminal_agent(
+        task,
+        message_str,
+        submit=True,
+        task_service=services.task_service,
+    )
+    _raise_for_terminal_delivery_result(result)
 
 
 @router.post("/api/v1/workspaces/{workspace_id}/agents/{agent_id}/answer_question")
@@ -3609,21 +3642,15 @@ def post_agent_terminal_input(
 
     # All three security guards and the bracketed-paste write live in the
     # shared helper so this endpoint and the CI Babysitter stay identically
-    # gated. Map each non-DELIVERED result to the status/detail the endpoint
-    # has always returned — the integration test and the frontend's
-    # enable/disable logic depend on these exact 409s.
+    # gated. _raise_for_terminal_delivery_result maps each non-DELIVERED result
+    # to the 409 the message endpoint returns too.
     result = deliver_prompt_to_terminal_agent(
         task,
         input_request.text,
         submit=input_request.submit,
         task_service=services.task_service,
     )
-    if result is TerminalDeliveryResult.NOT_OPT_IN:
-        raise HTTPException(status_code=409, detail="this agent does not accept automated prompts")
-    if result is TerminalDeliveryResult.NOT_AT_PROMPT:
-        raise HTTPException(status_code=409, detail="agent is busy or not at its prompt")
-    if result is TerminalDeliveryResult.NO_PTY:
-        raise HTTPException(status_code=409, detail="terminal not running")
+    _raise_for_terminal_delivery_result(result)
     return Response(status_code=204)
 
 

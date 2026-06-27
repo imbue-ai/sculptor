@@ -23,7 +23,10 @@ from typing import Any
 import playwright.sync_api
 from playwright.sync_api import expect
 
+from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.terminal import get_agent_terminal_panel
+from sculptor.testing.elements.terminal import wait_for_xterm_substring
 from sculptor.testing.pages.home_page import PlaywrightHomePage
 from sculptor.testing.playwright_utils import navigate_to_home_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -1324,3 +1327,94 @@ def test_sculpt_send_shows_sent_via_badge_in_ui(sculptor_instance_: SculptorInst
     assert len(cli_messages) == 4, f"Expected 4 messages, got {len(cli_messages)}"
     _assert_matches(cli_messages[2], _expected_user_message(follow_up, sent_via="sculpt"))
     _assert_matches(cli_messages[0], _expected_user_message(prompt, sent_via=None))
+
+
+# ---------------------------------------------------------------------------
+# sculpt agent send → registered terminal agent: prompt must be typed into the PTY
+# ---------------------------------------------------------------------------
+
+# A fake registered program: idle at its prompt, echo each received line as
+# RECEIVED:<line>, then go busy. The IDLE-DONE marker is assembled via printf so
+# the echoed command line never contains it (mirrors
+# test_terminal_agent_automated_prompts), letting the test gate on the marker.
+_FAKE_PROMPTS_COMMAND = (
+    "echo FAKE-PROMPTS-BANNER; sculpt signal idle; printf %sDONE IDLE-; echo; "
+    + "while read -r _line; do echo RECEIVED:$_line; sculpt signal busy; done"
+)
+
+_NEUTRAL_DOT = re.compile(r"^(read|unread)$")
+
+
+@user_story("to send a prompt to a registered terminal agent with `sculpt agent send`")
+def test_sculpt_agent_send_types_into_registered_terminal_agent_pty(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """`sculpt agent send` to a registered terminal agent must type the prompt
+    into the agent's PTY (as the action buttons and CI Babysitter do), not queue
+    it as a chat message the terminal agent never consumes.
+
+    A fake registered program opts into automated prompts, signals idle, and
+    echoes each stdin line as ``RECEIVED:<line>``. With it at its prompt, running
+    ``sculpt agent send <agent> <msg>`` must surface ``RECEIVED:<msg>`` in the
+    terminal buffer. With the bug present the CLI's message is queued as a
+    ChatInputUserMessage and never reaches the PTY, so the echo never appears and
+    this wait times out.
+    """
+    page = sculptor_instance_.page
+
+    # A workspace with a chat agent gives us somewhere to launch the terminal
+    # agent; the prompt content is irrelevant to this test.
+    task_page = start_task_and_wait_for_ready(
+        sculptor_page=page,
+        prompt='fake_claude:text `{"text": "ready"}`',
+        workspace_name="Sculpt Terminal Send WS",
+    )
+    ws_match = re.search(r"/ws/([a-zA-Z0-9_-]+)/", page.url)
+    assert ws_match, f"Could not extract workspace ID from URL: {page.url}"
+    workspace_id = ws_match.group(1)
+    chat_agent_id = task_page.get_task_id()
+
+    registrations_dir = sculptor_instance_.sculptor_folder / "terminal_agents"
+    registrations_dir.mkdir(parents=True, exist_ok=True)
+    (registrations_dir / "fake-prompts.toml").write_text(
+        f'display_name = "Fake Prompts"\nlaunch_command = "{_FAKE_PROMPTS_COMMAND}"\naccepts_automated_prompts = true\n'
+    )
+    try:
+        # Launch the registered terminal agent and wait until it is at its prompt.
+        agent_tab_bar = PlaywrightAgentTabBarElement(page)
+        agent_tab_bar.open_agent_type_menu()
+        registered_item = agent_tab_bar.get_agent_type_menu_item_registered("fake-prompts")
+        expect(registered_item).to_be_visible()
+        registered_item.click()
+
+        prompts_tab = agent_tab_bar.get_agent_tab_by_name("Fake Prompts 1").first
+        expect(prompts_tab).to_be_visible()
+        expect(get_agent_terminal_panel(page)).to_be_visible()
+        wait_for_xterm_substring(page, "FAKE-PROMPTS-BANNER")
+        # The idle signal landed in the backend: the program is at its prompt.
+        wait_for_xterm_substring(page, "IDLE-DONE")
+        expect(prompts_tab).to_have_attribute("data-dot-status", _NEUTRAL_DOT)
+
+        # Resolve the terminal agent's id from the CLI (it is the only agent in
+        # the workspace that is not the original chat agent).
+        exit_code, output = _run_sculpt(sculptor_instance_, ["agent", "list", "--workspace", workspace_id])
+        assert exit_code == 0, f"agent list failed: {output}"
+        other_agent_ids = [a["id"] for a in json.loads(output) if a["id"] != chat_agent_id]
+        assert len(other_agent_ids) == 1, f"Expected exactly one terminal agent, got {other_agent_ids}"
+        terminal_agent_id = other_agent_ids[0]
+
+        # No spaces: the prompt lands on one xterm line and the echoed RECEIVED
+        # line matches exactly (the program's `echo RECEIVED:$_line` is unquoted).
+        prompt_text = "SCULPT-CLI-TERMINAL-PROMPT"
+        exit_code, output = _run_sculpt(
+            sculptor_instance_,
+            ["agent", "send", terminal_agent_id, prompt_text, "--workspace", workspace_id],
+        )
+        assert exit_code == 0, f"agent send failed: {output}"
+
+        # The prompt was typed into the PTY: the program echoes it back. (The
+        # line-discipline echo of the typed text also appears, but only the
+        # program's output carries the RECEIVED: prefix.)
+        wait_for_xterm_substring(page, f"RECEIVED:{prompt_text}")
+    finally:
+        (registrations_dir / "fake-prompts.toml").unlink(missing_ok=True)
