@@ -21,7 +21,7 @@ from sculptor.utils.build import get_internal_folder
 
 @cache
 def _git_executable() -> str:
-    """Absolute path to the ``git`` binary, resolved once.
+    """Path to the ``git`` binary, resolved once (absolute when git is on ``PATH``).
 
     ``os.posix_spawn`` does not search ``PATH``, so the spawn path needs an
     absolute executable. Falls back to bare ``git`` if it is somehow not on PATH
