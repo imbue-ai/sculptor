@@ -209,13 +209,20 @@ def spawn_via_posix_spawn(
     that to ``ProcessSetupError`` just as it does for Popen.
     """
     argv = list(command)
+    if not argv:
+        # Raise ValueError (not IndexError) so the caller's (OSError, ValueError)
+        # handler maps it to ProcessSetupError, matching how subprocess.Popen([]) fails.
+        raise ValueError("command must be a non-empty sequence")
+    spawn_env = dict(env) if env is not None else dict(os.environ)
     executable = argv[0]
     if not os.path.isabs(executable):
-        resolved = shutil.which(executable)
+        # Resolve against the child's PATH, not the parent's, so a caller-provided
+        # PATH picks the same binary posix_spawn will exec — matching
+        # subprocess.Popen(env=...). (posix_spawn itself never searches PATH.)
+        resolved = shutil.which(executable, path=spawn_env.get("PATH"))
         if resolved is None:
             raise FileNotFoundError(f"command not found on PATH: {executable!r}")
         executable = resolved
-    spawn_env = dict(env) if env is not None else dict(os.environ)
 
     stdout_read, stdout_write = os.pipe()
     stderr_read, stderr_write = os.pipe()

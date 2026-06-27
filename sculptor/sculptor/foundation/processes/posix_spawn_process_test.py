@@ -8,6 +8,7 @@ delicate ``run_local_command_modern_version`` loop semantics.
 import os
 import signal
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -53,6 +54,25 @@ def test_missing_executable_raises_oserror() -> None:
     # Matches subprocess.Popen, whose OSError the caller maps to ProcessSetupError.
     with pytest.raises(OSError):
         spawn_via_posix_spawn(["this-command-does-not-exist-xyzzy"])
+
+
+def test_empty_command_raises_value_error() -> None:
+    # ValueError (not IndexError) so the caller's (OSError, ValueError) handler
+    # maps it to ProcessSetupError, like subprocess.Popen([]).
+    with pytest.raises(ValueError):
+        spawn_via_posix_spawn([])
+
+
+def test_relative_executable_resolved_against_env_path(tmp_path: Path) -> None:
+    # A relative exe must resolve against the caller-provided PATH (matching
+    # subprocess.Popen(env=...)), not the parent process's PATH.
+    helper = tmp_path / "sctest-helper"
+    helper.write_text("#!/bin/sh\nprintf from-env-path\n")
+    helper.chmod(0o755)
+    process = spawn_via_posix_spawn(["sctest-helper"], env={"PATH": str(tmp_path)})
+    assert process.wait(timeout=10) == 0
+    out, _err = _read_all(process)
+    assert out == b"from-env-path"
 
 
 def test_env_is_passed_through() -> None:
