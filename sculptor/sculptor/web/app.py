@@ -2322,6 +2322,20 @@ def get_workspace_agent_diagnostics(
     )
 
 
+def _raise_for_terminal_delivery_result(result: TerminalDeliveryResult) -> None:
+    """Raise the HTTP 409 that a non-DELIVERED PTY write maps to, or return for
+    DELIVERED. The frontend's enable/disable logic and the integration tests
+    depend on these exact statuses and details, so every endpoint that drives a
+    terminal agent maps results through here to keep them identical.
+    """
+    if result is TerminalDeliveryResult.NOT_OPT_IN:
+        raise HTTPException(status_code=409, detail="this agent does not accept automated prompts")
+    if result is TerminalDeliveryResult.NOT_AT_PROMPT:
+        raise HTTPException(status_code=409, detail="agent is busy or not at its prompt")
+    if result is TerminalDeliveryResult.NO_PTY:
+        raise HTTPException(status_code=409, detail="terminal not running")
+
+
 @router.post("/api/v1/workspaces/{workspace_id}/agents/{agent_id}/messages")
 def send_workspace_agent_messages(
     workspace_id: str,
@@ -2402,12 +2416,7 @@ def send_workspace_agent_messages(
         submit=True,
         task_service=services.task_service,
     )
-    if result is TerminalDeliveryResult.NOT_OPT_IN:
-        raise HTTPException(status_code=409, detail="this agent does not accept automated prompts")
-    if result is TerminalDeliveryResult.NOT_AT_PROMPT:
-        raise HTTPException(status_code=409, detail="agent is busy or not at its prompt")
-    if result is TerminalDeliveryResult.NO_PTY:
-        raise HTTPException(status_code=409, detail="terminal not running")
+    _raise_for_terminal_delivery_result(result)
 
 
 @router.post("/api/v1/workspaces/{workspace_id}/agents/{agent_id}/answer_question")
@@ -3633,21 +3642,15 @@ def post_agent_terminal_input(
 
     # All three security guards and the bracketed-paste write live in the
     # shared helper so this endpoint and the CI Babysitter stay identically
-    # gated. Map each non-DELIVERED result to the status/detail the endpoint
-    # has always returned — the integration test and the frontend's
-    # enable/disable logic depend on these exact 409s.
+    # gated. _raise_for_terminal_delivery_result maps each non-DELIVERED result
+    # to the 409 the message endpoint returns too.
     result = deliver_prompt_to_terminal_agent(
         task,
         input_request.text,
         submit=input_request.submit,
         task_service=services.task_service,
     )
-    if result is TerminalDeliveryResult.NOT_OPT_IN:
-        raise HTTPException(status_code=409, detail="this agent does not accept automated prompts")
-    if result is TerminalDeliveryResult.NOT_AT_PROMPT:
-        raise HTTPException(status_code=409, detail="agent is busy or not at its prompt")
-    if result is TerminalDeliveryResult.NO_PTY:
-        raise HTTPException(status_code=409, detail="terminal not running")
+    _raise_for_terminal_delivery_result(result)
     return Response(status_code=204)
 
 
