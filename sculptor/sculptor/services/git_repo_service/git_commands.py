@@ -67,6 +67,20 @@ def run_git_command_local(
     if spawn_via_git:
         argv[0] = _git_executable()
         if cwd is not None:
+            # `git -C <dir>` only fails once git runs, which our retry path would
+            # treat as a transient error and retry 3x with backoff. subprocess.Popen
+            # (the cwd path) instead fails immediately at spawn with a non-retriable
+            # ProcessSetupError -> GitCommandFailure. Preserve that contract: a
+            # missing/moved repo directory is an immediate, non-retriable failure
+            # (retrying a vanished repo just wastes ~tens of seconds of backoff).
+            if not Path(cwd).is_dir():
+                raise GitCommandFailure(
+                    f"Failed to start git command: {command}\nworking directory does not exist: {cwd}",
+                    command=command,
+                    returncode=None,
+                    stdout="",
+                    stderr="",
+                )
             argv = [argv[0], "-C", str(cwd), *argv[1:]]
 
     try:
