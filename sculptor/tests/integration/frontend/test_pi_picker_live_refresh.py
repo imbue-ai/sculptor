@@ -70,8 +70,15 @@ def test_pi_picker_refreshes_live_after_paste_key(
         )
         assert response.ok, f"paste-key failed: {response.status} {response.text()}"
 
-        # Without restarting the agent, its picker now includes the google model —
-        # the broadcast re-fetched and re-filtered the running agent's catalog live.
-        chat_panel.get_model_selector().click()
-        expect(chat_panel.get_model_option("fake-google-x")).to_be_visible(timeout=30_000)
-        expect(chat_panel.get_model_option("fake-anthropic-x")).to_be_visible()
+        # Without restarting the agent, its picker now offers the google model. The
+        # live refresh re-filters the running agent's catalog and adds the google
+        # provider, so the single-provider Select swaps for a two-provider cascade
+        # (the DropdownMenu pi renders for 2+ providers, aria-haspopup="menu"). Await
+        # that swap on the closed trigger — opening mid-swap re-renders the open menu
+        # shut — then open the cascade and drill into google's submenu for its model.
+        selector = chat_panel.get_model_selector()
+        expect(selector).to_have_attribute("aria-haspopup", "menu", timeout=30_000)
+        selector.click()
+        expect(chat_panel.get_model_provider_option("anthropic")).to_be_visible()
+        chat_panel.get_model_provider_option("google").hover()
+        expect(chat_panel.get_model_option("fake-google-x")).to_be_visible()

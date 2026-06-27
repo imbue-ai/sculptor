@@ -225,6 +225,14 @@ class PlaywrightChatPanelElement(PlaywrightFilePreviewAndUploadMixin, Playwright
         """The dropdown option for a specific model id (testid ``MODEL_OPTION-<model id>``)."""
         return self._page.get_by_test_id(f"{ElementIDs.MODEL_OPTION}-{model_id}")
 
+    def get_model_provider_option(self, provider: str) -> Locator:
+        """The cascade sub-trigger for a provider in a multi-provider catalog (pi).
+
+        Testid ``MODEL_PROVIDER_OPTION-<provider>``; its models live behind the
+        submenu it opens.
+        """
+        return self._page.get_by_test_id(f"{ElementIDs.MODEL_PROVIDER_OPTION}-{provider}")
+
     def get_picker_empty_state(self) -> Locator:
         """The pi model-picker empty state (shown when no providers are authenticated)."""
         return self.get_by_test_id(ElementIDs.PI_PICKER_EMPTY_STATE)
