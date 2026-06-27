@@ -57,41 +57,41 @@ def run_git_command_local(
     new_env = os.environ.copy()
     new_env["GIT_SSH_COMMAND"] = str(get_internal_folder() / "ssh" / "ssh")
 
-    # Spawn git via posix_spawn (cost independent of backend RSS, SCU-1624) rather
-    # than fork()+exec(). That requires an absolute executable and cwd=None, so we
-    # resolve git's path and fold any working directory into `git -C <dir>` (which
-    # is equivalent for git's purposes). Only applies when the command really is
-    # git; anything else keeps the original Popen behavior.
+    # Always spawn git via posix_spawn (cost independent of backend RSS, SCU-1624)
+    # rather than fork()+exec(). posix_spawn needs an absolute executable and cannot
+    # set the child's cwd, so we resolve git's path and fold any working directory
+    # into `git -C <dir>` (equivalent for git's purposes). This is git-only by
+    # contract; non-git commands belong in the generic process helpers.
     argv = list(command)
-    spawn_via_git = bool(argv) and argv[0] == "git"
-    if spawn_via_git:
-        argv[0] = _git_executable()
-        if cwd is not None:
-            # `git -C <dir>` only fails once git runs, which our retry path would
-            # treat as a transient error and retry 3x with backoff. subprocess.Popen
-            # (the cwd path) instead fails immediately at spawn with a non-retriable
-            # ProcessSetupError -> GitCommandFailure. Preserve that contract: a
-            # missing/moved repo directory is an immediate, non-retriable failure
-            # (retrying a vanished repo just wastes ~tens of seconds of backoff).
-            if not Path(cwd).is_dir():
-                raise GitCommandFailure(
-                    f"Failed to start git command: {command}\nworking directory does not exist: {cwd}",
-                    command=command,
-                    returncode=None,
-                    stdout="",
-                    stderr="",
-                )
-            argv = [argv[0], "-C", str(cwd), *argv[1:]]
+    if not argv or argv[0] != "git":
+        raise ValueError(f"run_git_command_local expects a command beginning with 'git', got: {command!r}")
+    argv[0] = _git_executable()
+    if cwd is not None:
+        # `git -C <dir>` only fails once git runs, which our retry path would treat
+        # as a transient error and retry 3x with backoff. subprocess.Popen(cwd=...)
+        # instead failed immediately at spawn with a non-retriable
+        # ProcessSetupError -> GitCommandFailure. Preserve that contract: a
+        # missing/moved repo directory is an immediate, non-retriable failure
+        # (retrying a vanished repo just wastes ~tens of seconds of backoff).
+        if not Path(cwd).is_dir():
+            raise GitCommandFailure(
+                f"Failed to start git command: {command}\nworking directory does not exist: {cwd}",
+                command=command,
+                returncode=None,
+                stdout="",
+                stderr="",
+            )
+        argv = [argv[0], "-C", str(cwd), *argv[1:]]
 
     try:
         result = concurrency_group.run_process_to_completion(
             command=argv,
-            cwd=None if spawn_via_git else (Path(cwd) if cwd else None),
+            cwd=None,
             timeout=timeout,
             is_checked_after=True,
             env=new_env,
             log_command=log_command,
-            prefer_posix_spawn=spawn_via_git,
+            prefer_posix_spawn=True,
         )
         assert result.returncode is not None, "returncode should never be None for completed process"
         return result.returncode, result.stdout, result.stderr
