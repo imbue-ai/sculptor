@@ -37,6 +37,34 @@ from typing import runtime_checkable
 # shutdown latency is dominated by the child's own SIGTERM handling, not by us.
 _WAIT_POLL_INTERVAL_SECONDS = 0.005
 
+
+def _detect_posix_spawn_setsid_support() -> bool:
+    """Whether ``os.posix_spawn(..., setsid=True)`` is usable on this platform.
+
+    Python always accepts the ``setsid`` keyword, but raises ``NotImplementedError``
+    at call time on builds whose C library lacks ``POSIX_SPAWN_SETSID`` (notably
+    glibc older than 2.39, e.g. Ubuntu 22.04). macOS uses ``POSIX_SPAWN_SETSID_NP``
+    and is always fine. We probe once with a deliberately empty executable path:
+    ``setsid`` is validated before any spawn is attempted, so an unsupported build
+    raises ``NotImplementedError`` here, while a supported one gets as far as the
+    failing exec and raises ``OSError``. No child process is created on either path.
+    """
+    try:
+        os.posix_spawn("", [b"posix-spawn-setsid-probe"], {}, setsid=True)
+    except NotImplementedError:
+        return False
+    except OSError:
+        return True
+    return True
+
+
+# Cached at import: a given posix_spawn build either supports setsid or it never
+# will, so callers needing process-group isolation can branch on this without
+# re-probing. The spawn machinery falls back to ``subprocess.Popen`` (whose
+# ``start_new_session=True`` is portable) when this is False.
+POSIX_SPAWN_SUPPORTS_SETSID = _detect_posix_spawn_setsid_support()
+
+
 # Returncode recorded when the child was reaped out from under us (``waitpid``
 # raised ECHILD), so its true exit status is unrecoverable. We surface a distinct
 # non-``None`` sentinel rather than leaving ``returncode`` at ``None``: callers
@@ -170,6 +198,11 @@ def spawn_via_posix_spawn(
     from ``/dev/null`` (or a pipe when ``stdin_mode`` is ``subprocess.PIPE``), and
     ``isolate_process_group`` realized through ``posix_spawn``'s ``setsid`` (so the
     child leads its own process group and ``killpg`` reaches its descendants).
+
+    ``isolate_process_group=True`` requires ``POSIX_SPAWN_SUPPORTS_SETSID``; on
+    platforms without it ``posix_spawn`` raises ``NotImplementedError``. Callers
+    that need isolation must gate on that flag and fall back to ``subprocess.Popen``
+    (the spawn machinery does), so we never silently spawn a non-isolated child.
 
     The executable is resolved to an absolute path (``posix_spawn`` does not search
     ``PATH``). Raises ``OSError`` if the command cannot be spawned — the caller maps
