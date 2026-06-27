@@ -69,7 +69,17 @@ class LocalProcessHandle(Protocol):
 
 
 class PosixSpawnedProcess:
-    """A ``os.posix_spawn``-backed process exposing the ``LocalProcessHandle`` surface."""
+    """A ``os.posix_spawn``-backed process exposing the ``LocalProcessHandle`` surface.
+
+    NOT thread-safe. Unlike ``subprocess.Popen`` (which serializes reaping with an
+    internal ``_waitpid_lock``), this class has no locking: concurrent ``poll``/
+    ``wait`` from two threads can both ``waitpid`` the same pid (one then sees
+    ECHILD), and a ``terminate``/``kill`` racing a reap can signal a recycled pid.
+    This is safe as used today — the git spawn path drives ``poll``/``wait`` from a
+    single worker thread and never hands the handle to another thread (e.g.
+    ``RunningProcess.kill_now``). Add locking here before routing any
+    ``kill_now``-exposed or otherwise multi-threaded caller through posix_spawn.
+    """
 
     def __init__(
         self,
