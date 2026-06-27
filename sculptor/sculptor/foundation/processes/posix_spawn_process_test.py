@@ -13,6 +13,7 @@ import pytest
 
 from sculptor.foundation.processes.posix_spawn_process import EXIT_CODE_REAPED_ELSEWHERE
 from sculptor.foundation.processes.posix_spawn_process import LocalProcessHandle
+from sculptor.foundation.processes.posix_spawn_process import POSIX_SPAWN_SUPPORTS_SETSID
 from sculptor.foundation.processes.posix_spawn_process import PosixSpawnedProcess
 from sculptor.foundation.processes.posix_spawn_process import spawn_via_posix_spawn
 
@@ -113,6 +114,10 @@ def test_terminate_delivers_sigterm() -> None:
     assert process.wait(timeout=10) == -signal.SIGTERM
 
 
+@pytest.mark.skipif(
+    not POSIX_SPAWN_SUPPORTS_SETSID,
+    reason="posix_spawn lacks setsid on this libc (older glibc); the spawn machinery falls back to Popen here",
+)
 def test_setsid_makes_child_a_process_group_leader() -> None:
     # isolate_process_group=True must put the child in its own group so killpg works.
     process = spawn_via_posix_spawn(["sh", "-c", "sleep 30"], isolate_process_group=True)

@@ -31,6 +31,7 @@ from sculptor.foundation.event_utils import ReadOnlyEvent
 from sculptor.foundation.log_utils import DETAIL
 from sculptor.foundation.log_utils import TRACE
 from sculptor.foundation.processes.posix_spawn_process import LocalProcessHandle
+from sculptor.foundation.processes.posix_spawn_process import POSIX_SPAWN_SUPPORTS_SETSID
 from sculptor.foundation.processes.posix_spawn_process import spawn_via_posix_spawn
 from sculptor.foundation.pydantic_serialization import FrozenModel
 
@@ -673,8 +674,16 @@ def run_local_command_modern_version(
         # with text, encoding, or errors, they will be TextIOBase.
         # this doesn't seem to play nice with nonblocking mode and read().
         process: LocalProcessHandle
+        # ``posix_spawn`` only realizes ``isolate_process_group`` via ``setsid``,
+        # which some libc builds (older glibc) lack. When isolation is required on
+        # such a platform, fall back to ``Popen`` (its ``start_new_session=True`` is
+        # portable) rather than crashing; the git path never sets isolation, so it
+        # keeps the fork-free spawn everywhere.
+        use_posix_spawn = (
+            prefer_posix_spawn and cwd is None and (not isolate_process_group or POSIX_SPAWN_SUPPORTS_SETSID)
+        )
         try:
-            if prefer_posix_spawn and cwd is None:
+            if use_posix_spawn:
                 # vfork-based spawn: cost does not scale with backend RSS (SCU-1624).
                 process = spawn_via_posix_spawn(
                     command,
