@@ -79,6 +79,10 @@ def heap(
     can take several seconds on a multi-GB heap; the request timeout is raised
     accordingly. For allocation-site attribution, run once with --start-trace,
     reproduce the growth, then run plain to see the top sites."""
+    if start_trace and trace_frames < 1:
+        # tracemalloc.start() needs nframe >= 1; a smaller value would reach the
+        # backend as start_trace=0 and silently fail to start tracing.
+        cli_error("--trace-frames must be at least 1 when --start-trace is set.")
     client = get_authenticated_client(get_default_base_url())
     params: dict[str, object] = {"collect": str(collect).lower(), "top": top, "limit": limit}
     if start_trace:

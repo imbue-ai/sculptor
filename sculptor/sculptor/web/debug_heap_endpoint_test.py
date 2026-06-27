@@ -71,3 +71,14 @@ def test_debug_heap_top_and_limit_are_honored(client: TestClient) -> None:
     assert "Top 5 types by object count:" in body
     # A small limit smaller than the live object count must mark the census truncated.
     assert "TRUNCATED" in body
+
+
+def test_debug_heap_clamps_negative_params(client: TestClient) -> None:
+    # A negative `top` must not slice almost the whole type list (Python's [:n]
+    # semantics) into a runaway report; it is clamped to 0.
+    response = client.get("/api/v1/debug/heap", params={"top": -1, "limit": -1})
+    assert response.status_code == 200
+    body = response.text
+    assert "Top 0 types by object count:" in body
+    # A clamped (0) limit means a full, untruncated census.
+    assert "TRUNCATED" not in body

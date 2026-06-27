@@ -4589,6 +4589,13 @@ def get_debug_heap(
     not atomic ``str``/``bytes``; their payload bytes show up in RSS and via
     tracemalloc, not the shallow-size column. Requires the session token.
     Development only."""
+    # Clamp to non-negative: a negative `top` would slice almost the whole list
+    # (Python's [:n] semantics) and dump a runaway report, and a negative `limit`
+    # would quietly disable the census cap.
+    top = max(0, top)
+    limit = max(0, limit)
+    start_trace = max(0, start_trace)
+
     process = psutil.Process()
     started_at = time.monotonic()
 
@@ -4625,7 +4632,9 @@ def get_debug_heap(
         counts[name] = counts.get(name, 0) + 1
         try:
             sizes[name] = sizes.get(name, 0) + getsizeof(obj)
-        except Exception:
+        except TypeError:
+            # getsizeof raises TypeError when an object's __sizeof__ returns a
+            # non-int; skip that one object rather than aborting the census.
             pass
     # Drop our strong reference to the full object list before formatting.
     del objects
