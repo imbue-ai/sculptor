@@ -133,15 +133,14 @@ def test_run_local_command_modern_version_posix_spawn_captures_output_and_closes
     assert process.stderr is not None and process.stderr.closed, "stderr pipe was left open after the command finished"
 
 
-def test_posix_spawn_falls_back_to_popen_when_setsid_unsupported(monkeypatch: pytest.MonkeyPatch) -> None:
-    """On a libc without ``POSIX_SPAWN_SETSID``, an isolated spawn must not crash.
+def test_isolation_request_routes_through_popen_not_posix_spawn() -> None:
+    """Process-group isolation must use Popen, even when posix_spawn is preferred.
 
-    ``posix_spawn`` realizes ``isolate_process_group`` via ``setsid``, which raises
-    ``NotImplementedError`` on such builds. The routing must fall back to
-    ``subprocess.Popen`` (whose ``start_new_session=True`` is portable) — we simulate
-    the unsupported platform and assert the handle is a Popen, yet output is captured.
+    The posix_spawn primitive deliberately does not implement isolation
+    (``start_new_session``/``setsid``), so a command requesting it must fall back
+    to ``subprocess.Popen`` (whose ``start_new_session=True`` is portable) rather
+    than silently spawn a non-isolated child. Output must still be captured.
     """
-    monkeypatch.setattr("sculptor.foundation.subprocess_utils.POSIX_SPAWN_SUPPORTS_SETSID", False)
     captured: list[LocalProcessHandle] = []
     result = run_local_command_modern_version(
         ["echo", "hello"],
@@ -152,7 +151,7 @@ def test_posix_spawn_falls_back_to_popen_when_setsid_unsupported(monkeypatch: py
 
     assert result.stdout == "hello\n"
     assert len(captured) == 1
-    assert isinstance(captured[0], subprocess.Popen), "isolation without setsid support must route through Popen"
+    assert isinstance(captured[0], subprocess.Popen), "isolation must route through Popen, not posix_spawn"
 
 
 def test_run_local_command_modern_version_posix_spawn_shutdown_terminates() -> None:
