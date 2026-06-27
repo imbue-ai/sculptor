@@ -67,12 +67,12 @@ def test_diff_refreshes_when_current_branch_changes(sculptor_instance_: Sculptor
     hello_row = changes_tree.get_tree_rows().filter(has_text="hello.py")
     expect(hello_row).to_be_visible()
 
-    # Wait for branch polling to publish its baseline before changing the
-    # branch externally. The polling callback's diff-refresh path only fires
-    # on a branch *transition* (`repo_polling_manager.py` — requires
-    # `_last_branch is not None`); the first poll fires 3s after the poller
-    # starts, so without this wait, a fast checkout can beat the first poll
-    # and set the baseline to the new branch — bypassing the refresh.
+    # Wait for the branch scanner to publish its baseline before changing the
+    # branch externally. The scanner's diff-refresh path only fires on a branch
+    # *transition* (`branch_poller.py` — requires a previously-seen branch); the
+    # first scan fires ~3s after the service starts, so without this wait a fast
+    # checkout can beat the first scan and set the baseline to the new branch —
+    # bypassing the refresh.
     task_page.get_branch_name_element()
 
     # Step 2: Commit and checkout *outside* the agent — no on_diff_needed().

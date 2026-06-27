@@ -386,3 +386,40 @@ class TestIsBranchRef:
 
         repo = LocalReadOnlyGitRepo(repo_path=repo_path, concurrency_group=test_root_concurrency_group)
         assert repo.is_branch_ref(commit_hash) is False
+
+
+class TestGetRemoteBranches:
+    """Tests for the get_remote_branches method."""
+
+    def test_returns_remote_tracking_branches_excluding_head_pointer(
+        self, temp_dir: Path, test_root_concurrency_group: ConcurrencyGroup
+    ) -> None:
+        """Remote-tracking branches are listed, but the ``origin/HEAD`` pointer
+        (e.g. ``origin/HEAD -> origin/main``) is excluded — it is an alias, not a
+        branch a user can merge into.
+
+        Remote-tracking refs are created directly with ``update-ref`` /
+        ``symbolic-ref`` so the test needs no network or second repo.
+        """
+        repo_path = temp_dir / "repo"
+        repo = make_test_repo(repo_path)
+        repo.run_git(["update-ref", "refs/remotes/origin/main", "HEAD"])
+        repo.run_git(["update-ref", "refs/remotes/origin/feature", "HEAD"])
+        repo.run_git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"])
+
+        read_only = LocalReadOnlyGitRepo(repo_path=repo_path, concurrency_group=test_root_concurrency_group)
+        remote_branches = read_only.get_remote_branches()
+
+        assert "origin/main" in remote_branches
+        assert "origin/feature" in remote_branches
+        assert "origin/HEAD" not in remote_branches
+
+    def test_returns_empty_for_repo_without_remotes(
+        self, temp_dir: Path, test_root_concurrency_group: ConcurrencyGroup
+    ) -> None:
+        """A repo with no remote has no remote-tracking branches."""
+        repo_path = temp_dir / "repo"
+        make_test_repo(repo_path)
+
+        read_only = LocalReadOnlyGitRepo(repo_path=repo_path, concurrency_group=test_root_concurrency_group)
+        assert read_only.get_remote_branches() == []
