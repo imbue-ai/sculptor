@@ -3,8 +3,9 @@ import { useAtomValue, useStore } from "jotai";
 import { Plus, RefreshCw, RotateCw, Settings2, Trash2 } from "lucide-react";
 import { type ComponentType, type ReactElement, useEffect, useState } from "react";
 
-import { ElementIds, getLocalPluginsDirectory } from "~/api";
+import { ElementIds, getLocalPluginsDirectory, UserConfigField } from "~/api";
 import { healthCheckDataAtom } from "~/common/state/atoms/backend.ts";
+import { isFrontendPluginsEnabledAtom } from "~/common/state/atoms/userConfig.ts";
 import { Code } from "~/components/Code.tsx";
 import { PluginContext } from "~/plugins/PluginContext.tsx";
 import { PluginErrorBoundary } from "~/plugins/PluginErrorBoundary.tsx";
@@ -16,6 +17,7 @@ import {
   pluginSourceStatesAtom,
 } from "~/plugins/pluginRegistry.ts";
 
+import { SettingRow } from "./SettingRow.tsx";
 import { SettingsSectionLayout } from "./SettingsSection.tsx";
 import { inlineCodeStyle } from "./settingsStyles.ts";
 
@@ -36,13 +38,24 @@ const pluginsDirFromDataDirectory = (dataDirectory: string | null | undefined): 
   return `${dataDirectory.replace(/[/\\]+$/, "")}${separator}plugins`;
 };
 
+type PluginsSettingsSectionProps = {
+  onSettingChange: (field: UserConfigField, value: unknown) => Promise<void>;
+};
+
 /**
- * Lists installed plugins and lets the user point Sculptor at additional plugin
- * sources (a URL serving a `manifest.json`). User sources are persisted to
- * localStorage and re-loaded on every boot.
+ * Hosts the frontend-plugins master switch (the kill switch for the whole
+ * system), then — while that switch is on — lists installed plugins and lets
+ * the user point Sculptor at additional plugin sources (a URL serving a
+ * `manifest.json`). User sources are persisted to localStorage and re-loaded on
+ * every boot.
+ *
+ * The kill switch lives here rather than in Experimental so the section can't
+ * gate its own visibility: it stays reachable to flip the system back on after
+ * it's been turned off.
  */
-export const PluginsSettingsSection = (): ReactElement => {
+export const PluginsSettingsSection = ({ onSettingChange }: PluginsSettingsSectionProps): ReactElement => {
   const store = useStore();
+  const isFrontendPluginsEnabled = useAtomValue(isFrontendPluginsEnabledAtom);
   const userSources = useAtomValue(pluginSourcesAtom);
   const states = useAtomValue(pluginSourceStatesAtom);
   const healthCheckData = useAtomValue(healthCheckDataAtom);
@@ -143,61 +156,79 @@ export const PluginsSettingsSection = (): ReactElement => {
         </>
       }
     >
-      <Flex gap="2" align="center" mb="4">
-        <TextField.Root
-          style={{ flexGrow: 1 }}
-          placeholder="http://localhost:5174/my-plugin"
-          value={draft}
-          disabled={isBusy}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") void handleAdd();
-          }}
-          data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_INPUT}
+      <SettingRow
+        title="Frontend plugins"
+        description="Master switch for the plugin system. Turning it on applies immediately; turning it off takes effect after an app reload (already-loaded plugins keep running for the rest of the session). Use the per-plugin switches below to disable individual plugins."
+      >
+        <Switch
+          checked={isFrontendPluginsEnabled}
+          onCheckedChange={(checked) => void onSettingChange(UserConfigField.ENABLE_FRONTEND_PLUGINS, checked)}
+          data-testid={ElementIds.SETTINGS_ENABLE_FRONTEND_PLUGINS_TOGGLE}
         />
-        <Button
-          onClick={() => void handleAdd()}
-          disabled={!draft.trim() || isBusy}
-          data-testid={ElementIds.SETTINGS_PLUGINS_ADD_BUTTON}
-        >
-          <Plus size={14} />
-          Add
-        </Button>
-        <Tooltip content={`Re-scan ${pluginsDir} for added or removed plugins`}>
-          <IconButton
-            variant="soft"
-            color="gray"
-            disabled={isBusy}
-            onClick={() => void handleRefresh()}
-            aria-label="Refresh local plugins"
-            data-testid={ElementIds.SETTINGS_PLUGINS_REFRESH_BUTTON}
-          >
-            <RefreshCw size={14} />
-          </IconButton>
-        </Tooltip>
-      </Flex>
+      </SettingRow>
 
-      {orderedSources.length === 0 ? (
-        <Flex direction="column" align="center" py="6" data-testid={ElementIds.SETTINGS_PLUGINS_EMPTY}>
-          <Text size="2" color="gray">
-            No plugins installed.
-          </Text>
-        </Flex>
-      ) : (
-        <Flex direction="column" data-testid={ElementIds.SETTINGS_PLUGINS_LIST}>
-          {orderedSources.map((source) => (
-            <SourceRow
-              key={source}
-              source={source}
-              state={states[source]}
-              activeSourceByPluginId={activeSourceByPluginId}
-              activeOrLoadingSources={activeOrLoadingSources}
-              pluginsDir={pluginsDir}
-              store={store}
-              setIsBusy={setIsBusy}
+      {/* The plugin list and add-source controls only matter while the system
+          is on — with it off nothing is loaded, so we hide them and leave just
+          the master switch above. */}
+      {isFrontendPluginsEnabled && (
+        <>
+          <Flex gap="2" align="center" mb="4" mt="4">
+            <TextField.Root
+              style={{ flexGrow: 1 }}
+              placeholder="http://localhost:5174/my-plugin"
+              value={draft}
+              disabled={isBusy}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void handleAdd();
+              }}
+              data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_INPUT}
             />
-          ))}
-        </Flex>
+            <Button
+              onClick={() => void handleAdd()}
+              disabled={!draft.trim() || isBusy}
+              data-testid={ElementIds.SETTINGS_PLUGINS_ADD_BUTTON}
+            >
+              <Plus size={14} />
+              Add
+            </Button>
+            <Tooltip content={`Re-scan ${pluginsDir} for added or removed plugins`}>
+              <IconButton
+                variant="soft"
+                color="gray"
+                disabled={isBusy}
+                onClick={() => void handleRefresh()}
+                aria-label="Refresh local plugins"
+                data-testid={ElementIds.SETTINGS_PLUGINS_REFRESH_BUTTON}
+              >
+                <RefreshCw size={14} />
+              </IconButton>
+            </Tooltip>
+          </Flex>
+
+          {orderedSources.length === 0 ? (
+            <Flex direction="column" align="center" py="6" data-testid={ElementIds.SETTINGS_PLUGINS_EMPTY}>
+              <Text size="2" color="gray">
+                No plugins installed.
+              </Text>
+            </Flex>
+          ) : (
+            <Flex direction="column" data-testid={ElementIds.SETTINGS_PLUGINS_LIST}>
+              {orderedSources.map((source) => (
+                <SourceRow
+                  key={source}
+                  source={source}
+                  state={states[source]}
+                  activeSourceByPluginId={activeSourceByPluginId}
+                  activeOrLoadingSources={activeOrLoadingSources}
+                  pluginsDir={pluginsDir}
+                  store={store}
+                  setIsBusy={setIsBusy}
+                />
+              ))}
+            </Flex>
+          )}
+        </>
       )}
     </SettingsSectionLayout>
   );

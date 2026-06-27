@@ -412,18 +412,19 @@ def test_plugin_loader_in_electron(sculptor_instance_: SculptorInstance) -> None
     differ). That packaged ``file://`` case remains a separate, unsolved scenario.
 
     The factory fixture can't launch a non-packaged Electron, so Electron
-    coverage rides the shared instance. That instance ships with the flag off, so
-    we flip it on through the Experimental settings (live, no reload) before
-    driving the Plugins section, and flip it back off afterward so later
-    Electron tests start from a clean flag. (The error rows the run leaves behind
-    are renderer-local and harmless -- no other Electron test reads plugin
-    sources -- so we don't bother removing them.)
+    coverage rides the shared instance. The broad UI suite pins the plugin
+    system off (see ``_make_test_user_config``), so we flip it on through the
+    Plugins section's master switch (live, no reload) before driving the section,
+    and flip it back off afterward so later Electron tests start from a clean
+    flag. (The error rows the run leaves behind are renderer-local and harmless
+    -- no other Electron test reads plugin sources -- so we don't bother removing
+    them.)
     """
     settings_page = navigate_to_settings_page(page=sculptor_instance_.page)
-    settings_page.click_on_experimental().set_frontend_plugins(enabled=True)
+    plugins = settings_page.click_on_plugins()
+    plugins.set_frontend_plugins(enabled=True)
     try:
         with spawn_plugin_fixture_server() as server:
-            plugins = settings_page.click_on_plugins()
             _exercise_error_modes(plugins, server)
             _exercise_valid_load_and_remove(plugins, server)
     finally:
@@ -431,4 +432,4 @@ def test_plugin_loader_in_electron(sculptor_instance_: SculptorInstance) -> None
         # raise on failure rather than swallowing it: a silent cleanup failure
         # would leave the instance in a bad state for the next test, so it's
         # better to surface it (worst case, a double exception with the body).
-        settings_page.click_on_experimental().set_frontend_plugins(enabled=False)
+        plugins.set_frontend_plugins(enabled=False)

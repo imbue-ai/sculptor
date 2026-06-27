@@ -43,14 +43,14 @@ Integration tests considered:
 | MSG | 15 | 12 | 10 | 37 |
 | PANEL | 23 | 20 | 14 | 57 |
 | CMDP | 4 | 9 | 18 | 31 |
-| SET | 11 | 18 | 10 | 39 |
+| SET | 12 | 18 | 10 | 40 |
 | DEV | 3 | 1 | 0 | 4 |
 | MENT | 5 | 2 | 3 | 10 |
 | SKILL | 2 | 1 | 0 | 3 |
 | ACT | 2 | 3 | 1 | 6 |
-| **Total** | **179** | **150** | **136** | **465** |
+| **Total** | **180** | **150** | **136** | **466** |
 
-**Under the integration-only standard, 38% of scenarios are completely covered, 32% partially, and
+**Under the integration-only standard, 39% of scenarios are completely covered, 32% partially, and
 29% not at all.** (Counts are derived directly from the two sections below.)
 
 The per-scenario detail is split into two sections: **Coverage gaps — Partial & Missing** (every
@@ -388,8 +388,9 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | SET-034 | Partial | test_theme_builder.py::test_theme_builder_navigation; ::test_theme_builder_change_accent_color | Exercise changing appearance mode, primary font, code font, and code theme and verify the UI updates. |
 | SET-035 | Partial | test_theme_builder.py::test_theme_builder_change_accent_color; ::test_theme_builder_reset_to_defaults | Cover custom hex entry, the light/dark hex override toggle, invalid-hex-shown-red, and the Gray/Success/Warning/Info swatches. |
 | SET-036 | Missing | — | Click a radius / scaling / panel-background option and assert the live UI updates. |
-| SET-038 | Partial | test_plugins_settings_visibility.py::test_plugins_section_visible_and_toggles_with_switch; test_plugin_loader.py::test_valid_plugin_loads_and_can_be_removed; ::test_plugin_source_can_be_disabled_and_re_enabled | Cover adding a source by URL, the Refresh rescan of the plugins directory, removing a user-added URL source, and the displayed directory path. |
+| SET-038 | Partial | test_plugin_loader.py::test_valid_plugin_loads_and_can_be_removed; ::test_plugin_source_can_be_disabled_and_re_enabled | Cover the Refresh rescan of the plugins directory and the displayed directory path. |
 | SET-039 | Partial | test_ci_babysitter.py::test_settings_selector_lists_only_driveable_harnesses | Assert the selector saves with a toast and is disabled when the babysitter is off. |
+| SET-040 | Complete | test_plugins_settings_visibility.py::test_plugins_section_always_present; ::test_master_switch_reveals_management_ui_live | — |
 | DEV-001 | Partial | test_tanstack_devtools_panel.py::test_tanstack_devtools_panel_mounts_with_content (panel mounts only) | Cover header Dock/Float/Close controls, floating drag + resize within viewport, docked resize-from-top-edge + pushes content up, and closing hides it. |
 
 ---

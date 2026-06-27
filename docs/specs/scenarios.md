@@ -2047,10 +2047,10 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: switching tabs/files and returning.
   - Then: each of these states is restored.
 
-## Plugin panels (experimental)
+## Plugin panels
 
 - **PANEL-057 — Plugin-contributed panel appears with a badge**
-  - Given: Frontend plugins is enabled and a plugin contributing a panel is loaded (e.g. the bundled Linear plugin).
+  - Given: the bundled Linear plugin (enabled by default) is loaded and contributes a panel.
   - When: the user views the Panels list and opens the plugin's panel.
   - Then: the panel is listed with a "plugin" badge and renders its content when opened.
 
@@ -2400,7 +2400,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 
 - **SET-029 — Experimental toggles**
   - Given: the Experimental section.
-  - When: the user toggles any feature (Always interrupt and send, Smooth streaming, Per-workspace panel layout, In-place workspaces, Clone workspaces, Review all, Entity mentions, Rich markdown rendering, Pi agent, Frontend plugins).
+  - When: the user toggles any feature (Always interrupt and send, Smooth streaming, Per-workspace panel layout, In-place workspaces, Clone workspaces, Review all, Entity mentions, Rich markdown rendering, Pi agent).
   - Then: each shows "Setting updated".
 
 - **SET-030 — Custom backend command & timeout**
@@ -2408,12 +2408,17 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user sets a custom backend command or readiness timeout.
   - Then: each saves with a "restart required" toast.
 
-## Plugins (experimental)
+## Plugins
 
 - **SET-038 — Manage plugin sources**
-  - Given: Frontend plugins is enabled, so a Plugins section appears in Settings.
+  - Given: the Plugins settings section with the plugin system enabled.
   - When: the user adds a plugin source by URL, toggles a plugin's enable/disable switch, clicks Refresh to rescan the plugins directory, or removes a user-added URL source.
   - Then: an added source appears in the list; the switch mutes/unmutes the plugin without removing it; Refresh re-scans drop-in plugins; a user-added URL source can be removed while bundled/disk-discovered ones cannot; the plugins directory path is shown.
+
+- **SET-040 — Plugin system master switch**
+  - Given: the Plugins settings section (always present, since it hosts the master switch).
+  - When: the user toggles the master switch at the top of the section off, then on.
+  - Then: turning it off hides the plugin-management UI (add-source input and list) while the section and switch remain; turning it on reveals the management UI again.
 
 ## Actions
 

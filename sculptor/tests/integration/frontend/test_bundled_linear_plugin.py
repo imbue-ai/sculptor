@@ -156,10 +156,10 @@ def test_bundled_linear_plugin_loads_and_renders_in_electron(
 ) -> None:
     """In Electron, the bundled Linear plugin loads and renders its UI."""
     settings_page = navigate_to_settings_page(page=sculptor_instance_.page)
-    settings_page.click_on_experimental().set_frontend_plugins(enabled=True)
+    plugins = settings_page.click_on_plugins()
+    plugins.set_frontend_plugins(enabled=True)
     try:
-        plugins = settings_page.click_on_plugins()
         _assert_linear_plugin_loads_and_renders(plugins)
     finally:
         # Leave the shared instance's flag as we found it for the next test.
-        settings_page.click_on_experimental().set_frontend_plugins(enabled=False)
+        plugins.set_frontend_plugins(enabled=False)

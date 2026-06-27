@@ -746,9 +746,6 @@ product makes no finer distinction than that: a feature is either generally avai
   viewer, toggled by the eye icon in the diff toolbar.
 - **Pi agent** — offer the experimental **Pi** agent as a choice when creating an agent (→ §7.4); an
   already-running Pi agent keeps going regardless of the toggle.
-- **Frontend plugins** — enable the experimental plugin system that lets third-party plugins extend
-  Sculptor's own UI (the plugin system below). Off by default; turning it off only fully takes effect
-  after an app reload, since already-loaded plugins aren't torn down live.
 - **Custom backend command** — the entry point for the container / remote backend described below.
 
 The **CI babysitter** (→ §7.6, §7.10) is likewise experimental and off by default.
@@ -766,27 +763,6 @@ notably the in-app **Browser** panel (desktop-only), which embeds a browser besi
 address bar and back/forward/reload/screenshot controls; outside the desktop app it shows a
 placeholder.
 
-**Frontend plugin system.** With **Frontend plugins** enabled, Sculptor can load third-party
-**plugins** that extend the app's own UI from inside the renderer — contributing new **panels** (which
-show up in the Panels list with a "plugin" badge), full-screen **overlays**, and compact **workspace
-widgets** that sit in the workspace banner's action row (collapsing in priority order as space
-tightens, like the built-in segments), built against a small versioned Sculptor SDK that reuses the
-host's React, Radix theming, icons, and shared data client so they look and behave like native UI. A new **Plugins** section appears in Settings to manage plugin
-**sources**: you add a plugin by dropping its folder into the Sculptor folder's `plugins/` directory
-(picked up on the next launch or via a **Refresh** button) or by adding the **URL** of a plugin
-server (saved and re-fetched on every launch). Each row has an enable/disable switch (mute a plugin
-without removing it) and, while enabled, Settings and Reload controls; user-added URL sources can also
-be removed, while bundled and disk-discovered plugins can't. Sculptor ships a bundled **Linear** example
-plugin and two no-build example plugins (**Sculpty** and **Pomodoro**). The Linear plugin shows two
-surfaces: a banner **widget** displaying the workspace's primary issue as a `# TICKET-ID` badge with a
-state dot (clicking it opens the issue in Linear), and a side **panel** of ticket details with
-collapsible **sub-issues** (the open state is remembered per workspace) and badges marking where each
-ticket came from (branch, PR, or a pinned search). It resolves the workspace's **primary issue** from
-the branch name first, falling back to the issues linked from the workspace's pull request. Because a plugin runs with the
-**same privileges as Sculptor's own UI** — and a URL source serves whatever code it holds at load time
-— adding a plugin means running that code, so you should only add sources you trust (the plugin trust
-model is documented in `SECURITY.md`; outbound links a plugin opens are restricted to `http(s)`).
-
 **Container / remote execution backend.** Pointing the **custom backend command** at a launcher lets
 Sculptor run agents somewhere other than your host machine — inside a Docker container, on a remote
 server over SSH, or in a VM. The launcher starts the backend and prints a URL the app connects to;
@@ -795,6 +771,38 @@ the GUI, workspace management, and agent orchestration are otherwise unchanged. 
 automatically restarts the custom backend (with backoff) if it crashes. The command can be set either
 in Settings or through an environment variable, and setting or clearing it requires restarting the app
 (→ §9.1 for the isolation and trust implications).
+
+### 7.13 Frontend plugins
+
+Sculptor loads **plugins** that extend the app's own UI from inside the renderer — contributing new
+**panels** (which show up in the Panels list with a "plugin" badge), full-screen **overlays**, and
+compact **workspace widgets** that sit in the workspace banner's action row (collapsing in priority
+order as space tightens, like the built-in segments) — built against a small versioned Sculptor SDK
+that reuses the host's React, Radix theming, icons, and shared data client so they look and behave
+like native UI. The plugin system is **on by default**. A
+master switch at the top of the **Plugins** settings section is the kill switch for the whole system:
+turning it off hides the plugin-management controls and, after an app reload, stops loading plugins
+(already-loaded plugins aren't torn down live), while the section and its switch stay in place so the
+system can be turned back on.
+
+The **Plugins** settings section manages plugin **sources**: you add a plugin by dropping its folder
+into the Sculptor folder's `plugins/` directory (picked up on the next launch or via a **Refresh**
+button) or by adding the **URL** of a plugin server (saved and re-fetched on every launch). Each row
+has an enable/disable switch (mute a plugin without removing it) and, while enabled, Settings and
+Reload controls; user-added URL sources can also be removed, while bundled and disk-discovered plugins
+can't. Sculptor ships a bundled **Linear** plugin, enabled by default, alongside two no-build example
+plugins — **Sculpty** and **Pomodoro** — that ship disabled and can be switched on per plugin. The
+Linear plugin shows two surfaces: a banner **widget** displaying the workspace's primary issue as a
+`# TICKET-ID` badge with a state dot (clicking it opens the issue in Linear), and a side **panel** of
+ticket details with collapsible **sub-issues** (the open state is remembered per workspace) and badges
+marking where each ticket came from (branch, PR, or a pinned search). It resolves the workspace's
+**primary issue** from the branch name first, falling back to the issues linked from the workspace's
+pull request.
+
+Because a plugin runs with the **same privileges as Sculptor's own UI** — and a URL source serves
+whatever code it holds at load time — adding a plugin means running that code, so you should only add
+sources you trust (the plugin trust model is documented in `SECURITY.md`; outbound links a plugin
+opens are restricted to `http(s)`).
 
 ## 8. The `sculpt` CLI  _(core product surface)_
 
