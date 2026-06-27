@@ -470,7 +470,8 @@ sleeps. `wait_for_alpha_scroll_idle` and friends are deleted.
 > Note (relaxation, see decisions below): `data-scroll-settled` reflects *our*
 > control flow becoming quiescent, not a guarantee that TanStack Virtual's
 > internal `scrollToIndex` correction has painted its final sub-pixel. That is an
-> accepted limitation — observable authority is the bar.
+> accepted limitation — observable authority is the bar. (Revisited — see
+> *Hardening: not one bad frame*.)
 
 ## Resolved design decisions
 
@@ -484,7 +485,9 @@ These were settled during design review:
 2. **Sub-pixel-exact settle is *not* required.** Observable authority quiescence
    is the contract. We do not patch or instrument TanStack Virtual's internal
    async scroll corrections; `restoreSettled` / `converged` are emitted from our
-   own rAF / measurement callbacks.
+   own rAF / measurement callbacks. — **Revisited in *Hardening: not one bad
+   frame*** below: a 10× pressure run showed the widen reflow paying for this
+   relaxation, so the bar is raised to per-frame correctness for reflow.
 3. **Search suppression is a top-level guard**, not a state in the union.
 4. **The scroll-to-top animation and the dynamic `paddingEnd` feature are
    kept.** They are the reason the `anchoringTurn` authority phase and the
@@ -547,3 +550,191 @@ These were settled during design review:
 - Resist adding a new boolean ref. If you find yourself reaching for one, it is
   almost certainly a transition or a derived value that belongs in the machine
   or is computed from geometry.
+
+---
+
+## Hardening: not one bad frame (reflow commit discipline)
+
+Status: **proposed** — design under review; not yet implemented. Revisits
+resolved decision #2 and the "relaxation" note above.
+
+### Why we are reopening this
+
+The landed machine accepted (decision #2, and the relaxation note under *The
+deterministic test signal*) that `data-scroll-settled` reflects *our* control flow
+going quiescent, **not** a guarantee that the final geometry has painted —
+sub-pixel-exact settle was declared out of scope. A 10× sequential pressure run of
+the scroll integration suite found the cost of that relaxation:
+`test_alpha_scroll_width_change::test_at_bottom_stays_glued_on_widen` fails about
+**1 in 10**, as a fast (~18 s) assertion miss — *not* a `wait_for_function`
+timeout. The view is glued correctly once it *settles*; it is the **intermediate
+frames** during a width reflow that occasionally paint un-pinned.
+
+The audit makes the deeper point: if widen is inconsistent, **narrow is too**
+(identical path, opposite sign) — narrow merely never lost the race across ten
+runs. And the inconsistency is not chat-specific: it lives in the *commit* layer of
+the generic machine, so any consumer inherits it. We therefore raise the bar from
+"authority is observably quiescent" to a stronger contract: **not one bad frame.**
+
+### The design gap: a pure decision, an undisciplined commit
+
+`projectReflow` (section 5) is already a pure, total, correct **decision** — given
+the phase it names the right `ReflowAction`. The flake is entirely in the
+**commit**: *how* and *when* that action becomes pixels. Three structural faults:
+
+| Fault | Where | Consequence |
+| --- | --- | --- |
+| **Two settles, two disciplines** | `measuring` (task switch) vs. the reflow `ResizeObserver` (no settle at all) | a reflow runs with *no* barrier; per-frame correctness is left to luck |
+| **The authority is not the sole writer** | per-item `shouldAdjustScrollPositionOnItemSizeChange` is gated off only for `measuring`, never for reflow | two actors write `scrollTop` in undefined order during a reflow |
+| **One executor defers past a paint** | `holdAnchor` → `restoreReadingAnchor` uses `requestAnimationFrame` | *guarantees* a paint between the reflow and its correction |
+
+Compounding it, the pin reads **lagging** geometry: `paddingEnd` is a React-state
+value that reconverges over ≥2 renders (the `tailContentHeight ↔ paddingEnd`
+cycle), so a pin computed against the in-flight value can be stale for a frame.
+
+### The principle: a frame is a contract
+
+Every painted frame must satisfy the invariant of the active phase:
+
+| Phase | Per-frame invariant |
+| --- | --- |
+| `following` / idle-at-bottom | the last message's bottom is flush with the viewport bottom |
+| `userControlled` scrolled-up | the reading-anchor message's top sits at its sampled offset |
+| `anchoringTurn` | the anchored user message's top sits at its sampled offset |
+| `restoring` | the saved-anchor framing |
+
+This is the same move the whole migration made — promote an implicit guarantee to
+an explicit one — applied now to the *commit* rather than the *state*.
+
+### The mechanism: one Settle Controller
+
+Collapse the two ad-hoc settles into one. `LayoutPhase` generalizes from
+`measuring` (task-switch-only) to a cause-tagged **settling**:
+
+```ts
+// layoutSettle.ts
+export type LayoutPhase =
+  | { kind: "stable" }
+  | { kind: "settling"; cause: "taskSwitch" | "reflow"; since: number };
+```
+
+A *settle* is any interval where geometry is in motion, whatever started it. While
+`settling`, three rules hold — uniformly, for both causes:
+
+1. **Single owner.** Per-item `shouldAdjustScrollPositionOnItemSizeChange` is gated
+   off for *all* `settling`, not just task switches. The phase authority is the
+   only writer of `scrollTop`.
+2. **Re-assert every settle render, before paint.** A no-deps `useLayoutEffect`
+   re-applies the active invariant from **final, post-render** geometry —
+   idempotently, synchronously, **no `requestAnimationFrame`.**
+3. **Converge explicitly.** When a render observes geometry has stopped moving (the
+   tail-sum-stable signal already computed in `useAlphaVirtualizer`), dispatch
+   `converged → stable` and re-enable per-item compensation.
+
+This is the structural fix the audit asked for: there is now **one** settle
+discipline, parameterized only by *which* invariant it holds — the saved anchor for
+`taskSwitch`, the `projectReflow` action for `reflow`.
+
+### The per-frame commit rule
+
+One executor — `commitInvariant` — runs in a pre-paint, no-deps layout effect while
+`settling`:
+
+```ts
+// runs after the measurement-settle render commits the DOM, before the browser paints
+const desired = resolveScrollTop(action, virtualizer.measurementsCache, el.clientHeight);
+if (Math.abs(el.scrollTop - desired) > 1) {
+  isProgrammaticScroll.current = true;
+  el.scrollTop = desired;   // the single, authoritative write
+}
+```
+
+Correct to the frame, for four independent reasons:
+
+- **Ground truth, not lagging arithmetic.** `desired` is anchored to the invariant
+  element's measured `start`/`size`, never to `scrollHeight − paddingEnd`. A
+  growing or shrinking `paddingEnd` only changes empty space *below* an
+  already-flush anchor — it can never move the anchor — so the `paddingEnd` lag
+  leaves the correctness path entirely.
+- **Positions are final post-settle-render.** TanStack measures **synchronously**
+  inside its `ResizeObserver` (it calls `shouldAdjustScrollPositionOnItemSizeChange`
+  and mutates `scrollTop` in-band), so by the time React commits that render and
+  runs our layout effect, item `translateY`s and the wrapper height are final and
+  mutually consistent. The stale-`translateY` window is closed; reading
+  `measurementsCache` is exact, independent of `ResizeObserver` delivery order.
+- **`useLayoutEffect` runs before paint** for its commit, and the settle render is
+  flushed pre-paint, so the corrected `scrollTop` is in place before the one paint
+  this frame produces.
+- **Idempotent.** The `>1 px` guard makes an already-correct frame a no-op, so the
+  effect is safe to run on every settle render without jitter or fighting momentum.
+
+`resolveScrollTop` is a pure helper beside `projectReflow`, so the commit math is
+unit-testable without a DOM:
+
+```ts
+// pinBottom  → measuredEnd(last)  − clientHeight
+// holdAnchor → measuredStart(i)   − anchor.viewportOffset
+// holdTurn   → measuredStart(idx) − sampledTopOffset
+// ignore     → leave scrollTop alone
+```
+
+The `requestAnimationFrame` in `restoreReadingAnchor` — the literal smoking gun — is
+deleted: the layout effect already runs *after* the settle render, which is the
+frame the `rAF` was waiting for.
+
+### Timing — the hardened widen path
+
+```
+T0  user widens → relayout: rows rewrap shorter, last message shorter
+T1  ResizeObserver delivery (after layout, before paint):
+      • TanStack row ROs (sync): measurementsCache updated; per-item compensation GATED OFF
+      • content RO: detect reflow → dispatch settling("reflow")              [enter settle]
+T1' React flushes the settle render (pre-paint):
+      • virtualizer re-renders with final translateYs + final wrapper height
+      • no-deps layout effect → commitInvariant():  scrollTop := lastEnd − clientHeight   ← SOLE write
+T2  ══ PAINT ══   last message flush — invariant holds ✓
+T3  any further pass (e.g. paddingEnd second render): T1'→T2 repeats, each corrected before its paint ✓
+T4  render sees tail sum stable → converged → stable; per-item compensation re-enabled
+```
+
+Every paint barrier is preceded by a `commitInvariant`. No frame is shown
+un-pinned.
+
+### Why this fixes widen, narrow, and the class
+
+- **Symmetry by construction.** Widen (content shrinks, `paddingEnd` grows) and
+  narrow (content grows, `paddingEnd` shrinks) traverse the *identical*
+  `commitInvariant`. There is no per-direction branch, so they cannot diverge;
+  narrow's clean ten-run record becomes a structural guarantee rather than luck.
+- **Whole-machine.** The fix lives in `LayoutPhase` + the commit primitive — the
+  generic core, not the chat. Any consumer driving a dynamically-padded virtualized
+  list through this machine gets "no bad frame" for free.
+
+### Invariants preserved
+
+- **Streaming/`following`** is behaviorally unchanged — `commitInvariant` re-pins to
+  the bottom exactly as today; the idempotent guard suppresses redundant writes.
+- **`anchoringTurn` fill** holds the user message at the top through the same
+  anchored commit, replacing the un-gated viewport-stability path.
+- **A user grab mid-settle still wins.** `userScrolled` flips authority, so
+  `projectReflow` returns `holdAnchor`/`ignore` for the *new* position and
+  `commitInvariant` holds that — it never snaps the user back (mirrors the existing
+  restore-preempt guard).
+
+### Verification: test the frames, not the endpoint
+
+The current test asserts the *settled* state, which is exactly why a one-frame
+violation only ever flaked. The hardening ships with a **frame-accurate** test: a
+`requestAnimationFrame` sampler injected in-page across the resize records
+`max(|distanceFromContentBottom|)` over every frame of the settle, asserted under
+threshold — for **both** widen and narrow, **both** at-bottom and scrolled-up. That
+turns "not one bad frame" from a principle into a gate.
+
+### Open lever
+
+The pre-paint guarantee rests on TanStack measuring synchronously inside its
+`ResizeObserver` — it does today, as the synchronous `shouldAdjust…` calls prove. If
+a future TanStack version deferred measurement to its own `rAF`, the settle render
+could land after a paint; the fallback is a `flushSync` in the content
+`ResizeObserver` to force the settle render synchronously. Noted so the assumption
+is explicit rather than silent.
