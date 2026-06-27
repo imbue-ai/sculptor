@@ -1,3 +1,4 @@
+import functools
 from threading import Lock
 from typing import Collection
 
@@ -34,6 +35,17 @@ def test_default_factory_signature_check_is_memoized() -> None:
     _Model()
     info = getattr(check, "cache_info")()
     assert info.misses <= 2 and info.hits >= 1, f"default-factory signature check is not being cached: {info}"
+
+
+def test_unhashable_default_factory_does_not_crash() -> None:
+    # The memoization cache keys on the factory object, so an unhashable factory (e.g. a
+    # functools.partial) must fall back to the uncached check rather than raising TypeError on
+    # instantiation -- which stock pydantic (calling inspect.signature directly) does not do.
+    class _Model(BaseModel):
+        _data: dict = PrivateAttr(default_factory=functools.partial(dict))
+
+    _Model()
+    _Model()  # must not raise
 
 
 class TestObject(SerializableModel):
