@@ -1,0 +1,116 @@
+"""Unit tests for the ``os.posix_spawn``-backed local process primitive.
+
+These prove the handle behaves like ``subprocess.Popen`` for the surface the
+backend spawn machinery uses, so it can be dropped in without touching the
+delicate ``run_local_command_modern_version`` loop semantics.
+"""
+
+import os
+import signal
+import subprocess
+
+import pytest
+
+from sculptor.foundation.processes.posix_spawn_process import LocalProcessHandle
+from sculptor.foundation.processes.posix_spawn_process import PosixSpawnedProcess
+from sculptor.foundation.processes.posix_spawn_process import spawn_via_posix_spawn
+
+
+def _read_all(process: PosixSpawnedProcess) -> tuple[bytes, bytes]:
+    assert process.stdout is not None and process.stderr is not None
+    out = process.stdout.read()
+    err = process.stderr.read()
+    return out, err
+
+
+def test_captures_stdout_and_zero_exit() -> None:
+    process = spawn_via_posix_spawn(["sh", "-c", "printf hello"])
+    assert process.wait(timeout=10) == 0
+    out, err = _read_all(process)
+    assert out == b"hello"
+    assert err == b""
+    assert process.returncode == 0
+
+
+def test_captures_stderr_and_nonzero_exit() -> None:
+    process = spawn_via_posix_spawn(["sh", "-c", "printf oops 1>&2; exit 3"])
+    assert process.wait(timeout=10) == 3
+    out, err = _read_all(process)
+    assert out == b""
+    assert err == b"oops"
+    assert process.returncode == 3
+
+
+def test_resolves_relative_executable_via_path() -> None:
+    # "sh" is relative; the primitive must resolve it on PATH (posix_spawn does not).
+    process = spawn_via_posix_spawn(["sh", "-c", "exit 0"])
+    assert process.wait(timeout=10) == 0
+
+
+def test_missing_executable_raises_oserror() -> None:
+    # Matches subprocess.Popen, whose OSError the caller maps to ProcessSetupError.
+    with pytest.raises(OSError):
+        spawn_via_posix_spawn(["this-command-does-not-exist-xyzzy"])
+
+
+def test_env_is_passed_through() -> None:
+    process = spawn_via_posix_spawn(
+        ["sh", "-c", 'printf %s "$SCTEST_VAR"'], env={"SCTEST_VAR": "from-env", "PATH": os.environ["PATH"]}
+    )
+    assert process.wait(timeout=10) == 0
+    out, _err = _read_all(process)
+    assert out == b"from-env"
+
+
+def test_stdin_pipe_round_trips() -> None:
+    process = spawn_via_posix_spawn(["cat"], stdin_mode=subprocess.PIPE)
+    assert process.stdin is not None
+    process.stdin.write(b"piped-input")
+    process.stdin.close()
+    assert process.wait(timeout=10) == 0
+    out, _err = _read_all(process)
+    assert out == b"piped-input"
+
+
+def test_poll_returns_none_then_exit_code() -> None:
+    process = spawn_via_posix_spawn(["sh", "-c", "sleep 0.3; exit 7"])
+    assert process.poll() is None  # still running
+    assert process.wait(timeout=10) == 7
+    assert process.poll() == 7  # idempotent after reaping
+
+
+def test_wait_times_out_then_kill() -> None:
+    process = spawn_via_posix_spawn(["sh", "-c", "sleep 30"])
+    with pytest.raises(subprocess.TimeoutExpired):
+        process.wait(timeout=0.2)
+    process.kill()
+    # SIGKILL → negative returncode, like subprocess.Popen.
+    assert process.wait(timeout=10) == -signal.SIGKILL
+
+
+def test_terminate_delivers_sigterm() -> None:
+    process = spawn_via_posix_spawn(["sh", "-c", "sleep 30"])
+    process.terminate()
+    assert process.wait(timeout=10) == -signal.SIGTERM
+
+
+def test_setsid_makes_child_a_process_group_leader() -> None:
+    # isolate_process_group=True must put the child in its own group so killpg works.
+    process = spawn_via_posix_spawn(["sh", "-c", "sleep 30"], isolate_process_group=True)
+    try:
+        assert os.getpgid(process.pid) == process.pid
+    finally:
+        os.killpg(process.pid, signal.SIGKILL)
+        process.wait(timeout=10)
+
+
+def test_satisfies_local_process_handle_protocol() -> None:
+    process = spawn_via_posix_spawn(["sh", "-c", "exit 0"])
+    assert isinstance(process, LocalProcessHandle)
+    process.wait(timeout=10)
+    # subprocess.Popen must satisfy the same protocol (so callers accept either).
+    popen = subprocess.Popen(["sh", "-c", "exit 0"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        assert isinstance(popen, LocalProcessHandle)
+    finally:
+        popen.wait(timeout=10)
