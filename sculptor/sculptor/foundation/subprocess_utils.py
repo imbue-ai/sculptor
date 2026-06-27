@@ -30,6 +30,8 @@ from sculptor.foundation.event_utils import MutableEvent
 from sculptor.foundation.event_utils import ReadOnlyEvent
 from sculptor.foundation.log_utils import DETAIL
 from sculptor.foundation.log_utils import TRACE
+from sculptor.foundation.processes.posix_spawn_process import LocalProcessHandle
+from sculptor.foundation.processes.posix_spawn_process import spawn_via_posix_spawn
 from sculptor.foundation.pydantic_serialization import FrozenModel
 
 # Received a shutdown signal
@@ -331,7 +333,7 @@ class OutputGatherer:
     @classmethod
     def build_from_popen(
         cls,
-        popen: subprocess.Popen[bytes],
+        popen: LocalProcessHandle,
         on_complete_line_from_stdout: Callable[[str], None] | None,
         on_complete_line_from_stderr: Callable[[str], None] | None,
         shutdown_event: ReadOnlyEvent,
@@ -381,7 +383,7 @@ class OutputGatherer:
 
 
 def send_shutdown_signal(
-    process: subprocess.Popen[bytes],
+    process: LocalProcessHandle,
     sig: signal.Signals,
     kill_process_group: bool,
 ) -> None:
@@ -413,7 +415,7 @@ def send_shutdown_signal(
 
 
 def _shutdown_popen(
-    process: subprocess.Popen[bytes],
+    process: LocalProcessHandle,
     command: str,
     shutdown_timeout_sec: float,
     kill_process_group: bool = False,
@@ -466,7 +468,7 @@ def _is_timeout(timeout_time: float | None = None) -> bool:
         return time.time() > timeout_time
 
 
-def _close_popen_output_pipes(process: subprocess.Popen[bytes]) -> None:
+def _close_popen_output_pipes(process: LocalProcessHandle) -> None:
     """Close a finished process's stdout/stderr pipe file descriptors.
 
     ``subprocess.Popen(..., stdout=PIPE, stderr=PIPE)`` otherwise releases those
@@ -620,13 +622,19 @@ def run_local_command_modern_version(
     # going through the shutdown_event / worker-thread shutdown path — which is
     # exactly what's needed when that worker thread is itself wedged. See
     # ``RunningProcess.kill_now`` (SCU-1340).
-    on_popen_ready: Callable[[subprocess.Popen[bytes]], None] | None = None,
+    on_popen_ready: Callable[[LocalProcessHandle], None] | None = None,
     # When True, spawn the child with ``start_new_session=True`` so it becomes
     # its own process-group leader, and broadcast SIGTERM/SIGKILL to that
     # group on shutdown (via ``os.killpg``) instead of just the child PID.
     # This is what makes Stop cascade to subprocesses the child has spawned
     # (e.g. a Bash tool's sh subprocess); see SCU-211.
     isolate_process_group: bool = False,
+    # When True (and ``cwd`` is None), spawn via ``os.posix_spawn`` instead of
+    # ``subprocess.Popen`` so spawn cost does not scale with backend RSS (SCU-1624).
+    # ``posix_spawn`` cannot set a working directory on macOS, so callers that need
+    # one must encode it in the command (git uses ``git -C``) and pass ``cwd=None``;
+    # with a non-None ``cwd`` this falls back to Popen.
+    prefer_posix_spawn: bool = False,
 ) -> FinishedProcess:
     """
     implementation notes:
@@ -664,17 +672,27 @@ def run_local_command_modern_version(
         # with nonzero bufsize, they will be BufferedIOBase. use read1() if using this for a nonblocking read.
         # with text, encoding, or errors, they will be TextIOBase.
         # this doesn't seem to play nice with nonblocking mode and read().
+        process: LocalProcessHandle
         try:
-            process = subprocess.Popen(
-                command,
-                cwd=cwd,
-                bufsize=0,
-                stdin=stdin_mode,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=env,
-                start_new_session=isolate_process_group,
-            )
+            if prefer_posix_spawn and cwd is None:
+                # vfork-based spawn: cost does not scale with backend RSS (SCU-1624).
+                process = spawn_via_posix_spawn(
+                    command,
+                    env=env,
+                    stdin_mode=stdin_mode,
+                    isolate_process_group=isolate_process_group,
+                )
+            else:
+                process = subprocess.Popen(
+                    command,
+                    cwd=cwd,
+                    bufsize=0,
+                    stdin=stdin_mode,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=env,
+                    start_new_session=isolate_process_group,
+                )
         except (OSError, ValueError) as e:
             # Raise setup error if process fails to start.
             #   OSError: subprocess.Popen fails to start the requested command

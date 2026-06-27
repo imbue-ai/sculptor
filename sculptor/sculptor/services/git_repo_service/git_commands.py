@@ -1,4 +1,6 @@
 import os
+import shutil
+from functools import cache
 from pathlib import Path
 from typing import Sequence
 
@@ -15,6 +17,17 @@ from sculptor.foundation.subprocess_utils import ProcessTimeoutError
 from sculptor.services.git_repo_service.git_errors import GitCommandFailure
 from sculptor.services.git_repo_service.git_errors import RetriableGitCommandFailure
 from sculptor.utils.build import get_internal_folder
+
+
+@cache
+def _git_executable() -> str:
+    """Absolute path to the ``git`` binary, resolved once.
+
+    ``os.posix_spawn`` does not search ``PATH``, so the spawn path needs an
+    absolute executable. Falls back to bare ``git`` if it is somehow not on PATH
+    (the spawn will then surface a clear error like Popen would).
+    """
+    return shutil.which("git") or "git"
 
 
 def _should_retry_git_error(exception: BaseException) -> bool:
@@ -44,14 +57,27 @@ def run_git_command_local(
     new_env = os.environ.copy()
     new_env["GIT_SSH_COMMAND"] = str(get_internal_folder() / "ssh" / "ssh")
 
+    # Spawn git via posix_spawn (cost independent of backend RSS, SCU-1624) rather
+    # than fork()+exec(). That requires an absolute executable and cwd=None, so we
+    # resolve git's path and fold any working directory into `git -C <dir>` (which
+    # is equivalent for git's purposes). Only applies when the command really is
+    # git; anything else keeps the original Popen behavior.
+    argv = list(command)
+    spawn_via_git = bool(argv) and argv[0] == "git"
+    if spawn_via_git:
+        argv[0] = _git_executable()
+        if cwd is not None:
+            argv = [argv[0], "-C", str(cwd), *argv[1:]]
+
     try:
         result = concurrency_group.run_process_to_completion(
-            command=command,
-            cwd=Path(cwd) if cwd else None,
+            command=argv,
+            cwd=None if spawn_via_git else (Path(cwd) if cwd else None),
             timeout=timeout,
             is_checked_after=True,
             env=new_env,
             log_command=log_command,
+            prefer_posix_spawn=spawn_via_git,
         )
         assert result.returncode is not None, "returncode should never be None for completed process"
         return result.returncode, result.stdout, result.stderr
