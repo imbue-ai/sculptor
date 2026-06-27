@@ -1,10 +1,10 @@
-import subprocess
 import time
 from threading import Event
 from threading import Thread
 
 import pytest
 
+from sculptor.foundation.processes.posix_spawn_process import LocalProcessHandle
 from sculptor.foundation.subprocess_utils import CommandError
 from sculptor.foundation.subprocess_utils import SUBPROCESS_STOPPED_BY_REQUEST_EXIT_CODE
 from sculptor.foundation.subprocess_utils import run_local_command
@@ -94,7 +94,7 @@ def test_run_local_command_modern_version_closes_output_pipes() -> None:
     Popen through ``on_popen_ready`` and assert both pipes are closed after the
     call returns.
     """
-    captured: list[subprocess.Popen[bytes]] = []
+    captured: list[LocalProcessHandle] = []
     result = run_local_command_modern_version(
         ["echo", "hello"],
         on_popen_ready=captured.append,
