@@ -4,7 +4,6 @@ from typing import Any
 from typing import TypeVar
 from typing import cast
 
-import pydantic._internal._fields as _pydantic_internal_fields
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Discriminator
@@ -15,6 +14,14 @@ from sculptor.foundation.nested_evolver import _Evolver
 from sculptor.foundation.nested_evolver import chill
 from sculptor.foundation.nested_evolver import evolver
 from sculptor.foundation.serialization_types import Serializable
+
+# Imported defensively: pydantic may relocate its internals on a major version bump. If so, the
+# memoization below is left uninstalled (the regression test fails loudly) rather than the app
+# crashing at import time.
+try:
+    import pydantic._internal._fields as _pydantic_internal_fields
+except ImportError:
+    _pydantic_internal_fields = None  # type: ignore[assignment]
 
 T = TypeVar("T", bound=BaseModel)
 V = TypeVar("V")
@@ -28,24 +35,44 @@ _threading_local = threading.local()
 # ``inspect.signature(factory)`` -- and re-runs it on *every* model instantiation, for each
 # ``PrivateAttr(default_factory=...)``. Under Python 3.14, ``inspect.signature`` on a C/builtin
 # callable (``dict``/``list``/``set``/``threading.Lock``/...) goes through
-# ``inspect._signature_fromstr``, which copies ``sys.modules`` and retains the copy. Models are
-# instantiated thousands of times a second (ShutdownEvent, ConcurrencyGroup, per-stream task views),
-# so this leaks gigabytes of RSS over a session. A given factory's signature never changes, so cache
-# the result per factory object; the factories are module-level singletons, so the cache stays tiny
-# (``functools.cache`` also exposes ``cache_info``/``cache_clear``, which the regression test uses).
+# ``inspect._signature_fromstr``, which copies ``sys.modules`` and builds closures that capture it --
+# reference cycles only the cyclic GC can reclaim. Generated thousands of times a second
+# (ShutdownEvent, ConcurrencyGroup, per-stream task views), that cyclic garbage accumulates into
+# gigabytes of RSS over a session. A given factory's signature never changes, so cache the check per
+# factory object; the factories are module-level singletons, so the cache stays tiny. This assumes
+# pydantic's helper is a pure function of the factory -- re-verify on a pydantic upgrade.
 #
-# Workaround for an upstream pydantic inefficiency. If a future pydantic renames/relocates the helper
-# the cache is simply not installed (``pydantic_serialization_test`` fails loudly in that case)
-# rather than crashing the app on a dependency bump. Factories must be hashable, which every current
-# ``default_factory`` is; an unhashable one (e.g. a ``functools.partial``) would raise here and need
-# wrapping in a ``lambda`` at its definition site.
-_uncached_takes_validated_data_argument = getattr(_pydantic_internal_fields, "takes_validated_data_argument", None)
+# Installed defensively: if pydantic has relocated its internals (the import above) or renamed the
+# helper, the cache is left uninstalled and ``pydantic_serialization_test`` fails loudly, rather than
+# the app crashing on a dependency bump. An unhashable factory (e.g. a ``functools.partial``) can't
+# be a cache key, so it falls back to the uncached check.
+_uncached_takes_validated_data_argument = (
+    getattr(_pydantic_internal_fields, "takes_validated_data_argument", None)
+    if _pydantic_internal_fields is not None
+    else None
+)
+_cached_takes_validated_data_argument = (
+    functools.cache(_uncached_takes_validated_data_argument)
+    if _uncached_takes_validated_data_argument is not None
+    else None
+)
+
+
+def _memoized_takes_validated_data_argument(default_factory: Any) -> Any:
+    try:
+        return _cached_takes_validated_data_argument(default_factory)  # type: ignore[misc]
+    except TypeError:
+        # Unhashable factory (e.g. a functools.partial): skip the cache, run the original check.
+        return _uncached_takes_validated_data_argument(default_factory)  # type: ignore[misc]
+
+
 if _uncached_takes_validated_data_argument is not None and not getattr(
     _uncached_takes_validated_data_argument, "__sculptor_memoized__", False
 ):
-    _memoized_takes_validated_data_argument = functools.cache(_uncached_takes_validated_data_argument)
     _memoized_takes_validated_data_argument.__sculptor_memoized__ = True  # type: ignore[attr-defined]
-    _pydantic_internal_fields.takes_validated_data_argument = _memoized_takes_validated_data_argument
+    _memoized_takes_validated_data_argument.cache_info = _cached_takes_validated_data_argument.cache_info  # type: ignore[attr-defined]
+    _memoized_takes_validated_data_argument.cache_clear = _cached_takes_validated_data_argument.cache_clear  # type: ignore[attr-defined]
+    _pydantic_internal_fields.takes_validated_data_argument = _memoized_takes_validated_data_argument  # type: ignore[missing-attribute]
 
 
 class EvolvableModel:
