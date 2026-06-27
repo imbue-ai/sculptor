@@ -1,3 +1,4 @@
+import signal
 import time
 from threading import Event
 from threading import Thread
@@ -5,6 +6,7 @@ from threading import Thread
 import pytest
 
 from sculptor.foundation.processes.posix_spawn_process import LocalProcessHandle
+from sculptor.foundation.processes.posix_spawn_process import PosixSpawnedProcess
 from sculptor.foundation.subprocess_utils import CommandError
 from sculptor.foundation.subprocess_utils import SUBPROCESS_STOPPED_BY_REQUEST_EXIT_CODE
 from sculptor.foundation.subprocess_utils import run_local_command
@@ -105,6 +107,52 @@ def test_run_local_command_modern_version_closes_output_pipes() -> None:
     process = captured[0]
     assert process.stdout is not None and process.stdout.closed, "stdout pipe was left open after the command finished"
     assert process.stderr is not None and process.stderr.closed, "stderr pipe was left open after the command finished"
+
+
+def test_run_local_command_modern_version_posix_spawn_captures_output_and_closes_pipes() -> None:
+    """The posix_spawn path drives the same delicate output/cleanup loop as Popen.
+
+    With ``prefer_posix_spawn=True`` (and ``cwd`` None) the command must actually be
+    spawned via ``os.posix_spawn`` — we assert the handle is a ``PosixSpawnedProcess``,
+    not a Popen — yet stdout is still captured and the pipe fds are closed afterward,
+    exactly like the Popen path tested above.
+    """
+    captured: list[LocalProcessHandle] = []
+    result = run_local_command_modern_version(
+        ["echo", "hello"],
+        prefer_posix_spawn=True,
+        on_popen_ready=captured.append,
+    )
+
+    assert result.stdout == "hello\n"
+    assert len(captured) == 1
+    process = captured[0]
+    assert isinstance(process, PosixSpawnedProcess), "prefer_posix_spawn=True must route through posix_spawn"
+    assert process.stdout is not None and process.stdout.closed, "stdout pipe was left open after the command finished"
+    assert process.stderr is not None and process.stderr.closed, "stderr pipe was left open after the command finished"
+
+
+def test_run_local_command_modern_version_posix_spawn_shutdown_terminates() -> None:
+    """A shutdown_event must promptly stop a long-running posix_spawn child, going
+    through the same SIGTERM shutdown path Popen uses (``_shutdown_popen`` →
+    ``send_shutdown_signal`` → the handle's ``terminate``/``wait``)."""
+    shutdown_event = Event()
+    thread = Thread(target=send_stop, args=(shutdown_event,))
+    thread.start()
+    start_time = time.time()
+
+    result = run_local_command_modern_version(
+        ["sleep", "30"],
+        prefer_posix_spawn=True,
+        is_checked=False,
+        shutdown_event=shutdown_event,
+    )
+
+    thread.join(1)
+    elapsed_time = time.time() - start_time
+    # sleep installs no SIGTERM handler, so it dies on the signal: negative returncode.
+    assert result.returncode == -signal.SIGTERM
+    assert elapsed_time < 5, f"Process took {elapsed_time:.2f}s, expected the shutdown to interrupt it"
 
 
 def test_run_local_command_timeout_stops_long_running_process() -> None:

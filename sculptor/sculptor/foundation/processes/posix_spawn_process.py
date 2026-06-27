@@ -37,6 +37,15 @@ from typing import runtime_checkable
 # shutdown latency is dominated by the child's own SIGTERM handling, not by us.
 _WAIT_POLL_INTERVAL_SECONDS = 0.005
 
+# Returncode recorded when the child was reaped out from under us (``waitpid``
+# raised ECHILD), so its true exit status is unrecoverable. We surface a distinct
+# non-``None`` sentinel rather than leaving ``returncode`` at ``None``: callers
+# poll ``returncode``/``poll()`` to detect exit, so a lingering ``None`` would make
+# ``poll()`` look "still running" forever (and a default ``timeout=None`` ``wait()``
+# would never return). The value mirrors the ``-9999`` style of
+# ``SUBPROCESS_STOPPED_BY_REQUEST_EXIT_CODE`` so it stands out in logs.
+EXIT_CODE_REAPED_ELSEWHERE = -9998
+
 
 @runtime_checkable
 class LocalProcessHandle(Protocol):
@@ -86,15 +95,22 @@ class PosixSpawnedProcess:
         self._reaped = True
         return self.returncode
 
+    def _record_reaped_elsewhere(self) -> int:
+        # waitpid raised ECHILD: something else reaped the child (or there was no
+        # such child), so we can never learn its real status. Record the sentinel
+        # once so poll()/wait() stay idempotent and always return a non-None code.
+        if self.returncode is None:
+            self.returncode = EXIT_CODE_REAPED_ELSEWHERE
+        self._reaped = True
+        return self.returncode
+
     def poll(self) -> int | None:
         if self._reaped:
             return self.returncode
         try:
             reaped_pid, status = os.waitpid(self.pid, os.WNOHANG)
         except ChildProcessError:
-            # Already reaped elsewhere; nothing more we can learn.
-            self._reaped = True
-            return self.returncode
+            return self._record_reaped_elsewhere()
         if reaped_pid == 0:
             return None
         return self._record_exit(status)
@@ -107,9 +123,7 @@ class PosixSpawnedProcess:
             try:
                 _reaped_pid, status = os.waitpid(self.pid, 0)
             except ChildProcessError:
-                self._reaped = True
-                assert self.returncode is not None
-                return self.returncode
+                return self._record_reaped_elsewhere()
             return self._record_exit(status)
         deadline = time.monotonic() + timeout
         while True:

@@ -11,6 +11,7 @@ import subprocess
 
 import pytest
 
+from sculptor.foundation.processes.posix_spawn_process import EXIT_CODE_REAPED_ELSEWHERE
 from sculptor.foundation.processes.posix_spawn_process import LocalProcessHandle
 from sculptor.foundation.processes.posix_spawn_process import PosixSpawnedProcess
 from sculptor.foundation.processes.posix_spawn_process import spawn_via_posix_spawn
@@ -77,6 +78,24 @@ def test_poll_returns_none_then_exit_code() -> None:
     assert process.poll() is None  # still running
     assert process.wait(timeout=10) == 7
     assert process.poll() == 7  # idempotent after reaping
+
+
+def test_poll_returns_sentinel_when_child_reaped_elsewhere() -> None:
+    # If something else reaps the child first, our waitpid raises ECHILD. poll()
+    # must then report a non-None sentinel rather than looping on None forever.
+    process = spawn_via_posix_spawn(["sh", "-c", "exit 0"])
+    os.waitpid(process.pid, 0)  # steal the child's exit status out from under it
+    assert process.poll() == EXIT_CODE_REAPED_ELSEWHERE
+    assert process.returncode == EXIT_CODE_REAPED_ELSEWHERE
+
+
+def test_wait_returns_sentinel_when_child_reaped_elsewhere() -> None:
+    # Same race via wait(): it must return the sentinel, not assert on a None
+    # returncode (the default timeout=None path used to do exactly that).
+    process = spawn_via_posix_spawn(["sh", "-c", "exit 0"])
+    os.waitpid(process.pid, 0)
+    assert process.wait() == EXIT_CODE_REAPED_ELSEWHERE
+    assert process.wait(timeout=10) == EXIT_CODE_REAPED_ELSEWHERE  # idempotent
 
 
 def test_wait_times_out_then_kill() -> None:
