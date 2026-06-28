@@ -90,23 +90,22 @@ export const projectAtBottom = (state: ScrollMachineState): boolean => {
  * What a content reflow (a viewport width change that re-wraps text, an
  * above-fold item growing, a streamed token) should do to the scroll position.
  * One typed policy keyed on the authority phase, derived the same way
- * `projectAtBottom` is — so the resize handling lives in the machine rather than
- * as scattered per-observer conditionals. Every phase has exactly one response:
+ * `projectAtBottom` is. Every phase has exactly one response:
  *
- *  - `following`              ⇒ keep pinned to the bottom;
+ *  - `following`              ⇒ keep pinned to the bottom (following the live tail);
  *  - `anchoringTurn`          ⇒ keep the anchored user turn at the top (and let
  *                               the caller hand off to `following` on overflow);
  *  - `restoring` / `navigating` ⇒ leave scrollTop to that phase's own owner;
- *  - `userControlled`         ⇒ idle at the bottom: keep glued there; scrolled up
- *                               (or disengaged mid-stream): hold the reading anchor
- *                               stationary, or ignore until an anchor has been
- *                               sampled.
+ *  - `userControlled`         ⇒ hold the reading anchor stationary, or — before an
+ *                               anchor has been sampled — defer to the virtualizer's
+ *                               default (preserve the visible content).
  *
- * `isStreaming` is the one bit not in the machine: while the stream runs, being
- * `following` is the only way to be pinned to the live tail, so a `userControlled`
- * user is deliberately disengaged and content growth must never pull them back —
- * even within the at-bottom threshold. The idle "stay glued at the bottom" re-pin
- * therefore applies only when not streaming.
+ * A resize is NOT a reason to re-pin to the bottom. An idle `userControlled` user —
+ * even one sitting at the bottom — keeps their reading position across a reflow: the
+ * virtualizer grows the visible port naturally and the jump-to-bottom button (driven
+ * by the geometry sample) surfaces if the bottom drifts out of view. Only
+ * `following`, the explicit "watching the live tail" mode, pins to the bottom — so
+ * whether a stream is running is already carried by the phase, not a separate bit.
  */
 export type ReflowAction =
   | { kind: "pinBottom" }
@@ -114,7 +113,7 @@ export type ReflowAction =
   | { kind: "holdTurn"; anchorIndex: number }
   | { kind: "ignore" };
 
-export const projectReflow = (state: ScrollMachineState, isStreaming: boolean): ReflowAction => {
+export const projectReflow = (state: ScrollMachineState): ReflowAction => {
   switch (state.authority.kind) {
     case "following":
       return { kind: "pinBottom" };
@@ -124,7 +123,6 @@ export const projectReflow = (state: ScrollMachineState, isStreaming: boolean): 
     case "navigating":
       return { kind: "ignore" };
     case "userControlled":
-      if (!isStreaming && projectAtBottom(state)) return { kind: "pinBottom" };
       return state.readingAnchor === null ? { kind: "ignore" } : { kind: "holdAnchor", anchor: state.readingAnchor };
     default: {
       const unreachable: never = state.authority;

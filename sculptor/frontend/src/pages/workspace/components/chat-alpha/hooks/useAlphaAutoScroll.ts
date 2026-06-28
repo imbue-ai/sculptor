@@ -566,7 +566,7 @@ export const useAlphaAutoScroll = (
   // drives — projectReflow decides, applyReflow performs.
   const applyReflow = useCallback(
     (el: HTMLElement, distance: number): void => {
-      const action = projectReflow(machine.getState(), isStreamingRef.current);
+      const action = projectReflow(machine.getState());
       switch (action.kind) {
         case "ignore":
           return;
@@ -575,7 +575,7 @@ export const useAlphaAutoScroll = (
           restoreReadingAnchor(action.anchor);
           return;
         case "pinBottom": {
-          // Following the stream, or idle at the bottom — keep the end in view.
+          // Following the live tail — keep the end in view.
           // A user actively scrolling away during a stream hands control back.
           if (distance > BOTTOM_THRESHOLD && isUserScrollingRef.current) {
             machine.dispatch({ kind: "userScrolled" });
@@ -624,9 +624,10 @@ export const useAlphaAutoScroll = (
   // suppressed, drives the typed reflow policy for every authority phase. On any
   // content size change — a streamed token, a viewport width reflow, an above-fold
   // item growing — it samples at-bottness and applies projectReflow's single
-  // action: pin to the bottom (following / at-bottom), hold the reading anchor
-  // (scrolled up), hold the anchored turn at the top (anchoringTurn), or leave
-  // scrollTop to a restore/nav owner.
+  // action: pin to the bottom (following), hold the reading anchor (scrolled up or
+  // idle), hold the anchored turn at the top (anchoringTurn), or leave scrollTop to
+  // the virtualizer's default. A resize never re-pins an idle view to the bottom —
+  // the port grows and the jump-to-bottom button surfaces if the bottom drifts off.
   useLayoutEffect(() => {
     if (isSuppressed) return;
     const el = scrollContainerRef.current;
@@ -642,9 +643,9 @@ export const useAlphaAutoScroll = (
 
     // Initial pin when a stream (re)connects already pinned to the bottom —
     // covers a stream starting while the content already overflowed, where no
-    // further resize would otherwise fire the pin. Idle reconnects don't pin
-    // here; a resize drives their stay-glued via the observer's pinBottom path.
-    if (isStreaming && messageCount > 0 && projectReflow(machine.getState(), isStreaming).kind === "pinBottom") {
+    // further resize would otherwise fire the pin. Only `following` yields
+    // pinBottom, so idle reconnects fall through untouched.
+    if (isStreaming && messageCount > 0 && projectReflow(machine.getState()).kind === "pinBottom") {
       if (distanceFromContentBottom(el, virtualizer) <= BOTTOM_THRESHOLD) {
         isProgrammaticScroll.current = true;
         virtualizer.scrollToIndex(messageCount - 1, { align: "end" });

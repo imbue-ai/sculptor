@@ -214,58 +214,52 @@ describe("createScrollStateMachine", () => {
   });
 
   describe("projectReflow", () => {
-    it("pins to the bottom while following (streaming or not)", () => {
-      expect(projectReflow(stateWith({ authority: { kind: "following" } }), true)).toEqual({ kind: "pinBottom" });
-      expect(projectReflow(stateWith({ authority: { kind: "following" } }), false)).toEqual({ kind: "pinBottom" });
+    it("pins to the bottom while following", () => {
+      expect(projectReflow(stateWith({ authority: { kind: "following" } }))).toEqual({ kind: "pinBottom" });
     });
 
     it("holds the anchored turn at the top while anchoringTurn", () => {
-      expect(projectReflow(stateWith({ authority: { kind: "anchoringTurn", anchorIndex: 4 } }), true)).toEqual({
+      expect(projectReflow(stateWith({ authority: { kind: "anchoringTurn", anchorIndex: 4 } }))).toEqual({
         kind: "holdTurn",
         anchorIndex: 4,
       });
     });
 
     it("leaves scrollTop to the owner while restoring or navigating", () => {
-      expect(projectReflow(stateWith({ authority: { kind: "restoring", taskId: "t" } }), false)).toEqual({
+      expect(projectReflow(stateWith({ authority: { kind: "restoring", taskId: "t" } }))).toEqual({ kind: "ignore" });
+      expect(projectReflow(stateWith({ authority: { kind: "navigating", promptIndex: 0 } }))).toEqual({
         kind: "ignore",
       });
-      expect(projectReflow(stateWith({ authority: { kind: "navigating", promptIndex: 0 } }), false)).toEqual({
-        kind: "ignore",
-      });
     });
 
-    it("pins to the bottom while idle (not streaming) and userControlled at the bottom", () => {
-      expect(
-        projectReflow(stateWith({ authority: { kind: "userControlled" }, geometryAtBottom: true }), false),
-      ).toEqual({ kind: "pinBottom" });
-    });
-
-    it("does NOT pin a disengaged user mid-stream, even within the at-bottom threshold", () => {
-      // While streaming, userControlled means deliberately disengaged from the
-      // live tail — content growth must not pull them back to the bottom.
-      expect(projectReflow(stateWith({ authority: { kind: "userControlled" }, geometryAtBottom: true }), true)).toEqual(
-        {
-          kind: "ignore",
-        },
-      );
-    });
-
-    it("holds the reading anchor while userControlled, scrolled up, with an anchor sampled", () => {
+    it("holds the reading anchor while userControlled with an anchor sampled — at the bottom or not", () => {
+      // A resize is not a reason to re-pin: an idle user keeps their reading
+      // position whether or not they were sitting at the bottom.
       const anchor = { messageIndex: 2, viewportOffset: 277 };
       expect(
         projectReflow(
+          stateWith({ authority: { kind: "userControlled" }, geometryAtBottom: true, readingAnchor: anchor }),
+        ),
+      ).toEqual({ kind: "holdAnchor", anchor });
+      expect(
+        projectReflow(
           stateWith({ authority: { kind: "userControlled" }, geometryAtBottom: false, readingAnchor: anchor }),
-          false,
         ),
       ).toEqual({ kind: "holdAnchor", anchor });
     });
 
-    it("ignores while userControlled, scrolled up, before any anchor is sampled", () => {
+    it("defers to the virtualizer's default (ignore) while userControlled before an anchor is sampled — even at the bottom", () => {
+      // The malformed "re-pin an idle view to the bottom on resize" requirement is
+      // gone: an at-bottom idle user is left to the virtualizer's natural reflow
+      // (grow the visible port), and the jump-to-bottom button reflects the result.
+      expect(
+        projectReflow(
+          stateWith({ authority: { kind: "userControlled" }, geometryAtBottom: true, readingAnchor: null }),
+        ),
+      ).toEqual({ kind: "ignore" });
       expect(
         projectReflow(
           stateWith({ authority: { kind: "userControlled" }, geometryAtBottom: false, readingAnchor: null }),
-          false,
         ),
       ).toEqual({ kind: "ignore" });
     });

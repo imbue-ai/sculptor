@@ -368,14 +368,13 @@ export type ReflowAction =
   | { kind: "holdTurn"; anchorIndex: number }      // keep the anchored turn at the top
   | { kind: "ignore" };                            // a restore/nav owner drives scrollTop
 
-export const projectReflow = (state: ScrollMachineState, isStreaming: boolean): ReflowAction => {
+export const projectReflow = (state: ScrollMachineState): ReflowAction => {
   switch (state.authority.kind) {
     case "following":              return { kind: "pinBottom" };
     case "anchoringTurn":          return { kind: "holdTurn", anchorIndex: state.authority.anchorIndex };
     case "restoring":
     case "navigating":             return { kind: "ignore" };
-    case "userControlled":
-      if (!isStreaming && projectAtBottom(state)) return { kind: "pinBottom" };
+    case "userControlled":         // an idle user keeps their reading position — a resize never re-pins
       return state.readingAnchor === null ? { kind: "ignore" } : { kind: "holdAnchor", anchor: state.readingAnchor };
   }
 };
@@ -383,17 +382,19 @@ export const projectReflow = (state: ScrollMachineState, isStreaming: boolean): 
 
 A single content `ResizeObserver` (connected whenever search is not suppressing
 auto-scroll) samples at-bottness, then performs the one action `projectReflow`
-chose: `pinBottom` re-pins the last message (following the stream, or staying glued
-when idle at the bottom); `holdTurn` keeps the freshly-anchored user message at the
-top and hands off to `following` once its response overflows; `holdAnchor` restores
-the reading anchor; `ignore` leaves scrollTop to the restore/nav owner.
+chose: `pinBottom` re-pins the last message (only while `following` the live tail);
+`holdTurn` keeps the freshly-anchored user message at the top and hands off to
+`following` once its response overflows; `holdAnchor` restores the reading anchor;
+`ignore` leaves scrollTop to the restore/nav owner or the virtualizer's default.
 
-**The one bit not in the machine is `isStreaming`.** While the stream runs,
-`following` is the *only* way to be pinned to the live tail, so a `userControlled`
-user is deliberately disengaged — content growth must never pull them back, even
-within the at-bottom threshold. The idle "stay glued at the bottom" re-pin
-therefore applies only when not streaming; mid-stream a `userControlled` user holds
-their anchor.
+**A resize never re-pins an idle view to the bottom.** Only `following` — the
+explicit "watching the live tail" mode — pins, so whether a stream is running is
+already carried by the phase, not a separate bit (an earlier `isStreaming` parameter
+to `projectReflow` was removed along with the idle pin). An idle `userControlled`
+user keeps their reading position across a reflow: the virtualizer grows the visible
+port naturally (its default behavior) and the jump-to-bottom button surfaces if the
+bottom drifts out of view. Re-pinning an *idle* view to the bottom on a resize was a
+malformed requirement — see *Reflow re-pin: a requirement we deleted* below.
 
 #### The reading anchor, and why `holdAnchor` is not just per-item compensation
 
@@ -471,7 +472,7 @@ sleeps. `wait_for_alpha_scroll_idle` and friends are deleted.
 > control flow becoming quiescent, not a guarantee that TanStack Virtual's
 > internal `scrollToIndex` correction has painted its final sub-pixel. That is an
 > accepted limitation — observable authority is the bar. (Revisited — see
-> *Hardening: not one bad frame*.)
+> *Reflow re-pin: a requirement we deleted*.)
 
 ## Resolved design decisions
 
@@ -485,9 +486,10 @@ These were settled during design review:
 2. **Sub-pixel-exact settle is *not* required.** Observable authority quiescence
    is the contract. We do not patch or instrument TanStack Virtual's internal
    async scroll corrections; `restoreSettled` / `converged` are emitted from our
-   own rAF / measurement callbacks. — **Revisited in *Hardening: not one bad
-   frame*** below: a 10× pressure run showed the widen reflow paying for this
-   relaxation, so the bar is raised to per-frame correctness for reflow.
+   own rAF / measurement callbacks. — **Revisited in *Reflow re-pin: a requirement
+   we deleted*** below: a 10× pressure run showed the widen reflow paying for this
+   relaxation, which we resolved by deleting the idle-at-bottom re-pin (not by
+   raising the settle bar).
 3. **Search suppression is a top-level guard**, not a state in the union.
 4. **The scroll-to-top animation and the dynamic `paddingEnd` feature are
    kept.** They are the reason the `anchoringTurn` authority phase and the
@@ -495,16 +497,18 @@ These were settled during design review:
 5. **The migration is incremental** — every commit stays green — **but the
    entire migration is completed by the final commit.**
 6. **Reflow handling is a derived projection over the phase, never an independent
-   mode** (SCU-1566). `projectReflow` folds the authority phase (plus the one
-   external `isStreaming` bit) over the `readingAnchor` sample into one of
-   `pinBottom` / `holdAnchor` / `holdTurn` / `ignore`, driven by a **single**
-   content `ResizeObserver`. This replaced the two phase-specific observers and
-   retired `useViewportStability`. The narrowing reading-anchor jump had two
-   causes, both fixed here: an off-by-`delta` bug in
+   mode** (SCU-1566). `projectReflow` folds the authority phase over the
+   `readingAnchor` sample into one of `pinBottom` / `holdAnchor` / `holdTurn` /
+   `ignore`, driven by a **single** content `ResizeObserver`. This replaced the two
+   phase-specific observers and retired `useViewportStability`. The narrowing
+   reading-anchor jump had two causes, both fixed here: an off-by-`delta` bug in
    `shouldAdjustScrollPosition` (the predicate is handed the *cached* pre-growth
    size, so it must not subtract `delta`), and the non-virtualized intro padding
    that per-item compensation cannot see — `holdAnchor` restores scrollTop
-   absolutely from the anchor's fresh `start`, covering both.
+   absolutely from the anchor's fresh `start`, covering both. (Later refined: the
+   idle-at-bottom `pinBottom` case — and the `isStreaming` parameter it needed —
+   were **removed**; a resize no longer re-pins an idle view. See *Reflow re-pin: a
+   requirement we deleted*.)
 
 ## What this buys us
 
@@ -553,12 +557,31 @@ These were settled during design review:
 
 ---
 
-## Hardening: not one bad frame (reflow commit discipline)
+## Reflow re-pin: a requirement we deleted
 
-Status: **proposed** — design under review; not yet implemented. Revisits
-resolved decision #2 and the "relaxation" note above.
+Status: **resolved** — but *not* the way this section first proposed. The "not one
+bad frame" hardening below (a Settle Controller that re-pins every frame pre-paint)
+was **never built**. Driving it to a clean settlement surfaced the real problem: the
+requirement it was trying to satisfy — *re-pin an idle view to the bottom on a
+resize* — is itself malformed. The fix was to **delete that requirement**, not to
+harden it.
 
-### Why we are reopening this
+**Resolution.** On a resize we now bless the virtualizer's default behavior — it
+grows the visible port and preserves the content the user is reading — and surface
+the **jump-to-bottom button** when that leaves the view off the bottom. In the
+machine, the idle-at-bottom `pinBottom` branch of `projectReflow` (and the
+`isStreaming` parameter that branch alone needed) were removed; only `following`
+still pins. That deleted the un-winnable per-frame race for the idle case outright —
+*removing* code rather than adding a Settle Controller — and recast the two
+`test_at_bottom_stays_glued_on_*` tests as `test_at_bottom_shows_jump_on_*`. A 10×
+pressure run of the full scroll suite is green for the reflow/width behavior.
+
+The diagnosis immediately below is retained as the reasoning that led here — it
+correctly locates the flake in the commit layer — but treat everything from *The
+principle: a frame is a contract* onward as **the path considered and not taken**:
+the Settle Controller was not implemented.
+
+### Why we reopened this (historical)
 
 The landed machine accepted (decision #2, and the relaxation note under *The
 deterministic test signal*) that `data-scroll-settled` reflects *our* control flow

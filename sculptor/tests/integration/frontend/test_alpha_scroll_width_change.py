@@ -54,12 +54,6 @@ _VIEWPORT_HEIGHT = 800
 # test_alpha_scroll_prompt_nav.py.
 _TOP_ANCHOR_TOLERANCE_PX = 30
 
-# Tolerance (px) for "the end of the last message is within the chat box": how far
-# the message's bottom edge may sit below the chat viewport bottom and still count
-# as glued.  Generous enough to absorb the turn footer / sub-pixel rounding, tight
-# enough to catch a real drift (where the bottom slides hundreds of px off-fold).
-_END_VISIBLE_TOLERANCE_PX = 80
-
 # Short reply that fits the viewport without overflowing.
 _SHORT_TEXT = "Hello, this is a short reply."
 # Long initial response so the chat is scrollable.
@@ -132,31 +126,6 @@ def _wait_for_message_top_near(page: Page, data_index: int, expected_offset: flo
     )
 
 
-def _wait_for_last_message_end_visible(page: Page, *, timeout: int = 30_000) -> None:
-    """Wait until the END of the last message is within the chat viewport.
-
-    "Glued to the bottom" across a reflow means the last message's bottom edge
-    stays at (or above) the chat box's bottom — nothing clipped below the fold,
-    i.e. the message's intersection with the area *below* the chat box is empty.
-    This asserts that on-screen fact directly, NOT the jump-to-bottom button:
-    the button's ``aria-hidden`` lags an idle resize (the geometry sample is
-    stale until the virtualizer's async scroll correction fires), so a
-    button-only check can false-pass while the view has actually drifted.
-    """
-    page.wait_for_function(
-        f"""() => {{
-            const container = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW.value}"]');
-            if (!container) return false;
-            const msgs = container.querySelectorAll('[data-testid="{ElementIDs.ALPHA_CHAT_MESSAGE.value}"]');
-            if (!msgs.length) return false;
-            const lastBottom = msgs[msgs.length - 1].getBoundingClientRect().bottom;
-            const boxBottom = container.getBoundingClientRect().bottom;
-            return lastBottom - boxBottom <= {_END_VISIBLE_TOLERANCE_PX};
-        }}""",
-        timeout=timeout,
-    )
-
-
 def _wait_for_following_pinned(page: Page, user_index: int, *, timeout: int = 30_000) -> None:
     """Wait until the just-sent user message has scrolled above the viewport top.
 
@@ -179,9 +148,11 @@ def _wait_for_following_pinned(page: Page, user_index: int, *, timeout: int = 30
     )
 
 
-@user_story("to verify an at-bottom completed turn stays glued to the bottom when the viewport narrows")
-def test_at_bottom_stays_glued_on_narrow(sculptor_instance_: SculptorInstance) -> None:
-    """Narrowing the viewport must not unstick a completed, at-bottom turn."""
+@user_story(
+    "to verify an at-bottom completed turn grows the port and surfaces the jump button when the viewport narrows"
+)
+def test_at_bottom_shows_jump_on_narrow(sculptor_instance_: SculptorInstance) -> None:
+    """Narrowing an at-bottom turn does NOT re-pin: the port grows and the jump button appears."""
     page = sculptor_instance_.page
     _set_viewport_width(page, _INITIAL_WIDTH)
 
@@ -194,31 +165,30 @@ def test_at_bottom_stays_glued_on_narrow(sculptor_instance_: SculptorInstance) -
 
     expect(get_alpha_chat_view(page)).to_be_visible()
 
-    # Drive a completed, overflowing turn that leaves the view pinned at the bottom.
+    # Drive a completed, overflowing turn that leaves the view at the bottom.
     send_chat_message(
         chat_panel,
         f'fake_claude:stream_text `{{"text": "{_STREAM_TEXT}", "chunk_size": 50, "delay_seconds": 0.1}}`',
     )
     expect(chat_panel.get_thinking_indicator()).not_to_be_visible(timeout=60_000)
     wait_for_alpha_scroll_settled(page)
-    # Baseline: the completed overflowing turn left the view glued — the end of
-    # the last message sits within the chat box.
-    _wait_for_last_message_end_visible(page)
+    # Baseline: at the bottom — the jump-to-bottom button is hidden.
+    jump_btn = get_jump_to_bottom_button(page)
+    _expect_jump_button_hidden(jump_btn)
 
-    # Narrow the viewport (width only) — the content reflows taller.
+    # Narrow the viewport (width only) — content reflows taller.  A resize does NOT
+    # re-pin to the bottom: the virtualizer preserves the visible content (the port
+    # grows) and the jump-to-bottom button surfaces so the user can return.
     _set_viewport_width(page, _NARROW_WIDTH)
 
-    # Stay glued: the end of the last message must remain within the chat box.
-    # Assert real on-screen visibility, NOT the jump button — its aria-hidden
-    # lags an idle resize (the geometry sample is stale until the virtualizer's
-    # async scroll correction fires), so a button-only check would false-pass
-    # while the view has actually drifted off the bottom.
-    _wait_for_last_message_end_visible(page)
+    expect(jump_btn).to_be_visible()
 
 
-@user_story("to verify an at-bottom completed turn stays glued to the bottom when the viewport widens")
-def test_at_bottom_stays_glued_on_widen(sculptor_instance_: SculptorInstance) -> None:
-    """Widening the viewport must not unstick a completed, at-bottom turn."""
+@user_story(
+    "to verify an at-bottom completed turn grows the port and surfaces the jump button when the viewport widens"
+)
+def test_at_bottom_shows_jump_on_widen(sculptor_instance_: SculptorInstance) -> None:
+    """Widening an at-bottom turn does NOT re-pin: the port grows and the jump button appears."""
     page = sculptor_instance_.page
     _set_viewport_width(page, _INITIAL_WIDTH)
 
@@ -231,23 +201,23 @@ def test_at_bottom_stays_glued_on_widen(sculptor_instance_: SculptorInstance) ->
 
     expect(get_alpha_chat_view(page)).to_be_visible()
 
-    # Drive a completed, overflowing turn that leaves the view pinned at the bottom.
+    # Drive a completed, overflowing turn that leaves the view at the bottom.
     send_chat_message(
         chat_panel,
         f'fake_claude:stream_text `{{"text": "{_STREAM_TEXT}", "chunk_size": 50, "delay_seconds": 0.1}}`',
     )
     expect(chat_panel.get_thinking_indicator()).not_to_be_visible(timeout=60_000)
     wait_for_alpha_scroll_settled(page)
-    # Baseline: the completed overflowing turn left the view glued — the end of
-    # the last message sits within the chat box.
-    _wait_for_last_message_end_visible(page)
+    # Baseline: at the bottom — the jump-to-bottom button is hidden.
+    jump_btn = get_jump_to_bottom_button(page)
+    _expect_jump_button_hidden(jump_btn)
 
-    # Widen the viewport (width only) — the content reflows shorter.
+    # Widen the viewport (width only) — content reflows shorter.  A resize does NOT
+    # re-pin to the bottom: the virtualizer preserves the visible content and the
+    # jump-to-bottom button surfaces so the user can return.
     _set_viewport_width(page, _WIDE_WIDTH)
 
-    # Stay glued: the end of the last message must remain within the chat box
-    # (widening shrinks content, so scrollTop clamps back to the bottom).
-    _wait_for_last_message_end_visible(page)
+    expect(jump_btn).to_be_visible()
 
 
 @user_story("to verify a scrolled-up reading anchor holds its top position when the viewport narrows")
