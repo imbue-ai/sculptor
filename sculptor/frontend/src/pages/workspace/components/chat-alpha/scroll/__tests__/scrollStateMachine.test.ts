@@ -249,9 +249,9 @@ describe("createScrollStateMachine", () => {
     });
 
     it("defers to the virtualizer's default (ignore) while userControlled before an anchor is sampled — even at the bottom", () => {
-      // The malformed "re-pin an idle view to the bottom on resize" requirement is
-      // gone: an at-bottom idle user is left to the virtualizer's natural reflow
-      // (grow the visible port), and the jump-to-bottom button reflects the result.
+      // An at-bottom idle user is NOT re-pinned on a resize — they are left to the
+      // virtualizer's natural reflow (grow the visible port), and the jump-to-bottom
+      // button reflects the result.
       expect(
         projectReflow(
           stateWith({ authority: { kind: "userControlled" }, geometryAtBottom: true, readingAnchor: null }),
