@@ -158,7 +158,7 @@ export const PluginsSettingsSection = ({ onSettingChange }: PluginsSettingsSecti
     >
       <SettingRow
         title="Frontend plugins"
-        description="Master switch for the plugin system. Turning it on applies immediately; turning it off takes effect after an app reload (already-loaded plugins keep running for the rest of the session). Use the per-plugin switches below to disable individual plugins."
+        description="Enable or disable all plugins globally. Unloading plugins may require a page refresh."
       >
         <Switch
           checked={isFrontendPluginsEnabled}
@@ -264,6 +264,7 @@ const SourceRow = ({
   // dead-trace row, with no live plugin to toggle, settings, or reload — only a
   // Remove to forget it.
   const isMissing = state?.status === "missing";
+  const isError = state?.status === "error";
   // Loaded and shadowed rows both carry a manifest (the shadowed one fetched
   // fine, it just isn't the active version) so both can show name + version.
   const manifest = state?.status === "loaded" || state?.status === "shadowed" ? state.manifest : undefined;
@@ -394,10 +395,12 @@ const SourceRow = ({
           )}
         </Flex>
         <Flex align="center" gap="2">
-          {/* Settings and reload only show while the source is enabled (loaded).
-              They sit to the LEFT of the switch so toggling the source — which
-              shows/hides them — never shifts the switch horizontally; only the
-              always-present Remove stays to its right. */}
+          {/* Settings shows only while the source is loaded; Reload also shows on
+              an errored row so a failed load (e.g. a bundle that wasn't ready yet
+              on a cold start) can be retried in place. Both sit to the LEFT of the
+              switch so toggling the source — which shows/hides them — never shifts
+              the switch horizontally; only the always-present Remove stays to its
+              right. */}
           {isLoaded && SettingsComponent && (
             <Tooltip content="Settings">
               <IconButton
@@ -412,13 +415,13 @@ const SourceRow = ({
               </IconButton>
             </Tooltip>
           )}
-          {isLoaded && (
-            <Tooltip content="Reload">
+          {(isLoaded || isError) && (
+            <Tooltip content={isError ? "Retry" : "Reload"}>
               <IconButton
                 variant="ghost"
                 size="1"
                 color="gray"
-                aria-label={`Reload ${source}`}
+                aria-label={`${isError ? "Retry" : "Reload"} ${source}`}
                 onClick={() => void handleReload()}
                 data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_RELOAD}
               >

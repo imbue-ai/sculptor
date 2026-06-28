@@ -2415,10 +2415,15 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user adds a plugin source by URL, toggles a plugin's enable/disable switch, clicks Refresh to rescan the plugins directory, or removes a user-added URL source.
   - Then: an added source appears in the list; the switch mutes/unmutes the plugin without removing it; Refresh re-scans drop-in plugins; a user-added URL source can be removed while bundled/disk-discovered ones cannot; the plugins directory path is shown.
 
-- **SET-040 — Plugin system master switch**
-  - Given: the Plugins settings section (always present, since it hosts the master switch).
-  - When: the user toggles the master switch at the top of the section off, then on.
+- **SET-040 — Global plugin enable/disable toggle**
+  - Given: the Plugins settings section (always present, since it hosts the global plugin toggle).
+  - When: the user toggles the global plugin switch at the top of the section off, then on.
   - Then: turning it off hides the plugin-management UI (add-source input and list) while the section and switch remain; turning it on reveals the management UI again.
+
+- **SET-041 — Retry a failed plugin load**
+  - Given: a plugin source whose row is in the error state (its load failed).
+  - When: the user clicks the retry control on that row.
+  - Then: the row re-attempts the load — settling back to error if it fails again, or showing the loaded plugin's name and version if it now succeeds.
 
 ## Actions
 

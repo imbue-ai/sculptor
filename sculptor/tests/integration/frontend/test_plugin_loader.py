@@ -253,6 +253,35 @@ def test_plugin_source_error_modes(sculptor_instance_factory_: SculptorInstanceF
 
 
 @custom_sculptor_folder_populator.with_args(_enable_frontend_plugins_populator)
+def test_failed_plugin_can_be_retried(sculptor_instance_factory_: SculptorInstanceFactory) -> None:
+    """An errored row offers a retry control that re-attempts the load in place.
+
+    Mirrors the cold-start race a bundled plugin can hit: the manifest is
+    reachable but the entry bundle 404s on the first load (an import-phase
+    failure). The row must let the user retry rather than sit failed until a full
+    app reload; once the bundle is available, retrying loads the plugin.
+    """
+    with (
+        sculptor_instance_factory_.spawn_instance() as instance,
+        spawn_plugin_fixture_server() as server,
+    ):
+        settings_page = navigate_to_settings_page(page=instance.page)
+        plugins = settings_page.click_on_plugins()
+
+        # Manifest OK, but the entry bundle isn't served yet -> import-phase error.
+        source = server.add_plugin("retry-me", manifest=_valid_manifest("retry-me", name="Retry Me"), entry_js=None)
+        plugins.add_source(source)
+        plugins.expect_failed(source, phase="import")
+        # The error row exposes a retry control (it doesn't just sit failed).
+        expect(plugins.get_reload_in(plugins.get_source_row(source))).to_be_visible()
+
+        # The bundle becomes available; retrying re-fetches and loads the plugin.
+        server.add_route("/retry-me/main.js", body=_VALID_PLUGIN_JS, content_type="text/javascript")
+        plugins.retry(source)
+        plugins.expect_loaded(source, name="Retry Me", version="0.1.0")
+
+
+@custom_sculptor_folder_populator.with_args(_enable_frontend_plugins_populator)
 def test_valid_plugin_loads_and_can_be_removed(sculptor_instance_factory_: SculptorInstanceFactory) -> None:
     """A well-formed cross-origin source loads (name/version shown) and removes cleanly."""
     with (

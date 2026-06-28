@@ -780,9 +780,9 @@ compact **workspace widgets** that sit in the workspace banner's action row (col
 order as space tightens, like the built-in segments) — built against a small versioned Sculptor SDK
 that reuses the host's React, Radix theming, icons, and shared data client so they look and behave
 like native UI. The plugin system is **on by default**. A
-master switch at the top of the **Plugins** settings section is the kill switch for the whole system:
+toggle at the top of the **Plugins** settings section globally enables or disables all plugins:
 turning it off hides the plugin-management controls and, after an app reload, stops loading plugins
-(already-loaded plugins aren't torn down live), while the section and its switch stay in place so the
+(already-loaded plugins aren't torn down live), while the section and its toggle stay in place so the
 system can be turned back on.
 
 The **Plugins** settings section manages plugin **sources**: you add a plugin by dropping its folder

@@ -63,7 +63,7 @@ pointers to their spec/scenario home.
 | REQ-FUNC-012 | Settings (all sections) | §7.10 | `SET` | Core |
 | REQ-FUNC-013 | Actions & notes; mentions & path autocomplete | §7.11 | `ACT`, `MENT` | Optional |
 | REQ-FUNC-014 | Experimental surface (toggles, experimental skills/panels, container backend) | §7.12 | `SET`, `PANEL` | Experimental |
-| REQ-FUNC-016 | Frontend plugins: on-by-default plugin system, Plugins settings section with a master kill switch, bundled Linear plugin enabled by default | §7.13 | `PANEL`, `SET` | Standard |
+| REQ-FUNC-016 | Frontend plugins: on-by-default plugin system, Plugins settings section with a global enable/disable toggle, bundled Linear plugin enabled by default | §7.13 | `PANEL`, `SET` | Standard |
 | REQ-FUNC-015 | `sculpt` CLI: full command surface, `--json`, env-var defaults, cross-surface visibility | §8 | (CLI-level, see §5.4) | Standard |
 
 - **REQ-FUNC-100 (MUST).** Every behavior enumerated in `scenarios.md` is a product requirement; that
@@ -404,7 +404,7 @@ rules behind them.
   cannot publish an inconsistent version (`SPEC.md` §11.2–§11.3).
 - **REQ-SEC-004.** **Frontend-plugin trust model.** The frontend plugin system (on by default, gated
   on the `enableFrontendPlugins` flag — atom `isFrontendPluginsEnabledAtom`, default `true`; the
-  flag's master switch lives at the top of the Plugins settings section) runs plugin code **in the
+  flag is toggled at the top of the Plugins settings section) runs plugin code **in the
   renderer with the same privileges as Sculptor's own UI**; a URL plugin source is re-fetched on every
   load, so the user trusts whatever it serves at load time. Adding a plugin source is therefore
   equivalent to running that code, documented in `SECURITY.md`. Of the bundled plugins only **Linear**
