@@ -456,24 +456,24 @@ class ElementIDs(StrEnum):
     PI_INSTALL_BUTTON = "pi-install-button"
     PI_INSTALL_PROGRESS = "pi-install-progress"
     PI_UP_TO_DATE = "pi-up-to-date"
-    # Pi provider authentication (Settings -> Pi -> Providers master/detail)
-    PI_PROVIDERS_RAIL = "pi-providers-rail"
+    # Pi provider authentication (Settings -> Pi -> Providers: Connected cards + Add grid)
     PI_PROVIDERS_GROUP_CONNECTED = "pi-providers-group-connected"
     PI_PROVIDERS_GROUP_AVAILABLE = "pi-providers-group-available"
     PI_PROVIDERS_GROUP_SESSION_ONLY = "pi-providers-group-session-only"
-    # Per-provider rail row, suffixed by provider id (e.g. pi-provider-row-anthropic).
-    PI_PROVIDER_ROW = "pi-provider-row"
-    PI_PROVIDER_DETAIL = "pi-provider-detail"
-    PI_PROVIDER_DETAIL_STATUS = "pi-provider-detail-status"
-    # Mount point for the Authenticate/Disconnect actions, inline login terminal, and
-    # paste-key form.
+    # Connected-provider card, suffixed by provider id (e.g. pi-provider-card-anthropic).
+    PI_PROVIDER_CARD = "pi-provider-card"
+    # Add-a-provider grid cell, suffixed by provider id (e.g. pi-provider-add-cell-openrouter).
+    PI_PROVIDER_ADD_CELL = "pi-provider-add-cell"
+    # Mount point for the in-modal Authenticate/Disconnect actions and the login terminal.
     PI_PROVIDER_ACTIONS = "pi-provider-actions"
     PI_PROVIDER_AUTHENTICATE_BUTTON = "pi-provider-authenticate-button"
     PI_PROVIDER_DISCONNECT_BUTTON = "pi-provider-disconnect-button"
+    # Centered modal that hosts the interactive pi /login (or /logout) session.
+    PI_LOGIN_DIALOG = "pi-login-dialog"
     PI_LOGIN_TERMINAL = "pi-login-terminal"
     PI_LOGIN_DONE_BUTTON = "pi-login-done-button"
-    # Collapsible power-user paste-key form in the detail pane.
-    PI_PASTE_KEY_TOGGLE = "pi-paste-key-toggle"
+    # Power-user paste-key path, reached via "Paste API key instead" inside the modal.
+    PI_PROVIDER_PASTE_KEY_SWITCH = "pi-provider-paste-key-switch"
     PI_PASTE_KEY_INPUT = "pi-paste-key-input"
     PI_PASTE_KEY_SAVE = "pi-paste-key-save"
     # Model-picker empty state when a pi agent has no authenticated providers.

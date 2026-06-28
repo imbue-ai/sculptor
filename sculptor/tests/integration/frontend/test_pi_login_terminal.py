@@ -1,11 +1,11 @@
-"""Integration coverage for the inline pi login terminal in Settings -> Pi -> Providers.
+"""Integration coverage for the pi login terminal in the Settings -> Pi -> Providers modal.
 
-Authenticate spawns an interactive pi PTY embedded in the detail pane; Done tears it
-down. The PTY hosts a real login shell regardless of the pi binary, so this verifies
-the inline-terminal wiring end-to-end without a real /login. The credential
-round-trip (pi writing auth.json) is covered by the real_pi conformance tests.
-auth.json is isolated via PI_CODING_AGENT_DIR so the developer's real credentials
-are untouched.
+Opening pi login spawns an interactive pi PTY embedded in the login modal; Done tears
+it down and closes the modal. The PTY hosts a real login shell regardless of the pi
+binary, so this verifies the terminal wiring end-to-end without a real /login. The
+credential round-trip (pi writing auth.json) is covered by the real_pi conformance
+tests. auth.json is isolated via PI_CODING_AGENT_DIR so the developer's real
+credentials are untouched.
 """
 
 import json
@@ -50,7 +50,7 @@ def test_pi_login_terminal_mounts_and_done_unmounts(
     sculptor_instance_factory_: SculptorInstanceFactory,
     tmp_path: Path,
 ) -> None:
-    """Authenticate mounts the inline login terminal; Done tears it down."""
+    """Opening pi login in the modal mounts the terminal; Done tears it down and closes it."""
     agent_dir = tmp_path / "pi-agent"
     agent_dir.mkdir()
     # Empty auth.json: openrouter is an unconfigured single-key provider -> Available.
@@ -63,17 +63,19 @@ def test_pi_login_terminal_mounts_and_done_unmounts(
         settings_page = navigate_to_settings_page(page=instance.page)
         pi_section = settings_page.click_on_pi()
 
-        pi_section.get_provider_row("openrouter").click()
+        # An unconfigured single-key provider opens the login modal from its Add cell.
+        pi_section.get_add_provider_cell("openrouter").click()
         authenticate_button = pi_section.get_authenticate_button()
         expect(authenticate_button).to_be_visible()
         authenticate_button.click()
 
-        # The inline login terminal mounts and useTerminal connects the PTY WebSocket
+        # The login terminal mounts and useTerminal connects the PTY WebSocket
         # (the container survives the brief 4404 retry while the PTY registers).
         expect(pi_section.get_login_terminal()).to_be_visible(timeout=30_000)
 
         pi_section.get_login_done_button().click()
 
-        # Done tears down the session; the terminal unmounts and the actions return.
-        expect(pi_section.get_login_terminal()).to_have_count(0)
-        expect(pi_section.get_authenticate_button()).to_be_visible()
+        # Done tears down the session and closes the modal; openrouter (no real
+        # credential was written) stays in the Add-a-provider grid.
+        expect(pi_section.get_login_dialog()).to_have_count(0)
+        expect(pi_section.get_add_provider_cell("openrouter")).to_be_visible()

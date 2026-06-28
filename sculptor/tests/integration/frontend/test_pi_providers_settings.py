@@ -1,9 +1,9 @@
-"""Integration coverage for the Settings -> Pi -> Providers master/detail area.
+"""Integration coverage for the Settings -> Pi -> Providers sections.
 
 Renders the authentication status from GET /api/v1/pi/providers/authenticated and
-verifies the Connected / Available / Session-only grouping plus detail-pane
-selection. auth.json is isolated via PI_CODING_AGENT_DIR (pointed at a temp dir)
-so the developer's real ~/.pi/agent/auth.json is never read or mutated.
+verifies the Connected cards, the Add-a-provider grid, and the Session-only callout.
+auth.json is isolated via PI_CODING_AGENT_DIR (pointed at a temp dir) so the
+developer's real ~/.pi/agent/auth.json is never read or mutated.
 """
 
 import json
@@ -35,10 +35,9 @@ def test_pi_providers_settings_groups_and_detail(
     sculptor_instance_factory_: SculptorInstanceFactory,
     tmp_path: Path,
 ) -> None:
-    """anthropic (in auth.json) shows under Connected with the import annotation, an
-    unconfigured single-key provider under Available, and a multi-value provider
-    under Session-only with the deferred-persistence explainer; selecting a row
-    updates the detail pane."""
+    """anthropic (in auth.json) shows as a Connected card with the import annotation, an
+    unconfigured single-key provider as an Add-a-provider cell, and a multi-value
+    provider in the Session-only callout with the deferred-persistence explainer."""
     agent_dir = tmp_path / "pi-agent"
     agent_dir.mkdir()
     (agent_dir / "auth.json").write_text(json.dumps({"anthropic": {"type": "api_key", "key": "x"}}), encoding="utf-8")
@@ -49,19 +48,15 @@ def test_pi_providers_settings_groups_and_detail(
         settings_page = navigate_to_settings_page(page=instance.page)
         pi_section = settings_page.click_on_pi()
 
-        # anthropic is in auth.json -> Connected.
-        expect(pi_section.get_providers_group_connected()).to_contain_text("Anthropic")
-        # A single-key provider with no credential -> Available.
+        # anthropic is in auth.json -> a Connected card that names its auth.json source.
+        connected = pi_section.get_providers_group_connected()
+        expect(connected).to_contain_text("Anthropic")
+        expect(connected).to_contain_text("Imported from ~/.pi/agent/auth.json")
+
+        # A single-key provider with no credential -> a cell in the Add-a-provider grid.
         expect(pi_section.get_providers_group_available()).to_contain_text("OpenRouter")
-        # A multi-value provider -> Session-only, with the deferred-persistence explainer.
+
+        # A multi-value provider -> the Session-only callout, with its deferred explainer.
         session_only = pi_section.get_providers_group_session_only()
         expect(session_only).to_contain_text("Amazon Bedrock")
-
-        # Selecting anthropic shows the auth.json import annotation in the detail pane.
-        pi_section.get_provider_row("anthropic").click()
-        detail = pi_section.get_provider_detail()
-        expect(detail).to_contain_text("Imported from ~/.pi/agent/auth.json")
-
-        # Selecting a session-only provider shows its deferred-persistence explainer.
-        pi_section.get_provider_row("amazon-bedrock").click()
-        expect(pi_section.get_provider_detail()).to_contain_text("full standalone persistence is deferred")
+        expect(session_only).to_contain_text("full standalone persistence is deferred")

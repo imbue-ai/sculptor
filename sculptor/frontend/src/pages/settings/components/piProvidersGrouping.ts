@@ -11,10 +11,11 @@ export const isAuthenticated = (provider: AuthenticatedProviderEntry): boolean =
   provider.inAuthJson || provider.envDetected;
 
 /**
- * Partition providers into the three rail groups. Session-only providers always
- * land in their own group regardless of auth state (their persistence is
- * deferred); otherwise an authenticated provider is Connected and an
- * unauthenticated single-key provider is Available.
+ * Partition providers into the three Providers sections (Connected cards /
+ * Add-a-provider grid / Session-only callout). Session-only providers always land in
+ * their own group regardless of auth state (their persistence is deferred); otherwise
+ * an authenticated provider is Connected and an unauthenticated single-key provider is
+ * Available.
  */
 export const groupProviders = (providers: ReadonlyArray<AuthenticatedProviderEntry>): ProviderGrouping => {
   const connected: Array<AuthenticatedProviderEntry> = [];

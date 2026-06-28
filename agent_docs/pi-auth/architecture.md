@@ -6,9 +6,10 @@ This feature makes pi provider authentication organic from Sculptor's
 Settings page and makes the pi model picker authenticated-only, treating pi's
 own `~/.pi/agent/auth.json` as the shared, bidirectional source of truth. It
 builds on PR #53's `supports_model_selection` seam: a new **Settings → Pi →
-Providers** master/detail area drives pi's interactive `/login` / `/logout`
-inline (via the terminal-agent stack) and offers a power-user merge-safe
-paste-key write, while Sculptor-side filtering narrows pi's
+Providers** area (Connected cards over an Add-a-provider grid) drives pi's
+interactive `/login` / `/logout` in a centered modal (via the terminal-agent stack)
+and offers a power-user merge-safe paste-key write, while Sculptor-side filtering
+narrows pi's
 presence-gated catalog to the *authenticated set*
 (`keys(auth.json) ∪ env-detected providers`).
 
@@ -95,16 +96,18 @@ Established facts that shape the design (from the phase-0 spike, pi 0.78.0):
 ## Proposed Architecture
 
 ```
-  SETTINGS → Pi → Providers   (Variant C master/detail; global)
-  ┌─────────────────────────────┬────────────────────────────────────┐
-  │ PROVIDER RAIL (master)      │ DETAIL PANE                          │
-  │  Connected   ● anthropic    │  status · models unlocked           │
-  │              ● openai       │  [Authenticate] [Disconnect]         │
-  │  Available   ○ google …     │  ┌── inline pi /login (or /logout) ──┐│
-  │  Session-only ◌ bedrock …   │  │ embedded xterm (useTerminal)     ││
-  │                             │  └──────────────────────────────────┘│
-  │                             │  ▸ Paste API key (collapsible)       │
-  └─────────────────────────────┴────────────────────────────────────┘
+  SETTINGS → Pi → Providers   (Variant B: Connected cards + Add grid; global)
+  ┌────────────────────────────────────────────────────────────────────┐
+  │ Connected · N                                                        │
+  │   ● anthropic · imported from auth.json   [Connected] [Disconnect]   │
+  │   ● openai    · $OPENAI_API_KEY           [Connected] [Disconnect]   │
+  │ Add a provider                                                       │
+  │   [ google + ]  [ openrouter + ]  [ groq + ]  [ mistral + ]  …       │
+  │ ⚠ Session-only: bedrock / azure / cloudflare — this session only     │
+  │                                                                      │
+  │ click an Add cell or Disconnect → centered modal (Radix Dialog):     │
+  │   [Open pi login] → embedded xterm (useTerminal)  ·  [Paste API key] │
+  └────────────────────────────────────────────────────────────────────┘
          ▲ reads                    │ writes              │ login/out (CHOSEN: 1b)
          │                          ▼                     ▼
   GET …/pi/providers/authenticated  POST …/pi/providers/  PiLoginService (no Task):
@@ -182,24 +185,23 @@ Read-only. Two consumers:
 
 ### C. Settings → Pi → Providers UI (REQ-UI-1/2)
 
-A master/detail area inside the existing Pi settings section (Variant C). The
-master rail groups providers (from the catalog table B) into **Connected**
-(provider ∈ authenticated; annotated by source — `auth.json` import per US-1 /
-REQ-UI-2, or env var), **Available** (single-key, not authenticated), and
-**Session-only** (multi-value, with the deferred-persistence explainer). A
-status dot per provider. The detail pane shows the selected provider's status,
-the models it unlocks (grafting Variant B's "what this unlocks" idea), and its
-actions: **Authenticate** (D), **Disconnect** (E), and a collapsible
-**Paste API key** (F, REQ-UI-4).
+A two-section area inside the existing Pi settings section (Variant B). The catalog
+table (B) splits into a **Connected** list of first-class cards (provider ∈
+authenticated; each card names its source — `auth.json` import per US-1 / REQ-UI-2,
+or env var — and carries a **Disconnect** action, E) over an **Add a provider** grid
+of the remaining single-key providers; **Session-only** multi-value providers (with
+the deferred-persistence explainer) sit in their own callout. Clicking an Add cell
+opens the login modal (D), which also hosts **Authenticate** and the **Paste API
+key** path (F, REQ-UI-4). Per the shipped scope the cards omit per-model chips.
 
 Data: a new global read endpoint `GET /api/v1/pi/providers/authenticated`
 returns the catalog × authentication status. Agent-independent (Settings is a
 global route, not workspace-scoped).
 
-### D. Inline interactive `/login` terminal — Settings-scoped ephemeral PTY (REQ-AUTH-1, REQ-UI-3) — **CHOSEN: 1b**
+### D. Interactive `/login` terminal in a modal — Settings-scoped ephemeral PTY (REQ-AUTH-1, REQ-UI-3) — **CHOSEN: 1b**
 
-"Authenticate" opens an interactive `pi` at `/login` **inline in the detail
-pane** (not a tab, not a modal); pi writes its own `auth.json` (REQ-AUTH-1/2).
+"Open pi login" opens an interactive `pi` at `/login` **embedded in a centered
+modal** (Radix Dialog, not a tab); pi writes its own `auth.json` (REQ-AUTH-1/2).
 Because Settings is a **global** route while terminal-agent Tasks are
 workspace-scoped, the login PTY is decoupled from the Task machinery — a global
 action does not fabricate a workspace.
@@ -236,9 +238,9 @@ Disconnect (E) and login share this one mechanism (mode flag).
 
 ### E. Disconnect via `/logout` (REQ-AUTH-3)
 
-Disconnect drives pi's native `/logout` **as-is** through the same inline
-terminal path (no Sculptor-side credential deletion). Whatever `/logout` clears
-moves from Connected back to Available; the picker refreshes live. The mock
+Disconnect drives pi's native `/logout` **as-is** through the same modal terminal
+path (no Sculptor-side credential deletion). Whatever `/logout` clears moves from
+Connected back to the Add-a-provider grid; the picker refreshes live. The mock
 assumes per-provider granularity; pi's actual `/logout` granularity is a
 **build-time check** against the real binary — if it is all-or-nothing, the
 disconnect UI is adjusted to match (the docs say "`/logout` to clear
@@ -246,8 +248,8 @@ credentials" without stating granularity).
 
 ### F. Power-user paste-key (REQ-AUTH-4, REQ-UI-4)
 
-A collapsible form in the detail pane: literal key or a `$ENV` / `!command`
-reference. `POST /api/v1/pi/providers/paste-key` performs a **merge-safe**
+A form reached via "Paste API key instead" in the login modal: literal key or a
+`$ENV` / `!command` reference. `POST /api/v1/pi/providers/paste-key` performs a **merge-safe**
 read-modify-write of `auth.json`: read current JSON, set
 `{provider}: {"type":"api_key","key": <value>}`, write back with mode `0600`,
 preserving all unknown/OAuth entries. After the write, fire the same refresh as
@@ -331,8 +333,9 @@ fetch/refresh.
   ↔ display ↔ group ↔ subscription flag (mirrors `providers.md`).
 - `auth.json` read + merge-safe write helper (backend) — read authenticated
   set; `0600` merge write for paste-key.
-- Settings Providers UI components (frontend) — master rail + detail pane,
-  embedded login terminal, collapsible paste-key form.
+- Settings Providers UI components (frontend) — Connected cards + Add-a-provider
+  grid + Session-only callout, plus a login modal (PiLoginDialog) hosting the
+  embedded login terminal and the paste-key form.
 - New endpoints in `web/app.py`: `GET …/pi/providers/authenticated`,
   `POST …/pi/providers/paste-key`, `POST …/pi/login`, and the WS route
   `GET …/pi/login/{id}/ws`.
@@ -377,9 +380,10 @@ fetch/refresh.
   Sculptor-managed pi converge.
 - **Write pi `settings.json` defaults (`defaultProvider`/`defaultModel`).**
   Out of scope: active-model selection stays with the #53 picker.
-- **UI Variant A (flat list) / Variant B (connected vs add).** Rejected in the
-  mock phase in favor of Variant C (master/detail); B's "what this unlocks"
-  framing is grafted into C's detail pane.
+- **UI Variant A (flat list) / Variant C (master/detail).** Variant C was the
+  initial pick, then superseded by **Variant B (connected cards + add grid)** for a
+  lighter two-section layout with a modal login; Variant A (flat list) stays
+  rejected. (See the Tweaks Log in `mocks.context.md`.)
 
 ## Risks and Mitigations
 
@@ -417,7 +421,7 @@ fetch/refresh.
 Split along the fake_pi / real_pi seam:
 
 - **fake_pi integration (deterministic, no real pi):** the Settings Providers
-  UI (rail grouping, detail pane, collapsible paste-key); the
+  UI (Connected cards + Add grid grouping, modal login, modal paste-key); the
   authenticated-set **filter** (a fake catalog spanning providers ∩ a controlled
   `auth.json`/env shows only authenticated ones); the **empty state** (0
   authenticated → verbatim copy + CTA, not the Claude list); the failed-turn

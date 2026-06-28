@@ -11,9 +11,9 @@ type PiLoginTerminalProps = {
 };
 
 /**
- * The interactive pi /login (or /logout) session, embedded inline in the Providers
- * detail pane. Reuses the workspace terminal hook pointed at the login PTY's
- * WebSocket; Done tears the session down (see PiProvidersArea).
+ * The interactive pi /login (or /logout) session, embedded in the Providers login
+ * modal. Reuses the workspace terminal hook pointed at the login PTY's WebSocket;
+ * Done tears the session down (see PiLoginDialog).
  */
 export const PiLoginTerminal = ({ loginId, onDone }: PiLoginTerminalProps): ReactElement => {
   const { terminalContainerRef } = useTerminal({

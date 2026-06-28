@@ -1,8 +1,8 @@
-"""Integration coverage for the collapsible paste-key form in Settings -> Pi -> Providers.
+"""Integration coverage for the paste-key path in the Settings -> Pi -> Providers modal.
 
-Pasting a key for an Available single-key provider writes auth.json (isolated via
-PI_CODING_AGENT_DIR) and moves the provider to Connected. Session-only providers get
-no paste form.
+Pasting a key for an Add-a-provider single-key provider writes auth.json (isolated via
+PI_CODING_AGENT_DIR) and moves the provider to Connected. Session-only providers are in
+the explainer callout, not the grid, so they offer no paste form.
 """
 
 import json
@@ -58,12 +58,13 @@ def test_pi_paste_key_connects_provider(
         settings_page = navigate_to_settings_page(page=instance.page)
         pi_section = settings_page.click_on_pi()
 
-        pi_section.get_provider_row("openrouter").click()
-        pi_section.get_paste_key_toggle().click()
+        # Open the login modal from openrouter's Add cell, then switch to the paste path.
+        pi_section.get_add_provider_cell("openrouter").click()
+        pi_section.get_paste_key_switch().click()
         pi_section.get_paste_key_input().fill("sk-or-test-key")
         pi_section.get_paste_key_save().click()
 
-        # The list refetches and openrouter moves from Available to Connected.
+        # Saving closes the modal; the list refetches and openrouter moves to Connected.
         expect(pi_section.get_providers_group_connected()).to_contain_text("OpenRouter", timeout=30_000)
 
     # The key was merged into the isolated auth.json (never the developer's real file).
@@ -76,7 +77,7 @@ def test_pi_paste_key_absent_for_session_only_provider(
     sculptor_instance_factory_: SculptorInstanceFactory,
     tmp_path: Path,
 ) -> None:
-    """A session-only provider (amazon-bedrock) shows only the explainer, no paste form."""
+    """A session-only provider (amazon-bedrock) shows only the explainer callout — no Add cell, no paste form."""
     agent_dir = tmp_path / "pi-agent"
     agent_dir.mkdir()
     (agent_dir / "auth.json").write_text(json.dumps({}), encoding="utf-8")
@@ -88,6 +89,6 @@ def test_pi_paste_key_absent_for_session_only_provider(
         settings_page = navigate_to_settings_page(page=instance.page)
         pi_section = settings_page.click_on_pi()
 
-        pi_section.get_provider_row("amazon-bedrock").click()
-        expect(pi_section.get_provider_detail()).to_contain_text("deferred")
-        expect(pi_section.get_paste_key_toggle()).to_have_count(0)
+        # A session-only provider lives in the explainer callout, not the Add grid.
+        expect(pi_section.get_providers_group_session_only()).to_contain_text("deferred")
+        expect(pi_section.get_add_provider_cell("amazon-bedrock")).to_have_count(0)

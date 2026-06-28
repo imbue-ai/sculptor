@@ -1,288 +1,212 @@
-import { Badge, Box, Button, Flex, Spinner, Text } from "@radix-ui/themes";
-import { type ReactElement, useCallback, useMemo, useState } from "react";
+import { ExclamationTriangleIcon, LockClosedIcon, PlusIcon } from "@radix-ui/react-icons";
+import { Badge, Box, Button, Callout, Flex, Spinner, Text } from "@radix-ui/themes";
+import { type ReactElement, type ReactNode, useCallback, useMemo, useState } from "react";
 
 import type { AuthenticatedProviderEntry } from "~/api";
-import { ElementIds, finishPiLogin, ProviderGroup, startPiLogin } from "~/api";
+import { ElementIds } from "~/api";
 import { getProviderDisplayName } from "~/common/modelConstants";
 import { usePiAuthenticatedProviders } from "~/common/state/hooks/usePiAuthenticatedProviders";
 
-import { PiLoginTerminal } from "./PiLoginTerminal.tsx";
-import { PiPasteKeyForm } from "./PiPasteKeyForm.tsx";
-import { groupProviders, isAuthenticated } from "./piProvidersGrouping.ts";
-
-type ActiveLogin = {
-  loginId: string;
-  mode: "login" | "logout";
-};
-
-const SESSION_ONLY_EXPLAINER = "Works this session via environment variables; full standalone persistence is deferred.";
+import { PiLoginDialog, type PiLoginRequestView } from "./PiLoginDialog.tsx";
+import { groupProviders } from "./piProvidersGrouping.ts";
 
 const displayNameFor = (provider: AuthenticatedProviderEntry): string =>
   provider.displayName || getProviderDisplayName(provider.providerId);
 
-const StatusDot = ({ color }: { color: string }): ReactElement => (
-  <Box
-    style={{
-      width: "8px",
-      height: "8px",
-      borderRadius: "var(--radius-full)",
-      backgroundColor: color,
-      flexShrink: 0,
-    }}
-  />
+const SectionEyebrow = ({ children }: { children: ReactNode }): ReactElement => (
+  <Text size="1" weight="bold" color="gray" style={{ textTransform: "uppercase", letterSpacing: "0.06em" }}>
+    {children}
+  </Text>
 );
 
-const dotColorFor = (provider: AuthenticatedProviderEntry): string => {
-  if (provider.group === ProviderGroup.SESSION_ONLY) {
-    return provider.envDetected ? "var(--amber-9)" : "var(--gray-6)";
-  }
-  return isAuthenticated(provider) ? "var(--green-9)" : "var(--gray-8)";
-};
-
-const ProviderRow = ({
-  provider,
-  isSelected,
-  onSelect,
-}: {
-  provider: AuthenticatedProviderEntry;
-  isSelected: boolean;
-  onSelect: (providerId: string) => void;
-}): ReactElement => (
+const ProviderMark = ({ provider, size }: { provider: AuthenticatedProviderEntry; size: number }): ReactElement => (
   <Flex
     align="center"
-    gap="2"
-    px="2"
-    py="1"
-    onClick={() => onSelect(provider.providerId)}
-    data-testid={`${ElementIds.PI_PROVIDER_ROW}-${provider.providerId}`}
+    justify="center"
+    flexShrink="0"
     style={{
-      cursor: "pointer",
-      borderRadius: "var(--radius-2)",
-      backgroundColor: isSelected ? "var(--gray-4)" : undefined,
+      width: `${size}px`,
+      height: `${size}px`,
+      borderRadius: "var(--radius-3)",
+      border: "1px solid var(--gray-6)",
+      backgroundColor: "var(--gray-3)",
+      fontWeight: 600,
+      fontSize: `${Math.round(size * 0.42)}px`,
+      textTransform: "uppercase",
     }}
   >
-    <StatusDot color={dotColorFor(provider)} />
-    <Text size="2">{displayNameFor(provider)}</Text>
+    {displayNameFor(provider).charAt(0)}
   </Flex>
 );
 
-const RailGroup = ({
-  title,
-  testId,
-  providers,
-  selectedId,
-  onSelect,
-}: {
-  title: string;
-  testId: string;
-  providers: ReadonlyArray<AuthenticatedProviderEntry>;
-  selectedId: string | null;
-  onSelect: (providerId: string) => void;
-}): ReactElement | null => {
-  if (providers.length === 0) {
-    return null;
-  }
-  return (
-    <Flex direction="column" gap="1" mb="3" data-testid={testId}>
-      <Text size="1" weight="bold" color="gray" style={{ textTransform: "uppercase", letterSpacing: "0.04em" }}>
-        {title}
-      </Text>
-      {providers.map((provider) => (
-        <ProviderRow
-          key={provider.providerId}
-          provider={provider}
-          isSelected={provider.providerId === selectedId}
-          onSelect={onSelect}
-        />
-      ))}
-    </Flex>
-  );
-};
-
-const ConnectedSource = ({ provider }: { provider: AuthenticatedProviderEntry }): ReactElement => {
-  if (provider.inAuthJson) {
-    return (
-      <Text size="2" color="gray">
-        Imported from ~/.pi/agent/auth.json
-      </Text>
-    );
-  }
-  return (
-    <Text size="2" color="gray">
-      Detected via environment variable {provider.envVarNames[0] ?? "—"}
-    </Text>
-  );
-};
-
-const ProviderActions = ({
+/** A first-class card for an authenticated provider. auth.json-backed providers can
+ *  be disconnected via pi /logout; env-detected-only providers can't (no entry to
+ *  remove), so they show how to clear the variable instead. */
+const ConnectedCard = ({
   provider,
-  onRefresh,
+  onDisconnect,
 }: {
   provider: AuthenticatedProviderEntry;
-  onRefresh: () => void;
+  onDisconnect: (provider: AuthenticatedProviderEntry) => void;
 }): ReactElement => {
-  const [activeLogin, setActiveLogin] = useState<ActiveLogin | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const startLogin = useCallback(
-    async (mode: "login" | "logout"): Promise<void> => {
-      setErrorMessage(null);
-      try {
-        const response = await startPiLogin({
-          body: { mode, providerId: provider.providerId },
-          meta: { skipWsAck: true },
-        });
-        if (response.data) {
-          setActiveLogin({ loginId: response.data.loginId, mode });
-        }
-      } catch {
-        setErrorMessage("Could not start the pi session. Check that pi is installed in Settings → Pi.");
-      }
-    },
-    [provider.providerId],
-  );
-
-  const handleDone = useCallback(async (): Promise<void> => {
-    const login = activeLogin;
-    setActiveLogin(null);
-    if (login !== null) {
-      try {
-        await finishPiLogin({ path: { login_id: login.loginId }, meta: { skipWsAck: true } });
-      } catch {
-        // Best-effort teardown; the PTY is also reaped on WebSocket close.
-      }
-    }
-    // Refetch the Settings list so the provider moves Connected<->Available; the
-    // picker is refreshed separately by the backend's login-teardown broadcast.
-    onRefresh();
-  }, [activeLogin, onRefresh]);
-
-  if (activeLogin !== null) {
-    const verb = activeLogin.mode === "login" ? "authenticate" : "log out";
-    return (
-      <Flex direction="column" gap="2" data-testid={ElementIds.PI_PROVIDER_ACTIONS}>
-        <Text size="2" color="gray">
-          In the pi selector below, choose <Text weight="bold">{displayNameFor(provider)}</Text> to {verb}, then click
-          Done.
-        </Text>
-        <PiLoginTerminal loginId={activeLogin.loginId} onDone={handleDone} />
-      </Flex>
-    );
-  }
-
-  const isConnectedViaEnvOnly = provider.envDetected && !provider.inAuthJson;
+  const canDisconnect = provider.inAuthJson;
+  const sourceText = provider.inAuthJson
+    ? "Imported from ~/.pi/agent/auth.json"
+    : `Detected via environment variable ${provider.envVarNames[0] ?? "—"}`;
   return (
-    <Flex direction="column" gap="2" data-testid={ElementIds.PI_PROVIDER_ACTIONS}>
-      <Flex gap="2" align="center">
-        <Button
-          variant="solid"
-          onClick={() => void startLogin("login")}
-          data-testid={ElementIds.PI_PROVIDER_AUTHENTICATE_BUTTON}
-        >
-          {provider.inAuthJson ? "Re-authenticate" : "Authenticate"}
-        </Button>
-        {provider.inAuthJson && (
+    <Box
+      data-testid={`${ElementIds.PI_PROVIDER_CARD}-${provider.providerId}`}
+      style={{
+        border: "1px solid var(--gray-5)",
+        borderRadius: "var(--radius-4)",
+        backgroundColor: "var(--gray-1)",
+        padding: "var(--space-4)",
+      }}
+    >
+      <Flex align="center" gap="3">
+        <ProviderMark provider={provider} size={32} />
+        <Flex direction="column" gap="1" flexGrow="1" minWidth="0">
+          <Text weight="medium">{displayNameFor(provider)}</Text>
+          <Text size="2" color="gray">
+            {sourceText}
+          </Text>
+        </Flex>
+        <Badge color="green" variant="soft">
+          Connected
+        </Badge>
+        {canDisconnect && (
           <Button
             variant="soft"
             color="red"
-            onClick={() => void startLogin("logout")}
-            data-testid={ElementIds.PI_PROVIDER_DISCONNECT_BUTTON}
+            onClick={() => onDisconnect(provider)}
+            data-testid={`${ElementIds.PI_PROVIDER_DISCONNECT_BUTTON}-${provider.providerId}`}
           >
             Disconnect
           </Button>
         )}
       </Flex>
-      {isConnectedViaEnvOnly && (
-        <Text size="2" color="gray">
+      {!canDisconnect && (
+        <Text size="1" color="gray" mt="2" style={{ display: "block" }}>
           Connected via environment variable {provider.envVarNames[0] ?? "—"} — clear that variable to disconnect.
         </Text>
       )}
-      {errorMessage !== null && (
-        <Text size="2" color="red">
-          {errorMessage}
-        </Text>
-      )}
-      <PiPasteKeyForm providerId={provider.providerId} onSaved={onRefresh} />
-    </Flex>
+    </Box>
   );
 };
 
-const ProviderDetail = ({
+/** A tidy grid cell for an unauthenticated single-key provider; clicking opens the
+ *  login modal. */
+const AddProviderCell = ({
   provider,
-  onRefresh,
+  onAdd,
 }: {
   provider: AuthenticatedProviderEntry;
-  onRefresh: () => void;
-}): ReactElement => {
-  const isSessionOnly = provider.group === ProviderGroup.SESSION_ONLY;
-  const isConnected = isAuthenticated(provider);
-  return (
-    <Flex direction="column" gap="3" data-testid={ElementIds.PI_PROVIDER_DETAIL}>
-      <Flex align="center" gap="2">
-        <Text weight="medium">{displayNameFor(provider)}</Text>
-        <Badge color={isSessionOnly ? "amber" : "gray"} variant="soft">
-          {isSessionOnly ? "Session-only" : "Single-key"}
-        </Badge>
-      </Flex>
+  onAdd: (provider: AuthenticatedProviderEntry) => void;
+}): ReactElement => (
+  <Flex
+    align="center"
+    gap="3"
+    px="3"
+    py="2"
+    onClick={() => onAdd(provider)}
+    data-testid={`${ElementIds.PI_PROVIDER_ADD_CELL}-${provider.providerId}`}
+    style={{
+      cursor: "pointer",
+      border: "1px solid var(--gray-5)",
+      borderRadius: "var(--radius-3)",
+      backgroundColor: "var(--gray-1)",
+    }}
+  >
+    <ProviderMark provider={provider} size={28} />
+    <Text weight="medium" size="2" style={{ flexGrow: 1, minWidth: 0 }}>
+      {displayNameFor(provider)}
+    </Text>
+    <PlusIcon style={{ color: "var(--indigo-11)", width: 18, height: 18 }} aria-hidden />
+  </Flex>
+);
 
-      <Box data-testid={ElementIds.PI_PROVIDER_DETAIL_STATUS}>
-        {isSessionOnly ? (
-          <Flex direction="column" gap="1">
-            <Text size="2" color={provider.envDetected ? "green" : "gray"}>
-              {provider.envDetected ? "Active this session (environment variables)" : "Not configured"}
-            </Text>
-            <Text size="2" color="gray">
-              {SESSION_ONLY_EXPLAINER}
-            </Text>
-          </Flex>
-        ) : isConnected ? (
-          <Flex direction="column" gap="1">
-            <Text size="2" color="green">
-              Connected
-            </Text>
-            <ConnectedSource provider={provider} />
-          </Flex>
-        ) : (
-          <Text size="2" color="gray">
-            Not connected
-          </Text>
-        )}
-      </Box>
+/** Multi-value providers usable this session via env vars, but whose full standalone
+ *  persistence is deferred — surfaced as one explainer callout. */
+const SessionOnlyCallout = ({ providers }: { providers: ReadonlyArray<AuthenticatedProviderEntry> }): ReactElement => (
+  <Callout.Root color="amber" data-testid={ElementIds.PI_PROVIDERS_GROUP_SESSION_ONLY}>
+    <Callout.Icon>
+      <ExclamationTriangleIcon />
+    </Callout.Icon>
+    <Callout.Text>
+      <Text weight="bold">{providers.map(displayNameFor).join(", ")}</Text> need endpoint/region configuration from
+      environment variables. They work for this session, but full standalone persistence is deferred to a later release.
+    </Callout.Text>
+  </Callout.Root>
+);
 
-      <Text size="2" color="gray">
-        Unlocks {displayNameFor(provider)} models
+const ConnectFirstHero = ({ onAuthenticate }: { onAuthenticate: () => void }): ReactElement => (
+  <Box
+    style={{
+      border: "1px solid var(--gray-5)",
+      borderRadius: "var(--radius-4)",
+      backgroundColor: "var(--gray-1)",
+    }}
+  >
+    <Flex direction="column" align="center" gap="3" py="6" px="5" style={{ textAlign: "center" }}>
+      <LockClosedIcon width="26" height="26" color="var(--gray-8)" />
+      <Text size="4" weight="medium">
+        Connect your first provider
       </Text>
-
-      {/* Session-only providers carry no auth actions (their persistence is
-          deferred); single-key providers get Authenticate/Disconnect and, inside
-          those actions, the collapsible paste-key form. */}
-      {!isSessionOnly && <ProviderActions provider={provider} onRefresh={onRefresh} />}
+      <Text size="2" color="gray" style={{ maxWidth: "420px" }}>
+        You have not authenticated any LLM providers yet. Connect one to start using pi — Sculptor opens an interactive
+        pi /login and pi stores the credential.
+      </Text>
+      <Button variant="solid" onClick={onAuthenticate}>
+        Authenticate a provider
+      </Button>
     </Flex>
-  );
-};
+  </Box>
+);
 
 export const PiProvidersArea = (): ReactElement => {
   const { providers, isPending, refetch } = usePiAuthenticatedProviders();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loginRequest, setLoginRequest] = useState<PiLoginRequestView | null>(null);
 
   const grouping = useMemo(() => groupProviders(providers), [providers]);
-  const orderedProviders = useMemo(
-    () => [...grouping.connected, ...grouping.available, ...grouping.sessionOnly],
-    [grouping],
-  );
 
-  const defaultId = grouping.connected[0]?.providerId ?? orderedProviders[0]?.providerId ?? null;
-  const effectiveId =
-    selectedId !== null && providers.some((provider) => provider.providerId === selectedId) ? selectedId : defaultId;
-  const selected = providers.find((provider) => provider.providerId === effectiveId) ?? null;
+  const openLogin = useCallback((provider: AuthenticatedProviderEntry): void => {
+    setLoginRequest({
+      providerId: provider.providerId,
+      displayName: displayNameFor(provider),
+      mode: "login",
+      canPasteKey: true,
+    });
+  }, []);
+
+  const openLogout = useCallback((provider: AuthenticatedProviderEntry): void => {
+    setLoginRequest({
+      providerId: provider.providerId,
+      displayName: displayNameFor(provider),
+      mode: "logout",
+      canPasteKey: false,
+    });
+  }, []);
+
+  const openAgnosticLogin = useCallback((): void => {
+    setLoginRequest({ providerId: null, displayName: "a provider", mode: "login", canPasteKey: false });
+  }, []);
+
+  const handleDialogClose = useCallback((): void => {
+    setLoginRequest(null);
+    // Refetch so a newly connected/disconnected provider moves between sections; the
+    // picker is refreshed separately by the backend's login-teardown broadcast.
+    void refetch();
+  }, [refetch]);
 
   return (
-    <Flex direction="column" gap="2" py="4">
-      <Text weight="medium">Providers</Text>
-      <Text size="2" color="gray">
-        Authenticate the LLM providers that pi supports. Connected providers are imported from your existing pi
-        credentials.
-      </Text>
+    <Flex direction="column" gap="4" py="4">
+      <Flex direction="column" gap="1">
+        <Text weight="medium">Providers</Text>
+        <Text size="2" color="gray">
+          Authenticate the LLM providers that pi supports. Connected providers are imported from your existing pi
+          credentials.
+        </Text>
+      </Flex>
 
       {isPending ? (
         <Spinner size="1" />
@@ -291,37 +215,34 @@ export const PiProvidersArea = (): ReactElement => {
           No providers available.
         </Text>
       ) : (
-        <Flex gap="5" mt="2" align="start">
-          <Box width="240px" flexShrink="0" data-testid={ElementIds.PI_PROVIDERS_RAIL}>
-            <RailGroup
-              title="Connected"
-              testId={ElementIds.PI_PROVIDERS_GROUP_CONNECTED}
-              providers={grouping.connected}
-              selectedId={effectiveId}
-              onSelect={setSelectedId}
-            />
-            <RailGroup
-              title="Available"
-              testId={ElementIds.PI_PROVIDERS_GROUP_AVAILABLE}
-              providers={grouping.available}
-              selectedId={effectiveId}
-              onSelect={setSelectedId}
-            />
-            <RailGroup
-              title="Session-only"
-              testId={ElementIds.PI_PROVIDERS_GROUP_SESSION_ONLY}
-              providers={grouping.sessionOnly}
-              selectedId={effectiveId}
-              onSelect={setSelectedId}
-            />
-          </Box>
-          <Box flexGrow="1">
-            {selected !== null && (
-              <ProviderDetail key={selected.providerId} provider={selected} onRefresh={() => void refetch()} />
-            )}
-          </Box>
-        </Flex>
+        <>
+          {grouping.connected.length > 0 ? (
+            <Flex direction="column" gap="2" data-testid={ElementIds.PI_PROVIDERS_GROUP_CONNECTED}>
+              <SectionEyebrow>Connected · {grouping.connected.length}</SectionEyebrow>
+              {grouping.connected.map((provider) => (
+                <ConnectedCard key={provider.providerId} provider={provider} onDisconnect={openLogout} />
+              ))}
+            </Flex>
+          ) : (
+            <ConnectFirstHero onAuthenticate={openAgnosticLogin} />
+          )}
+
+          {grouping.available.length > 0 && (
+            <Flex direction="column" gap="2" data-testid={ElementIds.PI_PROVIDERS_GROUP_AVAILABLE}>
+              <SectionEyebrow>{grouping.connected.length > 0 ? "Add a provider" : "Or add directly"}</SectionEyebrow>
+              <Box style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-2)" }}>
+                {grouping.available.map((provider) => (
+                  <AddProviderCell key={provider.providerId} provider={provider} onAdd={openLogin} />
+                ))}
+              </Box>
+            </Flex>
+          )}
+
+          {grouping.sessionOnly.length > 0 && <SessionOnlyCallout providers={grouping.sessionOnly} />}
+        </>
       )}
+
+      {loginRequest !== null && <PiLoginDialog request={loginRequest} onClose={handleDialogClose} />}
     </Flex>
   );
 };

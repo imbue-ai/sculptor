@@ -3,11 +3,12 @@
 ## Mocks
 
 See [mocks.html](./mocks.html) for interactive HTML mocks. The chosen direction is
-**Variant C (master/detail)**: a provider rail (Connected / Available /
-Session-only, with status dots) beside a detail pane that hosts the selected
-provider's auth status, the models it unlocks, the inline `pi /login` terminal,
-and the collapsible paste-key path. Variants A and B are retained in the file as
-record (see Rejected Alternatives in [mocks.context.md](./mocks.context.md)).
+**Variant B (Connected vs. Add)**: a **Connected** list of provider cards (each
+naming how it authenticated, with a Disconnect action) over an **Add a provider**
+grid of the remaining single-key providers, plus a Session-only explainer callout.
+`pi /login` (and `/logout`) open in a **centered modal**, and the paste-key path is a
+"Paste API key instead" switch inside that modal. Variants A and C are retained in
+the file as record (see Rejected Alternatives in [mocks.context.md](./mocks.context.md)).
 
 ## Overview
 
@@ -34,47 +35,47 @@ spike (pi 0.78.0) are recorded in [requirements.md](./requirements.md).
 
 ## User Scenarios
 
-The pi provider-auth UI is a **master/detail "Providers" area** in Settings →
-Pi (Variant C): a left rail groups providers into **Connected / Available /
-Session-only** (status dots), and a right detail pane shows the selected
-provider's auth status, the models it unlocks, and its actions (Authenticate /
-Disconnect / Paste key).
+The pi provider-auth UI is a two-section **"Providers" area** in Settings → Pi
+(Variant B): a **Connected** list of provider cards (each with its auth source and a
+Disconnect action) over an **Add a provider** grid of the remaining single-key
+providers, with Azure / Bedrock / Cloudflare in a **Session-only** explainer
+callout. Authenticate / Disconnect / Paste key all run in a centered modal.
 
 ### US-1 — Existing pi user: zero re-auth `REQ-FILTER-1` `REQ-FILTER-2` `REQ-UI-2`
 A developer already uses standalone pi and has authenticated Anthropic + OpenAI
 (entries in `~/.pi/agent/auth.json`). They start a pi workspace in Sculptor. The
 model picker shows exactly their Anthropic + OpenAI models — nothing else — with
-no extra steps. In Settings, the **Connected** rail group is pre-populated from
+no extra steps. In Settings, the **Connected** section is pre-populated from
 their existing `auth.json` (an "imported from `~/.pi/agent/auth.json`" affordance);
 nothing to re-enter.
 
 ### US-2 — New pi user: authenticate once, persists for real pi `REQ-AUTH-1` `REQ-PERSIST-1`
-A developer new to pi opens Settings → Pi → Providers, sees an empty Connected
-group, picks a provider from Available, and clicks **Authenticate**. An
-interactive `pi` session opens **inline in the detail pane** at `/login`; they
+A developer new to pi opens Settings → Pi → Providers, sees no Connected section
+yet, picks a provider from the **Add a provider** grid, and clicks **Open pi login**.
+An interactive `pi` session opens in a **centered modal** at `/login`; they
 complete it and pi writes `~/.pi/agent/auth.json`. The provider moves to Connected
 and the picker offers its models. Standalone pi later reuses the same file.
 
 ### US-3 — Interactive login is the primary path `REQ-AUTH-1` `REQ-AUTH-2` `REQ-UI-3`
-"Authenticate" always routes through an interactive `pi /login` embedded in the
-detail pane (Sculptor's terminal-agent stack); pi owns the write. One path covers
+"Authenticate" always routes through an interactive `pi /login` embedded in a
+centered modal (Sculptor's terminal-agent stack); pi owns the write. One path covers
 API-key and subscription/OAuth providers alike.
 
 ### Power-user paste `REQ-AUTH-4` `REQ-UI-4`
-A collapsible "Paste API key" path inside the detail pane lets a user enter a
+A "Paste API key instead" path inside the login modal lets a user enter a
 literal key or a `$ENV` / `!command` reference; Sculptor performs a merge-safe
 `auth.json` write (`0600`), leaving all other entries untouched.
 
 ### Disconnect a provider `REQ-AUTH-3`
-From the detail pane the user disconnects; Sculptor drives pi's `/logout` inline,
-as-is. Whatever `/logout` clears moves from Connected back to Available and leaves
-the picker, which refreshes live (`REQ-FILTER-3`). (The mock assumes per-provider;
-if pi's `/logout` granularity differs, the UI is adjusted to match.)
+From a Connected card the user disconnects; Sculptor drives pi's `/logout` in the
+modal, as-is. Whatever `/logout` clears moves from Connected back to the Add grid and
+leaves the picker, which refreshes live (`REQ-FILTER-3`). (The mock assumes
+per-provider; if pi's `/logout` granularity differs, the UI is adjusted to match.)
 
 ### Session-only (multi-value) providers `REQ-PERSIST-3`
-Azure / Bedrock / Cloudflare appear in a distinct **Session-only** rail group with
-an explainer that they work this session via env vars and that full standalone
-persistence is deferred.
+Azure / Bedrock / Cloudflare appear in a distinct **Session-only** explainer callout
+noting that they work this session via env vars and that full standalone persistence
+is deferred.
 
 ### Empty / not-authenticated state `REQ-ERR-1` `REQ-UI-5`
 With nothing authenticated, the model picker is empty and shows the verbatim
@@ -101,15 +102,15 @@ same actionable message.
 
 ### User interface (REQ-UI)
 - **REQ-UI-1 (MUST):** The pi provider-auth UI MUST live in Settings → Pi as a
-  master/detail "Providers" area: a provider rail grouped into Connected /
-  Available / Session-only, beside a detail pane with the selected provider's
-  status, unlocked models, and actions.
+  two-section "Providers" area: a Connected list of provider cards over an
+  Add-a-provider grid of the remaining single-key providers, with multi-value
+  providers in a Session-only explainer callout.
 - **REQ-UI-2 (MUST):** The Connected group MUST be populated from the user's
   existing `auth.json` (US-1) with no re-entry.
-- **REQ-UI-3 (MUST):** The interactive `pi /login` MUST render inline in the detail
-  pane (not a separate modal), via the terminal-agent stack.
-- **REQ-UI-4 (SHOULD):** The paste-key path SHOULD be a secondary, collapsible
-  control inside the detail pane.
+- **REQ-UI-3 (MUST):** The interactive `pi /login` MUST render embedded in a
+  centered modal, via the terminal-agent stack.
+- **REQ-UI-4 (SHOULD):** The paste-key path SHOULD be a secondary control reached
+  via "Paste API key instead" inside the login modal.
 - **REQ-UI-5 (MUST):** The model picker's empty state MUST show the verbatim copy
   "No models available — please log in to authenticate" with a CTA that opens the
   login flow.
@@ -160,7 +161,7 @@ same actionable message.
 - Modifying pi-core.
 
 ## Open Questions
-- **Login terminal mechanism:** REQ-UI-3 fixes it inline in the detail pane; the
+- **Login terminal mechanism:** REQ-UI-3 fixes it embedded in a centered modal; the
   underlying mechanism (a transient terminal-agent instance vs. a registered
   terminal agent, plus lifecycle / return-to-Settings) is for `/architect`.
 - **Empty-error wiring:** which surface carries the message (start-time 0-models
