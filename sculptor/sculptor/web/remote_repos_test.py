@@ -952,7 +952,8 @@ def test_clone_error_detail_redacts_credentials_in_stderr(
     ``https://oauth2:<token>@`` URL) must be stripped so the token never lands
     in the HTTP response body."""
     target_dir = tmp_path / "clones"
-    token = "ghp_supersecrettoken"
+    # Deliberately not a real token prefix (e.g. ghp_) so secret scanners don't flag it.
+    token = "fake-not-a-real-token"
     payload = _clone_payload(target_dir, url=f"https://oauth2:{token}@github.com/owner/my-repo.git")
     stderr = f"fatal: unable to access 'https://oauth2:{token}@github.com/owner/my-repo.git/': The requested URL returned error: 403"
     fake_clone_error = ProcessError(
@@ -996,7 +997,8 @@ def test_list_error_detail_redacts_credentials_in_stderr(
 ) -> None:
     """The 502 detail from a failing ``gh api`` call must likewise strip any
     user:token@ userinfo before reaching the client."""
-    token = "ghp_supersecrettoken"
+    # Deliberately not a real token prefix (e.g. ghp_) so secret scanners don't flag it.
+    token = "fake-not-a-real-token"
     stderr = f"fatal: unable to access 'https://oauth2:{token}@github.com/owner/repo.git/'"
     fake_error = ProcessError(
         command=("/fake/bin/gh", "api"),
@@ -1028,7 +1030,11 @@ def test_list_error_detail_redacts_credentials_in_stderr(
         response = client.get("/api/v1/remotes/github/repos")
 
     assert response.status_code == 502, response.text
-    assert token not in response.json()["detail"]
+    detail = response.json()["detail"]
+    assert token not in detail
+    # The redacted stderr is still surfaced (not swallowed into the fallback message),
+    # so the user gets an actionable error.
+    assert "https://github.com/owner/repo.git" in detail
 
 
 def test_clone_returns_504_on_subprocess_timeout(
