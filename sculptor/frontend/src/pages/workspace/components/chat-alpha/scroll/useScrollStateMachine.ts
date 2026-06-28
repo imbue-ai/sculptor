@@ -1,8 +1,8 @@
 /**
  * React binding for the alpha-chat scroll state machine.
  *
- * Creates one machine per chat instance (held in a ref so it is stable across
- * renders), attaches it to the scroll container so it can reflect
+ * Creates one machine per chat instance (created once, stable across renders),
+ * attaches it to the scroll container so it can reflect
  * `data-scroll-phase` / `data-scroll-settled`, and installs the single
  * user-input listener: a genuine wheel/touch on the container means the user has
  * taken control of the scroll, which preempts any programmatic phase.

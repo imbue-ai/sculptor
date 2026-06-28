@@ -269,9 +269,7 @@ export const useAlphaVirtualizer = (
       virtualizer.measure();
 
       // Enter the `measuring` layout phase to suppress per-item scroll
-      // adjustments until measurements settle. Without this, small deltas
-      // between cached estimates and real DOM measurements cause visible
-      // scroll-position shifts.
+      // adjustments until measurements settle.
       machine.dispatchLayout({ kind: "invalidated", taskId });
       cancelAnimationFrame(settlingRafRef.current);
       settlingRafRef.current = requestAnimationFrame(() => {

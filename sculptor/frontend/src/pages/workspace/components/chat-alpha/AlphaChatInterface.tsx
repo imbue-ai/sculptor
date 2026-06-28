@@ -380,8 +380,8 @@ export const AlphaChatInterface = ({
   // suppression that we supersede here).
   useEffect(() => {
     // The machine's top-level suppression guard drops auto-scroll initiation
-    // events (newUserTurn/reachedBottom) while search is open, so a search
-    // session never starts pinning or anchoring.
+    // events while search is open, so a search session never starts pinning or
+    // anchoring.
     scrollMachine.setSuppressed(isSearchVisible);
     if (isSearchVisible) {
       exitNavigation();

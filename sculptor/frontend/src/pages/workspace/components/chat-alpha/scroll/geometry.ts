@@ -8,8 +8,6 @@ import type { Virtualizer } from "@tanstack/react-virtual";
  * is empty space below the last message, so "at the bottom" means the last
  * message is in view — not that the padded scroll range is exhausted. Because
  * `scrollHeight` includes that padding, the distance subtracts `paddingEnd`.
- *
- * This is the single distance primitive for every "are we at the bottom" check.
  */
 export const distanceFromContentBottom = (
   el: HTMLElement,

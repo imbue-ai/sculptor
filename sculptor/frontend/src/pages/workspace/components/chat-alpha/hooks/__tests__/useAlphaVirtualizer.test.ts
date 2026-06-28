@@ -74,8 +74,8 @@ describe("shouldAdjustScrollPosition", () => {
   it("does NOT adjust the in-view reading anchor even when it grew by more than its height (SCU-1566)", () => {
     // The reading anchor at the top: start=277, cached (pre-growth) size=2588,
     // scrollOffset=0. Pre-growth end = 277 + 2588 = 2865 > 0 → in view → no adjust.
-    // The old formula subtracted delta (277 + 2588 - 3150 = -285 ≤ 0) and wrongly
-    // compensated, jumping the view down ~3150px on a narrowing width reflow.
+    // Subtracting delta here (277 + 2588 - 3150 = -285 ≤ 0) would wrongly
+    // compensate, jumping the view down ~3150px on a narrowing width reflow.
     const item = createMockItem(277, 2588);
     const instance = createMockInstance(0);
     expect(shouldAdjustScrollPosition(item, 3150, instance)).toBe(false);

@@ -8,10 +8,10 @@
  * Why a hand-rolled store rather than `useReducer`: the `following` phase
  * re-pins every animation frame during streaming. Turning those ticks into
  * React state updates would re-render the virtualized list (and tear down its
- * ResizeObserver) every frame — the exact reason the legacy code used refs. This
- * store keeps state in a closure, mirrors it to the DOM, and notifies only the
- * subscribers that opt in (via `useSyncExternalStore`), so high-frequency
- * transitions cost nothing for components that didn't select them.
+ * ResizeObserver) every frame. This store keeps state in a closure, mirrors it
+ * to the DOM, and notifies only the subscribers that opt in (via
+ * `useSyncExternalStore`), so high-frequency transitions cost nothing for
+ * components that didn't select them.
  *
  * See docs/development/scroll_state_unification.md.
  */
@@ -60,9 +60,8 @@ export type ScrollMachineState = {
 /**
  * Events that *enter* an auto-scroll mode. While search suppresses auto-scroll
  * these are dropped, so a search session never starts pinning/anchoring.
- * Completion events (turnAnchored, streamingStopped, restoreSettled, navEnded)
- * and the global ones (userScrolled, taskSwitched) always apply, so the machine
- * can always reach a settled state.
+ * Completion and global events always apply, so the machine can always reach a
+ * settled state.
  */
 const SUPPRESSIBLE_EVENTS: ReadonlySet<ScrollEvent["kind"]> = new Set(["newUserTurn", "reachedBottom"]);
 
@@ -77,8 +76,7 @@ export const isScrollSettled = (state: ScrollMachineState): boolean =>
  * pin-to-bottom logic see it. Derived, never stored as its own flag: `following`
  * is at the bottom by definition (we are pinning there), `anchoringTurn` never is
  * (a new turn sits at the top while its response fills in below), and every other
- * phase defers to the last sampled geometry. Keeping the phase override here is
- * what stops the button from ever disagreeing with the scroll mode.
+ * phase defers to the last sampled geometry.
  */
 export const projectAtBottom = (state: ScrollMachineState): boolean => {
   if (state.authority.kind === "following") return true;
@@ -88,17 +86,9 @@ export const projectAtBottom = (state: ScrollMachineState): boolean => {
 
 /**
  * What a content reflow (a viewport width change that re-wraps text, an
- * above-fold item growing, a streamed token) should do to the scroll position.
- * One typed policy keyed on the authority phase, derived the same way
- * `projectAtBottom` is. Every phase has exactly one response:
- *
- *  - `following`              ⇒ keep pinned to the bottom (following the live tail);
- *  - `anchoringTurn`          ⇒ keep the anchored user turn at the top (and let
- *                               the caller hand off to `following` on overflow);
- *  - `restoring` / `navigating` ⇒ leave scrollTop to that phase's own owner;
- *  - `userControlled`         ⇒ hold the reading anchor stationary, or — before an
- *                               anchor has been sampled — defer to the virtualizer's
- *                               default (preserve the visible content).
+ * above-fold item growing, a streamed token) should do to the scroll position —
+ * one typed policy keyed on the authority phase, derived the same way
+ * `projectAtBottom` is.
  *
  * A resize is NOT a reason to re-pin to the bottom. An idle `userControlled` user —
  * even one sitting at the bottom — keeps their reading position across a reflow: the

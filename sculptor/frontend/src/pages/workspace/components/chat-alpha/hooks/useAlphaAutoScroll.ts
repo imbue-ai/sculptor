@@ -107,10 +107,8 @@ export const useAlphaAutoScroll = (
   const [internalMachine] = useState(createScrollStateMachine);
   const machine = externalMachine ?? internalMachine;
 
-  // Read the auto-scroll authority off the machine. `following` ⇒ pinning to the
-  // bottom; `anchoringTurn` ⇒ filling phase, with `anchorIndex` naming the
-  // virtualizer item anchored at the top. Wrapped in useCallback so they are
-  // stable dependencies for the effects below (machine itself is stable).
+  // Read the auto-scroll authority off the machine, wrapped in useCallback so
+  // they are stable dependencies for the effects below (the machine is stable).
   const isFollowing = useCallback((): boolean => machine.getState().authority.kind === "following", [machine]);
   const isAnchoring = useCallback((): boolean => machine.getState().authority.kind === "anchoringTurn", [machine]);
   const isEngaged = useCallback((): boolean => isFollowing() || isAnchoring(), [isFollowing, isAnchoring]);
@@ -202,17 +200,14 @@ export const useAlphaAutoScroll = (
 
     const onUserInput = (): void => {
       markUserScrolling();
-      // Disengage immediately on any user wheel/touch/keydown input — before any
-      // scroll event fires.  The ResizeObserver fires on every content growth
-      // during streaming, sets isProgrammaticScroll, and calls scrollToIndex.  If
-      // the user's resulting scroll event then sees isProgrammaticScroll=true it
-      // gets consumed as "programmatic" and scroll-lock is never released.
-      // Dropping to userControlled here short-circuits that race: once the
-      // machine is no longer `following` the ResizeObserver returns early and
-      // stops scrolling.  Skip during the anchoring (filling) phase — leaving it
-      // tears down the CSS animation, handled by the leave-anchoring subscription.
-      // (Wheel/touch are also handled by the machine's own listener; dispatching
-      // again is an idempotent no-op, and this adds keydown coverage.)
+      // Disengage on user wheel/touch/keydown before the scroll event fires.
+      // During streaming the ResizeObserver sets isProgrammaticScroll and scrolls;
+      // a user scroll event that saw that flag would be consumed as programmatic
+      // and never release the scroll-lock. Dropping to userControlled here
+      // pre-empts that — the ResizeObserver returns early once we are no longer
+      // `following`. Skip while anchoring (leaving it tears down the CSS
+      // animation, handled by the leave-anchoring subscription). Wheel/touch also
+      // reach the machine's own listener; this adds keydown coverage.
       if (!isSuppressedRef.current && isFollowing()) {
         machine.dispatch({ kind: "userScrolled" });
         // Reset direction tracking: the next scroll event could land anywhere
@@ -621,13 +616,9 @@ export const useAlphaAutoScroll = (
   );
 
   // Unified content-resize observer. One observer, always connected while not
-  // suppressed, drives the typed reflow policy for every authority phase. On any
-  // content size change — a streamed token, a viewport width reflow, an above-fold
-  // item growing — it samples at-bottness and applies projectReflow's single
-  // action: pin to the bottom (following), hold the reading anchor (scrolled up or
-  // idle), hold the anchored turn at the top (anchoringTurn), or leave scrollTop to
-  // the virtualizer's default. A resize never re-pins an idle view to the bottom —
-  // the port grows and the jump-to-bottom button surfaces if the bottom drifts off.
+  // suppressed; on any content size change — a streamed token, a viewport width
+  // reflow, an above-fold item growing — it samples at-bottness and applies
+  // projectReflow's chosen action for the current phase.
   useLayoutEffect(() => {
     if (isSuppressed) return;
     const el = scrollContainerRef.current;
