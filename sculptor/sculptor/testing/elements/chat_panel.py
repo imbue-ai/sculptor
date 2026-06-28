@@ -226,10 +226,9 @@ class PlaywrightChatPanelElement(PlaywrightFilePreviewAndUploadMixin, Playwright
         return self._page.get_by_test_id(f"{ElementIDs.MODEL_OPTION}-{model_id}")
 
     def get_model_provider_option(self, provider: str) -> Locator:
-        """The cascade sub-trigger for a provider in a multi-provider catalog (pi).
+        """A provider's cascade sub-trigger (testid ``MODEL_PROVIDER_OPTION-<provider>``).
 
-        Testid ``MODEL_PROVIDER_OPTION-<provider>``; its models live behind the
-        submenu it opens.
+        Its models open in the submenu it reveals, not the top-level menu.
         """
         return self._page.get_by_test_id(f"{ElementIDs.MODEL_PROVIDER_OPTION}-{provider}")
 
