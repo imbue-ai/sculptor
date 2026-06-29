@@ -301,6 +301,17 @@ class PiLoginResponse(SerializableModel):
     login_id: str
 
 
+class PiLoginStatusResponse(SerializableModel):
+    """Whether a login session's credential change has landed in auth.json.
+
+    The modal polls this to auto-close (and refetch) without a manual Done:
+    ``completed`` flips true once pi has performed the /login (the provider appeared)
+    or /logout (the provider was removed).
+    """
+
+    completed: bool
+
+
 class PasteKeyRequest(RequestModel):
     """Power-user paste-key write for a single-key provider.
 

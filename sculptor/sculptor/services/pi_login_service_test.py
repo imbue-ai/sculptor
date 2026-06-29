@@ -2,10 +2,12 @@
 
 The interactive /login round-trip (pi actually writing auth.json) is covered by the
 real_pi conformance tests; here we cover the service lifecycle (spawn registers a
-PTY, teardown stops it and broadcasts) with a stand-in terminal manager, and the
-broadcast's pi-only targeting.
+PTY, teardown stops it and broadcasts), the keystroke driver's logout selector
+sequence, the auth.json completion judgement, and the broadcast's pi-only targeting —
+all with a stand-in terminal manager.
 """
 
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -27,11 +29,23 @@ from sculptor.services.data_model_service.api import DataModelService
 from sculptor.services.data_model_service.data_types import TaskAndDataModelTransaction
 from sculptor.services.pi_login_service import PiLoginMode
 from sculptor.services.pi_login_service import PiLoginService
+from sculptor.services.pi_login_service import _OutputAccumulator
+from sculptor.services.pi_login_service import _drive_pi_session
+from sculptor.services.pi_login_service import _login_change_observed
 from sculptor.services.pi_login_service import broadcast_pi_models_refresh
 from sculptor.services.pi_login_service import pi_login_terminal_id
 from sculptor.services.task_service.api import TaskService
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
+    LocalTerminalManager,
+)
+from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     get_terminal_manager,
+)
+from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
+    register_terminal_manager,
+)
+from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
+    unregister_terminal_manager,
 )
 
 
@@ -74,10 +88,22 @@ def test_broadcast_pi_models_refresh_no_pi_agents_messages_none() -> None:
     task_service.create_message.assert_not_called()
 
 
+def _stub_session_threads(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Neutralize the keystroke driver and auth.json poll for lifecycle-only tests.
+
+    spawn() starts both on background threads; here we only assert PTY registration
+    and teardown, so the driver is a no-op and the poll reads a fixed empty set
+    (never the developer's real ~/.pi/agent/auth.json).
+    """
+    monkeypatch.setattr(pi_login_service_module, "_drive_pi_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr(pi_login_service_module, "read_auth_json_provider_ids", set)
+
+
 def test_spawn_registers_pty_and_teardown_stops_and_broadcasts(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_manager = MagicMock()
+    fake_manager.subscribe.return_value = b""
     monkeypatch.setattr(pi_login_service_module, "LocalTerminalManager", MagicMock(return_value=fake_manager))
-    monkeypatch.setattr(pi_login_service_module, "write_launch_command", lambda *args, **kwargs: None)
+    _stub_session_threads(monkeypatch)
     broadcast_mock = MagicMock()
     monkeypatch.setattr(pi_login_service_module, "broadcast_pi_models_refresh", broadcast_mock)
 
@@ -104,8 +130,9 @@ def test_spawn_registers_pty_and_teardown_stops_and_broadcasts(monkeypatch: pyte
 
 def test_teardown_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_manager = MagicMock()
+    fake_manager.subscribe.return_value = b""
     monkeypatch.setattr(pi_login_service_module, "LocalTerminalManager", MagicMock(return_value=fake_manager))
-    monkeypatch.setattr(pi_login_service_module, "write_launch_command", lambda *args, **kwargs: None)
+    _stub_session_threads(monkeypatch)
     broadcast_mock = MagicMock()
     monkeypatch.setattr(pi_login_service_module, "broadcast_pi_models_refresh", broadcast_mock)
 
@@ -123,3 +150,104 @@ def test_teardown_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
     # Done and WebSocket-close both tear the same session down; only the call that
     # actually unregisters the PTY broadcasts, so the credential change fans out once.
     broadcast_mock.assert_called_once()
+
+
+def test_login_change_observed_logout_completes_when_key_removed() -> None:
+    # Logout completes only once the target key is gone — and not for a provider that
+    # was never in auth.json (e.g. an env-detected one), so it can't false-complete.
+    assert _login_change_observed(PiLoginMode.LOGOUT, "openai", {"anthropic", "openai"}, {"anthropic"})
+    assert not _login_change_observed(PiLoginMode.LOGOUT, "openai", {"anthropic", "openai"}, {"anthropic", "openai"})
+    assert not _login_change_observed(PiLoginMode.LOGOUT, "openai", {"anthropic"}, {"anthropic"})
+
+
+def test_login_change_observed_login_completes_when_key_appears() -> None:
+    assert _login_change_observed(PiLoginMode.LOGIN, "openai", {"anthropic"}, {"anthropic", "openai"})
+    assert not _login_change_observed(PiLoginMode.LOGIN, "openai", {"anthropic"}, {"anthropic"})
+    # Provider-agnostic (empty-state CTA): any newly added key completes the session.
+    assert _login_change_observed(PiLoginMode.LOGIN, None, set(), {"anthropic"})
+    assert not _login_change_observed(PiLoginMode.LOGIN, None, {"anthropic"}, {"anthropic"})
+
+
+class _FakeTerminal:
+    """A stand-in LocalTerminalManager that records writes and scripts pi's output.
+
+    Each write can emit bytes back through the subscribed callback (as pi's TUI would
+    render), so the marker-driven driver advances deterministically with no real PTY.
+    """
+
+    def __init__(self, on_write) -> None:
+        self._callbacks: list = []
+        self._on_write = on_write
+        self.writes: list[bytes] = []
+
+    def subscribe(self, callback) -> bytes:
+        self._callbacks.append(callback)
+        return b""
+
+    def remove_output_callback(self, callback) -> None:
+        self._callbacks.remove(callback)
+
+    def emit(self, data: bytes) -> None:
+        for callback in list(self._callbacks):
+            callback(data)
+
+    def write(self, data: bytes) -> None:
+        self.writes.append(data)
+        self._on_write(self, data)
+
+
+def test_drive_pi_session_logout_filters_and_confirms(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pi_login_service_module, "_PI_FILTER_SETTLE_SECONDS", 0.0)
+    # write_launch_command starts pi; emit a readiness marker so the slash is sent.
+    monkeypatch.setattr(
+        pi_login_service_module,
+        "write_launch_command",
+        lambda manager, command, **kwargs: manager.emit(b"escape interrupt"),
+    )
+
+    def on_write(manager: _FakeTerminal, data: bytes) -> None:
+        if data == b"/logout\r":
+            manager.emit(b"Select provider to logout:")
+
+    terminal = _FakeTerminal(on_write)
+    manager = cast(LocalTerminalManager, terminal)
+    accumulator = _OutputAccumulator(manager)
+    _drive_pi_session(accumulator, manager, "/fake/pi", PiLoginMode.LOGOUT, "openai")
+
+    # Submit the slash, fuzzy-filter to the chosen provider, then confirm with Return.
+    assert terminal.writes == [b"/logout\r", b"openai", b"\r"]
+
+
+def test_drive_pi_session_login_only_opens_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        pi_login_service_module,
+        "write_launch_command",
+        lambda manager, command, **kwargs: manager.emit(b"escape interrupt"),
+    )
+
+    terminal = _FakeTerminal(lambda manager, data: None)
+    manager = cast(LocalTerminalManager, terminal)
+    accumulator = _OutputAccumulator(manager)
+    _drive_pi_session(accumulator, manager, "/fake/pi", PiLoginMode.LOGIN, "openai")
+
+    # Login leaves provider selection + credential entry to the user — only the slash.
+    assert terminal.writes == [b"/login\r"]
+
+
+def test_poll_marks_completed_on_auth_json_change(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = PiLoginService(
+        concurrency_group=MagicMock(spec=ConcurrencyGroup),
+        data_model_service=MagicMock(spec=DataModelService),
+        task_service=MagicMock(spec=TaskService),
+    )
+    login_id = "test-login"
+    terminal_id = pi_login_terminal_id(login_id)
+    register_terminal_manager(terminal_id, MagicMock())  # is_active() True
+    try:
+        # auth.json already reflects the logout, so the first poll iteration completes.
+        monkeypatch.setattr(pi_login_service_module, "read_auth_json_provider_ids", lambda: {"anthropic"})
+        assert not service.is_completed(login_id)
+        service._poll_for_completion(login_id, PiLoginMode.LOGOUT, "openai", {"anthropic", "openai"})
+        assert service.is_completed(login_id)
+    finally:
+        unregister_terminal_manager(terminal_id)

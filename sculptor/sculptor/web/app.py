@@ -227,6 +227,7 @@ from sculptor.web.data_types import OpenPathInAppResult
 from sculptor.web.data_types import PasteKeyRequest
 from sculptor.web.data_types import PiLoginRequest
 from sculptor.web.data_types import PiLoginResponse
+from sculptor.web.data_types import PiLoginStatusResponse
 from sculptor.web.data_types import PreviewBranchNameResponse
 from sculptor.web.data_types import ProjectEnvVarNames
 from sculptor.web.data_types import ProjectInitializationRequest
@@ -4311,6 +4312,21 @@ def finish_pi_login(
     services = get_services_from_request_or_websocket(request)
     services.pi_login_service.teardown(login_id)
     return Response(status_code=204)
+
+
+@router.get("/api/v1/pi/login/{login_id}/status")
+def get_pi_login_status(
+    login_id: str,
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> PiLoginStatusResponse:
+    """Report whether a login session's credential change has landed in auth.json.
+
+    The login modal polls this to auto-close once pi finishes the /login or /logout,
+    replacing the manual Done click.
+    """
+    services = get_services_from_request_or_websocket(request)
+    return PiLoginStatusResponse(completed=services.pi_login_service.is_completed(login_id))
 
 
 @router.post("/api/v1/pi/providers/paste-key")

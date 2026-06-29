@@ -2,10 +2,14 @@ import { Cross1Icon } from "@radix-ui/react-icons";
 import { Button, Dialog, Flex, IconButton, Spinner, Text } from "@radix-ui/themes";
 import { type ReactElement, useCallback, useEffect, useState } from "react";
 
-import { ElementIds, finishPiLogin, startPiLogin } from "~/api";
+import { ElementIds, finishPiLogin, getPiLoginStatus, startPiLogin } from "~/api";
 
 import { PiLoginTerminal } from "./PiLoginTerminal.tsx";
 import { PiPasteKeyForm } from "./PiPasteKeyForm.tsx";
+
+/** How often the open modal polls for pi having performed the credential change, so it
+ *  auto-closes (and the Providers area refetches) without a manual Done. */
+const PI_LOGIN_STATUS_POLL_INTERVAL_MS = 1200;
 
 /** What the Providers area hands the modal: which provider and which direction.
  *  `providerId` is null for the empty-state "Authenticate a provider" CTA (pi's own
@@ -94,13 +98,42 @@ export const PiLoginDialog = ({ request, onClose }: PiLoginDialogProps): ReactEl
     onClose();
   }, [activeLoginId, onClose]);
 
+  // Auto-advance: while the terminal is live, poll for pi having performed the
+  // credential change (provider added on login / removed on logout). The backend
+  // observes this against auth.json itself, so the modal closes and the Providers area
+  // refetches the moment it lands — no manual Done.
+  useEffect(() => {
+    if (view !== "terminal" || activeLoginId === null) {
+      return;
+    }
+    let isCancelled = false;
+    const interval = window.setInterval(() => {
+      void (async (): Promise<void> => {
+        try {
+          const response = await getPiLoginStatus({ path: { login_id: activeLoginId }, meta: { skipWsAck: true } });
+          if (!isCancelled && response.data?.completed === true) {
+            isCancelled = true;
+            window.clearInterval(interval);
+            void teardown();
+          }
+        } catch {
+          // Transient (e.g. the session is briefly not found) — keep polling until teardown.
+        }
+      })();
+    }, PI_LOGIN_STATUS_POLL_INTERVAL_MS);
+    return (): void => {
+      isCancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [view, activeLoginId, teardown]);
+
   const isLogin = request.mode === "login";
   const title = isLogin ? `Authenticate ${request.displayName}` : `Disconnect ${request.displayName}`;
-  const verb = isLogin ? "authenticate" : "log out";
-  const terminalGuidance =
-    request.providerId === null
-      ? "Select a provider in the pi login screen below, then click Done."
-      : `In the pi selector below, choose ${request.displayName} to ${verb}, then click Done.`;
+  const terminalGuidance = isLogin
+    ? request.providerId === null
+      ? "Select a provider in the pi login screen below and complete sign-in. This window closes automatically when done."
+      : `Choose ${request.displayName} in the pi login screen below and complete sign-in. This window closes automatically when done.`
+    : `Disconnecting ${request.displayName} from pi — this window closes automatically when done.`;
 
   return (
     <Dialog.Root open onOpenChange={(open) => !open && void teardown()}>
