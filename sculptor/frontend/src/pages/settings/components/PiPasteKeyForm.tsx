@@ -10,10 +10,9 @@ type PiPasteKeyFormProps = {
 };
 
 /**
- * The power-user paste-key path for a single-key provider, shown inside the login
- * modal when the user picks "Paste API key instead". The value is written verbatim
- * to auth.json by the backend; the hint nudges toward $ENV / !command so the literal
- * key need not be stored.
+ * The power-user paste-key path for a single-key provider, shown in the login modal.
+ * The value is written verbatim to auth.json by the backend; the hint nudges toward
+ * $ENV / !command so the literal key need not be stored.
  */
 export const PiPasteKeyForm = ({ providerId, onSaved }: PiPasteKeyFormProps): ReactElement => {
   const [keyValue, setKeyValue] = useState<string>("");

@@ -7,14 +7,13 @@ import { ElementIds, finishPiLogin, startPiLogin } from "~/api";
 import { PiLoginTerminal } from "./PiLoginTerminal.tsx";
 import { PiPasteKeyForm } from "./PiPasteKeyForm.tsx";
 
-/** What the Providers area hands the modal: which provider, which direction, and
- *  whether a single-key paste path is offered. `providerId` is null for the
- *  empty-state "Authenticate a provider" CTA (pi's own TUI picks the provider). */
+/** What the Providers area hands the modal: which provider and which direction.
+ *  `providerId` is null for the empty-state "Authenticate a provider" CTA (pi's own
+ *  TUI picks the provider). */
 export type PiLoginRequestView = {
   providerId: string | null;
   displayName: string;
   mode: "login" | "logout";
-  canPasteKey: boolean;
 };
 
 type DialogView = "chooser" | "terminal" | "paste";
@@ -136,7 +135,7 @@ export const PiLoginDialog = ({ request, onClose }: PiLoginDialogProps): ReactEl
               >
                 Open pi login
               </Button>
-              {request.canPasteKey && request.providerId !== null && (
+              {request.providerId !== null && (
                 <Button
                   variant="soft"
                   onClick={() => setView("paste")}

@@ -174,7 +174,6 @@ export const PiProvidersArea = (): ReactElement => {
       providerId: provider.providerId,
       displayName: displayNameFor(provider),
       mode: "login",
-      canPasteKey: true,
     });
   }, []);
 
@@ -183,12 +182,11 @@ export const PiProvidersArea = (): ReactElement => {
       providerId: provider.providerId,
       displayName: displayNameFor(provider),
       mode: "logout",
-      canPasteKey: false,
     });
   }, []);
 
   const openAgnosticLogin = useCallback((): void => {
-    setLoginRequest({ providerId: null, displayName: "a provider", mode: "login", canPasteKey: false });
+    setLoginRequest({ providerId: null, displayName: "a provider", mode: "login" });
   }, []);
 
   const handleDialogClose = useCallback((): void => {
