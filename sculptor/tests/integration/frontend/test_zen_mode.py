@@ -364,11 +364,9 @@ def test_workspace_tab_navigation_works_in_zen_mode(sculptor_instance_: Sculptor
     layout = PlaywrightProjectLayoutPage(page)
     top_bar = layout.get_top_bar_locator()
 
-    # Step 2: Enter zen mode. Use press_keyboard_shortcut (not raw keyboard.press)
-    # for every chord here: macOS Chromium occasionally drops the modifier keyup
-    # between back-to-back chords, leaving Cmd "held" so the next chord arrives
-    # malformed and is swallowed. press_keyboard_shortcut releases the modifier
-    # after each chord.
+    # Step 2: Enter zen mode. The chords go through press_keyboard_shortcut, which
+    # releases the modifier between presses (macOS Chromium can drop the keyup
+    # between back-to-back chords and swallow the next one).
     blur_active_element(page)
     layout.press_keyboard_shortcut(f"{mod}+Shift+\\")
     expect(top_bar).not_to_be_visible()
@@ -436,9 +434,7 @@ def test_rapid_tab_navigation_reads_live_route_in_zen_mode(sculptor_instance_: S
     assert after_forward != before, (
         f"Cmd+] did not change the route — the synthetic events were not handled: {(before, after_forward, after_back)}"
     )
-    # Step 5: the back press must return to the starting workspace. With the
-    # stale-closure bug it cycles from the previous active tab and stays on the
-    # forward tab.
+    # Step 5: the back press must return to the starting workspace.
     assert after_back == before, (
         f"Cmd+[ did not return to the starting workspace (stale-route cycle): {(before, after_forward, after_back)}"
     )

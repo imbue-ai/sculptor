@@ -52,11 +52,9 @@ import styles from "./WorkspaceTabs.module.scss";
 const ICON_SIZE = 14;
 
 // Derive the active tab id from the live URL hash (e.g. "#/ws/<id>/agent/<id>").
-// The tab-cycle keydown listener must read the current location at the moment a
-// key is pressed: it re-registers only after React flushes effects, so a route
-// value it closes over lags window.location once a navigation has updated the
-// hash synchronously. Without this, a rapid second keypress would cycle from the
-// previously-active tab and land back where it started.
+// cycleTab reads this at keypress time rather than a closed-over route value: the
+// keydown listener re-registers only after React commits, while navigate() updates
+// the hash synchronously, so the closed-over value lags after a rapid first press.
 const getCurrentTabIdFromHash = (hash: string): string | null => {
   const pathname = hash.replace(/^#/, "").split("?")[0] ?? "";
   if (pathname === "/home") return HOME_TAB_ID;
