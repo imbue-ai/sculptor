@@ -377,6 +377,81 @@ def test_workspace_tab_navigation_works_in_zen_mode(sculptor_instance_: Sculptor
     page.wait_for_url(f"**{second_workspace_url.split('#')[-1]}**")
 
 
+@user_story("to rapidly cycle workspace tabs in zen mode without a stale-route no-op")
+def test_rapid_tab_navigation_reads_live_route_in_zen_mode(sculptor_instance_: SculptorInstance) -> None:
+    """Two tab-cycle keypresses fired back-to-back must each cycle from the
+    *current* route, not a stale one.
+
+    Regression test for SCU-1633. The tab-cycle keydown listener computed the
+    active tab from React route state, which lags ``window.location`` because the
+    listener (a passive effect) only re-registers with a fresh closure after React
+    commits and flushes effects — and react-router defers the route-state update
+    into a transition. ``navigate()`` to a loaderless agent route updates
+    ``window.location.hash`` synchronously, so a second keypress arriving before
+    React catches up cycled from the *previous* active tab and landed back where it
+    started, hanging ``wait_for_url``.
+
+    We reproduce that timing deterministically by dispatching both keydown events
+    synchronously inside a single ``page.evaluate`` — React cannot re-render
+    between them, so the listener's closure is guaranteed stale for the second
+    press. With the bug present, the back-press is a no-op; with the fix (reading
+    the live hash) it returns to the starting workspace.
+
+    Steps:
+    1. Create two workspaces (ending on the second).
+    2. Enter zen mode.
+    3. Synchronously dispatch Cmd+] then Cmd+[ on ``window``.
+    4. The forward press must change the route (proves the events are handled).
+    5. The back press must return to the starting route (the fix).
+    """
+    page = sculptor_instance_.page
+    mod = get_playwright_modifier_key()
+
+    # Step 1: Create two workspaces; we end up on the second.
+    start_task_and_wait_for_ready(sculptor_page=page, prompt="Task A", workspace_name="WS A")
+    start_task_and_wait_for_ready(sculptor_page=page, prompt="Task B", workspace_name="WS B")
+
+    # Step 2: Enter zen mode.
+    blur_active_element(page)
+    page.keyboard.press(f"{mod}+Shift+\\")
+
+    layout = PlaywrightProjectLayoutPage(page)
+    expect(layout.get_top_bar_locator()).not_to_be_visible()
+
+    # Steps 3-5: dispatch both presses synchronously, before React can re-render
+    # and re-register the keydown listener with a fresh closure. Build the event
+    # the way the app's isMac() check does so the platform modifier matches.
+    result = page.evaluate(
+        """
+        () => {
+          document.activeElement?.blur();
+          const isMac = window.sculptor?.platform === "darwin" || navigator.platform.startsWith("Mac");
+          const fire = (key, code) => window.dispatchEvent(new KeyboardEvent("keydown", {
+            key, code, metaKey: isMac, ctrlKey: !isMac, altKey: false, shiftKey: false,
+            bubbles: true, cancelable: true,
+          }));
+          const before = window.location.hash;
+          fire("]", "BracketRight");
+          const afterForward = window.location.hash;
+          fire("[", "BracketLeft");
+          const afterBack = window.location.hash;
+          return { before, afterForward, afterBack };
+        }
+        """
+    )
+
+    # The forward press must have actually navigated; otherwise the synthetic
+    # events were not handled and the back-press assertion would pass vacuously.
+    assert result["afterForward"] != result["before"], (
+        f"Cmd+] did not change the route — the synthetic events were not handled: {result}"
+    )
+    # The back press must return to the starting workspace. With the stale-closure
+    # bug it cycles from the previous active tab and stays on the forward tab.
+    assert result["afterBack"] == result["before"], (
+        f"Cmd+[ did not return to the starting workspace (stale-route cycle): {result}"
+    )
+
+
 @user_story("to verify the exit button is hidden by default when entering zen mode")
 def test_exit_button_hidden_by_default_in_zen_mode(sculptor_instance_: SculptorInstance) -> None:
     """The exit zen mode button should be in the DOM but not visible without hovering.
