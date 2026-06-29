@@ -172,7 +172,9 @@ def _fetch_repos(
             timeout=_REMOTE_REPO_LIST_TIMEOUT_SECONDS,
         )
     except ProcessError as e:
-        detail = e.stderr.strip() or f"gh api failed with exit code {e.returncode}"
+        # Redact any user:token@ userinfo: gh echoes the failing URL in stderr,
+        # and this detail is returned to the client, not just logged.
+        detail = _redact_url_credentials(e.stderr.strip()) or f"gh api failed with exit code {e.returncode}"
         raise HTTPException(status_code=502, detail=detail) from e
     try:
         payload = json.loads(result.stdout)
@@ -442,7 +444,9 @@ def clone_remote_repo(
                 e,
             )
         except ProcessError as e:
-            detail = e.stderr.strip() or f"clone failed with exit code {e.returncode}"
+            # Redact any user:token@ userinfo: git echoes the failing clone URL
+            # in stderr, and this detail is returned to the client, not just logged.
+            detail = _redact_url_credentials(e.stderr.strip()) or f"clone failed with exit code {e.returncode}"
             status_code = 409 if _looks_like_already_exists(detail) else 400
             clone_error = (status_code, detail, e)
 
