@@ -204,9 +204,7 @@ def reap_stale_shell(pid: int) -> None:
         logger.debug("No permission to inspect/signal pid {}; skipping reap", pid)
 
 
-def write_launch_command(
-    manager: LocalTerminalManager, command: str, timeout_seconds: float = 5.0, submit: str = "\n"
-) -> None:
+def write_launch_command(manager: LocalTerminalManager, command: str, timeout_seconds: float = 5.0) -> None:
     """Write a registered program's launch command into the shell, as if typed.
 
     Waits for the shell's first output bytes (the prompt — or at least rc-file
@@ -215,11 +213,6 @@ def write_launch_command(
     anyway: the program runs as a shell job either way, and a slightly-late
     write still works. The command comes from a user-authored registration —
     the same trust level as the user typing into their own shell.
-
-    ``submit`` is the terminator that sends the command. The default newline suits
-    a cooked-mode shell. Pass a carriage return ("\\r", the Return key) for a
-    raw-mode TUI such as pi's /login prompt, where a newline is a literal newline in
-    the input box and only Return submits.
     """
     ready = threading.Event()
 
@@ -234,4 +227,4 @@ def write_launch_command(
             logger.debug("Shell produced no output within {}s; writing launch command anyway", timeout_seconds)
     finally:
         manager.remove_output_callback(on_output)
-    manager.write((command + submit).encode())
+    manager.write((command + "\n").encode())
