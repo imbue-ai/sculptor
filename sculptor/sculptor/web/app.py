@@ -52,6 +52,11 @@ from sculptor import version
 from sculptor.agents.attachments import resolve_attachment_source
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import NoBtwSessionAvailable
 from sculptor.agents.harness_registry import get_harness_for_config
+from sculptor.agents.pi_agent.authenticated_providers import PiAuthJsonError
+from sculptor.agents.pi_agent.authenticated_providers import get_provider_auth_statuses
+from sculptor.agents.pi_agent.authenticated_providers import write_auth_json_entry
+from sculptor.agents.pi_agent.provider_catalog import ProviderGroup
+from sculptor.agents.pi_agent.provider_catalog import get_provider_entry
 from sculptor.common.plugin import get_plugin_dirs
 from sculptor.config.settings import SculptorSettings
 from sculptor.config.user_config import UserConfig
@@ -115,6 +120,9 @@ from sculptor.services.git_repo_service.default_implementation import LocalWrita
 from sculptor.services.git_repo_service.error_types import GitRepoError
 from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 from sculptor.services.git_repo_service.git_commands import run_git_command_local
+from sculptor.services.pi_login_service import PiLoginMode
+from sculptor.services.pi_login_service import broadcast_pi_models_refresh
+from sculptor.services.pi_login_service import pi_login_terminal_id
 from sculptor.services.project_service.default_implementation import get_most_recently_used_project_id
 from sculptor.services.project_service.default_implementation import update_most_recently_used_project
 from sculptor.services.task_service.errors import InvalidTaskOperation
@@ -187,6 +195,8 @@ from sculptor.web.data_types import AnswerQuestionRequest
 from sculptor.web.data_types import ArtifactDataResponse
 from sculptor.web.data_types import AuthResult
 from sculptor.web.data_types import AuthStartResult
+from sculptor.web.data_types import AuthenticatedProviderEntry
+from sculptor.web.data_types import AuthenticatedProvidersResponse
 from sculptor.web.data_types import BatchUpdateOpenStateRequest
 from sculptor.web.data_types import BranchExistsResponse
 from sculptor.web.data_types import BtwRequest
@@ -214,6 +224,10 @@ from sculptor.web.data_types import OpenFileUiRequest
 from sculptor.web.data_types import OpenInOsRequest
 from sculptor.web.data_types import OpenPathInAppRequest
 from sculptor.web.data_types import OpenPathInAppResult
+from sculptor.web.data_types import PasteKeyRequest
+from sculptor.web.data_types import PiLoginRequest
+from sculptor.web.data_types import PiLoginResponse
+from sculptor.web.data_types import PiLoginStatusResponse
 from sculptor.web.data_types import PreviewBranchNameResponse
 from sculptor.web.data_types import ProjectEnvVarNames
 from sculptor.web.data_types import ProjectInitializationRequest
@@ -4237,6 +4251,134 @@ def get_env_var_names(
         global_env_path=_display_path(global_env_path),
         projects=tuple(project_entries),
     )
+
+
+@router.get("/api/v1/pi/providers/authenticated")
+def get_pi_authenticated_providers(
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> AuthenticatedProvidersResponse:
+    """Return the full pi provider catalog crossed with current authentication status.
+
+    Global (no workspace/agent): Settings reads process-level auth.json + env. The
+    underlying readers are best-effort, so a missing/garbled auth.json yields all
+    in_auth_json=False rather than an error.
+    """
+    return AuthenticatedProvidersResponse(
+        providers=tuple(
+            AuthenticatedProviderEntry(
+                provider_id=status.provider_id,
+                display_name=status.display_name,
+                group=status.group,
+                in_auth_json=status.in_auth_json,
+                env_detected=status.env_detected,
+                env_var_names=status.env_var_names,
+            )
+            for status in get_provider_auth_statuses()
+        )
+    )
+
+
+@router.post("/api/v1/pi/login")
+def start_pi_login(
+    request: Request,
+    pi_login_request: PiLoginRequest,
+    user_session: UserSession = Depends(get_user_session),
+) -> PiLoginResponse:
+    """Spawn an interactive pi /login (or /logout) PTY and return its login-session id.
+
+    Global (no workspace/agent): the PTY drives pi's own interactive flow against the
+    user's real ~/.pi/agent. The frontend attaches at GET /api/v1/pi/login/{id}/ws.
+    """
+    services = get_services_from_request_or_websocket(request)
+    pi_binary_path = services.dependency_management_service.resolve_binary_path(Dependency.PI)
+    if pi_binary_path is None:
+        raise HTTPException(status_code=400, detail="pi is not installed — configure it in Settings → Pi")
+    login_id = services.pi_login_service.spawn(
+        PiLoginMode(pi_login_request.mode),
+        pi_binary_path,
+        pi_login_request.provider_id,
+    )
+    return PiLoginResponse(login_id=login_id)
+
+
+@router.post("/api/v1/pi/login/{login_id}/done")
+def finish_pi_login(
+    login_id: str,
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> Response:
+    """Tear down a login PTY (Done button) and broadcast a model refresh. Idempotent."""
+    services = get_services_from_request_or_websocket(request)
+    services.pi_login_service.teardown(login_id)
+    return Response(status_code=204)
+
+
+@router.get("/api/v1/pi/login/{login_id}/status")
+def get_pi_login_status(
+    login_id: str,
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> PiLoginStatusResponse:
+    """Report whether a login session's credential change has landed in auth.json.
+
+    The login modal polls this to auto-close once pi finishes the /login or /logout,
+    replacing the manual Done click.
+    """
+    services = get_services_from_request_or_websocket(request)
+    return PiLoginStatusResponse(completed=services.pi_login_service.is_completed(login_id))
+
+
+@router.post("/api/v1/pi/providers/paste-key")
+def write_pi_provider_key(
+    request: Request,
+    paste_key_request: PasteKeyRequest,
+    user_session: UserSession = Depends(get_user_session),
+) -> Response:
+    """Merge a single-key provider's api key into auth.json and refresh running pi agents.
+
+    The optional power-user path (the primary path is interactive /login). The value
+    is written verbatim (literal / $ENV / !command); session-only and unknown
+    providers are rejected (their config is not expressible as a single auth.json key).
+    """
+    entry = get_provider_entry(paste_key_request.provider_id)
+    if entry is None or entry.group is not ProviderGroup.SINGLE_KEY:
+        raise HTTPException(status_code=400, detail="paste-key is only supported for single-key providers")
+    if not paste_key_request.key_value.strip():
+        raise HTTPException(status_code=400, detail="a key value is required")
+    try:
+        write_auth_json_entry(paste_key_request.provider_id, paste_key_request.key_value)
+    except PiAuthJsonError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    services = get_services_from_request_or_websocket(request)
+    with user_session.open_transaction(services) as transaction:
+        broadcast_pi_models_refresh(services.task_service, transaction)
+    return Response(status_code=204)
+
+
+@APP.websocket("/api/v1/pi/login/{login_id}/ws")
+async def pi_login_websocket(
+    websocket: WebSocket,
+    login_id: str,
+) -> None:
+    """Attach a WebSocket to a pi login PTY, reaping it (and refreshing models) on close.
+
+    Unlike agent terminals (which persist across disconnect), a login PTY is
+    ephemeral: when the socket closes the session is torn down and a model-catalog
+    refresh is broadcast, since credentials may have changed.
+    """
+    services = get_services_from_request_or_websocket(websocket)
+    if not services.pi_login_service.is_active(login_id):
+        # Accept before closing so the client receives a proper 4404 close frame
+        # (see agent_terminal_websocket for the full explanation).
+        await websocket.accept()
+        await websocket.close(code=4404, reason=f"pi login session {login_id} not found")
+        return
+    try:
+        await _connect_terminal_websocket(websocket, pi_login_terminal_id(login_id))
+    finally:
+        services.pi_login_service.teardown(login_id)
 
 
 @router.post("/api/v1/projects/init-git")

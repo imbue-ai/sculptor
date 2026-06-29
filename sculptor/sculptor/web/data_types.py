@@ -11,6 +11,7 @@ from pydantic import EmailStr
 from pydantic import Field
 from pydantic import Tag
 
+from sculptor.agents.pi_agent.provider_catalog import ProviderGroup
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.pydantic_serialization import SerializableModel
@@ -264,6 +265,62 @@ class EnvVarNamesResponse(SerializableModel):
     global_var_names: tuple[str, ...]
     global_env_path: str
     projects: tuple[ProjectEnvVarNames, ...]
+
+
+class AuthenticatedProviderEntry(SerializableModel):
+    """One pi provider's catalog metadata annotated with its authentication status."""
+
+    provider_id: str
+    display_name: str
+    group: ProviderGroup
+    in_auth_json: bool
+    env_detected: bool
+    env_var_names: tuple[str, ...]
+
+
+class AuthenticatedProvidersResponse(SerializableModel):
+    """The full pi provider catalog crossed with current authentication status."""
+
+    providers: tuple[AuthenticatedProviderEntry, ...]
+
+
+class PiLoginRequest(RequestModel):
+    """Start an interactive pi login or logout PTY.
+
+    ``provider_id`` is on-screen guidance / refresh context only — pi's /login and
+    /logout take no provider argument (the user selects in pi's own TUI selector).
+    """
+
+    mode: Literal["login", "logout"]
+    provider_id: str | None = None
+
+
+class PiLoginResponse(SerializableModel):
+    """Identifies the spawned login session; the WS attaches at /pi/login/{id}/ws."""
+
+    login_id: str
+
+
+class PiLoginStatusResponse(SerializableModel):
+    """Whether a login session's credential change has landed in auth.json.
+
+    The modal polls this to auto-close (and refetch) without a manual Done:
+    ``completed`` flips true once pi has performed the /login (the provider appeared)
+    or /logout (the provider was removed).
+    """
+
+    completed: bool
+
+
+class PasteKeyRequest(RequestModel):
+    """Power-user paste-key write for a single-key provider.
+
+    ``key_value`` is stored verbatim in auth.json (a literal key, a ``$ENV``
+    reference, or a ``!command``); pi resolves it at read time.
+    """
+
+    provider_id: str
+    key_value: str
 
 
 class RecentWorkspaceResponse(SerializableModel):

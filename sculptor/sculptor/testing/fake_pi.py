@@ -80,6 +80,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shlex
 import sys
@@ -129,9 +130,38 @@ _FAKE_PI_MODELS: list[dict[str, str]] = [
     {"id": "fake-pi-haiku-4-5", "name": "FakePi Haiku 4.5", "provider": "anthropic"},
 ]
 
-# The model `get_state` reports as current until a `set_model` changes it (pi
-# defaults to its newest model; FakePi mirrors that with the first catalog entry).
-_DEFAULT_FAKE_PI_MODEL: dict[str, str] = _FAKE_PI_MODELS[0]
+# Env var a test sets (via update_environment) to override the reported catalog with
+# a JSON array of {id, name, provider} entries — e.g. to span multiple providers and
+# exercise the authenticated-set filter, or `[]` to model a no-authenticated-providers
+# state (empty catalog + no current model).
+_FAKE_PI_CATALOG_ENV_VAR = "FAKE_PI_CATALOG"
+
+
+def _resolve_fake_pi_models() -> list[dict[str, str]]:
+    """Return the catalog `get_available_models` reports.
+
+    A JSON list in `FAKE_PI_CATALOG` is honored verbatim, including the empty list
+    (which models "no authenticated providers"). Falls back to the fixed
+    `_FAKE_PI_MODELS` when the var is unset or not a JSON list, so existing pi
+    integration tests are unaffected.
+    """
+    raw = os.environ.get(_FAKE_PI_CATALOG_ENV_VAR)
+    if not raw:
+        return _FAKE_PI_MODELS
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return _FAKE_PI_MODELS
+    if not isinstance(parsed, list):
+        return _FAKE_PI_MODELS
+    return parsed
+
+
+def _default_fake_pi_current_model() -> dict[str, str]:
+    """The model `get_state` reports as current (the first catalog entry, mirroring
+    pi defaulting to its newest model); an empty catalog reports no current model."""
+    models = _resolve_fake_pi_models()
+    return dict(models[0]) if models else {}
 
 
 def _skill_invocation_name(prompt_text: str) -> str | None:
@@ -236,7 +266,7 @@ class _SessionState(MutableModel):
     # The model `get_state` reports as current; a `set_model` updates it in place.
     # In-memory only (not persisted): the model-selection test exercises a switch
     # within one process, and PiAgent re-fetches the model at every start.
-    current_model: dict[str, str] = Field(default_factory=lambda: dict(_DEFAULT_FAKE_PI_MODEL))
+    current_model: dict[str, str] = Field(default_factory=_default_fake_pi_current_model)
 
     @classmethod
     def load(cls, session_dir: Path | None, session_id: str) -> "_SessionState":
@@ -1029,7 +1059,7 @@ def _emit_available_models(prompt_id: str | None) -> None:
         "type": "response",
         "command": "get_available_models",
         "success": True,
-        "data": {"models": _FAKE_PI_MODELS},
+        "data": {"models": _resolve_fake_pi_models()},
     }
     if prompt_id:
         payload["id"] = prompt_id
@@ -1043,7 +1073,7 @@ def _emit_set_model(prompt_id: str | None, model: dict[str, str]) -> None:
     model. An unknown model id is rejected with `success:false` (pi's `Model not
     found` shape) so the failure-toast path stays exercisable.
     """
-    known = any(candidate["id"] == model["id"] for candidate in _FAKE_PI_MODELS)
+    known = any(candidate["id"] == model["id"] for candidate in _resolve_fake_pi_models())
     if not known:
         payload = {
             "type": "response",
@@ -1209,7 +1239,7 @@ def _run_rpc_loop(system_prompt: str, session_dir: Path | None, session_id: str)
                 "name": str(payload.get("modelId", "")),
                 "provider": str(payload.get("provider", "anthropic")),
             }
-            known = next((m for m in _FAKE_PI_MODELS if m["id"] == requested["id"]), None)
+            known = next((m for m in _resolve_fake_pi_models() if m["id"] == requested["id"]), None)
             if known is not None:
                 state.current_model = dict(known)
             _emit_set_model(command_id, known if known is not None else requested)

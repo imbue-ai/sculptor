@@ -786,6 +786,7 @@ class AlreadyRunningServiceCollection(CompleteServiceCollection):
             pr_polling_service=from_collection.pr_polling_service,
             btw_service=from_collection.btw_service,
             ci_babysitter_service=from_collection.ci_babysitter_service,
+            pi_login_service=from_collection.pi_login_service,
         )
 
     @contextmanager
