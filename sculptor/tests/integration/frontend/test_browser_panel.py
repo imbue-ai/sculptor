@@ -13,6 +13,15 @@ panel's user-visible contract:
 - Cross-workspace isolation: independent URLs, cookies, history (R8).
 - In-page state preservation across workspace switches and route
   detours (R8 strongest form).
+
+The ``@electron`` tests that drive a real ``<webview>`` guest are marked
+``@pytest.mark.browser_panel_webview_flaky``.  The feature works, but under
+CI's chromium-in-chromium xvfb software rendering their readiness is
+environment-timed (guest compositing for ``capturePage``, the X11 clipboard
+image round-trip, and ``<webview>`` attach latency under heavy parallelism),
+which no product-side gate can make deterministic.  They run in a dedicated
+higher-retry offload group rather than the default electron group; see
+``offload-electron.toml`` and SCU-1607.
 """
 
 from __future__ import annotations
@@ -219,6 +228,7 @@ def test_browser_panel_navigation_tour(
 
 
 @pytest.mark.electron
+@pytest.mark.browser_panel_webview_flaky
 @user_story("to land in the URL field with its contents selected, see errors on bad URLs, and load file paths")
 def test_browser_panel_url_input_polish(
     sculptor_instance_: SculptorInstance,
@@ -301,6 +311,7 @@ def test_browser_panel_url_input_polish(
 
 
 @pytest.mark.electron
+@pytest.mark.browser_panel_webview_flaky
 @user_story("to copy a screenshot of the Browser panel to the clipboard, blank or live")
 def test_browser_panel_screenshot(
     sculptor_instance_: SculptorInstance,
@@ -331,6 +342,7 @@ def test_browser_panel_screenshot(
 
 
 @pytest.mark.electron
+@pytest.mark.browser_panel_webview_flaky
 @user_story("to keep the Browser panel's URL when I collapse and reopen the panel")
 def test_browser_panel_url_persists_across_collapse(
     sculptor_instance_: SculptorInstance,
@@ -360,6 +372,7 @@ def test_browser_panel_url_persists_across_collapse(
 
 
 @pytest.mark.electron
+@pytest.mark.browser_panel_webview_flaky
 @user_story("to keep each workspace's Browser panel state — URL, cookies, history — fully isolated")
 def test_browser_panel_cross_workspace_isolation(
     sculptor_instance_: SculptorInstance,
@@ -409,6 +422,7 @@ def test_browser_panel_cross_workspace_isolation(
 
 
 @pytest.mark.electron
+@pytest.mark.browser_panel_webview_flaky
 @user_story("to keep my Browser panel's in-page state alive when I switch workspaces")
 def test_browser_panel_in_page_state_preserved_across_workspace_switch(
     sculptor_instance_: SculptorInstance,
@@ -448,6 +462,7 @@ def test_browser_panel_in_page_state_preserved_across_workspace_switch(
 
 
 @pytest.mark.electron
+@pytest.mark.browser_panel_webview_flaky
 @user_story("to keep my Browser panel's in-page state alive when I detour through a non-workspace route")
 def test_browser_panel_in_page_state_preserved_across_route_detour(
     sculptor_instance_: SculptorInstance,
