@@ -7,4 +7,4 @@ harness's ``fake_pi`` stub can answer ``pi --version`` without importing the
 database / web / httpx service layer it pulls in. Keep this module import-free.
 """
 
-PI_PINNED_VERSION = "0.78.0"
+PI_PINNED_VERSION = "0.80.2"
