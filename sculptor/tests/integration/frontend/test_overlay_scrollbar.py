@@ -128,17 +128,27 @@ def test_overlay_thumb_wins_over_adjacent_resize_handle(sculptor_instance_: Scul
     page.mouse.move(start_x - 80, start_y + 150, steps=10)
     page.mouse.up()
 
-    # The scrollbar owned the vertical gesture: the chat scrolled down.
+    # Wait until the gesture has visibly landed on EITHER side — the chat scrolls
+    # (the thumb won) or the panel resizes (the handle won) — so the assertion
+    # reads a settled layout instead of a one-shot snapshot, and a regression
+    # fails fast rather than timing out.
     page.wait_for_function(
-        f"""(before) => {{
-            const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
-            return el && el.scrollTop > before + 20;
+        f"""([before, widthBefore]) => {{
+            const chat = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+            const panel = document.querySelector('[data-testid="{ElementIDs.PANEL_RIGHT_AREA}"]');
+            if (!chat || !panel) return false;
+            const scrolled = chat.scrollTop > before + 20;
+            const resized = Math.abs(panel.getBoundingClientRect().width - widthBefore) >= 4;
+            return scrolled || resized;
         }}""",
-        arg=scroll_before,
+        arg=[scroll_before, width_before],
     )
-    # ...and the resize handle never caught it: the panel width is unchanged.
+
+    # The thumb owned the gesture: the chat scrolled and the panel did not resize.
+    scrolled_by = get_alpha_scroll_position(page) - scroll_before
     width_after = right_area.bounding_box()["width"]
-    assert abs(width_after - width_before) < 4, (
-        f"dragging the scrollbar thumb resized the panel ({width_before:.0f} -> {width_after:.0f}); "
+    assert scrolled_by > 20 and abs(width_after - width_before) < 4, (
+        "expected the thumb to scroll the chat without resizing the panel "
+        + f"(scrolled {scrolled_by:.0f}px; panel width {width_before:.0f} -> {width_after:.0f}); "
         + "the resize handle stole the gesture."
     )

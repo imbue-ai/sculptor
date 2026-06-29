@@ -85,13 +85,20 @@ export const VerticalOverlayScrollbar = ({
   const dragStartYRef = useRef(0);
   const dragStartScrollTopRef = useRef(0);
 
-  // Measure the host and mirror its scroll position so the thumb tracks it.
+  // Mirror the host's geometry so the thumb tracks it, split by update
+  // frequency: the hot `scroll` path reads only `scrollTop` (the sole thing a
+  // scroll changes), keeping `getBoundingClientRect` — which can force a
+  // synchronous layout — on the rarer size/position path.
   useEffect((): (() => void) | void => {
     const element = scrollRef.current;
     if (!element) return;
     setPortalTarget(element.closest<HTMLElement>(THEME_ROOT_SELECTOR));
 
-    const measure = (): void => {
+    const readScrollTop = (): void => {
+      setGeometry((prev) => (prev.scrollTop === element.scrollTop ? prev : { ...prev, scrollTop: element.scrollTop }));
+    };
+
+    const readRect = (): void => {
       const rect = element.getBoundingClientRect();
       setGeometry((prev) => {
         const next: Geometry = {
@@ -116,21 +123,21 @@ export const VerticalOverlayScrollbar = ({
       });
     };
 
-    measure();
-    element.addEventListener("scroll", measure, { passive: true });
-    // Observe the host (its size + position change on panel/window resize) and
-    // its content child (its height change grows scrollHeight without resizing
-    // the host — e.g. streaming chat output or an expanding file tree).
-    const resizeObserver = new ResizeObserver(measure);
+    readRect();
+    element.addEventListener("scroll", readScrollTop, { passive: true });
+    // Rect, scrollHeight and clientHeight change on panel/window resize and on
+    // content growth — the child's height grows scrollHeight without resizing
+    // the host (e.g. streaming chat output or an expanding file tree).
+    const resizeObserver = new ResizeObserver(readRect);
     resizeObserver.observe(element);
     const content = element.firstElementChild;
     if (content) resizeObserver.observe(content);
-    window.addEventListener("resize", measure);
+    window.addEventListener("resize", readRect);
 
     return (): void => {
-      element.removeEventListener("scroll", measure);
+      element.removeEventListener("scroll", readScrollTop);
       resizeObserver.disconnect();
-      window.removeEventListener("resize", measure);
+      window.removeEventListener("resize", readRect);
     };
   }, [scrollRef]);
 
