@@ -107,7 +107,7 @@ _SHELL_DEATH_POLL_INTERVAL_SECONDS: Final[float] = 0.05
 # and ``is_checked=False`` keeps the concurrency group from inspecting it.
 _SHELL_EXITED_SENTINEL: Final[int] = 0
 
-_EXCLUDED_ENV_VAR_NAMES: Final[frozenset[str]] = frozenset({"SESSION_TOKEN"})
+_EXCLUDED_ENV_VAR_NAMES: Final[frozenset[str]] = frozenset({"SESSION_TOKEN", "TMUX", "TMUX_PANE"})
 _EXCLUDED_ENV_VAR_PREFIXES: Final[tuple[str, ...]] = ("SCULPT_", "SCULPTOR_", "_PYI_")
 
 
@@ -127,6 +127,12 @@ def _scrub_shell_env(extra_env: Mapping[str, str], env_var_override: bool) -> di
     scrubbing it prevents Sculptor-on-Sculptor sessions from pointing the
     inner ``sculpt`` CLI at the outer backend.  ``_PYI_*`` is the
     PyInstaller bootloader's namespace.
+
+    ``TMUX``/``TMUX_PANE`` are scrubbed because a Sculptor PTY is never a real
+    tmux pane. A stale value (e.g. when the dev backend itself runs under tmux)
+    makes TUIs such as pi switch to tmux key handling, where a plain carriage
+    return no longer registers as Enter. Absent in production (the backend does
+    not run under tmux), so this is a no-op there.
     """
     env = dict(os.environ)
     for var in list(env):

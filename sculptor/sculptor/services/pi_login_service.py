@@ -9,8 +9,9 @@ changed.
 
 pi has no headless auth: /login and /logout are interactive TUI slash commands that
 open pi's own provider selector (they take no provider argument). The PTY hosts a
-real login shell, types the resolved pi binary path, then types the slash command.
-The PTY MUST inherit the user's real environment and MUST NOT set
+real login shell, types the resolved pi binary path, then types the slash command,
+submitting it with a carriage return (pi's raw-mode TUI does not submit on a bare
+newline). The PTY MUST inherit the user's real environment and MUST NOT set
 PI_CODING_AGENT_DIR, so pi writes the user's real ~/.pi/agent/auth.json.
 """
 
@@ -136,7 +137,10 @@ class PiLoginService(Service):
 
         write_launch_command(registered, pi_binary_path)
         slash_command = "/login" if mode == PiLoginMode.LOGIN else "/logout"
-        write_launch_command(registered, slash_command, timeout_seconds=_PI_TUI_READINESS_SECONDS)
+        # pi's /login prompt is a raw-mode TUI: a newline ("\n") is a literal newline
+        # in the input box, so submit the slash command with a carriage return (the
+        # Return key) to actually run it.
+        write_launch_command(registered, slash_command, timeout_seconds=_PI_TUI_READINESS_SECONDS, submit="\r")
         logger.info("Spawned pi {} PTY (login_id={})", mode.value, login_id)
         return login_id
 
