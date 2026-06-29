@@ -2,10 +2,8 @@
   // The strip is inert: a pointer-down off the thumb falls through to the resize
   // handle behind it, so the splitter still owns the rest of the panel edge.
   pointer-events: none;
-  // Body-level overlay positioned in viewport coordinates (top/left/width/height
-  // set inline from the host's bounding rect). `fixed` + portaled to <body> so
-  // no ancestor `overflow` clips it and no sibling stacking context traps it
-  // beneath the resize handle.
+  // Positioned in viewport coordinates (top/left/width/height set inline from the
+  // host's bounding rect); `fixed` so no ancestor `overflow` clips the overlay.
   position: fixed;
   z-index: var(--z-sticky);
 }

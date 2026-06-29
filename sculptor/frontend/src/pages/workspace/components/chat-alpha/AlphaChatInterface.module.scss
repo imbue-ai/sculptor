@@ -45,9 +45,8 @@
     position: relative;
   }
 
-  // Native scrollbar suppressed in favour of <VerticalOverlayScrollbar>, which
-  // renders an overlay thumb that widens on hover and yields the panel edge to
-  // the resize handle except over the thumb itself (SCU-1321).
+  // Native scrollbar suppressed in favour of <VerticalOverlayScrollbar>, whose
+  // overlay thumb coexists with the chat's adjacent panel resize handle (SCU-1321).
   @include hidden-scrollbar;
 }
 

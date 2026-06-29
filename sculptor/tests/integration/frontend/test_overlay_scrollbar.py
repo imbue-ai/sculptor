@@ -1,8 +1,8 @@
 """Integration tests for the overlay scrollbar (SCU-1321).
 
 The alpha chat and file browser replace their native scrollbar with
-``<VerticalOverlayScrollbar>``, whose thumb renders as a body-level overlay
-above the adjacent panel resize handle. This fixes the splitter stealing the
+``<VerticalOverlayScrollbar>``, whose thumb renders as an overlay above the
+adjacent panel resize handle. This fixes the splitter stealing the
 scrollbar's clicks: the thumb stays draggable, and a pointer over the thumb is
 owned by the scrollbar rather than the resize handle behind it.
 
