@@ -100,9 +100,8 @@ def pi_login_terminal_id(login_id: str) -> str:
     return f"pi-login:{login_id}"
 
 
-# pi's interactive TUI has rendered once any of these appear in the PTY stream (the
-# startup hint's "ctrl+…" chords, the status-line "•" bullet, "escape interrupt").
-# Matched so a slash command is not typed into a half-initialized shell.
+# pi's interactive TUI has rendered once one of these appears in the PTY stream, so a
+# slash command is not typed into a half-initialized shell.
 _PI_READY_MARKERS: tuple[bytes, ...] = (b"ctrl+", b"\xe2\x80\xa2", b"interrupt")
 
 # pi's /logout provider list prints this header; matched before fuzzy-filtering.
@@ -141,8 +140,6 @@ class _OutputAccumulator:
         self._buffer = bytearray()
         self._lock = threading.Lock()
         self._changed = threading.Event()
-        # subscribe() atomically snapshots prior output and registers the callback,
-        # so nothing rendered before this point is missed.
         snapshot = manager.subscribe(self._on_output)
         with self._lock:
             self._buffer.extend(snapshot)
@@ -220,8 +217,8 @@ def _drive_pi_session(
             logger.warning("pi /logout selector never rendered; leaving the session for manual completion")
             return
 
-    # Fuzzy-filter pi's list to the chosen provider, then confirm. Typing the provider id
-    # narrows to its row (validated against pi 0.78.0); Return removes its stored key.
+    # Fuzzy-filter pi's list to the chosen provider, then confirm: typing the provider id
+    # narrows to its row, and Return removes its stored key.
     manager.write(provider_id.encode())
     time.sleep(_PI_FILTER_SETTLE_SECONDS)
     manager.write(_PI_SUBMIT)
