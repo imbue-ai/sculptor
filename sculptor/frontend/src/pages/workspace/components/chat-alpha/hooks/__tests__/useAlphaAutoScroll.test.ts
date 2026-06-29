@@ -42,6 +42,15 @@ const setScrollPosition = (el: HTMLDivElement, scrollTop: number, scrollHeight: 
 const createMockVirtualizer = (): Virtualizer<HTMLDivElement, Element> => {
   return {
     scrollToIndex: vi.fn(),
+    // The reflow observer and reading-anchor capture read these; empty defaults
+    // mean captureReadingAnchor is a no-op (no items) for tests that drive
+    // geometry purely through the mock container.
+    getVirtualItems: vi.fn(() => []),
+    getTotalSize: vi.fn(() => 0),
+    measurementsCache: [],
+    // paddingEnd: 0 keeps distanceFromContentBottom == scrollHeight-based distance
+    // for the tests that drive geometry purely through the mock container.
+    options: { paddingEnd: 0 },
   } as unknown as Virtualizer<HTMLDivElement, Element>;
 };
 
@@ -618,6 +627,7 @@ describe("useAlphaAutoScroll", () => {
       return {
         scrollToIndex: vi.fn(),
         getTotalSize: vi.fn().mockReturnValue(totalSize),
+        getVirtualItems: vi.fn(() => []),
         options: { paddingEnd },
         measurementsCache: [] as Array<unknown>,
       } as unknown as Virtualizer<HTMLDivElement, Element>;

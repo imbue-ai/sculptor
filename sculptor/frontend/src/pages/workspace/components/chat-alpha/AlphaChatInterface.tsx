@@ -51,8 +51,8 @@ import { useAlphaSearch } from "./hooks/useAlphaSearch.ts";
 import { useAlphaVirtualizer } from "./hooks/useAlphaVirtualizer.ts";
 import { ChatScrollProvider } from "./hooks/useChatScroll.tsx";
 import { useJumpToBottom } from "./hooks/useJumpToBottom.ts";
-import { useViewportStability } from "./hooks/useViewportStability.ts";
 import { JumpToBottomButton } from "./JumpToBottomButton.tsx";
+import { useScrollStateMachine } from "./scroll/useScrollStateMachine.ts";
 import { StatusPill } from "./StatusPill.tsx";
 
 type AlphaChatInterfaceProps = ChatData & {
@@ -174,11 +174,17 @@ export const AlphaChatInterface = ({
   // useAlphaAutoScroll.handleScroll after it consumes the scroll event.
   const isProgrammaticScrollRef = useRef(false);
 
+  // Single owner of scroll state (authority + layout settle + suppression).
+  // Declared before the scroll hooks so its attach layout effect runs first and
+  // so they can dispatch into / read from it.
+  const scrollMachine = useScrollStateMachine(scrollContainerRef);
+
   const virtualizer = useAlphaVirtualizer(
     scrollContainerRef,
     filteredNodes.length,
     lastMessageRole,
     taskID ?? "",
+    scrollMachine,
     introHeight,
     isProgrammaticScrollRef,
   );
@@ -196,15 +202,13 @@ export const AlphaChatInterface = ({
     lastMessageRole,
     lastUserMessageIndex,
     taskID ?? "",
+    scrollMachine,
     isProgrammaticScrollRef,
   );
 
-  // Viewport stability: compensate scrollTop when items above viewport change height
-  useViewportStability(scrollContainerRef, virtualizer, isProgrammaticScrollRef);
-
   // Scroll position persistence per task
   const filteredMessageRefs = useMemo(() => filteredNodes.map((n) => ({ id: n.message.id })), [filteredNodes]);
-  useAlphaScrollPersistence(scrollContainerRef, virtualizer, taskID ?? "", filteredMessageRefs);
+  useAlphaScrollPersistence(scrollContainerRef, virtualizer, taskID ?? "", filteredMessageRefs, scrollMachine);
 
   // Prompt navigation: ArrowUp/Down to cycle through user prompts
   const filteredChatMessages = useMemo(() => filteredNodes.map((n) => n.message), [filteredNodes]);
@@ -226,19 +230,15 @@ export const AlphaChatInterface = ({
     [filteredNodes],
   );
 
-  // Shared ref: useAlphaPromptNav writes to it synchronously when entering/
-  // exiting nav, and useAlphaActivePromptIndex reads it to freeze the cursor
-  // during keyboard nav so the scroll spy and stick-to-bottom logic don't
-  // fight the explicit user intent.
-  const isNavigatingRef = useRef(false);
-
-  // Active dot index (scroll-spy) — shared with keyboard nav as the single cursor.
+  // Active dot index (scroll-spy) — shared with keyboard nav as the single
+  // cursor. Reads the `navigating` phase off the shared scroll machine so the
+  // scroll spy and stick-to-bottom logic don't fight the explicit user intent.
   const activePromptIndex = useAlphaActivePromptIndex(
     userPromptIndices,
     virtualizer,
     scrollContainerRef,
     isAtBottom,
-    isNavigatingRef,
+    scrollMachine,
   );
 
   // ─── Anchor the active user message during chat tool density flips ──────────
@@ -325,7 +325,7 @@ export const AlphaChatInterface = ({
     scrollToBottom,
     setIsSuppressed,
     activePromptIndex,
-    isNavigatingRef,
+    scrollMachine,
   );
 
   const handlePromptNavigate = useCallback(
@@ -379,13 +379,17 @@ export const AlphaChatInterface = ({
   // search navigation. Exit prompt navigation when search opens (it has its own
   // suppression that we supersede here).
   useEffect(() => {
+    // The machine's top-level suppression guard drops auto-scroll initiation
+    // events while search is open, so a search session never starts pinning or
+    // anchoring.
+    scrollMachine.setSuppressed(isSearchVisible);
     if (isSearchVisible) {
       exitNavigation();
       setIsSuppressed(true);
     } else {
       setIsSuppressed(false);
     }
-  }, [isSearchVisible, exitNavigation, setIsSuppressed]);
+  }, [isSearchVisible, exitNavigation, setIsSuppressed, scrollMachine]);
 
   // Jump-to-bottom button
   const { isVisible: isJumpVisible, label: jumpLabel } = useJumpToBottom(
