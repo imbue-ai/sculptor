@@ -1,7 +1,13 @@
 import type { createStore } from "jotai";
 import type { ComponentType, ReactElement } from "react";
 
-import { getLocalPlugins } from "~/api";
+import {
+  getLocalPlugins,
+  type PluginCommandResult,
+  type PluginCommandUiAction,
+  type PluginRegistrations,
+  type PluginSnapshot,
+} from "~/api";
 import { baseUrl } from "~/apiClient.ts";
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "~/common/queryClient.ts";
@@ -22,6 +28,7 @@ import {
   pluginSourceStatesAtom,
   pluginWorkspaceWidgetsAtom,
 } from "./pluginRegistry.ts";
+import { getRendererIdentity } from "./rendererIdentity.ts";
 import type {
   LoadedPlugin,
   OverlayDefinition,
@@ -100,6 +107,17 @@ const BUILTIN_SOURCES: ReadonlyArray<BuiltinSource> = [
   { path: "/plugins/pomodoro", disabledByDefault: true },
   { path: "/plugins/linear-issue" },
 ];
+
+/**
+ * Path marker identifying an agent-served *dev* plugin mount. The backend serves
+ * a plugin pushed live from a workspace under `/plugins/local/dev/<ws>/<id>/`;
+ * a regular installed local plugin lives at the top-level `/plugins/local/<id>/`.
+ * Used to render the "dev" badge and to set a snapshot's `origin` to `dev`.
+ */
+export const DEV_PLUGIN_PATH_MARKER = "/plugins/local/dev/";
+
+/** localStorage namespace prefix for a plugin's persisted settings (see `usePluginSetting`). */
+const PLUGIN_CONFIG_KEY_PREFIX = "sculptor-plugin:";
 
 /** A plugin the backend discovered in the Sculptor plugins directory (the data folder's `plugins/`). */
 export type LocalPluginRef = { id: string; manifestUrl: string };
@@ -619,11 +637,16 @@ export class PluginManager {
     this.setSourceState(store, source, undefined);
   }
 
-  /** Unloads then re-loads a source with a cache-busted import (dev iteration). */
-  async reloadSource(store: JotaiStore, source: string): Promise<void> {
+  /**
+   * Unloads then re-loads a source with a cache-busted import (dev iteration).
+   * A caller may pass an explicit `cacheBust` token (e.g. an agent's
+   * `sculpt plugin reload --cache-bust`); absent one, a timestamp forces a fresh
+   * fetch.
+   */
+  async reloadSource(store: JotaiStore, source: string, cacheBust?: string): Promise<void> {
     const kind = this.kindOf(source);
     this.unloadSource(source);
-    await this.loadSource(store, source, kind, String(Date.now()));
+    await this.loadSource(store, source, kind, cacheBust ?? String(Date.now()));
   }
 
   private bumpSeq(source: string): number {
@@ -875,6 +898,200 @@ export class PluginManager {
       }
       return next;
     });
+  }
+
+  /**
+   * Run an agent-issued `sculpt plugin <op>` against this renderer's plugin
+   * system and return a redacted result the CLI can report per renderer. Each op
+   * is wrapped so a failure surfaces as `ok: false` with a message rather than
+   * throwing — the caller (the WS handler) must always be able to POST a reply,
+   * or the agent's CLI would hang waiting for this renderer.
+   */
+  async handlePluginCommand(store: JotaiStore, action: PluginCommandUiAction): Promise<PluginCommandResult> {
+    const base = {
+      correlationId: action.correlationId,
+      renderer: getRendererIdentity(),
+      op: action.op,
+    };
+    try {
+      const plugins = await this.runPluginCommand(store, action);
+      return { ...base, ok: true, plugins };
+    } catch (e) {
+      return { ...base, ok: false, error: e instanceof Error ? e.message : String(e), plugins: [] };
+    }
+  }
+
+  /** Dispatch a single plugin command op; throws on failure (wrapped by `handlePluginCommand`). */
+  private async runPluginCommand(store: JotaiStore, action: PluginCommandUiAction): Promise<Array<PluginSnapshot>> {
+    switch (action.op) {
+      case "load": {
+        const source = action.source;
+        if (!source) throw new Error("load requires a source");
+        const normalized = normalizeSource(source);
+        // An absolute http(s) URL is a user-style source; a path is served by the
+        // backend (dev/installed local mount). `addSource` persists + loads URL
+        // sources (so a dev source survives a restart if it was added as a URL);
+        // a path goes through `loadSource` directly. Either reuses the manager's
+        // normal load path so the plugin registers, activates, and shows up live
+        // in `pluginSourceStatesAtom`.
+        const status = store.get(pluginSourceStatesAtom)[normalized]?.status;
+        if (status === "loaded") {
+          // Already active — reload so a re-issued `load` picks up fresh code.
+          await this.reloadSource(store, normalized, action.cacheBust ?? undefined);
+        } else if (/^https?:\/\//i.test(normalized)) {
+          // Persisted across restart via `pluginSourcesAtom`. `addSource` no-ops
+          // if the URL is already tracked, so fall back to an explicit load then.
+          await this.addSource(store, normalized);
+          if (store.get(pluginSourceStatesAtom)[normalized]?.status === undefined) {
+            await this.loadSource(store, normalized, "url");
+          }
+        } else {
+          // A served path (dev/installed local). Track it as a local source so
+          // `kindOf` and `manifestUrlForLoad` treat it as backend-served, then
+          // load it live. NOTE: this does NOT persist across an app restart — a
+          // dev mount only exists while the agent serves it, and the backend's
+          // discovery re-seeds installed local sources on boot. A dev source
+          // pushed live this way is re-pushed by the agent next session.
+          this.localSources.add(normalized);
+          await this.loadSource(store, normalized, "local");
+        }
+        return this.snapshotForSource(store, normalized);
+      }
+
+      case "reload": {
+        const source = this.sourceForPluginId(action.pluginId);
+        await this.reloadSource(store, source, action.cacheBust ?? undefined);
+        return this.snapshotForSource(store, source);
+      }
+
+      case "unload": {
+        const source = this.sourceForPluginId(action.pluginId);
+        this.unloadSource(source);
+        this.setSourceState(store, source, undefined);
+        // The plugin is gone; report the now-removed id with a "missing" status
+        // so the CLI can confirm which plugin was unloaded.
+        return [
+          {
+            pluginId: action.pluginId ?? "",
+            source,
+            status: "missing",
+            origin: this.originOf(source),
+            configKeys: this.configKeysForPluginId(action.pluginId ?? ""),
+          },
+        ];
+      }
+
+      case "inspect": {
+        if (!action.pluginId) throw new Error("inspect requires a pluginId");
+        return this.snapshotAll(store).filter((p) => p.pluginId === action.pluginId);
+      }
+      case "list":
+        return this.snapshotAll(store);
+      default:
+        throw new Error(`unknown plugin op "${String(action.op)}"`);
+    }
+  }
+
+  /** The active source owning `pluginId`, or throw if the plugin isn't loaded here. */
+  private sourceForPluginId(pluginId: string | null | undefined): string {
+    if (!pluginId) throw new Error("operation requires a pluginId");
+    const source = this.activeByPluginId.get(pluginId);
+    if (source === undefined) throw new Error(`plugin "${pluginId}" is not loaded in this renderer`);
+    return source;
+  }
+
+  /**
+   * Where a source came from, in the snapshot's vocabulary: `builtin` for a
+   * bundled source, `dev` for an agent-served dev mount, `url` for an absolute
+   * http(s) source, else `installed` (a top-level local mount).
+   */
+  private originOf(source: string): PluginSnapshot["origin"] {
+    if (this.builtinByPath.has(source)) return "builtin";
+    if (source.includes(DEV_PLUGIN_PATH_MARKER)) return "dev";
+    if (/^https?:\/\//i.test(source)) return "url";
+    return "installed";
+  }
+
+  /**
+   * Persisted setting key NAMES (never values — they may be credentials) for a
+   * plugin, read from the `sculptor-plugin:<pluginId>:<key>` localStorage
+   * namespace. Returns just the `<key>` suffixes.
+   */
+  private configKeysForPluginId(pluginId: string): Array<string> {
+    if (!pluginId) return [];
+    const prefix = `${PLUGIN_CONFIG_KEY_PREFIX}${pluginId}:`;
+    const keys: Array<string> = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const fullKey = localStorage.key(i);
+        if (fullKey && fullKey.startsWith(prefix)) keys.push(fullKey.slice(prefix.length));
+      }
+    } catch {
+      // localStorage may be unavailable (privacy mode); config keys are
+      // informational, so an empty list is an acceptable degraded result.
+    }
+    return keys;
+  }
+
+  /**
+   * Names-only registration summary for a plugin. Panels are attributable per
+   * plugin (each carries its `pluginId`); `hasSettings` is a membership test
+   * over the settings-component map. Overlays are NOT attributable per plugin —
+   * the overlay atom holds only `{id, component}` with no owning plugin id — so
+   * this returns an empty overlay list rather than mis-attributing the app's
+   * overlays to whichever plugin is being inspected. (Wiring plugin ids through
+   * the overlay registration is a follow-up.)
+   */
+  private registrationsForPluginId(store: JotaiStore, pluginId: string): PluginRegistrations {
+    const panels = store
+      .get(pluginPanelsAtom)
+      .filter((p) => p.pluginId === pluginId)
+      .map((p) => p.displayName || p.id);
+    const hasSettings = pluginId in store.get(pluginSettingsComponentsAtom);
+    return { panels, hasSettings, overlays: [] };
+  }
+
+  /** Build a snapshot for a single source (used by load/reload). */
+  private snapshotForSource(store: JotaiStore, source: string): Array<PluginSnapshot> {
+    const state = store.get(pluginSourceStatesAtom)[source];
+    if (state === undefined) return [];
+    return [this.snapshotFrom(store, source, state)];
+  }
+
+  /** Build a snapshot for every source the manager currently tracks (used by list). */
+  private snapshotAll(store: JotaiStore): Array<PluginSnapshot> {
+    const states = store.get(pluginSourceStatesAtom);
+    return Object.entries(states).map(([source, state]) => this.snapshotFrom(store, source, state));
+  }
+
+  /** Assemble one redacted `PluginSnapshot` from a source's live state. */
+  private snapshotFrom(store: JotaiStore, source: string, state: PluginSourceState): PluginSnapshot {
+    // The plugin id comes from the manifest when the source has one (loaded/
+    // shadowed), else from the manager's claim map (a source that claimed an id
+    // but hasn't finished activating), else falls back to the source string.
+    const manifestId = state.status === "loaded" || state.status === "shadowed" ? state.manifest.id : undefined;
+    const pluginId = manifestId ?? this.pluginIdBySource.get(source) ?? source;
+    const snapshot: PluginSnapshot = {
+      pluginId,
+      source,
+      status: state.status,
+      origin: this.originOf(source),
+      configKeys: this.configKeysForPluginId(pluginId),
+    };
+    if (state.status === "error") {
+      snapshot.errorPhase = state.phase;
+      snapshot.errorMessage = state.message;
+    }
+
+    if (state.status === "shadowed") {
+      snapshot.activeSource = state.activeSource;
+    }
+
+    // Registrations are only meaningful once a plugin is live in this renderer.
+    if (state.status === "loaded") {
+      snapshot.registrations = this.registrationsForPluginId(store, pluginId);
+    }
+    return snapshot;
   }
 
   /** Membership test over the live plugin ids without allocating — the guard below runs per dev cache event. */

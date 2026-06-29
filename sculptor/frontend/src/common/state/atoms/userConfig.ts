@@ -222,6 +222,16 @@ export const isPiAgentEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.
 // unloaded mid-session.
 export const isFrontendPluginsEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableFrontendPlugins ?? false);
 
+// Whether agents may drive this renderer's plugin system over the per-user
+// WebSocket (the `sculpt plugin` commands). Off by default: even with the
+// frontend-plugins runtime on, an agent can't install or run a plugin in the UI
+// until the user opts in here. (The stream handler still replies to the agent
+// when off — see `respondToPluginCommand` — so the CLI gets a clear signal
+// rather than a timeout.)
+export const isAgentPluginLoadingAllowedAtom = atom<boolean>(
+  (get) => get(userConfigAtom)?.allowAgentPluginLoading ?? false,
+);
+
 // Agent defaults
 export const isDefaultFastModeAtom = atom<boolean>((get) => get(userConfigAtom)?.defaultFastMode ?? false);
 

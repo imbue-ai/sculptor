@@ -5,11 +5,11 @@ import { type ComponentType, type ReactElement, useEffect, useState } from "reac
 
 import { ElementIds, getLocalPluginsDirectory, UserConfigField } from "~/api";
 import { healthCheckDataAtom } from "~/common/state/atoms/backend.ts";
-import { isFrontendPluginsEnabledAtom } from "~/common/state/atoms/userConfig.ts";
+import { isAgentPluginLoadingAllowedAtom, isFrontendPluginsEnabledAtom } from "~/common/state/atoms/userConfig.ts";
 import { Code } from "~/components/Code.tsx";
 import { PluginContext } from "~/plugins/PluginContext.tsx";
 import { PluginErrorBoundary } from "~/plugins/PluginErrorBoundary.tsx";
-import { pluginManager } from "~/plugins/pluginManager.tsx";
+import { DEV_PLUGIN_PATH_MARKER, pluginManager } from "~/plugins/pluginManager.tsx";
 import {
   pluginSettingsComponentsAtom,
   pluginSourcesAtom,
@@ -56,6 +56,7 @@ type PluginsSettingsSectionProps = {
 export const PluginsSettingsSection = ({ onSettingChange }: PluginsSettingsSectionProps): ReactElement => {
   const store = useStore();
   const isFrontendPluginsEnabled = useAtomValue(isFrontendPluginsEnabledAtom);
+  const isAgentPluginLoadingAllowed = useAtomValue(isAgentPluginLoadingAllowedAtom);
   const userSources = useAtomValue(pluginSourcesAtom);
   const states = useAtomValue(pluginSourceStatesAtom);
   const healthCheckData = useAtomValue(healthCheckDataAtom);
@@ -167,6 +168,19 @@ export const PluginsSettingsSection = ({ onSettingChange }: PluginsSettingsSecti
         />
       </SettingRow>
 
+      {isFrontendPluginsEnabled && (
+        <SettingRow
+          title="Agent plugin loading"
+          description="Allow agents to install and run frontend plugins in your Sculptor UI."
+        >
+          <Switch
+            checked={isAgentPluginLoadingAllowed}
+            onCheckedChange={(checked) => void onSettingChange(UserConfigField.ALLOW_AGENT_PLUGIN_LOADING, checked)}
+            data-testid={ElementIds.SETTINGS_ALLOW_AGENT_PLUGIN_LOADING_TOGGLE}
+          />
+        </SettingRow>
+      )}
+
       {/* The plugin list and add-source controls only matter while the system
           is on — with it off nothing is loaded, so we hide them and leave just
           the master switch above. */}
@@ -254,6 +268,10 @@ const SourceRow = ({
   setIsBusy,
 }: SourceRowProps): ReactElement => {
   const kind = state?.kind ?? "url";
+  // A dev plugin is one an agent pushed live from a workspace: a local source
+  // served under the dev mount path. Flagged with a "dev" badge so it's clear
+  // the source is an ephemeral working copy, not an installed plugin.
+  const isDev = kind === "local" && source.includes(DEV_PLUGIN_PATH_MARKER);
   // Built-in and discovered local sources aren't user-managed, so they can't be
   // removed (a local source would just reappear on the next rescan).
   const isReadOnly = kind !== "url";
@@ -349,9 +367,14 @@ const SourceRow = ({
                 bundled
               </Badge>
             )}
-            {kind === "local" && (
+            {kind === "local" && !isDev && (
               <Badge size="1" color="gray" variant="soft">
                 local
+              </Badge>
+            )}
+            {isDev && (
+              <Badge size="1" color="cyan" variant="soft">
+                dev
               </Badge>
             )}
             {isDisabled && (

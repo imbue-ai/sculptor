@@ -217,17 +217,18 @@ from sculptor.web.data_types import EmailConfigRequest
 from sculptor.web.data_types import EnvVarNamesResponse
 from sculptor.web.data_types import HealthCheckResponse
 from sculptor.web.data_types import InitializeGitRepoRequest
-from sculptor.web.data_types import ListTerminalAgentRegistrationsResponse
-from sculptor.web.data_types import ListWorkspacesResponse
 from sculptor.web.data_types import InstallPluginRequest
 from sculptor.web.data_types import InstallPluginResponse
+from sculptor.web.data_types import ListTerminalAgentRegistrationsResponse
+from sculptor.web.data_types import ListWorkspacesResponse
 from sculptor.web.data_types import NamingPatternRequest
 from sculptor.web.data_types import OpenFileUiAction
 from sculptor.web.data_types import OpenFileUiRequest
+from sculptor.web.data_types import OpenInOsRequest
+from sculptor.web.data_types import OpenPathInAppRequest
+from sculptor.web.data_types import OpenPathInAppResult
 from sculptor.web.data_types import PluginCommandRequest
 from sculptor.web.data_types import PluginCommandResponse
-from sculptor.web.data_types import PluginCommandResult
-from sculptor.web.data_types import PluginCommandUiAction
 from sculptor.web.data_types import OpenInOsRequest
 from sculptor.web.data_types import OpenPathInAppRequest
 from sculptor.web.data_types import OpenPathInAppResult
@@ -235,6 +236,8 @@ from sculptor.web.data_types import PasteKeyRequest
 from sculptor.web.data_types import PiLoginRequest
 from sculptor.web.data_types import PiLoginResponse
 from sculptor.web.data_types import PiLoginStatusResponse
+from sculptor.web.data_types import PluginCommandResult
+from sculptor.web.data_types import PluginCommandUiAction
 from sculptor.web.data_types import PreviewBranchNameResponse
 from sculptor.web.data_types import ProjectEnvVarNames
 from sculptor.web.data_types import ProjectInitializationRequest
@@ -286,6 +289,9 @@ from sculptor.web.middleware import resolve_stream_scope
 from sculptor.web.middleware import run_sync_function_with_debugging_support_if_enabled
 from sculptor.web.middleware import shutdown_event as shutdown_event_impl
 from sculptor.web.open_with import open_path_in_external_app
+from sculptor.web.plugin_command_bus import close_correlation
+from sculptor.web.plugin_command_bus import open_correlation
+from sculptor.web.plugin_command_bus import submit_result
 from sculptor.web.remote_repos import remote_repos_router
 from sculptor.web.skills import discover_skills
 from sculptor.web.streams import Scope
@@ -294,9 +300,6 @@ from sculptor.web.streams import StreamingUpdate
 from sculptor.web.streams import stream_everything
 from sculptor.web.terminal_input import TerminalDeliveryResult
 from sculptor.web.terminal_input import deliver_prompt_to_terminal_agent
-from sculptor.web.plugin_command_bus import close_correlation
-from sculptor.web.plugin_command_bus import open_correlation
-from sculptor.web.plugin_command_bus import submit_result
 from sculptor.web.ui_actions import next_webview_seq
 from sculptor.web.ui_actions import publish_ui_action
 from sculptor.web.ui_actions import subscriber_count
