@@ -8,6 +8,7 @@ from sculptor.testing.elements.panels import ensure_right_area_visible
 from sculptor.testing.elements.zen_mode import PlaywrightZenModeElement
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import blur_active_element
+from sculptor.testing.playwright_utils import dispatch_modified_shortcuts_in_one_task
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -360,20 +361,24 @@ def test_workspace_tab_navigation_works_in_zen_mode(sculptor_instance_: Sculptor
     # Sanity: we're on the second workspace and URLs differ
     assert first_workspace_url != second_workspace_url
 
-    # Step 2: Enter zen mode
-    blur_active_element(page)
-    page.keyboard.press(f"{mod}+Shift+\\")
-
     layout = PlaywrightProjectLayoutPage(page)
     top_bar = layout.get_top_bar_locator()
+
+    # Step 2: Enter zen mode. Use press_keyboard_shortcut (not raw keyboard.press)
+    # for every chord here: macOS Chromium occasionally drops the modifier keyup
+    # between back-to-back chords, leaving Cmd "held" so the next chord arrives
+    # malformed and is swallowed. press_keyboard_shortcut releases the modifier
+    # after each chord.
+    blur_active_element(page)
+    layout.press_keyboard_shortcut(f"{mod}+Shift+\\")
     expect(top_bar).not_to_be_visible()
 
     # Step 3: Press Cmd+] to cycle to next tab (wraps to first workspace)
-    page.keyboard.press(f"{mod}+]")
+    layout.press_keyboard_shortcut(f"{mod}+]")
     page.wait_for_url(f"**{first_workspace_url.split('#')[-1]}**")
 
     # Step 5: Press Cmd+[ to cycle back to second workspace
-    page.keyboard.press(f"{mod}+[")
+    layout.press_keyboard_shortcut(f"{mod}+[")
     page.wait_for_url(f"**{second_workspace_url.split('#')[-1]}**")
 
 
@@ -392,10 +397,10 @@ def test_rapid_tab_navigation_reads_live_route_in_zen_mode(sculptor_instance_: S
     started, hanging ``wait_for_url``.
 
     We reproduce that timing deterministically by dispatching both keydown events
-    synchronously inside a single ``page.evaluate`` — React cannot re-render
-    between them, so the listener's closure is guaranteed stale for the second
-    press. With the bug present, the back-press is a no-op; with the fix (reading
-    the live hash) it returns to the starting workspace.
+    synchronously in a single task (via ``dispatch_modified_shortcuts_in_one_task``)
+    — React cannot re-render between them, so the listener's closure is guaranteed
+    stale for the second press. With the bug present, the back-press is a no-op;
+    with the fix (reading the live hash) it returns to the starting workspace.
 
     Steps:
     1. Create two workspaces (ending on the second).
@@ -418,37 +423,24 @@ def test_rapid_tab_navigation_reads_live_route_in_zen_mode(sculptor_instance_: S
     layout = PlaywrightProjectLayoutPage(page)
     expect(layout.get_top_bar_locator()).not_to_be_visible()
 
-    # Steps 3-5: dispatch both presses synchronously, before React can re-render
-    # and re-register the keydown listener with a fresh closure. Build the event
-    # the way the app's isMac() check does so the platform modifier matches.
-    result = page.evaluate(
-        """
-        () => {
-          document.activeElement?.blur();
-          const isMac = window.sculptor?.platform === "darwin" || navigator.platform.startsWith("Mac");
-          const fire = (key, code) => window.dispatchEvent(new KeyboardEvent("keydown", {
-            key, code, metaKey: isMac, ctrlKey: !isMac, altKey: false, shiftKey: false,
-            bubbles: true, cancelable: true,
-          }));
-          const before = window.location.hash;
-          fire("]", "BracketRight");
-          const afterForward = window.location.hash;
-          fire("[", "BracketLeft");
-          const afterBack = window.location.hash;
-          return { before, afterForward, afterBack };
-        }
-        """
+    # Step 3: fire Cmd+] then Cmd+[ back-to-back, before React can re-render and
+    # re-register the keydown listener with a fresh closure.
+    blur_active_element(page)
+    before, after_forward, after_back = dispatch_modified_shortcuts_in_one_task(
+        page, [("]", "BracketRight"), ("[", "BracketLeft")]
     )
 
-    # The forward press must have actually navigated; otherwise the synthetic
-    # events were not handled and the back-press assertion would pass vacuously.
-    assert result["afterForward"] != result["before"], (
-        f"Cmd+] did not change the route — the synthetic events were not handled: {result}"
+    # Step 4: the forward press must have actually navigated; otherwise the
+    # synthetic events were not handled and the back-press assertion below would
+    # pass vacuously.
+    assert after_forward != before, (
+        f"Cmd+] did not change the route — the synthetic events were not handled: {(before, after_forward, after_back)}"
     )
-    # The back press must return to the starting workspace. With the stale-closure
-    # bug it cycles from the previous active tab and stays on the forward tab.
-    assert result["afterBack"] == result["before"], (
-        f"Cmd+[ did not return to the starting workspace (stale-route cycle): {result}"
+    # Step 5: the back press must return to the starting workspace. With the
+    # stale-closure bug it cycles from the previous active tab and stays on the
+    # forward tab.
+    assert after_back == before, (
+        f"Cmd+[ did not return to the starting workspace (stale-route cycle): {(before, after_forward, after_back)}"
     )
 
 
