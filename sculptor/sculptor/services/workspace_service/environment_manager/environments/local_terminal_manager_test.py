@@ -132,13 +132,22 @@ def test_read_loop_closes_primary_fd_and_unregisters_on_shell_self_exit(tmp_path
             os.fstat(primary_fd)
 
             # Tell the login shell to exit on its own. The reader thread should
-            # then observe EOF/EIO and run the self-exit cleanup path.
-            manager.write(b"exit\n")
-
-            # The reader clears _pty_process once it has closed the fd + terminated
-            # the shell. Poll for that (manager.stop() was never called).
-            deadline = time.monotonic() + 5.0
+            # then observe EOF/EIO and run the self-exit cleanup path, which
+            # clears _pty_process once it has closed the fd + terminated the
+            # shell (manager.stop() is never called here).
+            #
+            # ``exit`` is resent periodically rather than written once: a login
+            # shell with a heavy rc can still be initializing — and discarding
+            # typed-ahead input — right after start(), so a single early write
+            # can be dropped and the shell would never exit. Resending until the
+            # reader tears the terminal down makes this robust under load.
+            deadline = time.monotonic() + 15.0
+            next_write = 0.0
             while time.monotonic() < deadline and manager._pty_process is not None:
+                now = time.monotonic()
+                if now >= next_write:
+                    manager.write(b"exit\n")
+                    next_write = now + 0.5
                 time.sleep(0.02)
 
             assert manager._pty_process is None, "reader did not tear down the pty after the shell self-exited"

@@ -6,6 +6,8 @@ backend -> posix_spawn -> pty_helper -> pty.fork -> shell path.
 """
 
 import os
+import re
+import select
 import signal
 import socket
 import sys
@@ -25,30 +27,51 @@ from sculptor.services.workspace_service.environment_manager.environments.spawne
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX-only")
 
 
-def _read_pty_until(fd: int, marker: str, timeout: float = 5.0) -> str:
-    """Read from pty fd until marker appears or timeout expires."""
-    output = b""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            chunk = os.read(fd, 4096)
-            if chunk:
-                output += chunk
-                if marker.encode() in output:
-                    return output.decode(errors="replace")
-        except OSError:
-            pass
-        time.sleep(0.05)
-    return output.decode(errors="replace")
+# Matches ANSI/OSC escape sequences and stray C0 control bytes so a sentinel can
+# be found even when a developer's heavily-themed interactive login shell wraps
+# its prompt and output in color, bracketed-paste, or window-title codes. CI
+# typically runs a bare ``/bin/bash`` with none of these; local machines often
+# run zsh with prompt plugins. Tabs and newlines are preserved so captured
+# output stays readable in assertion messages.
+_TERMINAL_NOISE_RE = re.compile(
+    b"|".join(
+        (
+            rb"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)",  # OSC ... terminated by BEL or ST
+            rb"\x1b[@-Z\\-_]",  # two-byte ESC sequences
+            rb"\x1b\[[0-9;?]*[ -/]*[@-~]",  # CSI sequences (colors, cursor moves, ?2004h, ...)
+            rb"[\x00-\x08\x0b-\x1f\x7f]",  # stray C0 controls, keeping \t (0x09) and \n (0x0a)
+        )
+    )
+)
+
+# Sentinels bracketing the echoed value. We search for the fully-expanded form
+# (e.g. ``<SCT|local_port_5050|SCT>``), which can appear ONLY in the command's
+# OUTPUT: the shell's echo of the *typed* command still has the literal
+# ``${VAR}`` between the sentinels, so it can never match — not even for an
+# empty (scrubbed) value, whose output is ``<SCT||SCT>``. That is what lets the
+# scrub assertions actually prove a variable is empty in the child, rather than
+# merely that some shared ``CHECK:`` substring appeared somewhere on the line.
+_SENTINEL_OPEN = "<SCT|"
+_SENTINEL_CLOSE = "|SCT>"
+
+
+def _strip_terminal_noise(data: bytes) -> bytes:
+    return _TERMINAL_NOISE_RE.sub(b"", data)
 
 
 @contextmanager
 def _running_pty(proc: SpawnedPtyProcess) -> Generator[int, None, None]:
-    """Start a SpawnedPtyProcess, yield its primary fd, and ensure cleanup."""
+    """Start a SpawnedPtyProcess, yield its primary fd, and ensure cleanup.
+
+    There is deliberately no fixed "wait for the prompt" sleep here:
+    ``_assert_pty_echo`` resends its probe until the shell is actually ready,
+    which is robust to a slow login-shell init under load. A fixed pre-write
+    delay is unreliable — a heavily-configured shell (plugins, async/instant
+    prompt) can still be initializing, and dropping typed-ahead input, well past
+    any hardcoded delay.
+    """
     proc.start()
     try:
-        # Give the shell a moment to print its prompt before we write commands.
-        time.sleep(0.5)
         fd = proc.primary_fd
         assert fd is not None
         yield fd
@@ -60,12 +83,51 @@ def _running_pty(proc: SpawnedPtyProcess) -> Generator[int, None, None]:
         proc.close_primary_fd()
 
 
-def _assert_pty_echo(fd: int, env_var: str, expected: str) -> None:
-    """Write an echo command to the pty and assert the output contains the marker."""
-    marker = f"CHECK:{expected}"
-    os.write(fd, f'echo "CHECK:${{{env_var}}}"\n'.encode())
-    output = _read_pty_until(fd, marker)
-    assert marker in output
+def _assert_pty_echo(fd: int, env_var: str, expected: str, timeout: float = 15.0) -> None:
+    """Echo ``$env_var`` through the pty and assert its value equals ``expected``.
+
+    The probe command is *resent* periodically rather than written once after a
+    fixed delay: an interactive login shell with a heavy rc (prompt plugins,
+    async/instant prompt, syntax highlighting) can still be initializing — and
+    discarding typed-ahead input — for a second or more after it first draws a
+    prompt, especially when several shells start at once under parallel-test
+    load. Resending guarantees at least one probe lands once the shell is ready,
+    instead of betting that init finished within a hardcoded window.
+
+    Matching is done against noise-stripped output and uses sentinels that can
+    only appear in the command's output (never in the shell's echo of the typed
+    command), so the assertion stays meaningful even for an empty value.
+    """
+    marker = f"{_SENTINEL_OPEN}{expected}{_SENTINEL_CLOSE}".encode()
+    command = f'echo "{_SENTINEL_OPEN}${{{env_var}}}{_SENTINEL_CLOSE}"\n'.encode()
+
+    output = b""
+    deadline = time.monotonic() + timeout
+    next_send = 0.0
+    while time.monotonic() < deadline:
+        now = time.monotonic()
+        if now >= next_send:
+            try:
+                os.write(fd, command)
+            except OSError:
+                pass
+            next_send = now + 0.75
+        # ``select`` so we never block past the resend cadence; the pty primary
+        # fd is non-blocking, so a bare ``os.read`` would spin on BlockingIOError.
+        readable, _, _ = select.select([fd], [], [], 0.2)
+        if not readable:
+            continue
+        try:
+            chunk = os.read(fd, 4096)
+        except (BlockingIOError, OSError):
+            continue
+        if not chunk:
+            break  # EOF: the shell exited.
+        output += chunk
+        if marker in _strip_terminal_noise(output):
+            return
+    cleaned = _strip_terminal_noise(output)
+    raise AssertionError(f"marker {marker!r} for ${env_var} not seen within {timeout:.0f}s; output: {cleaned!r}")
 
 
 def test_extra_env_available_in_child(tmp_path: Path) -> None:
