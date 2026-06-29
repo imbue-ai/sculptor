@@ -243,31 +243,37 @@ serves `load` / `reload` / `unload` **and** `inspect`:
    **keyed by renderer id** — or times out with a clear message: *"no Sculptor
    window responded — is it running with frontend plugins enabled?"*.
 
-### Multi-renderer is designed in, not deferred
+### Multi-renderer: bake in identity, keep the policy dumb
 
-Commands broadcast to all of a user's renderers and there's no per-client
-addressing today, so the API is **multi-result from the start** — it always
-returns a list keyed by renderer id, never a single value that silently assumes one
-window. This makes two windows a non-event rather than a crash. Concretely:
+There is **no renderer identity on the wire today** — the WS handshake carries only
+the shared session token, an optional `scope`, and a per-request
+`Sculptor-Request-ID` (not a stable client id). The backend authenticates one
+anonymous user/session and tracks subscriber *queues* with no identity. So we
+introduce identity, but only the honest, durable bits, and avoid any fuzzy ranking:
 
-- **Renderer id** = a stable per-page-load id (sessionStorage), one per WebSocket
-  connection (~one per window). Each result carries it, plus light metadata the CLI
-  can rank on: whether that renderer's active workspace matches the command's
-  workspace, and a last-active timestamp.
-- **Strict preference** (CLI default, documented): pick the renderer whose active
-  workspace matches the command's workspace; tie-break by most-recently-active;
-  final tie-break by renderer id (deterministic). `--all` shows every renderer's
-  result instead of the preferred one.
-- **`load` / `reload`** apply to every renderer that has the plugin (so all windows
-  reflect the dev plugin); the CLI reports the preferred renderer's result by
-  default and a per-renderer breakdown under `--all` / `--json`. A failure in the
-  preferred renderer is the CLI's non-zero exit.
-- **`inspect`** reports the preferred renderer's snapshot and notes when other
-  renderers exist (and may disagree).
-
-Keeping the wire shape multi-result avoids a v2 breaking change; "Electron-first"
-just means we tune defaults for the one-window case, not that two windows are
-unhandled.
+- **Self-reported identity.** Each renderer generates a stable per-page-load
+  `rendererId` (sessionStorage) and includes, in its result POST,
+  `{ rendererId, environment, origin }` — `environment` is `electron | browser`
+  (from `isElectron()` = `window.sculptor` present, **not** UA/Origin sniffing) and
+  `origin` is `window.location.origin` (which determines the localStorage domain).
+  Nothing is derived from the handshake.
+- **Why `origin` matters:** localStorage is per-origin, so an Electron window
+  (`sculptor://app`) and a browser tab (`http://host`) can legitimately hold
+  *different* plugin config/enabled-state. Reporting `origin` makes a real
+  divergence visible instead of hidden behind a single pick.
+- **Multi-result wire shape from the start.** The command result is always a list
+  keyed by `rendererId`, never a scalar that assumes one window — so two windows are
+  a non-event, not a crash, and we avoid a later breaking change.
+- **Commands (`load`/`reload`/`unload`) broadcast and report per-renderer
+  outcomes** ("loaded in 2/2 windows"); non-zero exit if any window failed. There
+  is no "pick one" for a mutation — you want every window updated.
+- **`inspect` defaults to a simple, explainable pick, not a ranking:** prefer the
+  **Electron desktop window** when present, else the single connected renderer;
+  always **labeled** ("showing electron window; 1 other connected"), with `--all`
+  for every renderer. No most-recently-active / active-workspace heuristics — those
+  aren't known backend-side and would be invisible magic.
+- A `--renderer <id>` selector is intentionally **not** added until there's a real
+  use case (e.g. targeting a headless browser session); `--all` is the escape hatch.
 
 ## Inspect: what we report (and what we must not)
 
