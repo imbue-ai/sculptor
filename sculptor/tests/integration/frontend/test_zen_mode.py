@@ -8,6 +8,7 @@ from sculptor.testing.elements.panels import ensure_right_area_visible
 from sculptor.testing.elements.zen_mode import PlaywrightZenModeElement
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import blur_active_element
+from sculptor.testing.playwright_utils import dispatch_modified_shortcuts_in_one_task
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -360,21 +361,83 @@ def test_workspace_tab_navigation_works_in_zen_mode(sculptor_instance_: Sculptor
     # Sanity: we're on the second workspace and URLs differ
     assert first_workspace_url != second_workspace_url
 
-    # Step 2: Enter zen mode
+    layout = PlaywrightProjectLayoutPage(page)
+    top_bar = layout.get_top_bar_locator()
+
+    # Step 2: Enter zen mode. The chords go through press_keyboard_shortcut, which
+    # releases the modifier between presses (macOS Chromium can drop the keyup
+    # between back-to-back chords and swallow the next one).
+    blur_active_element(page)
+    layout.press_keyboard_shortcut(f"{mod}+Shift+\\")
+    expect(top_bar).not_to_be_visible()
+
+    # Step 3: Press Cmd+] to cycle to next tab (wraps to first workspace)
+    layout.press_keyboard_shortcut(f"{mod}+]")
+    page.wait_for_url(f"**{first_workspace_url.split('#')[-1]}**")
+
+    # Step 5: Press Cmd+[ to cycle back to second workspace
+    layout.press_keyboard_shortcut(f"{mod}+[")
+    page.wait_for_url(f"**{second_workspace_url.split('#')[-1]}**")
+
+
+@user_story("to rapidly cycle workspace tabs in zen mode without a stale-route no-op")
+def test_rapid_tab_navigation_reads_live_route_in_zen_mode(sculptor_instance_: SculptorInstance) -> None:
+    """Two tab-cycle keypresses fired back-to-back must each cycle from the
+    *current* route, not a stale one.
+
+    Regression test for SCU-1633. The tab-cycle keydown listener computed the
+    active tab from React route state, which lags ``window.location`` because the
+    listener (a passive effect) only re-registers with a fresh closure after React
+    commits and flushes effects — and react-router defers the route-state update
+    into a transition. ``navigate()`` to a loaderless agent route updates
+    ``window.location.hash`` synchronously, so a second keypress arriving before
+    React catches up cycled from the *previous* active tab and landed back where it
+    started, hanging ``wait_for_url``.
+
+    We reproduce that timing deterministically by dispatching both keydown events
+    synchronously in a single task (via ``dispatch_modified_shortcuts_in_one_task``)
+    — React cannot re-render between them, so the listener's closure is guaranteed
+    stale for the second press. With the bug present, the back-press is a no-op;
+    with the fix (reading the live hash) it returns to the starting workspace.
+
+    Steps:
+    1. Create two workspaces (ending on the second).
+    2. Enter zen mode.
+    3. Synchronously dispatch Cmd+] then Cmd+[ on ``window``.
+    4. The forward press must change the route (proves the events are handled).
+    5. The back press must return to the starting route (the fix).
+    """
+    page = sculptor_instance_.page
+    mod = get_playwright_modifier_key()
+
+    # Step 1: Create two workspaces; we end up on the second.
+    start_task_and_wait_for_ready(sculptor_page=page, prompt="Task A", workspace_name="WS A")
+    start_task_and_wait_for_ready(sculptor_page=page, prompt="Task B", workspace_name="WS B")
+
+    # Step 2: Enter zen mode.
     blur_active_element(page)
     page.keyboard.press(f"{mod}+Shift+\\")
 
     layout = PlaywrightProjectLayoutPage(page)
-    top_bar = layout.get_top_bar_locator()
-    expect(top_bar).not_to_be_visible()
+    expect(layout.get_top_bar_locator()).not_to_be_visible()
 
-    # Step 3: Press Cmd+] to cycle to next tab (wraps to first workspace)
-    page.keyboard.press(f"{mod}+]")
-    page.wait_for_url(f"**{first_workspace_url.split('#')[-1]}**")
+    # Step 3: fire Cmd+] then Cmd+[ back-to-back, before React can re-render and
+    # re-register the keydown listener with a fresh closure.
+    blur_active_element(page)
+    before, after_forward, after_back = dispatch_modified_shortcuts_in_one_task(
+        page, [("]", "BracketRight"), ("[", "BracketLeft")]
+    )
 
-    # Step 5: Press Cmd+[ to cycle back to second workspace
-    page.keyboard.press(f"{mod}+[")
-    page.wait_for_url(f"**{second_workspace_url.split('#')[-1]}**")
+    # Step 4: the forward press must have actually navigated; otherwise the
+    # synthetic events were not handled and the back-press assertion below would
+    # pass vacuously.
+    assert after_forward != before, (
+        f"Cmd+] did not change the route — the synthetic events were not handled: {(before, after_forward, after_back)}"
+    )
+    # Step 5: the back press must return to the starting workspace.
+    assert after_back == before, (
+        f"Cmd+[ did not return to the starting workspace (stale-route cycle): {(before, after_forward, after_back)}"
+    )
 
 
 @user_story("to verify the exit button is hidden by default when entering zen mode")
