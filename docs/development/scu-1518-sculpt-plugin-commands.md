@@ -60,21 +60,28 @@ These resolve the v1 open questions; the rest of the doc reflects them.
    would add ceremony without adding real security. The **agent-loading switch is
    the entire consent surface**: turning it on means "agents may install and run
    frontend code in my Sculptor UI." That is the honest, one-time decision.
-3. **`sculpt plugin load` is polymorphic** on its argument: a **path** is a
-   dev-loop install (package the workspace files and place them where the backend
-   serves them), a **URL** is a permanent install (a persistent url-source). The
-   L1-vs-L2 question dissolves into "what does load *do*" — see the next section.
-4. **Local (path) installs nest by workspace id** so two workspaces iterating on
-   the same plugin id don't collide.
+3. **`load` separates target from persistence — no magic.** The *target* (local
+   path vs URL) is auto-detected, but whether an install is **ephemeral (dev)** or
+   **permanent** is an **explicit flag** (`--persist`, default off = dev), not
+   inferred from URL-ness. The L1-vs-L2 question dissolves into "what does load
+   *do*" — see "What `sculpt plugin load` does".
+4. **Dev installs are nested in a reserved, clearly-temporary location** —
+   `~/.sculptor/plugins/dev/<workspace-id>/<plugin-id>/` — so they're visibly not
+   permanent drop-ins and two workspaces can't collide on the same id. Permanent
+   installs land in the top-level `~/.sculptor/plugins/<plugin-id>/` (a normal
+   drop-in) or as a URL source.
 5. **The bridge is a scatter-gather request/response** (correlation ids), not
-   fire-and-forget — because `load` itself must report success/failure back from
-   the renderer, and `inspect` reuses the same return channel.
-6. **Electron-first.** Browser-direct is not a v1 target. The design stays
-   backend-mediated (no renderer-side filesystem IPC), so it doesn't *break*
-   browser mode; we just don't promise it yet.
-7. **Workspace-scoped only.** `sculpt plugin …` runs inside a workspace and infers
-   the workspace id (as `sculpt signal` infers the agent id from the env).
-   Host-side use can come later.
+   fire-and-forget — `load` must report success/failure from the renderer, and
+   `inspect` reuses the same return channel.
+6. **Multi-renderer is handled from day one** (not deferred). Results are always
+   keyed by a **per-connection renderer id**, and the CLI applies a strict,
+   documented preference to pick one (or `--all` to see every window). Two open
+   windows must never crash or behave unexpectedly — Electron-first only means we
+   *optimize* for the common one-window case.
+7. **Electron-first, workspace-scoped.** Browser-direct isn't a v1 target — the
+   design stays backend-mediated (no renderer-side filesystem IPC), so it doesn't
+   *break* browser mode, we just don't promise it. `sculpt plugin …` runs inside a
+   workspace and infers the workspace id (as `sculpt signal` infers the agent id).
 8. **Inspect must not leak secrets.** Per-plugin settings (`usePluginSetting`,
    localStorage `sculptor-plugin:<id>:<key>`) can hold credentials — the Linear
    example plugin stores its API key there today. `inspect` reports **which config
@@ -140,58 +147,83 @@ be served from existing backend state; it must ask the renderer (the bridge belo
 
 ## What `sculpt plugin load` does — the packaging operation
 
-This is the piece worth designing first; the L1/L2 question falls out of it.
+This is the piece worth designing first; the L1/L2 question falls out of it. There
+are **two independent axes**, and `load` keeps them explicit rather than inferring
+one from the other:
 
-`sculpt plugin load <target>` runs inside a workspace and infers the workspace id.
-Behaviour depends on `<target>`:
+- **Target** (auto-detected): a **local path** (workspace files) or a **URL**.
+- **Mode** (explicit `--persist` flag, default off): **dev** (ephemeral, for
+  iteration) or **persistent** (the permanent end-state).
 
-### Path form — `sculpt plugin load ./my-plugin` (or `…/manifest.json`): dev loop
+`sculpt plugin load <target> [--persist]` runs inside a workspace and infers the
+workspace id.
+
+### Dev mode (default) — the iteration loop
+
+Place the plugin in a **reserved, clearly-temporary** location and load it:
 
 1. **Resolve** the `manifest.json`; read `id`, `entry`, and any referenced assets.
-2. **Package** — gather the manifest + the entry bundle + referenced assets into a
-   self-contained set. `load` does **not** build: the agent builds first (or writes
-   a no-build plugin) and `load` packages whatever the manifest points at. (A
-   `--build <cmd>` hook can come later.)
-3. **Place** the package where the backend serves it, **nested by workspace** to
-   avoid cross-workspace collisions:
-   `~/.sculptor/plugins/<workspace-id>/<plugin-id>/`. Placement always goes
-   **through a backend endpoint** (the CLI streams the packaged files to it), so:
-   - it works whether or not the workspace shares the host filesystem (worktree vs
-     container) — the backend writes the files;
-   - the **agent-loading switch gates it server-side**, one code path;
-   - nothing relies on the agent reaching the host home directly, even though it
-     technically could.
-4. **Trigger** load (or reload, if that id is already active) over the command
-   channel, and **return the result** — `loaded` or `error{phase,message}` — over
-   the return channel, so the CLI exits non-zero on a failed activate.
+2. **Package** (path target only) — gather the manifest + entry bundle + referenced
+   assets into a self-contained set. `load` does **not** build: the agent builds
+   first (or writes a no-build plugin) and `load` packages whatever the manifest
+   points at.
+3. **Place** (path target) **through a backend endpoint** (the CLI streams the
+   packaged files) into the reserved dev tree:
+   `~/.sculptor/plugins/dev/<workspace-id>/<plugin-id>/`. Going through the backend
+   means it works whether or not the workspace shares the host filesystem (worktree
+   vs container), the agent-loading switch gates it server-side in one code path,
+   and nothing relies on the agent reaching the host home directly. For a URL
+   target there's nothing to place.
+4. **Register + trigger** load (or reload, if that id is already active) over the
+   command channel, **tagged as dev** (see the dev indicator in `inspect`/`list`),
+   and **return the result** — `loaded` or `error{phase,message}` — so the CLI
+   exits non-zero on a failed activate.
 
-**Why this is L2, not L1:** the path form has to turn workspace files into
-backend-served bytes; placing them in the existing `/plugins/local`-style store
+Dev sources are **persisted across restart** (registered like any source) so the
+plugin survives a reload of the window or the app; if the dev files have been
+removed the source settles cleanly into `missing`/`error` rather than breaking the
+boot. The agent is expected to clean up its dev source when done (see lifecycle).
+
+**Why placement is L2, not L1:** a path target has to turn workspace files into
+backend-served bytes; placing them under the existing `/plugins/local` static mount
 reuses all SCU-1517 serving infrastructure and adds **no new executable-file
 endpoint**. Live workspace-serving (L1) would add a serving surface for no real
 gain now that placement is cheap and the switch is the gate.
 
-### URL form — `sculpt plugin load https://…`: permanent install
+### Persistent mode (`--persist`) — the permanent install
 
-Registers the URL as a **persistent url-source** (the same mechanism as a
-user-added source; persisted in `pluginSourcesAtom` / localStorage), triggers the
-load, returns the result. Survives restarts. No packaging or placement. This is
-the "more permanent way to install a plugin."
+The end-state once the user is happy with the plugin:
 
-### Persistence of path-form loads
+- **Path target:** copy the packaged files into the **top-level**
+  `~/.sculptor/plugins/<plugin-id>/` — a normal drop-in, **not** workspace-scoped,
+  discovered like any user-placed plugin.
+- **URL target:** register the URL as a **persistent url-source** (the same
+  mechanism as a user-added source; persisted in `pluginSourcesAtom`).
 
-Path-form (dev) loads are **command-driven**: the files stay on disk under the
-workspace-nested dir, and the plugin is (re)loaded when the agent runs `load` /
-`reload`. After a Sculptor restart the agent re-runs `load`. We deliberately do
-**not** auto-register dev loads as persistent sources in v1 (see open questions).
+Either way it survives restarts and is no longer tagged dev.
 
-### Workspace nesting vs passive discovery
+### Lifecycle: iterate → install → clean up
 
-Passive discovery (`GET /api/v1/plugins/local`) scans one level deep for **user
-drop-ins** and stays as-is. Agent loads are **pushed imperatively** — the command
-carries the exact manifest URL — so they need the static mount to serve the nested
-`<ws-id>/<id>/` path but need not appear in passive discovery. (Open question:
-whether `sculpt plugin list` should still surface agent-loaded plugins.)
+The intended flow, and why both modes plus a clean remove are needed:
+
+1. Agent iterates: `sculpt plugin load ./my-plugin` (dev) + `reload` repeatedly.
+2. User likes it: `sculpt plugin load ./my-plugin --persist` (copy to the top-level
+   dir) **or** host it and `sculpt plugin load https://… --persist`.
+3. Agent cleans up its dev version: `sculpt plugin remove <id>`, which unregisters
+   the dev source and deletes its files under `dev/<workspace-id>/<id>/`.
+
+Steps 2 and 3 briefly coexist as two sources for the same id; the existing
+shadow-by-priority behaviour handles that until the dev source is removed.
+
+### The reserved `dev/` subdir vs passive discovery
+
+The `dev/` name under `~/.sculptor/plugins/` is **reserved** (add it to the
+existing reserved-plugin-name check so a user can't create a top-level plugin
+literally named `dev`). Passive discovery (`GET /api/v1/plugins/local`) scans one
+level deep, so a `dev/` directory — which holds no `manifest.json` of its own —
+is naturally skipped and never mistaken for a plugin. Dev plugins are loaded
+**imperatively** (the command carries the exact nested manifest URL) and are
+re-registered from their persisted source on the next boot.
 
 ## The bridge: command out + result back
 
@@ -202,17 +234,40 @@ serves `load` / `reload` / `unload` **and** `inspect`:
    `{op, args, correlationId}`.
 2. Backend `publish_ui_action(PluginCommandUiAction{op, args, correlationId})` over
    the WS.
-3. The renderer handles it in `useUnifiedStream`, runs the matching `pluginManager`
-   method, then POSTs the outcome to
-   `POST /api/v1/plugins/command/{correlationId}/result`.
-4. The backend correlates (a waiter keyed by `correlationId`, like a future) and
-   returns the result to the still-blocked CLI request — or times out with a clear
-   message: *"no Sculptor window responded — is it running with frontend plugins
-   enabled?"*.
+3. Each connected renderer handles it in `useUnifiedStream`, runs the matching
+   `pluginManager` method, then POSTs its outcome to
+   `POST /api/v1/plugins/command/{correlationId}/result`, **tagged with its own
+   renderer id**.
+4. The backend correlates (a waiter keyed by `correlationId`, like a future),
+   gathers every result that arrives within a short window, and returns them
+   **keyed by renderer id** — or times out with a clear message: *"no Sculptor
+   window responded — is it running with frontend plugins enabled?"*.
 
-Multi-renderer is out of scope for v1 (Electron-first ⇒ one window). The backend
-aggregates whatever results arrive (keyed by a per-page-load renderer id) and the
-CLI shows them; with one window that's a single result.
+### Multi-renderer is designed in, not deferred
+
+Commands broadcast to all of a user's renderers and there's no per-client
+addressing today, so the API is **multi-result from the start** — it always
+returns a list keyed by renderer id, never a single value that silently assumes one
+window. This makes two windows a non-event rather than a crash. Concretely:
+
+- **Renderer id** = a stable per-page-load id (sessionStorage), one per WebSocket
+  connection (~one per window). Each result carries it, plus light metadata the CLI
+  can rank on: whether that renderer's active workspace matches the command's
+  workspace, and a last-active timestamp.
+- **Strict preference** (CLI default, documented): pick the renderer whose active
+  workspace matches the command's workspace; tie-break by most-recently-active;
+  final tie-break by renderer id (deterministic). `--all` shows every renderer's
+  result instead of the preferred one.
+- **`load` / `reload`** apply to every renderer that has the plugin (so all windows
+  reflect the dev plugin); the CLI reports the preferred renderer's result by
+  default and a per-renderer breakdown under `--all` / `--json`. A failure in the
+  preferred renderer is the CLI's non-zero exit.
+- **`inspect`** reports the preferred renderer's snapshot and notes when other
+  renderers exist (and may disagree).
+
+Keeping the wire shape multi-result avoids a v2 breaking change; "Electron-first"
+just means we tune defaults for the one-window case, not that two windows are
+unhandled.
 
 ## Inspect: what we report (and what we must not)
 
@@ -222,6 +277,11 @@ wholesale:
 
 - **status** — `loaded | error{phase,message} | shadowed{activeSource} | disabled |
   missing`.
+- **origin** — `dev` (workspace-scoped, from `dev/<ws-id>/<id>/`) vs `installed`
+  (top-level drop-in) vs `url` vs `builtin`. The **dev indicator** is surfaced
+  everywhere a plugin is listed (CLI `list`/`inspect`, and a small badge in the
+  Settings → Plugins row) so a work-in-progress dev plugin is never confused with a
+  permanent install.
 - **registrations** — panels (ids/titles), settings (present y/n), overlays (ids):
   names only.
 - **persisted config** — the **key names** that are set for the plugin, and whether
@@ -256,47 +316,55 @@ A new `plugin_app` Typer sub-app in `tools/sculpt/sculpt/main.py`, talking to th
 backend via the generated client (`get_authenticated_client`), like `sculpt
 signal`. Runs inside a workspace; infers the workspace id.
 
-- `sculpt plugin load <path|url>` — path = package + place + load (dev loop); url =
-  persistent install. Returns load result; non-zero exit on failure.
+- `sculpt plugin load <path|url> [--persist]` — default (dev) packages + places a
+  path into the workspace `dev/` tree (or registers a dev URL source) and loads it;
+  `--persist` installs permanently (path → top-level drop-in, url → persistent
+  url-source). Returns the (preferred-renderer) load result; non-zero on failure.
 - `sculpt plugin reload [<id>|<path>]` — re-package (for path) + cache-bust reload.
-- `sculpt plugin unload <id>` — unload (does not delete files).
-- `sculpt plugin list` — discovered + agent-loaded plugins with live status.
-- `sculpt plugin inspect <id>` — status, registrations, **redacted** config.
+- `sculpt plugin remove <id>` — unregister and **delete** a dev install's files
+  (the cleanup step of the lifecycle). For non-dev sources, unregisters only.
+- `sculpt plugin unload <id>` — unload from the running UI without deleting files.
+- `sculpt plugin list` — all plugins (builtin / installed / url / **dev**) with live
+  status and the dev indicator.
+- `sculpt plugin inspect <id>` — status, origin, registrations, **redacted** config.
 - `sculpt plugin dir` — print the data plugins dir (`/plugins/dir`).
-- All: `--json` for agents; clear non-zero exits on "disabled / not connected /
-  load failed".
+- All: `--json` for agents; `--all` for per-renderer results; clear non-zero exits
+  on "disabled / not connected / load failed".
 
 ## Phased implementation plan
 
-1. **Bridge.** `PluginCommandUiAction` + `POST /api/v1/plugins/command` +
-   correlation-id waiter + result endpoint; renderer handler in `useUnifiedStream`
-   calling `pluginManager.load/reload/unload`. (Generalizes the open-file/webview
-   pattern.)
+1. **Bridge (multi-result from the start).** `PluginCommandUiAction` + `POST
+   /api/v1/plugins/command` + correlation-id waiter + result endpoint that gathers
+   per-renderer-id results; renderer handler in `useUnifiedStream` (carrying its
+   renderer id) calling `pluginManager.load/reload/unload`. Generalizes the
+   open-file/webview pattern.
 2. **Agent-loading switch.** New `UserConfig` flag (closed default) + Settings
    toggle + server-side enforcement on the command endpoint.
-3. **Packaging + placement (path form).** Endpoint that receives a packaged plugin
-   and writes it to `~/.sculptor/plugins/<ws-id>/<id>/`; static mount serves the
-   nested path; command fires the load and returns the result.
-4. **URL form.** Persistent url-source registration via the command channel.
-5. **Inspect.** Renderer assembles the redacted snapshot; CLI reads it via the
-   bridge.
-6. **CLI sub-app** wiring all of the above, with `--json`.
+3. **Dev placement (path form).** Reserve the `dev/` subdir name; endpoint that
+   receives a packaged plugin and writes it to
+   `~/.sculptor/plugins/dev/<ws-id>/<id>/`; the static mount serves the nested path;
+   register a persisted dev source; command fires the load and returns the result.
+4. **Persistent installs (`--persist`).** Path → copy to top-level
+   `~/.sculptor/plugins/<id>/`; URL → persistent url-source. Plus `remove` to
+   unregister + delete a dev install.
+5. **Inspect + dev indicator.** Renderer assembles the redacted snapshot (status,
+   origin, registrations, redacted config); a dev badge in the Settings row; CLI
+   reads it via the bridge.
+6. **CLI sub-app** wiring all of the above, with `--json` and `--all`.
 7. **Tests.** Mirror `test_plugin_loader.py` (flip both flags via config populator,
    drive via the CLI/endpoint, assert on the settings POM `data-status` /
-   `data-phase` hooks). Electron-marked variant where it matters.
+   `data-phase` hooks, and the dev indicator). Electron-marked variant where it
+   matters; a two-renderer case for the strict-preference selection.
 
-Later: browser support; multi-renderer `inspect`/`list`; host-side `sculpt`;
-`--build` / `--watch`; auto-registering dev loads as persistent sources; auth on
-the static routes.
+Later: browser support; host-side `sculpt`; `--build` / `--watch`; auth on the
+static routes; a `promote` convenience that folds install + dev-cleanup into one.
 
 ## Remaining open questions
 
-1. **Dev-load persistence** — keep path-form loads command-driven (re-run after
-   restart), or auto-register them as persistent local sources so they reload on
-   app restart? (Leaning command-driven for v1.)
-2. **`list` scope** — should agent-loaded (workspace-nested) plugins appear in
-   `sculpt plugin list` / passive discovery, or only when explicitly inspected?
-3. **Packaging boundary** — confirm v1 expects a pre-built `entry` and never runs a
-   build (agent builds first); `--build` is a later add.
-4. **Switch naming** — name for the new sibling flag (e.g.
+1. **Packaging boundary** — confirm v1 expects a pre-built `entry` and never runs a
+   build (agent builds first); `--build` is a later add. *(Tentatively yes.)*
+2. **Switch naming** — confirm the new sibling flag name (proposing
    `allow_agent_plugin_loading`).
+3. **`remove` ergonomics** — is a separate `remove` enough, or do we want a single
+   `promote` (install permanently + delete the dev source) as the one-shot "I'm
+   done" command? (Listed as later work; flagging in case it should be v1.)
