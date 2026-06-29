@@ -725,7 +725,9 @@ def _make_test_user_config(claude_path: str = "claude") -> UserConfig:
         # plugin and contributes its panel to the top-right zone. The broad UI
         # suite (e.g. panel-layout tests) asserts on the core panel set and must
         # not depend on which plugins ship enabled, so pin the system off here.
-        # The dedicated plugin tests opt back in via their own populators.
+        # The dedicated plugin tests opt back in — most via their own folder
+        # populators, the shared-instance (Electron) ones by toggling the switch
+        # in the Plugins settings section at runtime.
         enable_frontend_plugins=False,
         # Managed pi has no fake-on-PATH path, so integration tests pin pi=CUSTOM (bare "pi") to resolve the FakePi stub on PATH.
         dependency_paths=DependencyPaths(claude=claude_path, pi="pi"),
