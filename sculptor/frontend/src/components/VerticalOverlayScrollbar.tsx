@@ -89,7 +89,7 @@ export const VerticalOverlayScrollbar = ({
   useEffect((): (() => void) | void => {
     const element = scrollRef.current;
     if (!element) return;
-    setPortalTarget(element.closest<HTMLElement>(THEME_ROOT_SELECTOR) ?? document.body);
+    setPortalTarget(element.closest<HTMLElement>(THEME_ROOT_SELECTOR));
 
     const measure = (): void => {
       const rect = element.getBoundingClientRect();
