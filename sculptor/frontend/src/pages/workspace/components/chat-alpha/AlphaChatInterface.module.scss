@@ -45,9 +45,10 @@
     position: relative;
   }
 
-  // Always-on thumb — users want a persistent position indicator during
-  // streaming, and the track width stays constant either way (no reflow).
-  @include thin-scrollbar($autohide: false);
+  // Native scrollbar suppressed in favour of <VerticalOverlayScrollbar>, which
+  // renders an overlay thumb that widens on hover and yields the panel edge to
+  // the resize handle except over the thumb itself (SCU-1321).
+  @include hidden-scrollbar;
 }
 
 // 1px sentinel pinned to the bottom of the virtual content. An
