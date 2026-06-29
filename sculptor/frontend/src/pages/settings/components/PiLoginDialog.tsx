@@ -98,10 +98,9 @@ export const PiLoginDialog = ({ request, onClose }: PiLoginDialogProps): ReactEl
     onClose();
   }, [activeLoginId, onClose]);
 
-  // Auto-advance: while the terminal is live, poll for pi having performed the
-  // credential change (provider added on login / removed on logout). The backend
-  // observes this against auth.json itself, so the modal closes and the Providers area
-  // refetches the moment it lands — no manual Done.
+  // Auto-advance: while the terminal is live, poll the backend for pi having performed
+  // the credential change (provider added on login / removed on logout). On completion
+  // the modal closes and the Providers area refetches — no manual Done.
   useEffect(() => {
     if (view !== "terminal" || activeLoginId === null) {
       return;

@@ -129,10 +129,9 @@ def _scrub_shell_env(extra_env: Mapping[str, str], env_var_override: bool) -> di
     PyInstaller bootloader's namespace.
 
     ``TMUX``/``TMUX_PANE`` are scrubbed because a Sculptor PTY is never a real
-    tmux pane. A stale value (e.g. when the dev backend itself runs under tmux)
-    makes TUIs such as pi switch to tmux key handling, where a plain carriage
-    return no longer registers as Enter. Absent in production (the backend does
-    not run under tmux), so this is a no-op there.
+    tmux pane. A stale value (e.g. the dev backend running under tmux) makes TUIs
+    such as pi switch to tmux key handling, where a plain carriage return no longer
+    registers as Enter.
     """
     env = dict(os.environ)
     for var in list(env):
