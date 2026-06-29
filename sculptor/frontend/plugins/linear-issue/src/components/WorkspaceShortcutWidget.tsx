@@ -71,13 +71,10 @@ export const WorkspaceShortcutWidget = (): ReactElement | null => {
         onClick={() => openExternal(issue.url)}
         data-testid="linear-workspace-shortcut"
       >
-        {/* Workflow-state glyph, tinted by the state color (replaces a generic
-            leading icon + separate dot — the icon now carries the state). */}
-        <StateIcon
-          type={issue.state?.type ?? null}
-          color={issue.state?.color ?? "var(--gray-8)"}
-          size={12}
-        />
+        {/* Leading glyph: the ticket's workflow state, tinted by the state
+            color. StateIcon supplies a neutral fallback when the color is
+            absent. */}
+        <StateIcon type={issue.state?.type ?? null} color={issue.state?.color ?? ""} size={12} />
         {/* Same monospace token as the PR button's "PR #123" beside it. */}
         <span
           style={{

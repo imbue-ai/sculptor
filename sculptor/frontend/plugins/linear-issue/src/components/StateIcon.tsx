@@ -1,5 +1,10 @@
 import type { ReactElement } from "react";
 
+// Glyph color for the mark drawn on a filled circle (check, ✕, exclamation).
+// A near-white that reads on the saturated state colors of completed/cancelled/
+// triage in both themes.
+const CONTRAST = "#fff";
+
 /**
  * A workflow-state glyph mirroring Linear's own state iconography, tinted with
  * the state's color. Linear ships no embeddable icon set, but the shape language
@@ -7,9 +12,10 @@ import type { ReactElement } from "react";
  * can draw ourselves — and, unlike Linear's logo, ours takes any color.
  *
  * `type` is Linear's `state.type`: backlog | unstarted | started | completed |
- * cancelled | triage. Unknown/`null` falls back to a neutral hollow ring so the
- * chip always has a leading glyph. Drawn in a 24-unit viewBox at lucide's stroke
- * weight (2) so it sits beside lucide icons at the same visual size.
+ * cancelled | triage. Any other value (or `null`) falls back to a neutral
+ * hollow ring so the chip always has a leading glyph. Drawn in a 24-unit
+ * viewBox at lucide's stroke weight (2) so it sits beside lucide icons at the
+ * same visual size.
  */
 export const StateIcon = ({
   type,
@@ -25,7 +31,7 @@ export const StateIcon = ({
   // surfaces — they wash out on a light chip here. Their meaning is carried by
   // the shape (dashed vs hollow ring), so draw them in a theme-aware grey that
   // always contrasts, and reserve the issue's own color for the saturated
-  // started/completed/cancelled glyphs.
+  // started/completed/cancelled/triage glyphs.
   const outline = "var(--gray-9)";
   const c = color || outline;
   const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", "aria-hidden": true } as const;
@@ -49,14 +55,29 @@ export const StateIcon = ({
       return (
         <svg {...common}>
           <circle cx="12" cy="12" r="9" fill={c} />
-          <path d="M8 12.5l2.5 2.5 5.5-6" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M8 12.5l2.5 2.5 5.5-6"
+            stroke={CONTRAST}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       );
     case "cancelled":
       return (
         <svg {...common}>
           <circle cx="12" cy="12" r="9" fill={c} />
-          <path d="M9 9l6 6M15 9l-6 6" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+          <path d="M9 9l6 6M15 9l-6 6" stroke={CONTRAST} strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+    case "triage":
+      // Filled disc with an exclamation — Linear's "needs triage".
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="9" fill={c} />
+          <path d="M12 7.5v5" stroke={CONTRAST} strokeWidth="2" strokeLinecap="round" />
+          <circle cx="12" cy="16.2" r="1.15" fill={CONTRAST} />
         </svg>
       );
     case "unstarted":
