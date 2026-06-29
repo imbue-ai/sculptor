@@ -262,6 +262,21 @@ _IDLE_WAIT_SECONDS: float = 1.0
 # get_state responses before giving up (see _fetch_models_into_state).
 _MODEL_FETCH_TIMEOUT_SECONDS: float = 10.0
 
+# How long pi may produce NO stdout during a turn before a control command
+# (model switch / context reset) queued behind that turn is failed rather than
+# left to wait on it. Control commands run strictly between turns on the single
+# `_process_message_queue` loop, so a turn that never ends starves them forever —
+# a queued model switch then never completes. pi emits no heartbeat, so total
+# silence is the only wedge signal available — and a long, genuinely-quiet tool
+# (a silent build) is indistinguishable from a wedge. The window is therefore
+# generous, and the response is non-destructive: only the starved command is
+# failed (the user retries, or presses Stop to recover a truly wedged pi via the
+# abort + SIGTERM escalation); the turn and the pi process are left untouched.
+_TURN_STALL_TIMEOUT_SECONDS: float = 120.0
+# Surfaced to the user when a control command is failed because the in-flight
+# turn's pi has gone silent past `_TURN_STALL_TIMEOUT_SECONDS`.
+_STALLED_CONTROL_COMMAND_MESSAGE: str = "The agent is busy or not responding. Stop the current turn and try again."
+
 # Transient-provider-error retry policy. A turn that ends with a known-transient
 # provider failure (overloaded / rate-limit / 5xx / timeout — see
 # `is_transient_provider_error`) is re-prompted up to this many times with
@@ -547,6 +562,12 @@ class PiAgent(DefaultAgentWrapper):
     _input_agent_messages: Queue[ChatInputUserMessage | ClearContextUserMessage | SetModelUserMessage] = PrivateAttr(
         default_factory=Queue
     )
+    # Set whenever a control command (model switch / context reset) is enqueued,
+    # so the turn pump knows to check for one starving behind a stalled turn
+    # (see `_consume_until_turn_end`). A coarse signal — it gates the queue scan
+    # so a turn with nothing waiting never pays for it; it is not kept exactly in
+    # sync with the queue.
+    _control_command_enqueued: Event = PrivateAttr(default_factory=Event)
     _shutdown_event: Event = PrivateAttr(default_factory=Event)
     _message_processing_thread: ObservableThread | None = PrivateAttr(default=None)
     # The pi session id this process resumes / creates (pinned via --session-id);
@@ -742,11 +763,13 @@ class PiAgent(DefaultAgentWrapper):
             # Enqueued on the same FIFO as chat turns so the reset runs strictly
             # between turns (see _handle_clear_context); supports_context_reset.
             self._input_agent_messages.put(message)
+            self._control_command_enqueued.set()
             return True
         if isinstance(message, SetModelUserMessage):
             # Enqueued on the same FIFO as chat turns so the switch runs strictly
             # between turns (see _handle_set_model); supports_model_selection.
             self._input_agent_messages.put(message)
+            self._control_command_enqueued.set()
             return True
         if isinstance(message, ResumeAgentResponseRunnerMessage):
             # The previous pi process died mid-turn: the in-flight chat message
@@ -1721,6 +1744,10 @@ class PiAgent(DefaultAgentWrapper):
         assert process is not None
         out_queue = process.get_queue()
         state = _TurnState(prompt_id=prompt_id)
+        # Wall-clock of pi's most recent stdout line. A turn that produces nothing
+        # for `_TURN_STALL_TIMEOUT_SECONDS` while a control command waits behind it
+        # is treated as stalled (see `_fail_control_commands_starved_by_stall`).
+        last_output_monotonic = time.monotonic()
 
         try:
             while not self._shutdown_event.is_set():
@@ -1729,7 +1756,16 @@ class PiAgent(DefaultAgentWrapper):
                 try:
                     line, is_stdout = out_queue.get(timeout=_STDOUT_QUEUE_POLL_SECONDS)
                 except Empty:
+                    # pi has gone quiet. If it stays silent past the stall window
+                    # while a control command is queued behind this turn, fail
+                    # that command so it does not wait on the turn forever.
+                    if (
+                        self._control_command_enqueued.is_set()
+                        and time.monotonic() - last_output_monotonic > _TURN_STALL_TIMEOUT_SECONDS
+                    ):
+                        self._fail_control_commands_starved_by_stall()
                     continue
+                last_output_monotonic = time.monotonic()
                 if not is_stdout:
                     continue
                 stripped = line.strip()
@@ -1759,6 +1795,58 @@ class PiAgent(DefaultAgentWrapper):
             # agent_end, process exit, raised error, shutdown).
             if state.compaction_open:
                 self._output_messages.put(AutoCompactingDoneAgentMessage(message_id=AgentMessageID()))
+
+    def _fail_control_commands_starved_by_stall(self) -> None:
+        """Fail control commands queued behind a turn whose pi has gone silent.
+
+        Control commands (model switch / context reset) run strictly between
+        turns, so a turn that never ends would leave them waiting forever. When the
+        in-flight turn's pi has produced no output for `_TURN_STALL_TIMEOUT_SECONDS`,
+        resolve any such queued command as a failed request the user can retry
+        rather than letting it block.
+
+        Runs on the message-processing thread — the sole consumer of
+        `_input_agent_messages` — so draining the queue races only with
+        `_push_message` puts. Chat turns drained alongside are put back to keep
+        their order. The current turn and the pi process are left untouched: a
+        genuinely wedged pi is recovered by the user pressing Stop (the abort +
+        SIGTERM escalation); a merely quiet-but-healthy turn keeps running.
+        """
+        # Clear before draining: a control command enqueued concurrently re-sets
+        # the flag, so the next poll rescans rather than missing it.
+        self._control_command_enqueued.clear()
+        requeued: list[ChatInputUserMessage | ClearContextUserMessage | SetModelUserMessage] = []
+        failed_count = 0
+        # Sole-consumer drain (mirrors DefaultAgentWrapper.pop_messages): only this
+        # thread dequeues, so a positive qsize guarantees get_nowait won't block.
+        while self._input_agent_messages.qsize() > 0:
+            message = self._input_agent_messages.get_nowait()
+            if isinstance(message, (ClearContextUserMessage, SetModelUserMessage)):
+                self._fail_stalled_control_command(message)
+                failed_count += 1
+            else:
+                requeued.append(message)
+        for message in requeued:
+            self._input_agent_messages.put(message)
+        if failed_count:
+            logger.warning(
+                "PiAgent failed {} control command(s) starved behind a turn with no pi output for over {}s",
+                failed_count,
+                _TURN_STALL_TIMEOUT_SECONDS,
+            )
+
+    def _fail_stalled_control_command(self, message: ClearContextUserMessage | SetModelUserMessage) -> None:
+        """Resolve one starved control command as a failed request.
+
+        `_handle_user_message` emits the command's RequestStarted and, on the
+        raised `AgentClientError`, its terminal RequestFailure — what the web
+        layer's `await_request_outcome` is blocked on — so the model switch /
+        context reset surfaces an actionable failure instead of hanging.
+        """
+        with self._handle_user_message(message):
+            if isinstance(message, SetModelUserMessage):
+                raise PiSetModelError(_STALLED_CONTROL_COMMAND_MESSAGE, exit_code=None, metadata=None)
+            raise PiContextResetError(_STALLED_CONTROL_COMMAND_MESSAGE, exit_code=None, metadata=None)
 
     def _handle_response_event(self, parsed: RpcResponse, state: _TurnState) -> None:
         """Process a top-level `response` envelope (correlated by `id`, RPC §5.1).
