@@ -107,6 +107,11 @@ class PlaywrightAlphaChatViewElement(PlaywrightIntegrationTestElement):
         return self.get_table_wrap_toggles().and_(self._page.locator(f'[aria-label="{aria_label}"]'))
 
 
+def get_alpha_scrollbar_thumb(page: Page) -> Locator:
+    """Locator for the alpha chat's overlay scrollbar thumb (the draggable indicator)."""
+    return page.get_by_test_id(ElementIDs.ALPHA_CHAT_SCROLLBAR_THUMB)
+
+
 def get_jump_to_bottom_button(page: Page) -> Locator:
     """Locator for the jump-to-bottom button."""
     return page.get_by_test_id(ElementIDs.ALPHA_JUMP_TO_BOTTOM_BUTTON)

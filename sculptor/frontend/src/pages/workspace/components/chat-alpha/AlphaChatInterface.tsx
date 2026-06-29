@@ -21,6 +21,7 @@ import { chatSearchVisibleAtom } from "~/common/state/atoms/chatSearch.ts";
 import { AgentLightboxProvider } from "~/components/AgentLightboxContext.tsx";
 import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
 import { Toast, type ToastContent, ToastType } from "~/components/Toast.tsx";
+import { VerticalOverlayScrollbar } from "~/components/VerticalOverlayScrollbar.tsx";
 import { isModifierPressed } from "~/electron/utils.ts";
 import { buildSubagentMetadataMap, buildSubagentTree } from "~/pages/workspace/utils/subagentTree.ts";
 
@@ -618,6 +619,10 @@ export const AlphaChatInterface = ({
                 pendingBackgroundTaskCount={pendingBackgroundTaskCount}
               />
             </div>
+            <VerticalOverlayScrollbar
+              scrollRef={scrollContainerRef}
+              thumbTestId={ElementIds.ALPHA_CHAT_SCROLLBAR_THUMB}
+            />
           </div>
           <AlphaPromptNavigator
             userMessages={userMessages}
