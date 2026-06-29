@@ -9,6 +9,7 @@ import os
 import platform
 import queue
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -218,9 +219,15 @@ from sculptor.web.data_types import HealthCheckResponse
 from sculptor.web.data_types import InitializeGitRepoRequest
 from sculptor.web.data_types import ListTerminalAgentRegistrationsResponse
 from sculptor.web.data_types import ListWorkspacesResponse
+from sculptor.web.data_types import InstallPluginRequest
+from sculptor.web.data_types import InstallPluginResponse
 from sculptor.web.data_types import NamingPatternRequest
 from sculptor.web.data_types import OpenFileUiAction
 from sculptor.web.data_types import OpenFileUiRequest
+from sculptor.web.data_types import PluginCommandRequest
+from sculptor.web.data_types import PluginCommandResponse
+from sculptor.web.data_types import PluginCommandResult
+from sculptor.web.data_types import PluginCommandUiAction
 from sculptor.web.data_types import OpenInOsRequest
 from sculptor.web.data_types import OpenPathInAppRequest
 from sculptor.web.data_types import OpenPathInAppResult
@@ -287,8 +294,12 @@ from sculptor.web.streams import StreamingUpdate
 from sculptor.web.streams import stream_everything
 from sculptor.web.terminal_input import TerminalDeliveryResult
 from sculptor.web.terminal_input import deliver_prompt_to_terminal_agent
+from sculptor.web.plugin_command_bus import close_correlation
+from sculptor.web.plugin_command_bus import open_correlation
+from sculptor.web.plugin_command_bus import submit_result
 from sculptor.web.ui_actions import next_webview_seq
 from sculptor.web.ui_actions import publish_ui_action
+from sculptor.web.ui_actions import subscriber_count
 from sculptor.web.upload_diagnostics import upload_diagnostics as perform_upload_diagnostics
 
 UpdateT = TypeVar("UpdateT", bound=StreamingUpdate)
@@ -1555,6 +1566,13 @@ def workspace_read_file_at_ref(
     return ReadFileAtRefResponse(content=result.content, encoding=result.encoding)
 
 
+# Subdirectories of the plugins folder reserved for Sculptor's own use, never
+# reported as drop-in plugins. ``dev`` holds agent-loaded dev installs, nested as
+# ``dev/<workspace_id>/<plugin_id>/`` so they're visibly temporary and can't
+# collide across workspaces (see the `sculpt plugin` command endpoints below).
+_RESERVED_PLUGIN_DIR_NAMES = frozenset({"dev"})
+
+
 class LocalPluginInfo(SerializableModel):
     """A frontend plugin discovered in the Sculptor plugins directory.
 
@@ -1594,6 +1612,8 @@ def get_local_plugins() -> list[LocalPluginInfo]:
         return []
     plugins: list[LocalPluginInfo] = []
     for entry in entries:
+        if entry.name in _RESERVED_PLUGIN_DIR_NAMES:
+            continue
         if entry.is_dir() and (entry / "manifest.json").is_file():
             # Percent-encode the directory name: a name with URL-special chars
             # (#, ?, space) would otherwise corrupt the manifest URL the frontend
@@ -1624,6 +1644,179 @@ def get_local_plugins_directory() -> LocalPluginsDirectory:
     reports the path — enumerating the plugins inside it is ``get_local_plugins``.
     """
     return LocalPluginsDirectory(path=_display_path(get_sculptor_folder() / "plugins"))
+
+
+# How long the command endpoint waits for renderer replies before returning what
+# it has. Connected renderers usually answer in well under a second; this is the
+# ceiling for the "no window responded" case (and for a renderer that has the
+# plugin feature disabled and so never replies).
+_PLUGIN_COMMAND_TIMEOUT_SECONDS = 8.0
+# Ops that mutate the running UI (install/run frontend code) and so require the
+# agent-loading switch. ``inspect``/``list`` are read-only and stay ungated so an
+# agent can always check state.
+_PLUGIN_COMMAND_GATED_OPS = frozenset({"load", "reload", "unload"})
+
+
+def _require_agent_plugin_loading() -> None:
+    """Enforce the agent-loading switch; raise a clear 403 when it is closed."""
+    config = get_user_config_instance()
+    if config is None or not config.allow_agent_plugin_loading:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "agent_plugin_loading_disabled",
+                "message": "Agent plugin loading is disabled. Enable it in Settings -> Plugins.",
+            },
+        )
+
+
+def _validate_plugin_id(plugin_id: str) -> str:
+    """Reject ids that aren't a single safe path segment (the plugin's dir name)."""
+    if (
+        not plugin_id
+        or "/" in plugin_id
+        or "\\" in plugin_id
+        or plugin_id in {".", ".."}
+        or plugin_id in _RESERVED_PLUGIN_DIR_NAMES
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "invalid_plugin_id", "message": f"invalid plugin id: {plugin_id!r}"},
+        )
+    return plugin_id
+
+
+def _resolve_plugin_file_dest(plugin_dir: Path, relative_path: str) -> Path:
+    """Resolve a packaged file's destination, refusing paths that escape the dir."""
+    plugin_dir_resolved = plugin_dir.resolve()
+    candidate = (plugin_dir_resolved / relative_path).resolve()
+    if candidate != plugin_dir_resolved and not candidate.is_relative_to(plugin_dir_resolved):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "unsafe_plugin_path",
+                "message": f"plugin file path escapes the plugin directory: {relative_path!r}",
+            },
+        )
+    return candidate
+
+
+@router.post("/api/v1/workspaces/{workspace_id}/plugins/command")
+def post_plugin_command(workspace_id: str, command: PluginCommandRequest) -> PluginCommandResponse:
+    """Broadcast a plugin command to connected renderers and collect their replies.
+
+    Publishes a ``PluginCommandUiAction`` over the per-user WebSocket fan-out, then
+    blocks (in the sync threadpool) draining per-renderer replies from the
+    correlation bus until every connected renderer has answered or the timeout
+    elapses. The reply list is keyed by renderer in the CLI; an empty list means no
+    window responded. Write ops require the agent-loading switch; ``inspect`` and
+    ``list`` are read-only and ungated.
+    """
+    validated_workspace_id = validate_workspace_id(workspace_id)
+    if command.op in _PLUGIN_COMMAND_GATED_OPS:
+        _require_agent_plugin_loading()
+
+    correlation_id = str(uuid4())
+    result_queue = open_correlation(correlation_id)
+    try:
+        expected = subscriber_count()
+        publish_ui_action(
+            PluginCommandUiAction(
+                workspace_id=validated_workspace_id,
+                correlation_id=correlation_id,
+                op=command.op,
+                plugin_id=command.plugin_id,
+                source=command.source,
+                cache_bust=command.cache_bust,
+            )
+        )
+        results: list[PluginCommandResult] = []
+        deadline = time.monotonic() + _PLUGIN_COMMAND_TIMEOUT_SECONDS
+        while expected <= 0 or len(results) < expected:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                results.append(result_queue.get(timeout=remaining))
+            except queue.Empty:
+                break
+        return PluginCommandResponse(correlation_id=correlation_id, results=results)
+    finally:
+        close_correlation(correlation_id)
+
+
+@router.post("/api/v1/plugins/command/{correlation_id}/result")
+def post_plugin_command_result(correlation_id: str, result: PluginCommandResult) -> Response:
+    """Renderer-facing endpoint: deliver one window's reply to a waiting command.
+
+    Quietly succeeds even if nobody is waiting (the originating request may have
+    already timed out), so a slow renderer never sees an error for a late reply.
+    """
+    submit_result(correlation_id, result)
+    return Response(status_code=204)
+
+
+@router.post("/api/v1/workspaces/{workspace_id}/plugins/install")
+def post_plugin_install(workspace_id: str, install: InstallPluginRequest) -> InstallPluginResponse:
+    """Write a packaged plugin to the data folder so the static mount can serve it.
+
+    ``persist=False`` (dev) writes to the reserved
+    ``plugins/dev/<workspace_id>/<plugin_id>/`` tree; ``persist=True`` writes a
+    permanent install at the top-level ``plugins/<plugin_id>/``. Either way the
+    target is wiped and rewritten so reloads pick up edits. Returns the
+    origin-relative manifest URL the caller then loads via the command endpoint.
+    """
+    _require_agent_plugin_loading()
+    validated_workspace_id = validate_workspace_id(workspace_id)
+    plugin_id = _validate_plugin_id(install.plugin_id)
+    if not any(plugin_file.path == "manifest.json" for plugin_file in install.files):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "missing_manifest", "message": "packaged plugin must include a top-level manifest.json"},
+        )
+
+    plugins_root = get_sculptor_folder() / "plugins"
+    encoded_plugin_id = urllib.parse.quote(plugin_id, safe="")
+    if install.persist:
+        plugin_dir = plugins_root / plugin_id
+        manifest_url = f"/plugins/local/{encoded_plugin_id}/manifest.json"
+    else:
+        workspace_segment = str(validated_workspace_id)
+        plugin_dir = plugins_root / "dev" / workspace_segment / plugin_id
+        encoded_workspace = urllib.parse.quote(workspace_segment, safe="")
+        manifest_url = f"/plugins/local/dev/{encoded_workspace}/{encoded_plugin_id}/manifest.json"
+
+    if plugin_dir.exists():
+        shutil.rmtree(plugin_dir)
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    for plugin_file in install.files:
+        dest = _resolve_plugin_file_dest(plugin_dir, plugin_file.path)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            dest.write_bytes(base64.b64decode(plugin_file.content_base64, validate=True))
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "invalid_file_encoding", "message": f"file {plugin_file.path!r} is not valid base64"},
+            ) from e
+
+    return InstallPluginResponse(manifest_url=manifest_url, plugin_dir=_display_path(plugin_dir))
+
+
+@router.post("/api/v1/workspaces/{workspace_id}/plugins/{plugin_id}/remove")
+def post_plugin_remove(workspace_id: str, plugin_id: str) -> Response:
+    """Delete a dev install's files (the cleanup step of the dev lifecycle).
+
+    Only touches the workspace-scoped ``dev/`` tree; permanent top-level installs
+    are left alone. Idempotent — removing an absent dev install still succeeds.
+    """
+    _require_agent_plugin_loading()
+    validated_workspace_id = validate_workspace_id(workspace_id)
+    plugin_id = _validate_plugin_id(plugin_id)
+    plugin_dir = get_sculptor_folder() / "plugins" / "dev" / str(validated_workspace_id) / plugin_id
+    if plugin_dir.exists():
+        shutil.rmtree(plugin_dir)
+    return Response(status_code=204)
 
 
 @router.get("/api/v1/skills")

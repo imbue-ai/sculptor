@@ -52,6 +52,7 @@ from sculptor.web.auth import UserSession
 from sculptor.web.data_types import BtwUpdate
 from sculptor.web.data_types import DependenciesStatus
 from sculptor.web.data_types import OpenFileUiAction
+from sculptor.web.data_types import PluginCommandUiAction
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.data_types import UserUpdateSourceTypes
 from sculptor.web.data_types import WebviewCommandUiAction
@@ -336,6 +337,7 @@ class StreamingUpdate(SerializableModel):
     btw_update: BtwUpdate | None = None
     ui_open_file_by_workspace_id: dict[WorkspaceID, OpenFileUiAction] = Field(default_factory=dict)
     ui_webview_command_by_workspace_id: dict[WorkspaceID, WebviewCommandUiAction] = Field(default_factory=dict)
+    ui_plugin_command_by_workspace_id: dict[WorkspaceID, PluginCommandUiAction] = Field(default_factory=dict)
 
 
 _WorkspaceValueT = TypeVar("_WorkspaceValueT")
@@ -446,6 +448,9 @@ def project_for_scope(
         ),
         ui_webview_command_by_workspace_id=_narrow_by_workspace_id(
             update.ui_webview_command_by_workspace_id, proj.scoped_workspace_ids
+        ),
+        ui_plugin_command_by_workspace_id=_narrow_by_workspace_id(
+            update.ui_plugin_command_by_workspace_id, proj.scoped_workspace_ids
         ),
     )
 
@@ -790,6 +795,7 @@ def _convert_to_streaming_update(
     latest_btw_update: BtwUpdate | None = None
     updated_ui_open_file_by_workspace_id: dict[WorkspaceID, OpenFileUiAction] = {}
     updated_ui_webview_command_by_workspace_id: dict[WorkspaceID, WebviewCommandUiAction] = {}
+    updated_ui_plugin_command_by_workspace_id: dict[WorkspaceID, PluginCommandUiAction] = {}
     messages_by_task: dict[TaskID, list[Message]] = defaultdict(list)
 
     for model in all_data:
@@ -844,6 +850,9 @@ def _convert_to_streaming_update(
         elif isinstance(model, WebviewCommandUiAction):
             updated_ui_webview_command_by_workspace_id[model.workspace_id] = model
 
+        elif isinstance(model, PluginCommandUiAction):
+            updated_ui_plugin_command_by_workspace_id[model.workspace_id] = model
+
         elif isinstance(model, Message):
             raise TypeError("should not have Message models in streaming update")
         else:
@@ -878,6 +887,7 @@ def _convert_to_streaming_update(
         btw_update=latest_btw_update,
         ui_open_file_by_workspace_id=updated_ui_open_file_by_workspace_id,
         ui_webview_command_by_workspace_id=updated_ui_webview_command_by_workspace_id,
+        ui_plugin_command_by_workspace_id=updated_ui_plugin_command_by_workspace_id,
     )
 
 
