@@ -141,12 +141,24 @@ def test_read_loop_closes_primary_fd_and_unregisters_on_shell_self_exit(tmp_path
             # typed-ahead input — right after start(), so a single early write
             # can be dropped and the shell would never exit. Resending until the
             # reader tears the terminal down makes this robust under load.
+            #
+            # Write straight to the captured pty fd rather than via
+            # ``manager.write()``: the reader thread is concurrently nulling
+            # ``manager._pty_process`` as it tears down, and ``write()`` reads
+            # that attribute twice, so a resend racing the teardown could hit an
+            # AttributeError. ``pty_process`` is a stable reference and its
+            # ``primary_fd`` property reads cleanly (returning None once closed).
             deadline = time.monotonic() + 15.0
             next_write = 0.0
             while time.monotonic() < deadline and manager._pty_process is not None:
                 now = time.monotonic()
                 if now >= next_write:
-                    manager.write(b"exit\n")
+                    exit_fd = pty_process.primary_fd
+                    if exit_fd is not None:
+                        try:
+                            os.write(exit_fd, b"exit\n")
+                        except OSError:
+                            pass  # fd closed mid-teardown; the shell is already exiting
                     next_write = now + 0.5
                 time.sleep(0.02)
 

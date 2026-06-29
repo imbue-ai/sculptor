@@ -49,8 +49,9 @@ _TERMINAL_NOISE_RE = re.compile(
 # OUTPUT: the shell's echo of the *typed* command still has the literal
 # ``${VAR}`` between the sentinels, so it can never match — not even for an
 # empty (scrubbed) value, whose output is ``<SCT||SCT>``. That is what lets the
-# scrub assertions actually prove a variable is empty in the child, rather than
-# merely that some shared ``CHECK:`` substring appeared somewhere on the line.
+# scrub assertions prove a variable is genuinely empty in the child, instead of
+# passing on any substring that merely happens to appear on the line (such as
+# the shell's own echo of the typed command).
 _SENTINEL_OPEN = "<SCT|"
 _SENTINEL_CLOSE = "|SCT>"
 
@@ -101,6 +102,15 @@ def _assert_pty_echo(fd: int, env_var: str, expected: str, timeout: float = 15.0
     marker = f"{_SENTINEL_OPEN}{expected}{_SENTINEL_CLOSE}".encode()
     command = f'echo "{_SENTINEL_OPEN}${{{env_var}}}{_SENTINEL_CLOSE}"\n'.encode()
 
+    # Wait for readability with poll(2), not select(2): select cannot wait on a
+    # file descriptor whose number is >= FD_SETSIZE (1024) and raises
+    # "filedescriptor out of range in select()". An fd-heavy test run (xdist, a
+    # long-lived process) can hand a freshly opened pty a high fd number, so a
+    # select() here would reintroduce exactly the high-fd flakiness the
+    # production reader uses poll(2) to avoid.
+    poller = select.poll()
+    poller.register(fd, select.POLLIN)
+
     output = b""
     deadline = time.monotonic() + timeout
     next_send = 0.0
@@ -112,15 +122,17 @@ def _assert_pty_echo(fd: int, env_var: str, expected: str, timeout: float = 15.0
             except OSError:
                 pass
             next_send = now + 0.75
-        # ``select`` so we never block past the resend cadence; the pty primary
-        # fd is non-blocking, so a bare ``os.read`` would spin on BlockingIOError.
-        readable, _, _ = select.select([fd], [], [], 0.2)
-        if not readable:
+        # poll so we never block past the resend cadence; the pty primary fd is
+        # non-blocking, so a bare os.read would spin on BlockingIOError. A 200ms
+        # timeout (in milliseconds for poll) paces the loop when there is no data.
+        if not poller.poll(200):
             continue
         try:
             chunk = os.read(fd, 4096)
-        except (BlockingIOError, OSError):
+        except BlockingIOError:
             continue
+        except OSError:
+            break  # EIO/EBADF: the shell is gone; stop and report what we have.
         if not chunk:
             break  # EOF: the shell exited.
         output += chunk
