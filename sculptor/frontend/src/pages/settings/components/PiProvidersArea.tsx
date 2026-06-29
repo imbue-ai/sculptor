@@ -1,13 +1,15 @@
 import { ExclamationTriangleIcon, LockClosedIcon, PlusIcon } from "@radix-ui/react-icons";
-import { Badge, Box, Button, Callout, Flex, Spinner, Text } from "@radix-ui/themes";
+import { Box, Button, Callout, Flex, Spinner, Text } from "@radix-ui/themes";
 import { type ReactElement, type ReactNode, useCallback, useMemo, useState } from "react";
 
 import type { AuthenticatedProviderEntry } from "~/api";
 import { ElementIds } from "~/api";
 import { getProviderDisplayName } from "~/common/modelConstants";
 import { usePiAuthenticatedProviders } from "~/common/state/hooks/usePiAuthenticatedProviders";
+import { BlandCircle } from "~/components/PulsingCircle.tsx";
 
 import { PiLoginDialog, type PiLoginRequestView } from "./PiLoginDialog.tsx";
+import styles from "./PiProvidersArea.module.scss";
 import { groupProviders } from "./piProvidersGrouping.ts";
 
 const displayNameFor = (provider: AuthenticatedProviderEntry): string =>
@@ -71,9 +73,12 @@ const ConnectedCard = ({
             {sourceText}
           </Text>
         </Flex>
-        <Badge color="green" variant="soft">
-          Connected
-        </Badge>
+        <Flex align="center" gap="2" flexShrink="0">
+          <BlandCircle size={8} className={styles.connectedDot} />
+          <Text size="2" color="green">
+            Connected
+          </Text>
+        </Flex>
         {canDisconnect && (
           <Button
             variant="soft"
