@@ -63,10 +63,6 @@ class PiPin(FrozenModel):
     plugin_set_revision: str = "bundled"
 
 
-# ``version`` is imported from the dependency-free ``PI_PINNED_VERSION`` so the pinned
-# string lives in exactly one place; ``pi_version`` imports nothing, so this can't cycle.
-# (The service's ``PI_VERSION_RANGE`` can't be imported here — the service imports this
-# module — so it is the pin string that is shared, not the range.)
 PI_PIN = PiPin(
     version=PI_PINNED_VERSION,
     platforms={
@@ -168,11 +164,9 @@ _PI_PLATFORM_MAP: dict[tuple[str, str], str] = {
 
 _PI_RELEASE_BASE_URL = "https://github.com/earendil-works/pi/releases/download"
 
-# Pinned single-version range, derived from ``PI_PINNED_VERSION`` — Sculptor refuses to
-# talk to a pi outside this pin so the RPC schema stays known. It lives in the seam
-# (beside ``PI_PIN``) rather than the dependency service so ``PiManagedTool`` can use it
-# without importing the service — which imports this module and would cycle. The service
-# re-exports it for its own callers.
+# Defined here, not in the dependency service, so ``PiManagedTool`` can reference it
+# without importing the service (which imports this module — a cycle). The service
+# re-exports it.
 PI_VERSION_RANGE = VersionRange(
     min_version=PI_PINNED_VERSION,
     max_version=PI_PINNED_VERSION,

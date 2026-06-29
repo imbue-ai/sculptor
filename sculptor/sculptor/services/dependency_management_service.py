@@ -64,9 +64,6 @@ class DependencyCheckResult(FrozenModel):
     version: str | None = None
 
 
-# ``PI_VERSION_RANGE`` is defined beside ``PI_PIN`` in ``managed_tools`` (imported above)
-# and re-exported here: callers and the justfile import it from this service.
-
 DEPENDENCIES_DIR_NAME = "dependencies"
 _VERSION_DIR_PREFIX = "version-"
 _TEMP_DIR_PREFIX = "tmp-"
