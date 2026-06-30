@@ -42,7 +42,7 @@
 "." = 0
 
 [no-integration-non-testid-queries]
-"." = 1
+"." = 0
 
 [no-integration-page-evaluate]
 "." = 22
@@ -117,7 +117,7 @@
 "." = 1
 
 [no-sculptor-subprocess]
-"." = 2
+"." = 1
 
 [no-ssh-subprocess]
 "." = 0

@@ -3255,14 +3255,13 @@ def _get_remote_branches(repo_path: Path, remote_filter: str | None = "origin") 
             Pass ``None`` to include branches from all remotes.
     """
     try:
-        result = subprocess.run(
+        result = run_blocking(
             ["git", "branch", "-r", "--format=%(refname:short)"],
             cwd=repo_path,
-            capture_output=True,
-            text=True,
             timeout=_GIT_INFO_TIMEOUT_SECONDS,
+            is_checked=False,
         )
-        if result.returncode != 0:
+        if result.returncode != 0 or result.is_timed_out:
             return []
         branches = []
         for line in result.stdout.strip().splitlines():
@@ -3276,7 +3275,7 @@ def _get_remote_branches(repo_path: Path, remote_filter: str | None = "origin") 
                 continue
             branches.append(branch)
         return branches
-    except (subprocess.TimeoutExpired, OSError):
+    except ProcessSetupError:
         return []
 
 

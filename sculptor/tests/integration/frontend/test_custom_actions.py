@@ -300,7 +300,7 @@ def test_builtin_chips(sculptor_instance_: SculptorInstance) -> None:
     dialog = get_action_dialog(page)
     expect(dialog).to_be_visible()
     dialog.get_group_select().click()
-    expect(page.get_by_role("option", name="Sculptor")).to_have_count(0)
+    expect(dialog.get_group_option("Sculptor")).to_have_count(0)
     page.keyboard.press("Escape")  # close select
 
     # Create a user group so we can verify Sculptor renders above it.
