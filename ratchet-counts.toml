@@ -60,7 +60,7 @@
 "." = 0
 
 [no-logger-exception]
-"." = 1
+"." = 0
 
 [no-logger-warning]
 "." = 51
