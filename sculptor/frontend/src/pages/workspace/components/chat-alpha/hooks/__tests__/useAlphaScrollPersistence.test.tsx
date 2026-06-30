@@ -64,7 +64,8 @@ describe("useAlphaScrollPersistence", () => {
       vi.advanceTimersByTime(16);
     });
 
-    expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(2, { align: "end" });
+    // Restored to the content bottom (scrollHeight 2000 - paddingEnd 0 - clientHeight 500).
+    expect(el.scrollTop).toBe(1500);
   });
 
   it("saves scroll position on scroll events", () => {
@@ -87,6 +88,10 @@ describe("useAlphaScrollPersistence", () => {
     act(() => {
       vi.advanceTimersByTime(48);
     });
+
+    // The restore-to-bottom moved scrollTop; put it where this test's user scroll
+    // lands (item index 1 spans it) before recording the position.
+    el.scrollTop = 300;
 
     // Trigger scroll
     act(() => {
@@ -124,7 +129,8 @@ describe("useAlphaScrollPersistence", () => {
       vi.advanceTimersByTime(16);
     });
 
-    expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(2, { align: "end" });
+    // Restored to the content bottom (scrollHeight 2000 - paddingEnd 0 - clientHeight 500).
+    expect(el.scrollTop).toBe(1500);
   });
 
   it("restores to message position when saved", () => {

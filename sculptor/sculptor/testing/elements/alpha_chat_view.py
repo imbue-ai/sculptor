@@ -169,6 +169,45 @@ def get_alpha_scroll_height(page: Page) -> float:
     )
 
 
+def get_max_following_tail_gap(page: Page, frames: int = 18) -> float | None:
+    """Over a short ``requestAnimationFrame`` burst, the max gap (px) from the last
+    message's bottom edge UP to the viewport bottom.
+
+    A positive gap means the last line is floating above the viewport bottom over
+    empty tail padding; pinned flush to the content bottom is ~0. The max across
+    frames is returned so a transient mid-growth frame (where the streaming tail
+    briefly overflows below the fold, giving a negative gap) does not mask the
+    steady pinned gap. Returns ``None`` if the chat view or its messages are absent.
+    """
+    return page.evaluate(
+        f"""(frames) => new Promise((resolve) => {{
+        const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+        if (!el) {{ resolve(null); return; }}
+        let maxGap = null;
+        let count = 0;
+        const tick = () => {{
+            const items = el.querySelectorAll('[data-index]');
+            let lastEl = null, lastIdx = -1;
+            items.forEach((it) => {{
+                const i = parseInt(it.getAttribute('data-index'));
+                if (i > lastIdx) {{ lastIdx = i; lastEl = it; }}
+            }});
+            if (lastEl) {{
+                const gap = el.getBoundingClientRect().bottom - lastEl.getBoundingClientRect().bottom;
+                if (maxGap === null || gap > maxGap) maxGap = gap;
+            }}
+            if (++count < frames) {{
+                requestAnimationFrame(tick);
+            }} else {{
+                resolve(maxGap === null ? null : Math.round(maxGap));
+            }}
+        }};
+        requestAnimationFrame(tick);
+    }})""",
+        frames,
+    )
+
+
 def scroll_alpha_chat_to_top(page: Page) -> None:
     """Scroll the alpha chat to the top.
 

@@ -338,6 +338,25 @@ padding) made the viewport read as "not at the bottom" while visibly at the bott
 Subtracting `paddingEnd` is the single correction, shared by every at-bottom check
 as the one `distanceFromContentBottom` primitive.
 
+The same correction governs *pinning* to the bottom, not just *measuring* it. Every
+"scroll to the bottom" site (the `following` pin, the anchoring→following handoff,
+the jump-to-bottom button, the restore-to-bottom) sets `scrollTop` to the inverse of
+that primitive — `contentBottomOffset = scrollHeight − paddingEnd − clientHeight` —
+so the last message's content bottom sits flush with the viewport bottom
+(`distanceFromContentBottom == 0`), leaving `paddingEnd` as empty slack *below*
+`scrollTop`. It deliberately does **not** pin with `virtualizer.scrollToIndex(last,
+{ align: "end" })`: for the final item TanStack resolves that to
+`getMaxScrollOffset()` — the very bottom of the *padded* scroll range — which parks
+`scrollTop` inside the `paddingEnd` gap with **zero** slack. Two failures followed:
+the last line floated a `paddingEnd`-tall gap above the viewport bottom
+while following, and — the turn-end jump — when a turn ended and its streaming cursor
+was removed, the last message shrank with no slack to absorb it, so the browser
+clamped `scrollTop` down by the shrink and the whole conversation jumped up. Pinning
+to the content bottom leaves the `paddingEnd` slack the shrink is absorbed into. The
+pin is also **down-only**: it follows the live tail's growth toward the bottom but
+never scrolls *up*, so a turn-end shrink is left where it is rather than chased
+(authority has already handed back to `userControlled` by then anyway).
+
 ### 4. Search suppression is a top-level guard
 
 When in-chat search is open, auto-scroll behaviors are suspended. Rather than add
