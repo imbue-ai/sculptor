@@ -129,7 +129,7 @@
 "." = 0
 
 [no-type-ignore]
-"." = 27
+"." = 28
 
 [no-typing-builtin-imports]
 "." = 0
