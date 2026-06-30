@@ -364,9 +364,9 @@ def test_migration_chain_produces_correct_schema() -> None:
     fresh_tables = set(schema_fresh.keys())
     migrated_tables = set(schema_migrated.keys())
     assert fresh_tables == migrated_tables, (
-        f"Table mismatch.\n"
-        f"  Only in fresh (not produced by migrations): {fresh_tables - migrated_tables}\n"
-        f"  Only in migrated (not in model definitions): {migrated_tables - fresh_tables}"
+        "Table mismatch.\n"
+        + f"  Only in fresh (not produced by migrations): {fresh_tables - migrated_tables}\n"
+        + f"  Only in migrated (not in model definitions): {migrated_tables - fresh_tables}"
     )
 
     # Compare each table's structure
@@ -378,26 +378,26 @@ def test_migration_chain_produces_correct_schema() -> None:
         if fresh_table["columns"] != migrated_table["columns"]:
             differences.append(
                 f"Table '{table_name}' columns differ:\n"
-                f"  fresh:    {fresh_table['columns']}\n"
-                f"  migrated: {migrated_table['columns']}"
+                + f"  fresh:    {fresh_table['columns']}\n"
+                + f"  migrated: {migrated_table['columns']}"
             )
         if fresh_table["primary_key"] != migrated_table["primary_key"]:
             differences.append(
                 f"Table '{table_name}' primary key differs:\n"
-                f"  fresh:    {fresh_table['primary_key']}\n"
-                f"  migrated: {migrated_table['primary_key']}"
+                + f"  fresh:    {fresh_table['primary_key']}\n"
+                + f"  migrated: {migrated_table['primary_key']}"
             )
         if fresh_table["foreign_keys"] != migrated_table["foreign_keys"]:
             differences.append(
                 f"Table '{table_name}' foreign keys differ:\n"
-                f"  fresh:    {fresh_table['foreign_keys']}\n"
-                f"  migrated: {migrated_table['foreign_keys']}"
+                + f"  fresh:    {fresh_table['foreign_keys']}\n"
+                + f"  migrated: {migrated_table['foreign_keys']}"
             )
         if fresh_table["unique_constraints"] != migrated_table["unique_constraints"]:
             differences.append(
                 f"Table '{table_name}' unique constraints differ:\n"
-                f"  fresh:    {fresh_table['unique_constraints']}\n"
-                f"  migrated: {migrated_table['unique_constraints']}"
+                + f"  fresh:    {fresh_table['unique_constraints']}\n"
+                + f"  migrated: {migrated_table['unique_constraints']}"
             )
 
     assert len(differences) == 0, (
@@ -623,8 +623,8 @@ def test_every_migration_has_a_test_fixture() -> None:
     missing = migration_ids - fixture_ids
     assert not missing, (
         f"The following migrations are missing test fixtures: {sorted(missing)}. "
-        f"Each migration must have a companion test_<revision_id>.py file "
-        f"in sculptor/database/alembic/versions/."
+        + "Each migration must have a companion test_<revision_id>.py file "
+        + "in sculptor/database/alembic/versions/."
     )
 
 

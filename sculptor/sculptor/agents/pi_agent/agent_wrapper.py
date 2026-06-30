@@ -1732,7 +1732,7 @@ class PiAgent(DefaultAgentWrapper):
         if not isinstance(new_session_id, str) or not new_session_id:
             logger.error(
                 "PiAgent could not read the post-clear pi session id (no get_state response); "
-                "a later resume may regress to the pre-clear session",
+                + "a later resume may regress to the pre-clear session",
             )
             return
         self._session_id = new_session_id

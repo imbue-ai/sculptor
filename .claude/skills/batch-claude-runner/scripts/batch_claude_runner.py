@@ -63,7 +63,7 @@ def find_files(
             matched = glob.glob(pattern, recursive=True)
         else:
             matched = glob.glob(
-                os.path.join(working_dir, pattern),
+                str(Path(working_dir) / pattern),
                 recursive=True,
             )
 
@@ -79,7 +79,7 @@ def find_files(
                 matched = glob.glob(pattern, recursive=True)
             else:
                 matched = glob.glob(
-                    os.path.join(working_dir, pattern),
+                    str(Path(working_dir) / pattern),
                     recursive=True,
                 )
             for f in matched:

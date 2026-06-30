@@ -120,6 +120,6 @@ fake_claude:ask_user_question `{
 
     assert health_check_count == settings_count, (
         f"Agent count mismatch: health check API reports {health_check_count} active agents, "
-        f"but settings page shows {settings_count}. "
-        f"This indicates get_active_tasks() is not filtering is_deleting tasks."
+        + f"but settings page shows {settings_count}. "
+        + "This indicates get_active_tasks() is not filtering is_deleting tasks."
     )

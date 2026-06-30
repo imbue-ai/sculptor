@@ -28,6 +28,7 @@ from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Task
 from sculptor.database.models import TaskID
+from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
@@ -265,8 +266,12 @@ class CIBabysitterCoordinator(Service):
                 continue
             try:
                 self._handle_status(item)
-            except Exception:
-                logger.exception("CIBabysitterCoordinator: error handling PrStatusInfo for {}", item.workspace_id)
+            except Exception as exc:
+                log_exception(
+                    exc,
+                    "CIBabysitterCoordinator: error handling PrStatusInfo for {workspace_id}",
+                    workspace_id=item.workspace_id,
+                )
 
     def _handle_status(self, new: PrStatusInfo) -> None:
         state = self._ensure_state(new.workspace_id)

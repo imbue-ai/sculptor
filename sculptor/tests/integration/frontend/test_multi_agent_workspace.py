@@ -233,8 +233,8 @@ def test_workspace_deleted_when_last_agent_deleted(
     workspace_dirs_after = {p for p in workspaces_dir.iterdir() if p.is_dir()} if workspaces_dir.exists() else set()
     deleted_dirs = workspace_dirs_before - workspace_dirs_after
     assert len(deleted_dirs) > 0, (
-        f"Expected at least one workspace directory to be deleted. "
-        f"Before: {workspace_dirs_before}, After: {workspace_dirs_after}"
+        "Expected at least one workspace directory to be deleted. "
+        + f"Before: {workspace_dirs_before}, After: {workspace_dirs_after}"
     )
 
 

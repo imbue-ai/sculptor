@@ -150,8 +150,8 @@ def test_multiple_interrupts_no_amnesia(sculptor_instance_: SculptorInstance) ->
         chat_panel,
         (
             "This is message 4. How many messages have I sent you in this conversation? "
-            "Count only my messages (not yours or system messages). "
-            "Reply in the format: MESSAGE-COUNT: <number>"
+            + "Count only my messages (not yours or system messages). "
+            + "Reply in the format: MESSAGE-COUNT: <number>"
         ),
     )
 
@@ -171,7 +171,7 @@ def test_multiple_interrupts_no_amnesia(sculptor_instance_: SculptorInstance) ->
     count = int(match.group(1))
     assert count >= 3, (  # noqa: PLR2004
         f"Claude reported only {count} messages — context was lost after interrupts. "
-        f"Expected at least 3 (sent 4). Response: {last_text[:300]}"
+        + f"Expected at least 3 (sent 4). Response: {last_text[:300]}"
     )
 
     # TRANSCRIPT VERIFICATION: confirm the conversation structure is intact.

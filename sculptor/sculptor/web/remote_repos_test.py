@@ -383,8 +383,8 @@ def test_already_exists_matches_real_gh_repo_clone_stderr() -> None:
     directory`` phrasing, prefixed by gh's own framing."""
     stderr = (
         "Cloning into 'foo'...\n"
-        "fatal: destination path 'foo' already exists and is not an empty directory.\n"
-        "exit status 128"
+        + "fatal: destination path 'foo' already exists and is not an empty directory.\n"
+        + "exit status 128"
     )
     assert _looks_like_already_exists(stderr) is True
 

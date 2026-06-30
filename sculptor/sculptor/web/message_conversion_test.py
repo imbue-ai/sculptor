@@ -3075,9 +3075,9 @@ def test_streaming_state_reset_after_interrupt_success_prevents_staircase() -> N
     assert in_progress is not None
     # BUG: Without the fix, this would be 2 (staircase: ["Good", "Good question."])
     assert len(in_progress.content) == 1, (
-        f"Second partial should replace the first, producing 1 content block. "
-        f"Got {len(in_progress.content)} blocks (staircase bug): "
-        f"{[b.text if isinstance(b, TextBlock) else type(b).__name__ for b in in_progress.content]}"
+        "Second partial should replace the first, producing 1 content block. "
+        + f"Got {len(in_progress.content)} blocks (staircase bug): "
+        + f"{[b.text if isinstance(b, TextBlock) else type(b).__name__ for b in in_progress.content]}"
     )
     second_block = in_progress.content[0]
     assert isinstance(second_block, TextBlock)
@@ -3103,7 +3103,7 @@ def test_streaming_state_reset_after_interrupt_success_prevents_staircase() -> N
     assert in_progress is not None
     assert len(in_progress.content) == 1, (
         f"Third partial should still be 1 block. Got {len(in_progress.content)} blocks: "
-        f"{[b.text if isinstance(b, TextBlock) else type(b).__name__ for b in in_progress.content]}"
+        + f"{[b.text if isinstance(b, TextBlock) else type(b).__name__ for b in in_progress.content]}"
     )
     third_block = in_progress.content[0]
     assert isinstance(third_block, TextBlock)
