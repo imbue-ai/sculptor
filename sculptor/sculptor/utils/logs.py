@@ -88,7 +88,7 @@ def setup_loggers(
         logger.remove(default_handler_id)
 
     # add the stderr handler
-    logger.add(sys.__stderr__, level=required_level, format=format, diagnose=False)  # type: ignore
+    logger.add(sys.__stderr__, level=required_level, format=format, diagnose=False)  # type: ignore[no-matching-overload]
 
     # install internal log levels for exception reporting
     ensure_core_log_levels_configured()

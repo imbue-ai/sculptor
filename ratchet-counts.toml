@@ -129,7 +129,7 @@
 "." = 0
 
 [no-type-ignore]
-"." = 29
+"." = 27
 
 [no-typing-builtin-imports]
 "." = 0
@@ -144,7 +144,7 @@
 "." = 0
 
 [no-unlabeled-type-ignore]
-"." = 3
+"." = 0
 
 [no-unnumbered-pyre-fixme]
 "." = 0

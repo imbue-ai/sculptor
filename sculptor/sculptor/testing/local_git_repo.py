@@ -151,7 +151,7 @@ class LocalGitRepo:
 
         f: IO[Any] | None = None
         try:
-            f = file_path.open(mode=mode)  # type: ignore
+            f = file_path.open(mode=mode)
             yield f
         finally:
             if f is not None:
