@@ -165,7 +165,7 @@ export interface FrontendConfigOptions {
   gateHmrUnderPytest?: boolean;
 }
 
-/** Dev-only proxy server forwarding `/api` and `/ws` to the backend. */
+/** Dev-only proxy server forwarding `/api`, `/ws`, and `/plugins/local` to the backend. */
 function devServer(env: Record<string, string>, defaultFrontendPort: number): import("vite").ServerOptions {
   const apiPort = Number(env.SCULPTOR_API_PORT || 5050);
   const fePort = Number(env.SCULPTOR_FRONTEND_PORT || defaultFrontendPort);
@@ -187,6 +187,16 @@ function devServer(env: Record<string, string>, defaultFrontendPort: number): im
         target: apiTarget,
         ws: true,
         rewriteWsOrigin: true,
+      },
+      // Local/dev plugins are served by the backend's `/plugins/local` static
+      // mount; in production the backend serves the SPA too (same origin), but in
+      // dev the SPA is on Vite, so forward this prefix to the backend or the
+      // plugin loader's manifest fetch hits Vite's SPA fallback (HTML, not JSON).
+      // Only `/plugins/local` — builtin plugins (`/plugins/<id>`) are Vite public
+      // assets and must keep being served by Vite.
+      "/plugins/local": {
+        target: apiTarget,
+        changeOrigin: true,
       },
     },
   };
