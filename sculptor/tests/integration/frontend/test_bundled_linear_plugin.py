@@ -18,19 +18,13 @@ Runs in both browser and electron launch modes, since the plugin ships bundled
 into the served build for every mode.
 """
 
-from pathlib import Path
-
 import pytest
 from playwright.sync_api import Route
 from playwright.sync_api import expect
 
-from sculptor.services.user_config.user_config import load_config
-from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.elements.settings_plugins import PlaywrightPluginsSettingsElement
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
-from sculptor.testing.resources import _default_sculptor_folder_populator
-from sculptor.testing.resources import custom_sculptor_folder_populator
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 
@@ -59,14 +53,6 @@ _MOCK_PRIMARY_ISSUE = {
     "assignee": None,
     "attachments": {"nodes": []},
 }
-
-
-def _enable_frontend_plugins_populator(folder_path: Path) -> None:
-    """Seed the per-test sculptor folder with ``enable_frontend_plugins=True``."""
-    _default_sculptor_folder_populator(folder_path)
-    config_path = folder_path / "internal" / "config.toml"
-    config = load_config(config_path).model_copy(update={"enable_frontend_plugins": True})
-    save_config(config, config_path)
 
 
 def _mock_linear_graphql(instance: SculptorInstance) -> None:
@@ -107,7 +93,6 @@ def _assert_linear_plugin_loads_and_renders(plugins: PlaywrightPluginsSettingsEl
     expect(plugins.get_source_row(LINEAR_SOURCE)).to_contain_text(LINEAR_SETTINGS_TEXT)
 
 
-@custom_sculptor_folder_populator.with_args(_enable_frontend_plugins_populator)
 def test_bundled_linear_plugin_loads_and_renders(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
@@ -118,7 +103,6 @@ def test_bundled_linear_plugin_loads_and_renders(
         _assert_linear_plugin_loads_and_renders(plugins)
 
 
-@custom_sculptor_folder_populator.with_args(_enable_frontend_plugins_populator)
 def test_bundled_linear_plugin_workspace_widget_shows_branch_ticket(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
@@ -157,9 +141,4 @@ def test_bundled_linear_plugin_loads_and_renders_in_electron(
     """In Electron, the bundled Linear plugin loads and renders its UI."""
     settings_page = navigate_to_settings_page(page=sculptor_instance_.page)
     plugins = settings_page.click_on_plugins()
-    plugins.set_frontend_plugins(enabled=True)
-    try:
-        _assert_linear_plugin_loads_and_renders(plugins)
-    finally:
-        # Leave the shared instance's flag as we found it for the next test.
-        plugins.set_frontend_plugins(enabled=False)
+    _assert_linear_plugin_loads_and_renders(plugins)

@@ -5,41 +5,27 @@ zone, turning the plugin off — or turning it off then on again — must never
 leave a panel the user has disabled (e.g. the Browser panel) rendered in that
 zone.
 
-The reproducer mirrors a real user setup: the bundled Linear plugin docks its
-panel in the top-right zone (alongside the built-in, disabled-by-default
-Browser panel). With the disabled Browser panel ordered ahead of the remaining
+The reproducer mirrors a real user setup: the bundled Linear plugin's panel is
+enabled and docked in the top-right zone (alongside the built-in,
+disabled-by-default Browser panel). With the disabled Browser panel ordered ahead of the remaining
 enabled panel, unloading the active Linear panel used to select Browser as the
 fallback and actually render it. These tests drive that arrangement through the
 UI and assert the zone falls back to an enabled panel instead — both for a
 plain disable and for a disable-then-re-enable cycle.
 """
 
-from pathlib import Path
-
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from sculptor.services.user_config.user_config import load_config
-from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.elements.panel_zones import PlaywrightPanelZonesElement
 from sculptor.testing.elements.panels import ensure_right_area_visible
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
-from sculptor.testing.resources import _default_sculptor_folder_populator
-from sculptor.testing.resources import custom_sculptor_folder_populator
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
 
 LINEAR_SOURCE = "/plugins/linear-issue"
-
-
-def _enable_frontend_plugins_populator(folder_path: Path) -> None:
-    """Seed the per-test sculptor folder with ``enable_frontend_plugins=True``."""
-    _default_sculptor_folder_populator(folder_path)
-    config_path = folder_path / "internal" / "config.toml"
-    config = load_config(config_path).model_copy(update={"enable_frontend_plugins": True})
-    save_config(config, config_path)
 
 
 def _open_linear_with_disabled_browser_ahead(
@@ -48,16 +34,21 @@ def _open_linear_with_disabled_browser_ahead(
     """Order the disabled Browser panel ahead of an enabled panel in top-right,
     then open the Linear plugin panel as the active one in that zone.
 
-    The default top-right order is [actions, skills, browser]; moving the two
-    enabled built-ins out and one back (each move appends to the target zone's
-    order) leaves [browser (disabled), linear-issue, skills (enabled)] — so the
-    disabled Browser panel is the first sibling after Linear is removed.
+    The Linear panel ships disabled (opt-in, like the built-in Browser panel), so
+    it is enabled here first; it then sits in its default top-right zone. Moving
+    the two enabled built-ins out and one back (each move appends to the target
+    zone's order) leaves the disabled Browser panel ordered ahead of the enabled
+    Skills panel — so once the active Linear panel is removed, the zone must fall
+    back to Skills rather than render the disabled Browser panel.
     """
     settings_page = navigate_to_settings_page(page=page)
     plugins = settings_page.click_on_plugins()
     plugins.expect_loaded(LINEAR_SOURCE, name="Linear", version="0.1.0")
 
     panels = settings_page.click_on_panels()
+    # The Linear panel is opt-in (defaultEnabled: false); enable it so it docks
+    # in the top-right zone and can be activated below.
+    panels.set_panel_enabled("linear-issue", True)
     panels.set_panel_zone("skills", "bottom-right")
     panels.set_panel_zone("actions", "bottom-right")
     panels.set_panel_zone("skills", "top-right")
@@ -70,7 +61,6 @@ def _open_linear_with_disabled_browser_ahead(
     expect(task_page.get_browser_panel_root()).not_to_be_visible()
 
 
-@custom_sculptor_folder_populator.with_args(_enable_frontend_plugins_populator)
 @user_story("to keep a disabled panel hidden when I turn off a plugin whose panel was open")
 def test_unloading_active_plugin_panel_falls_back_to_an_enabled_panel(
     sculptor_instance_factory_: SculptorInstanceFactory,
@@ -97,7 +87,6 @@ def test_unloading_active_plugin_panel_falls_back_to_an_enabled_panel(
         expect(task_page.get_skills_panel()).to_be_visible()
 
 
-@custom_sculptor_folder_populator.with_args(_enable_frontend_plugins_populator)
 @user_story("to keep a disabled panel hidden after I toggle a plugin off and back on")
 def test_toggling_plugin_off_then_on_does_not_open_a_disabled_panel(
     sculptor_instance_factory_: SculptorInstanceFactory,

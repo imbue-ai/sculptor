@@ -15,33 +15,20 @@ covers cross-mode loading.
 """
 
 import json
-from pathlib import Path
 
 from playwright.sync_api import Page
 from playwright.sync_api import Route
 from playwright.sync_api import expect
 
-from sculptor.services.user_config.user_config import load_config
-from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.elements.panel_zones import PlaywrightPanelZonesElement
 from sculptor.testing.elements.panels import ensure_right_area_visible
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
-from sculptor.testing.resources import _default_sculptor_folder_populator
-from sculptor.testing.resources import custom_sculptor_folder_populator
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 
 LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql"
 LINEAR_SOURCE = "/plugins/linear-issue"
 API_KEY = "lin_api_test_key_1234"
-
-
-def _enable_frontend_plugins_populator(folder_path: Path) -> None:
-    """Seed the per-test sculptor folder with ``enable_frontend_plugins=True``."""
-    _default_sculptor_folder_populator(folder_path)
-    config_path = folder_path / "internal" / "config.toml"
-    config = load_config(config_path).model_copy(update={"enable_frontend_plugins": True})
-    save_config(config, config_path)
 
 
 def _make_linear_route(captured_auth: list[str]):
@@ -83,7 +70,6 @@ def _activate_linear_panel(page: Page, zones: PlaywrightPanelZonesElement) -> No
     zones.activate_plugin_panel("linear-issue")
 
 
-@custom_sculptor_folder_populator.with_args(_enable_frontend_plugins_populator)
 def test_linear_panel_follows_workspace_branch_and_sends_key(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
@@ -102,6 +88,10 @@ def test_linear_panel_follows_workspace_branch_and_sends_key(
         plugins = settings_page.click_on_plugins()
         plugins.expect_loaded(LINEAR_SOURCE, name="Linear", version="0.1.0")
         plugins.set_source_text_setting(LINEAR_SOURCE, API_KEY)
+
+        # The Linear panel ships disabled (opt-in, like the built-in Browser
+        # panel), so enable it before driving it from the panel zones.
+        settings_page.click_on_panels().set_panel_enabled("linear-issue", True)
 
         zones = PlaywrightPanelZonesElement(page)
 

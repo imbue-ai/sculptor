@@ -792,10 +792,12 @@ has an enable/disable switch (mute a plugin without removing it) and, while enab
 Reload controls; user-added URL sources can also be removed, while bundled and disk-discovered plugins
 can't. Sculptor ships a bundled **Linear** plugin, enabled by default, alongside two no-build example
 plugins — **Sculpty** and **Pomodoro** — that ship disabled and can be switched on per plugin. The
-Linear plugin shows two surfaces: a banner **widget** displaying the workspace's primary issue as a
-`# TICKET-ID` badge with a state dot (clicking it opens the issue in Linear), and a side **panel** of
-ticket details with collapsible **sub-issues** (the open state is remembered per workspace) and badges
-marking where each ticket came from (branch, PR, or a pinned search). It resolves the workspace's
+Linear plugin shows two surfaces: a banner **widget**, shown by default, displaying the workspace's
+primary issue as a `# TICKET-ID` badge with a state dot (clicking it opens the issue in Linear), and a
+side **panel** of ticket details with collapsible **sub-issues** (the open state is remembered per
+workspace) and badges marking where each ticket came from (branch, PR, or a pinned search). The panel
+ships **off by default** and is enabled from Settings → Panels (like the built-in Browser panel), so an
+on-by-default plugin doesn't claim a slot in the panel layout uninvited. It resolves the workspace's
 **primary issue** from the branch name first, falling back to the issues linked from the workspace's
 pull request.
 
