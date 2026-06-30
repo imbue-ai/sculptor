@@ -56,6 +56,9 @@ class PlaywrightAddWorkspacePage(PlaywrightProjectLayoutPage):
     def get_branch_name_collision_error(self) -> Locator:
         return self.get_by_test_id(ElementIDs.BRANCH_NAME_COLLISION_ERROR)
 
+    def get_branch_name_invalid_error(self) -> Locator:
+        return self.get_by_test_id(ElementIDs.BRANCH_NAME_INVALID_ERROR)
+
     def get_branch_selector(self) -> Locator:
         return self.get_by_test_id(ElementIDs.BRANCH_SELECTOR)
 

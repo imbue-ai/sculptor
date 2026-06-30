@@ -245,10 +245,16 @@ class PreviewBranchNameResponse(SerializableModel):
     branch_name: str
 
 
-class BranchExistsResponse(SerializableModel):
-    """Whether a branch already exists in a project's local repo."""
+class NewBranchNameValidationResponse(SerializableModel):
+    """Validation result for a prospective new workspace branch name.
 
-    exists: bool
+    `is_valid` is whether the name is a legal git ref (per `git check-ref-format`);
+    `already_exists` is whether it collides with an existing local branch. The two
+    feed the Add Workspace form's inline branch-name error.
+    """
+
+    is_valid: bool
+    already_exists: bool
 
 
 class ProjectEnvVarNames(SerializableModel):
