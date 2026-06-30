@@ -19,12 +19,10 @@ export type CapturablePage<T extends CapturedImage> = {
 };
 
 // A guest <webview> whose window the OS compositor treats as hidden or occluded
-// — which is the steady state under a headless/xvfb display — never paints on
-// its own, so capturePage() returns an empty image indefinitely no matter how
-// long we retry. `stayHidden` puts the guest into the "being captured" state
-// that keeps it producing frames while hidden, the supported replacement for
-// the removed incrementCapturerCount(). This is what makes the capture resolve
-// to a real frame instead of an empty image in CI.
+// — the steady state under a headless/xvfb display — never paints on its own, so
+// capturePage() returns an empty image no matter how long we retry. `stayHidden`
+// keeps the guest compositing frames while hidden, so the capture resolves to a
+// real frame instead of an empty image.
 const CAPTURE_OPTS: CapturePageOpts = { stayHidden: true, stayAwake: true };
 
 export type CaptureNonEmptyPageOptions = {

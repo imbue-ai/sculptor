@@ -97,9 +97,9 @@ class PlaywrightBrowserPanelElement(PlaywrightIntegrationTestElement):
         By default we wait for the webview to *commit* the navigation, read from
         the panel's ``data-webview-current-url`` attribute (the committed URL
         published on the guest's ``did-navigate``). That is the production-truth
-        signal that the guest actually loaded ``url`` -- deterministic, and free
-        of the focus-coupled global bridge and the guest ``document.location``
-        round-trip the old gate used.
+        signal that the guest actually loaded ``url``: a per-workspace DOM read,
+        so it needs no focus-coupled global and no guest ``document.location``
+        round-trip.
 
         Set ``wait_for_webview_load=False`` for negative-path tests where the
         URL is intentionally invalid and the webview will never commit it; those
