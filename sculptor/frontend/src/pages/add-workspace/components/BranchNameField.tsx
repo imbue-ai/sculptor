@@ -5,7 +5,7 @@ import type { ReactElement } from "react";
 import type { WorkspaceInitializationStrategy } from "~/api";
 import { ElementIds, WorkspaceInitializationStrategy as Strategy } from "~/api";
 
-import type { BranchNameCollisionState } from "../hooks/useBranchNamePreview";
+import type { BranchNameStatus } from "../hooks/useBranchNamePreview";
 import styles from "./BranchNameField.module.scss";
 
 type BranchNameFieldProps = {
@@ -16,8 +16,8 @@ type BranchNameFieldProps = {
   isManuallyEdited: boolean;
   /** True while the preview fetch is in flight. */
   isLoading: boolean;
-  /** Result of the debounced collision check on `value`. */
-  collision: BranchNameCollisionState;
+  /** Result of the debounced branch-name validation on `value`. */
+  status: BranchNameStatus;
   /** Latest auto-filled preview, used by `onReset`. */
   preview: string;
   /** Called whenever the user types into the input. */
@@ -32,7 +32,7 @@ export const BranchNameField = ({
   value,
   isManuallyEdited,
   isLoading,
-  collision,
+  status,
   preview,
   onUserEdit,
   onReset,
@@ -62,9 +62,7 @@ export const BranchNameField = ({
           disabled={disabled}
         />
         {isLoading && !isManuallyEdited ? <span className={styles.spinner}>…</span> : null}
-        {shouldShowRequiredHint && collision !== "exists" ? (
-          <span className={styles.requiredHint}>required</span>
-        ) : null}
+        {shouldShowRequiredHint ? <span className={styles.requiredHint}>required</span> : null}
         {isManuallyEdited && preview !== value ? (
           <Link
             href="#"
@@ -79,7 +77,11 @@ export const BranchNameField = ({
           </Link>
         ) : null}
       </div>
-      {collision === "exists" ? (
+      {status === "invalid" ? (
+        <span className={styles.error} data-testid={ElementIds.BRANCH_NAME_INVALID_ERROR}>
+          &apos;{value}&apos; is not a valid branch name
+        </span>
+      ) : status === "exists" ? (
         <span className={styles.error} data-testid={ElementIds.BRANCH_NAME_COLLISION_ERROR}>
           Branch &apos;{value}&apos; already exists
         </span>

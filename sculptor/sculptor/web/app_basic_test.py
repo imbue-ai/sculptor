@@ -260,6 +260,31 @@ def test_create_worktree_workspace_accepts_valid_branch_name(
     assert response.status_code == 200, response.text
 
 
+def _validate_new_branch_name(client: TestClient, project: Project, name: str) -> dict:
+    response = client.get(
+        f"/api/v1/projects/{project.object_id}/validate-new-branch-name",
+        params={"name": name},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_validate_new_branch_name_reports_validity_and_collision(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    # A fresh, legal name is valid and available.
+    available = _validate_new_branch_name(client, test_project, "imbue/brand-new")
+    assert available == {"isValid": True, "alreadyExists": False}
+
+    # An illegal git ref is flagged invalid (and collision is not reported for it).
+    invalid = _validate_new_branch_name(client, test_project, "has space:and (parens)")
+    assert invalid == {"isValid": False, "alreadyExists": False}
+
+    # An existing branch (the fixture repo's default) is legal but collides.
+    existing = _validate_new_branch_name(client, test_project, "main")
+    assert existing == {"isValid": True, "alreadyExists": True}
+
+
 def test_terminal_agent_does_not_carry_a_model(
     client: TestClient, test_services: CompleteServiceCollection, test_project: Project
 ) -> None:
