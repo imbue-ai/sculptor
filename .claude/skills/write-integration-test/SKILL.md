@@ -70,6 +70,14 @@ Key conventions:
 - Use `only()` from `imbue_core.itertools` when expecting exactly one element
 - Read `docs/development/review/integration_tests.md` to avoid common anti-patterns (flaky sleeps, snapshot races, missing waits)
 
+#### Await a deterministic ready signal, not a sleep
+
+When a component finishes an async mount or initialization step that a test must wait for, the robust pattern is: production code stamps a stable `data-*` attribute once it's ready, and the test awaits it with `expect(...).to_have_attribute(...)`. This beats a fixed `page.wait_for_timeout(...)`, which races under load, and it gives Playwright a real condition to retry against.
+
+The in-repo exemplar is `data-editor-ready`: `Editor.tsx` stamps `data-editor-ready="true"` on the contenteditable once the editor has mounted, and `sculptor/sculptor/testing/elements/base.py` awaits it via `expect(chat_input).to_have_attribute("data-editor-ready", "true")` before typing into the chat input.
+
+Stamp the attribute **unconditionally in production** — not behind `import.meta.env.DEV`. The integration suite runs the production `vite build`, so a DEV-gated signal is dead-code-eliminated and the wait will hang (see `no_test_only_code_in_production` in `docs/development/review/integration_tests.md`).
+
 #### Minimal example (default response — no commands needed):
 
 ```python
