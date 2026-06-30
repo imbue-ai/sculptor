@@ -208,7 +208,7 @@ class Harness(BaseModel, abc.ABC):
         """
         raise NotImplementedError(
             "a harness whose is_ask_user_question_tool can return True must override "
-            "reconstruct_pending_ask_user_question"
+            + "reconstruct_pending_ask_user_question"
         )
 
     def get_plan_file_path_from_tool_use(self, block: ContentBlock) -> str | None:

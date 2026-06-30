@@ -30,7 +30,7 @@
 "." = 0
 
 [no-implicit-string-concat]
-"." = 25
+"." = 0
 
 [no-inline-functions]
 "." = 33

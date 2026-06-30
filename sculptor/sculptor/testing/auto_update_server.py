@@ -65,9 +65,12 @@ def _make_darwin_app_zip(version: str) -> bytes:
     Squirrel.Mac expects the zip to contain a ``*.app`` directory with a
     valid ``Contents/Info.plist`` including ``CFBundleVersion``.
     """
+    # The DOCTYPE's public/system IDs use single quotes (equally valid XML) so the two
+    # adjacent quoted literals aren't misread as Python implicit string concatenation by
+    # the no-implicit-string-concat ratchet, which scans raw text via a regex.
     plist = f"""\
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC '-//Apple//DTD PLIST 1.0//EN' 'http://www.apple.com/DTDs/PropertyList-1.0.dtd'>
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>

@@ -95,8 +95,8 @@ _MAX_DIFF_CONTEXT_LINES = 50
 # (un-added) files appear in both views.
 _UNTRACKED_FILES_DIFF_CMD = (
     "git ls-files --others --exclude-standard -z"
-    " | xargs -0 -I {} find {} -maxdepth 0 -type f -print0"
-    " | xargs -0 -I {} git --no-pager diff --no-index /dev/null {}"
+    + " | xargs -0 -I {} find {} -maxdepth 0 -type f -print0"
+    + " | xargs -0 -I {} git --no-pager diff --no-index /dev/null {}"
 )
 
 
@@ -182,10 +182,10 @@ class DefaultWorkspaceService(WorkspaceService):
                     on_persist=self._persist_setup_state,
                 )
             elif workspace.setup_status == "pending":
-                # Honor the project's tri-state default: `None` means "use the
-                # current default" (so we keep `pending` and the runner picks it
-                # up on first open), `""` means the user explicitly cleared
-                # (demote to `not_configured`).
+                # Honor the project's tri-state default: `None` means use the
+                # current default (so we keep `pending` and the runner picks it
+                # up on first open), an empty string means the user explicitly
+                # cleared it (demote to `not_configured`).
                 command = resolve_workspace_setup_command(project.workspace_setup_command)
                 if not command:
                     self._persist_setup_state(
