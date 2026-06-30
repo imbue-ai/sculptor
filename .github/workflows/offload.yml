@@ -17,9 +17,6 @@ concurrency:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   OFFLOAD_VERSION: "0.9.10"
-  # HCP Vault address + namespace. Mirrors the values in scripts/export-vault-env.
-  VAULT_ADDR: https://vault-cluster-public-vault-df29b16f.9b573ab7.z1.hashicorp.cloud:8200
-  VAULT_NAMESPACE: admin
 
 jobs:
   offload-integration-tests:
@@ -38,7 +35,7 @@ jobs:
       # offload's image-cache push to refs/notes/offload-images uses
       # GITHUB_TOKEN via the credentials actions/checkout sets up.
       contents: write
-      # Required so scripts/export-vault-env can request the OIDC token
+      # Required so the export-secrets action can request the OIDC token
       # GitHub injects via ACTIONS_ID_TOKEN_REQUEST_* env vars.
       id-token: write
       # Required by the report-flaky-aware-tests composite action to POST a
@@ -67,23 +64,7 @@ jobs:
           # Retry/timeout-harden apt against transient mirror stalls (SCU-1545).
           APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
           sudo apt-get $APT_OPTS update
-          sudo apt-get $APT_OPTS install -y --no-install-recommends rsync jq unzip ca-certificates
-
-      - name: Install Vault CLI
-        # Matches the GitLab pipeline's pinned version + sha. Installing
-        # directly to /usr/local/bin avoids the LOCAL_BIN/PATH dance the
-        # GitLab YAML needed for its caching layout.
-        run: |
-          VAULT_VERSION=1.19.0
-          VAULT_SHA256=9df904271319452bbb37825cfe50726383037550cc04b7c2d0ab09e2f08f82a1
-          curl -fsSL "https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip" -o /tmp/vault.zip
-          echo "${VAULT_SHA256}  /tmp/vault.zip" | sha256sum -c -
-          # -o overwrites without prompting (vault zip ships a LICENSE.txt
-          # that collides with one already on the runner; otherwise unzip
-          # tries to ask interactively and exits non-zero).
-          sudo unzip -o /tmp/vault.zip -d /usr/local/bin
-          rm /tmp/vault.zip
-          vault --version
+          sudo apt-get $APT_OPTS install -y --no-install-recommends rsync jq ca-certificates
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v4
@@ -120,15 +101,20 @@ jobs:
       - name: Sync Python deps
         run: uv sync --frozen
 
+      - name: Export Modal credentials
+        # Only Modal credentials are needed: the integration groups filter out
+        # the real_claude / real_pi tests, so the harness runs with a placeholder
+        # API key (see offload.toml) and never reads a host ANTHROPIC_API_KEY.
+        uses: imbue-ai/use-vault-secrets@main
+        with:
+          role: ${{ env.VAULT_AUTH_ROLE }}
+          secrets: |
+            shared/modal/MODAL_TOKEN_ID
+            shared/modal/MODAL_TOKEN_SECRET
+
       - name: Run offload integration tests
         id: tests
         run: |
-          # Only Modal credentials are needed: the integration groups filter out
-          # the real_claude / real_pi tests, so the harness runs with a placeholder
-          # API key (see offload.toml) and never reads a host ANTHROPIC_API_KEY.
-          eval "$(./scripts/export-vault-env \
-            shared/modal/MODAL_TOKEN_ID \
-            shared/modal/MODAL_TOKEN_SECRET)"
           ulimit -n 8192
 
           OFFLOAD_EXIT=0
@@ -216,17 +202,7 @@ jobs:
           # Retry/timeout-harden apt against transient mirror stalls (SCU-1545).
           APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
           sudo apt-get $APT_OPTS update
-          sudo apt-get $APT_OPTS install -y --no-install-recommends rsync jq unzip ca-certificates
-
-      - name: Install Vault CLI
-        run: |
-          VAULT_VERSION=1.19.0
-          VAULT_SHA256=9df904271319452bbb37825cfe50726383037550cc04b7c2d0ab09e2f08f82a1
-          curl -fsSL "https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip" -o /tmp/vault.zip
-          echo "${VAULT_SHA256}  /tmp/vault.zip" | sha256sum -c -
-          sudo unzip -o /tmp/vault.zip -d /usr/local/bin
-          rm /tmp/vault.zip
-          vault --version
+          sudo apt-get $APT_OPTS install -y --no-install-recommends rsync jq ca-certificates
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v4
@@ -261,12 +237,18 @@ jobs:
       - name: Sync Python deps
         run: uv sync --frozen
 
+      - name: Export Modal credentials
+        # Same Modal-only credential set as the browser lane above.
+        uses: imbue-ai/use-vault-secrets@main
+        with:
+          role: ${{ env.VAULT_AUTH_ROLE }}
+          secrets: |
+            shared/modal/MODAL_TOKEN_ID
+            shared/modal/MODAL_TOKEN_SECRET
+
       - name: Run offload electron integration tests
         id: tests
         run: |
-          eval "$(./scripts/export-vault-env \
-            shared/modal/MODAL_TOKEN_ID \
-            shared/modal/MODAL_TOKEN_SECRET)"
           ulimit -n 8192
 
           OFFLOAD_EXIT=0
