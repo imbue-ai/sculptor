@@ -735,9 +735,123 @@ tmux-dev-no-project:
 tmux-stop:
 	tmux kill-session -t {{session_name}} 2>/dev/null && echo "Session '{{session_name}}' terminated" || echo "Session '{{session_name}}' did not exist"
 
-# Rebuilds everything needed to successfully `just start` after changing commits
+# A too-old `uv` hard-errors on EVERY `uv` command, so a fresh workspace that
+# ships an older uv can't build, test, or `uv run` anything until uv is upgraded.
+# doctor upgrades a self-updatable uv in place; otherwise it prints the exact
+# upgrade command for how uv was installed.
+# Detect an out-of-range uv and self-remediate it, or print the exact fix.
 [group("dev")]
-rebuild: clean install install-ratchets generate-api generate-sculpt-client
+doctor:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{justfile_directory()}}"
+
+    # Compare dotted numeric versions: exit 0 (success) iff $1 >= $2.
+    version_ge() {
+      awk -v a="$1" -v b="$2" 'BEGIN {
+        na = split(a, x, "."); nb = split(b, y, ".");
+        n = (na > nb) ? na : nb;
+        for (i = 1; i <= n; i++) {
+          xi = (i <= na) ? x[i] + 0 : 0;
+          yi = (i <= nb) ? y[i] + 0 : 0;
+          if (xi > yi) exit 0;
+          if (xi < yi) exit 1;
+        }
+        exit 0;
+      }'
+    }
+
+    # Source of truth for the pin: the `required-version` line in pyproject.toml
+    # (e.g. `required-version = ">=0.11.22"`).
+    spec="$(awk -F'"' '/^required-version[[:space:]]*=/{print $2; exit}' pyproject.toml)"
+    if [ -z "$spec" ]; then
+      echo "doctor: could not read 'required-version' from pyproject.toml" >&2
+      exit 1
+    fi
+    # We reason about the '>=X.Y.Z' lower bound, which is what this repo pins.
+    min="$(printf '%s' "$spec" | sed -n 's/.*>=[[:space:]]*\([0-9][0-9.]*\).*/\1/p')"
+
+    if ! command -v uv >/dev/null 2>&1; then
+      echo "doctor: uv is not installed, but this repo requires uv $spec." >&2
+      echo "  Install it:  curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+      exit 1
+    fi
+    cur="$(uv --version 2>/dev/null | sed -n 's/^uv \([0-9][0-9.]*\).*/\1/p')"
+
+    if [ -z "$min" ]; then
+      echo "doctor: could not parse a '>=' bound from required-version=\"$spec\";" >&2
+      echo "        please confirm your uv ($cur) satisfies it." >&2
+      exit 0
+    fi
+    if version_ge "$cur" "$min"; then
+      echo "doctor: uv $cur satisfies required $spec — OK"
+      exit 0
+    fi
+
+    echo "doctor: uv $cur is older than this repo requires ($spec)." >&2
+
+    # Detect how uv was installed and remediate accordingly. Only the
+    # standalone-installer build supports `uv self update`; a package-managed
+    # build must be upgraded through its own package manager.
+    uv_bin="$(command -v uv)"
+    if command -v realpath >/dev/null 2>&1; then
+      uv_real="$(realpath "$uv_bin" 2>/dev/null || printf '%s' "$uv_bin")"
+    else
+      uv_real="$uv_bin"
+    fi
+
+    recheck() {
+      new="$(uv --version 2>/dev/null | sed -n 's/^uv \([0-9][0-9.]*\).*/\1/p')"
+      if version_ge "$new" "$min"; then
+        echo "doctor: uv upgraded to $new — OK"
+        return 0
+      fi
+      echo "doctor: uv is still $new after upgrading (needs $spec)." >&2
+      return 1
+    }
+
+    hint="standalone"
+    case "$uv_real" in
+      *"/Cellar/"*|*"/homebrew/"*|*"/.linuxbrew/"*) hint="brew" ;;
+      *"/pipx/"*) hint="pipx" ;;
+      *"/.cargo/"*) hint="cargo" ;;
+    esac
+    if command -v brew >/dev/null 2>&1; then
+      brew_prefix="$(brew --prefix 2>/dev/null || true)"
+      if [ -n "$brew_prefix" ] && [ "${uv_real#"$brew_prefix"}" != "$uv_real" ]; then
+        hint="brew"
+      fi
+    fi
+
+    case "$hint" in
+      standalone)
+        echo "doctor: attempting 'uv self update'..." >&2
+        if uv self update; then
+          recheck && exit 0
+        fi
+        echo "  If self-update is unavailable, reinstall the standalone build:" >&2
+        echo "      curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+        ;;
+      brew)
+        echo "  This uv is managed by Homebrew. Upgrade it with:" >&2
+        echo "      brew upgrade uv" >&2
+        ;;
+      pipx)
+        echo "  This uv is managed by pipx. Upgrade it with:" >&2
+        echo "      pipx upgrade uv" >&2
+        ;;
+      cargo)
+        echo "  This uv was installed via cargo. Upgrade it with:" >&2
+        echo "      cargo install --locked uv" >&2
+        ;;
+    esac
+    exit 1
+
+# Runs `doctor` first so a fresh workspace with an out-of-range uv is fixed (or
+# told exactly how to fix it) before the expensive clean/install steps run.
+# Rebuilds everything needed to successfully `just start` after changing commits.
+[group("dev")]
+rebuild: doctor clean install install-ratchets generate-api generate-sculpt-client
 
 # Open the per-test runtime distribution visualization in a browser.
 # Reads offload-history.jsonl from the repo root (tracked; updated by every `offload` run).
@@ -1405,13 +1519,39 @@ test-tracing:
       "sculptor/tests/integration/frontend/test_home_page.py::test_recent_workspaces_shown_on_home_page" \
       "--sculptor-trace-to=$trace_path"
 
+# Preflight for `test-real-claude`: those tests drive the actual `claude` CLI,
+# which must be installed and on PATH (and logged in). Fail fast here with a
+# clear message instead of deep inside pytest with a confusing stub error.
+_require-claude-cli:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! command -v claude >/dev/null 2>&1; then
+      echo "test-real-claude: the 'claude' CLI is not on PATH." >&2
+      echo "  Install it, then run 'claude /login' once to write OAuth" >&2
+      echo "  credentials to ~/.claude/ (a real ANTHROPIC_API_KEY also works)." >&2
+      exit 1
+    fi
+
+# Preflight for `test-real-pi`: those tests hit the live model through pi, which
+# reads ANTHROPIC_API_KEY from the environment. Fail fast here with a clear
+# message instead of building everything and then failing inside pytest.
+_require-anthropic-key:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+      echo "test-real-pi: ANTHROPIC_API_KEY is not set." >&2
+      echo "  These tests need a live Anthropic key:" >&2
+      echo "      export ANTHROPIC_API_KEY=sk-ant-...   # then re-run" >&2
+      exit 1
+    fi
+
 # Runs real Claude integration tests. Requires the `claude` CLI to be
 # logged in (run `claude /login` once to write OAuth credentials to
 # ~/.claude/). Hits real Claude usage and is excluded from CI. Run
 # serially by default. Set XDIST_WORKERS to override (e.g.
 # XDIST_WORKERS=2 for parallel).
 [group("test")]
-test-real-claude tests="sculptor/tests/integration/real_claude/" buildargs="": build-frontend generate-sculpt-client
+test-real-claude tests="sculptor/tests/integration/real_claude/" buildargs="": _require-claude-cli build-frontend generate-sculpt-client
     #!/usr/bin/env bash
     set -euo pipefail
     if [ "${JUST_VERBOSE:-}" != "1" ] && [ -z "${JUST_LOG_FILE:-}" ]; then
@@ -1436,7 +1576,7 @@ test-real-claude tests="sculptor/tests/integration/real_claude/" buildargs="": b
 # real_pi resolver requires. Run serially by default.
 # Set XDIST_WORKERS to override (e.g. XDIST_WORKERS=2 for parallel).
 [group("test")]
-test-real-pi tests="sculptor/tests/integration/real_pi/" buildargs="": install-pi build-frontend generate-sculpt-client
+test-real-pi tests="sculptor/tests/integration/real_pi/" buildargs="": _require-anthropic-key install-pi build-frontend generate-sculpt-client
     #!/usr/bin/env bash
     set -euo pipefail
     if [ "${JUST_VERBOSE:-}" != "1" ] && [ -z "${JUST_LOG_FILE:-}" ]; then
