@@ -6,7 +6,17 @@ const LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql";
 export type LinearAttachment = { url: string; sourceType: string | null; title: string | null };
 
 /** A Linear workflow state (e.g. "In Progress"), with its display color. */
-export type LinearState = { name: string; type: string; color: string };
+export type LinearState = {
+  name: string;
+  type: string;
+  color: string;
+  /**
+   * Linear's manual ordering of states within a team, used to sort states that
+   * share a `type` (a team can have several "started" states). Optional because
+   * not every fetch path selects it (e.g. sub-issue states don't need ordering).
+   */
+  position?: number;
+};
 
 /** A sub-issue, narrowed to what a ticket badge renders (id, title, status). */
 export type LinearChild = {
@@ -48,7 +58,7 @@ const ISSUE_FIELDS = `
   url
   description
   priorityLabel
-  state { name type color }
+  state { name type color position }
   assignee { displayName }
   attachments { nodes { url sourceType title } }
   children(first: ${CHILDREN_FETCH_LIMIT}) { nodes { identifier title url state { name type color } } }
@@ -176,6 +186,30 @@ export const fetchIssuesForUrl = async (inputs: {
     .map((node) => node.issue)
     .filter((issue): issue is RawIssue => issue !== null)
     .map(normalizeIssue);
+};
+
+/**
+ * The current user's assigned issues, most-recently-updated first. Resolved
+ * through the API key's `viewer`, so "me" is whoever the key belongs to. The
+ * board caps the count and orders by `updatedAt` rather than filtering by state
+ * so that recently-finished work stays visible (a just-completed ticket is the
+ * most recently updated), while long-closed issues fall off the end.
+ */
+export const fetchAssignedIssues = async (inputs: {
+  apiKey: string;
+  limit: number;
+  signal: AbortSignal;
+}): Promise<Array<LinearIssue>> => {
+  const { apiKey, limit, signal } = inputs;
+  const data = await linearRequest<{ viewer: { assignedIssues: { nodes: Array<RawIssue> } } }>({
+    apiKey,
+    query: `query ($first: Int!) {
+      viewer { assignedIssues(first: $first, orderBy: updatedAt) { nodes { ${ISSUE_FIELDS} } } }
+    }`,
+    variables: { first: limit },
+    signal,
+  });
+  return data.viewer.assignedIssues.nodes.map(normalizeIssue);
 };
 
 /** Free-text issue search for the quick-search bar (`issueSearch` is deprecated). */

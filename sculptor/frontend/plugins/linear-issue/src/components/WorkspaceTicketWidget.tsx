@@ -3,8 +3,8 @@ import { openExternal, useCurrentWorkspace, usePluginSetting } from "@sculptor/p
 import type { CSSProperties, ReactElement } from "react";
 import { useState } from "react";
 
-import { useShortcut } from "../linear/useShortcut.ts";
-import { useShortcutTicket } from "../linear/useShortcutTicket.ts";
+import { useTicketAssignment } from "../linear/useTicketAssignment.ts";
+import { useWorkspaceTicketIssue } from "../linear/useWorkspaceTicketIssue.ts";
 import { StateIcon } from "./StateIcon.tsx";
 
 // Mirrors the host PR button's chip (PrButton.module.scss): a filled gray-a3
@@ -28,23 +28,23 @@ const CHIP_BASE: CSSProperties = {
 };
 
 /**
- * The compact Linear shortcut the host places in the workspace banner, beside
+ * The compact Linear ticket chip the host places in the workspace banner, beside
  * the PR button. It tracks the same ticket as the panel: defaulting to the
- * branch's issue, but following whatever the user assigns as the shortcut from
- * the panel (the shared per-workspace `shortcut` setting). Clicking opens the
- * issue in Linear.
+ * branch's issue, but following whatever ticket the user assigns to the
+ * workspace from the panel (the shared per-workspace assignment setting).
+ * Clicking opens the issue in Linear.
  *
  * It renders nothing until there is something to link to (no API key, or no
  * branch/assigned ticket resolved yet) rather than show an empty chip — the
  * banner row stays clean for workspaces with no linked Linear issue.
  */
-export const WorkspaceShortcutWidget = (): ReactElement | null => {
+export const WorkspaceTicketWidget = (): ReactElement | null => {
   const branch = useCurrentWorkspace((workspace) => workspace?.branch ?? null);
   const workspaceId = useCurrentWorkspace((workspace) => workspace?.id ?? null);
   const pullRequestUrl = useCurrentWorkspace((workspace) => workspace?.pullRequestUrl ?? null);
   const [apiKey] = usePluginSetting("apiKey");
-  const { shortcutId } = useShortcut(workspaceId);
-  const { issue, isDefault } = useShortcutTicket({ apiKey, branch, pullRequestUrl, shortcutId });
+  const { assignedTicketId } = useTicketAssignment(workspaceId);
+  const { issue, isDefault } = useWorkspaceTicketIssue({ apiKey, branch, pullRequestUrl, assignedTicketId });
   const [isHovered, setIsHovered] = useState(false);
 
   if (!apiKey || !issue) return null;
@@ -52,9 +52,10 @@ export const WorkspaceShortcutWidget = (): ReactElement | null => {
   // A cancelled ticket is terminal and likely stale, so mute it the way the PR
   // button mutes a merged/closed PR (gray-a2 + struck identifier) — a glance is
   // enough to spot a still-open PR pointing at an abandoned ticket.
-  const isCancelled = issue.state?.type === "cancelled";
+  // Linear's terminal state type is "canceled" (one "l").
+  const isCancelled = issue.state?.type === "canceled";
   const stateLabel = issue.state ? ` · ${issue.state.name}` : "";
-  const tooltip = `${issue.title}${stateLabel}${isDefault ? "" : " · assigned shortcut"} — open in Linear`;
+  const tooltip = `${issue.title}${stateLabel}${isDefault ? "" : " · assigned ticket"} — open in Linear`;
 
   // Cancelled tickets sit one step more muted than active ones, mirroring the
   // merged/closed PR button (gray-a2 vs gray-a3).
@@ -69,7 +70,7 @@ export const WorkspaceShortcutWidget = (): ReactElement | null => {
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         onClick={() => openExternal(issue.url)}
-        data-testid="linear-workspace-shortcut"
+        data-testid="linear-workspace-ticket"
       >
         {/* Leading glyph: the ticket's workflow state, tinted by the state
             color. StateIcon supplies a neutral fallback when the color is

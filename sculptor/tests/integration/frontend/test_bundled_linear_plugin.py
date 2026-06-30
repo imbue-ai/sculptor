@@ -46,13 +46,13 @@ LINEAR_SETTINGS_TEXT = "Personal API key from Linear"
 LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql"
 # Test-only testids the plugin sets on its contributions.
 LINEAR_API_KEY_PLACEHOLDER = "lin_api_..."
-LINEAR_WIDGET_TESTID = "linear-workspace-shortcut"
+LINEAR_WIDGET_TESTID = "linear-workspace-ticket"
 # The canned issue the mock returns as the workspace's (branch) ticket.
 WIDGET_TICKET_ID = "SCU-1234"
 _MOCK_PRIMARY_ISSUE = {
     "identifier": WIDGET_TICKET_ID,
-    "title": "Banner shortcut under test",
-    "url": "https://linear.app/imbue/issue/SCU-1234/banner-shortcut-under-test",
+    "title": "Banner ticket under test",
+    "url": "https://linear.app/imbue/issue/SCU-1234/banner-ticket-under-test",
     "description": None,
     "priorityLabel": None,
     "state": {"name": "In Progress", "type": "started", "color": "#5e6ad2"},
@@ -125,14 +125,14 @@ def test_bundled_linear_plugin_workspace_widget_shows_branch_ticket(
     """The plugin's workspace widget renders the branch ticket beside the PR button.
 
     Exercises the new ``registerWorkspaceWidget`` SDK surface end-to-end: with a
-    Linear API key set and the Linear API mocked, the compact shortcut the plugin
-    contributes to the workspace banner resolves the branch's (primary) ticket
-    and shows its identifier — the same ticket the panel defaults to.
+    Linear API key set and the Linear API mocked, the compact ticket chip the
+    plugin contributes to the workspace banner resolves the branch's (primary)
+    ticket and shows its identifier — the same ticket the panel defaults to.
 
     TODO(SCU-1495 follow-up): also cover assigning a *different* ticket from the
-    panel (the bookmark control) and asserting the widget follows the shared
-    ``shortcut`` setting. That needs a multi-ticket Linear mock (a primary plus a
-    PR-linked or pinned issue), so it is left as a follow-up.
+    panel (the assign control) and asserting the widget follows the shared
+    per-workspace assignment setting. That needs a multi-ticket Linear mock (a
+    primary plus a PR-linked or pinned issue), so it is left as a follow-up.
     """
     with sculptor_instance_factory_.spawn_instance() as instance:
         _mock_linear_graphql(instance)
