@@ -58,16 +58,3 @@ class PlaywrightExperimentalSettingsElement(PlaywrightIntegrationTestElement):
         if toggle.get_attribute("data-state") != target_state:
             toggle.click()
         expect(toggle).to_have_attribute("data-state", target_state)
-
-    def get_frontend_plugins_toggle(self) -> Locator:
-        """Return the 'Frontend plugins' toggle locator."""
-        return self._page.get_by_test_id(ElementIDs.SETTINGS_ENABLE_FRONTEND_PLUGINS_TOGGLE)
-
-    def set_frontend_plugins(self, *, enabled: bool) -> None:
-        """Set the 'Frontend plugins' toggle to the desired state (idempotent)."""
-        toggle = self.get_frontend_plugins_toggle()
-        expect(toggle).to_be_visible()
-        target_state = "checked" if enabled else "unchecked"
-        if toggle.get_attribute("data-state") != target_state:
-            toggle.click()
-        expect(toggle).to_have_attribute("data-state", target_state)

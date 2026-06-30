@@ -310,8 +310,8 @@ class UserConfig(SerializableModel):
         description="When enabled, the agent-type menus offer the experimental pi agent. Off by default. Gates only the creation entry point — an existing pi agent keeps running regardless.",
     )
     enable_frontend_plugins: bool = Field(
-        default=False,
-        description="When enabled, the frontend plugin system loads runtime plugins and shows the Plugins settings section. Off by default. Enabling applies immediately; disabling takes effect after an app reload (already-loaded plugins are not unloaded mid-session).",
+        default=True,
+        description="When enabled, the frontend plugin system loads runtime plugins and shows the plugin-management UI in the Plugins settings section. On by default. The Plugins settings section itself is always present (it hosts the toggle for this flag); this flag gates loading plugins and the management UI, not the section's visibility. Enabling applies immediately; disabling takes effect after an app reload (already-loaded plugins are not unloaded mid-session).",
     )
     default_fast_mode: bool = Field(
         default=False,

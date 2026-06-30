@@ -133,7 +133,7 @@ describe("PanelRegistryProvider — bootstrap", () => {
     expect(store.get(zoneOrderAtom)).toEqual({});
   });
 
-  it("does not re-apply defaultLayout when zoneAssignments is already populated", () => {
+  it("does not overwrite a populated zoneAssignments with the default", () => {
     const store = createStore();
     // Seed with an existing user-configured assignment that differs from the
     // defaultLayout (info is placed in "bottom" instead of "top-left").
@@ -141,13 +141,30 @@ describe("PanelRegistryProvider — bootstrap", () => {
 
     renderProvider({ store, panels: TEST_PANELS, defaultLayout: TEST_DEFAULT_LAYOUT });
 
-    // The bootstrap effect must not overwrite the existing assignments with
+    // The bootstrap must not overwrite the existing assignments with
     // defaultLayout.zoneAssignments. The user-configured zone for "info" stays.
     expect(store.get(zoneAssignmentsAtom).info).toBe("bottom");
-    // activePanelPerZone and zoneVisibility are bootstrap-only atoms — they
-    // must remain untouched when zoneAssignments is already populated.
-    expect(store.get(activePanelPerZoneAtom)).toEqual({});
-    expect(store.get(zoneVisibilityAtom)).toEqual({});
+  });
+
+  it("seeds the other layout pieces even when zoneAssignments was populated first", () => {
+    // Regression: a plugin's panel registers asynchronously, and the
+    // reconciliation effect writes zoneAssignments to give it a zone. If that
+    // write lands before the bootstrap and the seed is gated on zoneAssignments
+    // being empty, zoneVisibility never gets seeded — and a missing zoneVisibility
+    // entry gates the zone hidden, collapsing the whole docked layout to the
+    // center panel. The bootstrap must seed each still-empty piece regardless.
+    const store = createStore();
+    store.set(zoneAssignmentsAtom, { info: "bottom", terminal: "bottom", changes: "top-right" });
+
+    renderProvider({ store, panels: TEST_PANELS, defaultLayout: TEST_DEFAULT_LAYOUT });
+
+    // The populated zoneAssignments is preserved...
+    expect(store.get(zoneAssignmentsAtom).info).toBe("bottom");
+    // ...but the still-empty pieces are seeded from the default, so the zones are
+    // visible rather than all-hidden.
+    expect(store.get(zoneVisibilityAtom)).toEqual(TEST_DEFAULT_LAYOUT.zoneVisibility);
+    expect(store.get(activePanelPerZoneAtom)).toEqual(TEST_DEFAULT_LAYOUT.activePanelPerZone);
+    expect(store.get(zoneOrderAtom)).toEqual(TEST_DEFAULT_LAYOUT.zoneOrder);
   });
 });
 

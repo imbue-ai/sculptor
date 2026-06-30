@@ -1,33 +1,28 @@
-"""Integration tests for the experimental frontend-plugins gating.
+"""Integration tests for the Plugins settings section and its global toggle.
 
-The plugin system ships behind the experimental `enable_frontend_plugins`
-UserConfig flag. With the flag off (the default) the Plugins settings section
-must be absent from the sidebar; with it on, the section appears, and toggling
-the switch flips that visibility live (no reload needed for the section itself).
+The Plugins settings section is always present in the sidebar — it hosts the
+toggle that globally enables or disables the whole plugin system, so it must
+stay reachable even when the system is off, to turn it back on. The system is on
+by default: the section shows the plugin-management UI (the add-source input and
+the list). Turning the toggle off hides that UI but leaves the section and toggle
+in place, live, with no reload; turning it on reveals the management UI again.
 
 Two instances are used deliberately:
-  - the shared `sculptor_instance_` asserts the default-off behavior without
+  - the shared ``sculptor_instance_`` asserts the default-on state without
     mutating any config, so it leaves no state behind;
-  - a fresh factory instance, seeded with the flag on via a folder populator,
-    owns all the mutation and is torn down (process + temp folder) when its
-    `spawn_instance()` context exits.
+  - a fresh factory instance owns the toggle mutation and is torn down (process
+    + temp folder) when its ``spawn_instance()`` context exits.
 """
-
-from pathlib import Path
 
 from playwright.sync_api import expect
 
-from sculptor.services.user_config.user_config import load_config
-from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.playwright_utils import navigate_to_settings_page
-from sculptor.testing.resources import _default_sculptor_folder_populator
-from sculptor.testing.resources import custom_sculptor_folder_populator
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 
 
-def test_plugins_section_hidden_by_default(sculptor_instance_: SculptorInstance) -> None:
-    """With the default config (flag off), the Plugins nav item is absent.
+def test_plugins_section_present_and_on_by_default(sculptor_instance_: SculptorInstance) -> None:
+    """The Plugins section is in the sidebar with the system on by default.
 
     Uses the shared instance and mutates nothing, so there is nothing to clean
     up — the assertion is purely read-only.
@@ -35,44 +30,34 @@ def test_plugins_section_hidden_by_default(sculptor_instance_: SculptorInstance)
     page = sculptor_instance_.page
     settings_page = navigate_to_settings_page(page=page)
 
-    # The section is gated off by default, so the nav item should not render.
-    expect(settings_page.get_plugins_nav()).to_have_count(0)
+    # The section is always present (it stays reachable to turn the system on).
+    expect(settings_page.get_plugins_nav()).to_be_visible()
 
-    # Sanity: the Experimental section is reachable and the flag toggle exists
-    # but is off — confirming the gating wiring (not just a missing test id).
-    experimental = settings_page.click_on_experimental()
-    expect(experimental.get_frontend_plugins_toggle()).to_have_attribute("data-state", "unchecked")
-
-
-def _enable_frontend_plugins_populator(folder_path: Path) -> None:
-    """Seed the per-test sculptor folder with `enable_frontend_plugins=True`."""
-    _default_sculptor_folder_populator(folder_path)
-    config_path = folder_path / "internal" / "config.toml"
-    config = load_config(config_path).model_copy(update={"enable_frontend_plugins": True})
-    save_config(config, config_path)
+    plugins = settings_page.click_on_plugins()
+    # On by default: the toggle is on and the management UI (add-source input) shows.
+    expect(plugins.get_frontend_plugins_toggle()).to_have_attribute("data-state", "checked")
+    expect(plugins.get_source_input()).to_be_visible()
 
 
-@custom_sculptor_folder_populator.with_args(_enable_frontend_plugins_populator)
-def test_plugins_section_visible_and_toggles_with_switch(
+def test_global_toggle_hides_management_ui_live(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
-    """Seeded on, the Plugins section shows; the switch hides/shows it live.
+    """Toggling the global switch hides/shows the management UI without a reload.
 
-    A fresh factory instance keeps this mutation isolated; it is fully torn
-    down when the `spawn_instance()` context exits.
+    A fresh factory instance keeps this mutation isolated; it is fully torn down
+    when the ``spawn_instance()`` context exits.
     """
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
         settings_page = navigate_to_settings_page(page=page)
+        plugins = settings_page.click_on_plugins()
 
-        # Seeded with the flag on -> the section is present.
+        # Turning the toggle off hides the add-source input and the list, but the
+        # section and toggle stay put so the system can be turned back on.
+        plugins.set_frontend_plugins(enabled=False)
         expect(settings_page.get_plugins_nav()).to_be_visible()
+        expect(plugins.get_source_input()).to_have_count(0)
 
-        # Turning the switch off removes the section without a reload.
-        experimental = settings_page.click_on_experimental()
-        experimental.set_frontend_plugins(enabled=False)
-        expect(settings_page.get_plugins_nav()).to_have_count(0)
-
-        # Turning it back on brings the section back.
-        experimental.set_frontend_plugins(enabled=True)
-        expect(settings_page.get_plugins_nav()).to_be_visible()
+        # Turning it back on reveals the management UI again.
+        plugins.set_frontend_plugins(enabled=True)
+        expect(plugins.get_source_input()).to_be_visible()

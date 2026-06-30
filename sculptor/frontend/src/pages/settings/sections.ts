@@ -100,10 +100,9 @@ export const SETTINGS_SECTIONS: ReadonlyArray<SettingsSectionDescriptor> = [
     icon: LayoutGridIcon,
     testId: ElementIds.SETTINGS_NAV_PANELS,
   },
-  // Visibility of the Plugins section is gated on the experimental
-  // frontend-plugins flag at both consumers of this array (the Settings
-  // sidebar in SettingsPage and the Cmd+K palette builder) — with the flag
-  // off it appears in neither.
+  // The Plugins section is always visible: it hosts the frontend-plugins
+  // master switch, so it must stay reachable even when the system is off (to
+  // flip it back on).
   {
     id: SettingsSection.PLUGINS,
     displayName: "Plugins",

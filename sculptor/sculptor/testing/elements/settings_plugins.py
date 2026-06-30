@@ -15,6 +15,21 @@ class PlaywrightPluginsSettingsElement(PlaywrightIntegrationTestElement):
     ``import``/``activate``/``load``).
     """
 
+    def get_frontend_plugins_toggle(self) -> Locator:
+        """Return the frontend-plugins master switch (the kill switch for the
+        whole plugin system). It lives at the top of this section rather than in
+        Experimental so the section stays reachable to flip the system back on."""
+        return self._page.get_by_test_id(ElementIDs.SETTINGS_ENABLE_FRONTEND_PLUGINS_TOGGLE)
+
+    def set_frontend_plugins(self, *, enabled: bool) -> None:
+        """Set the frontend-plugins master switch to the desired state (idempotent)."""
+        toggle = self.get_frontend_plugins_toggle()
+        expect(toggle).to_be_visible()
+        target_state = "checked" if enabled else "unchecked"
+        if toggle.get_attribute("data-state") != target_state:
+            toggle.click()
+        expect(toggle).to_have_attribute("data-state", target_state)
+
     def get_source_input(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.SETTINGS_PLUGINS_SOURCE_INPUT)
 
@@ -77,6 +92,11 @@ class PlaywrightPluginsSettingsElement(PlaywrightIntegrationTestElement):
         was located by kind/status rather than by source)."""
         return row.get_by_test_id(ElementIDs.SETTINGS_PLUGINS_SOURCE_TOGGLE)
 
+    def get_reload_in(self, row: Locator) -> Locator:
+        """The reload/retry control within a source row. Present on a loaded row
+        and on an errored row, where it re-attempts the failed load in place."""
+        return row.get_by_test_id(ElementIDs.SETTINGS_PLUGINS_SOURCE_RELOAD)
+
     def add_source(self, source: str) -> None:
         """Type a source into the input, click Add, and wait for its row to appear.
 
@@ -94,6 +114,10 @@ class PlaywrightPluginsSettingsElement(PlaywrightIntegrationTestElement):
     def remove_source(self, source: str) -> None:
         """Click the remove (trash) button on a source's row."""
         self.get_source_row(source).get_by_test_id(ElementIDs.SETTINGS_PLUGINS_SOURCE_REMOVE).click()
+
+    def retry(self, source: str) -> None:
+        """Click the reload/retry control on a source's row to re-attempt its load."""
+        self.get_source_row(source).get_by_test_id(ElementIDs.SETTINGS_PLUGINS_SOURCE_RELOAD).click()
 
     def open_source_settings(self, source: str) -> None:
         """Reveal a source's plugin-rendered settings component (clicks the gear).
