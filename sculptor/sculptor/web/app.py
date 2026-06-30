@@ -726,6 +726,12 @@ def create_workspace_v2(
 
         if branch_name:
             with services.git_repo_service.open_local_user_git_repo_for_read(project, log_command=False) as repo:
+                if not repo.is_valid_branch_name(branch_name):
+                    # Reject illegal ref names here so the user gets an actionable
+                    # error at creation, rather than an opaque WorktreeError raised
+                    # later when `git worktree add -b` runs during async environment
+                    # setup (and is surfaced only in the agent panel).
+                    raise HTTPException(status_code=400, detail=f"'{branch_name}' is not a valid git branch name")
                 if repo.is_branch_ref(branch_name):
                     raise HTTPException(status_code=409, detail=f"Branch '{branch_name}' already exists")
 

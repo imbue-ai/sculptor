@@ -653,6 +653,37 @@ By default the server creates a small test git repository. Pass
   changes appear in the next screenshot without restarting. If you edit a
   `.tsx` or `.scss` file, just take another screenshot to see the change.
 
+## Reading backend logs (when something fails)
+
+The server log you started with `nohup` (`$SERVER_LOG`) only captures the
+backend's **startup** output. Once the server is ready, the backend's runtime
+logs — request handling, git commands, and the full traceback + stderr of any
+backend error (e.g. a `WorktreeError` from `git worktree add`) — go **only** to
+the backend's own structured log file under its temp data folder, not to
+`$SERVER_LOG`. If the UI shows an error but `$SERVER_LOG` looks empty after
+startup, that's expected; look here instead.
+
+Find the backend's data folder (printed at startup) and read its JSONL log:
+
+```bash
+# The temp sculptor folder is printed once at startup, e.g. in the "Using DB:" line.
+SCULPTOR_FOLDER=$(grep -oE '/[^ ]*sculptor_manual_test_[A-Za-z0-9_]+' "$SERVER_LOG" | head -1)
+BACKEND_LOG="$SCULPTOR_FOLDER/internal/logs/server/logs.jsonl"
+echo "Backend log: $BACKEND_LOG"
+
+# Pull out errors / a specific failure (each line is a JSON record; print the message):
+grep -aE '\|ERROR|Traceback|fatal:|WorktreeError' "$BACKEND_LOG" | python3 -c "
+import json,sys
+for line in sys.stdin:
+    try: print(json.loads(line).get('text',''))
+    except Exception: print(line.rstrip())
+" | tail -40
+```
+
+This is the authoritative place to find *why* a workspace, agent, or git
+operation failed — the agent panel truncates the message and `$SERVER_LOG`
+won't have it.
+
 ## Cleanup
 
 **IMPORTANT:** The server runs as a detached `nohup` process — it will keep

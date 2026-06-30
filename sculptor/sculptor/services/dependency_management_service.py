@@ -33,8 +33,8 @@ from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.primitives.service import Service
 from sculptor.services.managed_tools import CLAUDE_VERSION_RANGE
-from sculptor.services.managed_tools import PI_VERSION_RANGE
 from sculptor.services.managed_tools import ManagedTool
+from sculptor.services.managed_tools import PI_VERSION_RANGE
 from sculptor.services.managed_tools import ResolvedDistribution
 from sculptor.services.managed_tools import VersionRange
 from sculptor.services.managed_tools import get_managed_tool
