@@ -23,13 +23,17 @@ describe("captureNonEmptyPage", () => {
     expect(capturePage).toHaveBeenCalledTimes(3);
   });
 
-  it("returns immediately when the first capture is already painted", async () => {
+  it("returns immediately when the first capture is already painted, capturing with stayHidden", async () => {
     const capturePage = vi.fn(() => Promise.resolve(paintedImage));
 
     const result = await captureNonEmptyPage({ capturePage });
 
     expect(result).toBe(paintedImage);
     expect(capturePage).toHaveBeenCalledTimes(1);
+    // stayHidden forces the guest to composite a frame even when its window is
+    // occluded (the xvfb steady state), which is what stops capturePage from
+    // returning an empty image forever; assert we always pass it.
+    expect(capturePage).toHaveBeenCalledWith(undefined, { stayHidden: true, stayAwake: true });
   });
 
   it("captures exactly once when retries is 0", async () => {
