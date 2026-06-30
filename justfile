@@ -1519,39 +1519,13 @@ test-tracing:
       "sculptor/tests/integration/frontend/test_home_page.py::test_recent_workspaces_shown_on_home_page" \
       "--sculptor-trace-to=$trace_path"
 
-# Preflight for `test-real-claude`: those tests drive the actual `claude` CLI,
-# which must be installed and on PATH (and logged in). Fail fast here with a
-# clear message instead of deep inside pytest with a confusing stub error.
-_require-claude-cli:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if ! command -v claude >/dev/null 2>&1; then
-      echo "test-real-claude: the 'claude' CLI is not on PATH." >&2
-      echo "  Install it, then run 'claude /login' once to write OAuth" >&2
-      echo "  credentials to ~/.claude/ (a real ANTHROPIC_API_KEY also works)." >&2
-      exit 1
-    fi
-
-# Preflight for `test-real-pi`: those tests hit the live model through pi, which
-# reads ANTHROPIC_API_KEY from the environment. Fail fast here with a clear
-# message instead of building everything and then failing inside pytest.
-_require-anthropic-key:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
-      echo "test-real-pi: ANTHROPIC_API_KEY is not set." >&2
-      echo "  These tests need a live Anthropic key:" >&2
-      echo "      export ANTHROPIC_API_KEY=sk-ant-...   # then re-run" >&2
-      exit 1
-    fi
-
 # Runs real Claude integration tests. Requires the `claude` CLI to be
 # logged in (run `claude /login` once to write OAuth credentials to
 # ~/.claude/). Hits real Claude usage and is excluded from CI. Run
 # serially by default. Set XDIST_WORKERS to override (e.g.
 # XDIST_WORKERS=2 for parallel).
 [group("test")]
-test-real-claude tests="sculptor/tests/integration/real_claude/" buildargs="": _require-claude-cli build-frontend generate-sculpt-client
+test-real-claude tests="sculptor/tests/integration/real_claude/" buildargs="": build-frontend generate-sculpt-client
     #!/usr/bin/env bash
     set -euo pipefail
     if [ "${JUST_VERBOSE:-}" != "1" ] && [ -z "${JUST_LOG_FILE:-}" ]; then
@@ -1576,7 +1550,7 @@ test-real-claude tests="sculptor/tests/integration/real_claude/" buildargs="": _
 # real_pi resolver requires. Run serially by default.
 # Set XDIST_WORKERS to override (e.g. XDIST_WORKERS=2 for parallel).
 [group("test")]
-test-real-pi tests="sculptor/tests/integration/real_pi/" buildargs="": _require-anthropic-key install-pi build-frontend generate-sculpt-client
+test-real-pi tests="sculptor/tests/integration/real_pi/" buildargs="": install-pi build-frontend generate-sculpt-client
     #!/usr/bin/env bash
     set -euo pipefail
     if [ "${JUST_VERBOSE:-}" != "1" ] && [ -z "${JUST_LOG_FILE:-}" ]; then
