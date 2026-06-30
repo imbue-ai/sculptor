@@ -45,10 +45,11 @@ def _isolate_shell_config(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pyt
 
     These tests start a real terminal (``$SHELL -l``), and the self-exit test
     drives that shell to exit. A heavily-configured login shell is slow to
-    initialize and drops typed-ahead input while it does, which is what made the
-    self-exit teardown flaky on a developer's machine but not on CI's bare bash.
-    An empty HOME/ZDOTDIR gives every run a vanilla, fast-starting shell, so the
-    behavior under test depends on Sculptor, not on who runs the suite.
+    initialize and drops typed-ahead input while it does, so a write issued
+    right after start() can be lost — and how long that takes varies per
+    developer. An empty HOME/ZDOTDIR gives every run a vanilla, fast-starting
+    shell, so the behavior under test depends on Sculptor, not on who runs the
+    suite.
     """
     empty_home = tmp_path_factory.mktemp("empty_shell_home")
     monkeypatch.setenv("HOME", str(empty_home))

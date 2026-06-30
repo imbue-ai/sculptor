@@ -34,12 +34,11 @@ def _isolate_shell_config(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pyt
     These tests spawn a real ``$SHELL -l`` — a login shell, which sources the
     user's full rc chain. Left alone, that turns the developer's personal
     terminal configuration (prompt themes, plugins, syntax highlighting,
-    bracketed-paste) into uncontrolled test input: a bare ``/bin/bash`` on CI
-    behaves nothing like a heavily-themed zsh on a laptop, which is what made
-    these reads flaky. Pointing HOME (bash, ``~/.profile`` etc.) and ZDOTDIR
-    (zsh, ``.zshrc`` etc.) at an empty directory gives every run a vanilla
-    prompt, so what the tests observe depends only on Sculptor's own env
-    handling, not on who runs the suite.
+    bracketed-paste) into uncontrolled test input — a bare ``/bin/bash`` on CI
+    behaves nothing like a heavily-themed zsh on a laptop. Pointing HOME (bash,
+    ``~/.profile`` etc.) and ZDOTDIR (zsh, ``.zshrc`` etc.) at an empty
+    directory gives every run a vanilla prompt, so what the tests observe
+    depends only on Sculptor's own env handling, not on who runs the suite.
     """
     empty_home = tmp_path_factory.mktemp("empty_shell_home")
     monkeypatch.setenv("HOME", str(empty_home))

@@ -250,6 +250,26 @@ create_disabled_dependency_stub(fake_bin_dir, "claude", DependencyState.INSTALLE
 
 ---
 
+### `isolate_spawned_shell_config`
+
+**Question:** Does this test spawn a real interactive/login shell (or other host process) and then assert on output read back through it — coupling a config-independent assertion to the developer's terminal configuration?
+
+A test that launches the developer's `$SHELL` — especially as a login shell (`-l`) — inherits their whole rc chain: prompt themes, plugins, syntax highlighting, bracketed-paste, autosuggestions. That output is uncontrolled input: a bare `/bin/bash` on CI behaves nothing like a heavily-themed zsh on a laptop, so the test passes in CI and flakes (or fails outright) locally. The deeper smell is the coupling itself — the property under test (e.g. that an env var is propagated or scrubbed) is usually produced by a pure function and has nothing to do with the shell's theme, yet it is being observed through a noisy, config-dependent channel.
+
+**What to look for:**
+- A process built from `$SHELL` / `os.environ["SHELL"]`, or a shell run with `-l`, without pinning the shell's environment
+- Reading command output back through an interactive shell and matching on it, especially with ANSI/escape-stripping or `errors="replace"` decoding added to cope with prompt noise
+- Fixed sleeps or generous timeouts added so a slow, heavily-configured shell has "enough" time to initialize before the test writes to it
+- An assertion about logic (env handling, argument building, path construction) verified *only* end-to-end through a spawned shell, with no direct test of the function that implements it
+
+**Fix:**
+- Isolate the shell so every run gets a vanilla, fast-starting config: an autouse fixture that points `HOME` and `ZDOTDIR` at an empty directory removes the user's rc files (and lets you delete the escape-stripping band-aids). Pin the shell explicitly rather than inheriting `$SHELL` when the test does not specifically need the user's shell.
+- Push the real assertion down a layer: unit-test the pure function that produces the behaviour (env scrub/merge, arg building) directly with controlled inputs, and keep at most a thin end-to-end test that a value reaches a real spawned process. Don't paper over a config-independent assertion with filtering or longer timeouts — remove the dependency on the channel.
+
+**Exceptions:** Tests that genuinely exercise the interactive-shell integration itself (e.g. that a login shell honours SIGHUP and exits, or that a specific rc-sourcing behaviour works) legitimately need a real shell — but should still pin its configuration so the behaviour under test is the only variable.
+
+---
+
 ## Test Placement
 
 ### `correct_launch_mode_markers`
