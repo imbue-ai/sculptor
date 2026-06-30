@@ -1354,7 +1354,7 @@ dev = [
 
 [[package]]
 name = "sculptor"
-version = "0.39.0rc1"
+version = "0.39.0"
 source = { editable = "sculptor" }
 dependencies = [
     { name = "alembic" },
