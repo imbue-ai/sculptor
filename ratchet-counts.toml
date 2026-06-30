@@ -117,7 +117,7 @@
 "." = 1
 
 [no-sculptor-subprocess]
-"." = 2
+"." = 1
 
 [no-ssh-subprocess]
 "." = 0
