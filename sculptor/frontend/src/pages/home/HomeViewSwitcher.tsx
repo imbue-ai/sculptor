@@ -20,7 +20,9 @@ export const HomeViewSwitcher = (): ReactElement => {
       {options.map(({ id, title, icon: Icon }) => (
         <SegmentedControl.Item key={id} value={id}>
           <Flex align="center" gap="2">
-            {Icon ? <Icon /> : null}
+            {/* 16px matches the codebase's SegmentedControl icon size; Lucide's
+                24px default sits taller than the item text. */}
+            {Icon ? <Icon size={16} /> : null}
             {title}
           </Flex>
         </SegmentedControl.Item>
