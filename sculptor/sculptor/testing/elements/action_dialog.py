@@ -70,8 +70,7 @@ class PlaywrightActionDialogElement(PlaywrightIntegrationTestElement):
         """Get an option in the (open) group dropdown by its visible name.
 
         Radix renders select options at the page level, so this queries the page
-        rather than the dialog locator. Encapsulating the role-based lookup in the
-        POM keeps integration tests free of raw get_by_role calls.
+        rather than the dialog locator.
         """
         return self._page.get_by_role("option", name=group_name)
 
