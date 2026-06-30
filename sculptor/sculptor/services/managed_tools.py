@@ -232,9 +232,9 @@ _CLAUDE_MANIFEST_FETCH_TIMEOUT_SECONDS = 30.0
 # the existing service -> managed_tools edge, which would be an import cycle. The
 # service re-imports this constant for its status / version-range logic.
 CLAUDE_VERSION_RANGE = VersionRange(
-    min_version="2.1.170",
+    min_version="2.1.195",
     max_version="2.99.99",
-    recommended_version="2.1.170",
+    recommended_version="2.1.195",
     # Blocked versions create background tool invocations that are missing events
     # describing them.
     blocked_versions=(BlockedVersionRange(min_version="2.1.101", max_version="2.1.101"),),

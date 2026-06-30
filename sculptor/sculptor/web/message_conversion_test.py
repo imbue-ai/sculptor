@@ -5783,6 +5783,88 @@ class TestChatMessageIdCollisionContract:
             expected_tool_ids=("toolu_agent", "toolu_sub", "toolu_b"),
         )
 
+    def test_two_level_nested_subagent_turns_keep_parent_attribution(self) -> None:
+        """Two-level nesting (a subagent that spawns its own subagent) must preserve each
+        level's parent_tool_use_id so the frontend can rebuild the depth-2 tree.
+
+        Claude 2.1.172 lets a sub-agent spawn its own sub-agents.  A foreground grandchild's
+        messages carry their *immediate* parent's tool_use id (the level-1 Agent tool_use),
+        which itself lives in a message whose parent is the top-level Agent tool_use.  The
+        converter must keep all three parent contexts distinct as control descends
+        None -> toolu_l1 -> toolu_l2 and returns back to None: collapsing any adjacent pair
+        merges turns and loses an Agent tool_use or a subagent reply (the SCU-1421/1422
+        collapse class, one level deeper than
+        ``test_interleaved_subagent_and_main_turns_keep_distinct_ids``).  buildSubagentTree
+        reconstructs the nesting purely from these ids, so a flattened/dropped parent here
+        silently breaks the rendered tree.
+        """
+        request_id = AgentMessageID()
+        assistant = AssistantMessageID("assistant-1")
+        main_a, main_b = AgentMessageID(), AgentMessageID()
+        child, grandchild = AgentMessageID(), AgentMessageID()
+
+        stream = self._user_and_start(request_id) + [
+            # Main agent spawns the level-1 subagent (parent None).
+            PartialResponseBlockAgentMessage(
+                assistant_message_id=assistant,
+                message_id=AgentMessageID(),
+                first_response_message_id=main_a,
+                content=(TextBlock(text="MAIN_BEFORE"), ToolUseBlock(id=ToolUseID("toolu_l1"), name="Task", input={})),
+            ),
+            # Level-1 subagent runs and itself spawns the level-2 subagent
+            # (parent = the main agent's Agent tool_use).
+            ResponseBlockAgentMessage(
+                role="assistant",
+                assistant_message_id=AssistantMessageID("subagent-l1"),
+                message_id=child,
+                content=(TextBlock(text="L1_TEXT"), ToolUseBlock(id=ToolUseID("toolu_l2"), name="Task", input={})),
+                parent_tool_use_id="toolu_l1",
+            ),
+            # Level-2 grandchild runs a leaf tool (parent = the level-1 Agent tool_use).
+            ResponseBlockAgentMessage(
+                role="assistant",
+                assistant_message_id=AssistantMessageID("subagent-l2"),
+                message_id=grandchild,
+                content=(
+                    TextBlock(text="L2_TEXT"),
+                    ToolUseBlock(id=ToolUseID("toolu_l2_bash"), name="Bash", input={}),
+                ),
+                parent_tool_use_id="toolu_l2",
+            ),
+            # Control returns to the main agent (parent None again).
+            PartialResponseBlockAgentMessage(
+                assistant_message_id=assistant,
+                message_id=AgentMessageID(),
+                first_response_message_id=main_b,
+                content=(TextBlock(text="MAIN_AFTER"),),
+            ),
+            RequestSuccessAgentMessage(request_id=request_id),
+        ]
+
+        update = convert_agent_messages_to_task_update(
+            stream, task_id=TaskID(), harness=CLAUDE_CODE_HARNESS, completed_message_by_id={}
+        )
+        _assert_turns_survive(
+            update,
+            expected_text_markers=("MAIN_BEFORE", "L1_TEXT", "L2_TEXT", "MAIN_AFTER"),
+            expected_tool_ids=("toolu_l1", "toolu_l2", "toolu_l2_bash"),
+        )
+
+        # Every turn keeps its own nesting context: the grandchild points at the level-1
+        # Agent tool_use, the child at the top-level Agent tool_use, and the main turns at
+        # nothing.  A regression that flattened deep nesting would surface here as a wrong
+        # (or None) parent on L2_TEXT even while the survival assertion above still passes.
+        parent_by_marker = {
+            block.text: message.parent_tool_use_id
+            for message in _rendered_chat_messages(update)
+            for block in message.content
+            if isinstance(block, TextBlock)
+        }
+        assert parent_by_marker.get("MAIN_BEFORE") is None
+        assert parent_by_marker.get("L1_TEXT") == "toolu_l1"
+        assert parent_by_marker.get("L2_TEXT") == "toolu_l2"
+        assert parent_by_marker.get("MAIN_AFTER") is None
+
     def test_multi_step_turn_reusing_id_preserves_every_step(self) -> None:
         """A multi-step turn legitimately reuses one first_response_message_id across segments
         (text -> tool -> more text), separated by StreamingMessageComplete.  Reusing the id must
