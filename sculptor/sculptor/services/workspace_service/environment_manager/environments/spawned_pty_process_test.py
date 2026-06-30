@@ -6,7 +6,6 @@ backend -> posix_spawn -> pty_helper -> pty.fork -> shell path.
 """
 
 import os
-import re
 import select
 import signal
 import socket
@@ -27,22 +26,25 @@ from sculptor.services.workspace_service.environment_manager.environments.spawne
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX-only")
 
 
-# Matches ANSI/OSC escape sequences and stray C0 control bytes so a sentinel can
-# be found even when a developer's heavily-themed interactive login shell wraps
-# its prompt and output in color, bracketed-paste, or window-title codes. CI
-# typically runs a bare ``/bin/bash`` with none of these; local machines often
-# run zsh with prompt plugins. Tabs and newlines are preserved so captured
-# output stays readable in assertion messages.
-_TERMINAL_NOISE_RE = re.compile(
-    b"|".join(
-        (
-            rb"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)",  # OSC ... terminated by BEL or ST
-            rb"\x1b[@-Z\\-_]",  # two-byte ESC sequences
-            rb"\x1b\[[0-9;?]*[ -/]*[@-~]",  # CSI sequences (colors, cursor moves, ?2004h, ...)
-            rb"[\x00-\x08\x0b-\x1f\x7f]",  # stray C0 controls, keeping \t (0x09) and \n (0x0a)
-        )
-    )
-)
+@pytest.fixture(autouse=True)
+def _isolate_shell_config(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory) -> None:
+    """Point the spawned login shell at an empty HOME/ZDOTDIR so it sources no
+    user rc files.
+
+    These tests spawn a real ``$SHELL -l`` — a login shell, which sources the
+    user's full rc chain. Left alone, that turns the developer's personal
+    terminal configuration (prompt themes, plugins, syntax highlighting,
+    bracketed-paste) into uncontrolled test input: a bare ``/bin/bash`` on CI
+    behaves nothing like a heavily-themed zsh on a laptop, which is what made
+    these reads flaky. Pointing HOME (bash, ``~/.profile`` etc.) and ZDOTDIR
+    (zsh, ``.zshrc`` etc.) at an empty directory gives every run a vanilla
+    prompt, so what the tests observe depends only on Sculptor's own env
+    handling, not on who runs the suite.
+    """
+    empty_home = tmp_path_factory.mktemp("empty_shell_home")
+    monkeypatch.setenv("HOME", str(empty_home))
+    monkeypatch.setenv("ZDOTDIR", str(empty_home))
+
 
 # Sentinels bracketing the echoed value. We search for the fully-expanded form
 # (e.g. ``<SCT|local_port_5050|SCT>``), which can appear ONLY in the command's
@@ -54,10 +56,6 @@ _TERMINAL_NOISE_RE = re.compile(
 # the shell's own echo of the typed command).
 _SENTINEL_OPEN = "<SCT|"
 _SENTINEL_CLOSE = "|SCT>"
-
-
-def _strip_terminal_noise(data: bytes) -> bytes:
-    return _TERMINAL_NOISE_RE.sub(b"", data)
 
 
 @contextmanager
@@ -95,9 +93,12 @@ def _assert_pty_echo(fd: int, env_var: str, expected: str, timeout: float = 15.0
     load. Resending guarantees at least one probe lands once the shell is ready,
     instead of betting that init finished within a hardcoded window.
 
-    Matching is done against noise-stripped output and uses sentinels that can
-    only appear in the command's output (never in the shell's echo of the typed
-    command), so the assertion stays meaningful even for an empty value.
+    The sentinels bracket the value so a match can come only from the command's
+    output (never the shell's echo of the typed command), which keeps the
+    assertion meaningful even for an empty value. The expanded sentinel string
+    lands contiguously on echo's output line, so a plain substring search over
+    the raw bytes suffices — no escape-stripping needed once the shell is
+    isolated to a vanilla config (see ``_isolate_shell_config``).
     """
     marker = f"{_SENTINEL_OPEN}{expected}{_SENTINEL_CLOSE}".encode()
     command = f'echo "{_SENTINEL_OPEN}${{{env_var}}}{_SENTINEL_CLOSE}"\n'.encode()
@@ -136,10 +137,11 @@ def _assert_pty_echo(fd: int, env_var: str, expected: str, timeout: float = 15.0
         if not chunk:
             break  # EOF: the shell exited.
         output += chunk
-        if marker in _strip_terminal_noise(output):
+        if marker in output:
             return
-    cleaned = _strip_terminal_noise(output)
-    raise AssertionError(f"marker {marker!r} for ${env_var} not seen within {timeout:.0f}s; output: {cleaned!r}")
+    raise AssertionError(
+        f"marker {marker!r} for ${env_var} not seen within {timeout:.0f}s; output: {output.decode(errors='replace')!r}"
+    )
 
 
 def test_extra_env_available_in_child(tmp_path: Path) -> None:
@@ -196,6 +198,70 @@ def test_inherited_sculpt_env_is_scrubbed_so_extra_env_takes_effect(
         _assert_pty_echo(fd, "SCULPT_API_PORT", "local_port_5050")
         _assert_pty_echo(fd, "SCULPT_AGENT_ID", "")
         _assert_pty_echo(fd, "SCULPT_LEAKED_VAR", "")
+
+
+# ``_scrub_shell_env`` is the pure function that actually decides what the shell
+# sees; the pty echo tests above prove a value survives an end-to-end spawn,
+# while these pin down every branch of the rule deterministically — no pty, no
+# shell, no dependence on the developer's terminal at all.
+
+
+def test_scrub_shell_env_removes_sculptor_internal_vars(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SCULPT_API_PORT", "5050")
+    monkeypatch.setenv("SCULPTOR_INTERNAL", "x")
+    monkeypatch.setenv("_PYI_BOOTSTRAP", "x")
+    monkeypatch.setenv("SESSION_TOKEN", "secret")
+    monkeypatch.setenv("SCTEST_UNRELATED", "keep")
+
+    env = spawned_pty_process._scrub_shell_env(extra_env={}, env_var_override=False)
+
+    assert "SCULPT_API_PORT" not in env
+    assert "SCULPTOR_INTERNAL" not in env
+    assert "_PYI_BOOTSTRAP" not in env
+    assert "SESSION_TOKEN" not in env
+    # Vars outside the excluded names/prefixes are left untouched.
+    assert env["SCTEST_UNRELATED"] == "keep"
+    # The pty advertises xterm-256color, so TERM is always forced to match.
+    assert env["TERM"] == spawned_pty_process.TERMINAL_TYPE
+
+
+def test_scrub_shell_env_injects_extra_env_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SCTEST_NEW_VAR", raising=False)
+    env = spawned_pty_process._scrub_shell_env(extra_env={"SCTEST_NEW_VAR": "new"}, env_var_override=False)
+    assert env["SCTEST_NEW_VAR"] == "new"
+
+
+def test_scrub_shell_env_keeps_inherited_value_when_override_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SCTEST_EXISTING", "original")
+    env = spawned_pty_process._scrub_shell_env(extra_env={"SCTEST_EXISTING": "replacement"}, env_var_override=False)
+    assert env["SCTEST_EXISTING"] == "original"
+
+
+def test_scrub_shell_env_replaces_inherited_value_when_override_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SCTEST_EXISTING", "original")
+    env = spawned_pty_process._scrub_shell_env(extra_env={"SCTEST_EXISTING": "replacement"}, env_var_override=True)
+    assert env["SCTEST_EXISTING"] == "replacement"
+
+
+def test_scrub_shell_env_prepends_path_even_without_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PATH", "/usr/bin")
+    # PATH is special-cased: a terminal's extra PATH is *prepended* (so its tools
+    # win) rather than replacing the inherited PATH — and this happens even with
+    # override disabled, unlike every other key.
+    env = spawned_pty_process._scrub_shell_env(extra_env={"PATH": "/custom/bin"}, env_var_override=False)
+    assert env["PATH"] == "/custom/bin" + os.pathsep + "/usr/bin"
+
+
+def test_scrub_shell_env_reinjects_scrubbed_sculpt_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The Sculptor-on-Sculptor case (see test_inherited_sculpt_env_... above),
+    # isolated to the pure function: the inherited SCULPT_* value is scrubbed, so
+    # extra_env's fresh value is injected and wins even with override disabled —
+    # precisely because scrubbing removed the inherited one first.
+    monkeypatch.setenv("SCULPT_API_PORT", "outer_port_12345")
+    env = spawned_pty_process._scrub_shell_env(
+        extra_env={"SCULPT_API_PORT": "local_port_5050"}, env_var_override=False
+    )
+    assert env["SCULPT_API_PORT"] == "local_port_5050"
 
 
 def test_shell_exit_via_close_primary_fd_is_detected(tmp_path: Path) -> None:

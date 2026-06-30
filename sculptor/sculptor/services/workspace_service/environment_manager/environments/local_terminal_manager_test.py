@@ -38,6 +38,23 @@ from sculptor.services.workspace_service.environment_manager.environments.spawne
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX-only")
 
 
+@pytest.fixture(autouse=True)
+def _isolate_shell_config(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory) -> None:
+    """Point the spawned login shell at an empty HOME/ZDOTDIR so it sources no
+    user rc files.
+
+    These tests start a real terminal (``$SHELL -l``), and the self-exit test
+    drives that shell to exit. A heavily-configured login shell is slow to
+    initialize and drops typed-ahead input while it does, which is what made the
+    self-exit teardown flaky on a developer's machine but not on CI's bare bash.
+    An empty HOME/ZDOTDIR gives every run a vanilla, fast-starting shell, so the
+    behavior under test depends on Sculptor, not on who runs the suite.
+    """
+    empty_home = tmp_path_factory.mktemp("empty_shell_home")
+    monkeypatch.setenv("HOME", str(empty_home))
+    monkeypatch.setenv("ZDOTDIR", str(empty_home))
+
+
 def _wait_for_dead(pid: int, timeout: float = 1.0) -> bool:
     """Return True once ``os.kill(pid, 0)`` raises ProcessLookupError.
 
