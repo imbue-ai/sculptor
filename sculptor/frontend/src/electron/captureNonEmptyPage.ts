@@ -6,9 +6,24 @@ export type CapturedImage = {
   isEmpty(): boolean;
 };
 
-export type CapturablePage<T extends CapturedImage> = {
-  capturePage(): Promise<T>;
+// Electron's capturePage opts. `stayHidden` makes the page "considered visible"
+// for the capture even when its window is occluded, forcing the compositor to
+// produce a frame; `stayAwake` keeps the system from sleeping mid-capture.
+export type CapturePageOpts = {
+  stayHidden?: boolean;
+  stayAwake?: boolean;
 };
+
+export type CapturablePage<T extends CapturedImage> = {
+  capturePage(rect?: undefined, opts?: CapturePageOpts): Promise<T>;
+};
+
+// A guest <webview> whose window the OS compositor treats as hidden or occluded
+// — the steady state under a headless/xvfb display — never paints on its own, so
+// capturePage() returns an empty image no matter how long we retry. `stayHidden`
+// keeps the guest compositing frames while hidden, so the capture resolves to a
+// real frame instead of an empty image.
+const CAPTURE_OPTS: CapturePageOpts = { stayHidden: true, stayAwake: true };
 
 export type CaptureNonEmptyPageOptions = {
   /**
@@ -31,10 +46,11 @@ const DEFAULT_DELAY_MS = 250;
 
 const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-// capturePage() resolves with an empty NativeImage until the guest has
-// composited a frame. Capture once, then keep retrying while the image is
-// blank (up to the retry budget) so the screenshot -> clipboard path doesn't
-// write an empty image.
+// Capture the guest with `stayHidden` so the compositor produces a frame even
+// when the window is occluded, then retry while the image is still blank (up to
+// the retry budget) to absorb the beat between the first forced frame request
+// and the compositor delivering it, so the screenshot -> clipboard path never
+// writes an empty image.
 export const captureNonEmptyPage = async <T extends CapturedImage>(
   contents: CapturablePage<T>,
   options: CaptureNonEmptyPageOptions = {},
@@ -43,10 +59,10 @@ export const captureNonEmptyPage = async <T extends CapturedImage>(
   const delayMs = options.delayMs ?? DEFAULT_DELAY_MS;
   const sleep = options.sleep ?? defaultSleep;
 
-  let image = await contents.capturePage();
+  let image = await contents.capturePage(undefined, CAPTURE_OPTS);
   for (let retry = 0; retry < retries && image.isEmpty(); retry++) {
     await sleep(delayMs);
-    image = await contents.capturePage();
+    image = await contents.capturePage(undefined, CAPTURE_OPTS);
   }
   return image;
 };
