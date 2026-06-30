@@ -227,15 +227,12 @@ from sculptor.web.data_types import OpenFileUiRequest
 from sculptor.web.data_types import OpenInOsRequest
 from sculptor.web.data_types import OpenPathInAppRequest
 from sculptor.web.data_types import OpenPathInAppResult
-from sculptor.web.data_types import PluginCommandRequest
-from sculptor.web.data_types import PluginCommandResponse
-from sculptor.web.data_types import OpenInOsRequest
-from sculptor.web.data_types import OpenPathInAppRequest
-from sculptor.web.data_types import OpenPathInAppResult
 from sculptor.web.data_types import PasteKeyRequest
 from sculptor.web.data_types import PiLoginRequest
 from sculptor.web.data_types import PiLoginResponse
 from sculptor.web.data_types import PiLoginStatusResponse
+from sculptor.web.data_types import PluginCommandRequest
+from sculptor.web.data_types import PluginCommandResponse
 from sculptor.web.data_types import PluginCommandResult
 from sculptor.web.data_types import PluginCommandUiAction
 from sculptor.web.data_types import PreviewBranchNameResponse
