@@ -15,6 +15,8 @@ import {
 } from "~/common/state/atoms/userConfig.ts";
 import { useWorkspaceFileContent } from "~/common/state/hooks/useWorkspaceFileContent.ts";
 import { getShikiThemes } from "~/common/theme/shikiThemes.ts";
+import { parseFrontmatter } from "~/components/MarkdownDiff/frontmatter.ts";
+import { FrontmatterBlock } from "~/components/MarkdownDiff/FrontmatterBlock.tsx";
 import { MarkdownAnchor } from "~/components/MarkdownDiff/MarkdownAnchor.tsx";
 import {
   FILE_MARKDOWN_REHYPE_PLUGINS,
@@ -188,6 +190,11 @@ export const ReadOnlyPreview = ({ workspaceId, filePath }: ReadOnlyPreviewProps)
   }
 
   if (shouldRenderMarkdown) {
+    // Frontmatter is stripped before `react-markdown` sees the content —
+    // otherwise the closing `---` underlines the `key: value` lines into a
+    // setext `<h2>`. It's rendered as a styled metadata block instead; the
+    // source view (eye-toggle off, below) keeps showing it verbatim.
+    const { frontmatter, body } = parseFrontmatter(fileContents.contents);
     // Plugin policy lives in `markdownPlugins.ts`. `data-markdown-body`
     // scopes the fragment-anchor scroll lookup in `anchorBehavior.ts` so
     // a `#install` click never lands on an unrelated id elsewhere in the
@@ -200,13 +207,14 @@ export const ReadOnlyPreview = ({ workspaceId, filePath }: ReadOnlyPreviewProps)
           data-testid={ElementIds.READ_ONLY_PREVIEW_MARKDOWN}
           data-markdown-body
         >
+          {frontmatter && <FrontmatterBlock frontmatter={frontmatter} />}
           <ReactMarkdown
             remarkPlugins={FILE_MARKDOWN_REMARK_PLUGINS}
             rehypePlugins={FILE_MARKDOWN_REHYPE_PLUGINS}
             urlTransform={safeUrlTransform}
             components={READ_ONLY_PREVIEW_COMPONENTS}
           >
-            {fileContents.contents}
+            {body}
           </ReactMarkdown>
         </Box>
       </div>

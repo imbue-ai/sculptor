@@ -112,6 +112,9 @@ class PlaywrightDiffPanelElement(PlaywrightIntegrationTestElement):
     def get_read_only_preview_markdown(self) -> Locator:
         return self.get_read_only_preview().get_by_test_id(ElementIDs.READ_ONLY_PREVIEW_MARKDOWN)
 
+    def get_read_only_preview_frontmatter(self) -> Locator:
+        return self.get_read_only_preview_markdown().get_by_test_id(ElementIDs.READ_ONLY_PREVIEW_FRONTMATTER)
+
     def ensure_render_mode(self, mode: Literal["rendered", "source"]) -> None:
         """Ensure the render-mode toggle is in ``mode`` (``"rendered"`` or ``"source"``)."""
         toggle = self.get_render_toggle()
