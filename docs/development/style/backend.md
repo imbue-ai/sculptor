@@ -352,6 +352,8 @@ Always use absolute imports from the original definition.
 
 ### Comments
 
+See [Comments](../style_guide.md#comments) for the repo-wide rule (write for a future reader, present-tense rationale, no change-narration).
+
 Prefer clear naming and semantically meaningful types over comments.
 
 Create docstrings for public members; keep docstrings short. Never put type information in docstrings, use type annotations and function signatures.
