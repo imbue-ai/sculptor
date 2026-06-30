@@ -9,7 +9,7 @@
 "." = 4
 
 [match-must-assert-never]
-"." = 5
+"." = 4
 
 [no-asyncio-run]
 "." = 8
