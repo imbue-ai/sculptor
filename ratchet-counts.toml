@@ -81,7 +81,7 @@
 "." = 0
 
 [no-os-path-join]
-"." = 2
+"." = 0
 
 [no-pydantic-model-copy-update]
 "." = 0
