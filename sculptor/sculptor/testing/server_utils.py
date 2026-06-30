@@ -4,24 +4,34 @@ import os
 import selectors
 import signal
 import subprocess
+import sys
 import time
 from collections.abc import Generator
 from collections.abc import Sequence
 from contextlib import contextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import attr
 import pytest
 from loguru import logger
 from playwright.sync_api import BrowserContext
 from playwright.sync_api import Page
+from playwright.sync_api import Playwright
+from pytest_playwright.pytest_playwright import ArtifactsRecorder
 
 from sculptor.foundation.git import get_git_repo_root
 from sculptor.testing.frontend_utils import configure_page
 from sculptor.testing.playwright_utils import navigate_to_frontend
+from sculptor.testing.port_manager import PortManager
 from sculptor.testing.subprocess_utils import Forwarder
 from sculptor.testing.subprocess_utils import print_colored_line
 from sculptor.utils.build import SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG
+
+if TYPE_CHECKING:
+    # ``electron_frontend`` imports ``get_v1_frontend_path`` from this module, so the
+    # runtime import lives inside ``_make_electron_frontend`` to avoid an import cycle.
+    from sculptor.testing.electron_frontend import ElectronFrontend
 
 LOCAL_HOST_URL = "http://127.0.0.1"
 READY_MESSAGE_V1 = "Server is ready to accept requests!"
@@ -80,6 +90,9 @@ class SculptorFactory:
         default_timeout_ms: int,
         request: pytest.FixtureRequest,
         sculptor_folder: Path | None = None,
+        launch_mode: str = "browser",
+        playwright: "Playwright | None" = None,
+        port_manager: "PortManager | None" = None,
     ) -> None:
         self.environment = environment
         self.database_url = database_url
@@ -87,6 +100,19 @@ class SculptorFactory:
         self.default_timeout_ms = default_timeout_ms
         self.request = request
         self.sculptor_folder = sculptor_folder
+        # ``launch_mode`` selects the per-spawn frontend: "browser" (default)
+        # drives the shared pytest-playwright page; "electron" /
+        # "electron-custom-command" launch a real, non-packaged Electron shell
+        # over CDP. ``playwright`` / ``port_manager`` are only consulted by the
+        # electron paths (and asserted present there).
+        self.launch_mode = launch_mode
+        self.playwright = playwright
+        self.port_manager = port_manager
+
+    @property
+    def is_electron(self) -> bool:
+        """Whether spawned instances render in a real (non-packaged) Electron shell."""
+        return self.launch_mode in ("electron", "electron-custom-command")
 
     @contextmanager
     def spawn_sculptor_instance(
@@ -97,8 +123,12 @@ class SculptorFactory:
     ) -> Generator[tuple[SculptorServer, Page, BrowserContext, str | None], None, None]:
         """Start a backend process and yield ``(server, page, context, session_token)``.
 
-        The session_token is always None for the raw-backend path (there's no
-        Electron main process issuing its own token).
+        In ``browser`` mode the session_token is always None (there's no Electron
+        main process issuing its own token) and the frontend is the shared
+        pytest-playwright page. In ``electron`` mode the backend is started the
+        same way but the frontend is a real Electron shell launched over CDP. In
+        ``electron-custom-command`` mode Electron spawns the backend itself, so
+        that flow is delegated to ``_spawn_custom_command_electron_instance``.
 
         Args:
             project_path: If provided, the backend starts with this repo as
@@ -111,6 +141,12 @@ class SculptorFactory:
         """
         if not wait_until_ready:
             raise NotImplementedError("wait_until_ready=False is only supported in packaged-electron mode")
+
+        if self.launch_mode == "electron-custom-command":
+            with self._spawn_custom_command_electron_instance(project_path) as result:
+                yield result
+            return
+
         environment = self.environment.copy()
         command = get_sculptor_command_backend_only(project_path, port=self.port)
 
@@ -120,11 +156,35 @@ class SculptorFactory:
         forwarder.start()
         specimen_server = SculptorServer(process=server, port=self.port)
 
-        page: "Page" = self.request.getfixturevalue("page")
-        configure_page(page, timeout_ms=self.default_timeout_ms)
-        navigate_to_frontend(page=page, url=f"http://127.0.0.1:{self.port}")
+        # Acquire the frontend. Browser mode drives the shared pytest-playwright
+        # page; electron mode launches a real Electron shell over CDP pointed at
+        # the just-started backend, mirroring the shared-instance electron path
+        # in resources.py.
+        electron_frontend: "ElectronFrontend | None" = None
+        artifacts_recorder: "ArtifactsRecorder | None" = None
+        if self.launch_mode == "electron":
+            # _launch_electron_frontend registers the context for tracing and tears
+            # the shell back down if that registration fails, so a setup error after
+            # launch can't leak the Electron + Vite process.
+            electron_frontend, page, context, artifacts_recorder = self._launch_electron_frontend()
+        else:
+            page = self.request.getfixturevalue("page")
+            configure_page(page, timeout_ms=self.default_timeout_ms)
+            navigate_to_frontend(page=page, url=f"http://127.0.0.1:{self.port}")
+            context = page.context
 
-        yield specimen_server, page, page.context, None
+        # On a test-body failure, reclaim the heavy Electron shell (Electron + Vite
+        # dev server + xvfb) before re-raising. Browser mode has nothing to do here,
+        # and the backend teardown below stays success-path-only — preserving the
+        # original behavior where a failing test leaves the raw backend for the
+        # worker/session to reap.
+        try:
+            yield specimen_server, page, context, None
+        except BaseException:
+            if electron_frontend is not None:
+                assert artifacts_recorder is not None
+                self._teardown_electron_factory_frontend(electron_frontend, artifacts_recorder, context, page)
+            raise
 
         # Snapshot any error the backend logged *during the test* before we start
         # tearing down. Killing the process group below also kills whatever child
@@ -134,7 +194,14 @@ class SculptorFactory:
         # That ERROR is an artifact of our own forced teardown, not a test
         # failure, so the pass/fail decision below must use this pre-teardown
         # snapshot rather than whatever the Forwarder records while we kill.
+        # Electron teardown happens *after* this snapshot for the same reason:
+        # tearing the shell down disconnects its websocket, which the backend may
+        # log, and that must not be misattributed to the test.
         failure_line_during_test = forwarder.first_failure_line
+
+        if electron_frontend is not None:
+            assert artifacts_recorder is not None
+            self._teardown_electron_factory_frontend(electron_frontend, artifacts_recorder, context, page)
 
         logger.info("Terminating sculptor server and its process group")
         # Kill the entire process group to clean up any child processes.
@@ -165,6 +232,142 @@ class SculptorFactory:
         # (even if the test didn't realize it failed). Teardown-induced errors are excluded via the snapshot above.
         if not specimen_server.is_unexpected_error_caused_by_test and failure_line_during_test is not None:
             raise RuntimeError(f"Sculptor server emitted a line with ERROR: {failure_line_during_test}")
+
+    def _launch_electron_frontend(
+        self,
+        *,
+        custom_backend_cmd: str | None = None,
+        extra_env: dict[str, str] | None = None,
+        env_unset_keys: tuple[str, ...] = (),
+    ) -> "tuple[ElectronFrontend, Page, BrowserContext, ArtifactsRecorder]":
+        """Launch a non-packaged Electron shell over CDP against the running backend.
+
+        Returns ``(frontend, page, context, artifacts_recorder)``. The Electron main
+        process is told to connect to the already-started backend via
+        ``SCULPTOR_API_PORT``; the renderer is served by an Electron-managed Vite
+        dev server. The CDP-acquired context is registered with pytest-playwright's
+        artifacts recorder so ``--tracing`` captures it (the browser path gets this
+        for free via the ``page`` fixture). If registration fails after the shell is
+        up, the shell is torn down before re-raising so it can't leak.
+        """
+        electron_frontend = self._make_electron_frontend(
+            custom_backend_cmd=custom_backend_cmd, extra_env=extra_env, env_unset_keys=env_unset_keys
+        )
+        context, page = electron_frontend.__enter__()
+        try:
+            artifacts_recorder: ArtifactsRecorder = self.request.getfixturevalue("_artifacts_recorder")
+            artifacts_recorder.on_did_create_browser_context(context)
+        except BaseException:
+            electron_frontend.__exit__(None, None, None)
+            raise
+        return electron_frontend, page, context, artifacts_recorder
+
+    def _make_electron_frontend(
+        self,
+        *,
+        custom_backend_cmd: str | None = None,
+        extra_env: dict[str, str] | None = None,
+        env_unset_keys: tuple[str, ...] = (),
+    ) -> "ElectronFrontend":
+        """Construct an ``ElectronFrontend`` for this factory's backend port.
+
+        The import is function-local because ``electron_frontend`` imports
+        ``get_v1_frontend_path`` from this module (a module-level import cycles).
+        """
+        from sculptor.testing.electron_frontend import ElectronFrontend
+
+        assert self.playwright is not None, "electron launch mode requires a Playwright instance"
+        assert self.port_manager is not None, "electron launch mode requires a PortManager"
+        return ElectronFrontend(
+            playwright=self.playwright,
+            backend_port=self.port,
+            port_manager=self.port_manager,
+            timeout_ms=self.default_timeout_ms,
+            custom_backend_cmd=custom_backend_cmd,
+            extra_env=extra_env,
+            env_unset_keys=env_unset_keys,
+        )
+
+    def _teardown_electron_factory_frontend(
+        self,
+        electron_frontend: "ElectronFrontend",
+        artifacts_recorder: "ArtifactsRecorder",
+        context: BrowserContext,
+        page: Page,
+    ) -> None:
+        """Stop tracing, close the CDP page/context, then kill the Electron shell.
+
+        Order matters: ``on_will_close_browser_context`` writes the trace via the
+        live CDP connection, so it must run before the Electron process (and its
+        CDP endpoint) is killed.
+        """
+        try:
+            artifacts_recorder.on_will_close_browser_context(context)
+        except Exception:
+            logger.debug("Artifacts recorder close failed during electron factory teardown")
+        for closer, what in ((page.close, "page"), (context.close, "browser context")):
+            try:
+                closer()
+            except Exception:
+                logger.debug("{} already closed during electron factory teardown", what)
+        try:
+            electron_frontend.__exit__(None, None, None)
+        except Exception:
+            logger.debug("ElectronFrontend cleanup error during electron factory teardown")
+
+    @contextmanager
+    def _spawn_custom_command_electron_instance(
+        self,
+        project_path: Path | None,
+    ) -> Generator[tuple[SculptorServer, Page, BrowserContext, str | None], None, None]:
+        """Spawn a per-test Electron instance where Electron manages the backend.
+
+        Mirrors the shared-instance custom-command path
+        (``_create_custom_command_instance`` in resources.py): instead of
+        starting the backend separately, Electron spawns it via
+        ``SCULPTOR_CUSTOM_BACKEND_CMD``, exercising the HTTP-upload code path.
+        Per-test isolation is preserved by the factory's own backend port and
+        sculptor folder. Yields ``(server, page, context, session_token)`` where
+        ``server`` wraps the Electron process (which owns the backend child).
+        """
+        # Print the URL then exec the backend, matching the shared path. Use
+        # sys.executable so the backend runs in the test virtualenv (the Electron
+        # child otherwise inherits a different PATH).
+        project_arg = f" {project_path}" if project_path is not None else ""
+        backend_exec = f"exec {sys.executable} -m sculptor.cli.main --no-open-browser --port {self.port}{project_arg}"
+        custom_backend_cmd = f"echo http://localhost:{self.port} && {backend_exec}"
+        # The testing environment (DATABASE_URL, sculptor folder, hidden keys, ...)
+        # reaches the backend as Electron's extra_env, since the custom command is the
+        # backend's parent. None-valued entries (SESSION_TOKEN, CLAUDECODE, ...) are
+        # "unset" requests: dropping them from extra_env is not enough because
+        # ElectronFrontend spreads os.environ, so a parent value would survive — hence
+        # they are passed as env_unset_keys so ElectronFrontend excludes them from the
+        # child's environment, matching the raw-backend path's unset semantics.
+        env_unset_keys = tuple(key for key, value in self.environment.items() if value is None)
+        extra_env = {k: str(v) for k, v in self.environment.items() if v is not None}
+        # A known session token lets Playwright's page.request calls authenticate
+        # against the backend (which requires the token in custom-command mode).
+        session_token = os.urandom(32).hex()
+        extra_env["SCULPTOR_SESSION_TOKEN"] = session_token
+
+        electron_frontend, page, context, artifacts_recorder = self._launch_electron_frontend(
+            custom_backend_cmd=custom_backend_cmd, extra_env=extra_env, env_unset_keys=env_unset_keys
+        )
+        try:
+            context.add_cookies(
+                [
+                    {
+                        "name": "x-session-token",
+                        "value": session_token,
+                        "url": f"http://127.0.0.1:{self.port}",
+                    }
+                ]
+            )
+            assert electron_frontend._electron_proc is not None
+            server = SculptorServer(process=electron_frontend._electron_proc, port=self.port)
+            yield server, page, context, session_token
+        finally:
+            self._teardown_electron_factory_frontend(electron_frontend, artifacts_recorder, context, page)
 
 
 def get_v1_frontend_path() -> Path:
