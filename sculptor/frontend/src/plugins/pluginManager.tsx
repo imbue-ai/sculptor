@@ -639,9 +639,8 @@ export class PluginManager {
 
   /**
    * Unloads then re-loads a source with a cache-busted import (dev iteration).
-   * A caller may pass an explicit `cacheBust` token (e.g. an agent's
-   * `sculpt plugin reload --cache-bust`); absent one, a timestamp forces a fresh
-   * fetch.
+   * A caller may pass an explicit `cacheBust` token (e.g. forwarded from a
+   * plugin command); absent one, a timestamp forces a fresh fetch.
    */
   async reloadSource(store: JotaiStore, source: string, cacheBust?: string): Promise<void> {
     const kind = this.kindOf(source);

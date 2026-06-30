@@ -19,6 +19,7 @@ import os
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 import typer
@@ -75,8 +76,6 @@ def _resolve_workspace_id(workspace: str | None, json_output: bool) -> str:
 
 def _is_url(target: str) -> bool:
     """True if the target looks like an http(s) URL rather than a local path."""
-    from urllib.parse import urlparse
-
     return urlparse(target).scheme in ("http", "https")
 
 
@@ -377,7 +376,9 @@ def _report_snapshots(
 def load(
     target: str = typer.Argument(..., help="Local plugin directory / manifest.json, or an http(s) manifest URL."),
     persist: bool = typer.Option(
-        False, "--persist", help="Install permanently (top-level) rather than as a workspace-scoped dev install."
+        False,
+        "--persist",
+        help="For a local path: install permanently (top-level) instead of as a workspace-scoped dev install. No effect for a URL, which is always a persistent source.",
     ),
     workspace: str | None = _WORKSPACE_OPTION,
     json_output: bool = _JSON_OPTION,
@@ -386,7 +387,9 @@ def load(
     """Package and load a plugin into the live UI.
 
     A local path is packaged and uploaded to the backend, then loaded from the
-    resulting manifest URL. An http(s) URL is loaded directly (no packaging).
+    resulting manifest URL. An http(s) URL is loaded directly (no packaging) and
+    is always registered as a persistent source, so ``--persist`` only affects
+    the local-path case.
     """
     workspace_id = _resolve_workspace_id(workspace, json_output)
     client = _client_or_exit(json_output)

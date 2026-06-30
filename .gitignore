@@ -327,3 +327,6 @@ browser-panel-traces/
 
 # Dead-code scan artifacts (batch-claude-runner)
 scan-reports/
+
+# auto-qa-changes / manual-test harness screenshot + pid artifacts
+.claude/skills/attachments/
