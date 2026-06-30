@@ -20,10 +20,10 @@ from sculptor.testing.elements.browser_panel import PlaywrightBrowserPanelElemen
 class _FakePage:
     """Minimal stand-in for a Playwright ``Page``.
 
-    ``evaluate`` answers the attach probe truthily and delegates the
-    webview-execute call to ``execute_side_effect``, which a test supplies to
-    raise transient/fatal errors before (optionally) returning a value.
-    ``wait_for_timeout`` is a no-op so the retry loop spins at full speed.
+    ``evaluate`` delegates the webview-execute call to ``execute_side_effect``,
+    which a test supplies to raise transient/fatal errors before (optionally)
+    returning a value. ``wait_for_timeout`` is a no-op so the retry loop spins
+    at full speed.
     """
 
     def __init__(self, execute_side_effect: list[Any]) -> None:
@@ -31,9 +31,6 @@ class _FakePage:
         self.execute_calls = 0
 
     def evaluate(self, js: str, *args: Any) -> Any:
-        if "__testBrowserWebviewExecute" not in js:
-            # The attach probe: pretend the bridge is always attached.
-            return True
         self.execute_calls += 1
         # Consume outcomes in order, but repeat the final one indefinitely so a
         # test can model a transient that never clears without sizing a list to
@@ -50,9 +47,13 @@ class _FakePage:
 
 
 def _make_panel(page: _FakePage) -> PlaywrightBrowserPanelElement:
-    # The element only touches ``self._page`` for these calls; the locator is
-    # never exercised, so ``None`` is a safe stand-in.
-    return PlaywrightBrowserPanelElement(locator=None, page=page)  # type: ignore[arg-type]
+    # These tests exercise only webview_evaluate's execute-retry loop. Attach
+    # resolution (which reads the panel's data-webview-content-id off a real
+    # locator) is stubbed to a fixed webContentsId so the locator is never
+    # touched and the execute outcomes drive the test.
+    panel = PlaywrightBrowserPanelElement(locator=None, page=page)  # type: ignore[arg-type]
+    panel._attached_content_id = lambda: 42  # type: ignore[method-assign]
+    return panel
 
 
 def test_webview_evaluate_returns_value_on_first_success() -> None:

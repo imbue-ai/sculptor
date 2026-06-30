@@ -16,8 +16,6 @@ declare global {
     sculptor?: SculptorElectronAPI;
     /** Exposed by the active TerminalInstance for integration tests. */
     __xterm?: XTerm;
-    /** Populated by the Browser panel after webview did-attach, for integration tests. */
-    __BROWSER_PANEL_TEST__?: { webContentsId: number };
     /** Inlined by the backend's static-HTML serve path when --trace-to is set.
      * The renderer reads this synchronously at boot in common/tracing.ts. */
     __SCULPTOR_TRACING__?: { enabled: boolean };

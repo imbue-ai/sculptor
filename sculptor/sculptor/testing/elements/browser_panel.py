@@ -7,6 +7,7 @@ panel integration tests.
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -16,37 +17,38 @@ from playwright.sync_api import expect
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 
-# Waits that depend on the <webview> guest attaching and committing a
-# navigation (vs. the address bar, which mirrors the typed URL instantly). The
-# guest can take well over 10s to attach and load under heavy CI parallelism
-# (xvfb + software rendering), so give these a generous budget.
+# The Browser panel surfaces the active workspace's committed webview status on
+# the panel root via data-webview-content-id (the attached guest's
+# webContentsId, present once did-attach fires) and data-webview-current-url
+# (the committed URL, updated on did-navigate). These are the production-truth
+# readiness signals the page object gates on, keyed to the active workspace
+# rather than a focus-coupled global or a guest round-trip.
+_WEBVIEW_CONTENT_ID_ATTR: str = "data-webview-content-id"
+_WEBVIEW_CURRENT_URL_ATTR: str = "data-webview-current-url"
+
+# The guest can take well over 10s to attach under heavy CI parallelism (xvfb +
+# software rendering), so give the attach wait a generous budget.
 _WEBVIEW_ATTACH_TIMEOUT_SECONDS: float = 30.0
-_WEBVIEW_LOAD_TIMEOUT_SECONDS: float = 30.0
 _URL_POLL_INTERVAL_SECONDS: float = 0.1
 _DEFAULT_ADDRESS_BAR_TIMEOUT_SECONDS: float = 10.0
 _PNG_MAGIC: bytes = b"\x89PNG\r\n\x1a\n"
 # The screenshot -> clipboard round-trip goes through Electron's main process
-# and the OS clipboard, which under xvfb + software rendering can take well
-# over the snappy budget a local run sees. Match the webview load budget so a
-# slow-but-healthy CI host isn't mistaken for a missing screenshot.
+# and the OS clipboard, which under xvfb can take longer than a local run. Match
+# the attach budget so a slow-but-healthy CI host isn't mistaken for a missing
+# screenshot.
 _CLIPBOARD_TIMEOUT_SECONDS: float = 30.0
 
-# How long ``webview_evaluate`` retries a *transient* bridge error before giving
-# up. A workspace switch or panel reopen re-creates the guest webContents, and
-# for a short window the test bridge can point at a guest that is mid-load or
-# just re-attached. Executing into it then rejects; retrying (and re-reading the
-# current webContentsId each attempt) lets the guest settle. The injected script
-# itself can also throw transiently -- e.g. ``getElementById(...)`` is null for a
-# beat right after re-focus -- which Electron surfaces as "Script failed to
-# execute". A genuine error still surfaces once the budget is exhausted.
+# How long ``webview_evaluate`` retries a transient execute error before giving
+# up. The injected script can throw for a beat -- e.g. ``getElementById(...)`` is
+# null right after a re-focus -- which Electron surfaces as "Script failed to
+# execute"; retrying rides through that window. A genuine error still surfaces
+# once the budget is exhausted.
 _WEBVIEW_EXECUTE_RETRY_SECONDS: float = 15.0
 
-# Budget for navigate() to land a typed URL, across re-resolutions of the URL
-# input. A workspace switch remounts the panel, so a one-shot fill can land in
-# the old, detaching input while the new one still shows the persisted
-# about:blank. We re-issue fill+Enter on a freshly-resolved input within this
-# window; each attempt's address-bar check is short so the budget supplies the
-# overall wait (the retry pattern, not a lowered single timeout).
+# Budget for navigate() to land a typed URL and have the webview commit it. A
+# workspace switch can remount the panel mid-fill, so we re-issue fill+Enter on a
+# freshly-resolved input until the committed URL moves; each attempt's wait is
+# short so the budget supplies the overall wait.
 _NAVIGATE_RETRY_SECONDS: float = 30.0
 _NAVIGATE_ATTEMPT_SECONDS: float = 3.0
 
@@ -57,10 +59,8 @@ _TRANSIENT_WEBVIEW_EXECUTE_MARKERS: tuple[str, ...] = (
     # Electron's executeJavaScript rejects with this when the guest's page threw
     # (e.g. a null element during a load) or the target webContents is gone.
     "Script failed to execute",
-    # The bridge is briefly absent while focus moves between workspace slots.
+    # The bridge is briefly absent while window.sculptor is still initializing.
     "browser panel test bridge not available",
-    # loadURL/eval before the <webview> has fired did-attach.
-    "WebView must be attached",
 )
 
 
@@ -94,21 +94,22 @@ class PlaywrightBrowserPanelElement(PlaywrightIntegrationTestElement):
     def navigate(self, url: str, *, wait_for_webview_load: bool = True) -> None:
         """Type ``url`` into the address bar, press Enter, and wait for navigation.
 
-        The address bar mirrors whatever the user typed the moment Enter is
-        pressed, but the webview's ``did-navigate`` event (which feeds the
-        per-workspace persisted-URL atom) is async. By default we additionally
-        wait for the webview's live ``document.location`` to reach ``url``,
-        so callers that immediately collapse the panel see the persisted URL
-        on reopen instead of a stale ``about:blank``.
+        By default we wait for the webview to *commit* the navigation, read from
+        the panel's ``data-webview-current-url`` attribute (the committed URL
+        published on the guest's ``did-navigate``). That is the production-truth
+        signal that the guest actually loaded ``url`` -- deterministic, and free
+        of the focus-coupled global bridge and the guest ``document.location``
+        round-trip the old gate used.
 
         Set ``wait_for_webview_load=False`` for negative-path tests where the
-        URL is intentionally invalid and the webview will never reach it.
+        URL is intentionally invalid and the webview will never commit it; those
+        only confirm the address bar took the typed text.
 
-        The fill is retried on a freshly-resolved URL input each attempt: a
-        workspace switch remounts the panel, so a one-shot fill can land in the
-        old, detaching input while the address bar then reads the new input
-        (still showing the persisted ``about:blank``). Re-issuing fill+Enter on
-        the live input lands the value.
+        The fill is re-issued on a freshly-resolved URL input each attempt: a
+        workspace switch can remount the panel so a one-shot fill lands in the
+        old, detaching input and the committed URL never moves. Re-issuing
+        fill+Enter on the live input until the committed URL reaches ``url``
+        lands the value.
         """
         bare_url = url.split("#", 1)[0]
         deadline = time.monotonic() + _NAVIGATE_RETRY_SECONDS
@@ -118,14 +119,16 @@ class PlaywrightBrowserPanelElement(PlaywrightIntegrationTestElement):
             input_locator.click(click_count=3)
             input_locator.fill(url)
             input_locator.press("Enter")
-            try:
+            if not wait_for_webview_load:
                 self.wait_for_address_bar_contains(bare_url, timeout_seconds=_NAVIGATE_ATTEMPT_SECONDS)
-                break
-            except AssertionError:
-                if time.monotonic() >= deadline:
-                    raise
-        if wait_for_webview_load:
-            self._wait_for_webview_location_contains(bare_url)
+                return
+            if self._committed_url_contains(bare_url, timeout_seconds=_NAVIGATE_ATTEMPT_SECONDS):
+                return
+            if time.monotonic() >= deadline:
+                last = self._committed_url()
+                raise AssertionError(
+                    f"Webview did not commit navigation to {bare_url!r}; last committed URL was {last!r}"
+                )
 
     def click_back(self) -> None:
         self.get_back_button().click()
@@ -140,35 +143,29 @@ class PlaywrightBrowserPanelElement(PlaywrightIntegrationTestElement):
         self.get_screenshot_button().click()
 
     def webview_evaluate(self, code: str) -> Any:
-        """Run ``code`` inside the panel's webview guest page via the test-only IPC.
+        """Run ``code`` inside the active panel's webview guest via the test-only IPC.
 
-        Retries transient "guest not ready" failures (see
-        ``_TRANSIENT_WEBVIEW_EXECUTE_MARKERS``) for up to
-        ``_WEBVIEW_EXECUTE_RETRY_SECONDS``, re-reading the current
-        ``webContentsId`` each attempt so a guest re-created by a workspace
-        switch or panel reopen is picked up rather than executed into while it
-        is still attaching. A non-transient execute error is re-raised immediately; a transient one
-        is re-raised only once the budget is spent. If the webview never attaches,
-        ``_wait_for_webview_attached`` will time out.
+        The guest is targeted by the webContentsId read from the panel's
+        ``data-webview-content-id`` attribute (re-read each attempt so a guest
+        re-created by a workspace switch is picked up rather than executed into
+        while it is still attaching). Transient execute failures (see
+        ``_TRANSIENT_WEBVIEW_EXECUTE_MARKERS``) are retried for up to
+        ``_WEBVIEW_EXECUTE_RETRY_SECONDS``; a non-transient error is re-raised
+        immediately, a transient one once the budget is spent.
         """
         deadline = time.monotonic() + _WEBVIEW_EXECUTE_RETRY_SECONDS
         while True:
-            # Re-resolve the bridge each attempt: the webContentsId mirrored onto
-            # window.__BROWSER_PANEL_TEST__ changes when the focused workspace's
-            # guest is re-created, so a value cached across the retry loop could
-            # point at a torn-down webContents.
-            self._wait_for_webview_attached()
+            content_id = self._attached_content_id()
             try:
                 return self._page.evaluate(
-                    """async (code) => {
+                    """async ([id, code]) => {
                       const api = window.sculptor;
-                      const test = window.__BROWSER_PANEL_TEST__;
-                      if (!api || !api.__testBrowserWebviewExecute || !test) {
+                      if (!api || !api.__testBrowserWebviewExecute) {
                         throw new Error('browser panel test bridge not available');
                       }
-                      return api.__testBrowserWebviewExecute(test.webContentsId, code);
+                      return api.__testBrowserWebviewExecute(id, code);
                     }""",
-                    code,
+                    [content_id, code],
                 )
             except Exception as exc:  # noqa: BLE001 — re-raised below unless transient
                 message = str(exc)
@@ -222,42 +219,35 @@ class PlaywrightBrowserPanelElement(PlaywrightIntegrationTestElement):
             self._page.wait_for_timeout(int(_URL_POLL_INTERVAL_SECONDS * 1000))
         raise AssertionError(f"Address bar did not contain {needle!r}; last value was {last_value!r}")
 
-    def _wait_for_webview_location_contains(
-        self, needle: str, *, timeout_seconds: float = _WEBVIEW_LOAD_TIMEOUT_SECONDS
-    ) -> None:
-        """Wait until the webview's live ``document.location`` reflects ``needle``.
+    def _committed_url(self) -> str:
+        """The webview's committed URL, from the panel's data-webview-current-url."""
+        return self.get_attribute(_WEBVIEW_CURRENT_URL_ATTR) or ""
 
-        Used to gate on the webview's ``did-navigate`` event having fired —
-        the address bar in the toolbar reflects the *typed* URL, but the
-        per-workspace persisted-URL atom is only updated when the webview
-        actually emits ``did-navigate``.
-        """
-        deadline = time.monotonic() + timeout_seconds
-        last_value = ""
-        last_error: Exception | None = None
-        while time.monotonic() < deadline:
-            try:
-                last_value = str(self.webview_evaluate("document.location.href"))
-                last_error = None
-            except Exception as exc:  # noqa: BLE001 — bridge may briefly raise mid-navigation
-                last_value = ""
-                last_error = exc
-            if needle in last_value:
-                return
-            self._page.wait_for_timeout(int(_URL_POLL_INTERVAL_SECONDS * 1000))
-        # Surface the last bridge error if we never got a readable location: a
-        # bare "last value was ''" hides a persistently-stale webContentsId,
-        # which is the failure mode worth diagnosing when this does trip.
-        suffix = f" (last webview-execute error: {last_error})" if last_error is not None else ""
-        raise AssertionError(f"Webview location did not reach {needle!r}; last value was {last_value!r}{suffix}")
-
-    def _wait_for_webview_attached(self) -> None:
-        deadline = time.monotonic() + _WEBVIEW_ATTACH_TIMEOUT_SECONDS
-        while time.monotonic() < deadline:
-            is_ready = self._page.evaluate(
-                "() => Boolean(window.__BROWSER_PANEL_TEST__ && window.__BROWSER_PANEL_TEST__.webContentsId)"
+    def _committed_url_contains(self, needle: str, *, timeout_seconds: float) -> bool:
+        """Whether the committed URL reaches ``needle`` within ``timeout_seconds``."""
+        try:
+            expect(self._locator).to_have_attribute(
+                _WEBVIEW_CURRENT_URL_ATTR,
+                re.compile(re.escape(needle)),
+                timeout=int(timeout_seconds * 1000),
             )
-            if is_ready:
-                return
-            time.sleep(_URL_POLL_INTERVAL_SECONDS)
-        raise TimeoutError("Timed out waiting for webview did-attach")
+            return True
+        except AssertionError:
+            return False
+
+    def _attached_content_id(self) -> int:
+        """Return the attached guest's webContentsId, waiting until it attaches.
+
+        Reads the panel's ``data-webview-content-id`` attribute, which is absent
+        until the active workspace's guest fires ``did-attach`` and then holds
+        its webContentsId. Times out via Playwright's ``to_have_attribute`` if
+        the guest never attaches.
+        """
+        expect(self._locator).to_have_attribute(
+            _WEBVIEW_CONTENT_ID_ATTR,
+            re.compile(r"\d+"),
+            timeout=int(_WEBVIEW_ATTACH_TIMEOUT_SECONDS * 1000),
+        )
+        value = self.get_attribute(_WEBVIEW_CONTENT_ID_ATTR)
+        assert value is not None  # to_have_attribute above guarantees presence
+        return int(value)
