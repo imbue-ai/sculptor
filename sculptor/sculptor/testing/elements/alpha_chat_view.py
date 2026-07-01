@@ -319,6 +319,32 @@ def scroll_alpha_chat_by(page: Page, delta: int) -> None:
     )
 
 
+def scroll_test_id_into_chat_viewport(page: Page, test_id: str, *, top_margin: int = 120) -> None:
+    """Scroll the alpha chat so the first element with ``test_id`` sits
+    ``top_margin`` px below the scroll container's top edge.
+
+    This positions the element fully inside the viewport for a subsequent
+    :func:`click_visible_in_chat_viewport` (which refuses to scroll-into-view),
+    without assuming anything about how tall the surrounding content renders — a
+    fixed pixel delta from the bottom is not robust to content whose height
+    varies (e.g. tables that wrap vs. scroll). Fires a ``scroll`` event so the
+    chat's scroll listeners run, mirroring a real user scroll.
+    """
+    page.evaluate(
+        f"""({{ testId, topMargin }}) => {{
+        const container = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+        const el = container && container.querySelector('[data-testid="' + testId + '"]');
+        if (!container || !el) throw new Error("cannot scroll " + testId + " into view: not found");
+        const cRect = container.getBoundingClientRect();
+        const eRect = el.getBoundingClientRect();
+        container.dispatchEvent(new Event('wheel'));
+        container.scrollTop += (eRect.top - cRect.top) - topMargin;
+        container.dispatchEvent(new Event('scroll'));
+    }}""",
+        {"testId": test_id, "topMargin": top_margin},
+    )
+
+
 def click_visible_in_chat_viewport(page: Page, test_id: str) -> None:
     """Dispatch a synthetic click on the first element with ``test_id`` that is
     fully inside the alpha chat scroll viewport.
