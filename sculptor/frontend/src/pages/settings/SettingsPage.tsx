@@ -25,7 +25,6 @@ import {
   isPanelLayoutPerWorkspaceAtom,
   isPiAgentEnabledAtom,
   isReviewAllEnabledAtom,
-  isRichMarkdownRenderingEnabledAtom,
   isSmoothStreamingUserPreferenceAtom,
   userEmailAtom,
 } from "../../common/state/atoms/userConfig.ts";
@@ -90,7 +89,6 @@ export const SettingsPage = (): ReactElement => {
   const isReviewAllEnabled = useAtomValue(isReviewAllEnabledAtom);
   const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
   const isEntityMentionsEnabled = useAtomValue(isEntityMentionsEnabledAtom);
-  const isRichMarkdownRenderingEnabled = useAtomValue(isRichMarkdownRenderingEnabledAtom);
   const isSmoothStreamingEnabled = useAtomValue(isSmoothStreamingUserPreferenceAtom);
   const isPanelLayoutPerWorkspace = useAtomValue(isPanelLayoutPerWorkspaceAtom);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
@@ -478,18 +476,6 @@ export const SettingsPage = (): ReactElement => {
                         handleSettingChange(UserConfigField.ENABLE_ENTITY_MENTIONS, checked)
                       }
                       data-testid={ElementIds.SETTINGS_ENABLE_ENTITY_MENTIONS_TOGGLE}
-                    />
-                  </SettingRow>
-                  <SettingRow
-                    title="Rich markdown rendering"
-                    description="Render .md and .markdown files as formatted HTML in the file viewer instead of source. Toggle via the eye icon in the diff toolbar."
-                  >
-                    <Switch
-                      checked={isRichMarkdownRenderingEnabled}
-                      onCheckedChange={(checked) =>
-                        handleSettingChange(UserConfigField.ENABLE_RICH_MARKDOWN_RENDERING, checked)
-                      }
-                      data-testid={ElementIds.SETTINGS_ENABLE_RICH_MARKDOWN_RENDERING_TOGGLE}
                     />
                   </SettingRow>
                   <SettingRow

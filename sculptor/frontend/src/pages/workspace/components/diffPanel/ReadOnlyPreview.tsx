@@ -8,13 +8,11 @@ import ReactMarkdown, { type Components } from "react-markdown";
 
 import { ElementIds } from "~/api";
 import { themeCodeThemeAtom } from "~/common/state/atoms/themeBuilder.ts";
-import {
-  appThemeAtom,
-  fileBrowserLineWrappingAtom,
-  isRichMarkdownRenderingEnabledAtom,
-} from "~/common/state/atoms/userConfig.ts";
+import { appThemeAtom, fileBrowserLineWrappingAtom } from "~/common/state/atoms/userConfig.ts";
 import { useWorkspaceFileContent } from "~/common/state/hooks/useWorkspaceFileContent.ts";
 import { getShikiThemes } from "~/common/theme/shikiThemes.ts";
+import { parseFrontmatter } from "~/components/MarkdownDiff/frontmatter.ts";
+import { FrontmatterBlock } from "~/components/MarkdownDiff/FrontmatterBlock.tsx";
 import { MarkdownAnchor } from "~/components/MarkdownDiff/MarkdownAnchor.tsx";
 import {
   FILE_MARKDOWN_REHYPE_PLUGINS,
@@ -119,14 +117,8 @@ export const ReadOnlyPreview = ({ workspaceId, filePath }: ReadOnlyPreviewProps)
   const codeTheme = useAtomValue(themeCodeThemeAtom);
   const shikiThemes = getShikiThemes(codeTheme);
   const markdownMode = useAtomValue(markdownRenderModeAtom);
-  const isRichMarkdownRenderingEnabled = useAtomValue(isRichMarkdownRenderingEnabledAtom);
   const pierreRef = useRef<HTMLDivElement>(null);
-  // The persisted `markdownRenderModeAtom` may carry "rendered" from before
-  // the flag was introduced (or after the user flipped it on then off again).
-  // Guard the render path on the flag so the source view is shown until the
-  // user explicitly enables the experimental feature.
-  const shouldRenderMarkdown =
-    isMarkdownPath(filePath) && markdownMode === "rendered" && isRichMarkdownRenderingEnabled;
+  const shouldRenderMarkdown = isMarkdownPath(filePath) && markdownMode === "rendered";
 
   /**
    * Inject our override stylesheet into Pierre's shadow DOM.
@@ -167,6 +159,14 @@ export const ReadOnlyPreview = ({ workspaceId, filePath }: ReadOnlyPreviewProps)
     return { name: fileName, contents: content, lang };
   }, [content, fileName, lang]);
 
+  // Split frontmatter off the body only when the markdown is actually being
+  // rendered, and memoize it so unrelated re-renders (theme, panel resize,
+  // atom updates) don't reparse a potentially large file every time.
+  const parsedMarkdown = useMemo(
+    () => (shouldRenderMarkdown && content != null ? parseFrontmatter(content) : null),
+    [shouldRenderMarkdown, content],
+  );
+
   if (isPending) {
     return (
       <Flex align="center" justify="center" flexGrow="1">
@@ -187,7 +187,12 @@ export const ReadOnlyPreview = ({ workspaceId, filePath }: ReadOnlyPreviewProps)
     );
   }
 
-  if (shouldRenderMarkdown) {
+  if (shouldRenderMarkdown && parsedMarkdown != null) {
+    // Frontmatter is stripped before `react-markdown` sees the content —
+    // otherwise the closing `---` underlines the `key: value` lines into a
+    // setext `<h2>`. It's rendered as a styled metadata block instead; the
+    // source view (eye-toggle off, below) keeps showing it verbatim.
+    const { frontmatter, body } = parsedMarkdown;
     // Plugin policy lives in `markdownPlugins.ts`. `data-markdown-body`
     // scopes the fragment-anchor scroll lookup in `anchorBehavior.ts` so
     // a `#install` click never lands on an unrelated id elsewhere in the
@@ -200,13 +205,14 @@ export const ReadOnlyPreview = ({ workspaceId, filePath }: ReadOnlyPreviewProps)
           data-testid={ElementIds.READ_ONLY_PREVIEW_MARKDOWN}
           data-markdown-body
         >
+          {frontmatter && <FrontmatterBlock frontmatter={frontmatter} />}
           <ReactMarkdown
             remarkPlugins={FILE_MARKDOWN_REMARK_PLUGINS}
             rehypePlugins={FILE_MARKDOWN_REHYPE_PLUGINS}
             urlTransform={safeUrlTransform}
             components={READ_ONLY_PREVIEW_COMPONENTS}
           >
-            {fileContents.contents}
+            {body}
           </ReactMarkdown>
         </Box>
       </div>

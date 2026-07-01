@@ -205,11 +205,6 @@ export const isReviewAllEnabledAtom = atom<boolean>((get) => get(userConfigAtom)
 // Entity mentions (experimental — off by default)
 export const isEntityMentionsEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableEntityMentions ?? false);
 
-// Rich markdown rendering (experimental — off by default)
-export const isRichMarkdownRenderingEnabledAtom = atom<boolean>(
-  (get) => get(userConfigAtom)?.enableRichMarkdownRendering ?? false,
-);
-
 // Pi agent (experimental — off by default). Gates only whether the pi option
 // is offered in the agent-type pickers (the + button menu and the
 // new-workspace form); an already-created pi agent keeps running regardless.

@@ -1,0 +1,51 @@
+// Metadata table shown above the rendered markdown body for a `.md` file that
+// opens with frontmatter. Styled to match the GFM table look in
+// `ReadOnlyPreview.module.scss`; the `.block` descendant scoping wins over the
+// parent `.markdownBody table/th/td` rules so this table controls its own
+// metrics regardless of the surrounding GFM styles.
+
+.block {
+  margin-bottom: 1.25em;
+}
+
+.block .table {
+  border-collapse: collapse;
+  margin: 0;
+  width: 100%;
+}
+
+.block .key,
+.block .value {
+  border: 1px solid var(--gray-6);
+  padding: 0.35em 0.75em;
+  text-align: left;
+  vertical-align: top;
+}
+
+.block .key {
+  background-color: var(--gray-2);
+  color: var(--gray-12);
+  font-weight: var(--font-weight-medium);
+  // Shrink the key column to its content so the value column takes the rest.
+  white-space: nowrap;
+  width: 1%;
+}
+
+.block .value {
+  color: var(--gray-12);
+  // Authored newlines (YAML block scalars) are already collapsed to spaces in
+  // the value string; `normal` lets long values soft-wrap as one paragraph.
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.block .raw {
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-3);
+  color: var(--gray-12);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-1);
+  margin: 0;
+  padding: 0.6em 0.85em;
+  white-space: pre-wrap;
+}

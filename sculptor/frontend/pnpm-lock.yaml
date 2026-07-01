@@ -255,6 +255,9 @@ importers:
       uuid:
         specifier: 14.0.0
         version: 14.0.0
+      yaml:
+        specifier: 2.9.0
+        version: 2.9.0
     devDependencies:
       '@electron-forge/cli':
         specifier: 7.11.2
