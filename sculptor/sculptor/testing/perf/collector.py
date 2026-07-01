@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import secrets
 import time
 from collections.abc import Callable
 from collections.abc import Generator
@@ -285,22 +286,38 @@ class MeasurementRecorder:
                 f.write(json.dumps(asdict(m), separators=(",", ":")) + "\n")
 
 
+# One token per Python process, mixed into the output filename so concurrent
+# writers never collide: xdist workers locally, and — crucially — the many
+# offload sandboxes in CI, each a separate pytest session appending only the
+# scenarios that ran there. Readers glob the directory and concatenate. The
+# random suffix (not just the pid) guards against pid reuse across separate
+# invocations on the same host.
+_RUN_TOKEN = f"{os.getpid()}-{secrets.token_hex(3)}"
+
+
 def resolve_output_path() -> Path | None:
-    """Return the JSONL output path, or None if perf collection is disabled.
+    """Return this process's JSONL output path, or None if collection is off.
 
-    Reads ``SCULPTOR_PERF_OUTPUT_PATH``; if unset, defaults to
-    ``perf-results/perf-measurements.jsonl`` under the current working dir.
-    Set the env var to an empty string to disable output entirely.
+    ``SCULPTOR_PERF_OUTPUT_PATH`` selects the destination:
 
-    Deliberately NOT under ``test-results/``: pytest-playwright wipes that
-    directory at session start, so measurements accumulated there survive
-    only the most recent pytest invocation — repeat-run workflows (e.g.
-    re-running one scenario 3x for variance) silently lose all but the
-    last run's data.
+    - **unset** → ``perf-results/`` under the cwd (a *directory*).
+    - **a directory** (or any value not ending in ``.jsonl``) → that directory.
+    - **a ``.jsonl`` file** → that exact file (single-writer; back-compat for
+      ad-hoc local runs that want one named file).
+    - **empty string** → disabled (returns None).
+
+    In the directory case the file is ``perf-measurements-<token>.jsonl`` where
+    ``<token>`` is unique per process (see ``_RUN_TOKEN``), so parallel writers
+    don't clobber each other and repeat runs accumulate rather than overwrite.
+
+    The default is deliberately *not* under ``test-results/``: pytest-playwright
+    wipes that dir at session start, which would drop everything but the most
+    recent local invocation. CI sets the env var explicitly to a retrieved path.
     """
     raw = os.environ.get("SCULPTOR_PERF_OUTPUT_PATH")
-    if raw is None:
-        return Path.cwd() / "perf-results" / "perf-measurements.jsonl"
     if raw == "":
         return None
-    return Path(raw)
+    if raw is not None and raw.endswith(".jsonl"):
+        return Path(raw)
+    directory = Path(raw) if raw else Path.cwd() / "perf-results"
+    return directory / f"perf-measurements-{_RUN_TOKEN}.jsonl"
