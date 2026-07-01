@@ -6,6 +6,7 @@ import { baseUrl } from "~/apiClient.ts";
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "~/common/queryClient.ts";
 import type { PanelDefinition } from "~/components/panels/types.ts";
+import { BUILTIN_HOME_VIEW_ID } from "~/pages/home/homeViews.ts";
 
 import { installHostRuntime } from "./hostRuntime.ts";
 import { PluginContext } from "./PluginContext.tsx";
@@ -13,6 +14,7 @@ import { PluginErrorBoundary } from "./PluginErrorBoundary.tsx";
 import {
   pluginDisabledSourcesAtom,
   pluginEnabledSourcesAtom,
+  pluginHomeViewsAtom,
   pluginOverlaysAtom,
   pluginPanelsAtom,
   pluginSettingsComponentsAtom,
@@ -23,6 +25,7 @@ import {
   pluginWorkspaceWidgetsAtom,
 } from "./pluginRegistry.ts";
 import type {
+  HomeViewDefinition,
   LoadedPlugin,
   OverlayDefinition,
   PluginHostApi,
@@ -858,6 +861,41 @@ export class PluginManager {
         store.set(pluginWorkspaceWidgetsAtom, (prev) => [...prev.filter((w) => w.id !== widget.id), entry]);
         const undo = (): void => {
           store.set(pluginWorkspaceWidgetsAtom, (prev) => prev.filter((w) => w !== entry));
+        };
+        loadDisposers.push(undo);
+        return undo;
+      },
+      registerHomeView: (view: HomeViewDefinition): (() => void) => {
+        // The recent-workspaces view is the built-in the host always offers; a
+        // plugin can't claim its id, or the switcher would have two options with
+        // the same value. Reject up front (rather than silently dropping it in
+        // the options atom) so the plugin author gets a reason it didn't appear.
+        if (view.id === BUILTIN_HOME_VIEW_ID) {
+          console.warn(
+            `Plugin "${manifest.id}" tried to register a home view with the reserved id "${BUILTIN_HOME_VIEW_ID}"; ignoring it.`,
+          );
+          return () => {};
+        }
+        // App-global like an overlay: wrap in the error boundary and
+        // PluginContext, but no WorkspacePluginContext — the homepage is not
+        // scoped to a workspace, so the view reads app state through SDK hooks.
+        const PluginComponent = view.component;
+        // Attribute crashes to the owning plugin (manifest), matching the other
+        // register paths — not to the home-view contribution id.
+        const Wrapped = (): ReactElement => (
+          <PluginErrorBoundary pluginId={manifest.id} pluginName={manifest.name}>
+            <PluginContext.Provider value={{ pluginId: manifest.id }}>
+              <PluginComponent />
+            </PluginContext.Provider>
+          </PluginErrorBoundary>
+        );
+        Wrapped.displayName = `PluginHomeView(${view.id})`;
+        const entry = { id: view.id, title: view.title, icon: view.icon, component: Wrapped };
+
+        // Replace-by-id; undo by instance (see the panel undo above).
+        store.set(pluginHomeViewsAtom, (prev) => [...prev.filter((v) => v.id !== view.id), entry]);
+        const undo = (): void => {
+          store.set(pluginHomeViewsAtom, (prev) => prev.filter((v) => v !== entry));
         };
         loadDisposers.push(undo);
         return undo;

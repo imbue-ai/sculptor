@@ -9,27 +9,27 @@ import { parseTicket } from "./ticket.ts";
 const STALE_TIME = 60_000;
 const GC_TIME = 30 * 60_000;
 
-export type ShortcutTicket = {
+export type WorkspaceTicketIssue = {
   issue: LinearIssue | null;
-  /** True when showing the branch ticket because no explicit shortcut is set. */
+  /** True when showing the branch ticket because there is no explicit assignment. */
   isDefault: boolean;
   isFetching: boolean;
 };
 
 /**
  * Resolves the single issue the banner widget shows: the explicitly-assigned
- * shortcut when set, otherwise the branch's primary issue. The default path
- * reuses the panel's `["primary", branch, pullRequestUrl]` query key, so an open
- * panel and the widget dedupe to one request and always agree on the branch
- * ticket — which means `pullRequestUrl` must be passed identically here.
+ * ticket when set, otherwise the branch's primary issue. The default path reuses
+ * the panel's `["primary", branch, pullRequestUrl]` query key, so an open panel
+ * and the widget dedupe to one request and always agree on the branch ticket —
+ * which means `pullRequestUrl` must be passed identically here.
  */
-export const useShortcutTicket = (inputs: {
+export const useWorkspaceTicketIssue = (inputs: {
   apiKey: string;
   branch: string | null;
   pullRequestUrl: string | null;
-  shortcutId: string | null;
-}): ShortcutTicket => {
-  const { apiKey, branch, pullRequestUrl, shortcutId } = inputs;
+  assignedTicketId: string | null;
+}): WorkspaceTicketIssue => {
+  const { apiKey, branch, pullRequestUrl, assignedTicketId } = inputs;
 
   const primaryQuery = useQuery({
     queryKey: [PLUGIN_ID, "primary", branch, pullRequestUrl],
@@ -37,27 +37,27 @@ export const useShortcutTicket = (inputs: {
       if (!branch) throw new Error("No workspace branch");
       return fetchPrimaryIssue({ apiKey, branch, ticketFallback: parseTicket(branch), pullRequestUrl, signal });
     },
-    enabled: Boolean(apiKey && branch && !shortcutId),
+    enabled: Boolean(apiKey && branch && !assignedTicketId),
     staleTime: STALE_TIME,
     gcTime: GC_TIME,
     retry: 1,
   });
 
-  const overrideQuery = useQuery({
-    queryKey: [PLUGIN_ID, "issue", shortcutId],
+  const assignedQuery = useQuery({
+    queryKey: [PLUGIN_ID, "issue", assignedTicketId],
     queryFn: ({ signal }) => {
-      const ticket = parseTicket(shortcutId);
+      const ticket = parseTicket(assignedTicketId);
       if (!ticket) return null;
       return fetchIssueByTicket({ apiKey, ticket, signal });
     },
-    enabled: Boolean(apiKey && shortcutId),
+    enabled: Boolean(apiKey && assignedTicketId),
     staleTime: STALE_TIME,
     gcTime: GC_TIME,
     retry: 1,
   });
 
-  if (shortcutId) {
-    return { issue: overrideQuery.data ?? null, isDefault: false, isFetching: overrideQuery.isFetching };
+  if (assignedTicketId) {
+    return { issue: assignedQuery.data ?? null, isDefault: false, isFetching: assignedQuery.isFetching };
   }
   return { issue: primaryQuery.data ?? null, isDefault: true, isFetching: primaryQuery.isFetching };
 };

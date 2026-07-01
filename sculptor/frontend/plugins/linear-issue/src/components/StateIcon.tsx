@@ -12,7 +12,8 @@ const CONTRAST = "#fff";
  * can draw ourselves — and, unlike Linear's logo, ours takes any color.
  *
  * `type` is Linear's `state.type`: backlog | unstarted | started | completed |
- * cancelled | triage. Any other value (or `null`) falls back to a neutral
+ * canceled | triage (Linear spells it with one "l"). Any other value (or
+ * `null`) falls back to a neutral
  * hollow ring so the chip always has a leading glyph. Drawn in a 24-unit
  * viewBox at lucide's stroke weight (2) so it sits beside lucide icons at the
  * same visual size.
@@ -64,7 +65,7 @@ export const StateIcon = ({
           />
         </svg>
       );
-    case "cancelled":
+    case "canceled":
       return (
         <svg {...common}>
           <circle cx="12" cy="12" r="9" fill={c} />

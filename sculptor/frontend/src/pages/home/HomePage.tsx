@@ -1,28 +1,37 @@
-import { Flex } from "@radix-ui/themes";
+import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
-import { useRef } from "react";
 
-import { useWorkspaceNavigation } from "../../common/state/hooks/useWorkspaceNavigation.ts";
-import { RecentWorkspaces } from "../add-workspace/components/RecentWorkspaces.tsx";
+import { pluginHomeViewsAtom } from "~/plugins/pluginRegistry.ts";
+
 import styles from "./HomePage.module.scss";
+import { BUILTIN_HOME_VIEW_ID, effectiveHomeViewIdAtom, homeViewOptionsAtom } from "./homeViews.ts";
+import { HomeViewSwitcher } from "./HomeViewSwitcher.tsx";
+import { RecentWorkspacesHomeView } from "./RecentWorkspacesHomeView.tsx";
 
 export const HomePage = (): ReactElement => {
-  const { handleWorkspaceClick, handleOpenInNewTab } = useWorkspaceNavigation();
-  const searchInputRef = useRef<HTMLInputElement>(null);
+  const options = useAtomValue(homeViewOptionsAtom);
+  const effectiveId = useAtomValue(effectiveHomeViewIdAtom);
+  const pluginHomeViews = useAtomValue(pluginHomeViewsAtom);
+
+  // Only surface the switcher once there is something to switch to: with no
+  // plugin home views the page is the recent-workspaces list, exactly as before.
+  const shouldShowSwitcher = options.length > 1;
+
+  const SelectedView =
+    effectiveId === BUILTIN_HOME_VIEW_ID
+      ? RecentWorkspacesHomeView
+      : (pluginHomeViews.find((view) => view.id === effectiveId)?.component ?? RecentWorkspacesHomeView);
 
   return (
-    <Flex direction="column" align="center" className={styles.container}>
-      <div className={styles.content}>
-        <RecentWorkspaces
-          searchInputRef={searchInputRef}
-          autoFocusSearch
-          onWorkspaceClick={handleWorkspaceClick}
-          onOpenInNewTab={handleOpenInNewTab}
-          onEscapeToTitle={(): void => {
-            searchInputRef.current?.focus();
-          }}
-        />
+    <div className={styles.root}>
+      {shouldShowSwitcher && (
+        <div className={styles.switcherBar}>
+          <HomeViewSwitcher />
+        </div>
+      )}
+      <div className={styles.body}>
+        <SelectedView />
       </div>
-    </Flex>
+    </div>
   );
 };

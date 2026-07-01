@@ -1,5 +1,5 @@
 import { Box, Flex, IconButton, Text } from "@radix-ui/themes";
-import { Bookmark, ChevronDown, ChevronRight, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Tag, X } from "lucide-react";
 import type { ReactElement } from "react";
 
 import type { PanelTicket } from "../linear/sources.ts";
@@ -10,9 +10,9 @@ import { StateDot } from "./StateDot.tsx";
 /**
  * A collapsible issue: a header (id, state, title, source badges) that toggles
  * the details. Open/closed is controlled by the panel, which derives the
- * default and persists user toggles; pinned tickets get an unpin control. A
- * bookmark control assigns the ticket as the workspace shortcut shown in the
- * banner widget — filled on the ticket that is currently the shortcut.
+ * default and persists user toggles; pinned tickets get an unpin control. An
+ * assign control marks the ticket as the workspace's ticket (shown in the
+ * banner) — filled on the ticket currently assigned.
  */
 export const TicketSection = ({
   ticket,
@@ -21,8 +21,8 @@ export const TicketSection = ({
   subIssuesOpen,
   onToggleSubIssues,
   onUnpin,
-  isShortcut,
-  onToggleShortcut,
+  isAssigned,
+  onToggleAssignment,
 }: {
   ticket: PanelTicket;
   isOpen: boolean;
@@ -30,10 +30,10 @@ export const TicketSection = ({
   subIssuesOpen: boolean;
   onToggleSubIssues: () => void;
   onUnpin: (identifier: string) => void;
-  /** Whether this ticket is the workspace's current (effective) shortcut. */
-  isShortcut: boolean;
-  /** Assign this ticket as the shortcut, or clear it if it already is one. */
-  onToggleShortcut: () => void;
+  /** Whether this ticket is the workspace's current (effective) assigned ticket. */
+  isAssigned: boolean;
+  /** Assign this ticket to the workspace, or clear it if it already is. */
+  onToggleAssignment: () => void;
 }): ReactElement => {
   const { issue } = ticket;
   const canUnpin = ticket.sources.includes("pinned");
@@ -62,15 +62,15 @@ export const TicketSection = ({
           <IconButton
             size="1"
             variant="ghost"
-            color={isShortcut ? undefined : "gray"}
-            title={isShortcut ? "Clear workspace shortcut" : "Use as workspace shortcut"}
-            aria-pressed={isShortcut}
+            color={isAssigned ? undefined : "gray"}
+            title={isAssigned ? "Clear ticket assignment" : "Assign ticket to this workspace"}
+            aria-pressed={isAssigned}
             onClick={(e) => {
               e.stopPropagation();
-              onToggleShortcut();
+              onToggleAssignment();
             }}
           >
-            <Bookmark size={12} fill={isShortcut ? "currentColor" : "none"} />
+            <Tag size={12} fill={isAssigned ? "currentColor" : "none"} />
           </IconButton>
           {canUnpin && (
             <IconButton

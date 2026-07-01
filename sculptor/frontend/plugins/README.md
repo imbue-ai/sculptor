@@ -22,13 +22,21 @@ issues that issue's PR links to (`attachmentsForURL`), and any the user pins via
 a quick-search box (`searchIssues`). It renders descriptions with the
 SDK `Markdown` component, opens links via `openExternal`, and stores its API
 key and per-workspace pins through the plugin-settings SDK. It also contributes
-a **workspace widget** (`registerWorkspaceWidget`) — a compact ticket shortcut
-the host renders in the workspace banner beside the PR button. The widget
-defaults to the branch ticket but follows whatever the user assigns from the
-panel; the two share a single per-workspace `shortcut` setting, so the ticket
-reference stays consistent across both surfaces.
+a **workspace widget** (`registerWorkspaceWidget`) — a compact ticket chip the
+host renders in the workspace banner beside the PR button. The widget defaults
+to the branch ticket but follows whatever ticket the user assigns from the
+panel; the two share a single per-workspace ticket-assignment setting, so the
+ticket reference stays consistent across both surfaces.
 
-![The Linear workspace widget — a "# SCU-1234" ticket shortcut — in the workspace banner](linear-issue/docs/workspace-widget.png)
+![The Linear workspace widget — a "# SCU-1234" ticket chip — in the workspace banner](linear-issue/docs/workspace-widget.png)
+
+It also registers a **home view** (`registerHomeView`) — a "Linear board" the
+homepage offers in its view switcher — listing the current user's assigned
+issues grouped by workflow state, with each ticket flagged by whether a Sculptor
+workspace already exists for it (and a button into that workspace, via
+`useNavigateToWorkspace`). The workspace↔ticket matching lives in one place
+(`linear/association.ts`) shared with the panel, so the two surfaces agree on
+which workspace is working which ticket.
 
 It is structured as a
 reference: a `linear/` core (Linear client, source-merging, query hooks) kept
@@ -73,18 +81,30 @@ the exact set the import map provides, derived from `RUNTIME_MODULE_SPECIFIERS`
   (`id`, `description`, `branch`, `targetBranch`, `pullRequestUrl`); pass a
   selector to subscribe to one field, e.g.
   `useCurrentWorkspace((w) => w?.branch ?? null)`.
-- `useWorkspaces()` — every workspace (app-global; works in overlays).
+- `useWorkspaces()` — every workspace as the same curated `WorkspaceView` shape
+  `useCurrentWorkspace` returns (`id`, `description`, `branch`, `targetBranch`,
+  `pullRequestUrl`), or `undefined` until the first batch loads. App-global, so
+  it works in overlays and home views.
+- `useNavigateToWorkspace()` — returns `(workspaceId) => void` that opens a
+  workspace exactly as clicking it in the host's own lists does (opens or
+  converts its tab, then jumps to its most-recently-used agent). The blessed way
+  for a home view to send the user into a workspace.
 - `useWorkspaceTasks()` — the workspace's tasks (host task data).
 - `usePluginSetting(key)` — a persisted string setting scoped to the plugin
   (localStorage under `sculptor-plugin:<id>:<key>`), shared between the
   plugin's panel and its settings component.
+- `usePluginSettings(keys)` — the multi-key companion: read many of the plugin's
+  settings at once, reactively, returning a `Map<key, value>`. For when the key
+  set is dynamic (e.g. one key per workspace from `useWorkspaces`), where you
+  can't call `usePluginSetting` once per key.
 - `Markdown` — the host's markdown renderer (`{ content: string }`); GFM,
   links open in a new tab, code blocks get copy buttons.
 - `openExternal(url)` — open a URL in the user's browser (a new tab on the web;
   the system browser in the desktop app). Use this rather than `window.open`.
 - `PanelHeader`, domain types, and the `PluginHostApi` / `PanelDefinition` /
-  `WorkspaceWidgetDefinition` registration types (so plugins type `activate(api)`
-  against the host contract instead of re-declaring it).
+  `WorkspaceWidgetDefinition` / `HomeViewDefinition` registration types (so
+  plugins type `activate(api)` against the host contract instead of re-declaring
+  it).
 
 ### Contribution points (`activate(api)`)
 
@@ -99,6 +119,12 @@ the exact set the import map provides, derived from `RUNTIME_MODULE_SPECIFIERS`
   the host's own banner items occupy a few small integers. The name is
   placement-agnostic on purpose — the same registration is what a future
   per-workspace vertical-tabs layout would render.
+- `registerHomeView(def)` — a full-page alternative homepage body. The homepage
+  shows a view switcher whenever at least one is registered; picking one replaces
+  the built-in recent-workspaces list with the plugin's component. The choice is
+  remembered (per browser) and falls back to the built-in view if the plugin is
+  unloaded. Like an overlay it is app-global (no `WorkspacePluginContext`), so it
+  reads app state through the SDK hooks.
 
 ## Caching fetched data (`@tanstack/react-query`)
 

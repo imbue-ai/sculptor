@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  fetchAssignedIssues,
   fetchPrimaryIssue,
   isPullRequestAttachment,
   type LinearAttachment,
@@ -142,6 +143,61 @@ describe("fetchPrimaryIssue", () => {
     });
     expect(issue).toBeNull();
     expect(queries).toHaveLength(1);
+  });
+});
+
+describe("fetchAssignedIssues", () => {
+  // Stub fetch with a fixed response, capturing each parsed request body so a
+  // test can assert the query text and the variables it forwarded.
+  const stub = (response: Partial<Response>): Array<{ query: string; variables: Record<string, unknown> }> => {
+    const calls: Array<{ query: string; variables: Record<string, unknown> }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: { body: string }) => {
+        calls.push(JSON.parse(init.body));
+        return response;
+      }),
+    );
+    return calls;
+  };
+
+  const inputs = { apiKey: "k", limit: 50, signal: new AbortController().signal };
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("reads viewer.assignedIssues, forwards the limit, and normalizes the nodes", async () => {
+    const calls = stub({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { viewer: { assignedIssues: { nodes: [rawIssue({ identifier: "SCU-5" })] } } } }),
+    });
+    const issues = await fetchAssignedIssues(inputs);
+    expect(issues.map((i) => i.identifier)).toEqual(["SCU-5"]);
+    // Connections are flattened by normalizeIssue.
+    expect(issues[0].attachments).toEqual([]);
+    expect(calls[0].query).toContain("viewer");
+    expect(calls[0].query).toContain("assignedIssues");
+    expect(calls[0].variables).toEqual({ first: 50 });
+  });
+
+  it("rejects a bad API key (401) with an actionable message", async () => {
+    stub({ ok: false, status: 401, json: async () => ({}) });
+    await expect(fetchAssignedIssues(inputs)).rejects.toThrow("Linear rejected the API key");
+  });
+
+  it("surfaces a non-OK HTTP status", async () => {
+    stub({ ok: false, status: 500, json: async () => ({}) });
+    await expect(fetchAssignedIssues(inputs)).rejects.toThrow("HTTP 500");
+  });
+
+  it("surfaces a GraphQL error message", async () => {
+    stub({ ok: true, status: 200, json: async () => ({ errors: [{ message: "Throttled" }] }) });
+    await expect(fetchAssignedIssues(inputs)).rejects.toThrow("Throttled");
+  });
+
+  it("throws when the response carries neither data nor errors", async () => {
+    stub({ ok: true, status: 200, json: async () => ({}) });
+    await expect(fetchAssignedIssues(inputs)).rejects.toThrow("Linear returned no data");
   });
 });
 
