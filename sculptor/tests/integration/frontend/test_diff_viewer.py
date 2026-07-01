@@ -217,13 +217,13 @@ def _set_rich_markdown_rendering_via_settings(page: Page, *, enabled: bool) -> N
 
 
 def _ensure_render_mode(viewer: PlaywrightDiffViewerElement, page: Page, mode: str) -> None:
-    """Drive the render-markdown toggle (now a checkbox item in the triple-dot
+    """Drive the render-markdown toggle (a flipping item in the triple-dot
     menu, FCC-07) to ``mode`` (``rendered`` / ``source``).
 
     Effective mode is read from CONTENT — the rendered markdown wrapper is mounted
-    only in rendered mode — rather than the menu checkbox's ``data-state`` (which is
-    only in the DOM while the menu is open and tracks the preference, not the
-    effective view). Idempotent — only toggles when the current view differs.
+    only in rendered mode — rather than the menu item's label (which is only in
+    the DOM while the menu is open and tracks the preference, not the effective
+    view). Idempotent — only toggles when the current view differs.
     """
     want_rendered = mode == "rendered"
     # Anchor on a deterministic baseline first: confirm the preview wrapper is

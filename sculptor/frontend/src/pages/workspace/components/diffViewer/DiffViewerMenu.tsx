@@ -1,5 +1,16 @@
 import { DropdownMenu, IconButton } from "@radix-ui/themes";
-import { ChevronsDownUp, List, ListTree, MoreHorizontal, Search, SplitSquareHorizontal } from "lucide-react";
+import {
+  BookOpen,
+  ChevronsDownUp,
+  Code,
+  List,
+  ListTree,
+  MoreHorizontal,
+  Search,
+  SplitSquareHorizontal,
+  Text,
+  WrapText,
+} from "lucide-react";
 import type { ReactElement } from "react";
 import { Fragment } from "react";
 
@@ -48,22 +59,19 @@ const DiffViewOptionItems = ({ isBinary, options }: { isBinary: boolean; options
         </DropdownMenu.Item>
       </>
     )}
-    <DropdownMenu.CheckboxItem
-      checked={options.lineWrapping === "wrap"}
-      onCheckedChange={() => options.onToggleLineWrapping()}
-      data-testid={ElementIds.DIFF_LINE_WRAP_TOGGLE}
-    >
-      Wrap lines
-    </DropdownMenu.CheckboxItem>
+    <DropdownMenu.Item onSelect={() => options.onToggleLineWrapping()} data-testid={ElementIds.DIFF_LINE_WRAP_TOGGLE}>
+      {options.lineWrapping === "wrap" ? <Text size={14} /> : <WrapText size={14} />}
+      {options.lineWrapping === "wrap" ? "Unwrap lines" : "Wrap lines"}
+    </DropdownMenu.Item>
     {options.showRenderToggle && (
-      <DropdownMenu.CheckboxItem
-        checked={options.isRendered}
+      <DropdownMenu.Item
         disabled={!options.isRenderToggleEnabled}
-        onCheckedChange={() => options.onToggleRender()}
+        onSelect={() => options.onToggleRender()}
         data-testid={ElementIds.DIFF_RENDER_TOGGLE}
       >
-        Render markdown
-      </DropdownMenu.CheckboxItem>
+        {options.isRendered ? <Code size={14} /> : <BookOpen size={14} />}
+        {options.isRendered ? "Show source" : "Render markdown"}
+      </DropdownMenu.Item>
     )}
   </>
 );
