@@ -62,10 +62,9 @@ const triggerResize = (): void => {
 };
 
 /**
- * Assert the container is pinned to the content bottom. The pin primitive now
- * sets scrollTop directly to contentBottomOffset (scrollHeight - paddingEnd -
- * clientHeight) instead of calling scrollToIndex(last, {align:"end"}), so tests
- * assert that observable scroll position rather than a virtualizer mock call.
+ * Assert the container is pinned to the content bottom — scrollTop at
+ * contentBottomOffset (scrollHeight - paddingEnd - clientHeight), the observable
+ * position rather than a virtualizer mock call.
  */
 const expectPinnedToBottom = (el: HTMLDivElement, paddingEnd = 0): void => {
   expect(el.scrollTop).toBe(Math.max(0, el.scrollHeight - paddingEnd - el.clientHeight));
@@ -1405,10 +1404,9 @@ describe("useAlphaAutoScroll", () => {
         isStreaming: false,
       });
 
-      // The problematic anchor scroll (the old isEngaged + !isFilling path) must
-      // NOT fire at streaming end while still anchoring a short response — with the
-      // inflated paddingEnd it would have landed near scrollTop=0. The down-only
-      // content-bottom pin leaves the view exactly where it was instead.
+      // At streaming end while still anchoring a short response, the view must stay
+      // put: the down-only content-bottom pin leaves scrollTop where it was rather
+      // than jumping toward the top.
       expect(el.scrollTop).toBe(1500);
     });
 

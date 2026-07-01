@@ -80,10 +80,8 @@ export const useAlphaScrollPersistence = (
     if (!el || filteredMessages.length === 0) return;
 
     if (!scrollPosition || scrollPosition.distanceFromBottom <= BOTTOM_THRESHOLD) {
-      // First visit or user was at bottom: restore to the content bottom (flush),
-      // not scrollToIndex(last, {align:"end"}) — that lands in the empty tail
-      // padding (see contentBottomOffset), leaving the last line floating a
-      // paddingEnd-tall gap above the viewport bottom after a task switch.
+      // First visit or user was at bottom: restore flush to the content bottom (see
+      // contentBottomOffset — not scrollToIndex, which lands in the tail padding).
       el.scrollTop = contentBottomOffset(el, virtualizer);
       return;
     }

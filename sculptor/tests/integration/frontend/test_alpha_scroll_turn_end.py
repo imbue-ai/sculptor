@@ -1,21 +1,15 @@
-"""Integration test: the chat does not jump when the agent finishes its turn.
+"""Integration tests: the chat does not misbehave when the agent finishes its turn.
 
 The alpha-chat scroll system is an explicit state machine (see
-``docs/development/scroll_state_unification.md``, SCU-1566). While ``following``
-the live tail, the design pins the last message's *content* bottom flush with the
+``docs/development/scroll_state_unification.md``, SCU-1566). While ``following`` the
+live tail, the design pins the last message's *content* bottom flush with the
 viewport bottom, leaving the dynamic ``paddingEnd`` as empty slack *below*
-``scrollTop`` (``distanceFromContentBottom == 0``).
+``scrollTop`` (``distanceFromContentBottom == 0``) — so a turn-end shrink has slack
+to absorb into and the view does not jump.
 
-A regression had the pin land at TanStack's ``getMaxScrollOffset()`` instead — the
-very bottom of the padded scroll range — which parks ``scrollTop`` inside the
-``paddingEnd`` gap with zero slack. That floated the last line a ``paddingEnd``-tall
-gap above the viewport bottom *and* left no room for the last message to shrink when
-the turn ends (its streaming cursor is removed): the browser clamped ``scrollTop``
-down by the shrink and the whole conversation jumped up by a small, annoying amount.
-
-This test sends a follow-on streaming message in a longer chat, lets it overflow and
-pin to the bottom, and asserts the last message sits flush with the viewport bottom
-while following — directly the property whose absence caused the turn-end jump.
+These tests send follow-on streaming messages that overflow and pin to the bottom,
+and assert the turn-end behavior: the last message stays flush with the viewport
+bottom, a stale reading anchor is not restored, and the turn footer scrolls into view.
 """
 
 from playwright.sync_api import expect

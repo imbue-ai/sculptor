@@ -22,15 +22,9 @@ export const distanceFromContentBottom = (
  * viewport bottom — i.e. `distanceFromContentBottom === 0` — leaving the dynamic
  * `paddingEnd` as empty slack *below* `scrollTop`.
  *
- * Use this to pin to the bottom instead of `virtualizer.scrollToIndex(last,
- * { align: "end" })`. For the final item that call resolves to
- * `getMaxScrollOffset()` — the very bottom of the padded scroll range — which
- * parks `scrollTop` inside the `paddingEnd` gap with *zero* slack beneath it.
- * Two problems follow: the last line floats a `paddingEnd`-tall gap above the
- * viewport bottom while following, and (the turn-end jump) the last message has
- * no room to shrink when its streaming cursor is removed — the browser clamps
- * `scrollTop` down by the shrink and the whole view jumps up. Pinning to the
- * content bottom keeps `paddingEnd` as slack the shrink is absorbed into.
+ * Prefer this to `virtualizer.scrollToIndex(last, { align: "end" })`, which for the
+ * final item resolves to `getMaxScrollOffset()` and parks `scrollTop` inside the
+ * `paddingEnd` gap — no slack for a turn-end shrink to absorb.
  */
 export const contentBottomOffset = (el: HTMLElement, virtualizer: Virtualizer<HTMLDivElement, Element>): number => {
   const paddingEnd = virtualizer.options.paddingEnd ?? 0;
