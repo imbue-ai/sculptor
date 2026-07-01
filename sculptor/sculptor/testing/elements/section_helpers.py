@@ -5,10 +5,10 @@ keyboard shortcuts, and dragging panel tabs through the dnd-kit KeyboardSensor �
 than seeding layout state, so the tests exercise the same code paths as production.
 
 The drag helper is the load-bearing one: panel drag-and-drop is driven via the
-KeyboardSensor, which Playwright can drive faithfully (focus the tab's drag
-handle, Space to pick up, one arrow per section to move, Space to drop) where a
-synthetic pointer drag cannot. The provider's directional coordinate getter makes a
-single arrow press jump to the adjacent section.
+KeyboardSensor, which Playwright can drive faithfully (focus the tab, Space to
+pick up, one arrow per section to move, Space to drop) where a synthetic pointer
+drag cannot. The provider's directional coordinate getter makes a single arrow
+press jump to the adjacent section.
 """
 
 from playwright.sync_api import Page
@@ -40,7 +40,7 @@ def _section_drop_target(page: Page, sub_section: str):  # noqa: ANN202 - playwr
     """The element carrying the live drop-target flag for a sub-section.
 
     Matches whichever is mounted: the expanded section body (PanelSection) or the
-    collapsed section's drop rail — both carry ``data-drop-target-subsection``.
+    collapsed section's drop overlay — both carry ``data-drop-target-subsection``.
     The CSS-attribute scoping stays inside this helper to honour the
     integration-test css-locator ratchet.
     """

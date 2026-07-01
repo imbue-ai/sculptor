@@ -33,6 +33,37 @@ export const isDropTargetAtom = memoizedAtomByKey<SubSectionId, boolean>((subSec
   selectAtom(panelDragStateAtom, (drag) => drag !== null && drag.to === subSection),
 );
 
+// ── Drag pointer halves ───────────────────────────────────────────────────────
+
+// Which halves of the window the drag pointer is in (left/right split at the
+// horizontal midpoint, bottom below the vertical midpoint). Drives which
+// collapsed-section drop overlays are visible. All false for keyboard drags (no
+// pointer), where overlay visibility falls back to the drop-target highlight.
+export type DragPointerHalves = { left: boolean; right: boolean; bottom: boolean };
+
+export const NO_DRAG_POINTER_HALVES: DragPointerHalves = { left: false, right: false, bottom: false };
+
+const dragPointerHalvesBaseAtom: PrimitiveAtom<DragPointerHalves> = atom<DragPointerHalves>(NO_DRAG_POINTER_HALVES);
+
+// Write-through with an equality guard: the provider writes on every drag move,
+// but subscribers only re-render when the pointer actually crosses a midline.
+export const dragPointerHalvesAtom = atom(
+  (get) => get(dragPointerHalvesBaseAtom),
+  (get, set, next: DragPointerHalves): void => {
+    const prev = get(dragPointerHalvesBaseAtom);
+    if (prev.left === next.left && prev.right === next.right && prev.bottom === next.bottom) {
+      return;
+    }
+    set(dragPointerHalvesBaseAtom, next);
+  },
+);
+
+// The single half slice a collapsed section's drop overlay watches (a section's
+// overlay shows while the pointer is in the same-named window half).
+export const isDragPointerInHalfAtom = memoizedAtomByKey<"left" | "right" | "bottom", boolean>((half) =>
+  selectAtom(dragPointerHalvesBaseAtom, (halves) => halves[half]),
+);
+
 export const ghostPanelIdAtom = memoizedAtomByKey<SubSectionId, PanelId | null>((subSection) =>
   selectAtom(panelDragStateAtom, (drag) => (drag !== null && drag.to === subSection ? drag.panelId : null)),
 );

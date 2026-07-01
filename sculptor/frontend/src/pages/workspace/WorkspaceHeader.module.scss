@@ -53,3 +53,12 @@
   background: var(--accent-a3);
   color: var(--accent-11);
 }
+
+// A dragged panel is hovering this collapsed section's drop overlay: light the
+// toggle up brighter than plain-active so the eye lands on the section that
+// dropping will pop open.
+.toggleDropTarget {
+  background: var(--accent-a4);
+  color: var(--accent-11);
+  outline: 1px solid var(--accent-8);
+}

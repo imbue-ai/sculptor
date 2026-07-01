@@ -15,6 +15,8 @@ import { sidebarCollapsedAtom } from "~/components/layout/sidebarAtoms.ts";
 import { toggleSectionAtom } from "~/components/sections/sectionActions.ts";
 import { isSectionExpandedAtom } from "~/components/sections/sectionAtoms.ts";
 import type { SectionId } from "~/components/sections/sectionTypes.ts";
+import { primaryOf } from "~/components/sections/sectionTypes.ts";
+import { isDropTargetAtom } from "~/components/sections/transientAtoms.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 import { getTitleBarLeftPadding } from "~/electron/utils.ts";
 import { getBranchName } from "~/pages/home/Utils";
@@ -44,11 +46,16 @@ type SectionToggleProps = {
 
 // One collapse/expand toggle for a side/bottom section. Reads the per-section
 // expanded slice and writes through the shared toggleSectionAtom so the header,
-// keyboard shortcuts, and drag-to-expand (via the collapsed-section drop rail) all
-// funnel through one reducer.
+// keyboard shortcuts, and drag-to-expand (via the collapsed-section drop overlay)
+// all funnel through one reducer.
 const SectionToggle = ({ section, icon, label, testId }: SectionToggleProps): ReactElement => {
   const isExpanded = useAtomValue(isSectionExpandedAtom(section));
+  // While a dragged panel hovers a collapsed section's drop overlay, light this
+  // toggle up — it is the section that dropping will pop open.
+  const isDropTarget = useAtomValue(isDropTargetAtom(primaryOf(section)));
   const toggleSection = useSetAtom(toggleSectionAtom);
+
+  const isDropHighlight = isDropTarget && !isExpanded;
 
   return (
     <TooltipIconButton
@@ -56,7 +63,7 @@ const SectionToggle = ({ section, icon, label, testId }: SectionToggleProps): Re
       variant="ghost"
       size="1"
       color="gray"
-      className={isExpanded ? styles.toggleActive : undefined}
+      className={isDropHighlight ? styles.toggleDropTarget : isExpanded ? styles.toggleActive : undefined}
       onClick={() => toggleSection({ section })}
       aria-label={`Toggle ${label}`}
       data-testid={testId}

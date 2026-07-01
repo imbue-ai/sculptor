@@ -12,8 +12,8 @@
 // re-renders only the sections under/around the cursor.
 //
 // Testability: the context runs a PointerSensor AND a
-// KeyboardSensor, and each tab exposes a focusable drag handle, so Playwright drives
-// the real sensor pipeline (focus handle → Space → arrows → Space) — a plain
+// KeyboardSensor, and each tab is itself a focusable drag activator, so Playwright
+// drives the real sensor pipeline (focus tab → Space → arrows → Space) — a plain
 // PointerSensor cannot be driven faithfully by Playwright's synthetic mouse events.
 
 import type { DragEndEvent, DragMoveEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/core";
@@ -34,7 +34,12 @@ import styles from "./PanelDndProvider.module.scss";
 import { panelDefinitionByIdAtom } from "./registry/panelRegistry.ts";
 import { jumpToSectionAtom, movePanelAtom } from "./sectionActions.ts";
 import type { PanelId, SubSectionId } from "./sectionTypes.ts";
-import { draggedPanelIdAtom, panelDragStateAtom } from "./transientAtoms.ts";
+import {
+  draggedPanelIdAtom,
+  dragPointerHalvesAtom,
+  NO_DRAG_POINTER_HALVES,
+  panelDragStateAtom,
+} from "./transientAtoms.ts";
 
 // A resolved drop target: where the panel would land and at which slot.
 type DropTarget = { to: SubSectionId; index: number };
@@ -93,6 +98,7 @@ const DragOverlayTab = ({ panelId }: { panelId: PanelId }): ReactElement | null 
 export const PanelDndProvider = ({ children }: { children: ReactNode }): ReactElement => {
   const draggedPanelId = useAtomValue(draggedPanelIdAtom);
   const setPanelDragState = useSetAtom(panelDragStateAtom);
+  const setDragPointerHalves = useSetAtom(dragPointerHalvesAtom);
   const movePanel = useSetAtom(movePanelAtom);
   const jumpToSection = useSetAtom(jumpToSectionAtom);
 
@@ -140,6 +146,18 @@ export const PanelDndProvider = ({ children }: { children: ReactNode }): ReactEl
       }
       const target = resolveDropTarget(event);
       dropTargetRef.current = target;
+      // Track which window halves the pointer is in — this is what reveals the
+      // collapsed-section drop overlays. Keyboard drags have no pointer and
+      // leave every half false (the overlays reveal via the drop-target slice).
+      if (event.activatorEvent instanceof PointerEvent) {
+        const pointerX = event.activatorEvent.clientX + event.delta.x;
+        const pointerY = event.activatorEvent.clientY + event.delta.y;
+        setDragPointerHalves({
+          left: pointerX < window.innerWidth / 2,
+          right: pointerX >= window.innerWidth / 2,
+          bottom: pointerY >= window.innerHeight / 2,
+        });
+      }
       // Over a drop zone → preview the panel there; otherwise snap the ghost home.
       setPanelDragState({
         panelId: activeData.panelId,
@@ -148,7 +166,7 @@ export const PanelDndProvider = ({ children }: { children: ReactNode }): ReactEl
         index: target?.index ?? activeData.index,
       });
     },
-    [setPanelDragState],
+    [setPanelDragState, setDragPointerHalves],
   );
 
   const handleDragEnd = useCallback(
@@ -157,6 +175,7 @@ export const PanelDndProvider = ({ children }: { children: ReactNode }): ReactEl
       const activeData = event.active.data.current as PanelDragData | undefined;
       dropTargetRef.current = null;
       resetKeyboardDropTarget();
+      setDragPointerHalves(NO_DRAG_POINTER_HALVES);
       setPanelDragState(null);
       if (target === null || activeData === undefined) {
         return;
@@ -169,14 +188,15 @@ export const PanelDndProvider = ({ children }: { children: ReactNode }): ReactEl
       // Dropping into a section makes it the active section and pulses its ring.
       jumpToSection({ subSection: target.to });
     },
-    [setPanelDragState, movePanel, jumpToSection],
+    [setPanelDragState, setDragPointerHalves, movePanel, jumpToSection],
   );
 
   const handleDragCancel = useCallback((): void => {
     dropTargetRef.current = null;
     resetKeyboardDropTarget();
+    setDragPointerHalves(NO_DRAG_POINTER_HALVES);
     setPanelDragState(null);
-  }, [setPanelDragState]);
+  }, [setPanelDragState, setDragPointerHalves]);
 
   return (
     <DndContext

@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 
-import { CollapsedSectionDropRail } from "./CollapsedSectionDropRail.tsx";
+import { CollapsedSectionDropOverlay } from "./CollapsedSectionDropOverlay.tsx";
 import { PanelSection } from "./PanelSection.tsx";
 import { ResizeHandle } from "./ResizeHandle.tsx";
 import { isSectionExpandedAtom, sectionSizesAtom, setSectionSizeAtom } from "./sectionAtoms.ts";
@@ -81,8 +81,6 @@ export const SectionGrid = (): ReactElement => {
   return (
     <div ref={containerRef} className={styles.outer}>
       <div className={styles.topRow}>
-        {/* Collapsed left section: a drop rail at the left edge while dragging. */}
-        {isDragging && !isLeftExpanded && <CollapsedSectionDropRail section="left" orientation="vertical" />}
         {isLeftExpanded && (
           <>
             <div className={styles.side} style={{ width: leftPx }} data-testid={ElementIds.SECTION_LEFT}>
@@ -117,8 +115,6 @@ export const SectionGrid = (): ReactElement => {
             </div>
           </>
         )}
-        {/* Collapsed right section: a drop rail at the right edge while dragging. */}
-        {isDragging && !isRightExpanded && <CollapsedSectionDropRail section="right" orientation="vertical" />}
       </div>
 
       {isBottomExpanded && (
@@ -136,8 +132,11 @@ export const SectionGrid = (): ReactElement => {
           </div>
         </>
       )}
-      {/* Collapsed bottom section: a drop rail along the bottom edge while dragging. */}
-      {isDragging && !isBottomExpanded && <CollapsedSectionDropRail section="bottom" orientation="horizontal" />}
+      {/* Collapsed sections: floating drop overlays at the window edges while
+          dragging. Absolutely positioned over the grid so nothing shifts. */}
+      {isDragging && !isLeftExpanded && <CollapsedSectionDropOverlay section="left" />}
+      {isDragging && !isRightExpanded && <CollapsedSectionDropOverlay section="right" />}
+      {isDragging && !isBottomExpanded && <CollapsedSectionDropOverlay section="bottom" />}
     </div>
   );
 };
