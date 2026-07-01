@@ -169,6 +169,36 @@ def get_alpha_scroll_height(page: Page) -> float:
     )
 
 
+def start_scroll_top_sampler(page: Page) -> None:
+    """Start an rAF loop recording the max scrollTop seen (the peak we followed to)."""
+    page.evaluate(
+        f"""() => {{
+        const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+        if (!el) return;
+        window.__st = {{ max: el.scrollTop }};
+        const tick = () => {{
+            if (el.scrollTop > window.__st.max) window.__st.max = el.scrollTop;
+            window.__st.raf = requestAnimationFrame(tick);
+        }};
+        window.__st.raf = requestAnimationFrame(tick);
+    }}"""
+    )
+
+
+def read_scroll_top_sampler(page: Page) -> dict:
+    """Stop the sampler; return {"max": peak scrollTop while sampling, "final": current}."""
+    return page.evaluate(
+        f"""() => {{
+        if (window.__st && window.__st.raf) cancelAnimationFrame(window.__st.raf);
+        const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+        return {{
+            max: window.__st ? Math.round(window.__st.max) : null,
+            final: el ? Math.round(el.scrollTop) : null,
+        }};
+    }}"""
+    )
+
+
 def get_max_following_tail_gap(page: Page, frames: int = 18) -> float | None:
     """Over a short ``requestAnimationFrame`` burst, the max gap (px) from the last
     message's bottom edge UP to the viewport bottom.

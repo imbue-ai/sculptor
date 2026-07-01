@@ -423,6 +423,17 @@ must not overwrite the position we are preserving), stored on the machine beside
 `geometryAtBottom` and read **only** by `projectReflow` — it never drives a render,
 so it updates state in place without notifying subscribers.
 
+The anchor is a *scrolled-up* reading position, so it is **cleared the moment
+authority enters `following` or `anchoringTurn`** (in the store's `dispatch`, the
+single writer of authority): the user is now watching the live tail or a fresh turn,
+not the message the anchor points at. Without this, a stale anchor from an earlier
+scroll survived the turn and, when the turn ended (→ `userControlled`), the next
+content reflow — the turn footer landing after we had left `following` — resolved to
+`holdAnchor` and snapped the whole conversation back to that old position, cutting off
+the message the user had just sent. Clearing on entry keeps `holdAnchor` for its real
+job (an idle scrolled-up reader whose view reflows) while a turn end leaves the view
+exactly where `following` left it.
+
 TanStack Virtual already preserves scroll across item-size changes via
 `shouldAdjustScrollPositionOnItemSizeChange`: when an item *entirely above* the fold
 grows, it shifts scrollTop by the same delta. Two reasons that is not enough on its
