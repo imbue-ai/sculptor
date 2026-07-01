@@ -1,0 +1,81 @@
+# Offload runner for the perf scenario suite (sculptor/tests/perf/). Run with:
+#   just test-offload-perf
+#
+# A separate config (rather than a group in offload.toml) keeps the perf run
+# fully independent of the integration groups: those partition by pytest marker
+# and would otherwise sweep the unmarked perf tests into `stable` with its
+# retry — which is exactly wrong here (see retry_count below). Reuses the same
+# base image (Dockerfile/finalize script) as offload.toml, so no extra build.
+
+[offload]
+# The perf suite is small (a handful of scenarios) but each scenario is a full
+# Playwright session; fan out one-ish scenario per sandbox so the slow blends
+# (with_diff_and_files ~50s, long_history ~190s) don't serialize behind each
+# other. max_parallel is a ceiling, not a target.
+max_parallel = 16
+# long_history builds 100 chat turns before it measures; give it real headroom.
+test_timeout_secs = 900
+stream_output = true
+sandbox_project_root = "/app/sculptor"
+sandbox_repo_root = "/app"
+sandbox_init_cmd = "bash /app/scripts/finalize-base-image.sh"
+# Perf tests are Playwright browser tests: they need the built frontend (with
+# the perf init script + keepNames name attribution) and the generated clients,
+# same as the integration suite. Mirror offload.toml's post_patch_cmd.
+post_patch_cmd = "export PATH=/root/.nvm/versions/node/v${NODE_VERSION}/bin:$PATH && cd /app/sculptor/frontend && pnpm run generate-api && pnpm run build && cd /app && just generate-sculpt-client"
+# Run each batch exactly once — no speculative straggler re-runs. Combined with
+# retry_count=0, a scenario is measured exactly once, so no duplicate JSONL rows.
+impatiently_requeue_batches = false
+
+[provider]
+type = "modal"
+dockerfile = ".devcontainer/Dockerfile"
+include_cwd = false
+
+[provider.env]
+SESSION_TOKEN = ""
+PROJECT_PATH = "/tmp/repo"
+GOOGLE_API_KEY = "fake"
+# Write each sandbox's measurements under the retrieved output dir. The
+# collector appends a per-process-unique suffix (perf-measurements-<token>.jsonl)
+# so the many sandboxes never collide; the caller concatenates them. Lives under
+# test-results-perf/ so download_globs below brings it back.
+SCULPTOR_PERF_OUTPUT_PATH = "test-results-perf"
+
+[framework]
+type = "pytest"
+command = "uv run --project sculptor pytest"
+paths = ["sculptor/tests/perf/"]
+run_args = "-p no:xdist"
+
+[groups.perf]
+# retry_count = 0 is load-bearing: a retried perf test re-runs its blend and
+# appends a SECOND set of JSONL rows for the same (scenario, variant), which
+# silently corrupts the comparison. A perf test that flakes is itself signal —
+# fail it rather than paper over it.
+retry_count = 0
+filters = "-m 'not real_claude and not real_pi and not isolated'"
+
+[checkpoint]
+build_inputs = [
+    ".devcontainer/Dockerfile",
+    ".dockerignore",
+    "offload-perf.toml",
+    "scripts/finalize-base-image.sh",
+    "pyproject.toml",
+    "sculptor/pyproject.toml",
+    "sculptor/frontend/package.json",
+    "sculptor/frontend/pnpm-lock.yaml",
+    "uv.lock",
+]
+
+[history]
+record_history = "flag"
+
+[report]
+output_dir = "test-results-perf"
+junit = true
+junit_file = "junit-perf.xml"
+# Bring back the per-sandbox measurement JSONLs (the actual perf payload) plus
+# the merged JUnit. The workflow concatenates the JSONLs for the compare step.
+download_globs = ["test-results-perf/**/perf-measurements-*.jsonl"]

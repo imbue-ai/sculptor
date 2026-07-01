@@ -1,0 +1,239 @@
+name: perf
+
+# Perf scenario suite (sculptor/tests/perf/) on offload. Comment-only, not a
+# gate (SCU-1294). On main pushes it records each commit's measurements as a
+# git note on refs/notes/perf; on PRs it diffs against the merge-base commit's
+# note and posts/updates an observational comment. See
+# docs/development/scu-1294-perf-ci-notes.md for the design.
+
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches: [main]
+
+# Like checks.yml: PR runs (refs/pull/N/merge) cancel on new pushes; main runs
+# (refs/heads/main) queue — never cancel — so each merged commit's baseline note
+# gets written. Do NOT key on head_ref (empty on push -> main never queues).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  OFFLOAD_VERSION: "0.9.10"
+
+permissions:
+  # contents: write -> push refs/notes/perf on main. pull-requests: write ->
+  # upsert the PR comment. Pinned explicitly; a read-only default would 403 the
+  # note push and the comment.
+  contents: write
+  id-token: write
+  pull-requests: write
+
+jobs:
+  perf:
+    name: perf scenarios
+    # No PR to comment on in the merge queue, and comment-only adds no gating
+    # value there — skip it.
+    if: >-
+      github.event_name != 'merge_group' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    # SECURITY: self-hosted runner — same fork gate as offload.yml. Forked PRs
+    # never reach here (guarded above), so the comment/notes steps always have a
+    # writable token.
+    runs-on: offload-runner
+    timeout-minutes: 60
+    env:
+      JUST_VERBOSE: "1"
+      SCIENCE_FILESYSTEM_ROOT: /tmp/science
+      VAULT_AUTH_ROLE: sculptor_test_gh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history: offload checkpoint resolution + merge-base + notes.
+          fetch-depth: 0
+
+      - name: Configure git identity for note writes
+        run: |
+          git config user.email "dev@imbue.com"
+          git config user.name "imbue-dev"
+
+      - name: Install system packages
+        run: |
+          APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends rsync jq ca-certificates
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Setup just
+        uses: extractions/setup-just@v2
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache offload binary
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/offload
+          key: cargo-offload-${{ env.OFFLOAD_VERSION }}-${{ runner.os }}
+
+      - name: Install offload
+        run: |
+          if ! command -v offload >/dev/null || ! offload --version | grep -qF "$OFFLOAD_VERSION"; then
+            cargo install offload@"$OFFLOAD_VERSION" --force
+          fi
+          offload --version
+
+      - name: Fetch git notes (offload image cache + perf baselines)
+        run: git fetch origin 'refs/notes/*:refs/notes/*' || true
+
+      - name: Sync Python deps
+        run: uv sync --frozen
+
+      - name: Export Modal credentials
+        uses: imbue-ai/use-vault-secrets@main
+        with:
+          role: ${{ env.VAULT_AUTH_ROLE }}
+          secrets: |
+            shared/modal/MODAL_TOKEN_ID
+            shared/modal/MODAL_TOKEN_SECRET
+
+      # TODO(SCU-1294): scenario subset. The design calls for fast `default`
+      # blends on every PR and the heavy blends (with_diff_and_files,
+      # long_history) on main/nightly only. That needs a lever offload actually
+      # forwards to pytest (a `-k`/env passthrough or a second group) — confirm
+      # the offload arg model on a real run before wiring it. For now the full
+      # matrix runs in both contexts (~8 min); it's a non-gating job.
+      - name: Run perf scenarios on offload
+        id: tests
+        run: |
+          ulimit -n 8192
+          OFFLOAD_EXIT=0
+          just test-offload-perf --ci || OFFLOAD_EXIT=$?
+          pkill -TERM -f 'python3.*modal' 2>/dev/null || true
+          sleep 3
+          pkill -KILL -f 'python3.*modal' 2>/dev/null || true
+          # offload exits 2 for "some tests failed"; keep going so we still
+          # aggregate whatever measurements came back.
+          if [ "$OFFLOAD_EXIT" -ne 0 ] && [ "$OFFLOAD_EXIT" -ne 2 ]; then
+            exit "$OFFLOAD_EXIT"
+          fi
+
+      - name: Aggregate per-sandbox measurements
+        id: agg
+        run: |
+          # Each sandbox wrote perf-measurements-<token>.jsonl; concatenate into
+          # one head file for the compare + note steps.
+          mkdir -p perf-out
+          find test-results-perf -name 'perf-measurements-*.jsonl' -exec cat {} + > perf-out/head.jsonl || true
+          COUNT=$(wc -l < perf-out/head.jsonl | tr -d ' ')
+          echo "rows=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Aggregated $COUNT measurement rows."
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::warning::No perf measurements were produced."
+          fi
+
+      - name: Upload measurements artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-measurements
+          path: perf-out/head.jsonl
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # --- main push: record this commit's measurements as its baseline note ---
+      - name: Record baseline note (main only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.agg.outputs.rows != '0'
+        run: |
+          git notes --ref=perf add -f -F perf-out/head.jsonl HEAD
+          # Retry-safe push; a concurrent main run is serialized by the
+          # concurrency group, so a straight push is normally fine.
+          git push origin refs/notes/perf
+
+      # --- PR: diff against merge-base note, write summary, upsert comment ---
+      - name: Resolve baseline (PR only)
+        if: github.event_name == 'pull_request' && steps.agg.outputs.rows != '0'
+        id: baseline
+        run: |
+          MB=$(git merge-base HEAD origin/main)
+          echo "Merge-base: $MB"
+          # Walk first-parent ancestors until one has a perf note (a skipped or
+          # failed main run leaves gaps).
+          SHA="$MB"
+          FOUND=""
+          for _ in $(seq 1 50); do
+            if git notes --ref=perf show "$SHA" > perf-out/base.jsonl 2>/dev/null; then
+              FOUND="$SHA"; break
+            fi
+            SHA=$(git rev-parse "$SHA^" 2>/dev/null) || break
+          done
+          if [ -n "$FOUND" ]; then
+            echo "base_sha=$FOUND" >> "$GITHUB_OUTPUT"
+            echo "Baseline note found at $FOUND"
+          else
+            echo "base_sha=" >> "$GITHUB_OUTPUT"
+            echo "No baseline note within 50 ancestors of $MB."
+          fi
+
+      - name: Render step summary + comment body (PR only)
+        if: github.event_name == 'pull_request' && steps.agg.outputs.rows != '0'
+        id: render
+        run: |
+          if [ -n "${{ steps.baseline.outputs.base_sha }}" ]; then
+            python3 tools/perf/comment.py \
+              --base perf-out/base.jsonl --head perf-out/head.jsonl \
+              --base-sha "${{ steps.baseline.outputs.base_sha }}" \
+              --format github --observational > perf-out/comment.md
+            # Full table always goes to the step summary.
+            cat perf-out/comment.md >> "$GITHUB_STEP_SUMMARY"
+            # Comment only when something is non-green (regression/improvement/
+            # new/removed). Grep the verdict line the renderer emits.
+            if grep -q "no perf change" perf-out/comment.md; then
+              echo "should_comment=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "should_comment=true" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "should_comment=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### perf scenarios"
+              echo ""
+              echo "No baseline note found for the merge-base; nothing to diff against yet."
+              echo "(This is expected until a main run has recorded a note for an ancestor commit.)"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upsert PR comment
+        if: github.event_name == 'pull_request' && steps.render.outputs.should_comment == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          MARKER="<!-- perf-bot:scu-1294 -->"
+          BODY_FILE=perf-out/comment.md
+          # Find an existing bot comment by the hidden marker.
+          EXISTING=$(gh pr view "$PR" --json comments \
+            --jq ".comments[] | select(.body | contains(\"$MARKER\")) | .url" | head -1)
+          if [ -n "$EXISTING" ]; then
+            # Comment URLs end in #issuecomment-<id>; PATCH that comment. If the
+            # human deleted it (PATCH 404s), fall back to creating a fresh one.
+            CID="${EXISTING##*issuecomment-}"
+            gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$CID" \
+              -f body="$(cat "$BODY_FILE")" >/dev/null \
+              && echo "Updated existing perf comment." \
+              || gh pr comment "$PR" --body-file "$BODY_FILE"
+          else
+            gh pr comment "$PR" --body-file "$BODY_FILE"
+            echo "Posted new perf comment."
+          fi

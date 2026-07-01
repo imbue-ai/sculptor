@@ -1675,6 +1675,18 @@ test-unit-offload *args="":
     ulimit -n 8192
     offload run -c offload-unit.toml --trace --show-estimated-cost {{args}} || [ $? -eq 2 ]
 
+# Run the perf scenario suite (sculptor/tests/perf/) on Offload (Modal); see
+# offload-perf.toml. Each sandbox writes measurements to test-results-perf/ as
+# perf-measurements-<token>.jsonl; concatenate them for the compare step
+# (tools/perf/comment.py). retry_count=0 there keeps measurements un-duplicated.
+[group("test")]
+test-offload-perf *args="":
+    #!/bin/bash
+    set -ueo pipefail
+    {{ _require_offload }}
+    ulimit -n 8192
+    offload run -c offload-perf.toml --trace {{args}} || [ $? -eq 2 ]
+
 # -------- Sculptor Release Commands --------
 
 # Runs the dev command to create a branch bumping the version
