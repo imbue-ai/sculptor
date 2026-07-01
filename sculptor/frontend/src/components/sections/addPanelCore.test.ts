@@ -1,7 +1,7 @@
 import { createStore } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createAgentInLocation } from "./addPanelCore.ts";
+import { createAgentInLocation, listAvailableLocations } from "./addPanelCore.ts";
 import { EMPTY_WORKSPACE_LAYOUT } from "./persistence/types.ts";
 import { makeAgentPanelId } from "./registry/dynamicPanels.tsx";
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "./sectionAtoms.ts";
@@ -16,6 +16,22 @@ vi.mock("~/api", async (importOriginal) => {
 
 afterEach(() => {
   createWorkspaceAgentMock.mockReset();
+});
+
+describe("listAvailableLocations", () => {
+  it("offers every section, including collapsed ones (adding a panel expands them)", () => {
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-test");
+    // Only 'left' is expanded; right/bottom are collapsed. Center is always available.
+    store.set(workspaceLayoutAtom, { ...EMPTY_WORKSPACE_LAYOUT, expanded: { left: true } });
+
+    const subSections = listAvailableLocations(store).map((l) => l.subSection);
+    expect(subSections).toContain("center");
+    expect(subSections).toContain("left");
+    // Collapsed sections must still be offered so a panel can be added to them.
+    expect(subSections).toContain("right");
+    expect(subSections).toContain("bottom");
+  });
 });
 
 describe("createAgentInLocation placement", () => {

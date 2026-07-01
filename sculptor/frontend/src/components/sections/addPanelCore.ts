@@ -45,22 +45,22 @@ const SECTION_LABELS: Readonly<Record<SectionId, string>> = {
   bottom: "Bottom",
 };
 
-// The locations a panel can be added to: every currently-expanded section, plus the
-// secondary half of any split section (the center section is always expanded).
+// The locations a panel can be added to: EVERY section (including collapsed ones —
+// adding a panel there expands the section), plus the secondary half of any section
+// that is both expanded and split. A collapsed section only offers its primary; its
+// split half isn't shown until the section is expanded.
 export function listAvailableLocations(store: AppStore): ReadonlyArray<AddPanelLocation> {
   const layout = store.get(workspaceLayoutAtom);
   const locations: Array<AddPanelLocation> = [];
   for (const section of SECTION_IDS) {
     const isExpanded = section === "center" || (layout.expanded[section] ?? false);
-    if (!isExpanded) {
-      continue;
-    }
     const isSplit = layout.splits[section] !== undefined;
+    const shouldShowSecondary = isExpanded && isSplit;
     locations.push({
       subSection: section,
-      label: isSplit ? `${SECTION_LABELS[section]} (primary)` : SECTION_LABELS[section],
+      label: shouldShowSecondary ? `${SECTION_LABELS[section]} (primary)` : SECTION_LABELS[section],
     });
-    if (isSplit) {
+    if (shouldShowSecondary) {
       locations.push({ subSection: toSecondary(section), label: `${SECTION_LABELS[section]} (secondary)` });
     }
   }

@@ -64,6 +64,8 @@ const makeCommandRuntime = (): CommandRuntime => {
       toggleLeftPanel: noop,
       toggleBottomPanel: noop,
       toggleRightPanel: noop,
+      toggleSidebar: noop,
+      toggleMaximizeSection: noop,
       setTheme: noop,
       focusChatInput: noop,
       showChatSearch: noop,

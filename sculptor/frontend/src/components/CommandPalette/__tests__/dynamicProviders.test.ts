@@ -4,9 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CodingAgentTaskView, Workspace } from "../../../api";
 import { taskAtomFamily, taskIdsAtom } from "../../../common/state/atoms/tasks.ts";
 import { workspaceAtomFamily, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
+import { EMPTY_WORKSPACE_LAYOUT } from "../../sections/persistence/types.ts";
 import type { PanelDefinition } from "../../sections/registry/panelRegistry.ts";
 import { panelRegistryAtom } from "../../sections/registry/panelRegistry.ts";
 import { togglePanelAtom } from "../../sections/sectionActions.ts";
+import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "../../sections/sectionAtoms.ts";
+import type { PanelId, SubSectionId } from "../../sections/sectionTypes.ts";
 import { buildAgentProvider } from "../dynamic/agentCommands.ts";
 import { buildPanelTogglesProvider } from "../dynamic/panels.ts";
 import { buildWorkspaceProvider } from "../dynamic/workspaceCommands.tsx";
@@ -42,6 +45,8 @@ const makeRuntime = (): CommandRuntime => {
       toggleLeftPanel: noop,
       toggleBottomPanel: noop,
       toggleRightPanel: noop,
+      toggleSidebar: noop,
+      toggleMaximizeSection: noop,
       setTheme: noop,
       focusChatInput: noop,
       showChatSearch: noop,
@@ -329,7 +334,13 @@ describe("buildPanelTogglesProvider", () => {
   // on lucide-react's full forwardRef shape.
   const TestIcon = (): null => null;
 
-  const seedRegistry = (panels: Array<Pick<PanelDefinition, "id" | "displayName">>): void => {
+  // Seed the registry AND mark every panel as actively placed in a section — the
+  // toggles provider only surfaces panels currently in the layout. Pass
+  // `{ place: false }` to seed the registry without placing (to exercise the filter).
+  const seedRegistry = (
+    panels: Array<Pick<PanelDefinition, "id" | "displayName">>,
+    opts: { place?: boolean } = {},
+  ): void => {
     const full = panels.map(
       (p) =>
         ({
@@ -341,7 +352,14 @@ describe("buildPanelTogglesProvider", () => {
           component: (() => null) as unknown,
         }) as unknown as PanelDefinition,
     );
-    getDefaultStore().set(panelRegistryAtom, full);
+    const store = getDefaultStore();
+    store.set(panelRegistryAtom, full);
+    const placement = opts.place === false ? {} : Object.fromEntries(panels.map((p) => [p.id as PanelId, "left"]));
+    store.set(activeWorkspaceIdAtom, "ws-test");
+    store.set(workspaceLayoutAtom, {
+      ...EMPTY_WORKSPACE_LAYOUT,
+      placement: placement as Partial<Record<PanelId, SubSectionId>>,
+    });
   };
 
   beforeEach(() => {
@@ -357,7 +375,7 @@ describe("buildPanelTogglesProvider", () => {
     expect(cmds).toHaveLength(0);
   });
 
-  it("emits one command per registered panel on a workspace route", () => {
+  it("emits one command per actively-placed panel on a workspace route", () => {
     seedRegistry([
       { id: "files", displayName: "File browser" },
       { id: "terminal", displayName: "Terminal" },
@@ -373,8 +391,26 @@ describe("buildPanelTogglesProvider", () => {
         "view.toggle_panel.todo-list",
       ].sort(),
     );
-    expect(cmds.find((c) => c.id === "view.toggle_panel.files")?.title).toBe("Toggle File browser");
-    expect(cmds.find((c) => c.id === "view.toggle_panel.todo-list")?.title).toBe("Toggle Agent tasks");
+    expect(cmds.find((c) => c.id === "view.toggle_panel.files")?.title).toBe("Show File browser");
+    expect(cmds.find((c) => c.id === "view.toggle_panel.todo-list")?.title).toBe("Show Agent tasks");
+  });
+
+  it("only surfaces panels actively placed in a section, not every registered panel", () => {
+    // 'files' is registered but NOT placed; 'terminal' is registered and placed.
+    seedRegistry([{ id: "terminal", displayName: "Terminal" }]);
+    getDefaultStore().set(panelRegistryAtom, [
+      ...getDefaultStore().get(panelRegistryAtom),
+      {
+        id: "files",
+        displayName: "File browser",
+        icon: TestIcon as unknown,
+        kind: "static",
+        defaultSection: "left",
+        component: (() => null) as unknown,
+      } as unknown as PanelDefinition,
+    ]);
+    const cmds = buildPanelTogglesProvider(makeRuntime()).produce(WORKSPACE_CTX);
+    expect(cmds.map((c) => c.id)).toEqual(["view.toggle_panel.terminal"]);
   });
 
   it("places every panel toggle in the View group and closes the palette after firing", () => {

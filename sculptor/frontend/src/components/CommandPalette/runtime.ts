@@ -46,6 +46,10 @@ export type CommandRuntime = {
     toggleLeftPanel: () => void;
     toggleBottomPanel: () => void;
     toggleRightPanel: () => void;
+    /** Collapse or expand the workspace nav sidebar (wraps `sidebarCollapsedAtom`). */
+    toggleSidebar: () => void;
+    /** Maximize the active section, or restore if one is already maximized. */
+    toggleMaximizeSection: () => void;
     setTheme: (mode: AppearanceMode) => void;
     focusChatInput: () => void;
     showChatSearch: () => void;

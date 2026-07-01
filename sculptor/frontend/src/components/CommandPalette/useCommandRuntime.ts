@@ -14,8 +14,12 @@ import { useHelpDialog } from "../../common/state/hooks/useHelpDialog.ts";
 import { useOpenSettings } from "../../common/state/hooks/useOpenSettings.ts";
 import { useUserConfig } from "../../common/state/hooks/useUserConfig.ts";
 import type { AppearanceMode } from "../../common/theme/appearanceModes.ts";
+import { sidebarCollapsedAtom } from "../layout/sidebarAtoms.ts";
 import { newWorkspaceModalAtom } from "../newWorkspace/newWorkspaceAtoms.ts";
 import { toggleSectionAtom } from "../sections/sectionActions.ts";
+import { workspaceLayoutAtom } from "../sections/sectionAtoms.ts";
+import { toSection } from "../sections/sectionTypes.ts";
+import { maximizedSectionAtom } from "../sections/transientAtoms.ts";
 import { type CommandActionId, commandActionsAtom } from "./commandActions.ts";
 import type { AppStore, CommandRuntime } from "./runtime.ts";
 
@@ -115,6 +119,17 @@ export const useCommandRuntime = (): CommandRuntime => {
   const uiToggleLeftPanel = useEvent((): void => toggleSection({ section: "left" }));
   const uiToggleBottomPanel = useEvent((): void => toggleSection({ section: "bottom" }));
   const uiToggleRightPanel = useEvent((): void => toggleSection({ section: "right" }));
+  const uiToggleSidebar = useEvent((): void => store.set(sidebarCollapsedAtom, !store.get(sidebarCollapsedAtom)));
+  // Maximize the active section, or restore if one is already maximized — mirrors the
+  // maximize_section keybinding (useWorkspaceShortcuts).
+  const uiToggleMaximizeSection = useEvent((): void => {
+    if (store.get(maximizedSectionAtom) !== null) {
+      store.set(maximizedSectionAtom, null);
+      return;
+    }
+    const layout = store.get(workspaceLayoutAtom);
+    store.set(maximizedSectionAtom, toSection(layout.activeSubSection ?? "center"));
+  });
   const setTheme = useEvent((mode: AppearanceMode): void => {
     setThemeSettings((prev) => ({ ...prev, appearance: mode }));
   });
@@ -162,6 +177,8 @@ export const useCommandRuntime = (): CommandRuntime => {
         toggleLeftPanel: uiToggleLeftPanel,
         toggleBottomPanel: uiToggleBottomPanel,
         toggleRightPanel: uiToggleRightPanel,
+        toggleSidebar: uiToggleSidebar,
+        toggleMaximizeSection: uiToggleMaximizeSection,
         setTheme,
         focusChatInput: uiFocusChatInput,
         showChatSearch,
@@ -190,6 +207,8 @@ export const useCommandRuntime = (): CommandRuntime => {
       uiToggleLeftPanel,
       uiToggleBottomPanel,
       uiToggleRightPanel,
+      uiToggleSidebar,
+      uiToggleMaximizeSection,
       setTheme,
       uiFocusChatInput,
       showChatSearch,

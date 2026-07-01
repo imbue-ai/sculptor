@@ -1,6 +1,7 @@
 import type { PanelDefinition } from "~/components/sections/registry/panelRegistry.ts";
 import { panelRegistryAtom } from "~/components/sections/registry/panelRegistry.ts";
 import { togglePanelAtom } from "~/components/sections/sectionActions.ts";
+import { workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
 import type { SubSectionId } from "~/components/sections/sectionTypes.ts";
 
 import type { CommandRuntime } from "../runtime.ts";
@@ -49,20 +50,25 @@ export const buildPanelTogglesProvider = (runtime: CommandRuntime): DynamicProvi
   produce: (ctx): Array<Command> => {
     if (!ctx.route.isWorkspace) return [];
     const registry = runtime.store.get(panelRegistryAtom);
-    return registry.map((panel: PanelDefinition): Command => {
-      const aliases = PANEL_SEARCH_ALIASES[panel.id] ?? [];
-      return {
-        id: `view.toggle_panel.${panel.id}`,
-        title: `Toggle ${panel.displayName}`,
-        subtitle: "Show or hide this panel",
-        keywords: ["panel", "show", "hide", panel.id, panel.displayName.toLowerCase(), ...aliases],
-        group: "view",
-        icon: panel.icon,
-        onPage: "view.panels",
-        boost: PANEL_TOGGLE_BOOST,
-        perform: () =>
-          runtime.store.set(togglePanelAtom, { panelId: panel.id, fallbackSection: fallbackSectionFor(panel) }),
-      };
-    });
+    // Only panels actively placed in a section — this list focuses/reveals an existing
+    // panel, it does not open new ones (that is what "Add panel..." is for).
+    const placement = runtime.store.get(workspaceLayoutAtom).placement;
+    return registry
+      .filter((panel: PanelDefinition) => placement[panel.id] !== undefined)
+      .map((panel: PanelDefinition): Command => {
+        const aliases = PANEL_SEARCH_ALIASES[panel.id] ?? [];
+        return {
+          id: `view.toggle_panel.${panel.id}`,
+          title: `Show ${panel.displayName}`,
+          subtitle: "Focus this panel",
+          keywords: ["panel", "show", "focus", "reveal", panel.id, panel.displayName.toLowerCase(), ...aliases],
+          group: "view",
+          icon: panel.icon,
+          onPage: "view.panels",
+          boost: PANEL_TOGGLE_BOOST,
+          perform: () =>
+            runtime.store.set(togglePanelAtom, { panelId: panel.id, fallbackSection: fallbackSectionFor(panel) }),
+        };
+      });
   },
 });

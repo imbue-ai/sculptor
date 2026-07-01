@@ -1,4 +1,12 @@
-import { LayoutPanelLeftIcon, PanelBottomIcon, PanelLeftIcon, PanelRightIcon, PuzzleIcon } from "lucide-react";
+import {
+  LayoutPanelLeftIcon,
+  Maximize2,
+  PanelBottomIcon,
+  PanelLeftIcon,
+  PanelRightIcon,
+  PuzzleIcon,
+  Sidebar,
+} from "lucide-react";
 
 import type { CommandRuntime } from "../runtime.ts";
 import type { Command } from "../types.ts";
@@ -31,9 +39,9 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
   },
   {
     id: "view.toggle_panels",
-    title: "Toggle panel visibility...",
-    subtitle: "Show or hide individual panels (Files, Actions, Terminal, …)",
-    keywords: ["panel", "visibility", "show", "hide", "view", "tool"],
+    title: "Show panel...",
+    subtitle: "Focus a panel already open in a section",
+    keywords: ["panel", "visibility", "show", "focus", "reveal", "view", "tool"],
     group: "view",
     icon: PuzzleIcon,
     pageId: "view.panels",
@@ -92,5 +100,33 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
     when: (ctx) => ctx.route.isWorkspace,
     perform: () => runtime.ui.toggleRightPanel(),
     keepOpen: true,
+  },
+  {
+    id: "view.toggle_sidebar",
+    title: "Toggle sidebar",
+    subtitle: "Collapse or expand the workspace sidebar",
+    keywords: ["sidebar", "nav", "navigation", "workspaces", "rail", "collapse", "expand"],
+    group: "view",
+    icon: Sidebar,
+    shortcut: "toggle_sidebar",
+    onPage: "view.layout",
+    order: 40,
+    when: (ctx) => ctx.route.isWorkspace,
+    perform: () => runtime.ui.toggleSidebar(),
+    keepOpen: true,
+  },
+  {
+    id: "view.maximize_section",
+    title: "Maximize section",
+    subtitle: "Maximize the active section, or restore if already maximized",
+    keywords: ["maximize", "fullscreen", "expand", "restore", "section", "focus"],
+    group: "view",
+    icon: Maximize2,
+    shortcut: "maximize_section",
+    onPage: "view.layout",
+    order: 50,
+    when: (ctx) => ctx.route.isWorkspace,
+    // Closes the palette (no keepOpen) so the maximized section is visible immediately.
+    perform: () => runtime.ui.toggleMaximizeSection(),
   },
 ];

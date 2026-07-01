@@ -6,6 +6,7 @@ import { useImbueLocation } from "~/common/NavigateUtils.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { effectiveOpenTabIdsAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 import { panelRegistryAtom } from "~/components/sections/registry/panelRegistry.ts";
+import { workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
 import { chatPanelMountedAtom, terminalPanelMountedAtom } from "~/pages/workspace/atoms.ts";
 
 import { areGlobalShortcutsDisabledAtom } from "../newWorkspace/newWorkspaceAtoms.ts";
@@ -236,6 +237,13 @@ export const useVisibleCommands = (ctx: PaletteContext): Array<Command> => {
   const tasks = useAtomValue(tasksArrayAtom);
   const openTabIds = useAtomValue(effectiveOpenTabIdsAtom);
   const panelRegistry = useAtomValue(panelRegistryAtom);
+  // The panel-toggle provider reads the layout's placement to list only actively-placed
+  // panels; the add-panel location page reads it via listAvailableLocations.
+  const workspaceLayout = useAtomValue(workspaceLayoutAtom);
+  // The add-panel provider reads this imperatively to build the panel page for the
+  // chosen section; without subscribing, picking a section wouldn't recompute the
+  // list and the panel page would show "No commands here".
+  const addPanelTarget = useAtomValue(addPanelTargetSubSectionAtom);
   const hasQuery = search.trim().length > 0;
   return useMemo(() => {
     if (!isOpen) return [];
@@ -247,10 +255,24 @@ export const useVisibleCommands = (ctx: PaletteContext): Array<Command> => {
     void tasks;
     void openTabIds;
     void panelRegistry;
+    void workspaceLayout;
+    void addPanelTarget;
     // While the user is typing at the root, surface page-scoped commands
     // too so fuzzy search can land them on sub-page items directly.
     return registry.list(ctx, { includeAllPages: hasQuery });
-  }, [registry, isOpen, ctx, hasQuery, size, workspaces, tasks, openTabIds, panelRegistry]);
+  }, [
+    registry,
+    isOpen,
+    ctx,
+    hasQuery,
+    size,
+    workspaces,
+    tasks,
+    openTabIds,
+    panelRegistry,
+    workspaceLayout,
+    addPanelTarget,
+  ]);
 };
 
 /**

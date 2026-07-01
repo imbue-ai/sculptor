@@ -66,6 +66,8 @@ const makeRuntime = (overrides: Partial<CommandRuntime> = {}): CommandRuntime =>
       toggleLeftPanel: vi.fn(),
       toggleBottomPanel: vi.fn(),
       toggleRightPanel: vi.fn(),
+      toggleSidebar: vi.fn(),
+      toggleMaximizeSection: vi.fn(),
       setTheme: vi.fn(),
       focusChatInput: vi.fn(),
       showChatSearch: vi.fn(),
@@ -311,6 +313,8 @@ describe("buildPanelCommands", () => {
         "view.toggle_left_panel",
         "view.toggle_right_panel",
         "view.toggle_bottom_panel",
+        "view.toggle_sidebar",
+        "view.maximize_section",
       ].sort(),
     );
   });
@@ -327,10 +331,10 @@ describe("buildPanelCommands", () => {
     expect(panelsOpener.primary).toBe(true);
   });
 
-  it("the panels page-opener title matches what users search for", () => {
+  it("the panels page-opener uses show/focus language, not toggle", () => {
     const cmds = buildPanelCommands(makeRuntime());
     const panelsOpener = cmds.find((c) => c.id === "view.toggle_panels")!;
-    expect(panelsOpener.title).toBe("Toggle panel visibility...");
+    expect(panelsOpener.title).toBe("Show panel...");
   });
 
   it('does NOT use the word "plugin" in any user-visible string', () => {
