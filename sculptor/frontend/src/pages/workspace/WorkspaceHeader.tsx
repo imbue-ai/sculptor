@@ -204,7 +204,12 @@ export const WorkspaceHeader = (): ReactElement | null => {
   return (
     <div
       className={styles.header}
-      style={isSidebarCollapsed ? { paddingLeft: getTitleBarLeftPadding(false) } : undefined}
+      // When the sidebar is collapsed the floating CollapsedSidebarToggle occupies the
+      // top-left gutter (traffic-light padding + its button); pad the header past both
+      // so the left-section toggle isn't hidden underneath it.
+      style={
+        isSidebarCollapsed ? { paddingLeft: `calc(${getTitleBarLeftPadding(false)} + var(--space-6))` } : undefined
+      }
       data-testid={ElementIds.WORKSPACE_HEADER}
     >
       {/* Left cluster: the left-section toggle. */}
@@ -272,18 +277,22 @@ export const WorkspaceHeader = (): ReactElement | null => {
             onSwitchTarget={handleSwitchTarget}
           />
         )}
-        <SectionToggle
-          section="bottom"
-          icon={<PanelBottom size={16} />}
-          label="bottom section"
-          testId={ElementIds.HEADER_SECTION_TOGGLE_BOTTOM}
-        />
-        <SectionToggle
-          section="right"
-          icon={<PanelRight size={16} />}
-          label="right section"
-          testId={ElementIds.HEADER_SECTION_TOGGLE_RIGHT}
-        />
+        {/* The bottom + right toggles get their own wider gap so their active
+            (accent) backgrounds don't touch when both sections are open. */}
+        <Flex align="center" gap="4">
+          <SectionToggle
+            section="bottom"
+            icon={<PanelBottom size={16} />}
+            label="bottom section"
+            testId={ElementIds.HEADER_SECTION_TOGGLE_BOTTOM}
+          />
+          <SectionToggle
+            section="right"
+            icon={<PanelRight size={16} />}
+            label="right section"
+            testId={ElementIds.HEADER_SECTION_TOGGLE_RIGHT}
+          />
+        </Flex>
       </Flex>
     </div>
   );

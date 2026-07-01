@@ -2,14 +2,15 @@
 
 .sidebar {
   background: var(--gray-2);
-  border-right: 1px solid var(--gray-a4);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   height: 100%;
   overflow: hidden;
   // Width is driven inline by the resize handle (sidebarWidthAtom); the handle
-  // lives at the right border via the relative positioning context below.
+  // lives at the right edge via the relative positioning context below and draws
+  // the 1px divider itself — a separate border-right here would stack into a
+  // visually ~2px-thick edge, so the sidebar has no border of its own.
   position: relative;
 }
 

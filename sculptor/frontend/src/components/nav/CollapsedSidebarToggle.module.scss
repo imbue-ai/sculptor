@@ -10,5 +10,8 @@
   left: 0;
   position: absolute;
   top: 0;
-  z-index: 2;
+  // Sit above a maximized section (which covers the content area at --z-sticky);
+  // otherwise the maximized overlay would bury this toggle and there would be no
+  // way to re-open the sidebar while a section is maximized.
+  z-index: calc(var(--z-sticky) + 1);
 }
