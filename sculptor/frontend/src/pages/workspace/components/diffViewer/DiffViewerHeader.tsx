@@ -9,6 +9,7 @@ import { isBinaryFile } from "~/pages/workspace/panels/fileBrowser/utils.ts";
 
 import styles from "./DiffViewerHeader.module.scss";
 import { DiffViewerMenu } from "./DiffViewerMenu.tsx";
+import { FilePathSelect } from "./FilePathSelect.tsx";
 import type { DiffViewOptions, TreeViewOptions } from "./types.ts";
 
 type DiffViewerHeaderProps = {
@@ -52,11 +53,6 @@ export const DiffViewerHeader = ({
   trailingActions,
   onOpenRenderedMarkdown,
 }: DiffViewerHeaderProps): ReactElement => {
-  const { dirParts, fileName } = useMemo(() => {
-    const parts = filePath.split("/");
-    return { dirParts: parts.slice(0, -1), fileName: parts[parts.length - 1] };
-  }, [filePath]);
-
   const isBinary = isBinaryProp || isBinaryFile(filePath.split("/").pop() ?? "");
 
   const fileContext: FileContextMenuContext = useMemo(
@@ -81,22 +77,7 @@ export const DiffViewerHeader = ({
       data-testid={ElementIds.DIFF_FILE_HEADER}
     >
       {leadingControl}
-      <Flex align="center" gap="0" className={styles.breadcrumb}>
-        {dirParts.length > 0 && (
-          <>
-            <span className={styles.dirPath}>
-              {dirParts.map((part, index) => (
-                <span key={dirParts.slice(0, index + 1).join("/")}>
-                  {index > 0 && <span className={styles.separator}>/</span>}
-                  <span className={styles.segment}>{part}</span>
-                </span>
-              ))}
-            </span>
-            <span className={styles.separator}>/</span>
-          </>
-        )}
-        <span className={styles.fileName}>{fileName}</span>
-      </Flex>
+      <FilePathSelect workspaceId={workspaceId} filePath={filePath} />
 
       <span className={styles.spacer} />
 

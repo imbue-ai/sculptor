@@ -233,6 +233,8 @@ class ElementIDs(StrEnum):
     DIFF_RENDER_TOGGLE = "DIFF_RENDER_TOGGLE"
     # Header icon on markdown diff/commit files that opens the rendered file view.
     DIFF_OPEN_RENDERED_MARKDOWN = "DIFF_OPEN_RENDERED_MARKDOWN"
+    # The viewer header's file-path breadcrumb (a Select listing recently viewed files).
+    DIFF_FILE_PATH_SELECT = "DIFF_FILE_PATH_SELECT"
     DIFF_FIND_IN_FILE_BTN = "DIFF_FIND_IN_FILE_BTN"
     DIFF_IN_FILE_SEARCH_BAR = "DIFF_IN_FILE_SEARCH_BAR"
     DIFF_IN_FILE_SEARCH_INPUT = "DIFF_IN_FILE_SEARCH_INPUT"

@@ -139,6 +139,31 @@ export const diffPanelSplitRatioAtom = atomWithDebouncedStorage<number>(
 type MarkdownRenderMode = "raw" | "rendered";
 export const markdownRenderModeAtom = atomWithStorage<MarkdownRenderMode>("diffPanel-markdownRenderMode", "rendered");
 
+/** Cap for the viewer header's recently-viewed file dropdown. */
+const MAX_RECENT_FILES = 10;
+
+/**
+ * Recently viewed files per workspace: workspace-relative paths, newest first,
+ * deduped, capped at {@link MAX_RECENT_FILES}. Fed by the diff viewer header
+ * whenever it shows a file; drives the header's path dropdown.
+ */
+export const recentDiffFilesAtomFamily = atomFamily((workspaceId: string) =>
+  atomWithStorage<Array<string>>(`diffPanel-recentFiles-${workspaceId}`, []),
+);
+
+/** Move (or insert) a file to the front of the workspace's recently-viewed list. */
+export const recordRecentDiffFileAtom = atom(
+  null,
+  (get, set, { workspaceId, filePath }: { workspaceId: string; filePath: string }) => {
+    const listAtom = recentDiffFilesAtomFamily(workspaceId);
+    const prev = get(listAtom);
+    if (prev[0] === filePath) {
+      return;
+    }
+    set(listAtom, [filePath, ...prev.filter((path) => path !== filePath)].slice(0, MAX_RECENT_FILES));
+  },
+);
+
 export const isMarkdownPath = (filePath: string): boolean => /\.(md|markdown)$/i.test(filePath);
 
 // ---------------------------------------------------------------------------
