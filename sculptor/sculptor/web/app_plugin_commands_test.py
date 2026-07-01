@@ -19,10 +19,13 @@ from fastapi import HTTPException
 import sculptor.web.app as app_module
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.web.app import post_plugin_command
+from sculptor.web.app import post_plugin_command_result
 from sculptor.web.app import post_plugin_install
 from sculptor.web.data_types import InstallPluginRequest
 from sculptor.web.data_types import PluginCommandRequest
+from sculptor.web.data_types import PluginCommandResult
 from sculptor.web.data_types import PluginFile
+from sculptor.web.data_types import RendererIdentity
 
 
 def _b64(text: str) -> str:
@@ -155,3 +158,27 @@ def test_command_inspect_is_ungated_and_returns_empty_without_renderers(monkeypa
 
     assert response.results == []
     assert response.correlation_id
+
+
+def _renderer_result(correlation_id: str) -> PluginCommandResult:
+    return PluginCommandResult(
+        correlation_id=correlation_id,
+        renderer=RendererIdentity(renderer_id="r1", environment="electron", origin="http://localhost"),
+        op="list",
+        ok=True,
+        plugins=[],
+    )
+
+
+def test_command_result_rejects_correlation_id_mismatch() -> None:
+    # A reply whose body correlation_id disagrees with the path is rejected, so a
+    # buggy client can't feed a result into the wrong waiting command.
+    with pytest.raises(HTTPException) as excinfo:
+        post_plugin_command_result("path-id", _renderer_result("different-id"))
+    assert excinfo.value.status_code == 400
+
+
+def test_command_result_accepts_matching_correlation_id() -> None:
+    # With no waiter registered it quietly succeeds (204) rather than erroring.
+    response = post_plugin_command_result("c1", _renderer_result("c1"))
+    assert response.status_code == 204

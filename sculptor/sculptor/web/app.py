@@ -1731,15 +1731,18 @@ def post_plugin_command(workspace_id: str, command: PluginCommandRequest) -> Plu
             )
         )
         results: list[PluginCommandResult] = []
-        deadline = time.monotonic() + _PLUGIN_COMMAND_TIMEOUT_SECONDS
-        while expected <= 0 or len(results) < expected:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            try:
-                results.append(result_queue.get(timeout=remaining))
-            except queue.Empty:
-                break
+        # With no connected renderer, the broadcast reaches no one and nothing can
+        # reply — return immediately instead of blocking for the whole timeout.
+        if expected > 0:
+            deadline = time.monotonic() + _PLUGIN_COMMAND_TIMEOUT_SECONDS
+            while len(results) < expected:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                try:
+                    results.append(result_queue.get(timeout=remaining))
+                except queue.Empty:
+                    break
         return PluginCommandResponse(correlation_id=correlation_id, results=results)
     finally:
         close_correlation(correlation_id)
@@ -1752,6 +1755,17 @@ def post_plugin_command_result(correlation_id: str, result: PluginCommandResult)
     Quietly succeeds even if nobody is waiting (the originating request may have
     already timed out), so a slow renderer never sees an error for a late reply.
     """
+    # The reply is routed to the waiter by the path id; reject a body whose own
+    # correlation_id disagrees so a buggy client can't feed a mismatched result
+    # into the wrong command.
+    if result.correlation_id != correlation_id:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "correlation_id_mismatch",
+                "message": "result.correlation_id does not match the path correlation_id",
+            },
+        )
     submit_result(correlation_id, result)
     return Response(status_code=204)
 

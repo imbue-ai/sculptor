@@ -708,9 +708,11 @@ export class PluginManager {
         kind,
         phase: result.phase,
         message: result.error.message,
-        // Real manifest id for a validate-phase failure; the source string for a
-        // fetch/parse failure where no id could be read (a harmless self-match).
-        pluginId: result.manifest.id,
+        // Keep the real manifest id when the manifest actually parsed (validate
+        // phase and later), so the failure is addressable by id. On a manifest
+        // fetch/parse failure the synthetic manifest.id is the URL, not a real
+        // id, so leave it unset and let the snapshot fall back to the source key.
+        pluginId: result.phase === "manifest" ? undefined : result.manifest.id,
       });
       return;
     }

@@ -858,4 +858,28 @@ describe("PluginManager sculpt-command handling", () => {
 
     expect(inspected.plugins?.[0]?.registrations?.overlays).toEqual(["beta-overlay"]);
   });
+
+  it("keeps a manifest-phase failure addressable by its source key, not the manifest url", async () => {
+    const store = createStore();
+    // A manifest fetch/parse failure yields a synthetic manifest whose id is the
+    // URL, not a real plugin id — so the snapshot must fall back to the source
+    // key, and the failure must be addressable by it.
+    const manager = new PluginManager({
+      builtinSources: [],
+      fetchManifest: async (manifestUrl): Promise<PluginLoadError> => ({
+        manifest: { id: manifestUrl, name: manifestUrl, version: "?", entry: "", sdkVersion: "?" },
+        phase: "manifest",
+        error: new Error("not valid JSON"),
+      }),
+      activate: async (_url, manifest): Promise<LoadedPlugin> => ({ manifest, dispose: vi.fn() }),
+    });
+    const source = "/plugins/local/dev/ws1/broken/manifest.json";
+
+    const result = await manager.handlePluginCommand(store, command("load", { source }));
+    expect(result.ok).toBe(false);
+    expect(result.plugins?.[0]?.pluginId).toBe(source);
+
+    const inspected = await manager.handlePluginCommand(store, command("inspect", { pluginId: source }));
+    expect((inspected.plugins ?? []).map((p) => p.pluginId)).toEqual([source]);
+  });
 });
