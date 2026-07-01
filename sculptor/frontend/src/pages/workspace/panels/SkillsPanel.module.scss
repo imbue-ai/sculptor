@@ -63,13 +63,16 @@
 }
 
 // Single shared popover for the skills list. The inline `transform`
-// translates this layer to the chip's left edge / vertical center; the
-// `translate` shorthand below then anchors the popover to the LEFT of that
-// point (so the popover sits to the left of the chip column) and centers it
-// vertically on the chip. `padding-right` keeps a visual gap between the
-// popover and the chip while extending the hit zone all the way to the
-// chip's left edge — so a slow diagonal traverse from chip to popover never
-// passes through "no man's land" that would trigger the close timer.
+// translates this layer to the chip's anchor edge / vertical center; the
+// `translate` shorthand below then places the popover relative to that point
+// and centers it vertically on the chip.
+//
+// Default (LEFT side): the inline transform points at the chip's LEFT edge,
+// and `translate: -100%` pulls the popover to the left of it so it sits to
+// the left of the chip column. `padding-right` keeps a visual gap between the
+// popover and the chip while extending the hit zone all the way to the chip's
+// left edge — so a slow diagonal traverse from chip to popover never passes
+// through "no man's land" that would trigger the close timer.
 .popoverHitArea {
   left: 0;
   padding-right: var(--space-2);
@@ -78,6 +81,16 @@
   translate: -100% -50%;
   will-change: transform;
   z-index: var(--z-tooltip);
+}
+
+// RIGHT side (collision flip): when the panel is docked at the left edge there
+// is no room on the left, so the inline transform points at the chip's RIGHT
+// edge and the popover extends rightward (`translate: 0%`). The gutter/hit-zone
+// mirrors to `padding-left`.
+.popoverRight {
+  padding-left: var(--space-2);
+  padding-right: 0;
+  translate: 0% -50%;
 }
 
 .popoverAnimated {

@@ -409,6 +409,67 @@ describe("SkillsPanel — popover dismiss-on-filter regression", () => {
   });
 });
 
+describe("SkillsPanel — popover collision-aware side", () => {
+  // Regression: the hover popover was hardcoded to sit to the LEFT of the
+  // chip column. In a narrow left-docked panel there is no room on the left,
+  // so it slid off-screen. The popover must flip to the side with space.
+  const advancePopoverOpen = (): void => {
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+  };
+
+  // Stub a chip's layout box so the side computation has a real `left` to
+  // reason about (jsdom returns an all-zero rect otherwise).
+  const stubChipRect = (chip: HTMLElement, left: number): void => {
+    chip.getBoundingClientRect = (): DOMRect =>
+      ({ left, right: left + 100, top: 100, bottom: 130, width: 100, height: 30, x: left, y: 100 }) as DOMRect;
+  };
+
+  const popoverSide = (): string | null => {
+    const hitArea = document.querySelector<HTMLElement>("[data-skill-popover]");
+    return hitArea?.getAttribute("data-side") ?? null;
+  };
+
+  it("flips the popover to the right when the chip hugs the left edge (no room on the left)", () => {
+    vi.useFakeTimers();
+    try {
+      renderSkillsPanel({
+        skills: [customSkill({ name: "fix-bug", description: "POPOVER_DESCRIPTION_PROBE" })],
+      });
+      const chip = screen.getByText("fix-bug").closest('[data-testid="SKILL_CHIP"]') as HTMLElement;
+      // Chip's left edge is only 20px from the viewport edge — a ~300px
+      // popover cannot fit on the left, so it must flip to the right.
+      stubChipRect(chip, 20);
+      fireEvent.mouseEnter(chip);
+      advancePopoverOpen();
+      expect(screen.getByText("POPOVER_DESCRIPTION_PROBE")).toBeInTheDocument();
+      expect(popoverSide()).toBe("right");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the popover on the left when the chip has room to its left", () => {
+    vi.useFakeTimers();
+    try {
+      renderSkillsPanel({
+        skills: [customSkill({ name: "fix-bug", description: "POPOVER_DESCRIPTION_PROBE" })],
+      });
+      const chip = screen.getByText("fix-bug").closest('[data-testid="SKILL_CHIP"]') as HTMLElement;
+      // Chip sits far from the left edge (600px), leaving plenty of room for
+      // the popover on the left — the default side is preserved.
+      stubChipRect(chip, 600);
+      fireEvent.mouseEnter(chip);
+      advancePopoverOpen();
+      expect(screen.getByText("POPOVER_DESCRIPTION_PROBE")).toBeInTheDocument();
+      expect(popoverSide()).toBe("left");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("SkillsPanel — keyboard navigation in search", () => {
   // Helpers — selection state lives on the chip via `data-selected`. The
   // input owns focus the whole time, so arrow / enter keys fire on it.

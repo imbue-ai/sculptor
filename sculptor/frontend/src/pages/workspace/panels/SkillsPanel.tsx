@@ -51,8 +51,30 @@ const SCROLL_END_DELAY_MS = 150;
 // Minimum gap between the popover and the viewport top/bottom edges. Chips
 // near the edge get clamped so the popover doesn't slide off-screen.
 const VIEWPORT_EDGE_MARGIN_PX = 8;
+// The popover's rendered width can't be known until it mounts, so the
+// collision check uses this estimate (mirrors the `.popover` max-width) to
+// decide, at hover time, whether it would fit to the left of the chip.
+const ESTIMATED_POPOVER_WIDTH_PX = 300;
+
+// Which side of the chip the popover sits on. Defaults to "left" (the panel
+// is usually docked on the right), flipping to "right" when a left-docked or
+// narrow layout leaves no room on the left.
+type PopoverSide = "left" | "right";
 
 type PopoverPosition = { x: number; y: number };
+
+// Anchor the popover to the side of the chip with room for it. `left` anchors
+// at the chip's left edge and the popover extends leftward; `right` anchors at
+// the chip's right edge and it extends rightward. When the chip hugs the
+// viewport's left edge (a narrow/left-docked panel) there's no room on the
+// left, so flip to the right.
+const computePopoverAnchor = (rect: DOMRect): { x: number; side: PopoverSide } => {
+  const hasRoomOnLeft = rect.left - ESTIMATED_POPOVER_WIDTH_PX - VIEWPORT_EDGE_MARGIN_PX >= 0;
+  if (hasRoomOnLeft) {
+    return { x: rect.left, side: "left" };
+  }
+  return { x: rect.right, side: "right" };
+};
 
 export const SkillsPanel = (): ReactElement => {
   const { skills: rawSkills, isLoading, error } = useSkills();
@@ -86,6 +108,7 @@ export const SkillsPanel = (): ReactElement => {
   // popover closed within the grace period).
   const [popoverSkill, setPopoverSkill] = useState<SkillEntry | null>(null);
   const [popoverPosition, setPopoverPosition] = useState<PopoverPosition>({ x: 0, y: 0 });
+  const [popoverSide, setPopoverSide] = useState<PopoverSide>("left");
   const [isPopoverVisible, setIsPopoverVisible] = useState(false);
   const [hasAnimated, setHasAnimated] = useState(false);
 
@@ -184,13 +207,15 @@ export const SkillsPanel = (): ReactElement => {
 
       activeChipElementRef.current = chipElement;
       const rect = chipElement.getBoundingClientRect();
-      const nextPosition = { x: rect.left, y: rect.top + rect.height / 2 };
+      const { x, side } = computePopoverAnchor(rect);
+      const nextPosition = { x, y: rect.top + rect.height / 2 };
 
       if (isPopoverVisibleRef.current && activeSkillRef.current?.name !== skill.name) {
         // Already visible — instantly switch content, animate position to the new chip.
         activeSkillRef.current = skill;
         setPopoverSkill(skill);
         setPopoverPosition(nextPosition);
+        setPopoverSide(side);
       } else if (!isPopoverVisibleRef.current) {
         // Retarget the pending open to this chip. If a timer is already running
         // from a previous chip, let it finish — it reads activeSkillRef when it
@@ -198,6 +223,7 @@ export const SkillsPanel = (): ReactElement => {
         // mouse is on at that moment.
         activeSkillRef.current = skill;
         setPopoverPosition(nextPosition);
+        setPopoverSide(side);
         scheduleOpenForActiveChip();
       }
     },
@@ -217,7 +243,9 @@ export const SkillsPanel = (): ReactElement => {
       if (chipRect.bottom < areaRect.top || chipRect.top > areaRect.bottom) {
         dismissPopover();
       } else {
-        setPopoverPosition({ x: chipRect.left, y: chipRect.top + chipRect.height / 2 });
+        const { x, side } = computePopoverAnchor(chipRect);
+        setPopoverPosition({ x, y: chipRect.top + chipRect.height / 2 });
+        setPopoverSide(side);
       }
     }
 
@@ -243,7 +271,9 @@ export const SkillsPanel = (): ReactElement => {
       const el = activeChipElementRef.current;
       if (el !== null) {
         const r = el.getBoundingClientRect();
-        setPopoverPosition({ x: r.left, y: r.top + r.height / 2 });
+        const { x, side } = computePopoverAnchor(r);
+        setPopoverPosition({ x, y: r.top + r.height / 2 });
+        setPopoverSide(side);
       }
 
       if (isPopoverVisibleRef.current) {
@@ -587,7 +617,12 @@ export const SkillsPanel = (): ReactElement => {
 
       {isPopoverVisible && popoverSkill !== null && (
         <div
-          className={classnames(styles.popoverHitArea, { [styles.popoverAnimated]: hasAnimated })}
+          className={classnames(styles.popoverHitArea, {
+            [styles.popoverAnimated]: hasAnimated,
+            [styles.popoverRight]: popoverSide === "right",
+          })}
+          data-skill-popover=""
+          data-side={popoverSide}
           style={{ transform: `translate(${popoverPosition.x}px, ${clampedPopoverY}px)` }}
           onMouseEnter={handlePopoverMouseEnter}
           onMouseLeave={handlePopoverMouseLeave}
