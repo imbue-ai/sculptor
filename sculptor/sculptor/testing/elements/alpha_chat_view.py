@@ -199,6 +199,28 @@ def read_scroll_top_sampler(page: Page) -> dict:
     )
 
 
+def get_last_turn_footer_viewport_gaps(page: Page) -> dict | None:
+    """Position of the last turn footer relative to the alpha chat viewport.
+
+    Returns ``None`` when no turn footer is rendered. Otherwise a dict:
+      - ``bottom_gap``: viewport bottom minus footer bottom, in px. ``>= 0`` means the
+        footer's bottom edge is at or above the viewport bottom (in view); ``< 0``
+        means the footer is cut off below the fold.
+      - ``top_gap``: footer top minus viewport top, in px. ``>= 0`` means the footer's
+        top edge is at or below the viewport top (not scrolled off the top).
+    """
+    return page.evaluate(
+        f"""() => {{
+        const view = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+        const footers = document.querySelectorAll('[data-testid="{ElementIDs.TURN_FOOTER}"]');
+        if (!view || footers.length === 0) return null;
+        const v = view.getBoundingClientRect();
+        const f = footers[footers.length - 1].getBoundingClientRect();
+        return {{ bottom_gap: Math.round(v.bottom - f.bottom), top_gap: Math.round(f.top - v.top) }};
+    }}"""
+    )
+
+
 def get_max_following_tail_gap(page: Page, frames: int = 18) -> float | None:
     """Over a short ``requestAnimationFrame`` burst, the max gap (px) from the last
     message's bottom edge UP to the viewport bottom.

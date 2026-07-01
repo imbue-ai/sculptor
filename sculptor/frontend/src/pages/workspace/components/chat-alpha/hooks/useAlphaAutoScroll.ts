@@ -37,6 +37,11 @@ const SCROLL_ANIMATION_EASING = "cubic-bezier(0.33, 1, 0.68, 1)"; // ease-out
 // actively scrolling, before the user-scroll flag is debounced back off.
 const USER_SCROLL_DEBOUNCE_MS = 150;
 
+// After a turn we were following ends, keep revealing the tail at the bottom for
+// this long — the turn footer (turn summary) mounts a beat after the stream stops
+// and would otherwise be left just below the fold. Bounded so it never lingers.
+const FOOTER_REVEAL_WINDOW_MS = 1200;
+
 /** Cancel any in-progress scroll-to-top transform animation and restore
  *  the virtualizer's scroll-position adjustment callback. */
 const clearScrollAnimation = (
@@ -197,6 +202,17 @@ export const useAlphaAutoScroll = (
     Virtualizer<HTMLDivElement, Element>["shouldAdjustScrollPositionOnItemSizeChange"] | null
   >(null);
 
+  // Turn-footer reveal window: the timestamp (performance.now) until which the
+  // content observer keeps re-pinning to the bottom after a followed turn ends, plus
+  // the content height and viewport size at that moment. We only re-pin once the
+  // footer actually grows the content (height past base) AND the viewport is
+  // unchanged — so a width/height resize reflow (which also grows content) is left to
+  // its own reading-anchor behavior, not glued to the bottom. Zeroed the instant the
+  // user scrolls, so a user who takes over always wins.
+  const revealFooterUntilRef = useRef(0);
+  const revealFooterBaseHeightRef = useRef(0);
+  const revealFooterViewportRef = useRef("");
+
   // Mark that the user is actively scrolling, with a debounce to clear it.
   const markUserScrolling = useCallback((): void => {
     isUserScrollingRef.current = true;
@@ -216,6 +232,9 @@ export const useAlphaAutoScroll = (
 
     const onUserInput = (): void => {
       markUserScrolling();
+      // A genuine user input ends the post-turn footer-reveal window immediately —
+      // whatever the user does with the surface wins over revealing the footer.
+      revealFooterUntilRef.current = 0;
       // Disengage on user wheel/touch/keydown before the scroll event fires.
       // During streaming the ResizeObserver sets isProgrammaticScroll and scrolls;
       // a user scroll event that saw that flag would be consumed as programmatic
@@ -323,6 +342,8 @@ export const useAlphaAutoScroll = (
       // meaningless for the incoming task. The first user scroll re-samples it.
       machine.setReadingAnchor(null);
       prevScrollTopRef.current = -1;
+      // Cancel any in-flight footer-reveal window from the outgoing task.
+      revealFooterUntilRef.current = 0;
       // The authority (following/anchoring) is reset by the machine's
       // taskSwitched -> restoring transition (dispatched by the persistence
       // hook); this effect only resets auto-scroll's own observations and
@@ -509,6 +530,17 @@ export const useAlphaAutoScroll = (
       // short response that never overflowed — only `following` was pinned here).
       if (isFollowing() && messageCount > 0) {
         pinToContentBottom();
+        // We were following the tail. The turn footer (turn summary) mounts a beat
+        // later and grows the content below the fold; open a short window so the
+        // content observer re-pins to reveal it at the bottom (one margin above the
+        // input), matching where focusing the input lands. Only for followed turns —
+        // a short anchored turn is left as-is.
+        const el = scrollContainerRef.current;
+        if (el) {
+          revealFooterUntilRef.current = performance.now() + FOOTER_REVEAL_WINDOW_MS;
+          revealFooterBaseHeightRef.current = el.scrollHeight;
+          revealFooterViewportRef.current = `${el.clientWidth}x${el.clientHeight}`;
+        }
       }
       // Streaming stopped: leave following/anchoring for userControlled. The
       // leave-anchoring subscription tears down the animation and jump
@@ -638,6 +670,21 @@ export const useAlphaAutoScroll = (
       if (messageCount === 0) return;
       const distance = distanceFromContentBottom(el, virtualizer);
       machine.setGeometryAtBottom(distance <= BOTTOM_THRESHOLD);
+      // Reveal the turn footer that grew the content just after a followed turn
+      // ended: re-pin to the (grown) content bottom. Down-only, only while the user
+      // has not taken over, only once the content actually grew past its stream-stop
+      // height, only while the viewport is unchanged (so a width/height resize reflow
+      // is excluded — that keeps its own reading-anchor behavior), and only within the
+      // bounded window opened at streaming stop.
+      if (
+        performance.now() < revealFooterUntilRef.current &&
+        !isUserScrollingRef.current &&
+        machine.getState().authority.kind === "userControlled" &&
+        el.scrollHeight > revealFooterBaseHeightRef.current + 1 &&
+        `${el.clientWidth}x${el.clientHeight}` === revealFooterViewportRef.current
+      ) {
+        pinToContentBottom();
+      }
       applyReflow(el, distance);
     });
 
