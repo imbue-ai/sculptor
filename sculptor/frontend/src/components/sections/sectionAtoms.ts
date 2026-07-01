@@ -155,11 +155,6 @@ export const sectionSizesAtom: Atom<GlobalLayoutState["sectionSizes"]> = selectA
   sectionSizesEqual,
 );
 
-export const explorerListWidthAtom: WritableAtom<number, [number], void> = atom(
-  (get) => get(globalLayoutAtom).explorerListWidthPx,
-  (_get, set, width: number) => set(globalLayoutAtom, (prev) => ({ ...prev, explorerListWidthPx: width })),
-);
-
 // Write a section's global size percentage (clamped). Resizing in one workspace
 // changes the size everywhere.
 export const setSectionSizeAtom = atom(
