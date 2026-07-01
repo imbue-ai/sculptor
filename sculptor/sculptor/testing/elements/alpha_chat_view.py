@@ -169,6 +169,97 @@ def get_alpha_scroll_height(page: Page) -> float:
     )
 
 
+def start_scroll_top_sampler(page: Page) -> None:
+    """Start an rAF loop recording the max scrollTop seen (the peak we followed to)."""
+    page.evaluate(
+        f"""() => {{
+        const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+        if (!el) return;
+        window.__st = {{ max: el.scrollTop }};
+        const tick = () => {{
+            if (el.scrollTop > window.__st.max) window.__st.max = el.scrollTop;
+            window.__st.raf = requestAnimationFrame(tick);
+        }};
+        window.__st.raf = requestAnimationFrame(tick);
+    }}"""
+    )
+
+
+def read_scroll_top_sampler(page: Page) -> dict:
+    """Stop the sampler; return {"max": peak scrollTop while sampling, "final": current}."""
+    return page.evaluate(
+        f"""() => {{
+        if (window.__st && window.__st.raf) cancelAnimationFrame(window.__st.raf);
+        const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+        return {{
+            max: window.__st ? Math.round(window.__st.max) : null,
+            final: el ? Math.round(el.scrollTop) : null,
+        }};
+    }}"""
+    )
+
+
+def get_last_turn_footer_viewport_gaps(page: Page) -> dict | None:
+    """Position of the last turn footer relative to the alpha chat viewport.
+
+    Returns ``None`` when no turn footer is rendered. Otherwise a dict:
+      - ``bottom_gap``: viewport bottom minus footer bottom, in px. ``>= 0`` means the
+        footer's bottom edge is at or above the viewport bottom (in view); ``< 0``
+        means the footer is cut off below the fold.
+      - ``top_gap``: footer top minus viewport top, in px. ``>= 0`` means the footer's
+        top edge is at or below the viewport top (not scrolled off the top).
+    """
+    return page.evaluate(
+        f"""() => {{
+        const view = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+        const footers = document.querySelectorAll('[data-testid="{ElementIDs.TURN_FOOTER}"]');
+        if (!view || footers.length === 0) return null;
+        const v = view.getBoundingClientRect();
+        const f = footers[footers.length - 1].getBoundingClientRect();
+        return {{ bottom_gap: Math.round(v.bottom - f.bottom), top_gap: Math.round(f.top - v.top) }};
+    }}"""
+    )
+
+
+def get_max_following_tail_gap(page: Page, frames: int = 18) -> float | None:
+    """Over a short ``requestAnimationFrame`` burst, the max gap (px) from the last
+    message's bottom edge UP to the viewport bottom.
+
+    A positive gap means the last line is floating above the viewport bottom over
+    empty tail padding; pinned flush to the content bottom is ~0. The max across
+    frames is returned so a transient mid-growth frame (where the streaming tail
+    briefly overflows below the fold, giving a negative gap) does not mask the
+    steady pinned gap. Returns ``None`` if the chat view or its messages are absent.
+    """
+    return page.evaluate(
+        f"""(frames) => new Promise((resolve) => {{
+        const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+        if (!el) {{ resolve(null); return; }}
+        let maxGap = null;
+        let count = 0;
+        const tick = () => {{
+            const items = el.querySelectorAll('[data-index]');
+            let lastEl = null, lastIdx = -1;
+            items.forEach((it) => {{
+                const i = parseInt(it.getAttribute('data-index'));
+                if (i > lastIdx) {{ lastIdx = i; lastEl = it; }}
+            }});
+            if (lastEl) {{
+                const gap = el.getBoundingClientRect().bottom - lastEl.getBoundingClientRect().bottom;
+                if (maxGap === null || gap > maxGap) maxGap = gap;
+            }}
+            if (++count < frames) {{
+                requestAnimationFrame(tick);
+            }} else {{
+                resolve(maxGap === null ? null : Math.round(maxGap));
+            }}
+        }};
+        requestAnimationFrame(tick);
+    }})""",
+        frames,
+    )
+
+
 def scroll_alpha_chat_to_top(page: Page) -> None:
     """Scroll the alpha chat to the top.
 

@@ -52,7 +52,8 @@ export type ScrollMachineState = {
   /**
    * The most recent reading anchor sampled on a genuine user scroll, or null
    * before the user has scrolled this task. Consulted only by `projectReflow`
-   * (for the scrolled-up `userControlled` phase); never drives a render.
+   * (for the scrolled-up `userControlled` phase); never drives a render. Cleared
+   * on entering `following`/`anchoringTurn` (the scrolled-up position is abandoned).
    */
   readingAnchor: ReadingAnchor | null;
 };
@@ -164,7 +165,12 @@ export const createScrollStateMachine = (): ScrollStateMachine => {
       if (state.isSuppressed && SUPPRESSIBLE_EVENTS.has(event.kind)) return;
       const authority = nextAuthority(state.authority, event);
       if (authority === state.authority) return;
-      commit({ ...state, authority });
+      // Entering `following`/`anchoringTurn` abandons any scrolled-up reading
+      // position: the user is watching the live tail / a fresh turn, not the message
+      // the anchor points at.
+      const readingAnchor =
+        authority.kind === "following" || authority.kind === "anchoringTurn" ? null : state.readingAnchor;
+      commit({ ...state, authority, readingAnchor });
     },
     dispatchLayout: (event): void => {
       const layout = nextLayout(state.layout, event);

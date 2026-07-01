@@ -10,7 +10,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExter
 
 import { ChatMessageRole } from "~/api";
 
-import { distanceFromContentBottom } from "../scroll/geometry.ts";
+import { contentBottomOffset, distanceFromContentBottom } from "../scroll/geometry.ts";
 import type { ReadingAnchor } from "../scroll/scrollStateMachine.ts";
 import {
   createScrollStateMachine,
@@ -36,6 +36,11 @@ const SCROLL_ANIMATION_EASING = "cubic-bezier(0.33, 1, 0.68, 1)"; // ease-out
 // How long after a wheel/touch/keydown the user is still considered to be
 // actively scrolling, before the user-scroll flag is debounced back off.
 const USER_SCROLL_DEBOUNCE_MS = 150;
+
+// How long after a followed turn ends the content observer keeps revealing the
+// tail, so the turn footer (which mounts a beat after the stream stops) is not left
+// below the fold.
+const FOOTER_REVEAL_WINDOW_MS = 1200;
 
 /** Cancel any in-progress scroll-to-top transform animation and restore
  *  the virtualizer's scroll-position adjustment callback. */
@@ -142,6 +147,19 @@ export const useAlphaAutoScroll = (
     [virtualizer, machine],
   );
 
+  // The single "scroll to the bottom" primitive: pin the last message's content
+  // bottom flush with the viewport, leaving paddingEnd as slack (see
+  // contentBottomOffset). Down-only — callers reach the bottom from above, so an
+  // upward move would only chase a turn-end shrink, which we leave in place.
+  const pinToContentBottom = useCallback((): void => {
+    const el = scrollContainerRef.current;
+    if (!el || messageCount === 0) return;
+    const desired = contentBottomOffset(el, virtualizer);
+    if (desired <= el.scrollTop + 1) return;
+    isProgrammaticScroll.current = true;
+    el.scrollTop = desired;
+  }, [scrollContainerRef, virtualizer, messageCount, isProgrammaticScroll]);
+
   // Suppress the jump-to-bottom button between message send and response arrival.
   const [isJumpSuppressed, setIsJumpSuppressed] = useState(false);
 
@@ -181,6 +199,14 @@ export const useAlphaAutoScroll = (
     Virtualizer<HTMLDivElement, Element>["shouldAdjustScrollPositionOnItemSizeChange"] | null
   >(null);
 
+  // Turn-footer reveal window: the timestamp (performance.now) until which the
+  // content observer re-pins to the bottom after a followed turn ends, plus the
+  // content height and viewport size sampled then (the reveal condition below
+  // compares against both). Zeroed on user takeover.
+  const revealFooterUntilRef = useRef(0);
+  const revealFooterBaseHeightRef = useRef(0);
+  const revealFooterViewportRef = useRef("");
+
   // Mark that the user is actively scrolling, with a debounce to clear it.
   const markUserScrolling = useCallback((): void => {
     isUserScrollingRef.current = true;
@@ -200,6 +226,8 @@ export const useAlphaAutoScroll = (
 
     const onUserInput = (): void => {
       markUserScrolling();
+      // A user input ends the footer-reveal window immediately: a takeover wins.
+      revealFooterUntilRef.current = 0;
       // Disengage on user wheel/touch/keydown before the scroll event fires.
       // During streaming the ResizeObserver sets isProgrammaticScroll and scrolls;
       // a user scroll event that saw that flag would be consumed as programmatic
@@ -307,6 +335,8 @@ export const useAlphaAutoScroll = (
       // meaningless for the incoming task. The first user scroll re-samples it.
       machine.setReadingAnchor(null);
       prevScrollTopRef.current = -1;
+      // Cancel any in-flight footer-reveal window from the outgoing task.
+      revealFooterUntilRef.current = 0;
       // The authority (following/anchoring) is reset by the machine's
       // taskSwitched -> restoring transition (dispatched by the persistence
       // hook); this effect only resets auto-scroll's own observations and
@@ -465,8 +495,8 @@ export const useAlphaAutoScroll = (
     // synchronously — so this never acts on a stale value.
     if (!atBottom()) return;
     if (lastMessageRole === ChatMessageRole.USER) return;
-    virtualizer.scrollToIndex(messageCount - 1, { align: "end" });
-  }, [messageCount, isAtBottom, isSuppressed, virtualizer, lastMessageRole, atBottom]);
+    pinToContentBottom();
+  }, [messageCount, isAtBottom, isSuppressed, lastMessageRole, atBottom, pinToContentBottom]);
 
   // Engage when streaming starts while at bottom; disengage when streaming stops.
   // Reads the live scroll position rather than the isAtBottom state, which can be
@@ -484,21 +514,20 @@ export const useAlphaAutoScroll = (
         }
       }
     } else if (!isStreaming) {
-      // Final scroll-to-bottom before disengaging: the ResizeObserver
-      // disconnects when streaming stops, so later virtualizer re-measurements
-      // won't be compensated. A single scrollToIndex anchors the view at the
-      // bottom before those adjustments land. Skip while anchoring (a short
-      // response that never overflowed — only `following` was pinned here) and
-      // when already at the very bottom (liveDistance ≤ 1px), where re-firing
-      // would cause a visible jump if paddingEnd changed in the same render.
-      // messageCount/virtualizer are read from the closure intentionally: this
-      // branch only matters on the isStreaming transition.
+      // Final settle onto the content bottom before disengaging: the ResizeObserver
+      // disconnects when streaming stops, so later virtualizer re-measurements won't
+      // be compensated — pin now, before they land. Skip while anchoring (a short
+      // response that never overflowed).
       if (isFollowing() && messageCount > 0) {
+        pinToContentBottom();
+        // The turn footer mounts a beat later and grows the content below the fold;
+        // open a short window so the content observer re-pins to reveal it at the
+        // bottom, matching where focusing the input lands.
         const el = scrollContainerRef.current;
-        const liveDistance = el ? distanceFromContentBottom(el, virtualizer) : 0;
-        if (liveDistance > 1) {
-          isProgrammaticScroll.current = true;
-          virtualizer.scrollToIndex(messageCount - 1, { align: "end" });
+        if (el) {
+          revealFooterUntilRef.current = performance.now() + FOOTER_REVEAL_WINDOW_MS;
+          revealFooterBaseHeightRef.current = el.scrollHeight;
+          revealFooterViewportRef.current = `${el.clientWidth}x${el.clientHeight}`;
         }
       }
       // Streaming stopped: leave following/anchoring for userControlled. The
@@ -570,15 +599,14 @@ export const useAlphaAutoScroll = (
           restoreReadingAnchor(action.anchor);
           return;
         case "pinBottom": {
-          // Following the live tail — keep the end in view.
-          // A user actively scrolling away during a stream hands control back.
+          // Following the live tail — keep the last message's content bottom in
+          // view. A user actively scrolling away during a stream hands control back.
           if (distance > BOTTOM_THRESHOLD && isUserScrollingRef.current) {
             machine.dispatch({ kind: "userScrolled" });
             return;
           }
           if (messageCount === 0) return;
-          isProgrammaticScroll.current = true;
-          virtualizer.scrollToIndex(messageCount - 1, { align: "end" });
+          pinToContentBottom();
           machine.setGeometryAtBottom(true);
           return;
         }
@@ -599,9 +627,8 @@ export const useAlphaAutoScroll = (
           // Compare against (clientHeight - anchorSize): the user message already
           // occupies the top portion of the viewport.
           if (tailHeight >= el.clientHeight - anchorSize - FILLING_OVERFLOW_BUFFER) {
-            isProgrammaticScroll.current = true;
             machine.dispatch({ kind: "turnAnchored" });
-            virtualizer.scrollToIndex(messageCount - 1, { align: "end" });
+            pinToContentBottom();
           }
           return;
         }
@@ -612,7 +639,7 @@ export const useAlphaAutoScroll = (
         }
       }
     },
-    [machine, virtualizer, messageCount, isProgrammaticScroll, restoreReadingAnchor],
+    [machine, virtualizer, messageCount, restoreReadingAnchor, pinToContentBottom],
   );
 
   // Unified content-resize observer. One observer, always connected while not
@@ -629,6 +656,19 @@ export const useAlphaAutoScroll = (
       if (messageCount === 0) return;
       const distance = distanceFromContentBottom(el, virtualizer);
       machine.setGeometryAtBottom(distance <= BOTTOM_THRESHOLD);
+      // Reveal the turn footer that grew the content just after a followed turn ended:
+      // re-pin (down-only) to the grown content bottom, within the window opened at
+      // streaming stop. The two non-obvious guards: still userControlled (a new turn
+      // opened within the window is anchoringTurn and must not be yanked down), and an
+      // unchanged viewport (a resize reflow keeps its own reading-anchor behavior).
+      if (
+        performance.now() < revealFooterUntilRef.current &&
+        machine.getState().authority.kind === "userControlled" &&
+        el.scrollHeight > revealFooterBaseHeightRef.current + 1 &&
+        `${el.clientWidth}x${el.clientHeight}` === revealFooterViewportRef.current
+      ) {
+        pinToContentBottom();
+      }
       applyReflow(el, distance);
     });
 
@@ -638,8 +678,7 @@ export const useAlphaAutoScroll = (
     // pinBottom, so idle reconnects fall through untouched.
     if (isStreaming && messageCount > 0 && projectReflow(machine.getState()).kind === "pinBottom") {
       if (distanceFromContentBottom(el, virtualizer) <= BOTTOM_THRESHOLD) {
-        isProgrammaticScroll.current = true;
-        virtualizer.scrollToIndex(messageCount - 1, { align: "end" });
+        pinToContentBottom();
       }
     }
 
@@ -654,18 +693,17 @@ export const useAlphaAutoScroll = (
     messageCount,
     virtualizer,
     scrollContainerRef,
-    isProgrammaticScroll,
     machine,
     applyReflow,
+    pinToContentBottom,
   ]);
 
   const scrollToBottom = useCallback((): void => {
     if (messageCount === 0) return;
-    isProgrammaticScroll.current = true;
-    virtualizer.scrollToIndex(messageCount - 1, { align: "end" });
-    // scrollToIndex(align:"end") lands at the content bottom; record it so the
-    // jump-to-bottom button hides immediately even if the resulting scroll event
-    // is async or coalesced (a non-streaming jump has no other trigger).
+    pinToContentBottom();
+    // Record at-bottom so the jump-to-bottom button hides immediately even if the
+    // resulting scroll event is async or coalesced (a non-streaming jump has no
+    // other trigger).
     machine.setGeometryAtBottom(true);
     if (isStreaming) {
       // Follow the stream (also exits anchoring → following).
@@ -676,7 +714,7 @@ export const useAlphaAutoScroll = (
       // suppression.
       machine.dispatch({ kind: "userScrolled" });
     }
-  }, [messageCount, virtualizer, isStreaming, isProgrammaticScroll, machine]);
+  }, [messageCount, isStreaming, machine, pinToContentBottom]);
 
   const scrollToTop = useCallback((): void => {
     if (messageCount === 0) return;

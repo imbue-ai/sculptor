@@ -16,3 +16,17 @@ export const distanceFromContentBottom = (
   const paddingEnd = virtualizer.options.paddingEnd ?? 0;
   return el.scrollHeight - paddingEnd - el.scrollTop - el.clientHeight;
 };
+
+/**
+ * The `scrollTop` at which the last message's content bottom sits flush with the
+ * viewport bottom — i.e. `distanceFromContentBottom === 0` — leaving the dynamic
+ * `paddingEnd` as empty slack *below* `scrollTop`.
+ *
+ * Prefer this to `virtualizer.scrollToIndex(last, { align: "end" })`, which for the
+ * final item resolves to `getMaxScrollOffset()` and parks `scrollTop` inside the
+ * `paddingEnd` gap — no slack for a turn-end shrink to absorb.
+ */
+export const contentBottomOffset = (el: HTMLElement, virtualizer: Virtualizer<HTMLDivElement, Element>): number => {
+  const paddingEnd = virtualizer.options.paddingEnd ?? 0;
+  return Math.max(0, el.scrollHeight - paddingEnd - el.clientHeight);
+};

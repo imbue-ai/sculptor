@@ -338,6 +338,25 @@ padding) made the viewport read as "not at the bottom" while visibly at the bott
 Subtracting `paddingEnd` is the single correction, shared by every at-bottom check
 as the one `distanceFromContentBottom` primitive.
 
+The same correction governs *pinning* to the bottom, not just *measuring* it. Every
+"scroll to the bottom" site (the `following` pin, the anchoring→following handoff,
+the jump-to-bottom button, the restore-to-bottom) sets `scrollTop` to the inverse of
+that primitive — `contentBottomOffset = scrollHeight − paddingEnd − clientHeight` —
+so the last message's content bottom sits flush with the viewport bottom
+(`distanceFromContentBottom == 0`), leaving `paddingEnd` as empty slack *below*
+`scrollTop`. It deliberately does **not** pin with `virtualizer.scrollToIndex(last,
+{ align: "end" })`: for the final item TanStack resolves that to
+`getMaxScrollOffset()` — the very bottom of the *padded* scroll range — which parks
+`scrollTop` inside the `paddingEnd` gap with **zero** slack. Two failures followed:
+the last line floated a `paddingEnd`-tall gap above the viewport bottom
+while following, and — the turn-end jump — when a turn ended and its streaming cursor
+was removed, the last message shrank with no slack to absorb it, so the browser
+clamped `scrollTop` down by the shrink and the whole conversation jumped up. Pinning
+to the content bottom leaves the `paddingEnd` slack the shrink is absorbed into. The
+pin is also **down-only**: it follows the live tail's growth toward the bottom but
+never scrolls *up*, so a turn-end shrink is left where it is rather than chased
+(authority has already handed back to `userControlled` by then anyway).
+
 ### 4. Search suppression is a top-level guard
 
 When in-chat search is open, auto-scroll behaviors are suspended. Rather than add
@@ -403,6 +422,17 @@ scroll observer on genuine user scrolls only (a correction scroll during the ref
 must not overwrite the position we are preserving), stored on the machine beside
 `geometryAtBottom` and read **only** by `projectReflow` — it never drives a render,
 so it updates state in place without notifying subscribers.
+
+The anchor is a *scrolled-up* reading position, so it is **cleared the moment
+authority enters `following` or `anchoringTurn`** (in the store's `dispatch`, the
+single writer of authority): the user is now watching the live tail or a fresh turn,
+not the message the anchor points at. Without this, a stale anchor from an earlier
+scroll survived the turn and, when the turn ended (→ `userControlled`), the next
+content reflow — the turn footer landing after we had left `following` — resolved to
+`holdAnchor` and snapped the whole conversation back to that old position, cutting off
+the message the user had just sent. Clearing on entry keeps `holdAnchor` for its real
+job (an idle scrolled-up reader whose view reflows) while a turn end leaves the view
+exactly where `following` left it.
 
 TanStack Virtual already preserves scroll across item-size changes via
 `shouldAdjustScrollPositionOnItemSizeChange`: when an item *entirely above* the fold

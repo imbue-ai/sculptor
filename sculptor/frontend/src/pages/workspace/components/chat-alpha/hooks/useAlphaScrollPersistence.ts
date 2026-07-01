@@ -5,7 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 import { alphaScrollPositionAtomFamily } from "~/common/state/atoms/alphaScroll.ts";
 
-import { distanceFromContentBottom } from "../scroll/geometry.ts";
+import { contentBottomOffset, distanceFromContentBottom } from "../scroll/geometry.ts";
 import type { ScrollStateMachine } from "../scroll/scrollStateMachine.ts";
 
 /** Cancel all pending rAFs tracked in the set and clear it. */
@@ -80,8 +80,9 @@ export const useAlphaScrollPersistence = (
     if (!el || filteredMessages.length === 0) return;
 
     if (!scrollPosition || scrollPosition.distanceFromBottom <= BOTTOM_THRESHOLD) {
-      // First visit or user was at bottom: scroll to bottom.
-      virtualizer.scrollToIndex(filteredMessages.length - 1, { align: "end" });
+      // First visit or user was at bottom: restore flush to the content bottom (see
+      // contentBottomOffset — not scrollToIndex, which lands in the tail padding).
+      el.scrollTop = contentBottomOffset(el, virtualizer);
       return;
     }
 
@@ -94,10 +95,9 @@ export const useAlphaScrollPersistence = (
       el.scrollTop += scrollPosition.pixelOffset;
     } else {
       // Fallback: use distance from the content bottom (synchronous for the same
-      // reason). Inverse of distanceFromContentBottom — paddingEnd is excluded so
-      // this matches how the distance was recorded above.
-      const paddingEnd = virtualizer.options.paddingEnd ?? 0;
-      el.scrollTop = el.scrollHeight - paddingEnd - el.clientHeight - scrollPosition.distanceFromBottom;
+      // reason). contentBottomOffset excludes paddingEnd, matching how the
+      // distance was recorded above.
+      el.scrollTop = contentBottomOffset(el, virtualizer) - scrollPosition.distanceFromBottom;
     }
   }, [scrollContainerRef, virtualizer, filteredMessages, scrollPosition]);
 
