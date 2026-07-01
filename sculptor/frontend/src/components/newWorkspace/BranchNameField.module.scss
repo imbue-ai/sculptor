@@ -3,18 +3,48 @@
   flex-direction: column;
 }
 
+// Matches the breadcrumb chips above (transparent fill, gray-a4 hairline,
+// radius-3) so the branch field reads as part of the same context row rather
+// than a heavier boxed input. Matches their type ramp too — font-size-1 with
+// 3px padding — so the field is the SAME HEIGHT as the chips, not an outsized
+// box. Focus-within deepens the border for edit feedback.
 .pill {
   align-items: center;
-  background: var(--gray-a3);
-  border: 1px solid var(--gray-a5);
+  background: transparent;
+  border: 1px solid var(--gray-a4);
   border-radius: var(--radius-3);
+  box-sizing: border-box;
   display: flex;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
+  padding: 3px var(--space-2);
+  transition:
+    background var(--duration-fast) ease,
+    border-color var(--duration-fast) ease;
+
+  &:hover {
+    background: var(--gray-a2);
+    border-color: var(--gray-a5);
+  }
+
+  &:focus-within {
+    background: var(--gray-a2);
+    border-color: var(--gray-a6);
+  }
 }
 
 .pillError {
   border-color: var(--red-a7);
+
+  &:hover {
+    border-color: var(--red-a8);
+  }
+
+  &:focus-within {
+    border-color: var(--red-a9);
+  }
 }
 
 .prefix {
@@ -30,12 +60,12 @@
   background: transparent;
   border: none;
   color: var(--gray-12);
-  flex: 1;
+  flex: 1 1 auto;
   font-family: var(--code-font-family);
-  font-size: var(--font-size-2);
+  font-size: var(--font-size-1);
   min-width: 0;
   outline: none;
-  padding: var(--space-1) 0;
+  padding: 0;
 
   &::placeholder {
     color: var(--gray-8);
@@ -46,16 +76,72 @@
   }
 }
 
+// Borderless, iconless variant — sits under the workspace title as an editable
+// subtitle rather than a bordered chip. Drops the border/fill/side-padding and
+// hugs its content (via the input's `field-sizing`) so the shuffle button trails
+// the branch name instead of floating at the far end of a full-width row.
+.pillPlain {
+  border-color: transparent;
+  padding-left: 0;
+  padding-right: 0;
+  width: fit-content;
+
+  &:hover,
+  &:focus-within {
+    background: transparent;
+    border-color: transparent;
+  }
+
+  .input {
+    color: var(--gray-11);
+    field-sizing: content;
+    min-width: 4ch;
+  }
+}
+
+// Constrain the trailing shuffle button to an 18px square so it never
+// forces the pill taller than the breadcrumb chips (a default size-1
+// IconButton is 24px, which is what made the field oversized). `margin: 0
+// !important` neutralizes Radix's ghost-variant negative margin so the
+// button's hover surface can't bleed past the pill's border.
+.pill .shuffleButton {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-2);
+  color: var(--gray-10);
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 18px;
+  justify-content: center;
+  // stylelint-disable-next-line declaration-no-important -- override Radix ghost negative margin
+  margin: 0 !important;
+  padding: 0;
+  transition:
+    color var(--duration-fast) ease,
+    background var(--duration-fast) ease;
+  width: 18px;
+
+  &:hover {
+    background: var(--gray-a3);
+    color: var(--gray-12);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 50%;
+  }
+}
+
 .spinner {
   color: var(--gray-9);
   flex-shrink: 0;
   font-size: var(--font-size-1);
 }
 
-// Always rendered with a fixed minimum height so toggling the collision error
-// never shifts the surrounding layout (the dialog must not jump).
+// Rendered only when there's an error, so the error-free field stays chip-height.
 .errorSlot {
-  min-height: var(--space-5);
   padding-top: var(--space-1);
 }
 

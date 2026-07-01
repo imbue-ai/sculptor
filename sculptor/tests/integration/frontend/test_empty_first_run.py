@@ -25,7 +25,7 @@ from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 from sculptor.testing.utils import get_playwright_modifier_key
 
-HELP_PROMPT_PREFILL = "/sculptor:help"
+HELP_PROMPT_PREFILL = "/sculptor:help I just set up Sculptor for the first time. What should I know to get started?"
 
 _ADD_REPO_SKIP_REASON = "FIRST-02 no-repos 'Add a repo' state needs the only repo removed via Settings, but reaching Settings from the empty-first-run page is a harness-nav interaction (navigate_to_settings_page can't find the gear when the empty page's sidebar is collapsed); the no-workspaces hint half of FIRST-02 is covered by test_sidebar_shows_no_workspaces_hint."
 

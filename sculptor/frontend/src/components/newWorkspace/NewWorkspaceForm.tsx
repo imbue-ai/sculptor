@@ -3,14 +3,27 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { ElementIds, getActiveProjects, getMostRecentlyUsedProject, WorkspaceInitializationStrategy } from "~/api";
+import {
+  EffortLevel,
+  ElementIds,
+  getActiveProjects,
+  getMostRecentlyUsedProject,
+  type LlmModel,
+  WorkspaceInitializationStrategy,
+} from "~/api";
 import { isDismissibleOverlayOpen } from "~/common/overlayUtils.ts";
 import { lastUsedAgentTypeAtom, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { projectsArrayAtom, updateProjectsAtom } from "~/common/state/atoms/projects.ts";
-import { defaultModelAtom, isPiAgentEnabledAtom } from "~/common/state/atoms/userConfig.ts";
+import {
+  defaultEffortLevelAtom,
+  defaultModelAtom,
+  isDefaultFastModeAtom,
+  isPiAgentEnabledAtom,
+} from "~/common/state/atoms/userConfig.ts";
 import { useCreateWorkspace } from "~/common/state/hooks/useCreateWorkspace.ts";
 import { useRepoInfo } from "~/common/state/hooks/useRepoInfo.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
+import { AgentSettingsControls } from "~/components/AgentSettingsControls.tsx";
 import { BranchSelector } from "~/components/BranchSelector.tsx";
 import { KeyboardHint } from "~/components/KeyboardHint.tsx";
 import { AgentTypeSelect } from "~/components/newWorkspace/AgentTypeSelect.tsx";
@@ -62,7 +75,19 @@ export const NewWorkspaceForm = ({
   const lastUsedAgentType = useAtomValue(lastUsedAgentTypeAtom);
   const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
   const defaultModel = useAtomValue(defaultModelAtom);
+  const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
+  const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const [isKeepOpen, setIsKeepOpen] = useAtom(keepNewWorkspaceModalOpenAtom);
+
+  // Per-prompt agent-settings overrides — model / effort / fast mode / plan
+  // mode. Seeded once from the user's defaults; surfaced beneath the prompt only
+  // after the user has typed something (no prompt → the defaults apply silently
+  // on create). The form remounts per open (keyed on the preset repo), so these
+  // re-seed from the current defaults each time rather than staying sticky.
+  const [agentModel, setAgentModel] = useState<LlmModel>(defaultModel as LlmModel);
+  const [agentEffort, setAgentEffort] = useState<EffortLevel>((defaultEffortLevel as EffortLevel) ?? EffortLevel.XHIGH);
+  const [isAgentFastMode, setIsAgentFastMode] = useState<boolean>(isDefaultFastMode);
+  const [isAgentPlanMode, setIsAgentPlanMode] = useState<boolean>(false);
 
   // State and hooks — seed the local form state once, from the preset repo (if
   // any) then the MRU settings. Reading the seed lazily keeps it a mount-time
@@ -218,7 +243,10 @@ export const NewWorkspaceForm = ({
       branchName: effectiveBranchName,
       agentTypeValue,
       registrations,
-      defaultModel,
+      defaultModel: agentModel,
+      effort: agentEffort,
+      fastMode: isAgentFastMode,
+      enterPlanMode: isAgentPlanMode,
     });
 
     if (!result.ok) {
@@ -262,7 +290,10 @@ export const NewWorkspaceForm = ({
     sourceBranch,
     agentTypeValue,
     registrations,
-    defaultModel,
+    agentModel,
+    agentEffort,
+    isAgentFastMode,
+    isAgentPlanMode,
     isKeepOpen,
     onCreated,
   ]);
@@ -294,40 +325,37 @@ export const NewWorkspaceForm = ({
     );
   }
 
+  // Breadcrumb repo crumb — an avatar initial + repo name, in place of the
+  // default `📁 repo <name>` trigger, so the top context row reads like a
+  // Linear-style breadcrumb.
+  const currentProject = projects.find((p) => p.objectId === selectedProjectId);
+  const crumbName = currentProject?.name ?? "Select repo";
+  const crumbInitial = (currentProject?.name?.trim()?.[0] ?? "?").toUpperCase();
+  const isPromptEmpty = prompt.trim() === "";
+
   return (
     <>
-      <Flex ref={formRef} direction="column" className={styles.form} data-testid={ElementIds.NEW_WORKSPACE_FORM}>
-        <input
-          ref={nameInputRef}
-          type="text"
-          value={workspaceName}
-          onChange={(e): void => setWorkspaceName(e.target.value)}
-          placeholder="Untitled workspace"
-          className={styles.titleInput}
-          data-testid={ElementIds.WORKSPACE_NAME_INPUT}
-          autoFocus
-        />
-
-        <textarea
-          ref={promptTextareaRef}
-          value={prompt}
-          onChange={(e): void => setPrompt(e.target.value)}
-          placeholder="Describe a task for the agent (optional)"
-          className={styles.promptTextarea}
-          data-testid={ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA}
-          rows={2}
-        />
-
-        <Flex align="center" gap="4" wrap="wrap" className={styles.contextRow}>
+      <div ref={formRef} className={styles.shell} data-testid={ElementIds.NEW_WORKSPACE_FORM}>
+        {/* ── Top breadcrumb: repo crumb → agent → environment → source → new branch ── */}
+        <div className={styles.context}>
           <RepoSelector
             projects={projects}
             selectedProjectId={selectedProjectId}
             onProjectChange={handleProjectChange}
+            className={styles.crumbTrigger}
+            triggerContent={
+              <span className={styles.crumb}>
+                <span className={styles.crumbIco} aria-hidden>
+                  {crumbInitial}
+                </span>
+                <span className={styles.crumbName}>{crumbName}</span>
+              </span>
+            }
           />
 
-          <AgentTypeSelect value={agentTypeValue} onChange={setAgentTypeValue} />
+          <AgentTypeSelect value={agentTypeValue} onChange={setAgentTypeValue} className={styles.toolbarPill} />
 
-          <ModeSelect value={mode} onChange={handleModeChange} />
+          <ModeSelect value={mode} onChange={handleModeChange} className={styles.toolbarPill} />
 
           {repoInfo ? (
             mode === WorkspaceInitializationStrategy.IN_PLACE ? (
@@ -340,6 +368,7 @@ export const NewWorkspaceForm = ({
                     sourceBranch={sourceBranch}
                     disabled={true}
                     triggerVariant="ghost"
+                    className={styles.toolbarPill}
                   />
                 </span>
               </Tooltip>
@@ -350,49 +379,112 @@ export const NewWorkspaceForm = ({
                 setUserSelectedBranch={setUserSelectedBranch}
                 sourceBranch={sourceBranch}
                 triggerVariant="ghost"
+                className={styles.toolbarPill}
               />
             )
+          ) : selectedProjectId ? (
+            <span className={styles.pillsLoading}>
+              <Spinner size="1" />
+              <Text size="1" color="gray">
+                Loading branches…
+              </Text>
+            </span>
           ) : null}
-        </Flex>
+        </div>
 
-        <BranchNameField
-          mode={mode}
-          value={effectiveBranchName}
-          isManuallyEdited={isBranchNameManuallyEdited}
-          isLoading={isBranchNamePreviewLoading}
-          collision={branchNameCollision}
-          preview={branchNamePreview}
-          onUserEdit={(value): void => setBranchNameOverride(value)}
-          onReset={(): void => setBranchNameOverride(null)}
-          onShuffle={handleShuffle}
-          disabled={isCreating}
-        />
-
-        <Flex align="center" justify="between" className={styles.footer}>
-          <Text as="label" size="1" className={styles.keepOpenLabel}>
-            <Switch
-              size="1"
-              checked={isKeepOpen}
-              onCheckedChange={setIsKeepOpen}
-              data-testid={ElementIds.NEW_WORKSPACE_KEEP_OPEN_SWITCH}
+        {/* ── Body: title (+ branch subtitle) + first-task prompt ── */}
+        <div className={styles.body}>
+          <div className={styles.titleGroup}>
+            <input
+              ref={nameInputRef}
+              type="text"
+              value={workspaceName}
+              onChange={(e): void => setWorkspaceName(e.target.value)}
+              placeholder="Untitled workspace"
+              className={styles.titleInput}
+              data-testid={ElementIds.WORKSPACE_NAME_INPUT}
+              autoFocus
             />
-            Keep open
-          </Text>
 
-          <Flex align="center" gap="3">
-            <KeyboardHint keys={`${getMetaKey()}↵`} label="create" />
+            {/* Borderless, iconless branch — reads as an editable subtitle of the
+                title (worktree/clone only; in-place uses the current branch). */}
+            {mode !== WorkspaceInitializationStrategy.IN_PLACE ? (
+              <BranchNameField
+                mode={mode}
+                value={effectiveBranchName}
+                isManuallyEdited={isBranchNameManuallyEdited}
+                isLoading={isBranchNamePreviewLoading}
+                collision={branchNameCollision}
+                preview={branchNamePreview}
+                onUserEdit={(value): void => setBranchNameOverride(value)}
+                onReset={(): void => setBranchNameOverride(null)}
+                onShuffle={handleShuffle}
+                disabled={isCreating}
+                variant="plain"
+              />
+            ) : null}
+          </div>
+
+          <textarea
+            ref={promptTextareaRef}
+            value={prompt}
+            onChange={(e): void => setPrompt(e.target.value)}
+            placeholder="Describe a task for the agent (optional)"
+            className={styles.promptTextarea}
+            data-testid={ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA}
+            rows={2}
+          />
+
+          {/* Per-prompt agent settings (plan / fast / effort / model). Always
+              rendered so the row reserves its space; hidden via `visibility`
+              until the user has typed a prompt so the modal doesn't jump. */}
+          <div className={styles.agentSettings} data-visible={!isPromptEmpty} aria-hidden={isPromptEmpty}>
+            <AgentSettingsControls
+              model={agentModel}
+              onModelChange={setAgentModel}
+              effort={agentEffort}
+              onEffortChange={setAgentEffort}
+              isFastMode={isAgentFastMode}
+              onFastModeToggle={(): void => setIsAgentFastMode((v) => !v)}
+              isPlanMode={isAgentPlanMode}
+              onPlanModeToggle={(): void => setIsAgentPlanMode((v) => !v)}
+            />
+          </div>
+        </div>
+
+        {/* ── Footer: keep-open toggle + Cmd+Enter hint + Create ── */}
+        <div className={styles.footer}>
+          <div className={styles.footerLeft}>
+            <label className={styles.keepOpenLabel}>
+              <Switch
+                size="1"
+                checked={isKeepOpen}
+                onCheckedChange={setIsKeepOpen}
+                data-testid={ElementIds.NEW_WORKSPACE_KEEP_OPEN_SWITCH}
+              />
+              Keep open
+            </label>
+          </div>
+
+          <div className={styles.footerRight}>
+            {!isSubmitDisabled ? (
+              <span className={styles.shortcutHint}>
+                <KeyboardHint keys={`${getMetaKey()}↵`} label="to create" />
+              </span>
+            ) : null}
             <Button
               onClick={(): void => void handleSubmit()}
               disabled={isSubmitDisabled}
               aria-label="Create workspace"
               data-testid={ElementIds.NEW_WORKSPACE_CREATE_BUTTON}
               size="2"
+              color="indigo"
             >
               Create workspace
             </Button>
-          </Flex>
-        </Flex>
-      </Flex>
+          </div>
+        </div>
+      </div>
 
       <Toast
         open={!!toast}

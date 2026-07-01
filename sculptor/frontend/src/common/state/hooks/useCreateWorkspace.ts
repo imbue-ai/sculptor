@@ -2,7 +2,7 @@ import { useSetAtom } from "jotai";
 import { posthog } from "posthog-js";
 import { useCallback, useState } from "react";
 
-import type { LlmModel, TerminalAgentRegistration } from "~/api";
+import type { EffortLevel, LlmModel, TerminalAgentRegistration } from "~/api";
 import { createWorkspaceAgent, createWorkspaceV2, WorkspaceInitializationStrategy } from "~/api";
 import { HTTPException } from "~/common/Errors.ts";
 import { useImbueNavigate } from "~/common/NavigateUtils.ts";
@@ -28,6 +28,12 @@ type CreateWorkspaceArgs = {
   registrations: ReadonlyArray<TerminalAgentRegistration>;
   /** Creation-time model for Claude agents. */
   defaultModel: string;
+  /** Per-prompt thinking effort for the first Claude agent (defaults apply when omitted). */
+  effort?: EffortLevel;
+  /** Whether the first Claude agent starts in fast mode. */
+  fastMode?: boolean;
+  /** Whether the first Claude agent starts in plan mode. */
+  enterPlanMode?: boolean;
 };
 
 type CreateWorkspaceErrorKind = "branch-collision" | "generic";
@@ -104,14 +110,18 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
         const effectiveRegistrationId = isMissingRegistration ? undefined : registrationId;
         const effectiveAgentTypeValue: StoredAgentType = isMissingRegistration ? "claude" : args.agentTypeValue;
 
-        // Only Claude consumes a creation-time model: terminal/registered agents
-        // have no model concept, and pi selects from its own catalog in-task, so
-        // it starts on pi's default rather than a Claude model it would ignore.
+        // Only Claude consumes a creation-time model and the per-prompt agent
+        // settings (effort / fast / plan): terminal/registered agents have no
+        // model concept, and pi selects from its own catalog in-task, so it
+        // starts on pi's defaults rather than Claude settings it would ignore.
         const shouldSendCreationModel = effectiveAgentType === "claude";
         const agentResponse = await createWorkspaceAgent({
           path: { workspace_id: workspaceId },
           body: {
             model: shouldSendCreationModel ? (args.defaultModel as LlmModel) : undefined,
+            effort: shouldSendCreationModel ? args.effort : undefined,
+            fastMode: shouldSendCreationModel ? args.fastMode : undefined,
+            enterPlanMode: shouldSendCreationModel ? args.enterPlanMode : undefined,
             agentType: effectiveAgentType,
             registrationId: effectiveRegistrationId,
             prompt: args.prompt.trim() || undefined,

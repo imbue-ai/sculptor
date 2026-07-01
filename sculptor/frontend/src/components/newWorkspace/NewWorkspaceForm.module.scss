@@ -5,29 +5,175 @@
   width: 100%;
 }
 
-.form {
-  gap: var(--space-3);
-  padding: var(--space-5);
+.shell {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
 }
 
-// Borderless title — reads as a heading, not a boxed field.
+// ── Top breadcrumb bar ────────────────────────────────────────────────
+//
+// Small, quiet context row (repo crumb → agent → environment →
+// source-branch → new-branch field), rendered above the title/prompt so
+// the modal reads like a Linear "new issue". All chips share the same
+// 12px / tight-padding ramp so the row reads as one breadcrumb. The
+// new-branch field is given `flex-basis: 100%` so it always drops to its
+// own full-width line beneath the chips.
+.context {
+  align-items: flex-start;
+  color: var(--gray-11);
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  font-size: var(--font-size-1);
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-5) 0;
+}
+
+// The repo crumb trigger: a neutral, bordered context chip whose caret
+// (rendered by Radix) sits inside the same chip surface. `margin: 0`
+// neutralizes the negative margin Radix applies to ghost size-1 triggers,
+// which would otherwise eat the gap between adjacent chips.
+.crumbTrigger {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--gray-a4);
+  border-radius: var(--radius-3);
+  color: var(--gray-12);
+  display: inline-flex;
+  flex-shrink: 0;
+  font-weight: var(--font-weight-medium);
+  gap: var(--space-1);
+  height: auto;
+  letter-spacing: 0.01em;
+  margin: 0;
+  padding: 3px var(--space-2);
+  transition: background var(--duration-fast) ease;
+
+  &:hover {
+    background: var(--gray-a2);
+    border-color: var(--gray-a5);
+  }
+}
+
+.crumb {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--space-1);
+  max-width: 220px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crumbIco {
+  align-items: center;
+  background: var(--gray-a8);
+  border-radius: var(--radius-2);
+  color: var(--gray-1);
+  display: inline-flex;
+  flex-shrink: 0;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- single-letter glyph in a 14px avatar; smallest Radix font-size (--font-size-1, 12px) is too large to fit
+  font-size: 9px;
+  font-weight: var(--font-weight-bold);
+  height: 14px;
+  justify-content: center;
+  text-transform: uppercase;
+  width: 14px;
+}
+
+.crumbName {
+  color: var(--gray-12);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// Shared pill styling for the ghost Select triggers in this modal (agent /
+// environment / source branch). Radix's ghost variant renders transparent
+// and disagrees with the bordered crumb + branch field; this pulls them all
+// onto the same gray, bordered chip surface. Nested under `.shell` to bump
+// specificity above Radix's `.rt-SelectTrigger:where(.rt-r-size-1)` radius
+// rule. `margin: 0` neutralizes the ghost-trigger negative margin.
+.shell .toolbarPill {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--gray-a4);
+  border-radius: var(--radius-3);
+  height: auto;
+  margin: 0;
+  padding: 3px var(--space-2);
+  transition:
+    background var(--duration-fast) ease,
+    border-color var(--duration-fast) ease;
+
+  &:hover {
+    background: var(--gray-a2);
+    border-color: var(--gray-a5);
+  }
+
+  svg {
+    color: var(--gray-10);
+  }
+}
+
+.pillsLoading {
+  align-items: center;
+  color: var(--gray-10);
+  display: inline-flex;
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+}
+
+// Title + branch subtitle as one unit: a tight internal gap so the branch reads
+// as a subtitle of the title, while the parent `.body` gap still separates the
+// group from the prompt below.
+.titleGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+// ── Body: workspace title + first-task prompt ────────────────────────
+//
+// Both inputs render border-less so the modal reads like a Linear "new
+// issue" — title-as-heading, plain prose below.
+.body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  overflow: hidden auto;
+  padding: var(--space-3) var(--space-5) var(--space-4);
+
+  @include thin-scrollbar($autohide: false);
+}
+
 .titleInput {
   background: transparent;
   border: none;
   color: var(--gray-12);
   font-size: var(--font-size-5);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.005em;
+  line-height: 1.25;
   outline: none;
   padding: 0;
   width: 100%;
 
   &::placeholder {
     color: var(--gray-8);
+    font-weight: var(--font-weight-semibold);
   }
 }
 
 // Auto-grows up to a cap set in JS (no Chromium-only `field-sizing` hack); the
-// height is driven by the scrollHeight measurement in the component.
+// height is driven by the scrollHeight measurement in the component. `min-height`
+// hints "describe the work here" rather than looking like a skinny caption.
 .promptTextarea {
   background: transparent;
   border: none;
@@ -36,6 +182,7 @@
   font-size: var(--font-size-3);
   line-height: var(--line-height-3);
   max-height: 240px;
+  min-height: 120px;
   outline: none;
   padding: 0;
   resize: none;
@@ -48,20 +195,90 @@
   }
 }
 
-// Breadcrumb context pills (repo / agent type / mode / branch source).
-.contextRow {
-  border-top: 1px solid var(--gray-a4);
-  padding-top: var(--space-3);
+// Per-prompt agent-settings toolbar (plan / fast / effort / model), mirroring
+// ChatInput's right-side controls. Always rendered so the row reserves its
+// vertical space; `data-visible="false"` (no prompt yet) hides paint via
+// `visibility` and blocks interaction, but the layout box stays put so typing
+// the first character doesn't grow the modal.
+.agentSettings {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  margin-top: var(--space-1);
+
+  &[data-visible="false"] {
+    pointer-events: none;
+    visibility: hidden;
+  }
 }
 
+// ── Footer: "Keep open" toggle + Create button ───────────────────────
 .footer {
-  border-top: 1px solid var(--gray-a4);
-  padding-top: var(--space-3);
+  align-items: center;
+  border-top: 1px solid var(--gray-a3);
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-3);
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
 }
 
+// Holds the "Keep open" toggle; the empty container preserves the footer's
+// space-between so the Create button stays right-aligned.
+.footerLeft {
+  align-items: center;
+  color: var(--gray-10);
+  display: flex;
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+// "Keep open" is an opt-in convenience, not a primary affordance, so the whole
+// control is dialed down: the caption matches the 11px / gray-8 weight of the
+// `.shortcutHint` opposite it, and the size-1 Switch is scaled a notch smaller
+// so it agrees with the quieter type. Flips to gray-11 when checked.
 .keepOpenLabel {
   align-items: center;
-  color: var(--gray-11);
+  color: var(--gray-8);
+  cursor: pointer;
+  display: inline-flex;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- match the .shortcutHint opposite us in the footer
+  font-size: 11px;
+  gap: var(--space-1);
+  transition: color var(--duration-fast) ease;
+  user-select: none;
+
+  &:has(button[data-state="checked"]) {
+    color: var(--gray-11);
+  }
+
+  button[role="switch"] {
+    transform: scale(0.85);
+    transform-origin: left center;
+  }
+}
+
+.footerRight {
+  align-items: center;
   display: flex;
-  gap: var(--space-2);
+  flex-shrink: 0;
+  gap: var(--space-3);
+}
+
+// Smaller / lighter than KeyboardHint's default — a subtle keyboard nudge to
+// the left of the Create button. Caption and kbd glyph share one gray-8 so the
+// line reads as a single unit.
+.shortcutHint {
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- one-off "even smaller than font-size-1" for the inline hint
+  font-size: 11px;
+
+  & > *,
+  & kbd {
+    color: var(--gray-8);
+    // stylelint-disable-next-line sculptor/no-hardcoded-values -- match the wrapper override
+    font-size: 11px;
+  }
 }

@@ -27,6 +27,12 @@ type BranchNameFieldProps = {
   /** Called when the user clicks the shuffle button to re-roll the name. */
   onShuffle: () => void;
   disabled?: boolean;
+  /**
+   * Visual style. "chip" (default) is the bordered pill used in the breadcrumb
+   * row. "plain" is a borderless, iconless variant that reads as an editable
+   * subtitle — used directly under the workspace title.
+   */
+  variant?: "chip" | "plain";
 };
 
 /**
@@ -60,6 +66,7 @@ export const BranchNameField = ({
   onReset,
   onShuffle,
   disabled,
+  variant = "chip",
 }: BranchNameFieldProps): ReactElement | undefined => {
   // In-place workspaces use the current branch, so there is no field to render.
   if (mode === Strategy.IN_PLACE) {
@@ -69,14 +76,16 @@ export const BranchNameField = ({
   const placeholder = mode === Strategy.WORKTREE ? "Branch name (required)" : "Branch name (optional)";
   const hasCollision = collision === "exists";
   const canReset = isManuallyEdited && preview !== value;
+  const isPlain = variant === "plain";
 
   return (
     <div className={styles.container} data-testid={ElementIds.NEW_WORKSPACE_CONTEXT_PILL}>
-      <div className={`${styles.pill} ${hasCollision ? styles.pillError : ""}`}>
-        <span className={styles.prefix}>
-          <GitBranchIcon size={12} />
-          branch
-        </span>
+      <div className={`${styles.pill} ${isPlain ? styles.pillPlain : ""} ${hasCollision ? styles.pillError : ""}`}>
+        {isPlain ? null : (
+          <span className={styles.prefix}>
+            <GitBranchIcon size={12} />
+          </span>
+        )}
         <input
           type="text"
           className={styles.input}
@@ -107,6 +116,7 @@ export const BranchNameField = ({
             type="button"
             variant="ghost"
             size="1"
+            className={styles.shuffleButton}
             aria-label="Shuffle branch name"
             data-testid={ElementIds.BRANCH_NAME_SHUFFLE_BUTTON}
             disabled={disabled}
@@ -116,14 +126,15 @@ export const BranchNameField = ({
           </IconButton>
         </Tooltip>
       </div>
-      {/* Stable error slot: always rendered so the layout never jumps. */}
-      <div className={styles.errorSlot}>
-        {hasCollision ? (
+      {/* Error rendered only when present, so an error-free field is the same
+          height as the breadcrumb chips (no always-reserved empty slot). */}
+      {hasCollision ? (
+        <div className={styles.errorSlot}>
           <span className={styles.error} data-testid={ElementIds.BRANCH_NAME_COLLISION_ERROR}>
             Branch &apos;{value}&apos; already exists
           </span>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 };

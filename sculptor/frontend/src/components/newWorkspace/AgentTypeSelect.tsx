@@ -52,8 +52,12 @@ export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectP
       <Select.Trigger variant="ghost" className={className} data-testid={ElementIds.ADD_WORKSPACE_AGENT_TYPE_SELECT}>
         <Flex align="center" gap="1">
           <BotIcon size={12} />
-          <Text>agent</Text>
-          {triggerLabel}
+          <Text size="1" color="gray">
+            agent
+          </Text>
+          <Text size="1" weight="medium" color="gray" highContrast>
+            {triggerLabel}
+          </Text>
         </Flex>
       </Select.Trigger>
       <Select.Content position="popper" side="bottom" sideOffset={5}>

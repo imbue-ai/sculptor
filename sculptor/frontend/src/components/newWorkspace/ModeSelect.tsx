@@ -40,8 +40,12 @@ export const ModeSelect = ({ value, onChange, className }: ModeSelectProps): Rea
       <Select.Trigger variant="ghost" className={className} data-testid={ElementIds.MODE_SELECTOR}>
         <Flex align="center" gap="1">
           <BlocksIcon size={12} />
-          <Text>environment</Text>
-          {MODE_LABELS[value]}
+          <Text size="1" color="gray">
+            environment
+          </Text>
+          <Text size="1" weight="medium" color="gray" highContrast>
+            {MODE_LABELS[value]}
+          </Text>
         </Flex>
       </Select.Trigger>
       <Select.Content position="popper" side="bottom" sideOffset={5}>
