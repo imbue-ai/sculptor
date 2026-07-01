@@ -1,4 +1,5 @@
-import { Flex } from "@radix-ui/themes";
+import { Flex, IconButton, Tooltip } from "@radix-ui/themes";
+import { BookOpen } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { useMemo } from "react";
 
@@ -27,6 +28,9 @@ type DiffViewerHeaderProps = {
   leadingControl?: ReactNode;
   /** Rendered in the right cluster before the menu (e.g. refresh). */
   trailingActions?: ReactNode;
+  /** When set, shows a quick-open icon that opens the file's rendered
+   *  markdown view in the Files panel (offered on diff/commit headers). */
+  onOpenRenderedMarkdown?: () => void;
 };
 
 /**
@@ -46,6 +50,7 @@ export const DiffViewerHeader = ({
   treeOptions,
   leadingControl,
   trailingActions,
+  onOpenRenderedMarkdown,
 }: DiffViewerHeaderProps): ReactElement => {
   const { dirParts, fileName } = useMemo(() => {
     const parts = filePath.split("/");
@@ -100,6 +105,21 @@ export const DiffViewerHeader = ({
           <span className={styles.lineStatsAdded}>+{addedLines}</span>
           <span className={styles.lineStatsRemoved}>-{removedLines}</span>
         </span>
+      )}
+
+      {onOpenRenderedMarkdown && (
+        <Tooltip content="Open rendered markdown">
+          <IconButton
+            variant="ghost"
+            size="1"
+            color="gray"
+            onClick={onOpenRenderedMarkdown}
+            aria-label="Open rendered markdown"
+            data-testid={ElementIds.DIFF_OPEN_RENDERED_MARKDOWN}
+          >
+            <BookOpen size={14} />
+          </IconButton>
+        </Tooltip>
       )}
 
       {trailingActions}

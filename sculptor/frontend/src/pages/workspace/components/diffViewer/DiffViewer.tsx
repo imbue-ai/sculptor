@@ -1,5 +1,5 @@
 import { Box, Flex, Text } from "@radix-ui/themes";
-import { useAtom, useAtomValue } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useMemo, useRef, useState } from "react";
 
@@ -16,7 +16,11 @@ import { useUserConfig } from "~/common/state/hooks/useUserConfig.ts";
 import { useWorkspaceCommitDiff } from "~/common/state/hooks/useWorkspaceCommitDiff.ts";
 import { getLineCounts, parseDiff } from "~/components/DiffUtils.ts";
 import { IndeterminateProgress } from "~/components/IndeterminateProgress.tsx";
-import { isMarkdownPath, markdownRenderModeAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
+import {
+  isMarkdownPath,
+  markdownRenderModeAtom,
+  openFileViewTabAtom,
+} from "~/pages/workspace/components/diffPanel/atoms.ts";
 import { BinaryPreview } from "~/pages/workspace/components/diffPanel/BinaryPreview.tsx";
 import { DeletedFileBanner } from "~/pages/workspace/components/diffPanel/DeletedFileBanner.tsx";
 import { DiffErrorBanner } from "~/pages/workspace/components/diffPanel/DiffErrorBanner.tsx";
@@ -238,6 +242,19 @@ export const DiffViewer = ({
   const isRenderedMarkdownActive =
     isMarkdownToggleVisible && markdownMode === "rendered" && isRichMarkdownRenderingEnabled;
 
+  // Quick-open a rendered view of a markdown file in the Files panel — offered
+  // on the diff/commit headers (the file-view header has the render toggle
+  // instead). Hidden while the experimental rendering flag is off, since the
+  // opened view would just be source.
+  const openFileViewTab = useSetAtom(openFileViewTabAtom);
+  const canQuickOpenRenderedMarkdown =
+    content.filePath !== null && isMarkdownPath(content.filePath) && isRichMarkdownRenderingEnabled;
+  const handleOpenRenderedMarkdown = useCallback((): void => {
+    if (!content.filePath) return;
+    setMarkdownMode("rendered");
+    openFileViewTab({ workspaceId, filePath: content.filePath });
+  }, [content.filePath, setMarkdownMode, openFileViewTab, workspaceId]);
+
   useKeybindingHandler("find_in_file", () => {
     if (!content.filePath || isRenderedMarkdownActive) return;
     setIsSearchOpen(true);
@@ -351,6 +368,9 @@ export const DiffViewer = ({
             treeOptions={treeOptions}
             leadingControl={sidebarToggle}
             trailingActions={headerActions}
+            onOpenRenderedMarkdown={
+              canQuickOpenRenderedMarkdown && commitFileStatus !== "D" ? handleOpenRenderedMarkdown : undefined
+            }
           />
           <Flex ref={diffContentRef} direction="column" flexGrow="1" overflow="hidden" className={styles.content}>
             {isCommitDiffPending ? (
@@ -393,6 +413,11 @@ export const DiffViewer = ({
             treeOptions={treeOptions}
             leadingControl={sidebarToggle}
             trailingActions={headerActions}
+            onOpenRenderedMarkdown={
+              canQuickOpenRenderedMarkdown && !content.isBinary && content.status !== "D"
+                ? handleOpenRenderedMarkdown
+                : undefined
+            }
           />
           <Flex ref={diffContentRef} direction="column" flexGrow="1" overflow="hidden" className={styles.content}>
             {renderDiffBody()}
