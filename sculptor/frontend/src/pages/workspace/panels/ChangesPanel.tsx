@@ -24,6 +24,7 @@ import { DiscardDialog } from "./changesPanel/DiscardDialog.tsx";
 import { useDiscardFile } from "./changesPanel/useDiscardFile.ts";
 import { ExplorerLayout } from "./ExplorerLayout.tsx";
 import {
+  changesPanelSelectionAtomFamily,
   changesScopeAtomFamily,
   collapseAllChangesFoldersAtom,
   fileBrowserStateAtomFamily,
@@ -33,10 +34,6 @@ import { ChangesTreeView } from "./fileBrowser/ChangesTreeView.tsx";
 import { CommitButton } from "./fileBrowser/CommitButton.tsx";
 import { useFileStatusMap } from "./fileBrowser/hooks.ts";
 import type { FileStatus } from "./fileBrowser/types.ts";
-
-/** A local-click selection: the file + the status the list reported, stamped so it can
- *  be reconciled with the atom-driven selection (an agent open) by recency. */
-type ChangesSelection = { filePath: string; status: FileStatus; at: number };
 
 const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactElement => {
   const workspace = useWorkspace(workspaceId);
@@ -51,8 +48,9 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
   const allStatusMap = useFileStatusMap(workspaceId, "vs-target-branch");
   const { discardFile } = useDiscardFile(workspaceId);
 
-  // Local-click selection (reconciled with the atom-driven one below).
-  const [selected, setSelected] = useState<ChangesSelection | null>(null);
+  // Clicked-file selection, persisted per-workspace so it survives the panel
+  // unmounting on a section-tab switch (reconciled with the atom-driven one below).
+  const [selected, setSelected] = useAtom(changesPanelSelectionAtomFamily(workspaceId));
   const [discardTarget, setDiscardTarget] = useState<string | null>(null);
 
   // The shared active diff tab — written when an agent opens a diff (a chat file-chip,
@@ -63,9 +61,12 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
   const { viewMode } = fileBrowserState;
   const isUncommitted = scope === "uncommitted";
 
-  const handleSelectFile = useCallback((filePath: string, status: FileStatus): void => {
-    setSelected({ filePath, status, at: Date.now() });
-  }, []);
+  const handleSelectFile = useCallback(
+    (filePath: string, status: FileStatus): void => {
+      setSelected({ filePath, status, at: Date.now() });
+    },
+    [setSelected],
+  );
 
   const handleDiscardRequest = useCallback((filePath: string): void => {
     setDiscardTarget(filePath);
@@ -78,12 +79,12 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
       setSelected((prev) => (prev?.filePath === discardTarget ? null : prev));
       setDiscardTarget(null);
     }
-  }, [discardTarget, discardFile]);
+  }, [discardTarget, discardFile, setSelected]);
 
   // After committing, the uncommitted changes clear, so reset the viewer.
   const handleCommit = useCallback((): void => {
     setSelected(null);
-  }, []);
+  }, [setSelected]);
 
   const handleToggleViewMode = useCallback((): void => {
     toggleViewMode({ workspaceId });

@@ -59,6 +59,14 @@ export const getUncommittedFileStatusMap = (
 /** Per-workspace scope for the Changes tab (independent of the Review All scope). Resets on page refresh. */
 export const changesScopeAtomFamily = atomFamily((_workspaceId: string) => atom<DiffScope>("vs-target-branch"));
 
+/** The Changes panel's clicked file selection (filePath + reported status, stamped for
+ *  recency reconciliation). Held per-workspace in an atom — not React state — so the
+ *  open file survives the panel unmounting when the user switches section tabs. */
+export type ChangesPanelSelection = { filePath: string; status: FileStatus; at: number };
+export const changesPanelSelectionAtomFamily = atomFamily((_workspaceId: string) =>
+  atom<ChangesPanelSelection | null>(null),
+);
+
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 const createToggleFolderAtom = (key: FolderStateKey) =>
   atom(null, (get, set, { workspaceId, folderPath }: { workspaceId: string; folderPath: string }) => {

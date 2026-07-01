@@ -5,9 +5,9 @@
 // is no shared "active diff" singleton. The proven history behavior
 // (graph dots, merge spurs, popover) is migrated, not redesigned.
 
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 
 import { registerPanelComponent } from "~/components/sections/registry/panelRegistry.ts";
 import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
@@ -16,21 +16,22 @@ import { DiffViewer } from "~/pages/workspace/components/diffViewer/index.ts";
 
 import styles from "./CommitsPanel.module.scss";
 import { ExplorerLayout } from "./ExplorerLayout.tsx";
-import { collapseAllCommitsAtom } from "./historyPanel/atoms.ts";
+import { collapseAllCommitsAtom, commitsPanelSelectionAtomFamily } from "./historyPanel/atoms.ts";
 import { HistoryTabContent } from "./historyPanel/HistoryTabContent.tsx";
-
-/** The commit + file the panel's viewer is currently showing. */
-type CommitSelection = { commitHash: string; filePath: string };
 
 const CommitsPanelContent = ({ workspaceId }: { workspaceId: string }): ReactElement => {
   const collapseAllCommits = useSetAtom(collapseAllCommitsAtom);
 
-  // Per-panel selection: the commit-scoped file currently shown in this panel's viewer.
-  const [selected, setSelected] = useState<CommitSelection | null>(null);
+  // Per-panel selection, persisted per-workspace so the open commit file survives the
+  // panel unmounting on a section-tab switch.
+  const [selected, setSelected] = useAtom(commitsPanelSelectionAtomFamily(workspaceId));
 
-  const handleSelectCommitFile = useCallback((commitHash: string, filePath: string): void => {
-    setSelected({ commitHash, filePath });
-  }, []);
+  const handleSelectCommitFile = useCallback(
+    (commitHash: string, filePath: string): void => {
+      setSelected({ commitHash, filePath });
+    },
+    [setSelected],
+  );
 
   const handleCollapseAll = useCallback((): void => {
     collapseAllCommits({ workspaceId });
