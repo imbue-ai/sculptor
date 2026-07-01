@@ -494,15 +494,11 @@ class _TurnState:
         self.assistant_message_id = AssistantMessageID(generate_id())
         self.first_message_id = AgentMessageID()
         self.tool_calls: dict[str, _ToolCall] = {}
-        # Wall-clock start of this agent run, used for the turn footer's duration.
-        # Mirrors Claude's per-turn duration (wall-clock, not the model's
-        # response-only time). A transient retry rebuilds _TurnState, so this
-        # measures the final (successful) attempt.
+        # Wall-clock start of this agent run, for the turn footer's duration
+        # (wall-clock, not the model's response-only time, to mirror Claude).
         self.start_time = time.monotonic()
-        # File paths mutated by file-changing tools during this run (git-relative
-        # display paths from the tool args). Feeds the turn footer's "N files
-        # changed" — the authoritative, all-tools source the frontend prefers over
-        # its streaming-time ToolUseBlock scan. Insertion-ordered + de-duplicated.
+        # File paths mutated by file-changing tools during this run, feeding the
+        # turn footer's "N files changed". Insertion-ordered + de-duplicated.
         self.changed_files: list[str] = []
         # True between a compaction_start and its matching compaction_end.
         # Compaction spans assistant messages, so this is NOT reset in
@@ -2603,18 +2599,15 @@ class PiAgent(DefaultAgentWrapper):
     def _emit_turn_metrics(self, parsed: ParsedAgentEnd, state: _TurnState) -> None:
         """Emit the per-turn footer metrics at the agent-run boundary.
 
-        Mirrors Claude's `TurnMetricsAgentMessage` (output_processor
-        `_flush_pending_turn_metrics`): the footer under a completed assistant
-        turn shows wall-clock duration, this turn's token totals, and the files it
-        changed. Emitted BEFORE the turn's terminating `RequestSuccess` so
-        message_conversion stamps it onto the in-progress chat message before
-        finalizing (see `_attach_turn_metrics`). Token totals are summed across the
-        run's assistant messages (pi reports usage per message); an interrupted
-        turn with no usage still emits duration + changed files so the footer
-        renders. pi exposes no numeric context-window threshold on the wire, so
-        the context fields stay unset (the "% context" chip is Claude-only — see
-        TokenPopoverContent). Duplicate `willRetry` runs do not reach here (the
-        retry loop rebuilds `_TurnState`), so this fires once per user turn.
+        The footer under a completed assistant turn shows wall-clock duration,
+        token totals, and the files it changed. Must be emitted BEFORE the turn's
+        terminating `RequestSuccess` so message_conversion stamps it onto the
+        in-progress chat message before finalizing (see `_attach_turn_metrics`).
+        Token totals are summed across the run's assistant messages (pi reports
+        usage per message); an interrupted turn with no usage still emits duration
+        + changed files. pi exposes no numeric context-window threshold on the
+        wire, so the context fields stay unset (the "% context" chip is
+        Claude-only).
         """
         input_tokens, output_tokens = sum_message_usage(parsed.messages)
         turn_metrics = TurnMetrics(

@@ -33,10 +33,9 @@ from pydantic import ValidationError
 from sculptor.foundation.pydantic_serialization import SerializableModel
 
 
-# Per-assistant-message token usage pi reports (RPC §Types "AssistantMessage").
+# Per-assistant-message token usage pi reports (RPC Types "AssistantMessage").
 # The wire field is `usage.{input,output,...}`; only input/output are consumed
-# for the turn footer. `extra="allow"` keeps the cost/cache sub-fields around
-# without modeling them.
+# for the turn footer, and `extra="allow"` retains the cost/cache sub-fields.
 class AgentMessageUsage(SerializableModel):
     input: int | None = None
     output: int | None = None
@@ -52,8 +51,7 @@ class AgentMessage(SerializableModel):
     # messages); absent on other roles.
     model: str | None = None
     # Per-message token usage (assistant messages); absent on other roles. Summed
-    # across an agent run's assistant messages to build the turn footer's token
-    # count (see `sum_message_usage`).
+    # across a run's assistant messages for the turn footer (see `sum_message_usage`).
     usage: AgentMessageUsage | None = None
     # The failure reason pi records when a turn ends in error — carried on an
     # otherwise-empty assistant message with `stopReason:"error"` (e.g. a
