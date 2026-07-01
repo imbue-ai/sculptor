@@ -786,9 +786,10 @@ doctor:
     cur="$(uv_version)"
 
     if [ -z "$min" ]; then
-      echo "doctor: could not parse a '>=' bound from required-version=\"$spec\";" >&2
-      echo "        please confirm your uv ($cur) satisfies it." >&2
-      exit 0
+      echo "doctor: cannot parse a '>=' lower bound from required-version=\"$spec\"." >&2
+      echo "  doctor only understands a '>=X.Y.Z' floor — update this recipe to handle" >&2
+      echo "  the new format, or fix the pin in pyproject.toml." >&2
+      exit 1
     fi
     if version_ge "$cur" "$min"; then
       echo "doctor: uv $cur satisfies required $spec — OK"
