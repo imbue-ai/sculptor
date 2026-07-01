@@ -102,6 +102,7 @@ from sculptor.agents.pi_agent.output_processor import humanize_pi_failure_reason
 from sculptor.agents.pi_agent.output_processor import humanize_transient_failure_reason
 from sculptor.agents.pi_agent.output_processor import is_transient_provider_error
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
+from sculptor.agents.pi_agent.output_processor import sum_message_usage
 from sculptor.agents.pi_agent.prompt_assembly import build_attachment_instructions
 from sculptor.agents.pi_agent.prompt_assembly import build_image_block
 from sculptor.agents.pi_agent.prompt_assembly import split_image_and_path_attachments
@@ -139,6 +140,7 @@ from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
 from sculptor.interfaces.agents.agent import SetModelUserMessage
 from sculptor.interfaces.agents.agent import StopAgentUserMessage
+from sculptor.interfaces.agents.agent import TurnMetricsAgentMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_SHUTDOWN_DUE_TO_EXCEPTION
 from sculptor.interfaces.agents.errors import AgentCrashed
@@ -160,6 +162,7 @@ from sculptor.state.chat_state import ContentBlockTypes
 from sculptor.state.chat_state import TextBlock
 from sculptor.state.chat_state import ToolResultBlock
 from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.chat_state import TurnMetrics
 from sculptor.state.chat_state import make_plan_approval_question
 from sculptor.state.claude_state import get_tool_invocation_string
 from sculptor.state.messages import ChatInputUserMessage
@@ -477,9 +480,11 @@ class _TurnState:
     __slots__ = (
         "accumulated_text",
         "assistant_message_id",
+        "changed_files",
         "compaction_open",
         "first_message_id",
         "prompt_id",
+        "start_time",
         "tool_calls",
     )
 
@@ -489,12 +494,27 @@ class _TurnState:
         self.assistant_message_id = AssistantMessageID(generate_id())
         self.first_message_id = AgentMessageID()
         self.tool_calls: dict[str, _ToolCall] = {}
+        # Wall-clock start of this agent run, used for the turn footer's duration.
+        # Mirrors Claude's per-turn duration (wall-clock, not the model's
+        # response-only time). A transient retry rebuilds _TurnState, so this
+        # measures the final (successful) attempt.
+        self.start_time = time.monotonic()
+        # File paths mutated by file-changing tools during this run (git-relative
+        # display paths from the tool args). Feeds the turn footer's "N files
+        # changed" — the authoritative, all-tools source the frontend prefers over
+        # its streaming-time ToolUseBlock scan. Insertion-ordered + de-duplicated.
+        self.changed_files: list[str] = []
         # True between a compaction_start and its matching compaction_end.
         # Compaction spans assistant messages, so this is NOT reset in
         # reset_accumulator. If the run exits while it is still open (process
         # death or a raised error mid-compaction), _consume_until_turn_end
         # emits the missing Done so is_auto_compacting cannot stick on True.
         self.compaction_open = False
+
+    def note_changed_file(self, file_path: str) -> None:
+        """Record a mutated file path once, preserving first-seen order."""
+        if file_path and file_path not in self.changed_files:
+            self.changed_files.append(file_path)
 
     def reset_accumulator(self) -> None:
         self.accumulated_text = ""
@@ -1950,21 +1970,30 @@ class PiAgent(DefaultAgentWrapper):
             case _ as unreachable:
                 assert_never(unreachable)
 
-    def _refresh_diff_if_file_change(self, parsed: ParsedToolExecutionEnd) -> None:
+    def _refresh_diff_if_file_change(self, parsed: ParsedToolExecutionEnd, state: _TurnState) -> None:
         """Refresh the workspace diff after a successful file-mutating tool.
 
         Pi runs its own `edit`/`write`/`bash` loop and emits no signal that
         files changed beyond these tool-execution events, so Sculptor must
         regenerate the diff artifact itself. Mirrors Claude's `on_diff_needed`
         path (`should_send_diff_and_branch_name_artifacts`): trigger on a
-        file-change tool, skip on tool errors.
+        file-change tool, skip on tool errors. Also records the mutated file's
+        path onto the turn state so the turn footer's "N files changed" reflects
+        it (edit/write carry a `file_path`; a bash-driven change carries none, so
+        it is not counted individually — matching the tools whose path we know).
         """
+        if parsed.tool_name not in FILE_CHANGE_TOOL_NAMES or parsed.is_error:
+            return
+        info = state.tool_calls.get(parsed.tool_call_id)
+        if info is not None:
+            file_path = info.claude_input.get("file_path")
+            if isinstance(file_path, str):
+                state.note_changed_file(file_path)
         on_diff_needed = self.on_diff_needed
         if on_diff_needed is None:
             return
-        if parsed.tool_name in FILE_CHANGE_TOOL_NAMES and not parsed.is_error:
-            logger.debug("PiAgent file-change tool finished ({}), refreshing workspace diff", parsed.tool_name)
-            on_diff_needed()
+        logger.debug("PiAgent file-change tool finished ({}), refreshing workspace diff", parsed.tool_name)
+        on_diff_needed()
 
     def _handle_message_update(self, parsed: ParsedMessageUpdate, state: _TurnState) -> None:
         inner = parsed.assistant_message_event
@@ -2191,7 +2220,7 @@ class PiAgent(DefaultAgentWrapper):
 
     def _handle_tool_execution_end(self, parsed: ParsedToolExecutionEnd, state: _TurnState) -> None:
         """Finish a tool call: refresh the workspace diff, then emit its result block."""
-        self._refresh_diff_if_file_change(parsed)
+        self._refresh_diff_if_file_change(parsed, state)
         self._emit_tool_result(parsed, state)
 
     def _emit_tool_result(self, parsed: ParsedToolExecutionEnd, state: _TurnState) -> None:
@@ -2568,7 +2597,34 @@ class PiAgent(DefaultAgentWrapper):
                     content=(TextBlock(text=state.accumulated_text),),
                 )
             )
+        self._emit_turn_metrics(parsed, state)
         return True
+
+    def _emit_turn_metrics(self, parsed: ParsedAgentEnd, state: _TurnState) -> None:
+        """Emit the per-turn footer metrics at the agent-run boundary.
+
+        Mirrors Claude's `TurnMetricsAgentMessage` (output_processor
+        `_flush_pending_turn_metrics`): the footer under a completed assistant
+        turn shows wall-clock duration, this turn's token totals, and the files it
+        changed. Emitted BEFORE the turn's terminating `RequestSuccess` so
+        message_conversion stamps it onto the in-progress chat message before
+        finalizing (see `_attach_turn_metrics`). Token totals are summed across the
+        run's assistant messages (pi reports usage per message); an interrupted
+        turn with no usage still emits duration + changed files so the footer
+        renders. pi exposes no numeric context-window threshold on the wire, so
+        the context fields stay unset (the "% context" chip is Claude-only — see
+        TokenPopoverContent). Duplicate `willRetry` runs do not reach here (the
+        retry loop rebuilds `_TurnState`), so this fires once per user turn.
+        """
+        input_tokens, output_tokens = sum_message_usage(parsed.messages)
+        turn_metrics = TurnMetrics(
+            duration_seconds=time.monotonic() - state.start_time,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            reasoning_tokens=None,
+            changed_files=list(state.changed_files),
+        )
+        self._output_messages.put(TurnMetricsAgentMessage(message_id=AgentMessageID(), turn_metrics=turn_metrics))
 
     def _handle_auto_retry_end(self, parsed: ParsedAutoRetryEnd, state: _TurnState) -> None:
         if not parsed.success:

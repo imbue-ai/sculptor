@@ -68,6 +68,7 @@ from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
 from sculptor.interfaces.agents.agent import SetModelUserMessage
 from sculptor.interfaces.agents.agent import StopAgentUserMessage
+from sculptor.interfaces.agents.agent import TurnMetricsAgentMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.errors import PiBinaryNotFoundError
 from sculptor.interfaces.agents.errors import PiCrashError
@@ -1324,7 +1325,9 @@ def test_extension_ui_fire_and_forget_method_is_ignored() -> None:
         ]
     )
     agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
-    assert not _drain(agent._output_messages)
+    # Only the turn footer's metrics (emitted at agent_end); the notify emits nothing.
+    emitted = _drain(agent._output_messages)
+    assert all(isinstance(m, TurnMetricsAgentMessage) for m in emitted)
 
 
 def test_extension_error_from_foreign_extension_is_logged_and_non_terminal() -> None:
@@ -2348,7 +2351,10 @@ def test_unconsumed_event_is_discarded_and_turn_still_ends(payload: dict[str, An
     )
     # Must not raise and must not hang — the agent_end terminates the turn.
     agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
-    assert not _drain(agent._output_messages)
+    # The only message emitted is the turn footer's metrics at agent_end; the
+    # discarded event itself contributes nothing.
+    emitted = _drain(agent._output_messages)
+    assert all(isinstance(m, TurnMetricsAgentMessage) for m in emitted)
 
 
 def test_extract_tool_call_blocks_returns_only_tool_call_blocks() -> None:
@@ -3465,3 +3471,121 @@ def test_fetch_available_models_probe_returns_empty_when_pi_lists_no_models() ->
     probe_process.close_stdin.assert_called_once()
     probe_process.terminate.assert_called_once()
     assert agent._process is None
+
+
+# --- Turn footer metrics (TurnMetricsAgentMessage at agent_end) --------------
+
+
+def _turn_metrics(messages: list) -> list[TurnMetricsAgentMessage]:
+    return [m for m in messages if isinstance(m, TurnMetricsAgentMessage)]
+
+
+def test_agent_end_emits_turn_metrics_with_summed_token_usage() -> None:
+    """A completed turn emits one TurnMetricsAgentMessage carrying wall-clock
+    duration and this turn's token totals (summed across the run's assistant
+    messages), so the frontend renders the per-turn footer that Claude shows."""
+    agent = _make_agent()
+    msg_a = {**_assistant_msg("part one."), "usage": {"input": 100, "output": 40}}
+    msg_b = {**_assistant_msg("part two."), "usage": {"input": 30, "output": 10}}
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(_text_delta_update("part two.", "part two.")),
+            _event({"type": "message_end", "message": msg_b}),
+            _event({"type": "agent_end", "messages": [msg_a, msg_b], "willRetry": False}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+    metrics = _turn_metrics(_drain(agent._output_messages))
+    assert len(metrics) == 1
+    turn = metrics[0].turn_metrics
+    assert turn.input_tokens == 130
+    assert turn.output_tokens == 50
+    assert turn.duration_seconds >= 0.0
+    assert turn.changed_files == []
+
+
+def test_agent_end_emits_turn_metrics_without_tokens_when_usage_absent() -> None:
+    """An agent_end whose messages carry no usage (e.g. an interrupted turn) still
+    emits metrics — duration only — so the footer renders without token counts."""
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(_text_delta_update("hi.", "hi.")),
+            _event({"type": "message_end", "message": _assistant_msg("hi.")}),
+            _event({"type": "agent_end", "messages": [], "willRetry": False}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+    metrics = _turn_metrics(_drain(agent._output_messages))
+    assert len(metrics) == 1
+    turn = metrics[0].turn_metrics
+    assert turn.input_tokens is None
+    assert turn.output_tokens is None
+
+
+def test_turn_metrics_reports_changed_files_from_file_mutating_tools() -> None:
+    """Files edited/written during the turn appear on turn_metrics.changed_files
+    (the authoritative "N files changed" source), de-duplicated and errors excluded."""
+    agent = _make_agent(on_diff_needed=MagicMock())
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(
+                {
+                    "type": "message_end",
+                    "message": _assistant_msg_with_content(
+                        [
+                            _tool_call_block("w1", "write", {"path": "/repo/new.txt", "content": "x"}),
+                            _tool_call_block("e1", "edit", {"path": "/repo/a.txt", "edits": []}),
+                            _tool_call_block("e2", "edit", {"path": "/repo/a.txt", "edits": []}),
+                            _tool_call_block("r1", "read", {"path": "/repo/b.txt"}),
+                        ]
+                    ),
+                }
+            ),
+            _event(_tool_execution_end("w1", "write", result={"content": [{"type": "text", "text": "ok"}]})),
+            _event(_tool_execution_end("e1", "edit", result={"content": [{"type": "text", "text": "ok"}]})),
+            _event(_tool_execution_end("e2", "edit", result={"content": [{"type": "text", "text": "ok"}]})),
+            _event(_tool_execution_end("r1", "read", result={"content": [{"type": "text", "text": "data"}]})),
+            _event({"type": "agent_end", "messages": [], "willRetry": False}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+    metrics = _turn_metrics(_drain(agent._output_messages))
+    assert len(metrics) == 1
+    # write + edit are counted (edit on the same file only once); read is not a mutation.
+    assert metrics[0].turn_metrics.changed_files == ["/repo/new.txt", "/repo/a.txt"]
+
+
+def test_failed_tool_call_is_excluded_from_changed_files() -> None:
+    """A file-mutating tool that ended in error does not count toward changed_files."""
+    agent = _make_agent(on_diff_needed=MagicMock())
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(
+                {
+                    "type": "message_end",
+                    "message": _assistant_msg_with_content(
+                        [_tool_call_block("w1", "write", {"path": "/repo/new.txt", "content": "x"})]
+                    ),
+                }
+            ),
+            _event(
+                _tool_execution_end(
+                    "w1", "write", result={"content": [{"type": "text", "text": "boom"}]}, is_error=True
+                )
+            ),
+            _event({"type": "agent_end", "messages": [], "willRetry": False}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+    metrics = _turn_metrics(_drain(agent._output_messages))
+    assert len(metrics) == 1
+    assert metrics[0].turn_metrics.changed_files == []
