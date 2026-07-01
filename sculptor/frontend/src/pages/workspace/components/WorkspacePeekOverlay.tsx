@@ -1,5 +1,7 @@
 import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
 
+import { ElementIds } from "~/api";
+
 import styles from "./WorkspacePeekOverlay.module.scss";
 import { WorkspacePeekPopover } from "./WorkspacePeekPopover";
 
@@ -7,7 +9,7 @@ const OPEN_DELAY_MS = 600;
 const CLOSE_DELAY_MS = 80;
 // After closing, re-entering a tab within this window reopens immediately.
 const REOPEN_GRACE_PERIOD_MS = 300;
-// Gap in pixels between the anchoring sidebar row and the peek overlay.
+// Gap in pixels between the sidebar's edge and the peek overlay.
 const PEEK_OFFSET_PX = 4;
 
 type OverlayPosition = {
@@ -55,10 +57,16 @@ export const WorkspacePeekOverlay = ({ onNavigate }: WorkspacePeekOverlayProps):
   }, []);
 
   const updatePosition = useCallback((tabElement: Element): void => {
-    // Workspace rows live in the left sidebar, so the peek anchors just to the
-    // right of the row (level with its top) rather than below it.
-    const rect = tabElement.getBoundingClientRect();
-    setPosition({ x: rect.right + PEEK_OFFSET_PX, y: rect.top });
+    // Workspace rows live in the left sidebar, so the peek anchors just past the
+    // sidebar's right edge (level with the hovered row's top) rather than below
+    // it. Anchor to the sidebar container, not the row itself: the row's right
+    // edge shifts inward as its hover-action icons appear/hide, and the sidebar
+    // is resizable — deriving x from the sidebar edge keeps the peek flush
+    // against it no matter the width.
+    const rowRect = tabElement.getBoundingClientRect();
+    const sidebar = tabElement.closest(`[data-testid="${ElementIds.WORKSPACE_SIDEBAR}"]`);
+    const anchorRight = sidebar ? sidebar.getBoundingClientRect().right : rowRect.right;
+    setPosition({ x: anchorRight + PEEK_OFFSET_PX, y: rowRect.top });
   }, []);
 
   const dismiss = useCallback((): void => {
