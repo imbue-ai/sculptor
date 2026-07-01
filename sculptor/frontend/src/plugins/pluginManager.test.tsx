@@ -839,4 +839,23 @@ describe("PluginManager sculpt-command handling", () => {
     const inspected = await manager.handlePluginCommand(store, command("inspect", { pluginId: DEV_SOURCE }));
     expect((inspected.plugins ?? []).map((p) => p.pluginId)).toEqual(["alpha"]);
   });
+
+  it("attributes a plugin's overlays in inspect registrations", async () => {
+    const store = createStore();
+    const manager = new PluginManager({
+      builtinSources: [],
+      fetchManifest: async (manifestUrl): Promise<{ manifest: PluginManifest }> => ({
+        manifest: manifestFor(idFromManifestUrl(manifestUrl)),
+      }),
+      activate: async (_url, manifest, makeApi): Promise<LoadedPlugin> => {
+        makeApi(manifest).registerOverlay({ id: `${manifest.id}-overlay`, component: (): null => null });
+        return { manifest, dispose: vi.fn() };
+      },
+    });
+
+    await manager.addSource(store, "/plugins/beta");
+    const inspected = await manager.handlePluginCommand(store, command("inspect", { pluginId: "beta" }));
+
+    expect(inspected.plugins?.[0]?.registrations?.overlays).toEqual(["beta-overlay"]);
+  });
 });

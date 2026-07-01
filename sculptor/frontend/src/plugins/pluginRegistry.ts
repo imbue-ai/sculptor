@@ -24,7 +24,9 @@ export const pluginSettingsComponentsAtom = atom<Readonly<Record<string, Compone
  * order. Each entry's component is already wrapped by the loader in an error
  * boundary and the plugin's PluginContext.
  */
-export const pluginOverlaysAtom = atom<ReadonlyArray<{ id: string; component: ComponentType }>>([]);
+// `pluginId` attributes each overlay to its owning plugin so `inspect` can list
+// a plugin's overlays; it's the manifest id, not the per-overlay contribution id.
+export const pluginOverlaysAtom = atom<ReadonlyArray<{ id: string; component: ComponentType; pluginId: string }>>([]);
 
 /**
  * Workspace-scoped widgets contributed by plugins via `registerWorkspaceWidget`.

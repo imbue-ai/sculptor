@@ -871,7 +871,7 @@ export class PluginManager {
           </PluginErrorBoundary>
         );
         Wrapped.displayName = `PluginOverlay(${overlay.id})`;
-        const entry = { id: overlay.id, component: Wrapped };
+        const entry = { id: overlay.id, component: Wrapped, pluginId: manifest.id };
 
         // Replace-by-id; undo by instance (see the panel undo above).
         store.set(pluginOverlaysAtom, (prev) => [...prev.filter((o) => o.id !== overlay.id), entry]);
@@ -1097,13 +1097,9 @@ export class PluginManager {
   }
 
   /**
-   * Names-only registration summary for a plugin. Panels are attributable per
-   * plugin (each carries its `pluginId`); `hasSettings` is a membership test
-   * over the settings-component map. Overlays are NOT attributable per plugin —
-   * the overlay atom holds only `{id, component}` with no owning plugin id — so
-   * this returns an empty overlay list rather than mis-attributing the app's
-   * overlays to whichever plugin is being inspected. (Wiring plugin ids through
-   * the overlay registration is a follow-up.)
+   * Names-only registration summary for a plugin: the panels and overlays it
+   * registered (each entry carries its owning `pluginId`) and whether it
+   * contributed a settings component.
    */
   private registrationsForPluginId(store: JotaiStore, pluginId: string): PluginRegistrations {
     const panels = store
@@ -1111,7 +1107,11 @@ export class PluginManager {
       .filter((p) => p.pluginId === pluginId)
       .map((p) => p.displayName || p.id);
     const hasSettings = pluginId in store.get(pluginSettingsComponentsAtom);
-    return { panels, hasSettings, overlays: [] };
+    const overlays = store
+      .get(pluginOverlaysAtom)
+      .filter((o) => o.pluginId === pluginId)
+      .map((o) => o.id);
+    return { panels, hasSettings, overlays };
   }
 
   /** Build a snapshot for a single source (used by load/reload). */
