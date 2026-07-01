@@ -17,6 +17,8 @@ import base64
 import json
 from pathlib import Path
 
+from playwright.sync_api import Error as PlaywrightError
+
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.user_config.user_config import load_config
 from sculptor.services.user_config.user_config import save_config
@@ -36,6 +38,11 @@ _PROBE_MANIFEST: dict[str, object] = {
     "sdkVersion": "^1.0.0",
 }
 _PROBE_JS = "export default function activate(api) {}\n"
+
+# How long to wait for the renderer's stream to connect and answer a command
+# before giving up — the page is still booting when the test starts.
+_RENDERER_READY_ATTEMPTS = 40
+_RENDERER_POLL_INTERVAL_MS = 500
 
 
 def _b64(text: str) -> str:
@@ -59,7 +66,7 @@ def _agent_loading_populator(folder_path: Path) -> None:
 def _post_json(instance: SculptorInstance, path: str, body: dict[str, object]) -> dict:
     """POST JSON to the backend from the page's context (carries the session), returning the parsed body."""
     base_url = instance.backend_api_url.rstrip("/")
-    response = instance.page.request.post(f"{base_url}{path}", data=body, timeout=20_000)
+    response = instance.page.request.post(f"{base_url}{path}", data=body)
     assert response.ok, f"POST {path} -> {response.status}: {response.text()}"
     return response.json()
 
@@ -70,12 +77,20 @@ def _wait_for_renderer(instance: SculptorInstance, workspace_id: str) -> None:
     A read-only ``list`` returns one reply per connected renderer; polling it
     until it's non-empty confirms the exact precondition a write command needs —
     a subscriber that receives the broadcast and replies over the bridge.
+
+    The page is still booting when the test starts, so a transient request error
+    (the backend not yet accepting connections) or an as-yet-empty reply is
+    treated as "not ready" and retried, not a failure.
     """
-    for _ in range(40):
-        result = _post_json(instance, f"/api/v1/workspaces/{workspace_id}/plugins/command", {"op": "list"})
-        if result["results"]:
-            return
-        instance.page.wait_for_timeout(500)
+    url = f"{instance.backend_api_url.rstrip('/')}/api/v1/workspaces/{workspace_id}/plugins/command"
+    for _ in range(_RENDERER_READY_ATTEMPTS):
+        try:
+            response = instance.page.request.post(url, data={"op": "list"})
+            if response.ok and response.json().get("results"):
+                return
+        except PlaywrightError:
+            pass
+        instance.page.wait_for_timeout(_RENDERER_POLL_INTERVAL_MS)
     raise AssertionError("renderer stream never connected / responded to a plugin command")
 
 
@@ -120,6 +135,7 @@ def test_plugin_command_load_reaches_the_live_renderer(sculptor_instance_factory
         assert result["ok"] is True, result
         assert result["renderer"]["rendererId"], result["renderer"]
         assert result["renderer"]["environment"] == "browser"
+        assert result["plugins"], f"expected the loaded plugin in the reply, got {result}"
         plugin = result["plugins"][0]
         assert plugin["pluginId"] == "probe", plugin
         assert plugin["status"] == "loaded", plugin
