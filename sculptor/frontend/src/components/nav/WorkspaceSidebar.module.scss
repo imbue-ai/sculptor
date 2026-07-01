@@ -256,37 +256,13 @@
   flex-shrink: 0;
 }
 
-// Report-a-bug + version row, anchored beneath the Settings link.
-.bottomMeta {
-  min-width: 0;
-  padding: 0 var(--space-2);
-}
-
-// Bug entry styled like a nav item but compact so it sits beside the version.
-.reportBugButton {
+// Version string on its own row beneath the nav items, inset to align with
+// their labels.
+.versionRow {
   align-items: center;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-2);
-  color: var(--gray-11);
-  cursor: pointer;
   display: flex;
-  flex-shrink: 1;
-  font-size: var(--font-size-1);
-  gap: var(--space-2);
   min-width: 0;
   padding: var(--space-1) var(--space-2);
-  text-align: left;
-
-  &:hover {
-    background: var(--gray-a3);
-  }
-}
-
-.versionWrapper {
-  align-items: center;
-  display: flex;
-  flex-shrink: 0;
 }
 
 // Drag gutter pinned to the sidebar's right border. ResizeHandle supplies the

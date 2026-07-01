@@ -585,22 +585,20 @@ export const WorkspaceSidebar = (): ReactElement | null => {
           onClick={handleOpenSettings}
           testId={ElementIds.SIDEBAR_SETTINGS_LINK}
         />
-        <Flex align="center" justify="between" className={styles.bottomMeta} gap="2">
-          <ReportProblemPopover>
-            <button
-              type="button"
-              className={styles.reportBugButton}
-              aria-label="Report a bug"
-              data-testid={ElementIds.SIDEBAR_REPORT_BUG}
-            >
-              <Bug size={14} className={styles.navIcon} />
-              <span className={styles.navLabel}>Report a bug</span>
-            </button>
-          </ReportProblemPopover>
-          <span className={styles.versionWrapper} data-testid={ElementIds.SIDEBAR_VERSION}>
-            <VersionDisplay />
-          </span>
-        </Flex>
+        <ReportProblemPopover>
+          <button
+            type="button"
+            className={styles.navItem}
+            aria-label="Report a bug"
+            data-testid={ElementIds.SIDEBAR_REPORT_BUG}
+          >
+            <Bug size={16} className={styles.navIcon} />
+            <span className={styles.navLabel}>Report a bug</span>
+          </button>
+        </ReportProblemPopover>
+        <div className={styles.versionRow} data-testid={ElementIds.SIDEBAR_VERSION}>
+          <VersionDisplay />
+        </div>
       </nav>
 
       <ResizeHandle
