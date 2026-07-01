@@ -167,6 +167,27 @@ export const validateManifest = (manifest: PluginManifest): Error | null => {
 /** Normalize a user-entered source for storage/comparison: trim and drop trailing slashes. */
 const normalizeSource = (raw: string): string => raw.trim().replace(/\/+$/, "");
 
+/**
+ * A human-readable reason a `load`/`reload` did not end with the plugin loaded,
+ * or `undefined` when every affected plugin is `loaded`. Used to set the command
+ * result's `ok`, so the CLI reports failure (and exits non-zero) for a plugin
+ * that uploaded and dispatched fine but then errored at validate/import/activate.
+ */
+const describeLoadFailure = (plugins: ReadonlyArray<PluginSnapshot>): string | undefined => {
+  if (plugins.length === 0) return "load produced no plugin state";
+  const failed = plugins.find((plugin) => plugin.status !== "loaded");
+  if (failed === undefined) return undefined;
+  if (failed.status === "error") {
+    const where = failed.errorPhase ? ` (${failed.errorPhase})` : "";
+    return `plugin "${failed.pluginId}" failed to load${where}: ${failed.errorMessage ?? "unknown error"}`;
+  }
+
+  if (failed.status === "shadowed") {
+    return `plugin "${failed.pluginId}" did not load: its id is already provided by ${failed.activeSource ?? "another source"}`;
+  }
+  return `plugin "${failed.pluginId}" did not load (status: ${failed.status})`;
+};
+
 /** Turn a user-entered source (URL or directory) into a manifest URL. */
 const normalizeManifestUrl = (source: string): string => {
   const trimmed = normalizeSource(source);
@@ -682,7 +703,15 @@ export class PluginManager {
 
     if ("phase" in result) {
       console.error(`Plugin manifest load failed (${result.phase}) for "${source}"`, result.error);
-      this.setSourceState(store, source, { status: "error", kind, phase: result.phase, message: result.error.message });
+      this.setSourceState(store, source, {
+        status: "error",
+        kind,
+        phase: result.phase,
+        message: result.error.message,
+        // Real manifest id for a validate-phase failure; the source string for a
+        // fetch/parse failure where no id could be read (a harmless self-match).
+        pluginId: result.manifest.id,
+      });
       return;
     }
 
@@ -747,6 +776,7 @@ export class PluginManager {
         kind,
         phase: outcome.phase,
         message: outcome.error.message,
+        pluginId: manifest.id,
       });
       return false;
     }
@@ -914,6 +944,12 @@ export class PluginManager {
     };
     try {
       const plugins = await this.runPluginCommand(store, action);
+      // A load/reload whose plugin fails at validate/import/activate settles into
+      // an error snapshot rather than throwing, so `ok` must reflect the plugin's
+      // final status — otherwise the CLI reports success for a plugin that never
+      // loaded (and exits 0).
+      const loadFailure = action.op === "load" || action.op === "reload" ? describeLoadFailure(plugins) : undefined;
+      if (loadFailure !== undefined) return { ...base, ok: false, error: loadFailure, plugins };
       return { ...base, ok: true, plugins };
     } catch (e) {
       return { ...base, ok: false, error: e instanceof Error ? e.message : String(e), plugins: [] };
@@ -958,31 +994,44 @@ export class PluginManager {
       }
 
       case "reload": {
-        const source = this.sourceForPluginId(action.pluginId);
+        if (!action.pluginId) throw new Error("reload requires a pluginId");
+        // Resolve by id or source so a failed load can be retried by id after a
+        // fix, not just an already-active plugin.
+        const [source] = this.resolveSources(store, action.pluginId);
+        if (source === undefined) throw new Error(`plugin "${action.pluginId}" is not loaded in this renderer`);
         await this.reloadSource(store, source, action.cacheBust ?? undefined);
         return this.snapshotForSource(store, source);
       }
 
       case "unload": {
-        const source = this.sourceForPluginId(action.pluginId);
-        this.unloadSource(source);
-        this.setSourceState(store, source, undefined);
+        if (!action.pluginId) throw new Error("unload requires a pluginId");
+        // Resolve by id OR source so a *failed* load — whose row is keyed by its
+        // source path and isn't in the active-id map — can still be cleared,
+        // rather than lingering as a stale `[error]` row until an app reload.
+        const sources = this.resolveSources(store, action.pluginId);
+        if (sources.length === 0) throw new Error(`plugin "${action.pluginId}" is not loaded in this renderer`);
+        for (const source of sources) {
+          this.unloadSource(source);
+          this.setSourceState(store, source, undefined);
+        }
         // The plugin is gone; report the now-removed id with a "missing" status
         // so the CLI can confirm which plugin was unloaded.
         return [
           {
-            pluginId: action.pluginId ?? "",
-            source,
+            pluginId: action.pluginId,
+            source: sources[0],
             status: "missing",
-            origin: this.originOf(source),
-            configKeys: this.configKeysForPluginId(action.pluginId ?? ""),
+            origin: this.originOf(sources[0]),
+            configKeys: this.configKeysForPluginId(action.pluginId),
           },
         ];
       }
 
       case "inspect": {
         if (!action.pluginId) throw new Error("inspect requires a pluginId");
-        return this.snapshotAll(store).filter((p) => p.pluginId === action.pluginId);
+        // Match by id or by source path, so a failed load (reported under its
+        // path when no id is known) is still inspectable.
+        return this.snapshotAll(store).filter((p) => p.pluginId === action.pluginId || p.source === action.pluginId);
       }
       case "list":
         return this.snapshotAll(store);
@@ -991,12 +1040,27 @@ export class PluginManager {
     }
   }
 
-  /** The active source owning `pluginId`, or throw if the plugin isn't loaded here. */
-  private sourceForPluginId(pluginId: string | null | undefined): string {
-    if (!pluginId) throw new Error("operation requires a pluginId");
-    const source = this.activeByPluginId.get(pluginId);
-    if (source === undefined) throw new Error(`plugin "${pluginId}" is not loaded in this renderer`);
-    return source;
+  /**
+   * The plugin id a source is known by: the manifest id when loaded/shadowed,
+   * the retained id on a failed load, else the manager's claim map, else the
+   * source string itself.
+   */
+  private pluginIdForState(source: string, state: PluginSourceState): string {
+    if (state.status === "loaded" || state.status === "shadowed") return state.manifest.id;
+    if (state.status === "error" && state.pluginId !== undefined) return state.pluginId;
+    return this.pluginIdBySource.get(source) ?? source;
+  }
+
+  /**
+   * Every source addressable by `target` — matched on its plugin id (active,
+   * shadowed, or a failed load's retained id) or its raw source string. Reaches
+   * failed/inactive entries that a lookup in the active-id map alone would miss.
+   */
+  private resolveSources(store: JotaiStore, target: string): Array<string> {
+    const states = store.get(pluginSourceStatesAtom);
+    return Object.keys(states).filter(
+      (source) => source === target || this.pluginIdForState(source, states[source]) === target,
+    );
   }
 
   /**
@@ -1065,11 +1129,7 @@ export class PluginManager {
 
   /** Assemble one redacted `PluginSnapshot` from a source's live state. */
   private snapshotFrom(store: JotaiStore, source: string, state: PluginSourceState): PluginSnapshot {
-    // The plugin id comes from the manifest when the source has one (loaded/
-    // shadowed), else from the manager's claim map (a source that claimed an id
-    // but hasn't finished activating), else falls back to the source string.
-    const manifestId = state.status === "loaded" || state.status === "shadowed" ? state.manifest.id : undefined;
-    const pluginId = manifestId ?? this.pluginIdBySource.get(source) ?? source;
+    const pluginId = this.pluginIdForState(source, state);
     const snapshot: PluginSnapshot = {
       pluginId,
       source,
