@@ -29,6 +29,9 @@ describe("parseFrontmatter", () => {
     const content = [
       "---",
       "name: tool",
+      "desc: |",
+      "  line one",
+      "  line two",
       "tags:",
       "  - docs",
       "  - internal",
@@ -38,7 +41,14 @@ describe("parseFrontmatter", () => {
       "Body",
     ].join("\n");
     const { frontmatter } = parseFrontmatter(content);
-    expect(frontmatter?.data).toEqual({ name: "tool", tags: ["docs", "internal"], meta: { level: 2 } });
+    // A `|` literal block scalar preserves the internal newline and clips to a
+    // single trailing one.
+    expect(frontmatter?.data).toEqual({
+      name: "tool",
+      desc: "line one\nline two\n",
+      tags: ["docs", "internal"],
+      meta: { level: 2 },
+    });
   });
 
   it("falls back to raw (data null) on malformed YAML rather than dropping it", () => {

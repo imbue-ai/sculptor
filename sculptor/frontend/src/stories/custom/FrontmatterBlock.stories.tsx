@@ -40,7 +40,7 @@ export const TypicalDoc: Story = {
     source: [
       "---",
       "title: Design Notes",
-      "author: Ada Lovelace",
+      "author: Example Author",
       "date: 2026-01-01",
       "draft: false",
       "---",
