@@ -14,6 +14,7 @@ import { useTaskSupportsSkills } from "~/common/state/hooks/useTaskHelpers";
 import { PanelHeader } from "~/components/panels/PanelHeader";
 import { registerPanelComponent } from "~/components/sections/registry/panelRegistry.ts";
 import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
+import { draggedPanelIdAtom } from "~/components/sections/transientAtoms.ts";
 import type { SkillType } from "~/components/skillBadge";
 import { SkillChip } from "~/components/skills/SkillChip";
 import { SkillHoverContent } from "~/components/skills/SkillHoverContent";
@@ -112,6 +113,13 @@ export const SkillsPanel = (): ReactElement => {
   const [isPopoverVisible, setIsPopoverVisible] = useState(false);
   const [hasAnimated, setHasAnimated] = useState(false);
 
+  // A panel drag passing over the skills list would trip chip mouse-enter and pop a
+  // skill card mid-drag. Track the active drag in a ref so the (stable) chip handler
+  // can suppress the popover without re-subscribing.
+  const isPanelDragging = useAtomValue(draggedPanelIdAtom) !== null;
+  const isPanelDraggingRef = useRef(isPanelDragging);
+  isPanelDraggingRef.current = isPanelDragging;
+
   const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isOverChipRef = useRef(false);
@@ -192,6 +200,10 @@ export const SkillsPanel = (): ReactElement => {
 
   const handleChipMouseEnter = useCallback(
     (skill: SkillEntry, chipElement: HTMLElement): void => {
+      // Ignore hover triggered by a panel drag passing over the list.
+      if (isPanelDraggingRef.current) {
+        return;
+      }
       isOverChipRef.current = true;
       clearCloseTimer();
 

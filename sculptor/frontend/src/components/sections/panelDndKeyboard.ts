@@ -18,7 +18,7 @@
 // leaks across drags or into a pointer drag.
 
 import type { CollisionDetection, DroppableContainer, KeyboardCoordinateGetter, UniqueIdentifier } from "@dnd-kit/core";
-import { closestCenter, closestCorners, getFirstCollision, KeyboardCode } from "@dnd-kit/core";
+import { closestCorners, getFirstCollision, KeyboardCode, pointerWithin, rectIntersection } from "@dnd-kit/core";
 
 const DIRECTIONAL_CODES: ReadonlyArray<string> = [
   KeyboardCode.Down,
@@ -115,11 +115,22 @@ export const panelKeyboardCoordinateGetter: KeyboardCoordinateGetter = (
 
 // During a keyboard drag (no pointer coordinates), resolve `over` to the section the
 // getter stepped to — bypassing geometry that thin rails and scroll-clamping would
-// otherwise get wrong. Before the first arrow (target unset) and for pointer drags,
-// fall back to closestCenter.
+// otherwise get wrong.
+//
+// For pointer drags, resolve to the droppable the pointer is actually over
+// (pointerWithin) rather than the one whose center is nearest (closestCenter).
+// closestCenter let a tall section's center "win" well beyond its own bounds — so its
+// drop zone bled into a neighbor (you had to drag deep into the target before it
+// registered), thin collapsed rails lost to their fat neighbors, and reordering a tab
+// in a tall section could resolve to a different section. Fall back to rectIntersection
+// when the pointer sits in a gap between droppables so the drag still finds a target.
 export const panelCollisionDetection: CollisionDetection = (args) => {
   if (args.pointerCoordinates === null && keyboardDropTargetId !== null) {
     return [{ id: keyboardDropTargetId }];
   }
-  return closestCenter(args);
+  const pointerCollisions = pointerWithin(args);
+  if (pointerCollisions.length > 0) {
+    return pointerCollisions;
+  }
+  return rectIntersection(args);
 };
