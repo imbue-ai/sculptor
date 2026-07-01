@@ -178,30 +178,66 @@ def test_open_single_instance_panel_drops_from_list(sculptor_instance_: Sculptor
     expect(dropdown.get_panel_option("files")).to_have_count(0)
 
 
-@user_story("to have a new agent land in the center even when added from another section")
-def test_new_agent_from_left_lands_in_center(sculptor_instance_: SculptorInstance) -> None:
-    """A new agent created from the LEFT section `+` still lands in center (PANEL-06).
+@user_story("to add an agent to the section whose add-panel button I used")
+def test_new_agent_from_left_lands_in_left(sculptor_instance_: SculptorInstance) -> None:
+    """A new agent created from the LEFT section `+` lands in the LEFT section, not center.
 
-    Expands the left section so its header (and its `+`) renders — the default layout
-    already seeds Files there — then creates an agent from that left `+`; the new agent
-    tab appears in center, not left.
+    Adding a panel from a section's `+` is an explicit, scoped action, so the agent joins
+    THAT section (only the keyboard shortcut / CI-babysitter default to center). Expands
+    the left section (Files is seeded there) and creates an agent from its `+`; the new
+    agent tab appears in left and the center keeps just its original agent.
     """
     page = sculptor_instance_.page
     left_dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="left")
     center_tabs = PlaywrightPanelTabElement(page, sub_section="center")
     left_tabs = PlaywrightPanelTabElement(page, sub_section="left")
 
-    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Center Targeting WS")
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Section Targeting WS")
     expect(center_tabs.get_panel_tabs()).to_have_count(1)
 
     # Bring the left section up so its header `+` renders; Files is seeded there already.
     PlaywrightWorkspaceSection(page, "left").expand_section()
     expect(left_tabs.get_panel_tab("files")).to_be_visible()
 
-    # Create an agent from the LEFT `+` — it must land in center (PANEL-06).
+    # Create an agent from the LEFT `+` — it lands in LEFT (joining the seeded
+    # Files/Changes/Commits), not center.
     left_dropdown.open()
     left_dropdown.get_new_agent_item().click()
-    expect(center_tabs.get_panel_tabs()).to_have_count(2)
+    # The new agent tab appears in the left section...
+    expect(page.get_by_test_id("SECTION_HEADER-left").locator('[data-testid^="PANEL_TAB-agent:"]')).to_have_count(1)
+    # ...and NOT in center, which still shows only its original agent.
+    expect(page.get_by_test_id("SECTION_HEADER-center").locator('[data-testid^="PANEL_TAB-agent:"]')).to_have_count(1)
+
+
+@user_story("to add an agent to the right section without breaking the chat")
+def test_add_agent_to_right_section_renders_both_chats(sculptor_instance_: SculptorInstance) -> None:
+    """Adding an agent to the RIGHT section leaves a second agent chat mounted alongside
+    the center one; both must render (regression for the single-StreamingEngine crash).
+
+    Before the fix, mounting a second agent chat threw "StreamingEngine already
+    registered. Only one stream may be active at a time." — so a right-section agent
+    could never render while the center agent was open.
+    """
+    page = sculptor_instance_.page
+    right_dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="right")
+    right_tabs = PlaywrightPanelTabElement(page, sub_section="right")
+    center_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Add Agent Right WS")
+    expect(center_tabs.get_panel_tabs()).to_have_count(1)
+
+    # Expand the (empty) right section and add an agent from its `+`.
+    PlaywrightWorkspaceSection(page, "right").expand_section()
+    right_dropdown.open()
+    right_dropdown.get_new_agent_item().click()
+
+    # The new agent lands in the right section; the center keeps its own agent.
+    expect(right_tabs.get_panel_tabs()).to_have_count(1)
+    expect(center_tabs.get_panel_tabs()).to_have_count(1)
+
+    # Both agent panels are mounted at once (one per section) and each runs its own
+    # streaming engine, so both chat panels render rather than one crashing the engine.
+    expect(page.get_by_test_id("CHAT_PANEL")).to_have_count(2)
 
 
 @user_story("to add a panel through Cmd+K targeting the center section")

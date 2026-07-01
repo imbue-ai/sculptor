@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { StreamingEngine } from "./StreamingEngine.ts";
+import { activeEngineCount, registerEngine, StreamingEngine, unregisterEngine } from "./StreamingEngine.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function msg(blocks: Array<{ type: string; [k: string]: unknown }>): any {
@@ -26,6 +26,32 @@ function visibleText(result: any): string {
     .map((b: { text: string }) => b.text)
     .join("");
 }
+
+describe("engine registration", () => {
+  it("allows more than one engine to be registered at once (concurrent agent chats)", () => {
+    // Two agent panels — e.g. one in the center section and one in the right — each
+    // mount their own engine. Registering the second must NOT throw.
+    const a = new StreamingEngine();
+    const b = new StreamingEngine();
+    registerEngine(a);
+    expect(() => registerEngine(b)).not.toThrow();
+    expect(activeEngineCount()).toBe(2);
+
+    unregisterEngine(a);
+    expect(activeEngineCount()).toBe(1);
+    unregisterEngine(b);
+    expect(activeEngineCount()).toBe(0);
+  });
+
+  it("registering the same engine twice is idempotent", () => {
+    const a = new StreamingEngine();
+    registerEngine(a);
+    registerEngine(a);
+    expect(activeEngineCount()).toBe(1);
+    unregisterEngine(a);
+    expect(activeEngineCount()).toBe(0);
+  });
+});
 
 describe("StreamingEngine", () => {
   it("flush returns null when no snapshot", () => {
