@@ -61,6 +61,7 @@ from pydantic import ValidationError
 
 from sculptor.agents.attachments import save_attachments_to_environment
 from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
+from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.utils import get_state_file_contents
 from sculptor.agents.default.utils import get_turn_request_id
 from sculptor.agents.pi_agent.authenticated_providers import compute_authenticated_provider_ids
@@ -102,6 +103,7 @@ from sculptor.agents.pi_agent.output_processor import humanize_pi_failure_reason
 from sculptor.agents.pi_agent.output_processor import humanize_transient_failure_reason
 from sculptor.agents.pi_agent.output_processor import is_transient_provider_error
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
+from sculptor.agents.pi_agent.output_processor import sum_message_usage
 from sculptor.agents.pi_agent.prompt_assembly import build_attachment_instructions
 from sculptor.agents.pi_agent.prompt_assembly import build_image_block
 from sculptor.agents.pi_agent.prompt_assembly import split_image_and_path_attachments
@@ -139,6 +141,7 @@ from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
 from sculptor.interfaces.agents.agent import SetModelUserMessage
 from sculptor.interfaces.agents.agent import StopAgentUserMessage
+from sculptor.interfaces.agents.agent import TurnMetricsAgentMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_SHUTDOWN_DUE_TO_EXCEPTION
 from sculptor.interfaces.agents.errors import AgentCrashed
@@ -160,6 +163,7 @@ from sculptor.state.chat_state import ContentBlockTypes
 from sculptor.state.chat_state import TextBlock
 from sculptor.state.chat_state import ToolResultBlock
 from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.chat_state import TurnMetrics
 from sculptor.state.chat_state import make_plan_approval_question
 from sculptor.state.claude_state import get_tool_invocation_string
 from sculptor.state.messages import ChatInputUserMessage
@@ -480,6 +484,7 @@ class _TurnState:
         "compaction_open",
         "first_message_id",
         "prompt_id",
+        "start_time",
         "tool_calls",
     )
 
@@ -489,6 +494,9 @@ class _TurnState:
         self.assistant_message_id = AssistantMessageID(generate_id())
         self.first_message_id = AgentMessageID()
         self.tool_calls: dict[str, _ToolCall] = {}
+        # Wall-clock start of this agent run, for the turn footer's duration
+        # (wall-clock, not the model's response-only time, to mirror Claude).
+        self.start_time = time.monotonic()
         # True between a compaction_start and its matching compaction_end.
         # Compaction spans assistant messages, so this is NOT reset in
         # reset_accumulator. If the run exits while it is still open (process
@@ -643,6 +651,13 @@ class PiAgent(DefaultAgentWrapper):
     # its `ModelsAvailableAgentMessage` carrier. Set and read on the
     # message-processing thread only.
     _available_models: tuple[ModelOption, ...] = PrivateAttr(default=())
+    # Tracks the working tree across a turn so the turn footer can report the
+    # git-relative paths of files changed by ANY tool (edit/write AND bash),
+    # mirroring Claude's DiffTracker. Diffs the tree SHA captured at the previous
+    # turn boundary against the tree at this turn's agent_end. Created lazily on
+    # the first turn (keeps `start()` git-free) and re-baselined per turn. Used
+    # only on the message-processing thread.
+    _diff_tracker: DiffTracker | None = PrivateAttr(default=None)
 
     def start(self, secrets: Mapping[str, str | Secret]) -> None:
         # Resolve and validate the pi binary BEFORE super().start so the
@@ -1521,6 +1536,7 @@ class PiAgent(DefaultAgentWrapper):
         # leaves this set so Stop can still settle it.
         self._in_flight_request_id = get_turn_request_id(message)
         self._update_plan_mode_from_message(message)
+        self._ensure_diff_baseline()
         with self._handle_user_message(message):
             # A fresh turn starts un-interrupted: clear interrupt state left by an
             # interrupt that raced in with no turn in flight, which would otherwise
@@ -2568,7 +2584,64 @@ class PiAgent(DefaultAgentWrapper):
                     content=(TextBlock(text=state.accumulated_text),),
                 )
             )
+        self._emit_turn_metrics(parsed, state)
         return True
+
+    def _emit_turn_metrics(self, parsed: ParsedAgentEnd, state: _TurnState) -> None:
+        """Emit the per-turn footer metrics at the agent-run boundary.
+
+        The footer under a completed assistant turn shows wall-clock duration,
+        token totals, and the files it changed. Must be emitted BEFORE the turn's
+        terminating `RequestSuccess` so message_conversion stamps it onto the
+        in-progress chat message before finalizing (see `_attach_turn_metrics`).
+        Token totals are summed across the run's assistant messages (pi reports
+        usage per message); an interrupted turn with no usage still emits duration
+        + changed files. pi exposes no numeric context-window threshold on the
+        wire, so the context fields stay unset (the "% context" chip is
+        Claude-only).
+
+        Changed files come from the DiffTracker's tree-diff (git-relative paths
+        covering ALL tools, including bash-driven changes) rather than from tool
+        args, matching Claude and what the frontend's file-click navigation
+        expects. The tree baseline is then re-captured so the next turn's diff is
+        measured from this turn's end.
+        """
+        input_tokens, output_tokens = sum_message_usage(parsed.messages)
+        changed_files = self._collect_changed_files_and_rebaseline()
+        turn_metrics = TurnMetrics(
+            duration_seconds=time.monotonic() - state.start_time,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            reasoning_tokens=None,
+            changed_files=changed_files,
+        )
+        self._output_messages.put(TurnMetricsAgentMessage(message_id=AgentMessageID(), turn_metrics=turn_metrics))
+
+    def _ensure_diff_baseline(self) -> None:
+        """Capture the working-tree baseline before a turn, once.
+
+        Created lazily (not in `start()`) so a git failure never blocks startup and
+        the baseline reflects the tree right before the turn. `DiffTracker.__init__`
+        captures the tree SHA and never raises (it logs and degrades internally).
+        """
+        if self._diff_tracker is None:
+            self._diff_tracker = DiffTracker(self.environment)
+
+    def _collect_changed_files_and_rebaseline(self) -> list[str]:
+        """Return this turn's changed files (git-relative), then re-baseline the tree.
+
+        Diffs the working tree against the SHA captured at the previous turn
+        boundary, so it reflects only what changed during this turn. Re-baselining
+        afterwards means the next turn measures from here. Degrades to an empty
+        list if the tracker is unavailable (e.g. the turn ran before a baseline was
+        captured, as in unit tests that drive the pump directly).
+        """
+        tracker = self._diff_tracker
+        if tracker is None:
+            return []
+        changed_files = tracker.get_changed_file_paths()
+        tracker.update_initial_tree_sha()
+        return changed_files
 
     def _handle_auto_retry_end(self, parsed: ParsedAutoRetryEnd, state: _TurnState) -> None:
         if not parsed.success:

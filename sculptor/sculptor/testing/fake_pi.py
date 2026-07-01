@@ -350,11 +350,18 @@ def _emit(event: dict) -> None:
 
 
 def _assistant_message(text: str, stop_reason: str = "stop") -> dict:
-    return {
+    # `usage` mirrors real pi's per-assistant-message token report (RPC Types
+    # "AssistantMessage"); PiAgent sums it across a run for the turn footer. Only
+    # a cleanly-stopped message carries it: a streaming partial has no settled
+    # usage yet, and an aborted/errored turn reports no token counts.
+    message: dict = {
         "role": "assistant",
         "content": [{"type": "text", "text": text}],
         "stopReason": stop_reason,
     }
+    if stop_reason == "stop":
+        message["usage"] = {"input": 100, "output": 50, "cacheRead": 0, "cacheWrite": 0}
+    return message
 
 
 def _user_message(text: str) -> dict:
