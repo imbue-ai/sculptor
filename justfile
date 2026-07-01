@@ -761,6 +761,13 @@ doctor:
       }'
     }
 
+    # Print uv's numeric version (e.g. 0.11.24), empty if uv can't report one.
+    # The `|| true` matters: it keeps a failing `uv` from tripping `set -e` in
+    # the `$(uv_version)` callers, so doctor still prints guidance for a broken uv.
+    uv_version() {
+      uv --version 2>/dev/null | sed -n 's/^uv \([0-9][0-9.]*\).*/\1/p' || true
+    }
+
     # Source of truth for the pin: the `required-version` line in pyproject.toml
     # (e.g. `required-version = ">=0.11.22"`).
     spec="$(awk -F'"' '/^required-version[[:space:]]*=/{print $2; exit}' pyproject.toml)"
@@ -776,7 +783,7 @@ doctor:
       echo "  Install it:  curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
       exit 1
     fi
-    cur="$(uv --version 2>/dev/null | sed -n 's/^uv \([0-9][0-9.]*\).*/\1/p')"
+    cur="$(uv_version)"
 
     if [ -z "$min" ]; then
       echo "doctor: could not parse a '>=' bound from required-version=\"$spec\";" >&2
@@ -801,7 +808,7 @@ doctor:
     fi
 
     recheck() {
-      new="$(uv --version 2>/dev/null | sed -n 's/^uv \([0-9][0-9.]*\).*/\1/p')"
+      new="$(uv_version)"
       if version_ge "$new" "$min"; then
         echo "doctor: uv upgraded to $new — OK"
         return 0
