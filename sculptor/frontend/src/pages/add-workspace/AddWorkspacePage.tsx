@@ -150,7 +150,7 @@ export const AddWorkspacePage = (): ReactElement => {
     preview: branchNamePreview,
     displayedValue: effectiveBranchName,
     isLoading: isBranchNamePreviewLoading,
-    collision: branchNameCollision,
+    status: branchNameStatus,
   } = useBranchNamePreview({
     projectId: selectedProjectId,
     workspaceName,
@@ -442,7 +442,7 @@ export const AddWorkspacePage = (): ReactElement => {
                 value={effectiveBranchName}
                 isManuallyEdited={isBranchNameManuallyEdited}
                 isLoading={isBranchNamePreviewLoading}
-                collision={branchNameCollision}
+                status={branchNameStatus}
                 preview={branchNamePreview}
                 onUserEdit={(value): void => setBranchNameOverride(value)}
                 onReset={(): void => setBranchNameOverride(null)}

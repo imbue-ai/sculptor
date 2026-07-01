@@ -17,8 +17,10 @@ import { PulsingCircle } from "~/components/PulsingCircle.tsx";
 import { TabBar } from "~/components/tabs/TabBar";
 import type { TabDefinition } from "~/components/tabs/types";
 
+import { getTabStatusIcon } from "./TerminalConnectionIndicator";
 import { getNextTerminalLabel } from "./terminalLabelUtils";
 import styles from "./TerminalPanel.module.scss";
+import type { TerminalConnectionStatus } from "./useTerminal";
 import { useTerminal } from "./useTerminal";
 
 // TerminalInstance — one xterm.js + WebSocket per tab
@@ -34,13 +36,21 @@ type TerminalInstanceProps = {
   terminalIndex: number;
   isVisible: boolean;
   onOutput?: () => void;
+  onConnectionStatusChange?: (status: TerminalConnectionStatus) => void;
 };
 
-const TerminalInstance = ({ workspaceID, terminalIndex, isVisible, onOutput }: TerminalInstanceProps): ReactElement => {
+const TerminalInstance = ({
+  workspaceID,
+  terminalIndex,
+  isVisible,
+  onOutput,
+  onConnectionStatusChange,
+}: TerminalInstanceProps): ReactElement => {
   const { terminalContainerRef } = useTerminal({
     terminalPath: `/api/v1/workspaces/${workspaceID}/terminal/${terminalIndex}/ws`,
     isVisible,
     onOutput,
+    onConnectionStatusChange,
   });
 
   return (
@@ -161,6 +171,35 @@ const TerminalPanelContent = ({ workspaceID }: { workspaceID: string }): ReactEl
     });
   }, []);
 
+  // Per-tab WebSocket connection state, so the tab bar can flag a terminal whose
+  // connection dropped or won't recover. Keyed by tab id. Only unhealthy states
+  // are stored — a connected/connecting terminal needs no indicator — so the map
+  // stays bounded and never holds stale entries for recovered or closed tabs.
+  const [connectionStatuses, setConnectionStatuses] = useState<Record<string, TerminalConnectionStatus>>({});
+
+  const handleConnectionStatusChange = useCallback((tabId: string, status: TerminalConnectionStatus): void => {
+    setConnectionStatuses((prev) => {
+      const isHealthy = status === "connected" || status === "connecting";
+      if (isHealthy) {
+        if (!(tabId in prev)) return prev;
+        const next = { ...prev };
+        delete next[tabId];
+        return next;
+      }
+      if (prev[tabId] === status) return prev;
+      return { ...prev, [tabId]: status };
+    });
+  }, []);
+
+  const forgetConnectionStatus = useCallback((tabId: string): void => {
+    setConnectionStatuses((prev) => {
+      if (!(tabId in prev)) return prev;
+      const next = { ...prev };
+      delete next[tabId];
+      return next;
+    });
+  }, []);
+
   const handleActivate = useCallback(
     (tabId: string) => {
       setActiveTabId(tabId);
@@ -203,6 +242,7 @@ const TerminalPanelContent = ({ workspaceID }: { workspaceID: string }): ReactEl
 
   const handleCloseTerminal = useCallback(
     (tabId: string): void => {
+      forgetConnectionStatus(tabId);
       setTabs((prev) => {
         const closed = prev.find((t) => t.id === tabId);
         const remaining = prev.filter((t) => t.id !== tabId);
@@ -234,7 +274,7 @@ const TerminalPanelContent = ({ workspaceID }: { workspaceID: string }): ReactEl
         return remaining;
       });
     },
-    [activeTabId, createFreshTab, setTabs, setActiveTabId, workspaceID],
+    [activeTabId, createFreshTab, forgetConnectionStatus, setTabs, setActiveTabId, workspaceID],
   );
 
   const handleCloseOthers = useCallback(
@@ -304,11 +344,15 @@ const TerminalPanelContent = ({ workspaceID }: { workspaceID: string }): ReactEl
         id: t.id,
         label: t.label,
         dataTestId: ElementIds.TERMINAL_TAB,
-        icon: unreadTabIds.has(t.id) ? (
-          <span className={styles.unreadDot}>
-            <PulsingCircle size={7} />
-          </span>
-        ) : undefined,
+        // A connection issue takes precedence over the unread-output dot: a
+        // frozen/dropped terminal is more important to surface than new output.
+        icon:
+          getTabStatusIcon(connectionStatuses[t.id]) ??
+          (unreadTabIds.has(t.id) ? (
+            <span className={styles.unreadDot}>
+              <PulsingCircle size={7} />
+            </span>
+          ) : undefined),
         labelContent:
           renamingTabId === t.id ? (
             <InlineRenameInput
@@ -319,7 +363,7 @@ const TerminalPanelContent = ({ workspaceID }: { workspaceID: string }): ReactEl
             />
           ) : undefined,
       })),
-    [tabs, renamingTabId, unreadTabIds, handleRenameCommit],
+    [tabs, renamingTabId, unreadTabIds, connectionStatuses, handleRenameCommit],
   );
 
   return (
@@ -355,6 +399,7 @@ const TerminalPanelContent = ({ workspaceID }: { workspaceID: string }): ReactEl
             terminalIndex={tab.index}
             isVisible={tab.id === activeTabId}
             onOutput={() => handleTerminalOutput(tab.id)}
+            onConnectionStatusChange={(status) => handleConnectionStatusChange(tab.id, status)}
           />
         ))}
       </div>

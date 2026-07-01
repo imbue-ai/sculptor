@@ -26,7 +26,10 @@ class DefaultProjectService(ProjectService):
     """
     Default implementation of ProjectService.
 
-    Note: Workspace methods have been moved to WorkspaceService.
+    Note: Workspace methods have been moved to WorkspaceService. Git target-branch
+    scanning lives in WorkspaceService's branch poller, keyed by the workspace's
+    common git dir rather than the project, because CLONE-mode workspaces are
+    independent clones whose remote-tracking refs are not the project repo's.
     """
 
     data_model_service: DataModelService

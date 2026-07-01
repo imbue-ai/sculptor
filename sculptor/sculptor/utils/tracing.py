@@ -64,7 +64,7 @@ MAX_BUFFERED_EXTERNAL_EVENTS = 100_000
 DEFAULT_TRACER_ENTRIES = 50_000_000
 
 # Smaller default ring buffer for ad-hoc tracing armed at runtime (via the
-# trace-control HTTP endpoint / `sculpt trace start`) rather than at boot.
+# trace-control HTTP endpoint / `sculpt debug trace start`) rather than at boot.
 # Runtime arming targets steady-state interactive work, whose event rate is
 # far below the boot peak the 50M buffer is sized for, so a fifth of the
 # entries (~500 MB) still covers a generous capture window while keeping the
@@ -89,10 +89,26 @@ _MERGE_BATCH_SIZE = 4096
 _trace_to_path: Path | None = None
 _tracer: Any = None
 _internal_trace_path: Path | None = None
+# Serializes the arm/disarm session state (`_tracer`, `_trace_to_path`,
+# `_internal_trace_path`). The runtime trace-control endpoints run on FastAPI
+# worker threads, so concurrent `POST /api/v1/trace/start` (or
+# `/api/v1/trace/stop`) calls would otherwise race the check-and-set in
+# start_tracing / stop_and_write_trace —
+# two starts could each see `_tracer is None` and build a second VizTracer,
+# leaking the first; two stops could both try to stop/save the same tracer.
+# Distinct from `_external_events_lock`, which guards only the event buffer;
+# start/stop acquire this one first, then that one (never the reverse).
+_trace_session_lock = Lock()
 _external_events_lock = Lock()
 _external_events: list[dict[str, Any]] = []
 _dropped_event_count = 0
 _invalid_event_count = 0
+# Whether `add_external_events` should buffer incoming /api/v1/trace/batch
+# payloads. Guarded by `_external_events_lock`. start_tracing sets it True;
+# stop_and_write_trace sets it False at the same instant it snapshots and clears
+# the buffer, so a batch that arrives during the (lock-held) flush is dropped
+# rather than buffered into the just-finished session and leaked into the next.
+_external_events_accepting = False
 
 
 @dataclass(frozen=True)
@@ -126,37 +142,48 @@ def get_buffered_external_event_count() -> int:
         return len(_external_events)
 
 
-def start_tracing(output_path: Path, tracer_entries: int | None = None) -> None:
+def start_tracing(output_path: Path, tracer_entries: int | None = None) -> bool:
     """Start viztracer, writing the combined trace to ``output_path`` when it is
     later stopped. ``tracer_entries`` sizes viztracer's in-memory ring buffer;
     ``None`` uses ``DEFAULT_TRACER_ENTRIES`` (resolved at call time so tests can
     monkeypatch the constant).
 
-    Idempotent — a second call while a trace is already running is a no-op (it
-    does NOT change the path or buffer size). After ``stop_and_write_trace``
-    has flushed and torn down a session, calling this again arms a fresh one,
-    which is what makes the runtime arm/disarm cycle (`sculpt trace start` then
-    `stop` then `start`) work.
-    """
-    global _trace_to_path, _tracer, _internal_trace_path
-    if _tracer is not None:
-        return
-    from viztracer import VizTracer
+    Returns ``True`` if this call armed a fresh session, or ``False`` if a trace
+    was already running (in which case nothing changed — the existing path and
+    buffer size are kept). After ``stop_and_write_trace`` has flushed and torn
+    down a session, calling this again arms a fresh one, which is what makes the
+    runtime arm/disarm cycle (`sculpt debug trace start` then `stop` then
+    `start`) work.
 
-    if tracer_entries is None:
-        tracer_entries = DEFAULT_TRACER_ENTRIES
-    _trace_to_path = output_path.resolve()
-    tmp_dir = Path(tempfile.mkdtemp(prefix="sculptor_viztrace_"))
-    _internal_trace_path = tmp_dir / "viztracer.json"
-    _tracer = VizTracer(
-        output_file=str(_internal_trace_path),
-        tracer_entries=tracer_entries,
-        log_func_args=False,
-        log_print=False,
-        minimize_memory=True,
-        process_name="sculptor_backend",
-    )
-    _tracer.start()
+    The check-and-arm runs under ``_trace_session_lock`` so concurrent callers
+    (the runtime trace-control endpoints run on worker threads) cannot both pass
+    the ``_tracer is None`` guard and build two VizTracer instances. The boolean
+    return lets the caller distinguish "armed" from "already running" without a
+    separate, racy ``is_tracing_enabled()`` check.
+    """
+    global _trace_to_path, _tracer, _internal_trace_path, _external_events_accepting
+    with _trace_session_lock:
+        if _tracer is not None:
+            return False
+        from viztracer import VizTracer
+
+        if tracer_entries is None:
+            tracer_entries = DEFAULT_TRACER_ENTRIES
+        _trace_to_path = output_path.resolve()
+        tmp_dir = Path(tempfile.mkdtemp(prefix="sculptor_viztrace_"))
+        _internal_trace_path = tmp_dir / "viztracer.json"
+        _tracer = VizTracer(
+            output_file=str(_internal_trace_path),
+            tracer_entries=tracer_entries,
+            log_func_args=False,
+            log_print=False,
+            minimize_memory=True,
+            process_name="sculptor_backend",
+        )
+        _tracer.start()
+        with _external_events_lock:
+            _external_events_accepting = True
+        return True
 
 
 def add_external_events(events: Sequence[dict[str, Any]], source_pid: int) -> None:
@@ -192,6 +219,12 @@ def add_external_events(events: Sequence[dict[str, Any]], source_pid: int) -> No
         return
 
     with _external_events_lock:
+        # Re-checked under the lock (not just the cheap `_trace_to_path is None`
+        # fast-path above): a stop in progress flips this False while holding the
+        # lock, so a batch racing the flush is dropped rather than buffered into
+        # the finished session.
+        if not _external_events_accepting:
+            return
         _invalid_event_count += invalid_count
         if valid_events:
             _external_events.extend(valid_events)
@@ -284,68 +317,88 @@ def stop_and_write_trace() -> TraceWriteResult | None:
     (or use the returned result), since the global is cleared here.
     """
     global _trace_to_path, _tracer, _internal_trace_path, _dropped_event_count, _invalid_event_count
-    trace_to_path = _trace_to_path
-    tracer = _tracer
-    internal_trace_path = _internal_trace_path
-    if trace_to_path is None or tracer is None or internal_trace_path is None:
-        return None
+    global _external_events_accepting
+    # Hold the session lock across the whole stop — including the flush — so a
+    # concurrent stop can't double-stop/save the same tracer, and a concurrent
+    # start can't build a new VizTracer while this one is still being saved
+    # (viztracer keeps a single process-global tracer; overlapping them would
+    # corrupt the in-progress save). The session stays "armed" (path still set)
+    # until the disarm in the finally, so a racing start is rejected at the
+    # endpoint's 409 gate rather than slipping in mid-flush.
+    with _trace_session_lock:
+        trace_to_path = _trace_to_path
+        tracer = _tracer
+        internal_trace_path = _internal_trace_path
+        if trace_to_path is None or tracer is None or internal_trace_path is None:
+            return None
 
-    try:
-        tracer.stop()
-        tracer.save()
-
-        with open(internal_trace_path) as f:
-            viztracer_data = json.load(f)
-        viztracer_events = viztracer_data.get("traceEvents", [])
-
-        with _external_events_lock:
-            buffered = list(_external_events)
-            _external_events.clear()
-            dropped_snapshot = _dropped_event_count
-            invalid_snapshot = _invalid_event_count
-
-        seen_synthetic_pids = {e["pid"] for e in buffered}
-        metadata_events: list[dict[str, Any]] = []
-        if RENDERER_PID in seen_synthetic_pids:
-            metadata_events.append(_process_name_metadata(RENDERER_PID, "renderer"))
-        if ELECTRON_MAIN_PID in seen_synthetic_pids:
-            metadata_events.append(_process_name_metadata(ELECTRON_MAIN_PID, "electron_main"))
-        if dropped_snapshot > 0 or invalid_snapshot > 0:
-            metadata_events.append(_dropped_marker_event(dropped_snapshot, invalid_snapshot))
-
-        trace_to_path.parent.mkdir(parents=True, exist_ok=True)
-        # Atomic write: stream to a sibling `.tmp` file, then `os.replace` into
-        # place on success. A mid-write serialization failure must not leave a
-        # truncated file at the user-facing path, and any prior file there
-        # must remain untouched.
-        tmp_path = trace_to_path.parent / (trace_to_path.name + ".tmp")
         try:
-            with open(tmp_path, "w") as f:
-                f.write('{"traceEvents":[')
-                _stream_events_batched(itertools.chain(viztracer_events, metadata_events, buffered), f)
-                f.write("]}")
-            os.replace(tmp_path, trace_to_path)
+            tracer.stop()
+            tracer.save()
+
+            with open(internal_trace_path) as f:
+                viztracer_data = json.load(f)
+            viztracer_events = viztracer_data.get("traceEvents", [])
+
+            with _external_events_lock:
+                # Stop accepting batches at the same instant we snapshot+clear,
+                # so any /api/v1/trace/batch arriving during the rest of this
+                # (lock-held) flush is dropped instead of buffered into the
+                # finished session. Reset the counters here too — under the same
+                # lock add_external_events bumps them — so the disarm can't race
+                # a concurrent bump (the reset used to live in the finally,
+                # outside this lock).
+                _external_events_accepting = False
+                buffered = list(_external_events)
+                _external_events.clear()
+                dropped_snapshot = _dropped_event_count
+                invalid_snapshot = _invalid_event_count
+                _dropped_event_count = 0
+                _invalid_event_count = 0
+
+            seen_synthetic_pids = {e["pid"] for e in buffered}
+            metadata_events: list[dict[str, Any]] = []
+            if RENDERER_PID in seen_synthetic_pids:
+                metadata_events.append(_process_name_metadata(RENDERER_PID, "renderer"))
+            if ELECTRON_MAIN_PID in seen_synthetic_pids:
+                metadata_events.append(_process_name_metadata(ELECTRON_MAIN_PID, "electron_main"))
+            if dropped_snapshot > 0 or invalid_snapshot > 0:
+                metadata_events.append(_dropped_marker_event(dropped_snapshot, invalid_snapshot))
+
+            trace_to_path.parent.mkdir(parents=True, exist_ok=True)
+            # Atomic write: stream to a sibling `.tmp` file, then `os.replace` into
+            # place on success. A mid-write serialization failure must not leave a
+            # truncated file at the user-facing path, and any prior file there
+            # must remain untouched.
+            tmp_path = trace_to_path.parent / (trace_to_path.name + ".tmp")
+            try:
+                with open(tmp_path, "w") as f:
+                    f.write('{"traceEvents":[')
+                    _stream_events_batched(itertools.chain(viztracer_events, metadata_events, buffered), f)
+                    f.write("]}")
+                os.replace(tmp_path, trace_to_path)
+            finally:
+                # On success, the tmp file has been renamed away and this is a
+                # no-op. On failure, drop the partial `.tmp` so we don't leak it.
+                tmp_path.unlink(missing_ok=True)
+            return TraceWriteResult(
+                path=trace_to_path,
+                backend_event_count=len(viztracer_events),
+                external_event_count=len(buffered),
+            )
         finally:
-            # On success, the tmp file has been renamed away and this is a
-            # no-op. On failure, drop the partial `.tmp` so we don't leak it.
-            tmp_path.unlink(missing_ok=True)
-        return TraceWriteResult(
-            path=trace_to_path,
-            backend_event_count=len(viztracer_events),
-            external_event_count=len(buffered),
-        )
-    finally:
-        # Always clean up the viztracer temp dir, even on partial-write
-        # failure. The user-facing trace file at trace_to_path is intentionally
-        # NOT cleaned up — that's the artifact they came here for.
-        shutil.rmtree(internal_trace_path.parent, ignore_errors=True)
-        # Disarm: drop references to the stopped tracer and clear the path so
-        # the module is ready to arm a fresh session. Dropping the only
-        # reference to the VizTracer also lets it be garbage-collected; the
-        # next start_tracing builds a new instance (viztracer's global
-        # __viz_tracer__ pointer is simply overwritten).
-        _tracer = None
-        _trace_to_path = None
-        _internal_trace_path = None
-        _dropped_event_count = 0
-        _invalid_event_count = 0
+            # Always clean up the viztracer temp dir, even on partial-write
+            # failure. The user-facing trace file at trace_to_path is intentionally
+            # NOT cleaned up — that's the artifact they came here for.
+            shutil.rmtree(internal_trace_path.parent, ignore_errors=True)
+            # Disarm: drop references to the stopped tracer and clear the path so
+            # the module is ready to arm a fresh session. Dropping the only
+            # reference to the VizTracer also lets it be garbage-collected; the
+            # next start_tracing builds a new instance (viztracer's global
+            # __viz_tracer__ pointer is simply overwritten).
+            _tracer = None
+            _trace_to_path = None
+            _internal_trace_path = None
+            # _dropped_event_count / _invalid_event_count and
+            # _external_events_accepting were already reset under
+            # _external_events_lock in the snapshot block above.

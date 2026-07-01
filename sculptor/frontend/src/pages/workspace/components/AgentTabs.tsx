@@ -353,7 +353,7 @@ export const AgentTabs = (): ReactElement | null => {
   // Build TabDefinition array from agents
   const tabs = useMemo((): Array<TabDefinition> => {
     return workspaceAgents.map((agent) => {
-      const dotStatus = getAgentDotStatus(agent.status, agent.lastReadAt, agent.updatedAt);
+      const dotStatus = getAgentDotStatus(agent.status, agent.lastReadAt, agent.updatedAt, agent.id === agentID);
       const isRenaming = renamingAgentId === agent.id;
       const label = pendingTitles[agent.id] ?? agent.title ?? "Untitled";
 
@@ -373,7 +373,7 @@ export const AgentTabs = (): ReactElement | null => {
         ) : undefined,
       };
     });
-  }, [workspaceAgents, renamingAgentId, handleRenameCommit, pendingTitles, setRenamingAgentId]);
+  }, [workspaceAgents, agentID, renamingAgentId, handleRenameCommit, pendingTitles, setRenamingAgentId]);
 
   const handleActivate = useCallback(
     (tabId: string): void => {

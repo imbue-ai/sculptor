@@ -52,6 +52,11 @@ from sculptor import version
 from sculptor.agents.attachments import resolve_attachment_source
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import NoBtwSessionAvailable
 from sculptor.agents.harness_registry import get_harness_for_config
+from sculptor.agents.pi_agent.authenticated_providers import PiAuthJsonError
+from sculptor.agents.pi_agent.authenticated_providers import get_provider_auth_statuses
+from sculptor.agents.pi_agent.authenticated_providers import write_auth_json_entry
+from sculptor.agents.pi_agent.provider_catalog import ProviderGroup
+from sculptor.agents.pi_agent.provider_catalog import get_provider_entry
 from sculptor.common.plugin import get_plugin_dirs
 from sculptor.config.settings import SculptorSettings
 from sculptor.config.user_config import UserConfig
@@ -115,6 +120,9 @@ from sculptor.services.git_repo_service.default_implementation import LocalWrita
 from sculptor.services.git_repo_service.error_types import GitRepoError
 from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 from sculptor.services.git_repo_service.git_commands import run_git_command_local
+from sculptor.services.pi_login_service import PiLoginMode
+from sculptor.services.pi_login_service import broadcast_pi_models_refresh
+from sculptor.services.pi_login_service import pi_login_terminal_id
 from sculptor.services.project_service.default_implementation import get_most_recently_used_project_id
 from sculptor.services.project_service.default_implementation import update_most_recently_used_project
 from sculptor.services.task_service.errors import InvalidTaskOperation
@@ -187,8 +195,9 @@ from sculptor.web.data_types import AnswerQuestionRequest
 from sculptor.web.data_types import ArtifactDataResponse
 from sculptor.web.data_types import AuthResult
 from sculptor.web.data_types import AuthStartResult
+from sculptor.web.data_types import AuthenticatedProviderEntry
+from sculptor.web.data_types import AuthenticatedProvidersResponse
 from sculptor.web.data_types import BatchUpdateOpenStateRequest
-from sculptor.web.data_types import BranchExistsResponse
 from sculptor.web.data_types import BtwRequest
 from sculptor.web.data_types import CommitDiffResponse
 from sculptor.web.data_types import CommitFileInfo
@@ -209,11 +218,16 @@ from sculptor.web.data_types import InitializeGitRepoRequest
 from sculptor.web.data_types import ListTerminalAgentRegistrationsResponse
 from sculptor.web.data_types import ListWorkspacesResponse
 from sculptor.web.data_types import NamingPatternRequest
+from sculptor.web.data_types import NewBranchNameValidationResponse
 from sculptor.web.data_types import OpenFileUiAction
 from sculptor.web.data_types import OpenFileUiRequest
 from sculptor.web.data_types import OpenInOsRequest
 from sculptor.web.data_types import OpenPathInAppRequest
 from sculptor.web.data_types import OpenPathInAppResult
+from sculptor.web.data_types import PasteKeyRequest
+from sculptor.web.data_types import PiLoginRequest
+from sculptor.web.data_types import PiLoginResponse
+from sculptor.web.data_types import PiLoginStatusResponse
 from sculptor.web.data_types import PreviewBranchNameResponse
 from sculptor.web.data_types import ProjectEnvVarNames
 from sculptor.web.data_types import ProjectInitializationRequest
@@ -712,6 +726,12 @@ def create_workspace_v2(
 
         if branch_name:
             with services.git_repo_service.open_local_user_git_repo_for_read(project, log_command=False) as repo:
+                if not repo.is_valid_branch_name(branch_name):
+                    # Reject illegal ref names here so the user gets an actionable
+                    # error at creation, rather than an opaque WorktreeError raised
+                    # later when `git worktree add -b` runs during async environment
+                    # setup (and is surfaced only in the agent panel).
+                    raise HTTPException(status_code=400, detail=f"'{branch_name}' is not a valid git branch name")
                 if repo.is_branch_ref(branch_name):
                     raise HTTPException(status_code=409, detail=f"Branch '{branch_name}' already exists")
 
@@ -2322,6 +2342,20 @@ def get_workspace_agent_diagnostics(
     )
 
 
+def _raise_for_terminal_delivery_result(result: TerminalDeliveryResult) -> None:
+    """Raise the HTTP 409 that a non-DELIVERED PTY write maps to, or return for
+    DELIVERED. The frontend's enable/disable logic and the integration tests
+    depend on these exact statuses and details, so every endpoint that drives a
+    terminal agent maps results through here to keep them identical.
+    """
+    if result is TerminalDeliveryResult.NOT_OPT_IN:
+        raise HTTPException(status_code=409, detail="this agent does not accept automated prompts")
+    if result is TerminalDeliveryResult.NOT_AT_PROMPT:
+        raise HTTPException(status_code=409, detail="agent is busy or not at its prompt")
+    if result is TerminalDeliveryResult.NO_PTY:
+        raise HTTPException(status_code=409, detail="terminal not running")
+
+
 @router.post("/api/v1/workspaces/{workspace_id}/agents/{agent_id}/messages")
 def send_workspace_agent_messages(
     workspace_id: str,
@@ -2345,45 +2379,64 @@ def send_workspace_agent_messages(
                 detail=[{"loc": ["body", "message"], "msg": "Message required", "type": "value_error.missing"}],
             )
 
-        saved_messages = services.task_service.get_saved_messages_for_task(task.object_id, transaction)
         assert isinstance(task.input_data, AgentTaskInputsV2), (
             f"Expected AgentTaskInputsV2 for agent message endpoint, got {type(task.input_data).__name__}"
         )
-        harness = get_harness_for_config(task.input_data.agent_config)
-        if message_request.enter_plan_mode and not harness.capabilities().supports_interactive_backchannel:
-            raise HTTPException(
-                status_code=400,
-                detail="plan mode requires a harness that supports the interactive backchannel",
+
+        # A registered terminal agent has no chat message stream to queue into;
+        # its delivery is handled below, outside this transaction. Chat agents
+        # take the original queueing path here, unchanged.
+        if not isinstance(task.input_data.agent_config, RegisteredTerminalAgentConfig):
+            saved_messages = services.task_service.get_saved_messages_for_task(task.object_id, transaction)
+            harness = get_harness_for_config(task.input_data.agent_config)
+            if message_request.enter_plan_mode and not harness.capabilities().supports_interactive_backchannel:
+                raise HTTPException(
+                    status_code=400,
+                    detail="plan mode requires a harness that supports the interactive backchannel",
+                )
+            task_state = convert_agent_messages_to_task_update(
+                saved_messages, task_id=task.object_id, completed_message_by_id={}, harness=harness
             )
-        task_state = convert_agent_messages_to_task_update(
-            saved_messages, task_id=task.object_id, completed_message_by_id={}, harness=harness
-        )
-        if task_state.pending_user_question is not None:
-            raise HTTPException(
-                status_code=409,
-                detail="Cannot send a message while the agent is waiting for a response to AskUserQuestion.",
+            if task_state.pending_user_question is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Cannot send a message while the agent is waiting for a response to AskUserQuestion.",
+                )
+
+            message_id = AgentMessageID()
+            logger.info("Sending message {} to agent {}: {}", message_id, agent_id, message_str[:100])
+
+            message = ChatInputUserMessage(
+                message_id=message_id,
+                text=message_str,
+                model_name=message_request.model,
+                files=message_request.files,
+                enter_plan_mode=message_request.enter_plan_mode,
+                exit_plan_mode=message_request.exit_plan_mode,
+                fast_mode=message_request.fast_mode,
+                effort=message_request.effort,
+                sent_via=message_request.sent_via,
             )
 
-        message_id = AgentMessageID()
-        logger.info("Sending message {} to agent {}: {}", message_id, agent_id, message_str[:100])
+            services.task_service.create_message(
+                message=message,
+                task_id=task.object_id,
+                transaction=transaction,
+            )
+            return
 
-        message = ChatInputUserMessage(
-            message_id=message_id,
-            text=message_str,
-            model_name=message_request.model,
-            files=message_request.files,
-            enter_plan_mode=message_request.enter_plan_mode,
-            exit_plan_mode=message_request.exit_plan_mode,
-            fast_mode=message_request.fast_mode,
-            effort=message_request.effort,
-            sent_via=message_request.sent_via,
-        )
-
-        services.task_service.create_message(
-            message=message,
-            task_id=task.object_id,
-            transaction=transaction,
-        )
+    # Registered terminal agent: type the prompt into the PTY via the shared
+    # helper, exactly as POST /agents/{id}/terminal/input and the CI Babysitter
+    # do, so every feature that drives a terminal agent stays identically gated.
+    # Done outside the transaction above — the helper sleeps briefly before the
+    # submit Enter and must not hold a DB transaction while it does.
+    result = deliver_prompt_to_terminal_agent(
+        task,
+        message_str,
+        submit=True,
+        task_service=services.task_service,
+    )
+    _raise_for_terminal_delivery_result(result)
 
 
 @router.post("/api/v1/workspaces/{workspace_id}/agents/{agent_id}/answer_question")
@@ -3208,14 +3261,13 @@ def _get_remote_branches(repo_path: Path, remote_filter: str | None = "origin") 
             Pass ``None`` to include branches from all remotes.
     """
     try:
-        result = subprocess.run(
+        result = run_blocking(
             ["git", "branch", "-r", "--format=%(refname:short)"],
             cwd=repo_path,
-            capture_output=True,
-            text=True,
             timeout=_GIT_INFO_TIMEOUT_SECONDS,
+            is_checked=False,
         )
-        if result.returncode != 0:
+        if result.returncode != 0 or result.is_timed_out:
             return []
         branches = []
         for line in result.stdout.strip().splitlines():
@@ -3229,7 +3281,7 @@ def _get_remote_branches(repo_path: Path, remote_filter: str | None = "origin") 
                 continue
             branches.append(branch)
         return branches
-    except (subprocess.TimeoutExpired, OSError):
+    except ProcessSetupError:
         return []
 
 
@@ -3283,33 +3335,44 @@ def get_current_branch(
         raise HTTPException(status_code=404, detail=str(e)) from e
 
 
-@router.get("/api/v1/projects/{project_id}/branch-exists")
-def branch_exists(
+@router.get("/api/v1/projects/{project_id}/validate-new-branch-name")
+def validate_new_branch_name(
     project_id: str,
     name: str,
     request: Request,
     user_session: UserSession = Depends(get_user_session),
-) -> BranchExistsResponse:
-    """Return whether `name` already exists as a local branch in the project's repo."""
+) -> NewBranchNameValidationResponse:
+    """Validate a prospective new workspace branch name in the project's repo.
+
+    Reports whether `name` is a legal git ref (`is_valid`) and whether it
+    collides with an existing local branch (`already_exists`). Backs the Add
+    Workspace form's inline error; `create_workspace_v2` re-checks both as the
+    authoritative gate. When the name is illegal, the collision check is skipped
+    (git can't resolve an invalid ref anyway).
+    """
     validated_project_id = validate_project_id(project_id)
     services = get_services_from_request_or_websocket(request)
 
     trimmed = name.strip()
     if not trimmed:
-        return BranchExistsResponse(exists=False)
+        return NewBranchNameValidationResponse(is_valid=False, already_exists=False)
 
     with user_session.open_transaction(services) as transaction:
         project = transaction.get_project(validated_project_id)
         if project is None:
             raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
+        # When the repo isn't reachable we can't check; don't surface a spurious
+        # error — let the create-time backstop catch any real problem.
         if not project.is_path_accessible:
-            return BranchExistsResponse(exists=False)
+            return NewBranchNameValidationResponse(is_valid=True, already_exists=False)
 
     try:
         with services.git_repo_service.open_local_user_git_repo_for_read(project, log_command=False) as repo:
-            return BranchExistsResponse(exists=repo.is_branch_ref(trimmed))
+            is_valid = repo.is_valid_branch_name(trimmed)
+            already_exists = is_valid and repo.is_branch_ref(trimmed)
+            return NewBranchNameValidationResponse(is_valid=is_valid, already_exists=already_exists)
     except GitRepoNotFoundError:
-        return BranchExistsResponse(exists=False)
+        return NewBranchNameValidationResponse(is_valid=True, already_exists=False)
 
 
 @router.get("/api/v1/projects/{project_id}/repo_info")
@@ -3609,21 +3672,15 @@ def post_agent_terminal_input(
 
     # All three security guards and the bracketed-paste write live in the
     # shared helper so this endpoint and the CI Babysitter stay identically
-    # gated. Map each non-DELIVERED result to the status/detail the endpoint
-    # has always returned — the integration test and the frontend's
-    # enable/disable logic depend on these exact 409s.
+    # gated. _raise_for_terminal_delivery_result maps each non-DELIVERED result
+    # to the 409 the message endpoint returns too.
     result = deliver_prompt_to_terminal_agent(
         task,
         input_request.text,
         submit=input_request.submit,
         task_service=services.task_service,
     )
-    if result is TerminalDeliveryResult.NOT_OPT_IN:
-        raise HTTPException(status_code=409, detail="this agent does not accept automated prompts")
-    if result is TerminalDeliveryResult.NOT_AT_PROMPT:
-        raise HTTPException(status_code=409, detail="agent is busy or not at its prompt")
-    if result is TerminalDeliveryResult.NO_PTY:
-        raise HTTPException(status_code=409, detail="terminal not running")
+    _raise_for_terminal_delivery_result(result)
     return Response(status_code=204)
 
 
@@ -4212,6 +4269,134 @@ def get_env_var_names(
     )
 
 
+@router.get("/api/v1/pi/providers/authenticated")
+def get_pi_authenticated_providers(
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> AuthenticatedProvidersResponse:
+    """Return the full pi provider catalog crossed with current authentication status.
+
+    Global (no workspace/agent): Settings reads process-level auth.json + env. The
+    underlying readers are best-effort, so a missing/garbled auth.json yields all
+    in_auth_json=False rather than an error.
+    """
+    return AuthenticatedProvidersResponse(
+        providers=tuple(
+            AuthenticatedProviderEntry(
+                provider_id=status.provider_id,
+                display_name=status.display_name,
+                group=status.group,
+                in_auth_json=status.in_auth_json,
+                env_detected=status.env_detected,
+                env_var_names=status.env_var_names,
+            )
+            for status in get_provider_auth_statuses()
+        )
+    )
+
+
+@router.post("/api/v1/pi/login")
+def start_pi_login(
+    request: Request,
+    pi_login_request: PiLoginRequest,
+    user_session: UserSession = Depends(get_user_session),
+) -> PiLoginResponse:
+    """Spawn an interactive pi /login (or /logout) PTY and return its login-session id.
+
+    Global (no workspace/agent): the PTY drives pi's own interactive flow against the
+    user's real ~/.pi/agent. The frontend attaches at GET /api/v1/pi/login/{id}/ws.
+    """
+    services = get_services_from_request_or_websocket(request)
+    pi_binary_path = services.dependency_management_service.resolve_binary_path(Dependency.PI)
+    if pi_binary_path is None:
+        raise HTTPException(status_code=400, detail="pi is not installed — configure it in Settings → Pi")
+    login_id = services.pi_login_service.spawn(
+        PiLoginMode(pi_login_request.mode),
+        pi_binary_path,
+        pi_login_request.provider_id,
+    )
+    return PiLoginResponse(login_id=login_id)
+
+
+@router.post("/api/v1/pi/login/{login_id}/done")
+def finish_pi_login(
+    login_id: str,
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> Response:
+    """Tear down a login PTY (Done button) and broadcast a model refresh. Idempotent."""
+    services = get_services_from_request_or_websocket(request)
+    services.pi_login_service.teardown(login_id)
+    return Response(status_code=204)
+
+
+@router.get("/api/v1/pi/login/{login_id}/status")
+def get_pi_login_status(
+    login_id: str,
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> PiLoginStatusResponse:
+    """Report whether a login session's credential change has landed in auth.json.
+
+    The login modal polls this to auto-close once pi finishes the /login or /logout,
+    replacing the manual Done click.
+    """
+    services = get_services_from_request_or_websocket(request)
+    return PiLoginStatusResponse(completed=services.pi_login_service.is_completed(login_id))
+
+
+@router.post("/api/v1/pi/providers/paste-key")
+def write_pi_provider_key(
+    request: Request,
+    paste_key_request: PasteKeyRequest,
+    user_session: UserSession = Depends(get_user_session),
+) -> Response:
+    """Merge a single-key provider's api key into auth.json and refresh running pi agents.
+
+    The optional power-user path (the primary path is interactive /login). The value
+    is written verbatim (literal / $ENV / !command); session-only and unknown
+    providers are rejected (their config is not expressible as a single auth.json key).
+    """
+    entry = get_provider_entry(paste_key_request.provider_id)
+    if entry is None or entry.group is not ProviderGroup.SINGLE_KEY:
+        raise HTTPException(status_code=400, detail="paste-key is only supported for single-key providers")
+    if not paste_key_request.key_value.strip():
+        raise HTTPException(status_code=400, detail="a key value is required")
+    try:
+        write_auth_json_entry(paste_key_request.provider_id, paste_key_request.key_value)
+    except PiAuthJsonError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    services = get_services_from_request_or_websocket(request)
+    with user_session.open_transaction(services) as transaction:
+        broadcast_pi_models_refresh(services.task_service, transaction)
+    return Response(status_code=204)
+
+
+@APP.websocket("/api/v1/pi/login/{login_id}/ws")
+async def pi_login_websocket(
+    websocket: WebSocket,
+    login_id: str,
+) -> None:
+    """Attach a WebSocket to a pi login PTY, reaping it (and refreshing models) on close.
+
+    Unlike agent terminals (which persist across disconnect), a login PTY is
+    ephemeral: when the socket closes the session is torn down and a model-catalog
+    refresh is broadcast, since credentials may have changed.
+    """
+    services = get_services_from_request_or_websocket(websocket)
+    if not services.pi_login_service.is_active(login_id):
+        # Accept before closing so the client receives a proper 4404 close frame
+        # (see agent_terminal_websocket for the full explanation).
+        await websocket.accept()
+        await websocket.close(code=4404, reason=f"pi login session {login_id} not found")
+        return
+    try:
+        await _connect_terminal_websocket(websocket, pi_login_terminal_id(login_id))
+    finally:
+        services.pi_login_service.teardown(login_id)
+
+
 @router.post("/api/v1/projects/init-git")
 def initialize_git_repository(
     request: Request,
@@ -4424,7 +4609,8 @@ def post_trace_start(
     settings: SculptorSettings = Depends(get_settings),
 ) -> TraceStatusResponse:
     """Arm viztracer on the running backend, writing to a fresh timestamped
-    file under ``{LOG_PATH}/traces``. 409 if a trace is already running.
+    file under ``{LOG_PATH}/traces``. 409 if a trace is already running (the
+    response reports where that trace is writing).
 
     Renderer / Electron-main events are only captured if the renderer learned
     tracing was on at boot (it reads ``window.__SCULPTOR_TRACING__`` once);
@@ -4432,12 +4618,6 @@ def post_trace_start(
     the point of this endpoint — profiling a live (e.g. production) backend
     without a restart. Requires the session token (not exempt like
     ``/trace/batch``)."""
-    if is_tracing_enabled():
-        raise HTTPException(
-            status_code=409,
-            detail="A trace is already running. Stop it first with POST /api/v1/trace/stop.",
-        )
-
     tracer_entries = payload.tracer_entries if payload.tracer_entries is not None else DEFAULT_ADHOC_TRACER_ENTRIES
     if tracer_entries <= 0 or tracer_entries > DEFAULT_TRACER_ENTRIES:
         raise HTTPException(
@@ -4450,7 +4630,17 @@ def post_trace_start(
     # os.replace would silently overwrite the previous session's trace.
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     output_path = _adhoc_trace_dir(settings) / f"trace-{timestamp}.json"
-    start_tracing(output_path, tracer_entries=tracer_entries)
+    # Atomic check-and-arm: start_tracing returns False if a trace was already
+    # running. Gating the 409 on its return (rather than a separate, racy
+    # is_tracing_enabled() pre-check) means concurrent/duplicate starts get a
+    # truthful 409 pointing at the active trace, instead of all reporting
+    # "armed" for the one session that actually won.
+    if not start_tracing(output_path, tracer_entries=tracer_entries):
+        active = get_trace_to_path()
+        raise HTTPException(
+            status_code=409,
+            detail=f"A trace is already running, writing to {active}. Stop it first with `sculpt debug trace stop`.",
+        )
     # Report the resolved path that start_tracing stored, so it matches what
     # /trace/status and /trace/stop later report (start_tracing resolves it,
     # e.g. /tmp -> /private/tmp on macOS).

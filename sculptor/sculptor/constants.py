@@ -26,6 +26,7 @@ class ElementIDs(StrEnum):
     MODE_OPTION_EXISTING = "MODE_OPTION_EXISTING"
     BRANCH_NAME_INPUT = "BRANCH_NAME_INPUT"
     BRANCH_NAME_COLLISION_ERROR = "BRANCH_NAME_COLLISION_ERROR"
+    BRANCH_NAME_INVALID_ERROR = "BRANCH_NAME_INVALID_ERROR"
     BRANCH_NAME_RESET_BUTTON = "BRANCH_NAME_RESET_BUTTON"
     WORKSPACE_SELECTOR = "WORKSPACE_SELECTOR"
     WORKSPACE_OPTION_NAME = "WORKSPACE_OPTION_NAME"
@@ -194,6 +195,7 @@ class ElementIDs(StrEnum):
     FILE_BROWSER_EMPTY = "FILE_BROWSER_EMPTY"
     FILE_BROWSER_SKELETON = "FILE_BROWSER_SKELETON"
     FILE_BROWSER_FILE_TREE = "FILE_BROWSER_FILE_TREE"
+    FILE_BROWSER_SCROLLBAR_THUMB = "FILE_BROWSER_SCROLLBAR_THUMB"
     FILE_BROWSER_TREE_ROW = "FILE_BROWSER_TREE_ROW"
     FILE_BROWSER_TREE_ROW_STATUS = "FILE_BROWSER_TREE_ROW_STATUS"
     FILE_BROWSER_SEARCH_INPUT = "FILE_BROWSER_SEARCH_INPUT"
@@ -249,6 +251,7 @@ class ElementIDs(StrEnum):
     TERMINAL_STARTING_TEXT = "TERMINAL_STARTING_TEXT"
     ADD_TERMINAL_BUTTON = "ADD_TERMINAL_BUTTON"
     TERMINAL_TAB = "TERMINAL_TAB"
+    TERMINAL_TAB_STATUS_INDICATOR = "TERMINAL_TAB_STATUS_INDICATOR"
 
     # Panel Icons (sidebar)
     PANEL_ICON_FILES = "PANEL_ICON_FILES"
@@ -456,6 +459,31 @@ class ElementIDs(StrEnum):
     PI_INSTALL_BUTTON = "pi-install-button"
     PI_INSTALL_PROGRESS = "pi-install-progress"
     PI_UP_TO_DATE = "pi-up-to-date"
+    # Pi provider authentication (Settings -> Pi -> Providers: Connected cards + Add grid)
+    PI_PROVIDERS_GROUP_CONNECTED = "pi-providers-group-connected"
+    PI_PROVIDERS_GROUP_AVAILABLE = "pi-providers-group-available"
+    PI_PROVIDERS_GROUP_SESSION_ONLY = "pi-providers-group-session-only"
+    # Connected-provider card, suffixed by provider id (e.g. pi-provider-card-anthropic).
+    PI_PROVIDER_CARD = "pi-provider-card"
+    # Add-a-provider grid cell, suffixed by provider id (e.g. pi-provider-add-cell-openrouter).
+    PI_PROVIDER_ADD_CELL = "pi-provider-add-cell"
+    # Mount point for the in-modal Authenticate/Disconnect actions and the login terminal.
+    PI_PROVIDER_ACTIONS = "pi-provider-actions"
+    PI_PROVIDER_AUTHENTICATE_BUTTON = "pi-provider-authenticate-button"
+    PI_PROVIDER_DISCONNECT_BUTTON = "pi-provider-disconnect-button"
+    # Centered modal that hosts the interactive pi /login (or /logout) session.
+    PI_LOGIN_DIALOG = "pi-login-dialog"
+    PI_LOGIN_TERMINAL = "pi-login-terminal"
+    PI_LOGIN_DONE_BUTTON = "pi-login-done-button"
+    # Power-user paste-key path, reached via "Paste API key instead" inside the modal.
+    PI_PROVIDER_PASTE_KEY_SWITCH = "pi-provider-paste-key-switch"
+    PI_PASTE_KEY_INPUT = "pi-paste-key-input"
+    PI_PASTE_KEY_SAVE = "pi-paste-key-save"
+    # Model-picker empty state when a pi agent has no authenticated providers.
+    PI_PICKER_EMPTY_STATE = "pi-picker-empty-state"
+    PI_PICKER_LOGIN_CTA = "pi-picker-login-cta"
+    # Failed-turn error block CTA that deep-links into the pi login flow.
+    PI_ERROR_LOGIN_CTA = "pi-error-login-cta"
 
     # Custom backend settings (in Experimental tab)
     SETTINGS_CUSTOM_BACKEND_COMMAND = "SETTINGS_CUSTOM_BACKEND_COMMAND"
@@ -705,6 +733,7 @@ class ElementIDs(StrEnum):
     TAB_CONTEXT_MENU_DEBUG_VIEW = "TAB_CONTEXT_MENU_DEBUG_VIEW"
     ALPHA_CHAT_INTRO = "ALPHA_CHAT_INTRO"
     ALPHA_CHAT_VIEW = "ALPHA_CHAT_VIEW"
+    ALPHA_CHAT_SCROLLBAR_THUMB = "ALPHA_CHAT_SCROLLBAR_THUMB"
     ALPHA_CHAT_BOTTOM_SENTINEL = "ALPHA_CHAT_BOTTOM_SENTINEL"
     ALPHA_CHAT_MESSAGE = "ALPHA_CHAT_MESSAGE"
     ALPHA_CHAT_TEXT = "ALPHA_CHAT_TEXT"

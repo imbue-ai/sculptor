@@ -383,8 +383,8 @@ def test_already_exists_matches_real_gh_repo_clone_stderr() -> None:
     directory`` phrasing, prefixed by gh's own framing."""
     stderr = (
         "Cloning into 'foo'...\n"
-        "fatal: destination path 'foo' already exists and is not an empty directory.\n"
-        "exit status 128"
+        + "fatal: destination path 'foo' already exists and is not an empty directory.\n"
+        + "exit status 128"
     )
     assert _looks_like_already_exists(stderr) is True
 
@@ -940,6 +940,101 @@ def test_clone_maps_unrelated_process_error_to_400(
 
     assert response.status_code == 400, response.text
     assert "Permission denied" in response.json()["detail"]
+
+
+def test_clone_error_detail_redacts_credentials_in_stderr(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    tmp_path: Path,
+) -> None:
+    """git echoes the failing clone URL in its stderr, and that stderr becomes
+    the client-facing error detail. A user:token@ userinfo (e.g. from a pasted
+    ``https://oauth2:<token>@`` URL) must be stripped so the token never lands
+    in the HTTP response body."""
+    target_dir = tmp_path / "clones"
+    # Deliberately not a real token prefix (e.g. ghp_) so secret scanners don't flag it.
+    token = "fake-not-a-real-token"
+    payload = _clone_payload(target_dir, url=f"https://oauth2:{token}@github.com/owner/my-repo.git")
+    stderr = f"fatal: unable to access 'https://oauth2:{token}@github.com/owner/my-repo.git/': The requested URL returned error: 403"
+    fake_clone_error = ProcessError(
+        command=("/fake/bin/git", "clone"),
+        stdout="",
+        stderr=stderr,
+        returncode=128,
+    )
+
+    with (
+        patch.object(
+            DependencyManagementService,
+            "resolve_binary_path",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_binary_lookup()),
+        ),
+        patch.object(
+            DependencyManagementService,
+            "check_authenticated",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_auth_lookup()),
+        ),
+        patch.object(
+            ConcurrencyGroup,
+            "run_process_to_completion",
+            autospec=True,
+            side_effect=_make_fake_run(raises=fake_clone_error),
+        ),
+    ):
+        response = client.post("/api/v1/remotes/clone", json=payload)
+
+    assert response.status_code == 400, response.text
+    detail = response.json()["detail"]
+    assert token not in detail
+    assert "https://github.com/owner/my-repo.git" in detail
+
+
+def test_list_error_detail_redacts_credentials_in_stderr(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+) -> None:
+    """The 502 detail from a failing ``gh api`` call must likewise strip any
+    user:token@ userinfo before reaching the client."""
+    # Deliberately not a real token prefix (e.g. ghp_) so secret scanners don't flag it.
+    token = "fake-not-a-real-token"
+    stderr = f"fatal: unable to access 'https://oauth2:{token}@github.com/owner/repo.git/'"
+    fake_error = ProcessError(
+        command=("/fake/bin/gh", "api"),
+        stdout="",
+        stderr=stderr,
+        returncode=1,
+    )
+
+    with (
+        patch.object(
+            DependencyManagementService,
+            "resolve_binary_path",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_binary_lookup()),
+        ),
+        patch.object(
+            DependencyManagementService,
+            "check_authenticated",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_auth_lookup()),
+        ),
+        patch.object(
+            ConcurrencyGroup,
+            "run_process_to_completion",
+            autospec=True,
+            side_effect=_make_fake_run(raises=fake_error),
+        ),
+    ):
+        response = client.get("/api/v1/remotes/github/repos")
+
+    assert response.status_code == 502, response.text
+    detail = response.json()["detail"]
+    assert token not in detail
+    # The redacted stderr is still surfaced (not swallowed into the fallback message),
+    # so the user gets an actionable error.
+    assert "https://github.com/owner/repo.git" in detail
 
 
 def test_clone_returns_504_on_subprocess_timeout(

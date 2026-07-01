@@ -52,6 +52,7 @@ from sculptor.web.auth import UserSession
 from sculptor.web.auth import authenticate_anonymous
 from sculptor.web.data_types import AgentTypeName
 from sculptor.web.data_types import CreateAgentRequest
+from sculptor.web.data_types import CreateWorkspaceRequestV2
 from sculptor.web.data_types import SendMessageRequest
 from sculptor.web.data_types import SetModelRequest
 from sculptor.web.data_types import StartTaskRequest
@@ -220,6 +221,68 @@ def test_create_task_creates_task(
     response = client.get(f"/api/v1/workspaces/{workspace_id}/agents")
     assert response.status_code == 200
     assert len(response.json()) == 1
+
+
+def _post_create_worktree_workspace(client: TestClient, project: Project, branch_name: str) -> httpx.Response:
+    return client.post(
+        "/api/v1/workspaces",
+        json=model_dump(
+            CreateWorkspaceRequestV2(
+                project_id=str(project.object_id),
+                initialization_strategy=WorkspaceInitializationStrategy.WORKTREE,
+                source_branch="main",
+                requested_branch_name=branch_name,
+            ),
+            is_camel_case=True,
+        ),
+    )
+
+
+def test_create_worktree_workspace_rejects_invalid_branch_name(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    """An illegal git ref name must be rejected with 400 at creation, not surface
+    later as an opaque WorktreeError from `git worktree add -b` during async setup."""
+    # The exact shape that broke the manual test harness: a workspace-name field
+    # accidentally filled with a prompt, slugified into an illegal ref name.
+    bad_name = (
+        "imbue/board-demo-workspaceRun: git checkout -b dev/scu-1634-board-demo  (just create that branch, then stop)."
+    )
+    response = _post_create_worktree_workspace(client, test_project, bad_name)
+    assert response.status_code == 400, response.text
+    assert "not a valid git branch name" in response.json()["detail"]
+
+
+def test_create_worktree_workspace_accepts_valid_branch_name(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    response = _post_create_worktree_workspace(client, test_project, "imbue/board-demo-workspace")
+    assert response.status_code == 200, response.text
+
+
+def _validate_new_branch_name(client: TestClient, project: Project, name: str) -> dict:
+    response = client.get(
+        f"/api/v1/projects/{project.object_id}/validate-new-branch-name",
+        params={"name": name},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_validate_new_branch_name_reports_validity_and_collision(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    # A fresh, legal name is valid and available.
+    available = _validate_new_branch_name(client, test_project, "imbue/brand-new")
+    assert available == {"isValid": True, "alreadyExists": False}
+
+    # An illegal git ref is flagged invalid (and collision is not reported for it).
+    invalid = _validate_new_branch_name(client, test_project, "has space:and (parens)")
+    assert invalid == {"isValid": False, "alreadyExists": False}
+
+    # An existing branch (the fixture repo's default) is legal but collides.
+    existing = _validate_new_branch_name(client, test_project, "main")
+    assert existing == {"isValid": True, "alreadyExists": True}
 
 
 def test_terminal_agent_does_not_carry_a_model(

@@ -16,6 +16,11 @@ export default function activate(api: PluginHostApi): () => void {
     icon: Hash,
     defaultZone: "top-right",
     defaultShortcut: "",
+    // Registered but off by default: a bundled, on-by-default plugin shouldn't
+    // claim a slot in everyone's panel layout uninvited. The workspace banner
+    // widget below is the always-on surface; users opt the panel in from
+    // Settings → Panels (like the built-in Browser panel).
+    defaultEnabled: false,
     component: LinearPanel,
   });
   const disposeSettings = api.registerSettings(LinearSettings);

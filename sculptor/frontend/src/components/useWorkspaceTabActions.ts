@@ -70,8 +70,12 @@ export const useWorkspaceTabActions = (): {
         navigateToAddWorkspace();
         return;
       }
+      // closedTabId may already be gone from effectiveOpenTabIds — e.g. an
+      // optimistic delete removed the tab before this runs — making indexOf
+      // return -1. Clamp to a valid range so we land on the first surviving tab
+      // instead of reading remaining[-1] (undefined).
       const closedIndex = effectiveOpenTabIds.indexOf(closedTabId);
-      const nextTab = remaining[Math.min(closedIndex, remaining.length - 1)];
+      const nextTab = remaining[Math.min(Math.max(closedIndex, 0), remaining.length - 1)];
       if (nextTab === HOME_TAB_ID) {
         navigateToHome();
       } else if (nextTab === SETTINGS_TAB_ID) {

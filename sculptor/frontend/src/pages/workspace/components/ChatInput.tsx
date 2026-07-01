@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { HTTPException } from "~/common/Errors.ts";
 import { isTextBlock } from "~/common/Guards.ts";
+import { useTimedLatch } from "~/common/Hooks.ts";
 import { useKeybinding, useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
 import { getModelCapabilities } from "~/common/modelCapabilities.ts";
 import { type ParsedPseudoSkillCommand, parsePseudoSkillCommand } from "~/common/pseudoSkills.ts";
@@ -85,6 +86,14 @@ const CLEAR_CONTEXT_TIMEOUT_MS = 30_000;
 const HTTP_STATUS_CONFLICT = 409;
 // Delay before the mention-picker tooltip appears, to avoid flicker on hover.
 const MENTION_TOOLTIP_DELAY_MS = 500;
+
+// A normal send resolves in well under a second, so a spinner on every send is
+// just noise. Lock the input immediately but only reveal the spinner once a send
+// has stayed in flight this long (a slow backend). No trailing min-hold: the
+// backend echoes the message over the WebSocket just before the POST resolves,
+// so once it's in the chat and the agent is streaming, a lingering spinner only
+// distracts — drop it the instant the send completes.
+const SEND_SPINNER_START_DELAY_MS = 1_000;
 
 /**
  * Cheap predicate used to decide whether the SendButton / handleSend should
@@ -169,6 +178,17 @@ export const ChatInput = ({
   // Mirrored onto the send button as `data-last-send-error` so callers can
   // observe send failures without depending on the toast lifecycle.
   const [lastSendError, setLastSendError] = useState<string | null>(null);
+  // True while a message POST is in flight. Drives the send-button spinner and
+  // the read-only editor so a slow backend gives visible feedback. The ref is
+  // the actual re-entrancy guard: setState is async, so a fast second Enter
+  // (or click) would slip past a state-only check and double-queue the message;
+  // the ref flips synchronously and is read before any new send proceeds.
+  const [isSending, setIsSending] = useState(false);
+  const isSendingRef = useRef(false);
+  // The lock/read-only state tracks `isSending` directly (instant), but the
+  // spinner is gated through a start-delay latch so only slow sends ever show
+  // it; the 0 min-hold drops the spinner as soon as the send completes.
+  const shouldShowSendSpinner = useTimedLatch(isSending, 0, SEND_SPINNER_START_DELAY_MS);
   const isAlwaysInterruptAndSend = useAtomValue(isAlwaysInterruptAndSendAtom);
   const sendMessageBinding = useKeybinding("send_message");
   const sendHint = useKeybindingDisplayText("send_message");
@@ -330,6 +350,12 @@ export const ChatInput = ({
       return;
     }
 
+    // Ignore re-entrant sends while a POST is already in flight (e.g. a second
+    // Enter on a slow backend) so the same draft can't be queued twice.
+    if (isSendingRef.current) {
+      return;
+    }
+
     if (editorRef.current) {
       const parsed = parsePseudoSkillCommand(editorRef.current, promptDraft ?? "");
       if (parsed !== null) {
@@ -338,6 +364,8 @@ export const ChatInput = ({
       }
     }
 
+    isSendingRef.current = true;
+    setIsSending(true);
     setLastSendError(null);
     try {
       await sendWorkspaceAgentMessages({
@@ -381,6 +409,9 @@ export const ChatInput = ({
         ),
         type: ToastType.ERROR,
       });
+    } finally {
+      isSendingRef.current = false;
+      setIsSending(false);
     }
   }, [
     promptDraft,
@@ -401,6 +432,9 @@ export const ChatInput = ({
   ]);
 
   const handleSend = useCallback(async (): Promise<void> => {
+    // A send is already in flight; ignore the trigger entirely so we neither
+    // re-send nor fire the trailing interrupt below for a send that no-ops.
+    if (isSendingRef.current) return;
     const isBtwDraft = draftIsBypassCommand(promptDraft);
     if (isDisabled && !isBtwDraft) return;
     await sendMessage();
@@ -417,6 +451,7 @@ export const ChatInput = ({
   }, [isDisabled, promptDraft, sendMessage, isAlwaysInterruptAndSend, isAgentBusy, taskID, workspaceID]);
 
   const handleInterruptAndSend = useCallback(async (): Promise<void> => {
+    if (isSendingRef.current) return;
     if (!promptDraft?.trim() || !taskID) return;
     await sendMessage();
     if (isAgentBusy) {
@@ -647,6 +682,9 @@ export const ChatInput = ({
             wrapperClassName={styles.editorInner}
             placeholder="Enter a prompt..."
             value={promptDraft || ""}
+            // Read-only while a send is in flight: prevents edits from being
+            // wiped by the on-success clear, and visually signals "sending".
+            disabled={isSending}
             onChange={(newValue: string) => setPromptDraft(newValue)}
             onKeyDown={handleKeyPress}
             tagName="CHAT_INPUT"
@@ -730,7 +768,8 @@ export const ChatInput = ({
               </Flex>
               <SendButton
                 onClick={handleSend}
-                disabled={(isDisabled && !draftIsBypassCommand(promptDraft)) || !promptDraft?.trim()}
+                disabled={isSending || (isDisabled && !draftIsBypassCommand(promptDraft)) || !promptDraft?.trim()}
+                loading={shouldShowSendSpinner}
                 tooltip={`${sendHint} to send message`}
                 ariaLabel="Send message"
                 testId={ElementIds.SEND_BUTTON}

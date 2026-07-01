@@ -349,11 +349,7 @@ export const Editor = ({
   }, [disabled, editor]);
 
   return (
-    <div
-      className={
-        wrapperClassName ? wrapperClassName : mergeClasses(optional(disabled, styles.disabled), styles.editorWrapper)
-      }
-    >
+    <div className={mergeClasses(wrapperClassName ?? styles.editorWrapper, optional(disabled, styles.disabled))}>
       <div className={mergeClasses(styles.scrollArea, scrollAreaClassName)}>
         <EditorContent editor={editor} />
       </div>

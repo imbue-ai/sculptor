@@ -82,3 +82,69 @@ def test_missing_sample_is_not_fatal(sculptor_folder: Path, monkeypatch: pytest.
     install_bundled_registrations()
 
     assert not (sculptor_folder / "terminal_agents" / _SENTINEL).exists()
+
+
+@pytest.mark.parametrize("file_name", ["claude-code.toml", "claude-code-hooks.json"])
+def test_unmodified_managed_file_is_refreshed(
+    sculptor_folder: Path, monkeypatch: pytest.MonkeyPatch, file_name: str
+) -> None:
+    install_bundled_registrations()
+    path = sculptor_folder / "terminal_agents" / file_name
+
+    # Simulate a stale-but-unmodified managed copy left by a prior release: its
+    # hash is "known" (Sculptor shipped it once) but it differs from the bundle.
+    stale = "stale-but-managed\n"
+    path.write_text(stale)
+    monkeypatch.setattr(
+        bundled_module,
+        "_KNOWN_MANAGED_FILE_SHA256",
+        {file_name: frozenset({bundled_module._sha256(stale)})},
+    )
+
+    install_bundled_registrations()
+
+    sample_dir = get_bundled_claude_code_dir()
+    assert sample_dir is not None
+    assert path.read_text() == (sample_dir / file_name).read_text()
+
+
+@pytest.mark.parametrize("file_name", ["claude-code.toml", "claude-code-hooks.json"])
+def test_user_edited_managed_file_is_not_refreshed(sculptor_folder: Path, file_name: str) -> None:
+    install_bundled_registrations()
+    path = sculptor_folder / "terminal_agents" / file_name
+
+    # An edit Sculptor never shipped (hash not in the known set) is never touched.
+    edited = "my own customizations\n"
+    path.write_text(edited)
+
+    install_bundled_registrations()
+
+    assert path.read_text() == edited
+
+
+def test_editing_one_managed_file_does_not_block_refreshing_the_other(
+    sculptor_folder: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    install_bundled_registrations()
+    registrations_dir = sculptor_folder / "terminal_agents"
+    toml_path = registrations_dir / "claude-code.toml"
+    hooks_path = registrations_dir / "claude-code-hooks.json"
+
+    # The user customized their TOML; the hooks file is a stale managed copy.
+    edited_toml = 'display_name = "Mine"\nlaunch_command = "my-claude"\n'
+    toml_path.write_text(edited_toml)
+    stale_hooks = '{"stale": "managed hooks"}\n'
+    hooks_path.write_text(stale_hooks)
+    monkeypatch.setattr(
+        bundled_module,
+        "_KNOWN_MANAGED_FILE_SHA256",
+        {"claude-code-hooks.json": frozenset({bundled_module._sha256(stale_hooks)})},
+    )
+
+    install_bundled_registrations()
+
+    sample_dir = get_bundled_claude_code_dir()
+    assert sample_dir is not None
+    # The hooks file upgraded even though the TOML was edited; the edit stuck.
+    assert hooks_path.read_text() == (sample_dir / "claude-code-hooks.json").read_text()
+    assert toml_path.read_text() == edited_toml

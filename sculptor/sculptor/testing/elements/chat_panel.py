@@ -225,6 +225,25 @@ class PlaywrightChatPanelElement(PlaywrightFilePreviewAndUploadMixin, Playwright
         """The dropdown option for a specific model id (testid ``MODEL_OPTION-<model id>``)."""
         return self._page.get_by_test_id(f"{ElementIDs.MODEL_OPTION}-{model_id}")
 
+    def get_model_provider_option(self, provider: str) -> Locator:
+        """A provider's cascade sub-trigger (testid ``MODEL_PROVIDER_OPTION-<provider>``).
+
+        Its models open in the submenu it reveals, not the top-level menu.
+        """
+        return self._page.get_by_test_id(f"{ElementIDs.MODEL_PROVIDER_OPTION}-{provider}")
+
+    def get_picker_empty_state(self) -> Locator:
+        """The pi model-picker empty state (shown when no providers are authenticated)."""
+        return self.get_by_test_id(ElementIDs.PI_PICKER_EMPTY_STATE)
+
+    def get_picker_login_cta(self) -> Locator:
+        """The "Open pi login" CTA inside the pi picker empty state."""
+        return self.get_by_test_id(ElementIDs.PI_PICKER_LOGIN_CTA)
+
+    def get_error_block_login_cta(self, error_block: Locator) -> Locator:
+        """The "Open pi login" CTA inside a given (auth-failure) error block."""
+        return error_block.get_by_test_id(ElementIDs.PI_ERROR_LOGIN_CTA)
+
     def get_fast_mode_toggle(self) -> Locator:
         return self.get_by_test_id(ElementIDs.FAST_MODE_TOGGLE)
 

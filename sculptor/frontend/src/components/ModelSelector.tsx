@@ -32,11 +32,15 @@ type ModelSelectorProps = {
    *  endpoint; the value stays server-driven (selectedModelId) until it lands. */
   onBackendModelChange?: (option: ModelOption) => void;
   /** Whether the harness sources its catalog from a backend (pi); when false the
-   *  built-in Claude list is shown. */
+   *  built-in Claude list is shown. An empty `backendModels` then means "no
+   *  authenticated providers" — show the login CTA, not the Claude fallback list. */
   sourcesBackendModels?: boolean;
-  /** Invoked by the no-providers prompt to send the user to authenticate a provider. */
+  /** Invoked by the no-providers prompt to send the user to authenticate a
+   *  provider (the pi login flow under Settings -> Pi). */
   onAuthenticate: () => void;
 };
+
+const PI_NO_MODELS_COPY = "No models available — please log in to authenticate";
 
 export const ModelSelector = ({
   model,
@@ -82,21 +86,18 @@ export const ModelSelector = ({
   }
 
   if (sourcesBackendModels && models.length === 0) {
-    // No authenticated providers: prompt the user to authenticate.
+    // pi with no authenticated providers: an empty catalog is genuinely "nothing to
+    // authenticate as", not a cue to fall back to the Claude list. Show the locked
+    // copy + a CTA into the login flow.
     return (
-      <Tooltip content="Authenticate a provider to choose a model">
-        <Button
-          size="1"
-          variant="ghost"
-          className={styles.trigger}
-          data-testid={ElementIds.MODEL_SELECTOR_AUTH_PROMPT}
-          onClick={onAuthenticate}
-        >
-          <Text size="1" truncate>
-            Authenticate a provider
-          </Text>
+      <Flex align="center" gap="2" data-testid={ElementIds.PI_PICKER_EMPTY_STATE}>
+        <Text size="1" color="gray">
+          {PI_NO_MODELS_COPY}
+        </Text>
+        <Button size="1" variant="ghost" onClick={onAuthenticate} data-testid={ElementIds.PI_PICKER_LOGIN_CTA}>
+          Open pi login
         </Button>
-      </Tooltip>
+      </Flex>
     );
   }
 

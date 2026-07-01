@@ -22,6 +22,7 @@ import { ElementIds, UserConfigField } from "../../../api";
 import { dependenciesStatusAtom } from "../../../common/state/atoms/dependenciesStatus";
 import { isPiAgentEnabledAtom, userConfigAtom } from "../../../common/state/atoms/userConfig";
 import { useManagedDependency } from "../../../common/useManagedDependency";
+import { PiProvidersArea } from "./PiProvidersArea.tsx";
 import { SettingRow } from "./SettingRow.tsx";
 import { SettingsSectionLayout } from "./SettingsSection.tsx";
 
@@ -272,6 +273,8 @@ export const PiSettingsSection = ({
           </Flex>
         </Flex>
       </SettingRow>
+
+      <PiProvidersArea />
 
       {displayMode === "CUSTOM" && (
         <SettingRow

@@ -161,10 +161,14 @@ def test_trace_start_status_stop_roundtrip(client: TestClient) -> None:
 
 
 def test_trace_start_conflicts_when_already_running(client: TestClient) -> None:
-    assert client.post("/api/v1/trace/start", json={}).status_code == 200
+    first = client.post("/api/v1/trace/start", json={})
+    assert first.status_code == 200
+    active_path = first.json()["outputPath"]
     try:
         second = client.post("/api/v1/trace/start", json={})
         assert second.status_code == 409
+        # The conflict names where the already-running trace is writing.
+        assert active_path in second.json()["detail"]
     finally:
         client.post("/api/v1/trace/stop")
 

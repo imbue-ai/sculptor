@@ -24,6 +24,7 @@ import httpx
 
 from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
+from sculptor.services.pi_version import PI_PINNED_VERSION
 
 
 class BlockedVersionRange(FrozenModel):
@@ -62,23 +63,20 @@ class PiPin(FrozenModel):
     plugin_set_revision: str = "bundled"
 
 
-# ``version`` is a literal, not an import of ``PI_VERSION_RANGE``: the dependency
-# service imports this module, so importing it back would be a cycle. A unit test
-# asserts the two stay equal.
 PI_PIN = PiPin(
-    version="0.78.0",
+    version=PI_PINNED_VERSION,
     platforms={
         "darwin-arm64": PlatformPin(
             asset="pi-darwin-arm64.tar.gz",
-            sha256="68ebbe4f56a136a1c7bace3393eca4ad0aa1fd9f253b797fd370058bd39fe070",
+            sha256="c7d125bbdebd863fa76d92274458ba0eb405e5cde39db34db1f49f767ed9f1dd",
         ),
         "darwin-x64": PlatformPin(
             asset="pi-darwin-x64.tar.gz",
-            sha256="66074b271260068199f47738a172397f1e0b5a3334697dd2acea35bbd3470b1c",
+            sha256="d4b6b62a0c34c0f2e4cb16ee6fd4f0086b86ad70e0488fd3daa9231216d84e2b",
         ),
         "linux-x64": PlatformPin(
             asset="pi-linux-x64.tar.gz",
-            sha256="8ac03343d1e1228106e8172157f32d6b882829e46b34feaf577f171a5f1387cc",
+            sha256="2e68772bbeaacd73488751098193875389636b80589100609a29921ded71c984",
         ),
     },
 )
@@ -166,12 +164,13 @@ _PI_PLATFORM_MAP: dict[tuple[str, str], str] = {
 
 _PI_RELEASE_BASE_URL = "https://github.com/earendil-works/pi/releases/download"
 
-# Built from the pin rather than imported from the service's ``PI_VERSION_RANGE`` (that
-# reverse import would cycle); a unit test asserts the two stay equal.
-_PI_VERSION_RANGE = VersionRange(
-    min_version=PI_PIN.version,
-    max_version=PI_PIN.version,
-    recommended_version=PI_PIN.version,
+# Defined here, not in the dependency service, so ``PiManagedTool`` can reference it
+# without importing the service (which imports this module — a cycle). The service
+# re-exports it.
+PI_VERSION_RANGE = VersionRange(
+    min_version=PI_PINNED_VERSION,
+    max_version=PI_PINNED_VERSION,
+    recommended_version=PI_PINNED_VERSION,
 )
 
 
@@ -189,7 +188,7 @@ class PiManagedTool(ManagedTool):
     """
 
     tool = Dependency.PI
-    version_range = _PI_VERSION_RANGE
+    version_range = PI_VERSION_RANGE
     platform_keys = frozenset({"darwin-arm64", "darwin-x64", "linux-x64"})
     retention_keep = 1
     # pi keeps its whole extracted tree and runs from ``pi/pi``.
@@ -233,9 +232,9 @@ _CLAUDE_MANIFEST_FETCH_TIMEOUT_SECONDS = 30.0
 # the existing service -> managed_tools edge, which would be an import cycle. The
 # service re-imports this constant for its status / version-range logic.
 CLAUDE_VERSION_RANGE = VersionRange(
-    min_version="2.1.170",
+    min_version="2.1.195",
     max_version="2.99.99",
-    recommended_version="2.1.170",
+    recommended_version="2.1.195",
     # Blocked versions create background tool invocations that are missing events
     # describing them.
     blocked_versions=(BlockedVersionRange(min_version="2.1.101", max_version="2.1.101"),),

@@ -157,8 +157,8 @@ def measure_renders(port, workspace_id, task_id, scenario, label):
         if renderers == 0:
             print(
                 f"[{label}] WARNING: No React renderers detected after 5s. "
-                "Render counts will be zero. Check that the build uses React and "
-                "that add_init_script ran before React loaded."
+                + "Render counts will be zero. Check that the build uses React and "
+                + "that add_init_script ran before React loaded."
             )
 
         page.evaluate(COUNTER_SCRIPT)

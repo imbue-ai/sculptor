@@ -34,11 +34,11 @@ from sculptor.interfaces.environments.agent_execution_environment import Depende
 from sculptor.primitives.service import Service
 from sculptor.services.managed_tools import CLAUDE_VERSION_RANGE
 from sculptor.services.managed_tools import ManagedTool
+from sculptor.services.managed_tools import PI_VERSION_RANGE
 from sculptor.services.managed_tools import ResolvedDistribution
 from sculptor.services.managed_tools import VersionRange
 from sculptor.services.managed_tools import get_managed_tool
 from sculptor.services.managed_tools import get_managed_tools
-from sculptor.services.pi_version import PI_PINNED_VERSION
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.utils.build import get_internal_folder
 from sculptor.web.data_types import AuthResult
@@ -63,16 +63,6 @@ class DependencyCheckResult(FrozenModel):
     path: str | None = None
     version: str | None = None
 
-
-# Pinned-single-version range — Sculptor refuses to talk to a pi outside this pin
-# so the RPC schema stays known. The version string is sourced from the
-# dependency-free ``pi_version`` module so ``fake_pi`` can report it without
-# importing this heavy module.
-PI_VERSION_RANGE = VersionRange(
-    min_version=PI_PINNED_VERSION,
-    max_version=PI_PINNED_VERSION,
-    recommended_version=PI_PINNED_VERSION,
-)
 
 DEPENDENCIES_DIR_NAME = "dependencies"
 _VERSION_DIR_PREFIX = "version-"

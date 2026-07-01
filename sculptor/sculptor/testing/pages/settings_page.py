@@ -65,8 +65,8 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
     def click_on_plugins(self) -> PlaywrightPluginsSettingsElement:
         """Navigate to Plugins settings and return the section element.
 
-        The Plugins nav item is gated on the experimental frontend-plugins flag,
-        so this only works on an instance with that flag enabled.
+        The Plugins nav item is always present (it hosts the frontend-plugins
+        master switch), so this works regardless of whether the system is on.
         """
         self.get_plugins_nav().click()
         return PlaywrightPluginsSettingsElement(locator=self._get_settings_content(), page=self._page)
@@ -134,8 +134,8 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
     def get_plugins_nav(self) -> Locator:
         """Get the Plugins navigation item.
 
-        The Plugins section is gated on the experimental frontend-plugins
-        flag, so this locator is expected to be absent unless that flag is on.
+        The Plugins section is always present — it hosts the frontend-plugins
+        master switch, so it stays reachable even when the system is off.
         """
         return self.get_by_test_id(ElementIDs.SETTINGS_NAV_PLUGINS)
 

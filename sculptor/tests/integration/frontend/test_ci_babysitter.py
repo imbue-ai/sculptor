@@ -26,6 +26,7 @@ from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.pr_popover import PlaywrightPrPopoverElement
 from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
+from sculptor.testing.fake_claude_pause import FakeClaudePause
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import full_spa_reload
 from sculptor.testing.playwright_utils import navigate_to_settings_page
@@ -65,6 +66,13 @@ _MERGED_MODE_STABLE_WAIT_MS = 25_000
 # poll. The polling service uses a 10s minimum interval in tests; 12s is a
 # safe lower bound that still keeps the test snappy.
 _BASELINE_POLL_SETTLE_MS = 12_000
+# Buffer in which a babysitter that ignored the busy gate (or one that queued the
+# failure to pounce when the agent goes idle) would have spawned its tab. Measured
+# from the moment the pipeline badge confirms the failed poll was observed, or from
+# the moment the busy agent goes idle. The coordinator consumes that same poll
+# result and re-checks idleness within ~1s, so 15s is generous headroom against a
+# contended runner.
+_BUSY_SKIP_STABLE_WAIT_MS = 15_000
 
 _FAKE_GITHUB_REMOTE = "https://github.com/test-org/test-repo.git"
 
@@ -75,6 +83,13 @@ _FAKE_GITHUB_REMOTE = "https://github.com/test-org/test-repo.git"
 #   mode = failed   → PR is open with a failed check rollup.
 #   mode = merged   → PR is merged.
 #   mode = closed   → PR is closed without merging.
+#   mode = conflict → PR is open and GitHub reports it CONFLICTING
+#                     (mergeable=CONFLICTING). The backend maps that to
+#                     has_conflicts=True, driving a MERGE_CONFLICT transition; a
+#                     backend that ignores the mergeable field (the SCU-1529 bug)
+#                     leaves has_conflicts=None and never fires. Every other mode
+#                     omits mergeable, so it reads as non-conflicting -- which
+#                     makes "running" the clean baseline a conflict is armed off.
 # The mode-file path is injected via ``.replace("{state_file}", ...)`` (not
 # ``.format``) so the JSON braces below don't need escaping.
 _FAKE_GH_STATE_SCRIPT = """\
@@ -90,6 +105,9 @@ case "$MODE" in
     merged)
         echo '{"data":{"repository":{"pullRequests":{"nodes":[{"number":7,"title":"Test PR","url":"https://github.com/test/repo/pull/7","state":"MERGED","baseRefName":"main","commits":{"nodes":[]},"latestReviews":{"nodes":[]},"reviewThreads":{"nodes":[]}}]}}}}'
         ;;
+    conflict)
+        echo '{"data":{"repository":{"pullRequests":{"nodes":[{"number":7,"title":"Test PR","url":"https://github.com/test/repo/pull/7","state":"OPEN","baseRefName":"main","mergeable":"CONFLICTING","commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"PENDING"}}}]},"latestReviews":{"nodes":[]},"reviewThreads":{"nodes":[]}}]}}}}'
+        ;;
     *)
         echo '{"data":{"repository":{"pullRequests":{"nodes":[]}}}}'
         ;;
@@ -101,21 +119,6 @@ def _install_fake_gh(fake_bin_dir: Path, script: str) -> None:
     script_path = fake_bin_dir / "gh"
     script_path.write_text(textwrap.dedent(script))
     script_path.chmod(script_path.stat().st_mode | stat.S_IEXEC)
-
-
-# Fake `gh` returning one OPEN PR that GitHub reports as CONFLICTING. The
-# backend issues a single `gh api graphql` query; this node carries
-# "mergeable":"CONFLICTING", so a backend that surfaces PR merge conflicts maps
-# it to has_conflicts=True and the babysitter fires on the very first poll (a
-# merge conflict needs no baseline change, unlike a pipeline failure -- see
-# transitions.classify_transitions). A backend that ignores the mergeable field
-# (the SCU-1529 bug) leaves has_conflicts=None and no babysitter tab appears.
-_FAKE_GH_CONFLICTING_PR_SCRIPT = """\
-#!/bin/bash
-if [[ "$*" == *"graphql"* ]]; then
-    echo '{"data":{"repository":{"pullRequests":{"nodes":[{"number":42,"title":"Test PR","url":"https://github.com/test/repo/pull/42","state":"OPEN","baseRefName":"main","mergeable":"CONFLICTING","commits":{"nodes":[{"commit":{"statusCheckRollup":null}}]},"latestReviews":{"nodes":[]},"reviewThreads":{"nodes":[]}}]}}}}'
-fi
-"""
 
 
 def _install_state_driven_gh(instance: SculptorInstance, state_file: Path) -> None:
@@ -192,6 +195,31 @@ def _arm_failed_transition(instance: SculptorInstance, state_file: Path) -> None
     expect(pr_popover.get_pipeline_status_badge()).to_have_text("Running", timeout=60_000)
     instance.page.keyboard.press("Escape")
     state_file.write_text("failed")
+
+
+def _arm_merge_conflict_transition(instance: SculptorInstance, state_file: Path) -> None:
+    """Flip a PR mergeable → conflicting, confirming the poller observed the
+    non-conflicting baseline (via the PR popover "Running" badge) first.
+
+    Unlike PIPELINE_FAILED, MERGE_CONFLICT fires even on the first poll
+    (transitions.classify_transitions): a conflict present from the start would
+    dispatch immediately — but on the very first poll the just-started workspace
+    agent is typically still building/running, so the SCU-1601 all-agents-idle
+    gate DROPS that failure, and a persistent conflict never re-arms (no babysitter
+    ever appears). Arming the conflict as a fresh has_conflicts → True edge only
+    after the workspace agent is idle makes the dispatch deterministic, the same
+    way _arm_failed_transition does for pipeline failures. Waiting on the badge —
+    driven by the same poll result the coordinator consumes — guarantees a
+    non-conflicting poll landed before we write "conflict".
+    """
+    state_file.write_text("running")
+    pr_popover = PlaywrightPrPopoverElement(instance.page)
+    chevron = pr_popover.get_chevron()
+    expect(chevron).to_be_visible(timeout=60_000)
+    chevron.click()
+    expect(pr_popover.get_pipeline_status_badge()).to_have_text("Running", timeout=60_000)
+    instance.page.keyboard.press("Escape")
+    state_file.write_text("conflict")
 
 
 @user_story("to have Sculptor's CI Babysitter automatically investigate a failed pipeline")
@@ -526,23 +554,33 @@ def test_restart_reuses_existing_babysitter_tab(
 
 
 @user_story("to have the CI Babysitter automatically resolve a merge conflict on a GitHub PR")
-def test_github_pr_merge_conflict_creates_babysitter(sculptor_instance_: SculptorInstance) -> None:
-    """When a GitHub PR opened from a workspace has a merge conflict, the
+def test_github_pr_merge_conflict_creates_babysitter(sculptor_instance_: SculptorInstance, tmp_path: Path) -> None:
+    """When a GitHub PR opened from a workspace develops a merge conflict, the
     coordinator spawns a 'CI Babysitter' agent tab and delivers the configured
     merge-conflict prompt.
 
     Regression for SCU-1529: the GitHub PR status path never surfaced
     has_conflicts (the `gh api graphql` query didn't request `mergeable`, and
     the parser didn't map it), so the coordinator's MERGE_CONFLICT transition
-    never fired for PRs and no babysitter tab ever appeared. A merge conflict
-    surfaces on the first poll, so -- unlike the pipeline-failure scenarios --
-    no baseline bump is needed.
+    never fired for PRs and no babysitter tab ever appeared.
+
+    The conflict is armed as a fresh non-conflicting → conflicting edge only
+    after the workspace agent goes idle. MERGE_CONFLICT fires even on the first
+    poll, so a conflict present from the start would dispatch while the
+    just-started agent is still building -- which the SCU-1601 all-agents-idle
+    gate then drops (and a persistent conflict never re-arms). Arming it once the
+    workspace is idle, the way the pipeline-failure tests do, keeps the dispatch
+    deterministic.
     """
+    state_file = tmp_path / "gh_state"
+    state_file.write_text("running")
+
     _enable_babysitter(sculptor_instance_)
-    _install_fake_gh(sculptor_instance_.fake_bin_dir, _FAKE_GH_CONFLICTING_PR_SCRIPT)
+    _install_state_driven_gh(sculptor_instance_, state_file)
     _set_remote(sculptor_instance_, _FAKE_GITHUB_REMOTE)
 
     start_task_and_wait_for_ready(sculptor_instance_.page, "say hello")
+    _arm_merge_conflict_transition(sculptor_instance_, state_file)
 
     agent_tabs = PlaywrightAgentTabBarElement(sculptor_instance_.page)
     babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")
@@ -552,3 +590,72 @@ def test_github_pr_merge_conflict_creates_babysitter(sculptor_instance_: Sculpto
     alpha_chat = get_alpha_chat_view(sculptor_instance_.page)
     conflict_prompt_messages = alpha_chat.get_messages().filter(has_text=_MERGE_CONFLICT_PROMPT_FRAGMENT)
     expect(conflict_prompt_messages.first).to_be_visible()
+
+
+@user_story("to keep the CI Babysitter from interrupting my other agent while it's working")
+def test_babysitter_ignores_ci_failure_while_agent_busy(sculptor_instance_: SculptorInstance, tmp_path: Path) -> None:
+    """The CI Babysitter must not inject a fix prompt while another agent in the
+    workspace is actively working — two agents editing the same workspace at once
+    corrupts the tree (SCU-1601). It does not queue the failure to pounce when the
+    agent finishes; it simply skips it. A *fresh* CI failure observed once the
+    workspace is idle still drives a prompt.
+
+    The workspace agent is held busy with FakeClaudePause so it stays RUNNING
+    until the test releases it. A failed pipeline armed while it is busy spawns no
+    'CI Babysitter' tab; releasing the agent (it goes idle) does NOT retroactively
+    spawn one; a fresh running → failed edge observed while idle does.
+    """
+    page = sculptor_instance_.page
+    state_file = tmp_path / "gh_state"
+    state_file.write_text("running")
+    # Keep the workspace agent busy (RUNNING) until the test releases it — a
+    # signaled pause, not a wall-clock, so CI overhead can't race the window.
+    pause = FakeClaudePause()
+
+    _enable_babysitter(sculptor_instance_)
+    _install_state_driven_gh(sculptor_instance_, state_file)
+    _set_remote(sculptor_instance_, _FAKE_GITHUB_REMOTE)
+
+    task_page = start_task_and_wait_for_ready(page, pause.prompt, wait_for_agent_to_finish=False)
+    chat_panel = task_page.get_chat_panel()
+    # Confirm the agent is actually busy before arming CI.
+    expect(chat_panel.get_thinking_indicator()).to_be_visible(timeout=30_000)
+
+    # Arm the running → failed pipeline transition with the PR popover kept open
+    # the whole time, so the badge flip is read live without a re-open race. Once
+    # the badge shows "Failed", the coordinator has consumed that same poll result
+    # (observer fan-out is simultaneous with the cache update the badge renders
+    # from), so a babysitter ignoring the busy gate would already have dispatched.
+    # Anchoring here — rather than on a fixed wall-clock window after arming —
+    # makes the negative assertion a reliable discriminator at any poll interval.
+    pr_popover = PlaywrightPrPopoverElement(page)
+    expect(pr_popover.get_chevron()).to_be_visible(timeout=60_000)
+    pr_popover.get_chevron().click()
+    badge = pr_popover.get_pipeline_status_badge()
+    expect(badge).to_have_text("Running", timeout=60_000)
+    state_file.write_text("failed")
+    expect(badge).to_have_text("Failed", timeout=60_000)
+    page.keyboard.press("Escape")
+
+    agent_tabs = PlaywrightAgentTabBarElement(page)
+    babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")
+    # Busy: the failure is skipped, so no babysitter tab appears.
+    page.wait_for_timeout(_BUSY_SKIP_STABLE_WAIT_MS)
+    expect(babysitter_tab).to_have_count(0)
+
+    # Release the agent → it finishes its turn and goes idle. The skipped failure
+    # must NOT come back to pounce the instant the agent stops working: the
+    # babysitter stays absent even after the workspace is idle.
+    pause.release()
+    expect(chat_panel.get_thinking_indicator()).not_to_be_visible(timeout=30_000)
+    page.wait_for_timeout(_BUSY_SKIP_STABLE_WAIT_MS)
+    expect(babysitter_tab).to_have_count(0)
+
+    # A fresh running → failed edge observed while idle DOES drive a prompt —
+    # proving the babysitter still works and the silence above was the busy gate.
+    _arm_failed_transition(sculptor_instance_, state_file)
+    expect(babysitter_tab.first).to_be_visible(timeout=60_000)
+    babysitter_tab.first.click()
+    alpha_chat = get_alpha_chat_view(page)
+    pipeline_prompt_messages = alpha_chat.get_messages().filter(has_text=_PIPELINE_PROMPT_FRAGMENT)
+    expect(pipeline_prompt_messages.first).to_be_visible()

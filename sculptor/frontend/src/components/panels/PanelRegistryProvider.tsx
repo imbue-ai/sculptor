@@ -32,6 +32,8 @@ export const PanelRegistryProvider = ({
   useHydrateAtoms([[panelRegistryAtom, panels]]);
 
   const zoneAssignments = useAtomValue(zoneAssignmentsAtom);
+  const activePanelPerZone = useAtomValue(activePanelPerZoneAtom);
+  const zoneVisibility = useAtomValue(zoneVisibilityAtom);
   const zoneOrder = useAtomValue(zoneOrderAtom);
   const panelEnabled = useAtomValue(panelEnabledAtom);
   const setZoneAssignments = useSetAtom(zoneAssignmentsAtom);
@@ -47,20 +49,39 @@ export const PanelRegistryProvider = ({
     setPanelRegistry(panels);
   }, [panels, setPanelRegistry]);
 
-  // One-time bootstrap: apply the full defaultLayout when no persisted layout
-  // exists. Only runs on first render; later changes are handled by the
+  // One-time bootstrap: seed defaults for any layout piece that has no persisted
+  // value. Only runs on first render; later changes are handled by the
   // reconciliation effect below so dynamic panel toggling works.
+  //
+  // Each piece is seeded independently rather than all-or-nothing on
+  // `zoneAssignments` being empty: a plugin's panel registers asynchronously,
+  // and the reconciliation effect below writes `zoneAssignments` to give that
+  // panel a zone. If that write lands before this bootstrap and the seed were
+  // gated on `zoneAssignments` being empty, `zoneVisibility` would never get
+  // seeded — and `isZoneVisibleAtom` treats a missing entry as hidden, so every
+  // docked zone (file browser, terminal, …) would collapse, leaving only the
+  // center panel. Seeding per-piece keeps the visibility default independent of
+  // when the plugin's zone assignment lands. A returning user has all pieces
+  // persisted, so nothing here overwrites their layout.
   useEffect(() => {
     if (!defaultLayout || hasInitialized.current) return;
     hasInitialized.current = true;
 
-    if (Object.keys(zoneAssignments).length === 0) {
-      setZoneAssignments(defaultLayout.zoneAssignments);
-      setActivePanelPerZone(defaultLayout.activePanelPerZone);
-      setZoneVisibility(defaultLayout.zoneVisibility);
-      setZoneOrder(defaultLayout.zoneOrder);
-    }
-  }, [defaultLayout, zoneAssignments, setZoneAssignments, setActivePanelPerZone, setZoneVisibility, setZoneOrder]);
+    if (Object.keys(zoneAssignments).length === 0) setZoneAssignments(defaultLayout.zoneAssignments);
+    if (Object.keys(activePanelPerZone).length === 0) setActivePanelPerZone(defaultLayout.activePanelPerZone);
+    if (Object.keys(zoneVisibility).length === 0) setZoneVisibility(defaultLayout.zoneVisibility);
+    if (Object.keys(zoneOrder).length === 0) setZoneOrder(defaultLayout.zoneOrder);
+  }, [
+    defaultLayout,
+    zoneAssignments,
+    activePanelPerZone,
+    zoneVisibility,
+    zoneOrder,
+    setZoneAssignments,
+    setActivePanelPerZone,
+    setZoneVisibility,
+    setZoneOrder,
+  ]);
 
   // Reconcile the persisted layout against the currently-registered panels.
   // Runs whenever the panels prop changes (e.g. an experimental panel toggle),

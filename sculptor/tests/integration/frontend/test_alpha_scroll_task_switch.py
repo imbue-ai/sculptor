@@ -6,7 +6,7 @@ from sculptor.constants import ElementIDs
 from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.alpha_chat_view import get_alpha_scroll_position
 from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_to_top
-from sculptor.testing.elements.alpha_chat_view import wait_for_alpha_scroll_idle
+from sculptor.testing.elements.alpha_chat_view import wait_for_alpha_scroll_settled
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -43,11 +43,11 @@ def test_scroll_position_restored_on_task_switch(sculptor_instance_: SculptorIns
     alpha_chat_view = get_alpha_chat_view(page)
     expect(alpha_chat_view).to_be_visible()
 
-    # Switching to task A restores its saved scroll position (the bottom) over
-    # several animation frames.  Wait for that restoration to fully settle
+    # Switching to task A restores its saved scroll position (the bottom)
+    # asynchronously.  Wait for the scroll machine to report it has settled
     # before scrolling — otherwise a late restore frame can clobber the
     # scroll-to-top below, which is the source of the CI flake.
-    wait_for_alpha_scroll_idle(page)
+    wait_for_alpha_scroll_settled(page)
 
     # Scroll to the top in task A and wait for scroll to settle
     scroll_alpha_chat_to_top(page)

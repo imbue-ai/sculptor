@@ -739,6 +739,42 @@ def navigate_to_workspace_without_agent(page: Page, workspace_id: str) -> None:
     page.evaluate(f"window.location.hash = '/ws/{workspace_id}'")
 
 
+def dispatch_modified_shortcuts_in_one_task(page: Page, shortcuts: Sequence[tuple[str, str]]) -> list[str]:
+    """Fire Cmd/Ctrl-modified keydown shortcuts back-to-back within a single task.
+
+    Each ``(key, code)`` pair is dispatched on ``window`` as a keydown carrying
+    the platform's primary modifier (Cmd on macOS, Ctrl elsewhere), with no yield
+    to the event loop between dispatches.  React therefore cannot re-render or
+    re-register window listeners in between, which deterministically exercises
+    handlers that would otherwise read stale closed-over state only on a rapid
+    second keypress.
+
+    Returns ``window.location.hash`` captured before the first dispatch and after
+    each one, so a navigation test can assert how the shortcuts moved the route
+    before the app had a chance to settle.
+
+    ``page.evaluate`` is unavoidable here: ``page.keyboard.press`` delivers each
+    press as a separate input event, letting the event loop (and React) run in
+    between, which would mask exactly the timing this reproduces.
+    """
+    return page.evaluate(
+        """(shortcuts) => {
+            const isMac = window.sculptor?.platform === "darwin" || navigator.platform.startsWith("Mac");
+            const hashes = [window.location.hash];
+            for (const [key, code] of shortcuts) {
+              window.dispatchEvent(new KeyboardEvent("keydown", {
+                key, code,
+                metaKey: isMac, ctrlKey: !isMac, altKey: false, shiftKey: false,
+                bubbles: true, cancelable: true,
+              }));
+              hashes.push(window.location.hash);
+            }
+            return hashes;
+        }""",
+        [list(shortcut) for shortcut in shortcuts],
+    )
+
+
 def get_electron_app_version(page: Page) -> str:
     """Return the Electron ``app.getVersion()`` string from the running instance.
 

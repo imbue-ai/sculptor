@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { alphaScrollPositionAtomFamily } from "~/common/state/atoms/alphaScroll.ts";
 
+import { createScrollStateMachine } from "../../scroll/scrollStateMachine.ts";
 import { useAlphaScrollPersistence } from "../useAlphaScrollPersistence.ts";
 
 const createMockScrollContainer = (scrollTop: number, scrollHeight: number, clientHeight: number): HTMLDivElement => {
@@ -29,7 +30,12 @@ const createMockVirtualizer = (virtualItems: Array<VirtualItem>): Virtualizer<HT
   return {
     getVirtualItems: vi.fn(() => virtualItems),
     scrollToIndex: vi.fn(),
+    options: { paddingEnd: 0 },
   } as unknown as Virtualizer<HTMLDivElement, Element>;
+};
+
+const wrapperFor = (store: ReturnType<typeof createStore>) => {
+  return ({ children }: { children: ReactNode }): ReactElement => <Provider store={store}>{children}</Provider>;
 };
 
 describe("useAlphaScrollPersistence", () => {
@@ -49,11 +55,9 @@ describe("useAlphaScrollPersistence", () => {
     const messages = [{ id: "msg-1" }, { id: "msg-2" }, { id: "msg-3" }];
     const store = createStore();
 
-    const wrapper = ({ children }: { children: ReactNode }): ReactElement => (
-      <Provider store={store}>{children}</Provider>
-    );
-
-    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages), { wrapper });
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, createScrollStateMachine()), {
+      wrapper: wrapperFor(store),
+    });
 
     // Initial mount triggers restore
     act(() => {
@@ -75,13 +79,11 @@ describe("useAlphaScrollPersistence", () => {
     const messages = [{ id: "msg-1" }, { id: "msg-2" }, { id: "msg-3" }];
     const store = createStore();
 
-    const wrapper = ({ children }: { children: ReactNode }): ReactElement => (
-      <Provider store={store}>{children}</Provider>
-    );
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, createScrollStateMachine()), {
+      wrapper: wrapperFor(store),
+    });
 
-    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages), { wrapper });
-
-    // Wait for restore to complete (double rAF)
+    // Wait for restore to complete (double rAF) so the machine leaves `restoring`.
     act(() => {
       vi.advanceTimersByTime(48);
     });
@@ -114,11 +116,9 @@ describe("useAlphaScrollPersistence", () => {
       distanceFromBottom: 100, // within threshold
     });
 
-    const wrapper = ({ children }: { children: ReactNode }): ReactElement => (
-      <Provider store={store}>{children}</Provider>
-    );
-
-    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages), { wrapper });
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, createScrollStateMachine()), {
+      wrapper: wrapperFor(store),
+    });
 
     act(() => {
       vi.advanceTimersByTime(16);
@@ -142,16 +142,89 @@ describe("useAlphaScrollPersistence", () => {
       distanceFromBottom: 800,
     });
 
-    const wrapper = ({ children }: { children: ReactNode }): ReactElement => (
-      <Provider store={store}>{children}</Provider>
-    );
-
-    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages), { wrapper });
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, createScrollStateMachine()), {
+      wrapper: wrapperFor(store),
+    });
 
     act(() => {
       vi.advanceTimersByTime(16);
     });
 
     expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(1, { align: "start" });
+  });
+
+  it("drives the machine through restoring -> userControlled", () => {
+    const el = createMockScrollContainer(0, 2000, 500);
+    const ref = { current: el };
+    const virtualizer = createMockVirtualizer([createMockVirtualItem(0, 0, 200)]);
+    const messages = [{ id: "msg-1" }, { id: "msg-2" }, { id: "msg-3" }];
+    const store = createStore();
+    const machine = createScrollStateMachine();
+
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, machine), {
+      wrapper: wrapperFor(store),
+    });
+
+    // Mount restore puts the machine into `restoring` synchronously.
+    expect(machine.getState().authority.kind).toBe("restoring");
+
+    // The deferred re-assert settles it back to `userControlled`.
+    act(() => {
+      vi.advanceTimersByTime(48);
+    });
+    expect(machine.getState().authority.kind).toBe("userControlled");
+  });
+
+  it("re-asserts the saved position after settle when the user stays put", () => {
+    const el = createMockScrollContainer(0, 2000, 500);
+    const ref = { current: el };
+    const virtualizer = createMockVirtualizer([createMockVirtualItem(0, 0, 200)]);
+    const messages = [{ id: "msg-1" }, { id: "msg-2" }, { id: "msg-3" }];
+    const store = createStore();
+    store.set(alphaScrollPositionAtomFamily("task-1"), {
+      firstVisibleMessageId: "msg-2",
+      pixelOffset: 50,
+      distanceFromBottom: 800,
+    });
+
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, createScrollStateMachine()), {
+      wrapper: wrapperFor(store),
+    });
+
+    expect(virtualizer.scrollToIndex).toHaveBeenCalledTimes(1); // initial apply
+    act(() => {
+      vi.advanceTimersByTime(48);
+    });
+    expect(virtualizer.scrollToIndex).toHaveBeenCalledTimes(2); // re-assert after settle
+  });
+
+  it("skips the deferred re-assert when the user scrolls during restore", () => {
+    const el = createMockScrollContainer(0, 2000, 500);
+    const ref = { current: el };
+    const virtualizer = createMockVirtualizer([createMockVirtualItem(0, 0, 200)]);
+    const messages = [{ id: "msg-1" }, { id: "msg-2" }, { id: "msg-3" }];
+    const store = createStore();
+    store.set(alphaScrollPositionAtomFamily("task-1"), {
+      firstVisibleMessageId: "msg-2",
+      pixelOffset: 50,
+      distanceFromBottom: 800,
+    });
+    const machine = createScrollStateMachine();
+
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, machine), {
+      wrapper: wrapperFor(store),
+    });
+
+    expect(virtualizer.scrollToIndex).toHaveBeenCalledTimes(1); // initial apply
+
+    // The user grabs the scroll before the re-assert frames drain.
+    act(() => {
+      machine.dispatch({ kind: "userScrolled" });
+      vi.advanceTimersByTime(48);
+    });
+
+    // Re-assert skipped — the user's scroll is not clobbered.
+    expect(virtualizer.scrollToIndex).toHaveBeenCalledTimes(1);
+    expect(machine.getState().authority.kind).toBe("userControlled");
   });
 });

@@ -6,10 +6,10 @@
 "." = 0
 
 [classmethod-builder-naming]
-"." = 5
+"." = 4
 
 [match-must-assert-never]
-"." = 7
+"." = 4
 
 [no-asyncio-run]
 "." = 8
@@ -30,7 +30,7 @@
 "." = 0
 
 [no-implicit-string-concat]
-"." = 25
+"." = 0
 
 [no-inline-functions]
 "." = 33
@@ -42,7 +42,7 @@
 "." = 0
 
 [no-integration-non-testid-queries]
-"." = 1
+"." = 0
 
 [no-integration-page-evaluate]
 "." = 22
@@ -60,10 +60,10 @@
 "." = 0
 
 [no-logger-exception]
-"." = 1
+"." = 0
 
 [no-logger-warning]
-"." = 57
+"." = 51
 
 [no-make-composite-seed]
 "." = 0
@@ -81,7 +81,7 @@
 "." = 0
 
 [no-os-path-join]
-"." = 4
+"." = 0
 
 [no-pydantic-model-copy-update]
 "." = 0
@@ -93,7 +93,7 @@
 "." = 0
 
 [no-pyrefly-ignore]
-"." = 75
+"." = 71
 
 [no-pyrefly-ignore-errors]
 "." = 0
@@ -117,7 +117,7 @@
 "." = 1
 
 [no-sculptor-subprocess]
-"." = 2
+"." = 1
 
 [no-ssh-subprocess]
 "." = 0
@@ -129,22 +129,22 @@
 "." = 0
 
 [no-type-ignore]
-"." = 41
+"." = 28
 
 [no-typing-builtin-imports]
-"." = 2
+"." = 0
 
 [no-typing-cast]
-"." = 49
+"." = 47
 
 [no-underscore-imports]
-"." = 6
+"." = 2
 
 [no-unlabeled-pyrefly-ignore]
 "." = 0
 
 [no-unlabeled-type-ignore]
-"." = 18
+"." = 0
 
 [no-unnumbered-pyre-fixme]
 "." = 0
@@ -153,7 +153,7 @@
 "." = 0
 
 [no-untyped-args-kwargs]
-"." = 33
+"." = 32
 
 [no-walrus-operator]
 "." = 0

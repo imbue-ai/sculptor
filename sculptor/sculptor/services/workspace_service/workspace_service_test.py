@@ -13,6 +13,7 @@ import pytest
 from pydantic import PrivateAttr
 
 from sculptor.config.settings import SculptorSettings
+from sculptor.config.settings import TEST_LOG_PATH
 from sculptor.database.models import Project
 from sculptor.database.workspace_enums import DiffStatus
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
@@ -26,7 +27,11 @@ from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
 from sculptor.services.workspace_service.default_implementation import DefaultWorkspaceService
+from sculptor.services.workspace_service.environment_manager import (
+    default_implementation as environment_manager_default_implementation,
+)
 from sculptor.services.workspace_service.environment_manager.default_implementation import DefaultEnvironmentManager
+from sculptor.services.workspace_service.environment_manager.environments import local_environment
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     LocalTerminalManager,
 )
@@ -43,6 +48,49 @@ from sculptor.testing.git_snapshot import FullLocalGitRepo
 from sculptor.testing.git_snapshot import GitCommitSnapshot
 from sculptor.testing.git_snapshot import create_repo_from_snapshot
 from sculptor.utils.shutdown import GLOBAL_SHUTDOWN_EVENT
+
+# Running from source, the Sculptor data folder resolves to ``<repo>/.dev_sculptor``
+# (see ``get_sculptor_folder``). Workspace creation writes each workspace's
+# checkout/state/artifacts there, and diff generation writes per-workspace sync
+# artifacts there, neither of which these tests clean up. Left as-is the suite
+# accumulates real workspace directories in the repo on every run. The two fixtures
+# below redirect every on-disk workspace location into the per-test ``tmp_path``
+# (which pytest reclaims automatically) so the suite leaves ``.dev_sculptor`` alone.
+
+
+@pytest.fixture
+def test_settings(database_url: str, tmp_path: Path) -> SculptorSettings:
+    """Point the diff-sync artifact dirs at ``tmp_path`` instead of ``.dev_sculptor``.
+
+    Overrides the shared ``test_settings`` fixture (``sculptor/conftest.py``) for this
+    module. ``WORKSPACE_SYNC_DIR``/``TASK_SYNC_DIR`` otherwise default under
+    ``get_internal_folder()`` (i.e. ``.dev_sculptor/internal/artifacts``), where the
+    diff tests would leave a per-workspace artifact directory behind on every run.
+    """
+    sculptor_artifacts_dir = tmp_path / "sculptor_artifacts"
+    return SculptorSettings(
+        DATABASE_URL=database_url,
+        LOG_PATH=str(TEST_LOG_PATH),
+        LOG_LEVEL="TRACE",
+        SESSION_TOKEN=None,
+        TASK_SYNC_DIR=str(sculptor_artifacts_dir / "task_sync"),
+        WORKSPACE_SYNC_DIR=str(sculptor_artifacts_dir / "workspace_sync"),
+    )
+
+
+@pytest.fixture(autouse=True)
+def _redirect_workspace_checkouts_to_tmp_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Create workspace checkouts under ``tmp_path`` instead of ``.dev_sculptor/workspaces``.
+
+    ``LOCAL_WORKSPACE_DIR`` captures ``get_workspaces_folder()`` at import time in both
+    environment-manager modules, so patching the function alone would not take effect;
+    rebind the constant in each module. The creation site and the deletion
+    safety-check both read it, so they must stay in agreement.
+    """
+    workspaces_dir = tmp_path / "workspaces"
+    workspaces_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(environment_manager_default_implementation, "LOCAL_WORKSPACE_DIR", workspaces_dir)
+    monkeypatch.setattr(local_environment, "LOCAL_WORKSPACE_DIR", workspaces_dir)
 
 
 @pytest.fixture

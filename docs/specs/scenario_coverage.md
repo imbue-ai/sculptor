@@ -36,21 +36,21 @@ Integration tests considered:
 | HELP | 0 | 2 | 1 | 3 |
 | HOME | 2 | 4 | 14 | 20 |
 | ADDWS | 8 | 14 | 3 | 25 |
-| ADDREPO | 1 | 5 | 2 | 8 |
-| ONB | 11 | 10 | 13 | 34 |
-| WS | 40 | 20 | 18 | 78 |
+| ADDREPO | 6 | 5 | 2 | 13 |
+| ONB | 11 | 10 | 15 | 36 |
+| WS | 41 | 20 | 18 | 79 |
 | CHAT | 21 | 16 | 9 | 46 |
 | MSG | 15 | 12 | 10 | 37 |
 | PANEL | 23 | 20 | 14 | 57 |
 | CMDP | 4 | 9 | 18 | 31 |
-| SET | 11 | 18 | 10 | 39 |
+| SET | 13 | 18 | 10 | 41 |
 | DEV | 3 | 1 | 0 | 4 |
 | MENT | 5 | 2 | 3 | 10 |
 | SKILL | 2 | 1 | 0 | 3 |
 | ACT | 2 | 3 | 1 | 6 |
-| **Total** | **173** | **150** | **134** | **457** |
+| **Total** | **181** | **150** | **136** | **467** |
 
-**Under the integration-only standard, 38% of scenarios are completely covered, 33% partially, and
+**Under the integration-only standard, 39% of scenarios are completely covered, 32% partially, and
 29% not at all.** (Counts are derived directly from the two sections below.)
 
 The per-scenario detail is split into two sections: **Coverage gaps — Partial & Missing** (every
@@ -121,7 +121,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | HOME-017 | Missing | — | Assert "Delete workspace?" title, warning naming the workspace, Cancel, and a red default-focused Delete button. |
 | HOME-018 | Missing | — | Open dialog, click Cancel / press Escape; assert dialog closes and row remains. |
 | HOME-019 | Missing | — | Open dialog from a home row, click Delete; assert dialog closes and row disappears. (test_optimistic_deletion.py covers the tab menu, not the home-row dialog.) |
-| HOME-020 | Partial | test_backend_pr_polling.py::test_home_page_shows_pr_badge; ::test_multiple_workspaces_independent_pr_status | Add home-row assertions for "Checking PR…", "Create PR"/"Create MR", merged/closed badge, "Assign PR", error button. |
+| HOME-020 | Partial | test_backend_pr_polling.py::test_home_page_shows_pr_badge; ::test_multiple_workspaces_independent_pr_status | Add home-row assertions for "Checking PR…", "Create PR", merged/closed badge, "Assign PR", error button. |
 | ADDWS-001 | Partial | test_add_workspace_page.py (asserts form/submit button) | Delay project fetch; assert the centered spinner before the form. |
 | ADDWS-002 | Partial | test_multi_repo.py::test_mru_project_updates_after_creating_workspace | Add the no-MRU case (first project pre-selected). |
 | ADDWS-003 | Partial | test_add_workspace_page.py::test_cmd_i_focuses_prompt_input | Assert placeholder "Untitled workspace (optional)" and autofocus on initial load. |
@@ -139,7 +139,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | ADDWS-020 | Partial | test_branch_name_collisions.py::test_worktree_mode_collision_blocks_creation | Assert the Create button's explanatory disabled tooltips and the "Cmd/Ctrl+↵" ready tooltip. |
 | ADDWS-023 | Partial | test_branch_name_collisions.py::test_worktree_mode_collision_blocks_creation (pre-submit) | Force a submit-time 409; assert toast "Branch '{name}' already exists" and the form stays open. |
 | ADDWS-024 | Missing | — | Force creation to fail; assert "Failed to create workspace"/"Failed to create agent" toast with details. |
-| ADDREPO-001 | Partial | test_multi_repo.py::test_adding_duplicate_repo_shows_error; test_regression_settings_delete_repo_stays_on_page.py::test_adding_repo_stays_on_settings_page | Assert the path input is focused on open and a Browse button is present on desktop. |
+| ADDREPO-001 | Partial | test_multi_repo.py::test_adding_duplicate_repo_shows_error; test_regression_settings_delete_repo_stays_on_page.py::test_adding_repo_stays_on_settings_page; test_add_repo_remote_picker.py (dialog opens on GitHub source) | Assert the source picker defaults to GitHub with a Local Folder option, and that Local Folder shows a focused path input + a Browse button on desktop. |
 | ADDREPO-002 | Missing | — | Open the dialog, click Cancel / Escape / overlay; assert it closes with no changes. |
 | ADDREPO-003 | Partial | test_path_autocomplete_keyboard.py::test_cmd_enter_submits_path | While validation is in progress, attempt to close; assert the dialog stays open. |
 | ADDREPO-004 | Partial | test_multi_repo.py::test_create_new_project_from_add_workspace_page (adds via Settings UI) | Focused dialog test: enter a valid path, click "Add Repository"; assert it closes and the new repo is selected in the dropdown. |
@@ -168,8 +168,10 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | ONB-021 | Missing | — | Open the Install affordance; assert popover shows the install command (e.g. `brew install …`) and a docs link. |
 | ONB-023 | Missing | — | Expand a card, click "Use System PATH" / "Use Managed"; assert the mode switches and UI updates. |
 | ONB-025 | Missing | — | Click "check again"; assert text flips to "Checking…" briefly and cards refresh. |
-| ONB-027 | Partial | test_onboarding.py::test_full_onboarding_flow | Assert "Add your first repo" header, the `~/path/to/repo` placeholder, and input autofocus. |
-| ONB-028 | Missing | — | On desktop, click "Or browse for a folder", select a folder; assert the path input is populated. |
+| ONB-027 | Partial | test_onboarding.py::test_full_onboarding_flow | Assert "Add your first repo" header, the GitHub-default source picker with a Local Folder option, and the `~/path/to/repo` placeholder under Local Folder. |
+| ONB-028 | Missing | — | On desktop with Local Folder selected, click "Or browse for a folder", select a folder; assert the path input is populated. |
+| ONB-035 | Missing | — | On the optional GitHub CLI card, click "Sign in"; assert a one-time code, an "Open verification page" link, and a waiting state; once gh reports authenticated assert the card flips to signed-in. |
+| ONB-036 | Missing | — | On the onboarding Add-Repo step's GitHub source, select a repo (or paste a URL) and submit; assert the clone-progress view, then the repo is added and the wizard completes. |
 | ONB-029 | Missing | — | Assert Add disabled + tooltip "Enter a repository path above" when empty; enabled after typing; spinner while validating. |
 | ONB-031 | Partial | test_multi_repo.py::test_git_init_dialog_for_non_git_directories (via Add Workspace page, not onboarding) | Add the same flow on the onboarding Add-Repo step; assert "Setting up repository…" and Cancel-returns. |
 | ONB-032 | Partial | test_multi_repo.py::test_empty_repo_initial_commit_dialog (via Settings, not onboarding) | Cover the empty-repo prompt on the onboarding Add-Repo step incl. Cancel-returns. |
@@ -194,15 +196,15 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | WS-005 | Missing | — | Drag files over chat input → "Drop to attach images" overlay; on drop files appear in preview list. |
 | WS-009 | Partial | test_regression_model_selection.py::test_new_agent_inherits_model_from_existing_agent | Open model selector, pick a model; assert it is highlighted and applied to the next sent message. |
 | WS-013 | Missing | — | Shift+Enter inserts a line break and editor grows; sending submits the whole multiline text as one message. |
-| WS-022 | Missing | — | While PR status loads, assert spinner with "Checking PR…"/"Checking MR…". |
+| WS-022 | Missing | — | While PR status loads, assert spinner with "Checking PR…". |
 | WS-023 | Partial | test_pr_button_errors.py::test_github_happy_paths (Create PR visible) | Click Create PR; assert the default PR-creation prompt (incl. target branch) is sent to the agent. |
 | WS-024 | Missing | — | Open Create-PR chevron, click "Edit prompt…", edit and Save; assert prompt updated and dialog closes. |
 | WS-025 | Partial | test_pr_button_errors.py::test_github_happy_paths ("PR #42") | Assert pipeline and review status dots render on the open-PR button. |
-| WS-026 | Missing | — | Click the PR number; assert PR/MR opens in browser (intercept window.open / browser-open RPC). |
+| WS-026 | Missing | — | Click the PR number; assert the PR opens in browser (intercept window.open / browser-open RPC). |
 | WS-027 | Missing | — | Open chevron popover; assert title/link, checks/pipeline status, approvals with reviewer names, unresolved comments. |
 | WS-029 | Partial | test_backend_pr_polling.py::test_closed_not_merged_pr_shows_closed_state | Add the merged-PR case: merge icon + "merged" text; clicking opens browser. |
 | WS-030 | Missing | — | Hover pipeline/review dots; assert tooltip text ("Pipeline running/passed/failed/No pipeline", "Approved/Review pending/No reviewers"). |
-| WS-031 | Missing | — | PR with different target shows "Assign PR"/"Assign MR"; opening offers "Create PR → {target}" and "switch target to {target}". |
+| WS-031 | Missing | — | PR with different target shows "Assign PR"; opening offers "Create PR → {target}" and "switch target to {target}". |
 | WS-032 | Partial | test_pr_button_errors.py::test_github_cli_error_variants; ::test_gitlab_cli_error_variants | Assert warning-triangle vs info icon distinction and the remediation-command copy icon turning to a checkmark briefly. |
 | WS-033 | Partial | test_target_branch.py::test_switching_to_all_scope_shows_target_branch_diff; test_pr_management.py::test_banner_shows_target_branch_selector_for_non_github_gitlab_origin | Click the selector; assert the dropdown lists branches; select one; assert target updates. |
 | WS-034 | Missing | — | Target differs from PR target → warning color; hover "PR #N targets {branch}"; selecting matching branch updates target. |
@@ -215,7 +217,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | WS-050 | Missing | — | Drag an agent tab to a new position; assert the tab order updates. |
 | WS-057 | Partial | test_ask_user_question.py::test_ask_user_question_navigation_state; ::test_ask_user_question_next_button | Add Tab/Shift+Tab and arrow-key navigation; assert progress dots show answered/unanswered/current. |
 | WS-060 | Missing | — | Agent errored + workspace deleted → input shows "deleted / cannot be restored" with no restore link. |
-| WS-061 | Partial | test_workspace_peek.py::test_workspace_peek_popover_idle_state; ::test_workspace_peek_popover_waiting_state; ::test_peek_popover_shows_diff_stats | Assert a single popover surfaces status, agent list, PR/MR info, branch, and diff stats together. |
+| WS-061 | Partial | test_workspace_peek.py::test_workspace_peek_popover_idle_state; ::test_workspace_peek_popover_waiting_state; ::test_peek_popover_shows_diff_stats | Assert a single popover surfaces status, agent list, PR info, branch, and diff stats together. |
 | WS-062 | Partial | test_workspace_peek.py::test_workspace_peek_popover_hover_mechanics; test_regression_workspace_peek_stuck_on_close.py::test_workspace_peek_dismissed_on_middle_click_close | Assert content swaps instantly within grace period and close-after-delay on leaving all tabs. |
 | WS-063 | Missing | — | Workspace with >5 agents shows only 5 + "+N more agents" button that reveals the rest. |
 | WS-064 | Missing | — | Click peek agent row/header closes popover and opens workspace/agent; click branch copies it with "Copied!". |
@@ -256,7 +258,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | CHAT-043 | Partial | test_alpha_ask_user_question.py::test_alpha_auq_pill_dismissed_state | Assert the dimmed-options styling on the dismissed block. |
 | CHAT-044 | Partial | test_alpha_chat_view.py::test_debug_view_displays_blocks | Assert role, id, timestamp, and tool_use/tool_result names per message. |
 | CHAT-045 | Missing | — | Clicking a debug-view timestamp toggles between relative and absolute formats. |
-| CHAT-046 | Partial | test_pi_capability_gating.py::test_pi_model_switcher_offers_pi_models_and_accepts_a_pick; ::test_fresh_pi_agent_switcher_shows_pi_models_without_a_message | Assert the picker is disabled (with the current model) for a terminal agent, and that a harness-rejected Pi switch leaves the selection unchanged and shows an error toast. |
+| CHAT-046 | Partial | test_pi_capability_gating.py::test_pi_model_switcher_offers_pi_models_and_accepts_a_pick; ::test_fresh_pi_agent_switcher_shows_pi_models_without_a_message | Assert the picker is disabled (with the current model) for a terminal agent; that two-or-more providers cascade into per-provider submenus while a single provider stays flat; that a Pi agent with no authenticated providers shows the "Authenticate a provider" prompt; and that a harness-rejected Pi switch leaves the selection unchanged and shows an error toast. |
 
 ### MSG
 
@@ -386,8 +388,10 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | SET-034 | Partial | test_theme_builder.py::test_theme_builder_navigation; ::test_theme_builder_change_accent_color | Exercise changing appearance mode, primary font, code font, and code theme and verify the UI updates. |
 | SET-035 | Partial | test_theme_builder.py::test_theme_builder_change_accent_color; ::test_theme_builder_reset_to_defaults | Cover custom hex entry, the light/dark hex override toggle, invalid-hex-shown-red, and the Gray/Success/Warning/Info swatches. |
 | SET-036 | Missing | — | Click a radius / scaling / panel-background option and assert the live UI updates. |
-| SET-038 | Partial | test_plugins_settings_visibility.py::test_plugins_section_visible_and_toggles_with_switch; test_plugin_loader.py::test_valid_plugin_loads_and_can_be_removed; ::test_plugin_source_can_be_disabled_and_re_enabled | Cover adding a source by URL, the Refresh rescan of the plugins directory, removing a user-added URL source, and the displayed directory path. |
+| SET-038 | Partial | test_plugin_loader.py::test_valid_plugin_loads_and_can_be_removed; ::test_plugin_source_can_be_disabled_and_re_enabled | Cover the Refresh rescan of the plugins directory and the displayed directory path. |
 | SET-039 | Partial | test_ci_babysitter.py::test_settings_selector_lists_only_driveable_harnesses | Assert the selector saves with a toast and is disabled when the babysitter is off. |
+| SET-040 | Complete | test_plugins_settings_visibility.py::test_plugins_section_present_and_on_by_default; ::test_global_toggle_hides_management_ui_live | — |
+| SET-041 | Complete | test_plugin_loader.py::test_failed_plugin_can_be_retried | — |
 | DEV-001 | Partial | test_tanstack_devtools_panel.py::test_tanstack_devtools_panel_mounts_with_content (panel mounts only) | Cover header Dock/Float/Close controls, floating drag + resize within viewport, docked resize-from-top-edge + pushes content up, and closing hides it. |
 
 ---
@@ -441,6 +445,11 @@ Every scenario an integration test fully covers — it performs the user action 
 | ADDWS-022 | test_add_workspace_page.py::test_arrow_down_focuses_name_input_when_nothing_focused; ::test_arrow_up_focuses_name_input_when_nothing_focused |
 | ADDWS-025 | test_add_workspace_page.py::test_workspace_form_branch_state_persists_after_navigation |
 | ADDREPO-007 | test_path_autocomplete_keyboard.py::test_enter_on_directory_highlights_first_subentry; ::test_selected_folder_submit_shows_correct_repo_name |
+| ADDREPO-009 | test_add_repo_remote_picker.py::test_github_picker_happy_path_clones_and_adds_project |
+| ADDREPO-010 | test_add_repo_remote_clone.py::test_add_repo_remote_clone_via_url_fallback; test_add_repo_remote_clone_errors.py::test_url_view_derives_name_from_url; ::test_url_view_ssh_url_clones_with_https_link_in_progress_view |
+| ADDREPO-011 | test_add_repo_not_configured.py::test_not_configured_shows_configure_cta |
+| ADDREPO-012 | test_add_repo_remote_clone_errors.py::test_url_view_ssh_url_clones_with_https_link_in_progress_view; ::test_clone_504_shows_timeout_message |
+| ADDREPO-013 | test_add_repo_remote_clone_errors.py::test_clone_409_offers_add_as_local_cta; ::test_clone_412_does_not_offer_add_as_local_cta |
 
 ### ONB / MENT / SKILL / ACT
 
@@ -487,7 +496,7 @@ Every scenario an integration test fully covers — it performs the user action 
 | WS-019 | test_queued_messages.py::test_edit_queued_message_into_empty_editor |
 | WS-020 | test_queued_messages.py::test_edit_dialog_overwrite_replaces_editor_content; ::test_edit_dialog_remove_discards_queued_message; ::test_edit_dialog_cancel_requeues_message |
 | WS-021 | test_queued_messages.py::test_interrupt_and_send_queued_message; test_regression_queued_messages_after_restart.py::test_queued_message_dispatched_after_graceful_restart |
-| WS-028 | test_ci_babysitter.py::test_scenario_4_pause_toggle_prevents_prompt |
+| WS-028 | test_ci_babysitter.py::test_scenario_4_pause_toggle_prevents_prompt; ::test_pause_state_persists_across_restart |
 | WS-036 | test_workspace_banner.py::test_repo_segment_shows_mode_label |
 | WS-037 | test_zen_mode.py::test_zen_mode_hides_chrome_and_panels; ::test_focus_mode_hides_panels_but_keeps_chrome |
 | WS-040 | test_workspace_banner.py::test_banner_shows_diff_stats; ::test_banner_click_navigates_to_changes_all |
@@ -499,6 +508,7 @@ Every scenario an integration test fully covers — it performs the user action 
 | WS-049 | test_mark_unread.py::test_mark_adjacent_tab_unread; test_read_unread_status.py::test_unread_indicator_when_switching_agents_within_workspace |
 | WS-051 | test_terminal_agent_basic.py::test_terminal_agent_basic |
 | WS-052 | test_terminal_agent_basic.py::test_terminal_agent_basic (switch away/back, scrollback restored); test_terminal_tab_enhancements.py::test_terminal_compact_layout_no_heading |
+| WS-079 | test_terminal_agent_focus.py::test_terminal_agent_tab_switch_focuses_terminal |
 | WS-053 | test_ask_user_question.py::test_ask_user_question_full_flow; test_alpha_ask_user_question.py::test_alpha_auq_pill_shows_answered_summary |
 | WS-054 | test_ask_user_question.py::test_ask_user_question_full_flow |
 | WS-055 | test_ask_user_question.py::test_ask_user_question_multiselect |

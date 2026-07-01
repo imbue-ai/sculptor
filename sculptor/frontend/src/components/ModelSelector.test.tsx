@@ -171,7 +171,7 @@ describe("ModelSelector", () => {
     expect(screen.queryByTestId(ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION)).not.toBeInTheDocument();
   });
 
-  it("prompts to authenticate when a backend harness has no providers", () => {
+  it("shows the login CTA when a backend harness has no providers", () => {
     render(
       withStore(
         <ModelSelector
@@ -184,11 +184,13 @@ describe("ModelSelector", () => {
         />,
       ),
     );
-    expect(screen.getByTestId(ElementIds.MODEL_SELECTOR_AUTH_PROMPT)).toBeInTheDocument();
+    const emptyState = screen.getByTestId(ElementIds.PI_PICKER_EMPTY_STATE);
+    expect(emptyState).toHaveTextContent("No models available — please log in to authenticate");
+    expect(screen.getByTestId(ElementIds.PI_PICKER_LOGIN_CTA)).toBeInTheDocument();
     expect(screen.queryByTestId(ElementIds.MODEL_SELECTOR)).not.toBeInTheDocument();
   });
 
-  it("invokes onAuthenticate when the no-providers prompt is clicked", () => {
+  it("invokes onAuthenticate when the login CTA is clicked", () => {
     const onAuthenticate = vi.fn();
     render(
       withStore(
@@ -202,7 +204,7 @@ describe("ModelSelector", () => {
         />,
       ),
     );
-    fireEvent.click(screen.getByTestId(ElementIds.MODEL_SELECTOR_AUTH_PROMPT));
+    fireEvent.click(screen.getByTestId(ElementIds.PI_PICKER_LOGIN_CTA));
     expect(onAuthenticate).toHaveBeenCalledTimes(1);
   });
 
@@ -223,7 +225,7 @@ describe("ModelSelector", () => {
     const trigger = screen.getByTestId(ElementIds.MODEL_SELECTOR);
     expect(trigger).toHaveTextContent("Anthropic New");
     expect(trigger).not.toBeDisabled();
-    expect(screen.queryByTestId(ElementIds.MODEL_SELECTOR_AUTH_PROMPT)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(ElementIds.PI_PICKER_EMPTY_STATE)).not.toBeInTheDocument();
   });
 });
 

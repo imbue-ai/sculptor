@@ -6,6 +6,7 @@ backend -> posix_spawn -> pty_helper -> pty.fork -> shell path.
 """
 
 import os
+import select
 import signal
 import socket
 import sys
@@ -25,30 +26,50 @@ from sculptor.services.workspace_service.environment_manager.environments.spawne
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX-only")
 
 
-def _read_pty_until(fd: int, marker: str, timeout: float = 5.0) -> str:
-    """Read from pty fd until marker appears or timeout expires."""
-    output = b""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            chunk = os.read(fd, 4096)
-            if chunk:
-                output += chunk
-                if marker.encode() in output:
-                    return output.decode(errors="replace")
-        except OSError:
-            pass
-        time.sleep(0.05)
-    return output.decode(errors="replace")
+@pytest.fixture(autouse=True)
+def _isolate_shell_config(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory) -> None:
+    """Point the spawned login shell at an empty HOME/ZDOTDIR so it sources no
+    user rc files.
+
+    These tests spawn a real ``$SHELL -l`` — a login shell, which sources the
+    user's full rc chain. Left alone, that turns the developer's personal
+    terminal configuration (prompt themes, plugins, syntax highlighting,
+    bracketed-paste) into uncontrolled test input — a bare ``/bin/bash`` on CI
+    behaves nothing like a heavily-themed zsh on a laptop. Pointing HOME (bash,
+    ``~/.profile`` etc.) and ZDOTDIR (zsh, ``.zshrc`` etc.) at an empty
+    directory gives every run a vanilla prompt, so what the tests observe
+    depends only on Sculptor's own env handling, not on who runs the suite.
+    """
+    empty_home = tmp_path_factory.mktemp("empty_shell_home")
+    monkeypatch.setenv("HOME", str(empty_home))
+    monkeypatch.setenv("ZDOTDIR", str(empty_home))
+
+
+# Sentinels bracketing the echoed value. We search for the fully-expanded form
+# (e.g. ``<SCT|local_port_5050|SCT>``), which can appear ONLY in the command's
+# OUTPUT: the shell's echo of the *typed* command still has the literal
+# ``${VAR}`` between the sentinels, so it can never match — not even for an
+# empty (scrubbed) value, whose output is ``<SCT||SCT>``. That is what lets the
+# scrub assertions prove a variable is genuinely empty in the child, instead of
+# passing on any substring that merely happens to appear on the line (such as
+# the shell's own echo of the typed command).
+_SENTINEL_OPEN = "<SCT|"
+_SENTINEL_CLOSE = "|SCT>"
 
 
 @contextmanager
 def _running_pty(proc: SpawnedPtyProcess) -> Generator[int, None, None]:
-    """Start a SpawnedPtyProcess, yield its primary fd, and ensure cleanup."""
+    """Start a SpawnedPtyProcess, yield its primary fd, and ensure cleanup.
+
+    There is deliberately no fixed "wait for the prompt" sleep here:
+    ``_assert_pty_echo`` resends its probe until the shell is actually ready,
+    which is robust to a slow login-shell init under load. A fixed pre-write
+    delay is unreliable — a heavily-configured shell (plugins, async/instant
+    prompt) can still be initializing, and dropping typed-ahead input, well past
+    any hardcoded delay.
+    """
     proc.start()
     try:
-        # Give the shell a moment to print its prompt before we write commands.
-        time.sleep(0.5)
         fd = proc.primary_fd
         assert fd is not None
         yield fd
@@ -60,12 +81,66 @@ def _running_pty(proc: SpawnedPtyProcess) -> Generator[int, None, None]:
         proc.close_primary_fd()
 
 
-def _assert_pty_echo(fd: int, env_var: str, expected: str) -> None:
-    """Write an echo command to the pty and assert the output contains the marker."""
-    marker = f"CHECK:{expected}"
-    os.write(fd, f'echo "CHECK:${{{env_var}}}"\n'.encode())
-    output = _read_pty_until(fd, marker)
-    assert marker in output
+def _assert_pty_echo(fd: int, env_var: str, expected: str, timeout: float = 15.0) -> None:
+    """Echo ``$env_var`` through the pty and assert its value equals ``expected``.
+
+    The probe command is *resent* periodically rather than written once after a
+    fixed delay: an interactive login shell with a heavy rc (prompt plugins,
+    async/instant prompt, syntax highlighting) can still be initializing — and
+    discarding typed-ahead input — for a second or more after it first draws a
+    prompt, especially when several shells start at once under parallel-test
+    load. Resending guarantees at least one probe lands once the shell is ready,
+    instead of betting that init finished within a hardcoded window.
+
+    The sentinels bracket the value so a match can come only from the command's
+    output (never the shell's echo of the typed command), which keeps the
+    assertion meaningful even for an empty value. The expanded sentinel string
+    lands contiguously on echo's output line, so a plain substring search over
+    the raw bytes suffices — no escape-stripping needed once the shell is
+    isolated to a vanilla config (see ``_isolate_shell_config``).
+    """
+    marker = f"{_SENTINEL_OPEN}{expected}{_SENTINEL_CLOSE}".encode()
+    command = f'echo "{_SENTINEL_OPEN}${{{env_var}}}{_SENTINEL_CLOSE}"\n'.encode()
+
+    # Wait for readability with poll(2), not select(2): select cannot wait on a
+    # file descriptor whose number is >= FD_SETSIZE (1024) and raises
+    # "filedescriptor out of range in select()". An fd-heavy test run (xdist, a
+    # long-lived process) can hand a freshly opened pty a high fd number, so a
+    # select() here would reintroduce exactly the high-fd flakiness the
+    # production reader uses poll(2) to avoid.
+    poller = select.poll()
+    poller.register(fd, select.POLLIN)
+
+    output = b""
+    deadline = time.monotonic() + timeout
+    next_send = 0.0
+    while time.monotonic() < deadline:
+        now = time.monotonic()
+        if now >= next_send:
+            try:
+                os.write(fd, command)
+            except OSError:
+                pass
+            next_send = now + 0.75
+        # poll so we never block past the resend cadence; the pty primary fd is
+        # non-blocking, so a bare os.read would spin on BlockingIOError. A 200ms
+        # timeout (in milliseconds for poll) paces the loop when there is no data.
+        if not poller.poll(200):
+            continue
+        try:
+            chunk = os.read(fd, 4096)
+        except BlockingIOError:
+            continue
+        except OSError:
+            break  # EIO/EBADF: the shell is gone; stop and report what we have.
+        if not chunk:
+            break  # EOF: the shell exited.
+        output += chunk
+        if marker in output:
+            return
+    raise AssertionError(
+        f"marker {marker!r} for ${env_var} not seen within {timeout:.0f}s; output: {output.decode(errors='replace')!r}"
+    )
 
 
 def test_extra_env_available_in_child(tmp_path: Path) -> None:
@@ -122,6 +197,70 @@ def test_inherited_sculpt_env_is_scrubbed_so_extra_env_takes_effect(
         _assert_pty_echo(fd, "SCULPT_API_PORT", "local_port_5050")
         _assert_pty_echo(fd, "SCULPT_AGENT_ID", "")
         _assert_pty_echo(fd, "SCULPT_LEAKED_VAR", "")
+
+
+# ``_scrub_shell_env`` is the pure function that actually decides what the shell
+# sees; the pty echo tests above prove a value survives an end-to-end spawn,
+# while these pin down every branch of the rule deterministically — no pty, no
+# shell, no dependence on the developer's terminal at all.
+
+
+def test_scrub_shell_env_removes_sculptor_internal_vars(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SCULPT_API_PORT", "5050")
+    monkeypatch.setenv("SCULPTOR_INTERNAL", "x")
+    monkeypatch.setenv("_PYI_BOOTSTRAP", "x")
+    monkeypatch.setenv("SESSION_TOKEN", "secret")
+    monkeypatch.setenv("SCTEST_UNRELATED", "keep")
+
+    env = spawned_pty_process._scrub_shell_env(extra_env={}, env_var_override=False)
+
+    assert "SCULPT_API_PORT" not in env
+    assert "SCULPTOR_INTERNAL" not in env
+    assert "_PYI_BOOTSTRAP" not in env
+    assert "SESSION_TOKEN" not in env
+    # Vars outside the excluded names/prefixes are left untouched.
+    assert env["SCTEST_UNRELATED"] == "keep"
+    # The pty advertises xterm-256color, so TERM is always forced to match.
+    assert env["TERM"] == spawned_pty_process.TERMINAL_TYPE
+
+
+def test_scrub_shell_env_injects_extra_env_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SCTEST_NEW_VAR", raising=False)
+    env = spawned_pty_process._scrub_shell_env(extra_env={"SCTEST_NEW_VAR": "new"}, env_var_override=False)
+    assert env["SCTEST_NEW_VAR"] == "new"
+
+
+def test_scrub_shell_env_keeps_inherited_value_when_override_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SCTEST_EXISTING", "original")
+    env = spawned_pty_process._scrub_shell_env(extra_env={"SCTEST_EXISTING": "replacement"}, env_var_override=False)
+    assert env["SCTEST_EXISTING"] == "original"
+
+
+def test_scrub_shell_env_replaces_inherited_value_when_override_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SCTEST_EXISTING", "original")
+    env = spawned_pty_process._scrub_shell_env(extra_env={"SCTEST_EXISTING": "replacement"}, env_var_override=True)
+    assert env["SCTEST_EXISTING"] == "replacement"
+
+
+def test_scrub_shell_env_prepends_path_even_without_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PATH", "/usr/bin")
+    # PATH is special-cased: a terminal's extra PATH is *prepended* (so its tools
+    # win) rather than replacing the inherited PATH — and this happens even with
+    # override disabled, unlike every other key.
+    env = spawned_pty_process._scrub_shell_env(extra_env={"PATH": "/custom/bin"}, env_var_override=False)
+    assert env["PATH"] == "/custom/bin" + os.pathsep + "/usr/bin"
+
+
+def test_scrub_shell_env_reinjects_scrubbed_sculpt_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The Sculptor-on-Sculptor case (see test_inherited_sculpt_env_... above),
+    # isolated to the pure function: the inherited SCULPT_* value is scrubbed, so
+    # extra_env's fresh value is injected and wins even with override disabled —
+    # precisely because scrubbing removed the inherited one first.
+    monkeypatch.setenv("SCULPT_API_PORT", "outer_port_12345")
+    env = spawned_pty_process._scrub_shell_env(
+        extra_env={"SCULPT_API_PORT": "local_port_5050"}, env_var_override=False
+    )
+    assert env["SCULPT_API_PORT"] == "local_port_5050"
 
 
 def test_shell_exit_via_close_primary_fd_is_detected(tmp_path: Path) -> None:

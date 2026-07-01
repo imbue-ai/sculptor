@@ -45,9 +45,9 @@
     position: relative;
   }
 
-  // Always-on thumb — users want a persistent position indicator during
-  // streaming, and the track width stays constant either way (no reflow).
-  @include thin-scrollbar($autohide: false);
+  // Native scrollbar suppressed in favour of <VerticalOverlayScrollbar>, whose
+  // overlay thumb coexists with the chat's adjacent panel resize handle (SCU-1321).
+  @include hidden-scrollbar;
 }
 
 // 1px sentinel pinned to the bottom of the virtual content. An

@@ -59,6 +59,7 @@ from sculptor.interfaces.agents.agent import ModelsAvailableAgentMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.interfaces.agents.agent import PlanModeAgentMessage
+from sculptor.interfaces.agents.agent import RefreshModelsUserMessage
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageUserMessage
 from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
 from sculptor.interfaces.agents.agent import RequestSkippedAgentMessage
@@ -1857,7 +1858,7 @@ def _make_start_env(persisted_session_id: str | None = None) -> MagicMock:
     env.get_tool_binary_path.return_value = "/bin/pi"
     version_result = MagicMock()
     version_result.stdout = ""
-    version_result.stderr = "pi 0.78.0\n"
+    version_result.stderr = "pi 0.80.2\n"
     env.run_process_to_completion.return_value = version_result
     env.get_state_path.return_value = Path("/fake/state")
     env.get_system_prompt.return_value = ""
@@ -1984,7 +1985,7 @@ def test_start_raises_pi_version_mismatch_when_out_of_range() -> None:
     agent = _make_agent(env)
     with pytest.raises(PiVersionMismatchError) as exc_info:
         agent.start(secrets={})
-    assert exc_info.value.pinned_version == "0.78.0"
+    assert exc_info.value.pinned_version == "0.80.2"
     assert exc_info.value.detected_version == "0.50.0"
     # The message must point the user at the self-healing fix (managed install).
     assert "Managed" in str(exc_info.value)
@@ -3160,6 +3161,51 @@ def test_curate_models_keeps_current_model_absent_from_catalog() -> None:
     assert curated[0].model_id == "claude-opus-9-9"
 
 
+_MULTI_PROVIDER_OPTIONS: list[ModelOption] = [
+    ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Claude Opus 4.8"),
+    ModelOption(provider="openai", model_id="gpt-5", display_name="GPT-5"),
+    ModelOption(provider="google", model_id="gemini-3", display_name="Gemini 3"),
+]
+
+
+def test_curate_models_filters_to_single_authenticated_provider() -> None:
+    """Only options whose provider is in the authenticated set survive."""
+    curated = _curate_models(_MULTI_PROVIDER_OPTIONS, current_model=None, authenticated_providers={"anthropic"})
+    assert {option.provider for option in curated} == {"anthropic"}
+    assert [option.model_id for option in curated] == ["claude-opus-4-8"]
+
+
+def test_curate_models_filters_to_multiple_authenticated_providers() -> None:
+    curated = _curate_models(
+        _MULTI_PROVIDER_OPTIONS, current_model=None, authenticated_providers={"anthropic", "openai"}
+    )
+    assert {option.provider for option in curated} == {"anthropic", "openai"}
+
+
+def test_curate_models_empty_authenticated_set_yields_empty() -> None:
+    """An empty authenticated set drops everything (this drives the empty-state CTA)."""
+    curated = _curate_models(_MULTI_PROVIDER_OPTIONS, current_model=None, authenticated_providers=set())
+    assert curated == []
+
+
+def test_curate_models_retains_current_model_even_when_provider_unauthenticated() -> None:
+    """The current model is always offered, even if its provider isn't authenticated."""
+    current = ModelOption(provider="openai", model_id="gpt-5", display_name="GPT-5")
+    curated = _curate_models(_MULTI_PROVIDER_OPTIONS, current_model=current, authenticated_providers={"anthropic"})
+    assert current in curated
+    assert "gemini-3" not in {option.model_id for option in curated}
+
+
+def test_curate_models_filter_preserves_blacklist_and_sort() -> None:
+    """The authenticated filter layers on top of the existing blacklist/sort rules."""
+    curated = _curate_models(
+        _options_from_raw(_RAW_PI_MODELS), current_model=None, authenticated_providers={"anthropic"}
+    )
+    # _RAW_PI_MODELS are all anthropic, so the filter is a no-op here and the curated
+    # list matches the unfiltered curation exactly.
+    assert [option.model_id for option in curated] == _CURATED_PI_MODEL_IDS
+
+
 def test_model_option_from_pi_defaults_provider_and_name() -> None:
     # Missing provider defaults to anthropic; missing name falls back to the id.
     option = _model_option_from_pi({"id": "claude-opus-4-8"})
@@ -3192,12 +3238,19 @@ def _state_response_with_model(model: dict[str, Any] | None) -> str:
     )
 
 
+def _set_model_response(model: dict[str, Any]) -> str:
+    return _event({"type": "response", "command": "set_model", "success": True, "id": "cmd-setmodel", "data": model})
+
+
 def test_fetch_models_into_state_emits_curated_catalog_and_current_model() -> None:
     """At start the agent fetches + curates pi's catalog and emits it with the current model."""
     agent = _make_agent()
     current_raw = {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"}
     agent._process = _make_process([_models_response(_RAW_PI_MODELS), _state_response_with_model(current_raw)])
-    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]):
+    with (
+        patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]),
+        patch("sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value={"anthropic"}),
+    ):
         agent._fetch_models_into_state()
 
     emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
@@ -3206,6 +3259,62 @@ def test_fetch_models_into_state_emits_curated_catalog_and_current_model() -> No
     assert [option.model_id for option in message.available_models] == _CURATED_PI_MODEL_IDS
     assert message.current_model is not None
     assert message.current_model.model_id == "claude-opus-4-8"
+
+
+def test_fetch_models_into_state_switches_off_deauthenticated_current_model() -> None:
+    """A refresh after a provider disconnect switches the agent off the now-unauthorized
+    current model onto an authenticated one, so the user is not stranded on a model
+    they can no longer run."""
+    agent = _make_agent()
+    raw = [
+        {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"},
+        {"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openrouter"},
+    ]
+    current_openrouter = {"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openrouter"}
+    anthropic_replacement = {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"}
+    agent._process = _make_process(
+        [
+            _models_response(raw),
+            _state_response_with_model(current_openrouter),
+            _set_model_response(anthropic_replacement),
+        ]
+    )
+    with (
+        patch(
+            "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+            side_effect=["cmd-models", "cmd-state", "cmd-setmodel"],
+        ),
+        patch("sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value={"anthropic"}),
+    ):
+        agent._fetch_models_into_state()
+
+    emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+    assert len(emitted) == 1
+    message = emitted[0]
+    assert message.current_model is not None
+    assert message.current_model.provider == "anthropic"
+    assert message.current_model.model_id == "claude-opus-4-8"
+    # The unusable openrouter model is no longer offered in the switcher.
+    assert "openai/gpt-4o" not in {option.model_id for option in message.available_models}
+
+
+def test_fetch_models_into_state_keeps_unauthenticated_current_when_no_alternative() -> None:
+    """When the disconnected provider was the only one, the current model is retained
+    (nothing to switch to) rather than blanking the switcher — and no set_model is sent."""
+    agent = _make_agent()
+    raw = [{"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openrouter"}]
+    current_openrouter = {"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openrouter"}
+    agent._process = _make_process([_models_response(raw), _state_response_with_model(current_openrouter)])
+    with (
+        patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]),
+        patch("sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value=set()),
+    ):
+        agent._fetch_models_into_state()
+
+    emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+    assert len(emitted) == 1
+    assert emitted[0].current_model is not None
+    assert emitted[0].current_model.model_id == "openai/gpt-4o"
 
 
 def test_fetch_models_into_state_emits_nothing_when_pi_lists_no_models() -> None:
@@ -3217,6 +3326,39 @@ def test_fetch_models_into_state_emits_nothing_when_pi_lists_no_models() -> None
     assert not [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
 
 
+def test_push_message_enqueues_refresh_models_returns_true() -> None:
+    """A RefreshModelsUserMessage goes on the same FIFO as chat turns — handled, not dead-lettered."""
+    agent = _make_agent()
+    refresh = RefreshModelsUserMessage(message_id=AgentMessageID())
+    with expect_exact_logged_errors([]):
+        handled = agent._push_message(refresh)
+    assert handled is True
+    assert agent._input_agent_messages.get_nowait() is refresh
+
+
+def test_handle_refresh_models_re_fetches_and_re_emits_catalog() -> None:
+    """A delivered refresh re-runs the fetch between turns and re-emits the catalog.
+
+    This is the live-refresh carrier the credential-change flows (login/logout
+    close, paste-key write) broadcast so the picker reflects the new auth.json
+    without a restart.
+    """
+    agent = _make_agent()
+    current_raw = {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"}
+    agent._process = _make_process([_models_response(_RAW_PI_MODELS), _state_response_with_model(current_raw)])
+    with (
+        patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]),
+        patch("sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value={"anthropic"}),
+    ):
+        agent._handle_refresh_models(RefreshModelsUserMessage(message_id=AgentMessageID()))
+
+    emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+    assert len(emitted) == 1
+    assert [option.model_id for option in emitted[0].available_models] == _CURATED_PI_MODEL_IDS
+    assert emitted[0].current_model is not None
+    assert emitted[0].current_model.model_id == "claude-opus-4-8"
+
+
 def _make_probe_env(probe_process: MagicMock) -> MagicMock:
     """A MagicMock environment whose binary + version preflight pass and whose
     `run_process_in_background` returns `probe_process` (the canned probe RPC)."""
@@ -3224,7 +3366,7 @@ def _make_probe_env(probe_process: MagicMock) -> MagicMock:
     env.get_tool_binary_path.return_value = "/bin/pi"
     version_result = MagicMock()
     version_result.stdout = ""
-    version_result.stderr = "pi 0.78.0\n"
+    version_result.stderr = "pi 0.80.2\n"
     env.run_process_to_completion.return_value = version_result
     env.get_state_path.return_value = Path("/fake/state")
     env.run_process_in_background.return_value = probe_process
@@ -3238,9 +3380,12 @@ def test_fetch_available_models_probe_returns_curated_catalog_and_current_model(
     probe_process = _make_process([_models_response(_RAW_PI_MODELS), _state_response_with_model(current_raw)])
     env = _make_probe_env(probe_process)
     agent = _make_agent(env)
-    with patch(
-        "sculptor.agents.pi_agent.agent_wrapper.generate_id",
-        side_effect=["probe-sess", "cmd-models", "cmd-state"],
+    with (
+        patch(
+            "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+            side_effect=["probe-sess", "cmd-models", "cmd-state"],
+        ),
+        patch("sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value={"anthropic"}),
     ):
         available_models, current_model = agent.fetch_available_models_probe(secrets={})
 

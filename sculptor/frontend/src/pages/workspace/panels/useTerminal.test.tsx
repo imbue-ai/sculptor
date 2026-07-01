@@ -1,16 +1,56 @@
-import { renderHook } from "@testing-library/react";
+import { act, render, renderHook } from "@testing-library/react";
 import { getDefaultStore } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { commandActionsAtom } from "~/components/CommandPalette/commandActions.ts";
 
+import type { TerminalConnectionStatus } from "./useTerminal.ts";
 import {
   containsTerminalQuery,
   shouldClearActiveTerminal,
   shouldForwardQueryResponse,
   useTerminal,
 } from "./useTerminal.ts";
+
+// Mock xterm.js and its addons so the hook's terminal-init effect runs to
+// completion in jsdom (setting `isXtermReady`, which gates the WebSocket
+// effect) without a real canvas/WebGL terminal. The mocks implement only the
+// members the hook touches.
+vi.mock("@xterm/xterm", () => ({
+  Terminal: class {
+    rows = 24;
+    cols = 80;
+    options: Record<string, unknown> = {};
+    buffer = { active: { cursorY: 0, baseY: 0, getLine: (): null => null } };
+    loadAddon(): void {}
+    open(): void {}
+    onData(): void {}
+    attachCustomKeyEventHandler(): void {}
+    dispose(): void {}
+    focus(): void {}
+    blur(): void {}
+    refresh(): void {}
+    clear(): void {}
+    write(): void {}
+  },
+}));
+vi.mock("@xterm/addon-fit", () => ({
+  FitAddon: class {
+    fit(): void {}
+  },
+}));
+vi.mock("@xterm/addon-web-links", () => ({
+  WebLinksAddon: class {
+    constructor(_handler: unknown) {}
+  },
+}));
+vi.mock("@xterm/addon-webgl", () => ({
+  WebglAddon: class {
+    onContextLoss(): void {}
+    dispose(): void {}
+  },
+}));
 
 // jsdom's KeyboardEvent constructor drops metaKey/ctrlKey from the init
 // dict, so the existing `ShortcutUtils.test.ts` plain-object pattern is the
@@ -317,5 +357,178 @@ describe("useTerminal — clear-terminal keydown listener lifecycle", () => {
     unmount();
     const afterUnmount = keydownRemoveCalls().length;
     expect(afterUnmount).toBeGreaterThan(beforeUnmount);
+  });
+});
+
+// A minimal WebSocket stand-in. Each construction is recorded so a reconnect is
+// observable as a second instance; the hook assigns `onclose`, which the tests
+// invoke to drive the real close handler.
+class FakeWebSocket {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSING = 2;
+  static readonly CLOSED = 3;
+  static instances: Array<FakeWebSocket> = [];
+
+  binaryType = "blob";
+  readyState: number = FakeWebSocket.CONNECTING;
+  onopen: ((event: Event) => void) | null = null;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  onclose: ((event: CloseEvent) => void) | null = null;
+
+  constructor(public url: string) {
+    FakeWebSocket.instances.push(this);
+  }
+
+  send(): void {}
+
+  close(): void {
+    this.readyState = FakeWebSocket.CLOSED;
+  }
+}
+
+describe("useTerminal — WebSocket reconnect on close", () => {
+  const TERMINAL_PATH = "/api/v1/workspaces/ws_test/terminal/0/ws";
+  const RETRY_DELAY_MS = 2000; // mirrors TERMINAL_RECONNECT_RETRY_DELAY_MS
+
+  // The hook only initialises xterm once the container reports non-zero
+  // dimensions; jsdom reports 0, so force a size for the duration of these tests.
+  const sizeOverride: PropertyDescriptor = { configurable: true, get: () => 100 };
+
+  // Render a real element that wires the hook's container ref to the DOM, so the
+  // terminal-init effect (and therefore the WebSocket effect) actually runs.
+  const ReconnectHarness = ({
+    onConnectionStatusChange,
+  }: {
+    onConnectionStatusChange?: (status: TerminalConnectionStatus) => void;
+  }): ReactElement => {
+    const { terminalContainerRef } = useTerminal({
+      terminalPath: TERMINAL_PATH,
+      isVisible: true,
+      onConnectionStatusChange,
+    });
+    return <div ref={terminalContainerRef} />;
+  };
+
+  // The first connection resolves the WS URL through a promise, so drain the
+  // microtask queue before asserting. Promise microtasks run independently of
+  // fake timers, so this works without advancing them.
+  const flushMicrotasks = async (): Promise<void> => {
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+    }
+  };
+
+  const mountAndConnect = async (
+    onConnectionStatusChange?: (status: TerminalConnectionStatus) => void,
+  ): Promise<ReturnType<typeof render>> => {
+    const result = render(<ReconnectHarness onConnectionStatusChange={onConnectionStatusChange} />);
+    await flushMicrotasks();
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    return result;
+  };
+
+  // The close handler updates React state (the connection status), so dispatch it
+  // through act() to flush that update and avoid "not wrapped in act" warnings.
+  const fireClose = (socket: FakeWebSocket, code: number): void => {
+    act(() => {
+      socket.onclose?.({ code } as CloseEvent);
+    });
+  };
+
+  beforeEach(() => {
+    // Fake timers keep the 2s reconnect delay deterministic and near-instant
+    // instead of waiting in real time.
+    vi.useFakeTimers();
+    FakeWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    // resolveTerminalWsBaseUrl reads the API_URL_BASE build-time global; define it
+    // (as undefined) so the lookup falls through to the window.location fallback
+    // instead of throwing a ReferenceError.
+    vi.stubGlobal("API_URL_BASE", undefined);
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", sizeOverride);
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", sizeOverride);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientWidth;
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientHeight;
+  });
+
+  it("reconnects after the connection drops with code 1006 (e.g. host sleep)", async () => {
+    await mountAndConnect();
+
+    // Simulate the socket being torn down out from under us — the close a macOS
+    // sleep produces. The pre-fix handler only retried on code 4404, so this close
+    // left the terminal frozen; the fix retries on any recoverable close.
+    fireClose(FakeWebSocket.instances[0], 1006);
+    vi.advanceTimersByTime(RETRY_DELAY_MS);
+
+    expect(FakeWebSocket.instances).toHaveLength(2);
+  });
+
+  it("still reconnects when the backend has not started the PTY yet (close code 4404)", async () => {
+    // The original retry case must keep working after the fix broadened the trigger.
+    await mountAndConnect();
+
+    fireClose(FakeWebSocket.instances[0], 4404);
+    vi.advanceTimersByTime(RETRY_DELAY_MS);
+
+    expect(FakeWebSocket.instances).toHaveLength(2);
+  });
+
+  it("does NOT reconnect after a normal close (code 1000)", async () => {
+    // A clean, intentional close means nothing went wrong — retrying would be noise.
+    await mountAndConnect();
+
+    fireClose(FakeWebSocket.instances[0], 1000);
+    vi.advanceTimersByTime(RETRY_DELAY_MS);
+
+    expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+
+  it("does NOT reconnect when the session token is rejected (code 4401)", async () => {
+    // The token is still invalid on a retry, so reconnecting would loop forever
+    // until the user re-authenticates.
+    await mountAndConnect();
+
+    fireClose(FakeWebSocket.instances[0], 4401);
+    vi.advanceTimersByTime(RETRY_DELAY_MS);
+
+    expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+
+  it("does NOT reconnect when the close is our own teardown (unmount)", async () => {
+    const { unmount } = await mountAndConnect();
+    const initialSocket = FakeWebSocket.instances[0];
+
+    // Unmounting flips the effect's `isCleanedUp` guard. A close firing after that
+    // (the unmount closes the socket) must NOT schedule a reconnect, or tearing down
+    // a terminal would resurrect its connection.
+    unmount();
+    // No state update here (the cleanup guard returns before touching status), so
+    // dispatch directly rather than through act().
+    initialSocket.onclose?.({ code: 1006 } as CloseEvent);
+    vi.advanceTimersByTime(RETRY_DELAY_MS);
+
+    expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+
+  it("reports connection status: reconnecting on a recoverable drop, disconnected when unrecoverable", async () => {
+    const statuses: Array<TerminalConnectionStatus> = [];
+    await mountAndConnect((status) => statuses.push(status));
+
+    const lastStatus = (): TerminalConnectionStatus | undefined => statuses[statuses.length - 1];
+
+    // A recoverable drop should read as reconnecting (the terminal will self-heal).
+    fireClose(FakeWebSocket.instances[0], 1006);
+    expect(lastStatus()).toBe("reconnecting");
+
+    // An unrecoverable close should read as disconnected (no self-healing).
+    fireClose(FakeWebSocket.instances[0], 4401);
+    expect(lastStatus()).toBe("disconnected");
   });
 });

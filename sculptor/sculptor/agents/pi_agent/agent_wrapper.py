@@ -63,6 +63,7 @@ from sculptor.agents.attachments import save_attachments_to_environment
 from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
 from sculptor.agents.default.utils import get_state_file_contents
 from sculptor.agents.default.utils import get_turn_request_id
+from sculptor.agents.pi_agent.authenticated_providers import compute_authenticated_provider_ids
 from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_DIALOG_TITLE
 from sculptor.agents.pi_agent.backchannel import build_ask_user_question_data
 from sculptor.agents.pi_agent.backchannel import extension_ui_response_body
@@ -130,6 +131,7 @@ from sculptor.interfaces.agents.agent import ModelsAvailableAgentMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.interfaces.agents.agent import PlanModeAgentMessage
+from sculptor.interfaces.agents.agent import RefreshModelsUserMessage
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageUserMessage
 from sculptor.interfaces.agents.agent import RequestSkippedAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
@@ -316,13 +318,23 @@ def _model_sort_key(model: ModelOption) -> tuple[int, int, str]:
     return (-major, -minor, model.model_id)
 
 
-def _curate_models(models: list[ModelOption], current_model: ModelOption | None) -> list[ModelOption]:
+def _curate_models(
+    models: list[ModelOption],
+    current_model: ModelOption | None,
+    authenticated_providers: set[str] | None = None,
+) -> list[ModelOption]:
     """Trim pi's raw catalog to the models the switcher should offer, newest-first.
 
     Drops the obsolete `_PI_MODEL_BLACKLIST` ids and dated-pin duplicates
     (`_DATED_PIN_SUFFIX_RE`), then sorts newest-first (`_model_sort_key`). The
     current model is always kept even if a rule would drop it, so the switcher
     never shows an empty selection. Duplicate ids are de-duplicated, first-wins.
+
+    When `authenticated_providers` is provided, options whose `provider` is not in
+    that set are also dropped — pi gates its catalog on credential presence, not
+    validity, so a stray ambient key would otherwise leak that provider's models
+    into the picker. `None` (the default) disables the filter. The current model is
+    exempt from every rule, including this one.
     """
     kept: list[ModelOption] = []
     seen_ids: set[str] = set()
@@ -334,6 +346,8 @@ def _curate_models(models: list[ModelOption], current_model: ModelOption | None)
         if not is_current and model.model_id in _PI_MODEL_BLACKLIST:
             continue
         if not is_current and _DATED_PIN_SUFFIX_RE.search(model.model_id):
+            continue
+        if not is_current and authenticated_providers is not None and model.provider not in authenticated_providers:
             continue
         seen_ids.add(model.model_id)
         kept.append(model)
@@ -544,9 +558,9 @@ class PiAgent(DefaultAgentWrapper):
     # model switch) through one FIFO so each runs strictly after any in-flight
     # turn — the sole-reader window where the control RPCs' responses can be
     # consumed safely (see _process_message_queue).
-    _input_agent_messages: Queue[ChatInputUserMessage | ClearContextUserMessage | SetModelUserMessage] = PrivateAttr(
-        default_factory=Queue
-    )
+    _input_agent_messages: Queue[
+        ChatInputUserMessage | ClearContextUserMessage | SetModelUserMessage | RefreshModelsUserMessage
+    ] = PrivateAttr(default_factory=Queue)
     _shutdown_event: Event = PrivateAttr(default_factory=Event)
     _message_processing_thread: ObservableThread | None = PrivateAttr(default=None)
     # The pi session id this process resumes / creates (pinned via --session-id);
@@ -746,6 +760,12 @@ class PiAgent(DefaultAgentWrapper):
         if isinstance(message, SetModelUserMessage):
             # Enqueued on the same FIFO as chat turns so the switch runs strictly
             # between turns (see _handle_set_model); supports_model_selection.
+            self._input_agent_messages.put(message)
+            return True
+        if isinstance(message, RefreshModelsUserMessage):
+            # Enqueued on the same FIFO so the credential re-read + catalog re-emit
+            # runs strictly between turns (see _handle_refresh_models), where the
+            # get_* RPCs are safe. Broadcast on a global credential change.
             self._input_agent_messages.put(message)
             return True
         if isinstance(message, ResumeAgentResponseRunnerMessage):
@@ -1113,6 +1133,60 @@ class PiAgent(DefaultAgentWrapper):
             return []
         return [m for m in models if isinstance(m, dict)]
 
+    def _request_set_model_blocking(
+        self, provider: str, model_id: str, timeout: float = _MODEL_FETCH_TIMEOUT_SECONDS
+    ) -> ModelOption | None:
+        """Send `set_model` and return pi's new current model, or None on failure.
+
+        The non-raising counterpart to `_handle_set_model`'s RPC core, used by the
+        internal auto-reselect (`_reselect_unauthenticated_current_model`). Shares
+        the sole-reader constraint of `_consume_until_command_response`, so it is
+        only safe between turns.
+        """
+        if self._process is None:
+            return None
+        command_id = generate_id()
+        self._send_rpc({"type": "set_model", "id": command_id, "provider": provider, "modelId": model_id})
+        response = self._consume_until_command_response("set_model", command_id, timeout)
+        if response is None or not response.success:
+            return None
+        new_model = _model_option_from_pi(response.data) if isinstance(response.data, dict) else None
+        return new_model or ModelOption(provider=provider, model_id=model_id, display_name=model_id)
+
+    def _reselect_unauthenticated_current_model(
+        self, current_model: ModelOption, curated: list[ModelOption], authenticated: set[str]
+    ) -> ModelOption:
+        """Switch off a current model whose provider is no longer authenticated.
+
+        pi's catalog gates on credential presence, so disconnecting a provider can
+        leave the agent pointed at a model it can no longer run — and because the
+        current model is retained in `curated`, the switcher otherwise stays stuck on
+        it. If an authenticated model is available, switch to the first (newest-first)
+        one so the user is not stranded. Best-effort: a failed switch leaves the
+        current model unchanged. Only call when `current_model.provider` is already
+        known to be unauthenticated, and only after a successful catalog fetch (so pi
+        is proven responsive and the `set_model` write will not block).
+        """
+        replacement = next((option for option in curated if option.provider in authenticated), None)
+        if replacement is None:
+            logger.info(
+                "PiAgent current model {} is no longer authenticated and no authenticated model is available to switch to",
+                current_model.model_id,
+            )
+            return current_model
+        new_model = self._request_set_model_blocking(replacement.provider, replacement.model_id)
+        if new_model is None:
+            logger.info(
+                "PiAgent could not switch off deauthenticated model {}; leaving it selected", current_model.model_id
+            )
+            return current_model
+        logger.info(
+            "PiAgent switched off deauthenticated model {} to authenticated {}",
+            current_model.model_id,
+            new_model.model_id,
+        )
+        return new_model
+
     def _fetch_models_into_state(self) -> None:
         """Fetch pi's model catalog + current model and surface them onto task state.
 
@@ -1132,7 +1206,15 @@ class PiAgent(DefaultAgentWrapper):
             option = _model_option_from_pi(raw)
             if option is not None:
                 options.append(option)
-        curated = _curate_models(options, current_model)
+        authenticated = compute_authenticated_provider_ids()
+        curated = _curate_models(options, current_model, authenticated)
+        # Don't strand the agent on a model whose provider was just deauthorized
+        # (e.g. the user disconnected it): switch to an authenticated model and
+        # re-curate so the now-unusable model drops out of the switcher. Safe here
+        # because the fetch above already proved pi responsive.
+        if current_model is not None and current_model.provider not in authenticated:
+            current_model = self._reselect_unauthenticated_current_model(current_model, curated, authenticated)
+            curated = _curate_models(options, current_model, authenticated)
         if not curated and current_model is None:
             logger.info("PiAgent get_available_models returned no usable models; switcher will fall back to defaults")
             return
@@ -1234,7 +1316,7 @@ class PiAgent(DefaultAgentWrapper):
             option = _model_option_from_pi(raw)
             if option is not None:
                 options.append(option)
-        curated = _curate_models(options, current_model)
+        curated = _curate_models(options, current_model, compute_authenticated_provider_ids())
         if not curated and current_model is None:
             logger.info("PiAgent model probe found no usable models; switcher will fall back to defaults")
             return [], None
@@ -1399,6 +1481,11 @@ class PiAgent(DefaultAgentWrapper):
             if isinstance(message, SetModelUserMessage):
                 # Between-turns model switch (see _handle_set_model).
                 self._handle_set_model(message)
+                continue
+            if isinstance(message, RefreshModelsUserMessage):
+                # Between-turns credential re-read + catalog re-emit (see
+                # _handle_refresh_models).
+                self._handle_refresh_models(message)
                 continue
             self._run_prompt_turn(message)
 
@@ -1645,7 +1732,7 @@ class PiAgent(DefaultAgentWrapper):
         if not isinstance(new_session_id, str) or not new_session_id:
             logger.error(
                 "PiAgent could not read the post-clear pi session id (no get_state response); "
-                "a later resume may regress to the pre-clear session",
+                + "a later resume may regress to the pre-clear session",
             )
             return
         self._session_id = new_session_id
@@ -1705,6 +1792,19 @@ class PiAgent(DefaultAgentWrapper):
                     current_model=new_model,
                 )
             )
+
+    def _handle_refresh_models(self, message: RefreshModelsUserMessage) -> None:
+        """Re-fetch pi's catalog and re-emit it after a global credential change.
+
+        Routed through the `_input_agent_messages` FIFO so it runs between turns,
+        where `get_available_models` / `get_state` are safe. Reuses
+        `_fetch_models_into_state` so the authenticated-set filter applied inside
+        that shared path applies here for free. Best-effort and fire-and-forget: a
+        re-fetch that finds nothing leaves the cached catalog as-is rather than
+        blanking it.
+        """
+        del message
+        self._fetch_models_into_state()
 
     def _consume_until_turn_end(self, prompt_id: str = "") -> None:
         """Drive pi's stdout until the current agent run terminates.

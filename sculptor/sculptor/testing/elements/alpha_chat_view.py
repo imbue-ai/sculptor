@@ -1,5 +1,6 @@
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
+from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
@@ -106,6 +107,11 @@ class PlaywrightAlphaChatViewElement(PlaywrightIntegrationTestElement):
         return self.get_table_wrap_toggles().and_(self._page.locator(f'[aria-label="{aria_label}"]'))
 
 
+def get_alpha_scrollbar_thumb(page: Page) -> Locator:
+    """Locator for the alpha chat's overlay scrollbar thumb (the draggable indicator)."""
+    return page.get_by_test_id(ElementIDs.ALPHA_CHAT_SCROLLBAR_THUMB)
+
+
 def get_jump_to_bottom_button(page: Page) -> Locator:
     """Locator for the jump-to-bottom button."""
     return page.get_by_test_id(ElementIDs.ALPHA_JUMP_TO_BOTTOM_BUTTON)
@@ -192,40 +198,19 @@ def scroll_alpha_chat_to_top(page: Page) -> None:
     )
 
 
-def wait_for_alpha_scroll_idle(page: Page, stable_frames: int = 5) -> None:
-    """Wait until the alpha chat's ``scrollTop`` stops changing across frames.
+def wait_for_alpha_scroll_settled(page: Page, *, timeout_ms: int = 30_000) -> None:
+    """Wait until the alpha chat's scroll has fully settled.
 
-    After a task/agent switch the scroll position is restored asynchronously:
-    the virtualizer re-measures and re-anchors over a settle double-rAF, and
-    ``useAlphaScrollPersistence`` re-applies the saved anchor over its own
-    double-rAF *after* that.  A test that programmatically scrolls immediately
-    after switching can be clobbered by those late corrections (the source of
-    intermittent CI flakes).
-
-    This polls ``scrollTop`` once per animation frame and returns only once it
-    has held the *same* value for ``stable_frames`` consecutive frames — i.e.
-    every queued restore/settle frame has drained.  Any change resets the
-    counter, so the wait can't return mid-restoration even if a correction is
-    still pending when it starts.
+    After a task/agent switch the scroll position and the virtualizer's
+    measurements settle asynchronously.  Rather than polling ``scrollTop`` for
+    frame-stability (a heuristic that can't tell "still settling" from "settled"
+    and times out under CI load), the scroll state machine stamps
+    ``data-scroll-settled="true"`` on the scroll container once the authority is
+    quiescent (userControlled or following) and the layout has converged.  We
+    await that deterministic DOM signal.  See
+    docs/development/scroll_state_unification.md (SCU-1566).
     """
-    page.wait_for_function(
-        f"""(stableFrames) => new Promise((resolve) => {{
-        const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
-        if (!el) {{ resolve(false); return; }}
-        let last = el.scrollTop;
-        let steady = 0;
-        let budget = 120;
-        const tick = () => {{
-            if (budget-- <= 0) {{ resolve(false); return; }}
-            const now = el.scrollTop;
-            if (now === last) {{ steady++; }} else {{ steady = 0; last = now; }}
-            if (steady >= stableFrames) {{ resolve(true); return; }}
-            requestAnimationFrame(tick);
-        }};
-        requestAnimationFrame(tick);
-    }})""",
-        arg=stable_frames,
-    )
+    expect(get_alpha_chat_view(page)).to_have_attribute("data-scroll-settled", "true", timeout=timeout_ms)
 
 
 def scroll_alpha_chat_by(page: Page, delta: int) -> None:

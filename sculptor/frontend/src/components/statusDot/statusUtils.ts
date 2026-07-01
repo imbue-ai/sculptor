@@ -12,7 +12,12 @@ function hasUnreadUpdate(lastReadAt: string | null, updatedAt: string): boolean 
   return lastReadAt === null || new Date(updatedAt) > new Date(lastReadAt);
 }
 
-export function getAgentDotStatus(status: TaskStatus, lastReadAt: string | null, updatedAt: string): AgentDotStatus {
+export function getAgentDotStatus(
+  status: TaskStatus,
+  lastReadAt: string | null,
+  updatedAt: string,
+  isFocused: boolean = false,
+): AgentDotStatus {
   if (status === TaskStatus.RUNNING || status === TaskStatus.BUILDING) {
     return "running";
   }
@@ -29,6 +34,13 @@ export function getAgentDotStatus(status: TaskStatus, lastReadAt: string | null,
   // the workspace, then clear to "read" — unlike full ERROR which persists.
   if (status === TaskStatus.REQUEST_ERROR) {
     return hasUnreadUpdate(lastReadAt, updatedAt) ? "error" : "read";
+  }
+
+  // The agent the user is currently viewing has its content on screen, so it
+  // reads as "read". An explicit mark-unread (lastReadAt === null) is the
+  // exception — the user can mark the active agent unread and it must stay so.
+  if (isFocused && lastReadAt !== null) {
+    return "read";
   }
 
   return hasUnreadUpdate(lastReadAt, updatedAt) ? "unread" : "read";
@@ -56,6 +68,7 @@ export const EMPTY_WORKSPACE_DOT_STATUS: WorkspaceDotStatus = {
 };
 
 type AgentTaskLike = {
+  id: string;
   status: TaskStatus;
   lastReadAt: string | null;
   updatedAt: string;
@@ -63,29 +76,29 @@ type AgentTaskLike = {
   isArchived?: boolean;
 };
 
-export function computeWorkspaceDotStatus(tasks: ReadonlyArray<AgentTaskLike>): WorkspaceDotStatus {
+// `focusedAgentId` is the agent the user is currently viewing (or null when no
+// agent is focused, e.g. on the home page); it is treated as read — see
+// getAgentDotStatus.
+export function computeWorkspaceDotStatus(
+  tasks: ReadonlyArray<AgentTaskLike>,
+  focusedAgentId: string | null = null,
+): WorkspaceDotStatus {
   const activeTasks = tasks.filter((task) => !task.isDeleted && !task.isArchived);
 
   if (activeTasks.length === 0) {
     return EMPTY_WORKSPACE_DOT_STATUS;
   }
 
-  const hasError = activeTasks.some((task) => {
-    const dotStatus = getAgentDotStatus(task.status, task.lastReadAt, task.updatedAt);
-    return dotStatus === "error";
-  });
+  const dotStatuses = activeTasks.map((task) =>
+    getAgentDotStatus(task.status, task.lastReadAt, task.updatedAt, task.id === focusedAgentId),
+  );
+  const hasError = dotStatuses.some((dotStatus) => dotStatus === "error");
   const hasWaiting = activeTasks.some((task) => task.status === TaskStatus.WAITING);
   const hasRunning = activeTasks.some(
     (task) => task.status === TaskStatus.RUNNING || task.status === TaskStatus.BUILDING,
   );
-  const isAllError = activeTasks.every((task) => {
-    const dotStatus = getAgentDotStatus(task.status, task.lastReadAt, task.updatedAt);
-    return dotStatus === "error";
-  });
-  const hasUnread = activeTasks.some((task) => {
-    const dotStatus = getAgentDotStatus(task.status, task.lastReadAt, task.updatedAt);
-    return dotStatus === "unread";
-  });
+  const isAllError = dotStatuses.every((dotStatus) => dotStatus === "error");
+  const hasUnread = dotStatuses.some((dotStatus) => dotStatus === "unread");
 
   return { hasError, hasWaiting, hasRunning, isAllError, hasUnread };
 }

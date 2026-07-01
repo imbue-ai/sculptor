@@ -38,6 +38,24 @@ from sculptor.services.workspace_service.environment_manager.environments.spawne
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX-only")
 
 
+@pytest.fixture(autouse=True)
+def _isolate_shell_config(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory) -> None:
+    """Point the spawned login shell at an empty HOME/ZDOTDIR so it sources no
+    user rc files.
+
+    These tests start a real terminal (``$SHELL -l``), and the self-exit test
+    drives that shell to exit. A heavily-configured login shell is slow to
+    initialize and drops typed-ahead input while it does, so a write issued
+    right after start() can be lost — and how long that takes varies per
+    developer. An empty HOME/ZDOTDIR gives every run a vanilla, fast-starting
+    shell, so the behavior under test depends on Sculptor, not on who runs the
+    suite.
+    """
+    empty_home = tmp_path_factory.mktemp("empty_shell_home")
+    monkeypatch.setenv("HOME", str(empty_home))
+    monkeypatch.setenv("ZDOTDIR", str(empty_home))
+
+
 def _wait_for_dead(pid: int, timeout: float = 1.0) -> bool:
     """Return True once ``os.kill(pid, 0)`` raises ProcessLookupError.
 
@@ -132,13 +150,34 @@ def test_read_loop_closes_primary_fd_and_unregisters_on_shell_self_exit(tmp_path
             os.fstat(primary_fd)
 
             # Tell the login shell to exit on its own. The reader thread should
-            # then observe EOF/EIO and run the self-exit cleanup path.
-            manager.write(b"exit\n")
-
-            # The reader clears _pty_process once it has closed the fd + terminated
-            # the shell. Poll for that (manager.stop() was never called).
-            deadline = time.monotonic() + 5.0
+            # then observe EOF/EIO and run the self-exit cleanup path, which
+            # clears _pty_process once it has closed the fd + terminated the
+            # shell (manager.stop() is never called here).
+            #
+            # ``exit`` is resent periodically rather than written once: a login
+            # shell with a heavy rc can still be initializing — and discarding
+            # typed-ahead input — right after start(), so a single early write
+            # can be dropped and the shell would never exit. Resending until the
+            # reader tears the terminal down makes this robust under load.
+            #
+            # Write straight to the captured pty fd rather than via
+            # ``manager.write()``: the reader thread is concurrently nulling
+            # ``manager._pty_process`` as it tears down, and ``write()`` reads
+            # that attribute twice, so a resend racing the teardown could hit an
+            # AttributeError. ``pty_process`` is a stable reference and its
+            # ``primary_fd`` property reads cleanly (returning None once closed).
+            deadline = time.monotonic() + 15.0
+            next_write = 0.0
             while time.monotonic() < deadline and manager._pty_process is not None:
+                now = time.monotonic()
+                if now >= next_write:
+                    exit_fd = pty_process.primary_fd
+                    if exit_fd is not None:
+                        try:
+                            os.write(exit_fd, b"exit\n")
+                        except OSError:
+                            pass  # fd closed mid-teardown; the shell is already exiting
+                    next_write = now + 0.5
                 time.sleep(0.02)
 
             assert manager._pty_process is None, "reader did not tear down the pty after the shell self-exited"

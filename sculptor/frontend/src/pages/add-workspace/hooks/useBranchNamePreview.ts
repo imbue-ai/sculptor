@@ -1,9 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { WorkspaceInitializationStrategy } from "~/api";
-import { branchExists, previewBranchName, WorkspaceInitializationStrategy as Strategy } from "~/api";
+import { previewBranchName, validateNewBranchName, WorkspaceInitializationStrategy as Strategy } from "~/api";
 
-export type BranchNameCollisionState = "unknown" | "exists" | "available";
+/**
+ * Status of the displayed branch name, from the debounced backend check:
+ * - `unknown`: not checked yet (empty name, in-place mode, or in flight)
+ * - `invalid`: not a legal git ref name
+ * - `exists`: legal, but already a branch in the repo
+ * - `available`: legal and free to use
+ */
+export type BranchNameStatus = "unknown" | "invalid" | "exists" | "available";
 
 type BranchNamePreviewState = {
   /** The auto-filled value sourced from the backend `preview-branch-name` endpoint. */
@@ -12,8 +19,8 @@ type BranchNamePreviewState = {
   displayedValue: string;
   /** True while the preview fetch is in flight in auto mode. */
   isLoading: boolean;
-  /** Result of the debounced `branch-exists` check on `displayedValue`. */
-  collision: BranchNameCollisionState;
+  /** Result of the debounced `validate-new-branch-name` check on `displayedValue`. */
+  status: BranchNameStatus;
 };
 
 type UseBranchNamePreviewArgs = {
@@ -25,7 +32,7 @@ type UseBranchNamePreviewArgs = {
 };
 
 const PREVIEW_DEBOUNCE_MS = 250;
-const COLLISION_DEBOUNCE_MS = 300;
+const VALIDATION_DEBOUNCE_MS = 300;
 
 export function useBranchNamePreview({
   projectId,
@@ -35,10 +42,10 @@ export function useBranchNamePreview({
 }: UseBranchNamePreviewArgs): BranchNamePreviewState {
   const [preview, setPreview] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [collision, setCollision] = useState<BranchNameCollisionState>("unknown");
+  const [status, setStatus] = useState<BranchNameStatus>("unknown");
 
   const previewRequestId = useRef<number>(0);
-  const collisionRequestId = useRef<number>(0);
+  const validationRequestId = useRef<number>(0);
 
   const isManuallyEdited = override !== null;
   const displayedValue = override ?? preview;
@@ -84,41 +91,42 @@ export function useBranchNamePreview({
     };
   }, [projectId, workspaceName, mode, shouldFetchPreview]);
 
-  // A collision check only runs for a non-in-place strategy with a project and a
-  // non-empty branch name; otherwise there is no result to report, so collision is
+  // A validation check only runs for a non-in-place strategy with a project and a
+  // non-empty branch name; otherwise there is no result to report, so status is
   // forced "unknown" during render rather than reset by a synchronous setState.
   const trimmedBranchName = displayedValue.trim();
-  const shouldCheckCollision = mode !== Strategy.IN_PLACE && Boolean(projectId) && trimmedBranchName !== "";
-  if (!shouldCheckCollision && collision !== "unknown") {
-    setCollision("unknown");
+  const shouldValidate = mode !== Strategy.IN_PLACE && Boolean(projectId) && trimmedBranchName !== "";
+  if (!shouldValidate && status !== "unknown") {
+    setStatus("unknown");
   }
 
   useEffect(() => {
-    if (!shouldCheckCollision || projectId === null) {
+    if (!shouldValidate || projectId === null) {
       return;
     }
-    const myId = ++collisionRequestId.current;
+    const myId = ++validationRequestId.current;
     const timer = window.setTimeout(() => {
       void (async (): Promise<void> => {
         try {
-          const result = await branchExists({
+          const result = await validateNewBranchName({
             path: { project_id: projectId },
             query: { name: trimmedBranchName },
           });
-          if (myId === collisionRequestId.current && result.data) {
-            setCollision(result.data.exists ? "exists" : "available");
+          if (myId === validationRequestId.current && result.data) {
+            const { isValid } = result.data;
+            setStatus(!isValid ? "invalid" : result.data.alreadyExists ? "exists" : "available");
           }
         } catch {
-          if (myId === collisionRequestId.current) {
-            setCollision("unknown");
+          if (myId === validationRequestId.current) {
+            setStatus("unknown");
           }
         }
       })();
-    }, COLLISION_DEBOUNCE_MS);
+    }, VALIDATION_DEBOUNCE_MS);
     return (): void => {
       window.clearTimeout(timer);
     };
-  }, [projectId, trimmedBranchName, shouldCheckCollision]);
+  }, [projectId, trimmedBranchName, shouldValidate]);
 
-  return { preview, displayedValue, isLoading, collision };
+  return { preview, displayedValue, isLoading, status };
 }

@@ -14,6 +14,7 @@ from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.alpha_chat_view import get_message_top_offset
 from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_by
 from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_to_top
+from sculptor.testing.elements.alpha_chat_view import wait_for_alpha_scroll_settled
 from sculptor.testing.elements.alpha_prompt_navigator import ALPHA_DOT
 from sculptor.testing.elements.alpha_prompt_navigator import get_alpha_prompt_navigator
 from sculptor.testing.elements.base import wait_for_tiptap_ready
@@ -115,6 +116,11 @@ def _setup_three_prompt_chat(sculptor_instance_: SculptorInstance):
     alpha_nav = get_alpha_prompt_navigator(page)
     dots = alpha_nav.get_dots()
     expect(dots).to_have_count(3)
+
+    # Let the post-reload scroll restore fully settle before clicking a dot.
+    # Otherwise the restore's deferred re-assert can land after the dot-click
+    # scrollToIndex and clobber it, leaving the target prompt off the top.
+    wait_for_alpha_scroll_settled(page)
 
     # Normalize scroll state: click the last dot so the virtualizer lands
     # scrollTop ≈ start[lastUserMessage], then immediately exit navigation by

@@ -58,7 +58,7 @@ def test_real_pi_clear_resets_context(sculptor_instance_: SculptorInstance) -> N
         chat_panel=chat_panel,
         message=prefixed(
             "What codeword did I ask you to remember earlier? If you do not know, reply with exactly "
-            "NO-CODE-REMEMBERED. Otherwise reply in the format THE-CODE-IS: <code>."
+            + "NO-CODE-REMEMBERED. Otherwise reply in the format THE-CODE-IS: <code>."
         ),
     )
     expect(chat_panel.get_assistant_messages().last).to_contain_text("NO-CODE-REMEMBERED", timeout=RESPONSE_TIMEOUT_MS)
