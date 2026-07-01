@@ -1,8 +1,11 @@
 import { useSetAtom, useStore } from "jotai";
 import { useCallback } from "react";
 
+import { type PluginCommandResult, type PluginCommandUiAction, postPluginCommandResult } from "~/api";
 import { openFileFromUiEventAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
 import { agentWebviewStateAtomFamily } from "~/pages/workspace/panels/browser/atoms.ts";
+import { pluginManager } from "~/plugins/pluginManager.tsx";
+import { getRendererIdentity } from "~/plugins/rendererIdentity.ts";
 
 import type { StreamingUpdate } from "../../../api";
 import { handleBtwUpdateAtom } from "../atoms/btwPopup";
@@ -13,6 +16,7 @@ import { updatePrStatusAtom } from "../atoms/prStatus";
 import { sculptorSettingsAtom } from "../atoms/sculptorSettings";
 import { getEmptyTaskDetailState, updateTaskDetailAtom, updateTaskUpdatedArtifactsAtom } from "../atoms/taskDetails";
 import { updateTasksAtom } from "../atoms/tasks";
+import { isAgentPluginLoadingAllowedAtom, isFrontendPluginsEnabledAtom } from "../atoms/userConfig";
 import { updateWorkspaceBranchAtom } from "../atoms/workspaceBranch";
 import { updateWorkspacesAtom } from "../atoms/workspaces";
 import { appendSetupOutputChunkAtom } from "../atoms/workspaceSetupOutput";
@@ -23,6 +27,60 @@ import { chatMessagesReducer } from "../taskDetailReducers.ts";
 import { useWebsocket } from "./useWebsocket";
 
 const API_BASE_URL = "/api/v1";
+
+/**
+ * Run one agent-issued plugin command against this renderer and POST the result
+ * so the originating `sculpt plugin` CLI can report a per-renderer outcome.
+ *
+ * Fire-and-forget: the caller does not await it, so the stream handler stays
+ * cheap. Whatever happens — the command throwing, the plugin runtime being
+ * disabled, even the POST itself failing — we always *try* to send a reply
+ * (with `ok: false` on failure), because the CLI blocks waiting on a reply from
+ * every connected renderer; a silent renderer would hang it until timeout.
+ *
+ * Two flags gate execution. `enableFrontendPlugins` is whether this renderer's
+ * plugin runtime bootstrapped at all; `allowAgentPluginLoading` is whether the
+ * user lets *agents* drive it. If either is off we reply with an explicit
+ * `ok: false` error (naming which one) rather than staying silent — the agent
+ * gets a clear signal instead of an opaque timeout.
+ */
+const respondToPluginCommand = (
+  store: ReturnType<typeof useStore>,
+  action: PluginCommandUiAction,
+  isPluginsEnabled: boolean,
+  isAgentLoadingAllowed: boolean,
+): void => {
+  void (async (): Promise<void> => {
+    const reject = (error: string): PluginCommandResult => ({
+      correlationId: action.correlationId,
+      renderer: getRendererIdentity(),
+      op: action.op,
+      ok: false,
+      error,
+      plugins: [],
+    });
+    // Write ops (load/reload/unload) require the agent-loading switch; read-only
+    // inspect/list stay ungated so an agent can always check state, matching the
+    // backend (which only gates write ops before broadcasting). The write gate
+    // here is defense-in-depth — the backend normally rejects those before they
+    // ever reach a renderer.
+    const isWriteOp = action.op === "load" || action.op === "reload" || action.op === "unload";
+    const result = !isPluginsEnabled
+      ? reject("frontend plugins are disabled in this renderer")
+      : isWriteOp && !isAgentLoadingAllowed
+        ? reject("agent plugin loading is not allowed in this renderer")
+        : await pluginManager.handlePluginCommand(store, action);
+    try {
+      await postPluginCommandResult({
+        path: { correlation_id: action.correlationId },
+        body: result,
+        meta: { skipWsAck: true },
+      });
+    } catch (e) {
+      console.error("[plugins] failed to POST plugin command result", e);
+    }
+  })();
+};
 
 /**
  * This hook:
@@ -207,6 +265,18 @@ export const useUnifiedStream = (): void => {
       if (data.uiWebviewCommandByWorkspaceId && Object.keys(data.uiWebviewCommandByWorkspaceId).length > 0) {
         Object.entries(data.uiWebviewCommandByWorkspaceId).forEach(([workspaceId, action]) => {
           store.set(agentWebviewStateAtomFamily(workspaceId), (prev) => ({ ...prev, command: action }));
+        });
+      }
+
+      // Handle agent plugin commands (sculpt plugin load/reload/unload/inspect/list).
+      // Each renderer runs the op against its own plugin system and POSTs a
+      // result back so the CLI can report a per-renderer outcome. The work is
+      // fired off without awaiting so the stream handler stays cheap.
+      if (data.uiPluginCommandByWorkspaceId && Object.keys(data.uiPluginCommandByWorkspaceId).length > 0) {
+        const isPluginsEnabled = store.get(isFrontendPluginsEnabledAtom);
+        const isAgentLoadingAllowed = store.get(isAgentPluginLoadingAllowedAtom);
+        Object.values(data.uiPluginCommandByWorkspaceId).forEach((action) => {
+          respondToPluginCommand(store, action, isPluginsEnabled, isAgentLoadingAllowed);
         });
       }
     },

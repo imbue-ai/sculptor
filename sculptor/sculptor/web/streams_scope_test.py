@@ -49,6 +49,7 @@ _EXPECTED_STREAMING_UPDATE_FIELDS: frozenset[str] = frozenset(
         "btw_update",
         "ui_open_file_by_workspace_id",
         "ui_webview_command_by_workspace_id",
+        "ui_plugin_command_by_workspace_id",
     }
 )
 

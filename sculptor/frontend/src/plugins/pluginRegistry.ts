@@ -24,7 +24,9 @@ export const pluginSettingsComponentsAtom = atom<Readonly<Record<string, Compone
  * order. Each entry's component is already wrapped by the loader in an error
  * boundary and the plugin's PluginContext.
  */
-export const pluginOverlaysAtom = atom<ReadonlyArray<{ id: string; component: ComponentType }>>([]);
+// `pluginId` attributes each overlay to its owning plugin so `inspect` can list
+// a plugin's overlays; it's the manifest id, not the per-overlay contribution id.
+export const pluginOverlaysAtom = atom<ReadonlyArray<{ id: string; component: ComponentType; pluginId: string }>>([]);
 
 /**
  * Workspace-scoped widgets contributed by plugins via `registerWorkspaceWidget`.
@@ -113,7 +115,11 @@ export type PluginSourceKind = "builtin" | "local" | "url";
 export type PluginSourceState =
   | { status: "loading"; kind: PluginSourceKind }
   | { status: "loaded"; kind: PluginSourceKind; manifest: PluginManifest }
-  | { status: "error"; kind: PluginSourceKind; phase: string; message: string }
+  // `pluginId` is the manifest id when the failure happened after the manifest
+  // parsed (validate/import/activate); absent when even the manifest couldn't be
+  // read. Retaining it lets `inspect`/`unload` address a failed plugin by id
+  // rather than only by its source path.
+  | { status: "error"; kind: PluginSourceKind; phase: string; message: string; pluginId?: string }
   | { status: "disabled"; kind: PluginSourceKind }
   // Another source provides the same plugin `id` and is the one that loaded;
   // this one is shown but not active. `activeSource` is that winner, named in
