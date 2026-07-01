@@ -10,7 +10,6 @@ import {
   appThemeAtom,
   fileBrowserDiffViewTypeAtom,
   fileBrowserLineWrappingAtom,
-  isRichMarkdownRenderingEnabledAtom,
 } from "~/common/state/atoms/userConfig.ts";
 import { useUserConfig } from "~/common/state/hooks/useUserConfig.ts";
 import { useWorkspaceCommitDiff } from "~/common/state/hooks/useWorkspaceCommitDiff.ts";
@@ -168,12 +167,9 @@ export const DiffPanel = ({ workspaceId }: DiffPanelProps): ReactElement => {
   }, [overflow, updateField]);
 
   const [markdownMode, setMarkdownMode] = useAtom(markdownRenderModeAtom);
-  const isRichMarkdownRenderingEnabled = useAtomValue(isRichMarkdownRenderingEnabledAtom);
 
   // ReadOnlyPreview is the only path that supports rendered markdown — used
-  // for file-view tabs and "no diff" states. Hide the toggle elsewhere. Even
-  // when visible, the toggle is shown disabled (with a hint tooltip) until the
-  // experimental `enable_rich_markdown_rendering` flag is enabled.
+  // for file-view tabs and "no diff" states. Hide the toggle elsewhere.
   const isMarkdownToggleVisible = useMemo((): boolean => {
     const fp = activeFileDiff.filePath;
     if (!fp || !isMarkdownPath(fp)) return false;
@@ -216,11 +212,8 @@ export const DiffPanel = ({ workspaceId }: DiffPanelProps): ReactElement => {
   }, [setMarkdownMode, handleCloseSearch]);
 
   // Find-in-file walks source-view DOM; rendered markdown has none. Treat the
-  // button visibility and the Cmd+F keybinding consistently. The rendered
-  // path only mounts when the experimental flag is on, so the persisted
-  // "rendered" preference doesn't suppress find-in-file when the flag is off.
-  const isRenderedMarkdownActive =
-    isMarkdownToggleVisible && markdownMode === "rendered" && isRichMarkdownRenderingEnabled;
+  // button visibility and the Cmd+F keybinding consistently.
+  const isRenderedMarkdownActive = isMarkdownToggleVisible && markdownMode === "rendered";
 
   useKeybindingHandler("find_in_file", () => {
     if (!activeFileDiff.filePath || isRenderedMarkdownActive) return;
@@ -308,8 +301,7 @@ export const DiffPanel = ({ workspaceId }: DiffPanelProps): ReactElement => {
         onToggleSearch={handleToggleSearch}
         isBinaryFile={activeFileDiff.isBinary}
         showRenderToggle={isMarkdownToggleVisible}
-        isRendered={markdownMode === "rendered" && isRichMarkdownRenderingEnabled}
-        isRenderToggleEnabled={isRichMarkdownRenderingEnabled}
+        isRendered={markdownMode === "rendered"}
         onToggleRender={handleToggleMarkdownRender}
       />
 

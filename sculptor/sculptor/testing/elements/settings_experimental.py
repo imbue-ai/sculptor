@@ -50,15 +50,6 @@ class PlaywrightExperimentalSettingsElement(PlaywrightIntegrationTestElement):
 
         expect(select_trigger).to_contain_text("Disabled")
 
-    def set_rich_markdown_rendering(self, *, enabled: bool) -> None:
-        """Set the rich-markdown-rendering toggle to the desired state (idempotent)."""
-        toggle = self._page.get_by_test_id(ElementIDs.SETTINGS_ENABLE_RICH_MARKDOWN_RENDERING_TOGGLE)
-        expect(toggle).to_be_visible()
-        target_state = "checked" if enabled else "unchecked"
-        if toggle.get_attribute("data-state") != target_state:
-            toggle.click()
-        expect(toggle).to_have_attribute("data-state", target_state)
-
     def get_frontend_plugins_toggle(self) -> Locator:
         """Return the 'Frontend plugins' toggle locator."""
         return self._page.get_by_test_id(ElementIDs.SETTINGS_ENABLE_FRONTEND_PLUGINS_TOGGLE)

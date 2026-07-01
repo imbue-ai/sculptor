@@ -21,7 +21,6 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -72,19 +71,6 @@ def _write_file_via_fake_claude(file_path: str, content: str) -> str:
     return f'fake_claude:multi_step `{{"steps": [{{"command": "write_file", "args": {{"file_path": "{file_path}", "content": "{escaped}"}}}}]}}`'
 
 
-def _set_rich_markdown_rendering_via_settings(page: Page, *, enabled: bool) -> None:
-    """Toggle the rich-markdown-rendering experimental flag in Settings →
-    Experimental, matching the helper in ``test_markdown_gfm.py``."""
-    settings_page = navigate_to_settings_page(page=page)
-    settings_page.get_by_test_id(ElementIDs.SETTINGS_NAV_EXPERIMENTAL).click()
-    toggle = settings_page.get_by_test_id(ElementIDs.SETTINGS_ENABLE_RICH_MARKDOWN_RENDERING_TOGGLE)
-    expect(toggle).to_be_visible()
-    target_state = "checked" if enabled else "unchecked"
-    if toggle.get_attribute("data-state") != target_state:
-        toggle.click()
-    expect(toggle).to_have_attribute("data-state", target_state)
-
-
 def _ensure_file_browser_visible(page: Page) -> None:
     file_browser = page.get_by_test_id(ElementIDs.FILE_BROWSER_PANEL)
     if not file_browser.is_visible():
@@ -114,7 +100,6 @@ def test_yaml_frontmatter_renders_as_metadata_block(sculptor_instance_: Sculptor
     """A `.md` file that opens with YAML frontmatter shows a metadata block
     with key/value rows, and the body's own heading is the only heading."""
     page = sculptor_instance_.page
-    _set_rich_markdown_rendering_via_settings(page, enabled=True)
 
     task_page = start_task_and_wait_for_ready(
         page, prompt=_write_file_via_fake_claude("frontmatter.md", _FRONTMATTER_FILE_CONTENT)
@@ -160,7 +145,6 @@ def test_frontmatter_block_is_rendered_view_only(sculptor_instance_: SculptorIns
     removes both it and the rendered markdown body, so the raw `.md`
     (frontmatter included) shows verbatim through the source renderer."""
     page = sculptor_instance_.page
-    _set_rich_markdown_rendering_via_settings(page, enabled=True)
 
     task_page = start_task_and_wait_for_ready(
         page, prompt=_write_file_via_fake_claude("frontmatter.md", _FRONTMATTER_FILE_CONTENT)
@@ -186,7 +170,6 @@ def test_toml_frontmatter_renders_as_raw_block(sculptor_instance_: SculptorInsta
     in the metadata block (no row parsing yet) and never leaks into the body
     as a heading."""
     page = sculptor_instance_.page
-    _set_rich_markdown_rendering_via_settings(page, enabled=True)
 
     task_page = start_task_and_wait_for_ready(
         page, prompt=_write_file_via_fake_claude("toml.md", _TOML_FRONTMATTER_FILE_CONTENT)

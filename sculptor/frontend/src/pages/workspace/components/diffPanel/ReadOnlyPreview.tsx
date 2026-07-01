@@ -8,11 +8,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 
 import { ElementIds } from "~/api";
 import { themeCodeThemeAtom } from "~/common/state/atoms/themeBuilder.ts";
-import {
-  appThemeAtom,
-  fileBrowserLineWrappingAtom,
-  isRichMarkdownRenderingEnabledAtom,
-} from "~/common/state/atoms/userConfig.ts";
+import { appThemeAtom, fileBrowserLineWrappingAtom } from "~/common/state/atoms/userConfig.ts";
 import { useWorkspaceFileContent } from "~/common/state/hooks/useWorkspaceFileContent.ts";
 import { getShikiThemes } from "~/common/theme/shikiThemes.ts";
 import { parseFrontmatter } from "~/components/MarkdownDiff/frontmatter.ts";
@@ -121,14 +117,8 @@ export const ReadOnlyPreview = ({ workspaceId, filePath }: ReadOnlyPreviewProps)
   const codeTheme = useAtomValue(themeCodeThemeAtom);
   const shikiThemes = getShikiThemes(codeTheme);
   const markdownMode = useAtomValue(markdownRenderModeAtom);
-  const isRichMarkdownRenderingEnabled = useAtomValue(isRichMarkdownRenderingEnabledAtom);
   const pierreRef = useRef<HTMLDivElement>(null);
-  // The persisted `markdownRenderModeAtom` may carry "rendered" from before
-  // the flag was introduced (or after the user flipped it on then off again).
-  // Guard the render path on the flag so the source view is shown until the
-  // user explicitly enables the experimental feature.
-  const shouldRenderMarkdown =
-    isMarkdownPath(filePath) && markdownMode === "rendered" && isRichMarkdownRenderingEnabled;
+  const shouldRenderMarkdown = isMarkdownPath(filePath) && markdownMode === "rendered";
 
   /**
    * Inject our override stylesheet into Pierre's shadow DOM.

@@ -162,9 +162,6 @@ type DiffTabBarProps = {
   isBinaryFile: boolean;
   showRenderToggle: boolean;
   isRendered: boolean;
-  /** Off => the eye icon renders disabled with a hint tooltip pointing at
-   * Settings → Experimental, where the flag lives. */
-  isRenderToggleEnabled: boolean;
   onToggleRender: () => void;
 };
 
@@ -179,7 +176,6 @@ export const DiffTabBar = ({
   isBinaryFile,
   showRenderToggle,
   isRendered,
-  isRenderToggleEnabled,
   onToggleRender,
 }: DiffTabBarProps): ReactElement => {
   const diffPanelState = useAtomValue(diffPanelStateAtomFamily(workspaceId));
@@ -332,16 +328,9 @@ export const DiffTabBar = ({
 
         {showRenderToggle && (
           <TooltipIconButton
-            tooltipText={
-              isRenderToggleEnabled
-                ? isRendered
-                  ? "Show source"
-                  : "Show rendered"
-                : "Markdown rendering is an experimental feature that you have to enable in settings first."
-            }
+            tooltipText={isRendered ? "Show source" : "Show rendered"}
             size="1"
             onClick={onToggleRender}
-            disabled={!isRenderToggleEnabled}
             className={isRendered ? styles.activeControl : undefined}
             data-testid={ElementIds.DIFF_RENDER_TOGGLE}
             data-state={isRendered ? "rendered" : "source"}

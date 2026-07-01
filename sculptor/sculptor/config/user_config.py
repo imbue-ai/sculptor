@@ -297,10 +297,6 @@ class UserConfig(SerializableModel):
         default=False,
         description="When enabled, typing % in the chat input opens entity mention completions for repositories, workspaces, and agents",
     )
-    enable_rich_markdown_rendering: bool = Field(
-        default=False,
-        description="When enabled, .md and .markdown files in the read-only file preview can be shown as rendered markdown via the eye toggle. Off by default while we iterate on the renderer.",
-    )
     enable_pi_agent: bool = Field(
         default=False,
         description="When enabled, the agent-type menus offer the experimental pi agent. Off by default. Gates only the creation entry point — an existing pi agent keeps running regardless.",
