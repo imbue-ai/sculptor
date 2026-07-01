@@ -4,7 +4,7 @@ import type { KeybindingId } from "~/common/keybindings/types.ts";
 
 export type CommandId = string;
 
-export type CommandGroupId = "navigation" | "workspaces" | "view" | "chat" | "terminal" | "help";
+export type CommandGroupId = "navigation" | "workspaces" | "panels" | "view" | "chat" | "terminal" | "help";
 
 export type PageId =
   | "theme.appearance"
@@ -18,7 +18,7 @@ export type PageId =
   | "workspace.open_in"
   /** Action list for the current agent (set via `agentActionsTargetAtom`). */
   | "agent.actions"
-  /** Layout toggles: Left/Right/Bottom panel zones + Focus/Zen modes. */
+  /** Section toggles: the left/right/bottom sections. */
   | "view.layout"
   /** Individual panel toggles (Files, Actions, Terminal, Notes, …). */
   | "view.panels"

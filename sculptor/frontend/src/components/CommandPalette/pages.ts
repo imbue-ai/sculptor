@@ -47,8 +47,8 @@ export const PAGE_DEFINITIONS: Record<PageId, PageDefinition> = {
     placeholder: "Pick an action...",
   },
   "view.layout": {
-    title: "Toggle layout",
-    placeholder: "Pick a layout option...",
+    title: "Toggle sections",
+    placeholder: "Pick a section to toggle...",
   },
   "view.panels": {
     title: "Toggle panel visibility",

@@ -11,26 +11,25 @@ import {
 import type { CommandRuntime } from "../runtime.ts";
 import type { Command } from "../types.ts";
 
-// View is split into two sub-pages so the root list isn't dominated by
-// 10+ "Toggle X" rows: layout-level toggles (the left/right/bottom
-// sections) live on `view.layout`; individual panel toggles (Files,
-// Actions, Terminal, …) live on `view.panels`. The `view.panels` page
-// title intentionally matches what users search for ("Toggle panel
-// visibility...") so typing it surfaces the page that actually lists
-// panels.
+// The Panels & Sections group is split into two sub-pages so the root list
+// isn't dominated by 10+ "Toggle X" rows: section toggles (the
+// left/right/bottom sections) live on `view.layout`; individual panel
+// toggles (Files, Actions, Terminal, …) live on `view.panels`. The
+// `view.panels` page title intentionally matches what users search for
+// ("Toggle panel visibility...") so typing it surfaces the page that
+// actually lists panels.
 export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
   {
     id: "view.toggle_layout",
-    title: "Toggle layout...",
+    title: "Toggle sections...",
     subtitle: "Show or hide the left, right, or bottom section",
     keywords: ["layout", "section", "sidebar", "visibility", "show", "hide", "view"],
-    group: "view",
+    group: "panels",
     icon: LayoutPanelLeftIcon,
     pageId: "view.layout",
     primary: true,
-    // Sits below theme entries (order 10/20) within the merged
-    // Theme & Layout group; layout-section toggles lead, panel-visibility
-    // follows.
+    // Within Panels & Sections: Add panel (90) leads, then section
+    // toggles, then panel-visibility.
     order: 100,
     when: (ctx) => ctx.route.isWorkspace,
     perform: (): void => {
@@ -42,7 +41,7 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
     title: "Show panel...",
     subtitle: "Focus a panel already open in a section",
     keywords: ["panel", "visibility", "show", "focus", "reveal", "view", "tool"],
-    group: "view",
+    group: "panels",
     icon: PuzzleIcon,
     pageId: "view.panels",
     primary: true,
@@ -61,10 +60,10 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
   // Explicit `order` so the row sequence reads Bottom → Left → Right.
   {
     id: "view.toggle_bottom_panel",
-    title: "Toggle bottom panel",
+    title: "Toggle bottom section",
     subtitle: "Show or hide the bottom section",
-    keywords: ["console", "terminal"],
-    group: "view",
+    keywords: ["console", "terminal", "panel"],
+    group: "panels",
     icon: PanelBottomIcon,
     shortcut: "toggle_bottom_panel",
     onPage: "view.layout",
@@ -75,10 +74,10 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
   },
   {
     id: "view.toggle_left_panel",
-    title: "Toggle left panel",
+    title: "Toggle left section",
     subtitle: "Show or hide the left section",
-    keywords: ["sidebar"],
-    group: "view",
+    keywords: ["sidebar", "panel"],
+    group: "panels",
     icon: PanelLeftIcon,
     shortcut: "toggle_left_panel",
     onPage: "view.layout",
@@ -89,10 +88,10 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
   },
   {
     id: "view.toggle_right_panel",
-    title: "Toggle right panel",
+    title: "Toggle right section",
     subtitle: "Show or hide the right section",
-    keywords: ["sidebar"],
-    group: "view",
+    keywords: ["sidebar", "panel"],
+    group: "panels",
     icon: PanelRightIcon,
     shortcut: "toggle_right_panel",
     onPage: "view.layout",
@@ -101,16 +100,18 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
     perform: () => runtime.ui.toggleRightPanel(),
     keepOpen: true,
   },
+  // The sidebar is workspace-navigation chrome rather than a section, so its
+  // toggle lives in the Navigation group at the root (not on the sections
+  // sub-page).
   {
     id: "view.toggle_sidebar",
     title: "Toggle sidebar",
     subtitle: "Collapse or expand the workspace sidebar",
     keywords: ["sidebar", "nav", "navigation", "workspaces", "rail", "collapse", "expand"],
-    group: "view",
+    group: "navigation",
     icon: Sidebar,
     shortcut: "toggle_sidebar",
-    onPage: "view.layout",
-    order: 40,
+    order: 100,
     when: (ctx) => ctx.route.isWorkspace,
     perform: () => runtime.ui.toggleSidebar(),
     keepOpen: true,
@@ -120,7 +121,7 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
     title: "Maximize section",
     subtitle: "Maximize the active section, or restore if already maximized",
     keywords: ["maximize", "fullscreen", "expand", "restore", "section", "focus"],
-    group: "view",
+    group: "panels",
     icon: Maximize2,
     shortcut: "maximize_section",
     onPage: "view.layout",
