@@ -36,7 +36,7 @@ export type PluginManifest = {
  * whole app (across every route) for as long as the plugin is loaded. The
  * component draws into a full-viewport, click-through layer, so it must opt
  * its own interactive box back into pointer events. Use the workspace SDK
- * hooks (`useWorkspaces`, `useCurrentWorkspaceId`) to react to app state —
+ * hooks (`useWorkspaces`, `useCurrentWorkspace`) to react to app state —
  * there is no single workspace context, because an overlay outlives any one
  * workspace page.
  */
@@ -85,15 +85,19 @@ export type WorkspaceWidgetDefinition = {
  * Like an app-global overlay (and unlike a panel/workspace widget) it is mounted
  * with no `WorkspacePluginContext`: the homepage is not scoped to a single
  * workspace, so a home view reads app state through the SDK hooks
- * (`useWorkspaces`, `useCurrentWorkspaceId`) instead of a fixed context.
+ * (`useWorkspaces`, `useCurrentWorkspace`) instead of a fixed context.
  */
 export type HomeViewDefinition = {
   /** Stable id; registering twice with the same id replaces the previous one. */
   id: string;
   /** Label shown for this view in the homepage switcher. */
   title: string;
-  /** Optional Lucide icon shown beside the title in the switcher. */
-  icon?: ComponentType;
+  /**
+   * Optional Lucide icon shown beside the title in the switcher. Typed to accept
+   * a `size` prop so the switcher can render it at a consistent size rather than
+   * Lucide's 24px default (which sits taller than the segmented-control text).
+   */
+  icon?: ComponentType<{ size?: number | string }>;
   component: ComponentType;
 };
 

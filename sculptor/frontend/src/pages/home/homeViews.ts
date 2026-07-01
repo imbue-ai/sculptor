@@ -17,7 +17,8 @@ const BUILTIN_HOME_VIEW_TITLE = "Recent workspaces";
 export type HomeViewOption = {
   id: string;
   title: string;
-  icon?: ComponentType;
+  // Accepts `size` so the switcher can render it at the segmented-control's icon size.
+  icon?: ComponentType<{ size?: number | string }>;
 };
 
 /**

@@ -6,6 +6,7 @@ import { useImbueLocation, useImbueNavigate } from "../../NavigateUtils.ts";
 import { agentIdsByWorkspaceAtom, convertHomeTabToWorkspaceAtom, openWorkspaceTabAtom } from "../atoms/workspaces.ts";
 
 type WorkspaceNavigationResult = {
+  navigateToWorkspaceById: (workspaceId: string) => void;
   handleWorkspaceClick: (workspace: RecentWorkspaceResponse) => void;
   handleOpenInNewTab: (workspace: RecentWorkspaceResponse) => void;
 };
@@ -21,28 +22,37 @@ export const useWorkspaceNavigation = (): WorkspaceNavigationResult => {
   const agentIdsByWorkspace = useAtomValue(agentIdsByWorkspaceAtom);
   const openTab = useSetAtom(openWorkspaceTabAtom);
   const convertHomeTab = useSetAtom(convertHomeTabToWorkspaceAtom);
-  const handleWorkspaceClick = useCallback(
-    (workspace: RecentWorkspaceResponse): void => {
+  // The id-keyed core of the click handler, so callers that only hold a
+  // workspace id (e.g. the plugin SDK's navigate verb) get the same tab-opening
+  // and MRU-agent resolution without reconstructing a RecentWorkspaceResponse.
+  const navigateToWorkspaceById = useCallback(
+    (workspaceId: string): void => {
       // When navigating from the home page, replace the home tab with the workspace tab.
       if (isHomeRoute) {
-        convertHomeTab(workspace.objectId);
+        convertHomeTab(workspaceId);
       } else {
         // Ensure the workspace has an open tab (re-opens closed tabs)
-        openTab(workspace.objectId);
+        openTab(workspaceId);
       }
 
       // Use the saved agent id from tabsAtom if available for instant navigation.
-      const savedAgentId = agentIdsByWorkspace.get(workspace.objectId);
+      const savedAgentId = agentIdsByWorkspace.get(workspaceId);
       if (savedAgentId) {
-        navigateToAgent(workspace.objectId, savedAgentId);
+        navigateToAgent(workspaceId, savedAgentId);
         return;
       }
 
       // No saved agent yet — navigate to the workspace URL and let
       // WorkspacePage's validation effect pick a fallback agent.
-      navigateToWorkspace(workspace.objectId);
+      navigateToWorkspace(workspaceId);
     },
     [isHomeRoute, openTab, convertHomeTab, agentIdsByWorkspace, navigateToAgent, navigateToWorkspace],
+  );
+  const handleWorkspaceClick = useCallback(
+    (workspace: RecentWorkspaceResponse): void => {
+      navigateToWorkspaceById(workspace.objectId);
+    },
+    [navigateToWorkspaceById],
   );
 
   const handleOpenInNewTab = useCallback(
@@ -54,5 +64,5 @@ export const useWorkspaceNavigation = (): WorkspaceNavigationResult => {
     [openTab],
   );
 
-  return { handleWorkspaceClick, handleOpenInNewTab };
+  return { navigateToWorkspaceById, handleWorkspaceClick, handleOpenInNewTab };
 };
