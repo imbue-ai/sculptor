@@ -12,8 +12,8 @@
 }
 
 .list {
-  // Fixed pixel width (set inline); the viewer flexes to fill the rest. A right
-  // border delineates the list from the viewer (the ResizeHandle overlays it).
+  // Fixed pixel width (set inline); the viewer flexes to fill the rest. A single
+  // 1px right border delineates the list from the viewer.
   border-right: 1px solid var(--gray-a5);
   display: flex;
   flex: 0 0 auto;

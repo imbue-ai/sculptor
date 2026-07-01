@@ -1,18 +1,16 @@
-import { useAtom } from "jotai";
 import { FolderTree } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 
 import { ElementIds } from "~/api";
-import { ResizeHandle } from "~/components/panels/ResizeHandle.tsx";
-import { explorerListWidthAtom } from "~/components/sections/sectionAtoms.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 
 import styles from "./ExplorerLayout.module.scss";
 
-const MIN_LIST_PX = 200;
-const MIN_DETAIL_PX = 280;
-const HANDLE_PX = 1;
+// The list (sidebar) is a fixed width — it is not user-resizable, so the pane
+// stays the same size across the Files / Changes / Commits panels and across
+// workspaces. The viewer flexes to fill the remaining space.
+const LIST_WIDTH_PX = 240;
 
 type ExplorerLayoutProps = {
   /** The master list (file tree / changes browser / commit history). */
@@ -26,55 +24,19 @@ type ExplorerLayoutProps = {
 };
 
 /**
- * Shared resizable list-plus-viewer scaffold for the Files / Changes / Commits
- * panels. The list (sidebar) on the left keeps a fixed pixel
- * width — the GLOBAL `explorerListWidthAtom`, shared across all three panels and
- * across workspaces — and the viewer on the right flexes to fill the rest. The
- * divider resizes the list (min 200px list / min 280px viewer). The
- * sidebar-visibility toggle is rendered into the viewer's header; the
- * viewer is always visible.
+ * Shared list-plus-viewer scaffold for the Files / Changes / Commits panels.
+ * The list (sidebar) on the left is a fixed pixel width and the viewer on the
+ * right flexes to fill the rest. A single 1px divider separates them (the
+ * list's right border); the sidebar cannot be dragged to a new size. The
+ * sidebar-visibility toggle is rendered into the viewer's header; the viewer is
+ * always visible.
  *
  * It takes the list and viewer as slots — there is no shared "active diff"
  * singleton, so each panel embeds its own instance with its own selection.
  */
 export const ExplorerLayout = ({ list, detail }: ExplorerLayoutProps): ReactElement => {
-  // Width persists globally (shared across the three panels and all workspaces).
-  const [listWidth, setListWidth] = useAtom(explorerListWidthAtom);
   // Sidebar visibility is per-instance UI state (each panel can hide its own).
   const [isSidebarHidden, setIsSidebarHidden] = useState(false);
-
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [containerWidth, setContainerWidth] = useState(0);
-
-  // Measure synchronously on mount (pre-paint) so the first painted frame sizes
-  // the panes correctly instead of flashing from containerWidth=0.
-  useLayoutEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    setContainerWidth(el.offsetWidth);
-    const observer = new ResizeObserver((entries) => {
-      const rect = entries[0]?.contentRect;
-      if (rect) setContainerWidth(rect.width);
-    });
-    observer.observe(el);
-    return (): void => observer.disconnect();
-  }, []);
-
-  const maxList = Math.max(MIN_LIST_PX, containerWidth - MIN_DETAIL_PX - HANDLE_PX);
-  const clampedListWidth = Math.min(Math.max(listWidth, MIN_LIST_PX), maxList);
-
-  const getListSize = useCallback(() => clampedListWidth, [clampedListWidth]);
-  const onResizeList = useCallback(
-    (nextPx: number): void => {
-      if (containerWidth <= 0) return;
-      const clamped = Math.min(
-        Math.max(nextPx, MIN_LIST_PX),
-        Math.max(MIN_LIST_PX, containerWidth - MIN_DETAIL_PX - HANDLE_PX),
-      );
-      setListWidth(clamped);
-    },
-    [containerWidth, setListWidth],
-  );
 
   const toggleSidebar = useCallback((): void => setIsSidebarHidden((hidden) => !hidden), []);
 
@@ -93,14 +55,11 @@ export const ExplorerLayout = ({ list, detail }: ExplorerLayoutProps): ReactElem
   const detailContent = detail(sidebarToggle);
 
   return (
-    <div ref={containerRef} className={styles.row}>
+    <div className={styles.row}>
       {!isSidebarHidden && (
-        <>
-          <div className={styles.list} style={{ width: clampedListWidth }}>
-            {list}
-          </div>
-          <ResizeHandle axis="x" getSize={getListSize} onResize={onResizeList} ariaLabel="Resize sidebar" />
-        </>
+        <div className={styles.list} style={{ width: LIST_WIDTH_PX }}>
+          {list}
+        </div>
       )}
       <div className={styles.detail}>{detailContent}</div>
     </div>
