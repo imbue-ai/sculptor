@@ -83,10 +83,8 @@ const DragOverlayTab = ({ panelId }: { panelId: PanelId }): ReactElement | null 
   if (definition === undefined) {
     return null;
   }
-  const Icon = definition.icon;
   return (
     <div className={styles.overlayTab}>
-      <span className={styles.overlayIcon}>{definition.tabIcon ?? <Icon size={14} />}</span>
       <span className={styles.overlayLabel}>{definition.displayName}</span>
     </div>
   );

@@ -77,7 +77,6 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   }
 
   const canRename = isMultiInstanceKind(definition.kind);
-  const Icon = definition.icon;
 
   // "Create {direction} split and move panel": one option per allowed
   // axis, offered only while the section has no split (one-split-max).
@@ -150,12 +149,6 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
         {...listeners}
       >
         <GripVertical size={12} />
-      </span>
-      <span className={styles.icon}>
-        {/* Multi-instance panels carry a per-instance tabIcon (the agent status dot —
-            read/unread + running/waiting); static panels fall back to their
-            lucide kind icon. */}
-        {definition.tabIcon ?? <Icon size={14} />}
       </span>
       {isRenaming && canRename ? (
         <InlineRenameInput
@@ -232,10 +225,8 @@ const GhostTabComponent = ({ panelId }: { panelId: PanelId }): ReactElement | nu
   if (definition === undefined) {
     return null;
   }
-  const Icon = definition.icon;
   return (
     <div className={`${styles.tab} ${styles.tabGhost}`} data-section-tab-ghost="true" aria-hidden="true">
-      <span className={styles.icon}>{definition.tabIcon ?? <Icon size={14} />}</span>
       <span className={styles.label}>{definition.displayName}</span>
     </div>
   );

@@ -5,7 +5,8 @@ import { ElementIds } from "~/api";
 import styles from "./WorkspacePeekOverlay.module.scss";
 import { WorkspacePeekPopover } from "./WorkspacePeekPopover";
 
-const OPEN_DELAY_MS = 600;
+// The peek opens instantly on hover (no hover-intent delay), per QA.
+const OPEN_DELAY_MS = 0;
 const CLOSE_DELAY_MS = 80;
 // After closing, re-entering a tab within this window reopens immediately.
 const REOPEN_GRACE_PERIOD_MS = 300;

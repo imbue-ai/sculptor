@@ -14,7 +14,8 @@ vi.mock("./WorkspacePeekOverlay.module.scss", () => ({
   default: { overlay: "overlay", animated: "animated" },
 }));
 
-const OPEN_DELAY_MS = 600;
+// The peek opens instantly (0ms) — kept as a named constant for the advance-timers calls.
+const OPEN_DELAY_MS = 0;
 const CLOSE_DELAY_MS = 80;
 const REOPEN_GRACE_PERIOD_MS = 300;
 const PEEK_OFFSET_PX = 4;
@@ -87,13 +88,13 @@ afterEach(() => {
 });
 
 describe("WorkspacePeekOverlay", () => {
-  it("opens after OPEN_DELAY_MS on first hover", () => {
+  it("opens instantly on hover", () => {
     render(<WorkspacePeekOverlay onNavigate={vi.fn()} />);
     const tab = createSidebarTab("ws-1");
 
     hoverTab(tab);
 
-    // Not visible before delay
+    // Not visible until the (0ms) open timer flushes on the next tick.
     expect(screen.queryByTestId("workspace-peek-overlay")).toBeNull();
 
     act(() => vi.advanceTimersByTime(OPEN_DELAY_MS));
@@ -121,7 +122,7 @@ describe("WorkspacePeekOverlay", () => {
     expect(screen.getByTestId("workspace-peek-overlay")).toBeDefined();
   });
 
-  it("requires full delay when re-entering after the grace period expires", () => {
+  it("still opens instantly when re-entering after the grace period expires", () => {
     render(<WorkspacePeekOverlay onNavigate={vi.fn()} />);
     const tab = createSidebarTab("ws-1");
 
@@ -135,15 +136,10 @@ describe("WorkspacePeekOverlay", () => {
     act(() => vi.advanceTimersByTime(CLOSE_DELAY_MS));
     expect(screen.queryByTestId("workspace-peek-overlay")).toBeNull();
 
-    // Wait past the grace period
+    // Wait past the grace period, then re-enter — the peek has no open delay, so it
+    // still appears instantly rather than waiting.
     act(() => vi.advanceTimersByTime(REOPEN_GRACE_PERIOD_MS + 100));
-
-    // Re-enter — should NOT open immediately
     hoverTab(tab);
-    act(() => vi.advanceTimersByTime(0));
-    expect(screen.queryByTestId("workspace-peek-overlay")).toBeNull();
-
-    // Should open after full delay
     act(() => vi.advanceTimersByTime(OPEN_DELAY_MS));
     expect(screen.getByTestId("workspace-peek-overlay")).toBeDefined();
   });
