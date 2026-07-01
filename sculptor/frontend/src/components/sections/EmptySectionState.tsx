@@ -1,13 +1,13 @@
-// The empty-section state: a centered "add panel" button that opens the
-// same AddPanelDropdown, plus up to five quick actions — always "New {recent}
-// agent" and "New terminal", then up to three most-recently-created-but-closed
-// single-instance panels (excluding any currently open, and never agents/terminals).
+// The empty-section state: a centered "Add panel" button that opens the same
+// AddPanelDropdown, over a "Quick add" list of up to five shortcuts — always
+// "New {recent} agent" and "New terminal", then up to three
+// most-recently-created-but-closed single-instance panels (excluding any
+// currently open, and never agents/terminals).
 // When the empty pane is a split half it also offers a "close split" affordance so
 // the other half can reclaim the space (closeSplitAtom owns this).
 
-import { Button, Flex } from "@radix-ui/themes";
+import { Button, Flex, Text } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
-import { MessageSquarePlus, Plus, SquareTerminal } from "lucide-react";
 import type { ReactElement } from "react";
 import { memo } from "react";
 
@@ -66,51 +66,49 @@ const EmptySectionStateComponent = ({ subSection }: EmptySectionStateProps): Rea
             <Button
               variant="soft"
               color="gray"
-              size="2"
+              size="1"
+              className={styles.addPanelButton}
               data-testid={`${ElementIds.SECTION_EMPTY_STATE}-${subSection}`}
             >
-              <Plus size={14} /> Add panel
+              Add panel
             </Button>
           }
         />
 
-        <Flex direction="column" gap="1" align="stretch" className={styles.quickActions}>
+        <Text size="1" color="gray" className={styles.heading}>
+          Quick add
+        </Text>
+        <Flex direction="column" gap="2" align="center">
           <Button
-            variant="ghost"
+            variant="soft"
             color="gray"
             size="1"
-            className={styles.quickAction}
             onClick={() => actions.createRecentAgent(subSection)}
             data-testid={`${ElementIds.SECTION_EMPTY_QUICK_ACTION}-new-agent`}
           >
-            <MessageSquarePlus size={14} /> New {actions.recentAgentLabel} agent
+            New {actions.recentAgentLabel} agent
           </Button>
           <Button
-            variant="ghost"
+            variant="soft"
             color="gray"
             size="1"
-            className={styles.quickAction}
             onClick={() => actions.createTerminal(subSection)}
             data-testid={`${ElementIds.SECTION_EMPTY_QUICK_ACTION}-new-terminal`}
           >
-            <SquareTerminal size={14} /> New terminal
+            New terminal
           </Button>
-          {recentPanelActions.map((panel) => {
-            const Icon = panel.icon;
-            return (
-              <Button
-                key={panel.id}
-                variant="ghost"
-                color="gray"
-                size="1"
-                className={styles.quickAction}
-                onClick={() => actions.openStaticPanel(panel.id, subSection)}
-                data-testid={`${ElementIds.SECTION_EMPTY_QUICK_ACTION}-${panel.id}`}
-              >
-                <Icon size={14} /> {panel.displayName}
-              </Button>
-            );
-          })}
+          {recentPanelActions.map((panel) => (
+            <Button
+              key={panel.id}
+              variant="soft"
+              color="gray"
+              size="1"
+              onClick={() => actions.openStaticPanel(panel.id, subSection)}
+              data-testid={`${ElementIds.SECTION_EMPTY_QUICK_ACTION}-${panel.id}`}
+            >
+              {panel.displayName}
+            </Button>
+          ))}
         </Flex>
 
         {isSplitPane && (
@@ -118,6 +116,7 @@ const EmptySectionStateComponent = ({ subSection }: EmptySectionStateProps): Rea
             variant="ghost"
             color="gray"
             size="1"
+            className={styles.closeSplit}
             onClick={handleCloseSplit}
             data-testid={ElementIds.SPLIT_CLOSE_OPTION}
           >
