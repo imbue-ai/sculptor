@@ -61,6 +61,7 @@ from pydantic import ValidationError
 
 from sculptor.agents.attachments import save_attachments_to_environment
 from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
+from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.utils import get_state_file_contents
 from sculptor.agents.default.utils import get_turn_request_id
 from sculptor.agents.pi_agent.authenticated_providers import compute_authenticated_provider_ids
@@ -480,7 +481,6 @@ class _TurnState:
     __slots__ = (
         "accumulated_text",
         "assistant_message_id",
-        "changed_files",
         "compaction_open",
         "first_message_id",
         "prompt_id",
@@ -497,20 +497,12 @@ class _TurnState:
         # Wall-clock start of this agent run, for the turn footer's duration
         # (wall-clock, not the model's response-only time, to mirror Claude).
         self.start_time = time.monotonic()
-        # File paths mutated by file-changing tools during this run, feeding the
-        # turn footer's "N files changed". Insertion-ordered + de-duplicated.
-        self.changed_files: list[str] = []
         # True between a compaction_start and its matching compaction_end.
         # Compaction spans assistant messages, so this is NOT reset in
         # reset_accumulator. If the run exits while it is still open (process
         # death or a raised error mid-compaction), _consume_until_turn_end
         # emits the missing Done so is_auto_compacting cannot stick on True.
         self.compaction_open = False
-
-    def note_changed_file(self, file_path: str) -> None:
-        """Record a mutated file path once, preserving first-seen order."""
-        if file_path and file_path not in self.changed_files:
-            self.changed_files.append(file_path)
 
     def reset_accumulator(self) -> None:
         self.accumulated_text = ""
@@ -659,6 +651,13 @@ class PiAgent(DefaultAgentWrapper):
     # its `ModelsAvailableAgentMessage` carrier. Set and read on the
     # message-processing thread only.
     _available_models: tuple[ModelOption, ...] = PrivateAttr(default=())
+    # Tracks the working tree across a turn so the turn footer can report the
+    # git-relative paths of files changed by ANY tool (edit/write AND bash),
+    # mirroring Claude's DiffTracker. Diffs the tree SHA captured at the previous
+    # turn boundary against the tree at this turn's agent_end. Created lazily on
+    # the first turn (keeps `start()` git-free) and re-baselined per turn. Used
+    # only on the message-processing thread.
+    _diff_tracker: DiffTracker | None = PrivateAttr(default=None)
 
     def start(self, secrets: Mapping[str, str | Secret]) -> None:
         # Resolve and validate the pi binary BEFORE super().start so the
@@ -1537,6 +1536,7 @@ class PiAgent(DefaultAgentWrapper):
         # leaves this set so Stop can still settle it.
         self._in_flight_request_id = get_turn_request_id(message)
         self._update_plan_mode_from_message(message)
+        self._ensure_diff_baseline()
         with self._handle_user_message(message):
             # A fresh turn starts un-interrupted: clear interrupt state left by an
             # interrupt that raced in with no turn in flight, which would otherwise
@@ -1966,30 +1966,21 @@ class PiAgent(DefaultAgentWrapper):
             case _ as unreachable:
                 assert_never(unreachable)
 
-    def _refresh_diff_if_file_change(self, parsed: ParsedToolExecutionEnd, state: _TurnState) -> None:
+    def _refresh_diff_if_file_change(self, parsed: ParsedToolExecutionEnd) -> None:
         """Refresh the workspace diff after a successful file-mutating tool.
 
         Pi runs its own `edit`/`write`/`bash` loop and emits no signal that
         files changed beyond these tool-execution events, so Sculptor must
         regenerate the diff artifact itself. Mirrors Claude's `on_diff_needed`
         path (`should_send_diff_and_branch_name_artifacts`): trigger on a
-        file-change tool, skip on tool errors. Also records the mutated file's
-        path onto the turn state so the turn footer's "N files changed" reflects
-        it (edit/write carry a `file_path`; a bash-driven change carries none, so
-        it is not counted individually — matching the tools whose path we know).
+        file-change tool, skip on tool errors.
         """
-        if parsed.tool_name not in FILE_CHANGE_TOOL_NAMES or parsed.is_error:
-            return
-        info = state.tool_calls.get(parsed.tool_call_id)
-        if info is not None:
-            file_path = info.claude_input.get("file_path")
-            if isinstance(file_path, str):
-                state.note_changed_file(file_path)
         on_diff_needed = self.on_diff_needed
         if on_diff_needed is None:
             return
-        logger.debug("PiAgent file-change tool finished ({}), refreshing workspace diff", parsed.tool_name)
-        on_diff_needed()
+        if parsed.tool_name in FILE_CHANGE_TOOL_NAMES and not parsed.is_error:
+            logger.debug("PiAgent file-change tool finished ({}), refreshing workspace diff", parsed.tool_name)
+            on_diff_needed()
 
     def _handle_message_update(self, parsed: ParsedMessageUpdate, state: _TurnState) -> None:
         inner = parsed.assistant_message_event
@@ -2216,7 +2207,7 @@ class PiAgent(DefaultAgentWrapper):
 
     def _handle_tool_execution_end(self, parsed: ParsedToolExecutionEnd, state: _TurnState) -> None:
         """Finish a tool call: refresh the workspace diff, then emit its result block."""
-        self._refresh_diff_if_file_change(parsed, state)
+        self._refresh_diff_if_file_change(parsed)
         self._emit_tool_result(parsed, state)
 
     def _emit_tool_result(self, parsed: ParsedToolExecutionEnd, state: _TurnState) -> None:
@@ -2608,16 +2599,49 @@ class PiAgent(DefaultAgentWrapper):
         + changed files. pi exposes no numeric context-window threshold on the
         wire, so the context fields stay unset (the "% context" chip is
         Claude-only).
+
+        Changed files come from the DiffTracker's tree-diff (git-relative paths
+        covering ALL tools, including bash-driven changes) rather than from tool
+        args, matching Claude and what the frontend's file-click navigation
+        expects. The tree baseline is then re-captured so the next turn's diff is
+        measured from this turn's end.
         """
         input_tokens, output_tokens = sum_message_usage(parsed.messages)
+        changed_files = self._collect_changed_files_and_rebaseline()
         turn_metrics = TurnMetrics(
             duration_seconds=time.monotonic() - state.start_time,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             reasoning_tokens=None,
-            changed_files=list(state.changed_files),
+            changed_files=changed_files,
         )
         self._output_messages.put(TurnMetricsAgentMessage(message_id=AgentMessageID(), turn_metrics=turn_metrics))
+
+    def _ensure_diff_baseline(self) -> None:
+        """Capture the working-tree baseline before a turn, once.
+
+        Created lazily (not in `start()`) so a git failure never blocks startup and
+        the baseline reflects the tree right before the turn. `DiffTracker.__init__`
+        captures the tree SHA and never raises (it logs and degrades internally).
+        """
+        if self._diff_tracker is None:
+            self._diff_tracker = DiffTracker(self.environment)
+
+    def _collect_changed_files_and_rebaseline(self) -> list[str]:
+        """Return this turn's changed files (git-relative), then re-baseline the tree.
+
+        Diffs the working tree against the SHA captured at the previous turn
+        boundary, so it reflects only what changed during this turn. Re-baselining
+        afterwards means the next turn measures from here. Degrades to an empty
+        list if the tracker is unavailable (e.g. the turn ran before a baseline was
+        captured, as in unit tests that drive the pump directly).
+        """
+        tracker = self._diff_tracker
+        if tracker is None:
+            return []
+        changed_files = tracker.get_changed_file_paths()
+        tracker.update_initial_tree_sha()
+        return changed_files
 
     def _handle_auto_retry_end(self, parsed: ParsedAutoRetryEnd, state: _TurnState) -> None:
         if not parsed.success:

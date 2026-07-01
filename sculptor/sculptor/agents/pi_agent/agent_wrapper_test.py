@@ -3496,60 +3496,42 @@ class TestTurnFooterMetrics:
         assert turn.input_tokens is None
         assert turn.output_tokens is None
 
-    def test_turn_metrics_reports_changed_files_from_file_mutating_tools(self) -> None:
-        """Files edited/written during the turn appear on turn_metrics.changed_files
-        (the authoritative "N files changed" source), de-duplicated and errors excluded."""
-        agent = _make_agent(on_diff_needed=MagicMock())
+    def test_turn_metrics_reports_git_relative_changed_files_from_diff_tracker(self) -> None:
+        """changed_files comes from the DiffTracker's tree-diff (git-relative, all
+        tools including bash) — not from tool args — and the tree is re-baselined
+        for the next turn."""
+        agent = _make_agent()
+        tracker = MagicMock()
+        tracker.get_changed_file_paths.return_value = ["src/a.py", "scripts/gen.sh"]
+        agent._diff_tracker = tracker
         agent._process = _make_process(
             [
                 _event({"type": "agent_start"}),
-                _event(
-                    {
-                        "type": "message_end",
-                        "message": _assistant_msg_with_content(
-                            [
-                                _tool_call_block("w1", "write", {"path": "/repo/new.txt", "content": "x"}),
-                                _tool_call_block("e1", "edit", {"path": "/repo/a.txt", "edits": []}),
-                                _tool_call_block("e2", "edit", {"path": "/repo/a.txt", "edits": []}),
-                                _tool_call_block("r1", "read", {"path": "/repo/b.txt"}),
-                            ]
-                        ),
-                    }
-                ),
-                _event(_tool_execution_end("w1", "write", result={"content": [{"type": "text", "text": "ok"}]})),
-                _event(_tool_execution_end("e1", "edit", result={"content": [{"type": "text", "text": "ok"}]})),
-                _event(_tool_execution_end("e2", "edit", result={"content": [{"type": "text", "text": "ok"}]})),
-                _event(_tool_execution_end("r1", "read", result={"content": [{"type": "text", "text": "data"}]})),
-                _event({"type": "agent_end", "messages": [], "willRetry": False}),
+                _event(_text_delta_update("done.", "done.")),
+                _event({"type": "message_end", "message": _assistant_msg("done.")}),
+                _event({"type": "agent_end", "messages": [_assistant_msg("done.")], "willRetry": False}),
             ]
         )
         agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
 
         metrics = _turn_metrics(_drain(agent._output_messages))
         assert len(metrics) == 1
-        # write + edit are counted (edit on the same file only once); read is not a mutation.
-        assert metrics[0].turn_metrics.changed_files == ["/repo/new.txt", "/repo/a.txt"]
+        # Whatever the tree-diff reports (git-relative, tool-agnostic), verbatim.
+        assert metrics[0].turn_metrics.changed_files == ["src/a.py", "scripts/gen.sh"]
+        # The baseline is advanced so the next turn diffs from this turn's end.
+        tracker.update_initial_tree_sha.assert_called_once()
 
-    def test_failed_tool_call_is_excluded_from_changed_files(self) -> None:
-        """A file-mutating tool that ended in error does not count toward changed_files."""
-        agent = _make_agent(on_diff_needed=MagicMock())
+    def test_turn_metrics_changed_files_empty_when_no_diff_tracker(self) -> None:
+        """With no DiffTracker (e.g. before start()), changed_files degrades to empty
+        rather than raising."""
+        agent = _make_agent()
+        assert agent._diff_tracker is None
         agent._process = _make_process(
             [
                 _event({"type": "agent_start"}),
-                _event(
-                    {
-                        "type": "message_end",
-                        "message": _assistant_msg_with_content(
-                            [_tool_call_block("w1", "write", {"path": "/repo/new.txt", "content": "x"})]
-                        ),
-                    }
-                ),
-                _event(
-                    _tool_execution_end(
-                        "w1", "write", result={"content": [{"type": "text", "text": "boom"}]}, is_error=True
-                    )
-                ),
-                _event({"type": "agent_end", "messages": [], "willRetry": False}),
+                _event(_text_delta_update("done.", "done.")),
+                _event({"type": "message_end", "message": _assistant_msg("done.")}),
+                _event({"type": "agent_end", "messages": [_assistant_msg("done.")], "willRetry": False}),
             ]
         )
         agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
@@ -3557,3 +3539,14 @@ class TestTurnFooterMetrics:
         metrics = _turn_metrics(_drain(agent._output_messages))
         assert len(metrics) == 1
         assert metrics[0].turn_metrics.changed_files == []
+
+    def test_ensure_diff_baseline_creates_tracker_once(self) -> None:
+        """The diff baseline is captured lazily on the first turn and reused after."""
+        agent = _make_agent()
+        with patch("sculptor.agents.pi_agent.agent_wrapper.DiffTracker") as tracker_cls:
+            agent._ensure_diff_baseline()
+            first = agent._diff_tracker
+            agent._ensure_diff_baseline()
+        assert first is not None
+        assert agent._diff_tracker is first
+        tracker_cls.assert_called_once_with(agent.environment)
