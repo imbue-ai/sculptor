@@ -1,4 +1,4 @@
-import { DropdownMenu, Flex, IconButton, Popover, Spinner, Text, Tooltip } from "@radix-ui/themes";
+import { ContextMenu, DropdownMenu, Flex, IconButton, Popover, Spinner, Text, Tooltip } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import { Check, ChevronDown, ChevronUp, CopyIcon, GitMergeIcon, Info, PlusIcon, TriangleAlert } from "lucide-react";
 import { posthog } from "posthog-js";
@@ -163,27 +163,22 @@ const CreatePrButton = ({ targetBranch, gitProvider }: CreatePrButtonProps): Rea
 
   return (
     <>
-      <div className={styles.createSplitButton}>
-        <button
-          type="button"
-          className={styles.createMainArea}
-          onClick={handleClick}
-          data-testid={ElementIds.PR_BUTTON_CREATE}
-        >
-          <PlusIcon size={12} className={styles.plusIcon} />
-          <Text size="1">{buttonLabel}</Text>
-        </button>
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger>
-            <span className={styles.createChevronArea} role="button" tabIndex={0}>
-              <ChevronDown size={12} />
-            </span>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content size="1">
-            <DropdownMenu.Item onSelect={() => setIsPromptDialogOpen(true)}>Edit prompt...</DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
-      </div>
+      <ContextMenu.Root>
+        <ContextMenu.Trigger>
+          <button
+            type="button"
+            className={styles.createButton}
+            onClick={handleClick}
+            data-testid={ElementIds.PR_BUTTON_CREATE}
+          >
+            <PlusIcon size={12} className={styles.plusIcon} />
+            <Text size="1">{buttonLabel}</Text>
+          </button>
+        </ContextMenu.Trigger>
+        <ContextMenu.Content size="1">
+          <ContextMenu.Item onSelect={() => setIsPromptDialogOpen(true)}>Edit prompt...</ContextMenu.Item>
+        </ContextMenu.Content>
+      </ContextMenu.Root>
       <PrPromptDialog open={isPromptDialogOpen} onOpenChange={setIsPromptDialogOpen} gitProvider={gitProvider} />
     </>
   );
