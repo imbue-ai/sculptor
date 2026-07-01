@@ -1,6 +1,6 @@
 """The pi harness — non-Claude implementor of `Harness`.
 
-Pi is a full-featured and capable harness that renders tool calls
+Pi is a capable harness that renders tool calls
 (`supports_tool_use_rendering=True`): pi's tool-execution lane is adapted onto
 Sculptor's harness-agnostic tool blocks (see `agent_wrapper` / `tool_rendering`).
 Session resume is supported — pi persists a per-task JSONL session
