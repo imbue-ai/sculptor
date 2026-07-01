@@ -22,19 +22,18 @@ import { ElementIds, updateWorkspace } from "~/api";
 import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { projectsArrayAtom } from "~/common/state/atoms/projects.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
-import {
-  agentIdsByWorkspaceAtom,
-  effectiveOpenTabIdsAtom,
-  ensurePseudoTabAtom,
-  workspacesArrayAtom,
-} from "~/common/state/atoms/workspaces.ts";
+import { agentIdsByWorkspaceAtom, ensurePseudoTabAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { useOptimisticWorkspaceDelete } from "~/common/state/hooks/useOptimisticWorkspaceDelete.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { AddRepoDialog } from "~/components/add-repo/AddRepoDialog.tsx";
 import { useCommandPalette } from "~/components/CommandPalette";
 import { renamingWorkspaceIdAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
-import { type OpenInRuntime, WorkspaceContextMenuContent } from "~/components/CommandPalette/contextActions/menu.tsx";
+import {
+  type OpenInRuntime,
+  WorkspaceContextMenuContent,
+  WorkspaceDropdownMenuContent,
+} from "~/components/CommandPalette/contextActions/menu.tsx";
 import type { WorkspaceAction, WorkspaceActionRuntime } from "~/components/CommandPalette/contextActions/types.ts";
 import { useGitAndOpenInRuntime } from "~/components/CommandPalette/contextActions/useGitAndOpenInRuntime.ts";
 import { buildWorkspaceActions } from "~/components/CommandPalette/contextActions/workspaceActions.ts";
@@ -65,61 +64,54 @@ type NavItemProps = {
   label: string;
   isActive?: boolean;
   disabled?: boolean;
+  /**
+   * Tooltip shown on hover while the item is disabled, explaining why it
+   * can't be used right now (e.g. no workspaces yet). Ignored when enabled.
+   */
+  disabledTooltip?: string;
   onClick: () => void;
   testId?: string;
 };
 
-const NavItem = ({ icon: Icon, label, isActive, disabled, onClick, testId }: NavItemProps): ReactElement => (
-  <button
-    type="button"
-    className={`${styles.navItem} ${isActive ? styles.navItemActive : ""}`}
-    onClick={onClick}
-    disabled={disabled}
-    data-testid={testId}
-  >
-    <Icon size={16} className={styles.navIcon} />
-    <span className={styles.navLabel}>{label}</span>
-  </button>
-);
+const NavItem = ({
+  icon: Icon,
+  label,
+  isActive,
+  disabled,
+  disabledTooltip,
+  onClick,
+  testId,
+}: NavItemProps): ReactElement => {
+  const button = (
+    <button
+      type="button"
+      className={`${styles.navItem} ${isActive ? styles.navItemActive : ""}`}
+      onClick={onClick}
+      disabled={disabled}
+      data-testid={testId}
+    >
+      <Icon size={16} className={styles.navIcon} />
+      <span className={styles.navLabel}>{label}</span>
+    </button>
+  );
+  // Disabled buttons don't emit pointer events, so the tooltip anchors on a
+  // wrapper span that still receives hover — this keeps the affordance
+  // discoverable ("why can't I click this?") instead of a silent no-op.
+  if (disabled && disabledTooltip) {
+    return (
+      <Tooltip content={disabledTooltip} side="right">
+        <span className={styles.navItemTooltipAnchor}>{button}</span>
+      </Tooltip>
+    );
+  }
+  return button;
+};
 
 type RepoGroup = {
   projectId: string;
   name: string;
   workspaces: ReadonlyArray<Workspace>;
 };
-
-/**
- * The compact "..." dropdown menu for a workspace row. Reuses the shared
- * `workspaceActions` descriptors so it stays in sync with the right-click
- * context menu and Cmd+K, but renders the flat action list (without the
- * right-click menu's "Open in..." submenu and copy group) so the hover-
- * revealed button stays light.
- */
-const WorkspaceRowDropdownItems = ({
-  actions,
-  workspace,
-  destructiveColor,
-}: {
-  actions: ReadonlyArray<WorkspaceAction>;
-  workspace: Workspace;
-  destructiveColor: ReturnType<typeof useThemeDangerColor>;
-}): ReactElement => (
-  <DropdownMenu.Content size="1" onCloseAutoFocus={(e): void => e.preventDefault()}>
-    {actions
-      .filter((action) => (action.visible ? action.visible(workspace) : true))
-      .map((action) => (
-        <DropdownMenu.Item
-          key={action.id}
-          data-testid={action.testId}
-          color={action.destructive ? destructiveColor : undefined}
-          disabled={action.disabled ? action.disabled(workspace) : false}
-          onSelect={(): void => void action.perform(workspace)}
-        >
-          {action.icon ? <action.icon size={14} /> : null} {action.getTitle ? action.getTitle(workspace) : action.title}
-        </DropdownMenu.Item>
-      ))}
-  </DropdownMenu.Content>
-);
 
 /**
  * A single workspace row in the sidebar repo group: the status dot + name (or an
@@ -203,7 +195,12 @@ const SidebarWorkspaceRow = ({
                 </IconButton>
               </DropdownMenu.Trigger>
             </Tooltip>
-            <WorkspaceRowDropdownItems actions={actions} workspace={workspace} destructiveColor={destructiveColor} />
+            <WorkspaceDropdownMenuContent
+              actions={actions}
+              workspace={workspace}
+              destructiveColor={destructiveColor}
+              openInRuntime={openInRuntime}
+            />
           </DropdownMenu.Root>
           <Tooltip content="Delete workspace" side="bottom">
             <IconButton
@@ -251,7 +248,6 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   const agentIdsByWorkspace = useAtomValue(agentIdsByWorkspaceAtom);
   const collapsedRepos = useAtomValue(collapsedRepoGroupsAtom);
   const setCollapsedRepos = useSetAtom(collapsedRepoGroupsAtom);
-  const effectiveOpenTabIds = useAtomValue(effectiveOpenTabIdsAtom);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useAtom(renamingWorkspaceIdAtom);
   // In the empty first-run state the repo area shows its own
   // "Add a repo" / "No workspaces yet" affordances; outside it the sidebar is
@@ -275,7 +271,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   const openSettings = useOpenSettings();
   const { workspaceId: activeWorkspaceId, isHomeRoute, isSettingsRoute } = useImbueLocation();
   const dangerColor = useThemeDangerColor();
-  const { handleClose, handleCloseOthers, handleCloseAll, navigateToNextTab } = useWorkspaceTabActions();
+  const { navigateToNextTab } = useWorkspaceTabActions();
   const gitAndOpenIn = useGitAndOpenInRuntime();
   // Deleting a workspace updates the sidebar optimistically and rolls back with
   // an error toast on failure. Navigate away only when the deleted
@@ -307,14 +303,10 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   const workspaceActionRuntime = useMemo<WorkspaceActionRuntime>(
     () => ({
       beginRename: (ws): void => setRenamingWorkspaceId(ws.objectId),
-      closeWorkspace: (ws): void => handleClose(ws.objectId),
-      closeOtherWorkspaces: (ws): void => handleCloseOthers(ws.objectId),
-      closeAllWorkspaces: (): void => handleCloseAll(),
       beginDelete: (ws): void => setDeleteTarget(ws),
-      canCloseOthers: (): boolean => effectiveOpenTabIds.length > 1,
       ...gitAndOpenIn,
     }),
-    [setRenamingWorkspaceId, handleClose, handleCloseOthers, handleCloseAll, effectiveOpenTabIds.length, gitAndOpenIn],
+    [setRenamingWorkspaceId, gitAndOpenIn],
   );
 
   // Run the optimistic delete once the user confirms in the dialog.
@@ -455,13 +447,27 @@ export const WorkspaceSidebar = (): ReactElement | null => {
           onClick={handleOpenHome}
           testId={ElementIds.SIDEBAR_HOME_LINK}
         />
-        <NavItem icon={Search} label="Search" onClick={toggleCommandPalette} testId={ElementIds.SIDEBAR_CMDK_LINK} />
+        {/* Search (Cmd+K) and New Workspace are inert until the first
+            workspace exists: the palette open-path is gated by
+            `areGlobalShortcutsDisabledAtom` and the new-workspace modal isn't
+            mounted on the first-run page. Reflect that with a real disabled
+            state + tooltip rather than a silent no-op — the inline first-run
+            form is the create affordance while the list is empty. */}
+        <NavItem
+          icon={Search}
+          label="Search"
+          disabled={isWorkspaceListEmpty}
+          disabledTooltip="Create a workspace to enable search"
+          onClick={toggleCommandPalette}
+          testId={ElementIds.SIDEBAR_CMDK_LINK}
+        />
         {/* Direct-create reusing the last settings + a fresh auto branch;
             falls back to the dialog when there are no last settings yet. */}
         <NavItem
           icon={Plus}
           label="New Workspace"
-          disabled={isCreating}
+          disabled={isCreating || isWorkspaceListEmpty}
+          disabledTooltip="Use the form to create your first workspace"
           onClick={() => void createFromSidebar()}
           testId={ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON}
         />

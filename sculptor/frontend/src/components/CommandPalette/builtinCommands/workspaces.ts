@@ -14,12 +14,6 @@ import type { Command } from "../types.ts";
  * picking an agent and stepping through agents share one entry-point.
  * They still surface at root via fuzzy search (and via their
  * keybindings), so this scoping does NOT make them harder to invoke.
- *
- * Note: closing the current workspace is intentionally NOT in this list.
- * It's covered by the dynamic "Close" entry in `workspace.actions` (see
- * `dynamic/workspaceActions.ts`), which carries the `close_workspace`
- * shortcut hint and uses the same atom-driven close path as the
- * right-click menu.
  */
 export const buildWorkspaceActionCommands = (runtime: CommandRuntime): Array<Command> => [
   {
@@ -31,8 +25,8 @@ export const buildWorkspaceActionCommands = (runtime: CommandRuntime): Array<Com
     icon: ArrowRightIcon,
     shortcut: "next_tab",
     onPage: "workspace.actions",
-    // Slots between Rename (50) and Close (80) on the workspace.actions
-    // sub-page — see `dynamic/workspaceActions.ts` for the full sequence.
+    // Slots after Rename (50) on the workspace.actions sub-page — see
+    // `dynamic/workspaceActions.ts` for the full sequence.
     order: 60,
     perform: () => runtime.ui.nextWorkspaceTab(),
   },

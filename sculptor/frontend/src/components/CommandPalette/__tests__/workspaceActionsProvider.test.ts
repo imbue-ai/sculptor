@@ -91,11 +91,7 @@ type ActionRuntimeOverrides = {
 
 const makeActionRuntime = (overrides: ActionRuntimeOverrides = {}): WorkspaceActionRuntime => ({
   beginRename: vi.fn(),
-  closeWorkspace: vi.fn(),
-  closeOtherWorkspaces: vi.fn(),
-  closeAllWorkspaces: vi.fn(),
   beginDelete: vi.fn(),
-  canCloseOthers: vi.fn(() => true),
   commitChanges: vi.fn(),
   createMergeRequest: vi.fn(),
   openMergeRequest: vi.fn(),

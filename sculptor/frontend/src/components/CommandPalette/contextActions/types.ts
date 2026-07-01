@@ -133,12 +133,7 @@ export type AgentAction = ContextActionShared & {
  */
 export type WorkspaceActionRuntime = {
   beginRename: (workspace: Workspace) => void;
-  closeWorkspace: (workspace: Workspace) => void;
-  closeOtherWorkspaces: (workspace: Workspace) => void;
-  closeAllWorkspaces: () => void;
   beginDelete: (workspace: Workspace) => void;
-  /** True when there is more than one workspace tab open. */
-  canCloseOthers: () => boolean;
 
   /** Send the user's commit prompt to chat for the active agent. */
   commitChanges: (workspace: Workspace) => void;

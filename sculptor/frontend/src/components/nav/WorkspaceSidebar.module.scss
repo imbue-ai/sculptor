@@ -50,9 +50,21 @@
   text-align: left;
   width: 100%;
 
-  &:hover {
+  &:disabled {
+    color: var(--gray-8);
+    cursor: not-allowed;
+  }
+
+  &:hover:not(:disabled) {
     background: var(--gray-a3);
   }
+}
+
+// Anchors the "why is this disabled?" tooltip: a disabled button emits no
+// pointer events, so the wrapper receives hover in its place.
+.navItemTooltipAnchor {
+  display: block;
+  width: 100%;
 }
 
 .navItemActive {
@@ -63,6 +75,12 @@
 .navIcon {
   color: var(--gray-11);
   flex-shrink: 0;
+}
+
+// Dim the leading icon in step with the disabled label. Kept flat (and after
+// `.navIcon`) so selector specificity stays in source order for stylelint.
+.navItem:disabled .navIcon {
+  color: var(--gray-8);
 }
 
 .navLabel {
