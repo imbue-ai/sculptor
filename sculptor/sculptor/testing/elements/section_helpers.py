@@ -28,14 +28,21 @@ _ARROW_BY_DIRECTION: dict[str, str] = {
 # widest run); the loop stops as soon as the target lights up as the drop target.
 _MAX_DRAG_STEPS = 4
 
+# Keyboard pickup (focus tab → Space) is retried: a Radix menu that closed just
+# before the drag (e.g. the add-panel dropdown that opened the panel) restores
+# focus to its trigger asynchronously, and when that restore lands between the
+# helper's focus() and its Space press, the Space goes to the trigger instead of
+# the tab and no drag starts.
+_PICKUP_ATTEMPTS = 3
+
 
 def _section_drop_target(page: Page, sub_section: str):  # noqa: ANN202 - playwright Locator
     """The element carrying the live drop-target flag for a sub-section.
 
     Matches whichever is mounted: the expanded section body (PanelSection) or the
-    collapsed section's drop rail — both carry ``data-drop-target-subsection``. The
-    CSS-attribute scoping stays inside this helper to honour the integration-test
-    css-locator ratchet.
+    collapsed section's drop rail — both carry ``data-drop-target-subsection``.
+    The CSS-attribute scoping stays inside this helper to honour the
+    integration-test css-locator ratchet.
     """
     return page.locator(f'[data-drop-target-subsection="{sub_section}"]')
 
@@ -52,13 +59,24 @@ def drag_panel_to_section(
     The KeyboardSensor picks up on Space but attaches its arrow/end keydown listener on
     a deferred tick AND marks the source section as the initial drop target, so the
     helper waits for that source highlight before pressing arrows — otherwise the first
-    arrow is dispatched before the listener is live and is silently dropped.
+    arrow is dispatched before the listener is live and is silently dropped. Pickup
+    itself is retried per ``_PICKUP_ATTEMPTS``: a stolen-focus Space may have gone to
+    (and opened) another control, so each retry dismisses whatever it opened with
+    Escape and re-focuses the tab.
     """
-    handle = page.get_by_test_id(f"{ElementIDs.PANEL_TAB_DRAG_HANDLE}-{panel_id}")
+    handle = page.get_by_test_id(f"{ElementIDs.PANEL_TAB}-{panel_id}")
     expect(handle).to_be_visible()
-    handle.focus()
-    page.keyboard.press("Space")  # pick up
-    expect(_section_drop_target(page, source_sub_section)).to_have_attribute("data-drop-active", "true")
+    source = _section_drop_target(page, source_sub_section)
+    for attempt in range(_PICKUP_ATTEMPTS):
+        handle.focus()
+        page.keyboard.press("Space")  # pick up
+        try:
+            expect(source).to_have_attribute("data-drop-active", "true", timeout=5_000)
+            break
+        except AssertionError:
+            if attempt == _PICKUP_ATTEMPTS - 1:
+                raise
+            page.keyboard.press("Escape")
 
     arrow = _ARROW_BY_DIRECTION[direction]
     target = _section_drop_target(page, target_sub_section)

@@ -13,7 +13,7 @@
 import { useDraggable } from "@dnd-kit/core";
 import { ContextMenu, Flex, IconButton, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
-import { GripVertical, Maximize2, Minimize2, Plus, X } from "lucide-react";
+import { Maximize2, Minimize2, Plus, X } from "lucide-react";
 import type { ReactElement } from "react";
 import { memo, useState } from "react";
 
@@ -127,10 +127,22 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
     definition.onRename?.(newName);
   };
 
+  // The whole tab is the drag activator (no separate handle). The activator ref
+  // points at the same node so the keyboard sensor only picks up when the tab
+  // itself is focused — keydowns inside children (rename input, close button)
+  // don't start a drag. Pointer listeners are dropped while renaming so text
+  // selection inside the input can't move the panel.
+  const setTabRef = (node: HTMLElement | null): void => {
+    setNodeRef(node);
+    setActivatorNodeRef(node);
+  };
+
   const tabBody = (
     <div
-      ref={setNodeRef}
+      ref={setTabRef}
       className={tabClassName}
+      {...attributes}
+      {...(isRenaming ? {} : listeners)}
       role="tab"
       aria-selected={isActive}
       data-testid={`${ElementIds.PANEL_TAB}-${panelId}`}
@@ -140,16 +152,6 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
       onClick={handleActivate}
       onDoubleClick={handleDoubleClick}
     >
-      <span
-        ref={setActivatorNodeRef}
-        className={styles.dragHandle}
-        data-testid={`${ElementIds.PANEL_TAB_DRAG_HANDLE}-${panelId}`}
-        aria-label={`Drag ${definition.displayName}`}
-        {...attributes}
-        {...listeners}
-      >
-        <GripVertical size={12} />
-      </span>
       {isRenaming && canRename ? (
         <InlineRenameInput
           value={definition.displayName}

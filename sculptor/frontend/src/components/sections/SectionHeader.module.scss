@@ -26,7 +26,8 @@
 
 // A pill tab: compact, the active one filled with --gray-4. The close button sits in
 // its own fixed trailing slot so it never overlaps the label (the label truncates
-// before it) and stays in a stable, predictable spot.
+// before it) and stays in a stable, predictable spot. The tab itself is the dnd-kit
+// drag activator — touch-action:none lets the pointer sensor own the gesture on touch.
 .tab {
   align-items: center;
   background: transparent;
@@ -38,6 +39,7 @@
   font-size: var(--font-size-1);
   gap: var(--space-1);
   padding: var(--space-1) var(--space-2);
+  touch-action: none;
   transition:
     background-color var(--duration-fast),
     color var(--duration-fast);
@@ -68,22 +70,6 @@
   opacity: 70%;
   outline: 1px dashed var(--gray-a7);
   outline-offset: -1px;
-}
-
-// The drag activator. Always in the DOM (Playwright focuses it to drive the keyboard
-// sensor) but visually recessed; it carries grab cursors and dnd-kit's a11y
-// attributes. touch-action:none lets the pointer sensor own the gesture on touch.
-.dragHandle {
-  align-items: center;
-  color: var(--gray-a7);
-  cursor: grab;
-  display: flex;
-  flex-shrink: 0;
-  touch-action: none;
-
-  &:active {
-    cursor: grabbing;
-  }
 }
 
 // The source tab while its floating copy is being dragged: dimmed so the eye follows

@@ -205,9 +205,9 @@ def test_new_agent_from_left_lands_in_left(sculptor_instance_: SculptorInstance)
     left_dropdown.get_new_agent_item().click()
     # The new agent tab appears in the left section... (agent panel ids are dynamic,
     # so match the PANEL_TAB-agent:<id> testid by prefix via a get_by_test_id regex).
-    expect(
-        page.get_by_test_id("SECTION_HEADER-left").get_by_test_id(re.compile(r"^PANEL_TAB-agent:"))
-    ).to_have_count(1)
+    expect(page.get_by_test_id("SECTION_HEADER-left").get_by_test_id(re.compile(r"^PANEL_TAB-agent:"))).to_have_count(
+        1
+    )
     # ...and NOT in center, which still shows only its original agent.
     expect(
         page.get_by_test_id("SECTION_HEADER-center").get_by_test_id(re.compile(r"^PANEL_TAB-agent:"))
