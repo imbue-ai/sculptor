@@ -262,18 +262,14 @@ const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElemen
   };
 
   // While maximized the workspace header is hidden, so this section header sits at the
-  // very top. Add a little top padding so the tab strip vertically aligns with the OS
-  // window controls, and let the header grow to fit it (its resting height would clip
-  // the extra padding via overflow). When the sidebar is also collapsed, reserve the OS
-  // window-control gutter on the left so the tabs clear the traffic lights and the
-  // floating show-sidebar toggle (CollapsedSidebarToggle, rendered by the shell).
-  const headerStyle: React.CSSProperties | undefined = isMaximized
-    ? {
-        paddingTop: "var(--space-2)",
-        height: "auto",
-        ...(isSidebarCollapsed ? { paddingLeft: getTitleBarLeftPadding(false) } : {}),
-      }
-    : undefined;
+  // very top. It keeps its normal height (matching the workspace content header) — no
+  // extra top padding. When the sidebar is also collapsed, reserve the left gutter for
+  // the traffic lights AND the floating show-sidebar toggle (CollapsedSidebarToggle,
+  // rendered by the shell), so the first tab doesn't slide under them.
+  const headerStyle: React.CSSProperties | undefined =
+    isMaximized && isSidebarCollapsed
+      ? { paddingLeft: `calc(${getTitleBarLeftPadding(false)} + var(--space-6))` }
+      : undefined;
 
   return (
     <Flex

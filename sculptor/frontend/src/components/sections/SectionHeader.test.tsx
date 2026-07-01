@@ -44,7 +44,7 @@ describe("SectionHeader chrome layout", () => {
     expect(addButton.compareDocumentPosition(maximizeButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("does not add maximized top padding when the section is not maximized", () => {
+  it("does not mark the header as maximized when the section is not maximized", () => {
     const store = storeWith(false);
     renderWithProviders(<SectionHeader subSection="center" />, { store });
 
@@ -52,7 +52,7 @@ describe("SectionHeader chrome layout", () => {
     expect(header.getAttribute("data-maximized")).toBeNull();
   });
 
-  it("adds top padding so the tab strip clears the OS window controls when maximized", () => {
+  it("marks the header as maximized when the section is maximized", () => {
     const store = storeWith(true);
     renderWithProviders(<SectionHeader subSection="center" />, { store });
 

@@ -263,8 +263,10 @@ export const WorkspaceHeader = (): ReactElement | null => {
       {/* Draggable spacer so the frameless window can be moved by the header. */}
       <div className={styles.spacer} data-spacer />
 
-      {/* Right cluster: re-homed diff summary + PR button, then bottom/right toggles. */}
-      <Flex align="center" gap="2" flexShrink="0">
+      {/* Right cluster: re-homed diff summary + PR button, then bottom/right toggles.
+          gap="3" spaces every item (including the two toggles) evenly so the toggles'
+          active backgrounds don't touch while keeping the same gap as the PR button. */}
+      <Flex align="center" gap="3" flexShrink="0">
         <DiffSummary workspaceId={workspaceID} />
         {orderedWorkspaceWidgets.map(({ id, component: Widget }) => (
           <Widget key={id} />
@@ -277,22 +279,18 @@ export const WorkspaceHeader = (): ReactElement | null => {
             onSwitchTarget={handleSwitchTarget}
           />
         )}
-        {/* The bottom + right toggles get their own wider gap so their active
-            (accent) backgrounds don't touch when both sections are open. */}
-        <Flex align="center" gap="4">
-          <SectionToggle
-            section="bottom"
-            icon={<PanelBottom size={16} />}
-            label="bottom section"
-            testId={ElementIds.HEADER_SECTION_TOGGLE_BOTTOM}
-          />
-          <SectionToggle
-            section="right"
-            icon={<PanelRight size={16} />}
-            label="right section"
-            testId={ElementIds.HEADER_SECTION_TOGGLE_RIGHT}
-          />
-        </Flex>
+        <SectionToggle
+          section="bottom"
+          icon={<PanelBottom size={16} />}
+          label="bottom section"
+          testId={ElementIds.HEADER_SECTION_TOGGLE_BOTTOM}
+        />
+        <SectionToggle
+          section="right"
+          icon={<PanelRight size={16} />}
+          label="right section"
+          testId={ElementIds.HEADER_SECTION_TOGGLE_RIGHT}
+        />
       </Flex>
     </div>
   );
