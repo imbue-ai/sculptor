@@ -671,14 +671,15 @@ export const useAlphaAutoScroll = (
       const distance = distanceFromContentBottom(el, virtualizer);
       machine.setGeometryAtBottom(distance <= BOTTOM_THRESHOLD);
       // Reveal the turn footer that grew the content just after a followed turn
-      // ended: re-pin to the (grown) content bottom. Down-only, only while the user
-      // has not taken over, only once the content actually grew past its stream-stop
-      // height, only while the viewport is unchanged (so a width/height resize reflow
-      // is excluded — that keeps its own reading-anchor behavior), and only within the
-      // bounded window opened at streaming stop.
+      // ended: re-pin (down-only) to the grown content bottom. Fires only within the
+      // bounded window opened at streaming stop (a user scroll zeroes it, so a
+      // takeover wins), while still in the settled userControlled phase (a new turn
+      // started within the window is anchoringTurn, not userControlled, and must not
+      // be yanked down), once the content actually grew past its stream-stop height
+      // (the footer landing, not a no-op reflow), and while the viewport is unchanged
+      // (a width/height resize reflow keeps its own reading-anchor behavior instead).
       if (
         performance.now() < revealFooterUntilRef.current &&
-        !isUserScrollingRef.current &&
         machine.getState().authority.kind === "userControlled" &&
         el.scrollHeight > revealFooterBaseHeightRef.current + 1 &&
         `${el.clientWidth}x${el.clientHeight}` === revealFooterViewportRef.current
