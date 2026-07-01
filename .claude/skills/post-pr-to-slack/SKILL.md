@@ -1,7 +1,7 @@
 ---
 name: post-pr-to-slack
 description: |
-  Post a one-line PR announcement to a Slack channel, and mark it :done: when
+  Post a one-line PR announcement to a Slack channel, and mark it :merged: when
   the PR merges. Use whenever you open or meaningfully adjust a Sculptor PR.
 compatibility: |
   Requires latchkey with a working Slack credential, plus `jq` and `gh`. Run
@@ -12,7 +12,7 @@ argument-hint: [pr-number | pr-url] [#channel]
 # Post PR to Slack
 
 Announce Sculptor pull requests in the team's merges channel with a single
-standalone line, then mark each announcement `:done:` once its PR merges. This
+standalone line, then mark each announcement `:merged:` once its PR merges. This
 file covers *when* to post and *what* the message should say; the Slack
 mechanics (channel lookup, posting, reacting) live in
 [`scripts/slack_pr.sh`](scripts/slack_pr.sh).
@@ -29,7 +29,7 @@ The skill is agent-agnostic — it depends only on `latchkey`, `jq`, `gh`, and
   approach, a scope change, or a retitle. Reply in the existing thread; don't
   start a new top-level post. Skip trivial edits (typo fixes, rebases, minor doc
   tweaks). If unsure, ask the user.
-- **When a PR merges** (you observe it, or the user says so). Add a `:done:`
+- **When a PR merges** (you observe it, or the user says so). Add a `:merged:`
   reaction to the original post. Do *not* post a separate "merged" message — the
   reaction is the convention.
 
@@ -87,7 +87,7 @@ missing, install it with `npm install -g latchkey`.
    text are safe.
 
 3. **Report** the channel and `ts` back to the user, and remember the `ts` — the
-   merge-time `:done:` step needs it.
+   merge-time `:merged:` step needs it.
 
 ## Steps — adjusting an open PR
 
@@ -108,7 +108,7 @@ TS=$("$SLACK" find-ts '#project-sculptor-merges' "$PR_URL")
 ```
 
 `find-ts` matches the bare URL even when Slack has wrapped it in `<…>`. `done` is
-idempotent — an already-present `:done:` counts as success. Don't post anything
+idempotent — an already-present `:merged:` counts as success. Don't post anything
 else; the reaction *is* the "merged" signal.
 
 ## Drafting the one-liner
@@ -135,12 +135,12 @@ Check the draft against these guardrails:
 
 ## Authorization
 
-The `#project-sculptor-merges` post-and-`:done:` flow is **pre-authorized** for
+The `#project-sculptor-merges` post-and-`:merged:` flow is **pre-authorized** for
 Sculptor PRs — this skill living in the repo *is* the standing instruction.
 Don't pause to ask "should I post this?" after `gh pr create` succeeds; just
 post. Posting and reacting are still visible to others, so **do** ask before any
 scope expansion: a different channel, @-mentioning people, a reaction other than
-`:done:`, or cross-posting to a non-Sculptor PR.
+`:merged:`, or cross-posting to a non-Sculptor PR.
 
 ## Notes
 
