@@ -278,7 +278,12 @@ section against the diff produced by this fix.
 - **If the section names a skill** (e.g. `Skill: /code-review-checklist`):
   invoke that skill with:
   - Working directory: the repo root.
-  - Diff range: `<merge base>...HEAD`.
+  - Diff range: `<base branch>...HEAD`, where `<base branch>` is the
+    up-to-date remote-tracking base ref (e.g. `origin/main`) — NOT local
+    `main`, which may be stale and silently widen the diff to include
+    commits already merged upstream. The three-dot syntax scopes the
+    review to this branch's own commits (it diffs against the merge base
+    automatically).
   - Stated goal: a short summary of the bug and the intended behaviour
     (the same content you've been building in Phase 1).
 
@@ -549,7 +554,12 @@ this run has produced.
 - **If the section names a skill** (e.g. `Skill: /code-review-checklist`):
   invoke that skill with:
   - Working directory: the repo root.
-  - Diff range: `<merge base>...HEAD`.
+  - Diff range: `<base branch>...HEAD`, where `<base branch>` is the
+    up-to-date remote-tracking base ref (e.g. `origin/main`) — NOT local
+    `main`, which may be stale and silently widen the diff to include
+    commits already merged upstream. The three-dot syntax scopes the
+    review to this branch's own commits (it diffs against the merge base
+    automatically).
   - Stated goal: the assembled MR body draft (root cause, fix, repro,
     proof) you will publish in A5 — pass the actual draft, not just the
     bug description. The review skill needs the body to evaluate "Proof of
