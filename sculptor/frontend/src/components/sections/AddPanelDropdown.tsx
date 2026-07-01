@@ -2,11 +2,10 @@
 // Opened by the section header `+` and the empty-state add button, scoped to the
 // sub-section it was opened from. Items, in order:
 //   1. "New {recent} agent" — the recently-used agent type (Claude by default),
-//      with its new-agent keybinding shown. ALWAYS lands the agent in center,
-//      regardless of `subSection`.
+//      with its new-agent keybinding shown. Lands the agent in THIS sub-section.
 //   2. Agent-type sub-menu — create an agent of a different type: Claude, pi
 //      (gated), and each registered terminal-agent program. No bare "Terminal"
-//      agent type. Also lands in center.
+//      agent type. Also lands in THIS sub-section.
 //   3. "New terminal" — creates a terminal in THIS sub-section.
 //   4. Every single-instance panel not currently open anywhere — opens in THIS
 //      sub-section. Agents/terminals are never offered (closing one ends it).
@@ -74,7 +73,10 @@ export const AddPanelDropdown = ({ subSection, trigger, tooltip }: AddPanelDropd
         <DropdownMenu.Trigger>{trigger}</DropdownMenu.Trigger>
       )}
       <DropdownMenu.Content size="1" data-testid={`${ElementIds.ADD_PANEL_DROPDOWN}-${subSection}`}>
-        <DropdownMenu.Item data-testid={ElementIds.ADD_PANEL_NEW_AGENT} onSelect={() => actions.createRecentAgent()}>
+        <DropdownMenu.Item
+          data-testid={ElementIds.ADD_PANEL_NEW_AGENT}
+          onSelect={() => actions.createRecentAgent(subSection)}
+        >
           <span className={styles.item}>
             <span className={styles.itemIcon}>
               <MessageSquarePlus size={16} />
@@ -99,7 +101,7 @@ export const AddPanelDropdown = ({ subSection, trigger, tooltip }: AddPanelDropd
                 key={option.key}
                 data-testid={agentTypeTestId(option.agentType)}
                 data-registration-id={option.registrationId}
-                onSelect={() => actions.createAgent(option.agentType, option.registrationId)}
+                onSelect={() => actions.createAgent(option.agentType, option.registrationId, subSection)}
               >
                 <span className={styles.item}>
                   <span className={styles.itemIcon}>

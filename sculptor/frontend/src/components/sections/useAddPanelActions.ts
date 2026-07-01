@@ -4,9 +4,10 @@
 // after create, the live registrations list, pi gating, the recent-agent label).
 //
 // The actual create/list logic lives in addPanelCore so the Cmd+K "Add panel" flow
-// (which runs outside React) shares one implementation and can't drift. New agents
-// always land in center; terminals and single-instance panels land in
-// the requesting sub-section; agents/terminals are never in the re-add list.
+// (which runs outside React) shares one implementation and can't drift. Agents,
+// terminals, and single-instance panels all land in the requesting sub-section; the
+// non-scoped surfaces (the new-agent keybinding and Cmd+K "New agent" command) pass no
+// target and default to center. Agents/terminals are never in the re-add list.
 
 import { useAtomValue } from "jotai";
 import { useStore } from "jotai/react";
@@ -29,7 +30,7 @@ import { ToastType } from "~/components/Toast.tsx";
 
 import {
   type AvailableStaticPanel,
-  createAgentInCenter,
+  createAgentInLocation,
   createTerminalInLocation,
   openStaticPanelInLocation,
 } from "./addPanelCore.ts";
@@ -59,10 +60,12 @@ export type AddPanelActions = {
   refreshRegistrations: () => void;
   // Single-instance static panels not currently open anywhere — the re-add list.
   availableStaticPanels: ReadonlyArray<StaticPanelOption>;
-  // Create an agent of the recently-used type (Claude by default) in center.
-  createRecentAgent: () => void;
-  // Create an agent of a specific type in center.
-  createAgent: (agentType: AgentTypeName, registrationId?: string) => void;
+  // Create an agent of the recently-used type (Claude by default). Lands in the given
+  // sub-section, defaulting to center for the non-scoped surfaces (keybinding / command).
+  createRecentAgent: (target?: SubSectionId) => void;
+  // Create an agent of a specific type. Lands in the given sub-section, defaulting to
+  // center for the non-scoped surfaces.
+  createAgent: (agentType: AgentTypeName, registrationId?: string, target?: SubSectionId) => void;
   // Create a terminal and place it in the requesting sub-section.
   createTerminal: (subSection: SubSectionId) => void;
   // Open a single-instance static panel in the requesting sub-section.
@@ -96,9 +99,13 @@ export const useAddPanelActions = (): AddPanelActions => {
   }, [refetch]);
 
   const createAgent = useCallback(
-    (agentType: AgentTypeName, registrationId?: string): void => {
+    (agentType: AgentTypeName, registrationId?: string, target: SubSectionId = "center"): void => {
       void (async (): Promise<void> => {
-        const taskId = await createAgentInCenter(store, { agentType, registrationId, activeAgentId: agentID });
+        const taskId = await createAgentInLocation(store, target, {
+          agentType,
+          registrationId,
+          activeAgentId: agentID,
+        });
         if (taskId !== undefined) {
           navigateToAgent(workspaceID, taskId);
         } else {
@@ -114,10 +121,13 @@ export const useAddPanelActions = (): AddPanelActions => {
     [store, agentID, workspaceID, navigateToAgent],
   );
 
-  const createRecentAgent = useCallback((): void => {
-    const { agentType, registrationId } = parseStoredAgentType(defaultAgentType);
-    createAgent(agentType, registrationId);
-  }, [defaultAgentType, createAgent]);
+  const createRecentAgent = useCallback(
+    (target: SubSectionId = "center"): void => {
+      const { agentType, registrationId } = parseStoredAgentType(defaultAgentType);
+      createAgent(agentType, registrationId, target);
+    },
+    [defaultAgentType, createAgent],
+  );
 
   const createTerminal = useCallback(
     (subSection: SubSectionId): void => {

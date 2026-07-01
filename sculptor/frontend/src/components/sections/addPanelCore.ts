@@ -5,10 +5,12 @@
 // the React hook — means the dropdown and Cmd+K can't drift, and the Cmd+K
 // provider doesn't need React hooks (which would crash on non-workspace routes).
 //
-// New agents ALWAYS land in the center section, regardless of the
-// requesting sub-section. Terminals and single-instance panels land in the
-// requesting sub-section. Agents/terminals are multi-instance and are never in the
-// single-instance re-add list (closing one ends it).
+// New agents land in the requesting sub-section (createAgentInLocation) — the section
+// "+" dropdown / empty-state / Cmd+K "Add panel" pass their own sub-section, while the
+// non-scoped surfaces (the new-agent keybinding and Cmd+K "New agent" command) pass
+// center. Terminals and single-instance panels also land in the requesting sub-section.
+// Agents/terminals are multi-instance and are never in the single-instance re-add list
+// (closing one ends it).
 
 import type { useStore } from "jotai/react";
 
@@ -25,9 +27,6 @@ import { jumpToSectionAtom, openPanelAtom, setActivePanelAtom } from "./sectionA
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "./sectionAtoms.ts";
 import type { PanelId, SectionId, SubSectionId } from "./sectionTypes.ts";
 import { SECTION_IDS, toSecondary } from "./sectionTypes.ts";
-
-// New agents always land in the center section's primary sub-section.
-const AGENT_TARGET_SUB_SECTION: SubSectionId = "center";
 
 type AppStore = ReturnType<typeof useStore>;
 
@@ -131,11 +130,17 @@ export function seedFirstVisitTerminal(store: AppStore, workspaceId: string): nu
 
 type CreateAgentInputs = { agentType: AgentTypeName; registrationId?: string; activeAgentId?: string };
 
-// Create an agent of the given type and place its panel in the CENTER section
-// regardless of the requesting sub-section. Returns the new task id (or
-// undefined on failure) so callers can navigate to it. The placement is just an id
-// reference; the registry sync derives the panel def once the task loads.
-export async function createAgentInCenter(store: AppStore, inputs: CreateAgentInputs): Promise<string | undefined> {
+// Create an agent of the given type and place its panel in the requesting sub-section.
+// Returns the new task id (or undefined on failure) so callers can navigate to it. The
+// placement is just an id reference; the registry sync derives the panel def once the
+// task loads. Placing the panel here (before the caller navigates) means the shell's
+// active-agent effect sees an existing placement and leaves the agent in this section
+// rather than pulling it into center.
+export async function createAgentInLocation(
+  store: AppStore,
+  subSection: SubSectionId,
+  inputs: CreateAgentInputs,
+): Promise<string | undefined> {
   // Optimistically reflect the chosen harness as the most-recently-used type so the
   // surfaces' "New {recent} agent" label updates immediately; the backend persists
   // it on actual create.
@@ -165,9 +170,9 @@ export async function createAgentInCenter(store: AppStore, inputs: CreateAgentIn
       return undefined;
     }
     const panelId = makeAgentPanelId(response.data.id);
-    store.set(openPanelAtom, { panelId, in: AGENT_TARGET_SUB_SECTION });
-    store.set(setActivePanelAtom, { panelId, in: AGENT_TARGET_SUB_SECTION });
-    store.set(jumpToSectionAtom, { subSection: AGENT_TARGET_SUB_SECTION });
+    store.set(openPanelAtom, { panelId, in: subSection });
+    store.set(setActivePanelAtom, { panelId, in: subSection });
+    store.set(jumpToSectionAtom, { subSection });
     return response.data.id;
   } catch (error) {
     console.error("Failed to create agent:", error);

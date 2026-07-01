@@ -6,16 +6,16 @@
 //         → addpanel.panels (pick a panel for that location)
 //
 // The chosen location rides in addPanelTargetSubSectionAtom (set by the location
-// rows, cleared on palette close). The panel page lists "New {recent} agent" (always
-// landing the agent in center), "New terminal" (in the chosen location),
-// and every single-instance panel not already open. Agents/terminals are never in
-// the single-instance list (closing one ends it).
+// rows, cleared on palette close). The panel page lists "New {recent} agent",
+// "New terminal", and every single-instance panel not already open — all landing in
+// the chosen location. Agents/terminals are never in the single-instance list (closing
+// one ends it).
 
 import { MessageSquarePlus, PanelTopIcon, SquareTerminal } from "lucide-react";
 
 import { AGENT_TYPE_LABELS, lastUsedAgentTypeAtom, parseStoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import {
-  createAgentInCenter,
+  createAgentInLocation,
   createTerminalInLocation,
   listAvailableLocations,
   listAvailableStaticPanels,
@@ -87,7 +87,7 @@ export const buildAddPanelProvider = (runtime: CommandRuntime): DynamicProvider 
       out.push({
         id: "addpanel.panels.new_agent",
         title: `New ${recentAgentLabel(runtime)} agent`,
-        subtitle: "Create an agent in the center section",
+        subtitle: "Create an agent in this section",
         keywords: ["agent", "new", "claude", "create"],
         group: "view",
         icon: MessageSquarePlus,
@@ -95,7 +95,7 @@ export const buildAddPanelProvider = (runtime: CommandRuntime): DynamicProvider 
         order: 10,
         perform: (): void => {
           const { agentType, registrationId } = parseStoredAgentType(runtime.store.get(lastUsedAgentTypeAtom));
-          void createAgentInCenter(runtime.store, {
+          void createAgentInLocation(runtime.store, target, {
             agentType,
             registrationId,
             activeAgentId: ctx.activeAgentId ?? undefined,

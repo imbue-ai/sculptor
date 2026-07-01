@@ -8,7 +8,7 @@
 // B1). Mirrors the terminal close-confirmation wiring; rendered once by the workspace
 // shell next to TerminalCloseConfirmation.
 
-import { useAtom, useAtomValue } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback } from "react";
 
@@ -17,6 +17,8 @@ import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { useOptimisticTaskDelete } from "~/common/state/hooks/useOptimisticTaskDelete.ts";
 import { agentDeleteTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
+import { makeAgentPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
+import { closePanelAtom } from "~/components/sections/sectionActions.ts";
 import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 
 export const AgentDeleteConfirmation = (): ReactElement | null => {
@@ -54,14 +56,22 @@ export const AgentDeleteConfirmation = (): ReactElement | null => {
     workspaceId: workspaceId ?? "",
     onNavigateAfterDelete: handleNavigateAfterDelete,
   });
+  const closePanel = useSetAtom(closePanelAtom);
 
   const handleConfirm = useCallback((): void => {
     if (target === null) {
       return;
     }
     execute(target.id, target.name);
+    // Unplace the agent's panel from the layout and reassign its section's active tab to
+    // a sibling — mirrors TerminalCloseConfirmation. Route navigation only reassigns the
+    // section when the deleted agent is the routed one; deleting the tab that is active
+    // in its section (but not the routed agent, e.g. after switching via the tab bar)
+    // would otherwise leave activePanel pointing at the now-gone panel, dropping the
+    // section to the empty state even though sibling agents remain.
+    closePanel({ panelId: makeAgentPanelId(target.id) });
     setTarget(null);
-  }, [target, execute, setTarget]);
+  }, [target, execute, closePanel, setTarget]);
 
   if (workspaceId === null) {
     return null;

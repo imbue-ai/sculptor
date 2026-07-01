@@ -80,7 +80,7 @@ const EmptySectionStateComponent = ({ subSection }: EmptySectionStateProps): Rea
             color="gray"
             size="1"
             className={styles.quickAction}
-            onClick={() => actions.createRecentAgent()}
+            onClick={() => actions.createRecentAgent(subSection)}
             data-testid={`${ElementIds.SECTION_EMPTY_QUICK_ACTION}-new-agent`}
           >
             <MessageSquarePlus size={14} /> New {actions.recentAgentLabel} agent

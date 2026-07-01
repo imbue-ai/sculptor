@@ -20,9 +20,10 @@ import { useKeybindingHandler } from "~/common/keybindings";
 import { sidebarCollapsedAtom } from "~/components/layout/sidebarAtoms.ts";
 
 import type { WorkspaceLayoutState } from "./persistence/types.ts";
+import { panelRegistryAtom } from "./registry/panelRegistry.ts";
 import { jumpToSectionAtom, setActivePanelAtom, toggleSectionAtom } from "./sectionActions.ts";
 import { activePanelIdInSubSectionAtom, panelsInSubSectionAtom, workspaceLayoutAtom } from "./sectionAtoms.ts";
-import type { SubSectionId } from "./sectionTypes.ts";
+import type { PanelId, SubSectionId } from "./sectionTypes.ts";
 import { SECTION_IDS, toSecondary, toSection } from "./sectionTypes.ts";
 import { maximizedSectionAtom } from "./transientAtoms.ts";
 import { useAddPanelActions } from "./useAddPanelActions.ts";
@@ -52,6 +53,25 @@ function stepIndex(length: number, current: number, direction: CycleDirection): 
   return (base + direction + length) % length;
 }
 
+// The next panel to activate when cycling within a sub-section. Cycles only over panels
+// that currently RENDER — i.e. have a registry definition. An open panel without one
+// (an agent whose task is mid-load or was just deleted) shows as the empty-section
+// state, so including it would let a cycle land on "nothing selected" between two real
+// panels. Returns undefined (a no-op) for an empty or single renderable-panel section.
+export function nextCyclablePanel(
+  openPanels: ReadonlyArray<PanelId>,
+  renderablePanelIds: ReadonlySet<PanelId>,
+  active: PanelId | undefined,
+  direction: CycleDirection,
+): PanelId | undefined {
+  const panels = openPanels.filter((panelId) => renderablePanelIds.has(panelId));
+  if (panels.length < 2) {
+    return undefined;
+  }
+  const currentIndex = active === undefined ? -1 : panels.indexOf(active);
+  return panels[stepIndex(panels.length, currentIndex, direction)];
+}
+
 export const useWorkspaceShortcuts = (): void => {
   const store = useStore();
   const toggleSection = useSetAtom(toggleSectionAtom);
@@ -77,20 +97,20 @@ export const useWorkspaceShortcuts = (): void => {
     [store, jumpToSection],
   );
 
-  // Cycle the active panel within the active sub-section; wraps at the ends and is a
-  // no-op for an empty or single-panel section.
+  // Cycle the active panel within the active sub-section; wraps at the ends, skips
+  // panels that have no renderable definition, and is a no-op for an empty or
+  // single-renderable-panel section.
   const cyclePanel = useCallback(
     (direction: CycleDirection): void => {
       const layout = store.get(workspaceLayoutAtom);
       const activeSub = layout.activeSubSection ?? "center";
-      const panels = store.get(panelsInSubSectionAtom(activeSub));
-      if (panels.length < 2) {
-        return;
-      }
+      const openPanels = store.get(panelsInSubSectionAtom(activeSub));
+      const renderablePanelIds = new Set(store.get(panelRegistryAtom).map((definition) => definition.id));
       const active = store.get(activePanelIdInSubSectionAtom(activeSub));
-      const currentIndex = active === undefined ? -1 : panels.indexOf(active);
-      const next = panels[stepIndex(panels.length, currentIndex, direction)];
-      setActivePanel({ panelId: next, in: activeSub });
+      const next = nextCyclablePanel(openPanels, renderablePanelIds, active, direction);
+      if (next !== undefined) {
+        setActivePanel({ panelId: next, in: activeSub });
+      }
     },
     [store, setActivePanel],
   );
