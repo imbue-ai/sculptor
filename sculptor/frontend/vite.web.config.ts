@@ -48,6 +48,12 @@ export default defineFrontendConfig({
       // importing a virtual module from app code, so the Electron renderer
       // build (which does not include this plugin) needs no changes.
       injectRegister: "script-defer",
+      // Adds crossorigin="use-credentials" to the injected manifest <link>.
+      // Browsers fetch the manifest with cookies OMITTED by default (even
+      // same-origin), so on a deployment behind cookie SSO (e.g. OpenHost)
+      // the manifest request would get bounced to the login page and the
+      // app would never be considered installable.
+      useCredentials: true,
       manifest: {
         name: "Sculptor",
         short_name: "Sculptor",
