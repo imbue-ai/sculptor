@@ -68,9 +68,9 @@ def test_table_wrap_toggle_is_per_table_and_does_not_scroll_chat(sculptor_instan
 
     wrap_toggles = alpha_view.get_table_wrap_toggles()
     expect(wrap_toggles).to_have_count(2)
-    # Default per-table state is "scroll" — both toggles say "Switch to wrap".
-    expect(wrap_toggles.nth(0)).to_have_attribute("aria-label", "Switch to wrap")
-    expect(wrap_toggles.nth(1)).to_have_attribute("aria-label", "Switch to wrap")
+    # Default per-table state is "wrap" — both toggles say "Switch to scroll".
+    expect(wrap_toggles.nth(0)).to_have_attribute("aria-label", "Switch to scroll")
+    expect(wrap_toggles.nth(1)).to_have_attribute("aria-label", "Switch to scroll")
 
     # Scroll up so we are not pinned at the bottom — only then can we see if
     # the toggle yanks the scroll.
@@ -89,9 +89,9 @@ def test_table_wrap_toggle_is_per_table_and_does_not_scroll_chat(sculptor_instan
 
     # Exactly one toggle should have flipped — the other table's wrap state
     # must stay independent.
-    switched = alpha_view.get_table_wrap_toggles_with_label("Switch to scroll")
+    switched = alpha_view.get_table_wrap_toggles_with_label("Switch to wrap")
     expect(switched).to_have_count(1)
-    unchanged = alpha_view.get_table_wrap_toggles_with_label("Switch to wrap")
+    unchanged = alpha_view.get_table_wrap_toggles_with_label("Switch to scroll")
     expect(unchanged).to_have_count(1)
 
     # Confirm scroll did not jump to the bottom after layout settles.

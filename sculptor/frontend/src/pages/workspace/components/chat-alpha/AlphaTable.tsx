@@ -16,18 +16,19 @@ const COPY_FEEDBACK_DURATION_MS = 1500;
 const CONTROL_ICON_SIZE = 14;
 
 /**
- * Wraps a markdown-rendered table in a horizontally scrollable container with
- * a copy button and a per-table wrap toggle. Wrap state is component-local
- * and resets on remount; this is intentional so toggling one table doesn't
- * resize others on the page (which would cause large layout shifts in the
- * virtualized chat).
+ * Wraps a markdown-rendered table in a container with a copy button and a
+ * per-table wrap toggle. Tables wrap their cell text by default; the toggle
+ * switches an individual table to a horizontally scrollable, no-wrap layout.
+ * Wrap state is component-local and resets on remount; this is intentional so
+ * toggling one table doesn't resize others on the page (which would cause
+ * large layout shifts in the virtualized chat).
  */
 export const AlphaTable = memo(({ children }: AlphaTableProps): ReactElement => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [isCopied, setIsCopied] = useState(false);
-  const [isWrapping, setIsWrapping] = useState(false);
+  const [isWrapping, setIsWrapping] = useState(true);
 
   const updateScrollState = useCallback((): void => {
     const el = wrapperRef.current;
