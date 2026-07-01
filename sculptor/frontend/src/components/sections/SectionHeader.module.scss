@@ -130,16 +130,20 @@
   }
 }
 
-// Fills the remaining strip width so the controls stay pinned to the far right after
-// the last tab.
+// Fills the remaining strip width so the maximize control stays pinned to the far right
+// after the tab strip and the add-panel "+". flex-shrink:0 keeps it from squishing when
+// the section narrows — all the shrink pressure lands on .tabs, which then scrolls.
 .controls {
   flex-grow: 1;
+  flex-shrink: 0;
   justify-content: flex-end;
   padding-right: var(--space-2);
 }
 
 // Muted gray matching a non-active tab, so the "+" and maximize controls recede until
-// hovered.
+// hovered. Never shrink, so the icons stay a stable size as the section narrows and the
+// tab strip (not the controls) absorbs the shrink and scrolls.
 .headerButton {
   color: var(--gray-a10);
+  flex-shrink: 0;
 }

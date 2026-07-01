@@ -11,7 +11,7 @@
 // tab whose definition actually changed, not the whole strip.
 
 import { useDraggable } from "@dnd-kit/core";
-import { ContextMenu, Flex, IconButton } from "@radix-ui/themes";
+import { ContextMenu, Flex, IconButton, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import { GripVertical, Maximize2, Minimize2, Plus, X } from "lucide-react";
 import type { ReactElement } from "react";
@@ -262,16 +262,25 @@ const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElemen
   };
 
   // While maximized the workspace header is hidden, so this section header sits at the
-  // very top. When the sidebar is also collapsed, reserve the OS window-control
-  // gutter on the left so the tabs clear the traffic lights and the floating
-  // show-sidebar toggle (CollapsedSidebarToggle, rendered by the shell).
-  const headerStyle = isMaximized && isSidebarCollapsed ? { paddingLeft: getTitleBarLeftPadding(false) } : undefined;
+  // very top. Add a little top padding so the tab strip vertically aligns with the OS
+  // window controls, and let the header grow to fit it (its resting height would clip
+  // the extra padding via overflow). When the sidebar is also collapsed, reserve the OS
+  // window-control gutter on the left so the tabs clear the traffic lights and the
+  // floating show-sidebar toggle (CollapsedSidebarToggle, rendered by the shell).
+  const headerStyle: React.CSSProperties | undefined = isMaximized
+    ? {
+        paddingTop: "var(--space-2)",
+        height: "auto",
+        ...(isSidebarCollapsed ? { paddingLeft: getTitleBarLeftPadding(false) } : {}),
+      }
+    : undefined;
 
   return (
     <Flex
       align="center"
       className={styles.header}
       style={headerStyle}
+      data-maximized={isMaximized ? "true" : undefined}
       data-testid={`${ElementIds.SECTION_HEADER}-${subSection}`}
     >
       <div className={styles.tabs} data-section-tabs={subSection}>
@@ -294,34 +303,38 @@ const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElemen
           );
         })}
       </div>
-      <Flex align="center" gap="2" className={styles.controls}>
-        <AddPanelDropdown
-          subSection={subSection}
-          trigger={
-            <IconButton
-              variant="ghost"
-              size="1"
-              color="gray"
-              className={styles.headerButton}
-              aria-label="Add panel"
-              data-testid={`${ElementIds.SECTION_ADD_PANEL_BUTTON}-${subSection}`}
-            >
-              <Plus size={14} />
-            </IconButton>
-          }
-        />
-        <IconButton
-          variant="ghost"
-          size="1"
-          color="gray"
-          className={styles.headerButton}
-          aria-label={isMaximized ? "Restore section" : "Maximize section"}
-          title={isMaximized ? "Restore section (Esc)" : "Maximize section"}
-          data-testid={`${ElementIds.SECTION_MAXIMIZE_BUTTON}-${subSection}`}
-          onClick={handleToggleMaximize}
-        >
-          {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-        </IconButton>
+      {/* The add-panel "+" is left-aligned right after the tab strip; only the maximize
+          toggle stays pinned to the far right of the header. */}
+      <AddPanelDropdown
+        subSection={subSection}
+        tooltip="Add panel"
+        trigger={
+          <IconButton
+            variant="ghost"
+            size="1"
+            color="gray"
+            className={styles.headerButton}
+            aria-label="Add panel"
+            data-testid={`${ElementIds.SECTION_ADD_PANEL_BUTTON}-${subSection}`}
+          >
+            <Plus size={14} />
+          </IconButton>
+        }
+      />
+      <Flex align="center" className={styles.controls}>
+        <Tooltip content={isMaximized ? "Restore section" : "Maximize section"}>
+          <IconButton
+            variant="ghost"
+            size="1"
+            color="gray"
+            className={styles.headerButton}
+            aria-label={isMaximized ? "Restore section" : "Maximize section"}
+            data-testid={`${ElementIds.SECTION_MAXIMIZE_BUTTON}-${subSection}`}
+            onClick={handleToggleMaximize}
+          >
+            {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          </IconButton>
+        </Tooltip>
       </Flex>
     </Flex>
   );

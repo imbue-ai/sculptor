@@ -13,7 +13,7 @@
 //
 // Reuses the add-panel row styling, rendered as dropdown items.
 
-import { DropdownMenu } from "@radix-ui/themes";
+import { DropdownMenu, Tooltip } from "@radix-ui/themes";
 import { MessageSquarePlus, SquareTerminal } from "lucide-react";
 import type { ReactElement } from "react";
 
@@ -29,6 +29,9 @@ type AddPanelDropdownProps = {
   // The control that opens the dropdown (the section header `+` or the empty-state
   // add button). Wrapped in DropdownMenu.Trigger.
   trigger: ReactElement;
+  // Optional hover tooltip for the trigger (e.g. the section header `+`). The
+  // empty-state add button is self-explanatory and omits it.
+  tooltip?: string;
 };
 
 // The agent-type sub-menu never offers a bare "terminal" type, so
@@ -46,7 +49,7 @@ const agentTypeTestId = (agentType: AgentTypeName): string => {
   }
 };
 
-export const AddPanelDropdown = ({ subSection, trigger }: AddPanelDropdownProps): ReactElement => {
+export const AddPanelDropdown = ({ subSection, trigger, tooltip }: AddPanelDropdownProps): ReactElement => {
   // state and hooks
   const actions = useAddPanelActions();
   const newAgentShortcut = useKeybindingDisplayText("new_agent");
@@ -63,8 +66,14 @@ export const AddPanelDropdown = ({ subSection, trigger }: AddPanelDropdownProps)
   // rendering / derived data
   return (
     <DropdownMenu.Root onOpenChange={handleOpenChange}>
-      <DropdownMenu.Trigger>{trigger}</DropdownMenu.Trigger>
-      <DropdownMenu.Content data-testid={`${ElementIds.ADD_PANEL_DROPDOWN}-${subSection}`}>
+      {tooltip !== undefined ? (
+        <Tooltip content={tooltip}>
+          <DropdownMenu.Trigger>{trigger}</DropdownMenu.Trigger>
+        </Tooltip>
+      ) : (
+        <DropdownMenu.Trigger>{trigger}</DropdownMenu.Trigger>
+      )}
+      <DropdownMenu.Content size="1" data-testid={`${ElementIds.ADD_PANEL_DROPDOWN}-${subSection}`}>
         <DropdownMenu.Item data-testid={ElementIds.ADD_PANEL_NEW_AGENT} onSelect={() => actions.createRecentAgent()}>
           <span className={styles.item}>
             <span className={styles.itemIcon}>
