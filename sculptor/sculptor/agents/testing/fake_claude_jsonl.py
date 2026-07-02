@@ -63,7 +63,7 @@ def make_task_started_message(
 
 def make_task_notification_message(
     task_id: str,
-    tool_use_id: str,
+    tool_use_id: str | None,
     status: str = "completed",
     summary: str = "",
     duration_ms: int | None = None,
@@ -72,15 +72,21 @@ def make_task_notification_message(
 
     When ``duration_ms`` is provided it is emitted nested under ``usage`` to
     match the real Claude CLI shape (see SCU-1151).
+
+    Pass ``tool_use_id=None`` to omit the field entirely. The real CLI drops
+    ``tool_use_id`` when a background task is orphaned by a process exit (e.g. a
+    restart) and reported as failed on resume, because the launching tool call's
+    id was lost with the dead process — see SCU-1666.
     """
     msg: dict = {
         "type": "system",
         "subtype": "task_notification",
         "task_id": task_id,
-        "tool_use_id": tool_use_id,
         "status": status,
         "summary": summary,
     }
+    if tool_use_id is not None:
+        msg["tool_use_id"] = tool_use_id
     if duration_ms is not None:
         msg["usage"] = {"duration_ms": duration_ms}
     return msg

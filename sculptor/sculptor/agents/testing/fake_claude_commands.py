@@ -1183,6 +1183,9 @@ def handle_emit_task_notification(args: dict, emit_streaming: bool) -> list[dict
 
     Args:
         args: Must contain "task_id". Optional: "tool_use_id", "status", "summary".
+            Pass "tool_use_id": null to omit the field, reproducing the orphaned-
+            task-on-restart notification the real CLI emits (see SCU-1666). When
+            "tool_use_id" is absent a placeholder id is generated instead.
     """
     return [
         make_task_notification_message(
