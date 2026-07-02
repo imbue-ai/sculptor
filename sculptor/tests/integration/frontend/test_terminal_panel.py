@@ -1,15 +1,15 @@
-"""Integration tests for the terminal as a panel (TERM-01..03).
+"""Integration tests for the terminal as a panel.
 
 Terminals render as panel tabs created from the same section `+` add-panel dropdown
 as agents. This file owns the terminal TAB-MODEL behaviour: create a terminal panel,
-create multiple, switch between them, lowest-available-number reuse after close
-(TERM-03), and close = a confirmation dialog (TERM-02 — terminal close had no
-confirmation before; goals.md adds one).
+create multiple, switch between them, lowest-available-number reuse after close,
+close = a confirmation dialog (terminal close had no confirmation in the old
+shell; the redesign adds one), and per-tab content isolation with
+scrollback surviving tab switches.
 
-These cases are CREATE-not-migrate (per `03_07_agent_terminal_panel_tests.md`): they
-supersede the add / switch / close / numbering TAB-MODEL half of `test_terminal.py`,
-re-anchored onto the panel-tab model and the new add-panel dropdown. The xterm I/O
-(CONTENT) tests stay in `test_terminal.py`; Task 8.2 finishes that split.
+These cases supersede the add / switch / close / numbering TAB-MODEL half of
+`test_terminal.py`, re-anchored onto the panel-tab model and the new add-panel
+dropdown. The xterm I/O (CONTENT) tests stay in `test_terminal.py`.
 
 A terminal lands in the bottom section, which is collapsed by default — the
 ``create_terminal_panel`` helper expands it first via the workspace header toggle.
@@ -20,6 +20,11 @@ from playwright.sync_api import expect
 
 from sculptor.testing.elements.add_panel_dropdown import create_terminal_panel
 from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
+from sculptor.testing.elements.terminal import get_xterm_buffer_text
+from sculptor.testing.elements.terminal import run_command_in_active_terminal
+from sculptor.testing.elements.terminal import wait_for_xterm_buffer_nonempty
+from sculptor.testing.elements.terminal import wait_for_xterm_substring
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -72,7 +77,7 @@ def test_multiple_terminal_panels_and_switch(sculptor_instance_: SculptorInstanc
 
 @user_story("to be asked to confirm before closing a terminal")
 def test_closing_terminal_panel_requires_confirmation(sculptor_instance_: SculptorInstance) -> None:
-    """Closing a terminal panel tab opens a close confirmation (TERM-02).
+    """Closing a terminal panel tab opens a close confirmation.
 
     Cancelling keeps the terminal; confirming removes it.
     """
@@ -108,7 +113,7 @@ def test_terminal_numbering_reuses_lowest_after_close(sculptor_instance_: Sculpt
     The default layout seeds Terminal 1 in the bottom section, so created
     terminals start at Terminal 2. Create Terminal 2 + Terminal 3, close
     Terminal 2, then create a new terminal — it is named "Terminal 2" again
-    (lowest available), not "Terminal 4" (TERM-03).
+    (lowest available), not "Terminal 4".
     """
     page = sculptor_instance_.page
     bottom_tabs = PlaywrightPanelTabElement(page, sub_section="bottom")
@@ -131,3 +136,58 @@ def test_terminal_numbering_reuses_lowest_after_close(sculptor_instance_: Sculpt
     create_terminal_panel(page, section="bottom")
     expect(bottom_tabs.get_panel_tab_by_name("Terminal 2")).to_have_count(1)
     expect(bottom_tabs.get_panel_tab_by_name("Terminal 4")).to_have_count(0)
+
+
+@user_story("to see only a terminal's own output in its tab, with scrollback surviving switches")
+def test_terminal_content_isolated_and_scrollback_survives_switch(sculptor_instance_: SculptorInstance) -> None:
+    """Each terminal panel shows only its own PTY's content, and switching away
+    and back retains the scrollback.
+
+    Two terminal panels in one workspace, a distinct marker echoed in each.
+    Switching between the tabs must not carry one terminal's scrollback into the
+    other (the backend PTYs are isolated per terminal, so any cross-tab text is
+    frontend mixing). Switching back replays the first terminal's scrollback and
+    the shell still accepts commands — the PTY survived the tab switch (the
+    inactive panel unmounts, dropping its WebSocket, but the backend shell and
+    its buffer live on).
+    """
+    page = sculptor_instance_.page
+    bottom_tabs = PlaywrightPanelTabElement(page, sub_section="bottom")
+
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Terminal Isolation WS")
+
+    # Reveal the seeded Terminal 1 (the bottom section starts collapsed).
+    PlaywrightWorkspaceSection(page, "bottom").expand_section()
+    first_tab = bottom_tabs.get_panel_tab_by_name("Terminal 1")
+    expect(first_tab).to_have_count(1)
+    first_tab.click()
+    wait_for_xterm_buffer_nonempty(page)
+    run_command_in_active_terminal(page, "echo ISOLATION-ALPHA")
+    wait_for_xterm_substring(page, "ISOLATION-ALPHA")
+
+    # Creating the second terminal makes it the active tab — a direct
+    # terminal -> terminal switch.
+    create_terminal_panel(page, section="bottom")
+    second_tab = bottom_tabs.get_panel_tab_by_name("Terminal 2")
+    expect(second_tab).to_have_count(1)
+    wait_for_xterm_buffer_nonempty(page)
+    run_command_in_active_terminal(page, "echo ISOLATION-BRAVO")
+    wait_for_xterm_substring(page, "ISOLATION-BRAVO")
+    assert "ISOLATION-ALPHA" not in get_xterm_buffer_text(page), (
+        "Terminal 2 shows Terminal 1's output -- tab contents leaked across terminals"
+    )
+
+    # Direct switch back: Terminal 1 replays its own scrollback only. The
+    # positive wait proves the replay landed before the negative check reads
+    # the buffer.
+    first_tab.click()
+    wait_for_xterm_substring(page, "ISOLATION-ALPHA")
+    assert "ISOLATION-BRAVO" not in get_xterm_buffer_text(page), (
+        "Terminal 1 shows Terminal 2's output -- tab contents leaked across terminals"
+    )
+
+    # The shell behind Terminal 1 is still live after the switch: a fresh
+    # command round-trips. (Only the active tab's xterm is mounted, so the
+    # active-terminal typing helper targets Terminal 1 here.)
+    run_command_in_active_terminal(page, "echo ALPHA-STILL-ALIVE")
+    wait_for_xterm_substring(page, "ALPHA-STILL-ALIVE")

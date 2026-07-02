@@ -1,5 +1,5 @@
 """Integration tests for the Files panel — the workspace file tree paired with
-its own embedded DiffViewer (FCC-01/03/04/05/06).
+its own embedded DiffViewer.
 
 The Files panel is one of the three separate panels that replaced the old
 single File-Browser panel with its All/Changes/History tabs. It pairs the
@@ -9,21 +9,21 @@ and Commits panels are their own panels, so the old ``FILE_BROWSER_TAB_*``
 surface (and everything that hung off it) is gone.
 
 These cases are MIGRATED, not rewritten, from the pre-rewrite file-browser
-tests (see ``e2e_test_plan.md`` §1). The proven file-tree content assertions
+tests. The proven file-tree content assertions
 carry over unchanged; only the *surface* moved:
 
-* a panel is opened through the section ``+`` add-panel dropdown (the 3.6a
+* a panel is opened through the section ``+`` add-panel dropdown (the shared
   ``open_panel`` helper) instead of being the default docked panel;
 * the file tree, search box, status indicators, and embedded viewer are driven
   through the ``PlaywrightFilesPanelElement`` / ``ExplorerLayout`` /
   ``DiffViewer`` POMs scoped to the opened section;
 * the list view controls (flat/tree, collapse-all) re-anchored under the
-  viewer header's single triple-dot menu (FCC-07), reached via
+  viewer header's single triple-dot menu, reached via
   ``toggle_view_option_via_menu``;
-* the sidebar-visibility toggle lives in the viewer header (FCC-05) and the
-  viewer is always visible with an empty body when nothing is selected (FCC-06).
+* the sidebar-visibility toggle lives in the viewer header, and the
+  viewer is always visible with an empty body when nothing is selected.
 
-This file also folds in the Task 3.6a harness smoke test (open Files + render
+This file also folds in the harness smoke test (open Files + render
 list/viewer), so ``test_fcc_harness_smoke.py`` can be deleted.
 
 The old All/Changes/History tab-switching, the multi-tab diff surface, the
@@ -31,15 +31,14 @@ scope picker (All/Uncommitted), Review All, copy-path, Cmd+W tab close, and the
 list header's search/refresh buttons are NOT part of the Files panel surface:
 those moved to the Changes / Commits panels or the viewer menu and are covered
 by ``test_changes_panel.py`` / ``test_diff_viewer.py``. The diff-mode
-assertions that depend on the scope picker or the old global diff-panel routing
-are skipped here with a follow-up reason rather than re-pointed at a surface the
-Files panel does not own.
+assertions that depend on the scope picker (and the symlink-replaces-directory
+repro, which needs the uncommitted Changes scope) live in
+``test_changes_panel.py``, since the Files panel does not own that surface.
 
 Migrated from:
 * ``test_file_browser.py`` (file-tree content only)
 * ``test_file_browser_tabs.py`` (residual file-tree content only; the
   All/Changes/History tab-switching is dropped — that tab model is gone)
-* ``test_file_browser_symlink_replaces_directory.py``
 * ``test_file_open_diff_modes.py``
 * ``test_path_tilde_display.py``
 * ``test_fcc_harness_smoke.py`` (folded in)
@@ -68,15 +67,6 @@ from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
-
-# --------------------------------------------------------------------------- #
-# Skip reasons (kept as single-line variables so the decorators stay short and
-# avoid adjacent-string-literal concatenation).
-# --------------------------------------------------------------------------- #
-
-_SCOPE_DIFF_SKIP_REASON = "Uncommitted/All scope diff modes are driven by the Changes panel scope picker, not the Files panel; follow-up belongs in test_changes_panel.py."
-
-_SYMLINK_SKIP_REASON = "Symlink-replaces-directory repro needs the uncommitted Changes scope plus a page.evaluate row count (ratchet at budget); follow-up belongs in test_changes_panel.py."
 
 # --------------------------------------------------------------------------- #
 # FakeClaude prompts (migrated verbatim from the source tests).
@@ -180,27 +170,6 @@ fake_claude:multi_step `{
   ]
 }`"""
 
-# Replace a tracked directory with a symlink at the same path, the exact data
-# shape that confuses ``addDeletedFileToTree`` (see the skipped test below).
-_SYMLINK_REPRO_PROMPT = """\
-fake_claude:multi_step `{
-  "steps": [
-    {
-      "command": "bash",
-      "args": {
-        "command": "mkdir -p mydir && printf 'one\\n' > mydir/foo.md && printf 'two\\n' > mydir/bar.md && git add -A && git commit -m 'Add mydir with files'"
-      }
-    },
-    {
-      "command": "bash",
-      "args": {
-        "command": "rm -rf mydir && ln -s stuff.txt mydir && git add -A"
-      }
-    }
-  ]
-}`"""
-
-
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
@@ -241,7 +210,7 @@ def _ensure_folder_expanded(files_panel: PlaywrightFilesPanelElement, folder_tex
 
 
 # --------------------------------------------------------------------------- #
-# Folded-in: Task 3.6a harness smoke test.
+# Folded-in: harness smoke test.
 # --------------------------------------------------------------------------- #
 
 
@@ -249,10 +218,10 @@ def _ensure_folder_expanded(files_panel: PlaywrightFilesPanelElement, folder_tex
 def test_open_files_panel_renders_list_and_viewer(sculptor_instance_: SculptorInstance) -> None:
     """The open-a-panel helper opens Files; its list + embedded viewer render.
 
-    Folds in the Task 3.6a smoke test: open Files through the section ``+``
+    Folds in the old harness smoke test: open Files through the section ``+``
     add-panel dropdown (no layout / localStorage seeding), then verify the
     ExplorerLayout list and the embedded viewer's always-visible empty body
-    render (FCC-04/06).
+    render.
     """
     page = sculptor_instance_.page
 
@@ -264,7 +233,7 @@ def test_open_files_panel_renders_list_and_viewer(sculptor_instance_: SculptorIn
     # The ExplorerLayout list (file tree) renders.
     expect(files_panel.get_list()).to_be_visible()
 
-    # The embedded DiffViewer renders (nothing selected -> empty body, FCC-06).
+    # The embedded DiffViewer renders (nothing selected -> empty body).
     expect(files_panel.get_diff_viewer()).to_be_visible()
 
 
@@ -375,7 +344,7 @@ def test_folder_expand_and_collapse(sculptor_instance_: SculptorInstance) -> Non
 
 @user_story("to collapse all folders at once")
 def test_collapse_all_folders(sculptor_instance_: SculptorInstance) -> None:
-    """The collapse-all option (now in the viewer's triple-dot menu, FCC-07)
+    """The collapse-all option (now in the viewer's triple-dot menu)
     collapses expanded folders in the tree."""
     page = sculptor_instance_.page
     _, files_panel = _open_files_panel_with(page, WRITE_FILES_PROMPT)
@@ -396,7 +365,7 @@ def test_collapse_all_folders(sculptor_instance_: SculptorInstance) -> None:
 
 @user_story("to see the file tree as a flat list of files")
 def test_flat_list_view_shows_files_without_folders(sculptor_instance_: SculptorInstance) -> None:
-    """The flat/tree toggle (now in the viewer's triple-dot menu, FCC-07)
+    """The flat/tree toggle (now in the viewer's triple-dot menu)
     switches the tree to a flat list that shows files directly."""
     page = sculptor_instance_.page
     _, files_panel = _open_files_panel_with(page, WRITE_FILES_PROMPT)
@@ -563,8 +532,7 @@ def test_file_search_folders_are_collapsible(sculptor_instance_: SculptorInstanc
 # read-only file view of the working tree (the old "Browse tab" behavior). The
 # committed-vs-uncommitted and All/Uncommitted-scope diff modes from the source
 # file are driven by the Changes panel's scope picker, which the Files panel does
-# not own; those cases are skipped here with a follow-up reason and belong to
-# ``test_changes_panel.py``.
+# not own; those cases live in ``test_changes_panel.py``.
 # --------------------------------------------------------------------------- #
 
 
@@ -588,40 +556,14 @@ def test_open_file_shows_read_only_preview(sculptor_instance_: SculptorInstance)
     expect(preview).to_contain_text("goodbye")
 
 
-@pytest.mark.skip(reason=_SCOPE_DIFF_SKIP_REASON)
-@user_story("to see uncommitted vs all-scope diffs when opening a file")
-def test_scope_diff_modes(sculptor_instance_: SculptorInstance) -> None:
-    """Placeholder for the scope-dependent diff modes (HEAD-vs-working-tree and
-    merge-base-vs-working-tree) that the Files panel does not surface — they are
-    driven by the Changes panel's scope picker."""
-
-
 # --------------------------------------------------------------------------- #
-# Migrated: test_file_browser_symlink_replaces_directory.py
-# --------------------------------------------------------------------------- #
-
-
-@pytest.mark.skip(reason=_SYMLINK_SKIP_REASON)
-@user_story("to see a clean file tree when a directory has been replaced by a symlink")
-def test_directory_replaced_by_symlink_no_duplicate_row(sculptor_instance_: SculptorInstance) -> None:
-    """Placeholder for the duplicate-row repro when a directory is replaced by a
-    symlink at the same path. The repro requires the uncommitted Changes scope
-    (the deleted children appear as D entries only there) and the original
-    counted matching rows via ``page.evaluate``; both belong with the Changes
-    panel coverage rather than the Files panel."""
-    # The setup prompt is retained for the follow-up migration.
-    _ = _SYMLINK_REPRO_PROMPT
-
-
-# --------------------------------------------------------------------------- #
-# FCC-04 / FCC-05 / FCC-06: resizable shared-width sidebar + toggle +
-# always-visible viewer
+# Resizable shared-width sidebar + visibility toggle + always-visible viewer
 # --------------------------------------------------------------------------- #
 
 
 @user_story("to widen the file-browser list by dragging its divider and see the same width in the Changes panel")
 def test_list_divider_drag_resizes_and_width_is_shared_across_panels(sculptor_instance_: SculptorInstance) -> None:
-    """Dragging the ExplorerLayout divider (FCC-04) widens the list pane, and
+    """Dragging the ExplorerLayout divider widens the list pane, and
     the new width carries over when the Changes panel becomes the section's
     active tab — the width is one shared, persisted value across the Files /
     Changes / Commits panels rather than per-panel state.
@@ -684,7 +626,7 @@ def test_list_divider_drag_resizes_and_width_is_shared_across_panels(sculptor_in
 
 @user_story("to hide and show the file-browser sidebar from the viewer header")
 def test_sidebar_toggle_from_viewer_header(sculptor_instance_: SculptorInstance) -> None:
-    """The sidebar-visibility toggle in the viewer header (FCC-05) collapses the
+    """The sidebar-visibility toggle in the viewer header collapses the
     list, leaving the viewer, and re-expands it."""
     page = sculptor_instance_.page
     _, files_panel = _open_files_panel_with(page, WRITE_FILES_PROMPT)
@@ -696,7 +638,7 @@ def test_sidebar_toggle_from_viewer_header(sculptor_instance_: SculptorInstance)
     layout.hide_sidebar()
     expect(layout.get_list()).to_have_count(0)
 
-    # The viewer stays visible while the sidebar is collapsed (FCC-06).
+    # The viewer stays visible while the sidebar is collapsed.
     expect(files_panel.get_diff_viewer()).to_be_visible()
 
     # Show it again — the list reappears.
@@ -707,7 +649,7 @@ def test_sidebar_toggle_from_viewer_header(sculptor_instance_: SculptorInstance)
 @user_story("to always see the viewer with an empty state when nothing is selected")
 def test_viewer_always_visible_with_empty_state(sculptor_instance_: SculptorInstance) -> None:
     """With files written but nothing selected, the viewer renders its
-    always-visible empty body and shows NO loading bar (FCC-06)."""
+    always-visible empty body and shows NO loading bar."""
     page = sculptor_instance_.page
     _, files_panel = _open_files_panel_with(page, WRITE_FILES_PROMPT)
 

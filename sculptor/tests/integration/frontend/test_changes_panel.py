@@ -1,5 +1,5 @@
 """Integration tests for the Changes panel — the changed-file browser paired with
-its own embedded DiffViewer (FCC-01/02/03).
+its own embedded DiffViewer.
 
 The Changes panel is one of the three separate panels that replaced the old
 single File-Browser panel with its All/Changes/History tabs. It pairs the
@@ -8,16 +8,16 @@ button, the changed-file tree, and per-file discard) with an always-visible
 embedded viewer via the shared ``ExplorerLayout``. There is no tab model: the
 Files and Commits panels are their own panels.
 
-These cases are MIGRATED, not rewritten, from the pre-rewrite Changes-tab tests
-(see ``e2e_test_plan.md`` §1). The proven assertions carry over unchanged; only
+These cases are MIGRATED, not rewritten, from the pre-rewrite Changes-tab tests.
+The proven assertions carry over unchanged; only
 the *surface* moved:
 
-* a panel is opened through the section ``+`` add-panel dropdown (the 3.6a
+* a panel is opened through the section ``+`` add-panel dropdown (the shared
   ``open_panel`` helper) instead of clicking the File-Browser Changes tab;
 * the scope picker, commit button, changed-file tree, and discard dialog are
   driven through the ``PlaywrightChangesPanelElement`` POM scoped to the opened
   section, and the file's diff opens into the panel's OWN embedded viewer
-  (FCC-02) rather than a page-wide active diff;
+   rather than a page-wide active diff;
 * the discard controls only render in the Uncommitted scope, so tests select the
   Uncommitted scope through the picker before discarding.
 
@@ -32,10 +32,11 @@ Review All are NOT part of the Changes panel: Review All is gone, so the
 own scope picker (All vs Uncommitted) rather than a Review-All button.
 
 This file also folds in the scope-dependent diff modes (HEAD-vs-working /
-merge-base-vs-working) that 3.6c deferred here, driven by the Changes scope
-picker. The symlink-replaces-directory uncommitted-scope repro is skipped: it
-can only distinguish the duplicated same-path rows via a ``page.evaluate`` row
-count (the ``no-integration-page-evaluate`` ratchet is at budget).
+merge-base-vs-working) driven by the Changes scope picker, the moved/renamed-file
+R-status rendering, and the symlink-replaces-directory uncommitted-scope repro
+(whose duplicated same-path rows carry no distinguishing testid, so the row
+names are counted via a locator ``evaluate_all`` — a budgeted exception to the
+``no-integration-page-evaluate`` rule).
 
 Migrated from:
 * ``test_file_browser_uncommitted.py``
@@ -44,13 +45,13 @@ Migrated from:
 * ``test_discard_file.py``
 * ``test_discard_preserves_all_tab.py``
 * ``test_target_branch.py``
-* ``test_file_open_diff_modes.py`` (the scope-dependent diff modes, deferred from 3.6c)
-* ``test_file_browser_symlink_replaces_directory.py`` (skipped; see above)
+* ``test_file_open_diff_modes.py`` (the scope-dependent diff modes)
+* ``test_file_browser.py`` (the moved-file R-status rendering)
+* ``test_file_browser_symlink_replaces_directory.py``
 """
 
 import re
 
-import pytest
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
@@ -66,13 +67,6 @@ from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
-
-# --------------------------------------------------------------------------- #
-# Skip reasons (kept as single-line variables so the decorators stay short and
-# avoid adjacent-string-literal concatenation).
-# --------------------------------------------------------------------------- #
-
-_SYMLINK_SKIP_REASON = "Symlink-replaces-directory repro needs a page.evaluate row count to tell the two same-path 'mydir' rows apart (no test-id distinguishes them); the no-integration-page-evaluate ratchet is at budget."
 
 # --------------------------------------------------------------------------- #
 # FakeClaude prompts (migrated verbatim from the source tests).
@@ -427,7 +421,12 @@ fake_claude:multi_step `{
   ]
 }`"""
 
-# Retained for the follow-up symlink migration (skipped below).
+# Step 1 commits a directory containing two files; step 2 deletes the directory,
+# replaces it with a symlink at the same path (``mydir`` now points at the
+# pre-existing ``stuff.txt``), and stages the result. ``git ls-files`` then
+# reports ``mydir`` as a regular file while the uncommitted diff carries
+# ``D mydir/foo.md`` / ``D mydir/bar.md`` — the exact data shape that makes
+# ``addDeletedFileToTree`` synthesize a duplicate folder node at the file's path.
 _SYMLINK_REPRO_PROMPT = """\
 fake_claude:multi_step `{
   "steps": [
@@ -444,6 +443,13 @@ fake_claude:multi_step `{
       }
     }
   ]
+}`"""
+
+# Move a file that exists on main (the target branch) to a new directory without
+# changing its name; the vs-target-branch diff detects this as a rename (status R).
+_RENAME_FILE_PROMPT = """\
+fake_claude:bash `{
+  "command": "mkdir -p lib && git mv src/helpers.py lib/helpers.py && git commit -m 'Move helpers to lib'"
 }`"""
 
 
@@ -508,9 +514,9 @@ def _reactivate_agent_chat(task_page: PlaywrightTaskPage) -> PlaywrightChatPanel
     count can be asserted after a panel action (e.g. the commit button).
     """
     agent_panel_id = f"agent:{task_page.get_task_id()}"
-    agent_tab = task_page.get_agent_tab_bar().get_panel_tab(agent_panel_id)
-    expect(agent_tab).to_be_visible()
-    agent_tab.click()
+    tab = task_page.get_section().get_panel_tab(agent_panel_id)
+    expect(tab).to_be_visible()
+    tab.click()
     return task_page.get_chat_panel()
 
 
@@ -563,7 +569,7 @@ def test_individual_file_diff_shows_only_uncommitted_changes(sculptor_instance_:
     status = changes_tree.get_row_status(tree_rows.first)
     expect(status).to_have_text("M")
 
-    # Open the file into the panel's own embedded viewer (FCC-02).
+    # Open the file into the panel's own embedded viewer.
     viewer = changes_panel.open_file("app.py")
     _ensure_unified_view(viewer)
 
@@ -1010,7 +1016,7 @@ def test_switching_to_all_scope_shows_target_branch_diff(sculptor_instance_: Scu
 
 
 # --------------------------------------------------------------------------- #
-# Folded in (deferred from 3.6c): scope-dependent diff modes from
+# Folded in: scope-dependent diff modes from
 # test_file_open_diff_modes.py, driven by the Changes panel's scope picker.
 # --------------------------------------------------------------------------- #
 
@@ -1072,17 +1078,87 @@ def test_scope_diff_mode_all_merge_base_vs_working_tree(sculptor_instance_: Scul
 
 
 # --------------------------------------------------------------------------- #
-# Deferred from 3.6c: test_file_browser_symlink_replaces_directory.py
+# Migrated: test_file_browser.py (moved/renamed-file rendering)
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.skip(reason=_SYMLINK_SKIP_REASON)
+@user_story("to see moved files rendered cleanly with R status and no redundant rename label")
+def test_moved_file_shows_r_status_without_rename_label(sculptor_instance_: SculptorInstance) -> None:
+    """Moved files show an R status without a redundant old→new name label.
+
+    When a file is moved to a new folder without changing its name, the Changes
+    panel (All scope) shows only the file in its new location with an R (renamed)
+    status indicator — no "oldName →" label that duplicates the filename.
+    ``src/helpers.py`` exists on the target branch (main), so committing the move
+    yields a rename in the vs-target-branch diff.
+    """
+    page = sculptor_instance_.page
+    _, changes_panel = _open_changes_panel_with(page, _RENAME_FILE_PROMPT)
+
+    _select_all_scope(changes_panel)
+
+    changes_tree = changes_panel.get_changes_tree()
+    expect(changes_tree).to_be_visible()
+
+    file_row = changes_tree.get_tree_rows().filter(has_text="helpers.py")
+    expect(file_row).to_be_visible()
+
+    status = changes_tree.get_row_status(file_row)
+    expect(status).to_have_text("R")
+
+    # The row must NOT contain the "→" rename arrow — the old-name label is
+    # not rendered when the filename itself didn't change.
+    expect(file_row).not_to_contain_text("→")
+
+
+# --------------------------------------------------------------------------- #
+# Migrated: test_file_browser_symlink_replaces_directory.py
+# --------------------------------------------------------------------------- #
+
+
 @user_story("to see a clean Changes panel when a directory has been replaced by a symlink")
 def test_directory_replaced_by_symlink_no_duplicate_row(sculptor_instance_: SculptorInstance) -> None:
-    """Placeholder for the duplicate-row repro when a directory is replaced by a
-    symlink at the same path. The symlink file and the synthesized parent folder
-    share the path "mydir" and carry no distinguishing test id, so the only way
-    to count distinct "mydir" rows is a page.evaluate over row text — which the
-    no-integration-page-evaluate ratchet forbids."""
-    # The setup prompt is retained for the follow-up migration.
-    _ = _SYMLINK_REPRO_PROMPT
+    """When a directory is replaced by a symlink at the same path, the Changes
+    tree must not render two distinct rows for that path.
+
+    ``addDeletedFileToTree`` synthesizes a folder node to host the diff's deleted
+    children; when the file list already contains a *file* node at the same path
+    (the symlink), a buggy synthesis creates a sibling node with the same path and
+    the virtualizer renders two overlapping "mydir" rows.
+    """
+    page = sculptor_instance_.page
+    _, changes_panel = _open_changes_panel_with(page, _SYMLINK_REPRO_PROMPT)
+
+    # The repro needs the uncommitted scope: the directory commit is HEAD, the
+    # symlink is the working tree, so the uncommitted diff carries the D entries
+    # for foo.md/bar.md while the file list carries ``mydir`` as a (symlink) file.
+    _select_uncommitted_scope(changes_panel)
+
+    changes_tree = changes_panel.get_changes_tree()
+    expect(changes_tree).to_be_visible()
+    tree_rows = changes_tree.get_tree_rows()
+
+    # Wait for the deleted children to render before counting — they are
+    # injected by ``addDeletedFileToTree`` once the diff is parsed, which is
+    # exactly the synthesis that can create the duplicate node.
+    expect(tree_rows.filter(has_text="foo.md")).to_have_count(1)
+    expect(tree_rows.filter(has_text="bar.md")).to_have_count(1)
+
+    # Count rows whose display name (first line of innerText) is exactly
+    # ``mydir`` — e.g. ``mydir\n+1\nA`` (the symlink file) or ``mydir\n2`` (the
+    # synthesized folder with badge count 2). The buggy state has two such rows;
+    # the fixed state has exactly one. The two rows share the path and carry no
+    # distinguishing testid, so the names are read via a locator ``evaluate_all``
+    # (a budgeted exception to the no-integration-page-evaluate rule). The
+    # inputs that gate the duplicate (file list + diff) have settled via the
+    # assertions above, so a one-shot count is reliable.
+    name_counts = tree_rows.evaluate_all(
+        "els => { const c = {}; for (const e of els) { const n = e.innerText.split('\\n')[0]; c[n] = (c[n] || 0) + 1; } return c; }"
+    )
+    mydir_row_count = name_counts.get("mydir", 0)
+    failure_message = (
+        f"Expected exactly one row named 'mydir' in the changes tree, got {mydir_row_count}."
+        + f" Row name counts were {name_counts}. Two 'mydir' rows means useFileTree synthesised"
+        + " a duplicate node when the symlink replaced the directory."
+    )
+    assert mydir_row_count == 1, failure_message

@@ -1,27 +1,26 @@
-"""Integration tests for the shared panel-tab context menu (PANEL-07/11/14, AGENT-06/07, TERM-02).
+"""Integration tests for the shared panel-tab context menu.
 
 The redesigned shell renders ONE context menu for every panel tab (agent and
-terminal alike): Rename for multi-instance panels (PANEL-11), plus — for agents —
-"Mark as unread" (AGENT-07) and the flat diagnostics copy items (AGENT-06: copy
+terminal alike): Rename for multi-instance panels, plus — for agents —
+"Mark as unread" and the flat diagnostics copy items (copy
 agent id / name, copy claude session id / transcript paths, disabled until a
 session exists). Closing a tab routes through the close (X) button to a
-confirmation dialog (AGENT-04 / TERM-02).
+confirmation dialog. Close-others is not part of the
+panel-tab context menu (only Rename, Mark as unread, and the diagnostics copy
+items render).
 
-These cases are CREATE-not-migrate (per `03_07_agent_terminal_panel_tests.md`): they
-consolidate `test_agent_tab_context_menu.py`, `test_agent_diagnostics_context_menu.py`,
-and the rename/context halves of `test_terminal_tab_enhancements.py` /
-`test_tab_context_menus.py` onto the panel-tab model. Task 8.2 deletes the superseded
-files.
+These cases consolidate the retired `test_agent_tab_context_menu.py`,
+`test_agent_diagnostics_context_menu.py`, and the rename/context halves of
+`test_terminal_tab_enhancements.py` / `test_tab_context_menus.py` onto the
+panel-tab model.
 
-Known phase gaps applied here (the redesigned PanelTab context menu does not yet carry
-these affordances — the old agent tab bar did):
-* Diagnostics is a FLAT set of copy items (no "Diagnostics" sub-menu), so items —
-  like "Mark as unread" — are asserted by their visible label rather than a
-  per-item testid.
-* Close-others is not offered on the panel-tab context menu — skipped.
+Diagnostics is a FLAT set of copy items (no "Diagnostics" sub-menu), so items —
+like "Mark as unread" — are asserted by their visible label rather than a
+per-item testid.
 """
 
-import pytest
+from playwright.sync_api import Locator
+from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
@@ -35,12 +34,10 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
-_CLOSE_OTHERS_SKIP_REASON = "Close-others is not offered on the redesigned panel-tab context menu (only Rename, Mark as unread, and the diagnostics copy items render); deferred to a later task."
-
 
 @user_story("to rename an agent panel tab but not close it via a dedicated menu item")
 def test_agent_tab_offers_rename(sculptor_instance_: SculptorInstance) -> None:
-    """An agent panel tab's context menu offers Rename and starts an inline edit (PANEL-11)."""
+    """An agent panel tab's context menu offers Rename and starts an inline edit."""
     page = sculptor_instance_.page
     panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
 
@@ -57,7 +54,7 @@ def test_agent_tab_offers_rename(sculptor_instance_: SculptorInstance) -> None:
 
 @user_story("to rename a terminal panel tab via double-click")
 def test_terminal_tab_double_click_rename(sculptor_instance_: SculptorInstance) -> None:
-    """Double-clicking a terminal panel tab starts an inline rename (PANEL-11)."""
+    """Double-clicking a terminal panel tab starts an inline rename."""
     page = sculptor_instance_.page
     bottom_tabs = PlaywrightPanelTabElement(page, sub_section="bottom")
 
@@ -73,27 +70,94 @@ def test_terminal_tab_double_click_rename(sculptor_instance_: SculptorInstance) 
     expect(bottom_tabs.get_inline_rename_input()).to_be_visible()
 
 
+def _copy_via_context_menu(page: Page, panel_tabs: PlaywrightPanelTabElement, tab: Locator, label: str) -> str:
+    """Open ``tab``'s context menu, click the copy item named ``label``, and
+    return the intercepted clipboard text.
+
+    Each click closes the menu, so callers invoke this once per item. The
+    session-dependent items render disabled (Radix ``data-disabled``) until the
+    agent's diagnostics load — and menu items resolve their state when the menu
+    OPENS, so an already-open menu never flips to enabled in place. Reopen the
+    menu until the item is enabled instead of polling one open menu.
+    """
+    item = panel_tabs.get_diagnostics_item_by_text(label)
+    for _ in range(15):
+        panel_tabs.open_context_menu(tab)
+        expect(item).to_be_visible()
+        try:
+            expect(item).not_to_have_attribute("data-disabled", "", timeout=2_000)
+            break
+        except AssertionError:
+            page.keyboard.press("Escape")
+            expect(item).not_to_be_visible()
+    else:
+        raise AssertionError(f"{label!r} stayed disabled — the agent's diagnostics never loaded")
+    reset_intercepted_clipboard(page)
+    item.click()
+    page.wait_for_function("() => window.__clipboardWritten !== null")
+    copied = read_intercepted_clipboard(page)
+    assert copied is not None, f"Expected {label!r} to write to the clipboard"
+    return copied
+
+
 @user_story("to copy an agent's id from its tab context menu")
 def test_agent_tab_copy_agent_id(sculptor_instance_: SculptorInstance) -> None:
     """The agent tab context menu copies the agent id (always available, no session needed)."""
     page = sculptor_instance_.page
     panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
 
-    start_task_and_wait_for_ready(page, prompt="Copy id agent", workspace_name="Copy Id WS")
+    task_page = start_task_and_wait_for_ready(page, prompt="Copy id agent", workspace_name="Copy Id WS")
     install_clipboard_interceptor(page)
 
     tabs = panel_tabs.get_panel_tabs()
     expect(tabs).to_have_count(1)
-    panel_tabs.open_context_menu(tabs.first)
 
-    copy_agent_id = panel_tabs.get_diagnostics_item_by_text("Copy agent id")
-    expect(copy_agent_id).to_be_visible()
-    reset_intercepted_clipboard(page)
-    copy_agent_id.click()
+    # The copied value is the agent's task id — the same id the agent page URL carries.
+    agent_id = _copy_via_context_menu(page, panel_tabs, tabs.first, "Copy agent id")
+    assert agent_id == task_page.get_task_id(), (
+        f"Expected the copied agent id to match the URL's task id; got {agent_id!r} vs {task_page.get_task_id()!r}"
+    )
 
-    page.wait_for_function("() => window.__clipboardWritten !== null")
-    agent_id = read_intercepted_clipboard(page)
-    assert agent_id, "Expected the agent id to be copied to the clipboard"
+
+@user_story("to copy an agent's name, session id, and transcript paths from its tab context menu")
+def test_agent_tab_diagnostics_copy_contents(sculptor_instance_: SculptorInstance) -> None:
+    """The diagnostics copy items copy real values once the agent has a session.
+
+    After a completed run: "Copy agent name" copies the tab's display name,
+    "Copy claude session id" copies a non-empty id, "Copy claude transcript file
+    path" copies that session's ``.jsonl`` path, and "Copy Sculptor transcript
+    file path" copies the task's ``transcript.jsonl`` artifact path.
+    """
+    page = sculptor_instance_.page
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+
+    task_page = start_task_and_wait_for_ready(page, prompt="Diagnostics copy agent", workspace_name="Diag Copy WS")
+    chat_panel = task_page.get_chat_panel()
+    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
+    install_clipboard_interceptor(page)
+
+    tabs = panel_tabs.get_panel_tabs()
+    expect(tabs).to_have_count(1)
+
+    agent_name = _copy_via_context_menu(page, panel_tabs, tabs.first, "Copy agent name")
+    assert agent_name, "Expected a non-empty agent name"
+    expect(tabs.first).to_contain_text(agent_name)
+
+    session_id = _copy_via_context_menu(page, panel_tabs, tabs.first, "Copy claude session id")
+    assert session_id, "Expected a non-empty claude session id"
+
+    transcript_path = _copy_via_context_menu(page, panel_tabs, tabs.first, "Copy claude transcript file path")
+    assert transcript_path.endswith(".jsonl"), f"Expected a.jsonl transcript path, got {transcript_path!r}"
+    assert session_id in transcript_path, (
+        f"Expected the transcript path to be the session's jsonl; got {transcript_path!r} for session {session_id!r}"
+    )
+
+    sculptor_transcript_path = _copy_via_context_menu(
+        page, panel_tabs, tabs.first, "Copy Sculptor transcript file path"
+    )
+    assert sculptor_transcript_path.endswith("transcript.jsonl"), (
+        f"Expected the task's transcript.jsonl artifact path, got {sculptor_transcript_path!r}"
+    )
 
 
 @user_story("to see diagnostics copy items disabled for an agent with no session")
@@ -120,7 +184,7 @@ def test_agent_tab_diagnostics_disabled_without_session(sculptor_instance_: Scul
 
 @user_story("to close an agent from its tab with a confirmation")
 def test_agent_tab_close_requires_confirmation(sculptor_instance_: SculptorInstance) -> None:
-    """Closing an agent panel tab surfaces the delete confirmation (AGENT-04)."""
+    """Closing an agent panel tab surfaces the delete confirmation."""
     page = sculptor_instance_.page
     panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
 
@@ -145,7 +209,7 @@ def test_agent_tab_close_requires_confirmation(sculptor_instance_: SculptorInsta
 @user_story("to mark an agent unread from its tab context menu")
 def test_agent_tab_mark_unread(sculptor_instance_: SculptorInstance) -> None:
     """The agent tab context menu offers "Mark as unread", and clicking it flips the
-    tab's ``data-dot-status`` to unread (AGENT-07).
+    tab's ``data-dot-status`` to unread.
 
     Marking the currently viewed agent unread is allowed — the unread
     override suppresses the auto mark-read, so the dot must not revert.
@@ -167,10 +231,3 @@ def test_agent_tab_mark_unread(sculptor_instance_: SculptorInstance) -> None:
     mark_unread_item.click()
 
     expect(tabs.first).to_have_attribute("data-dot-status", "unread")
-
-
-@pytest.mark.skip(reason=_CLOSE_OTHERS_SKIP_REASON)
-@user_story("to close other terminal tabs from a terminal tab context menu")
-def test_terminal_tab_close_others(sculptor_instance_: SculptorInstance) -> None:
-    """Placeholder for PANEL-14 close-others, which the redesigned panel-tab context
-    menu does not yet offer."""

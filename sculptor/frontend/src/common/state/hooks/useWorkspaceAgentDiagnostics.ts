@@ -4,14 +4,21 @@
 // the session/transcript items stay disabled until a session exists and become enabled
 // once the agent has run.
 //
-// Each agent is fetched once per (id, status) pair via a TanStack query keyed on that
-// pair: an agent with no session yet returns empty diagnostics, and the refetch when its
-// status changes (e.g. after the first prompt completes) picks up the now-available
-// session. The result is a stable map keyed by task id, so the registry-sync hook can
-// read agent.diagnostics without triggering a fetch on every task tick.
+// Each agent has ONE query keyed by (workspace, task). A task's status is not part of
+// the key — it is an invalidation signal: when a task's status changes (e.g. its first
+// prompt completing and a session appearing), the effect below explicitly invalidates
+// that task's query, which refetches while continuing to serve the previous data. The
+// result is a stable map keyed by task id, so the registry-sync hook can read
+// agent.diagnostics without triggering a fetch on every task tick.
+//
+// Do NOT fold `status` into the query key instead. A task view can transiently derive
+// READY before its messages load, caching (task, READY) with empty diagnostics; the
+// RUNNING→READY flip at the end of the first run then lands on that cached entry, and —
+// with window-focus/reconnect refetches disabled client-wide — nothing ever refetches
+// it, leaving the copy items disabled forever.
 
-import { useQueries } from "@tanstack/react-query";
-import { useCallback } from "react";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef } from "react";
 
 import type { TaskStatus } from "~/api";
 import { getWorkspaceAgentDiagnostics } from "~/api";
@@ -22,11 +29,20 @@ export type AgentDiagnosticsTarget = { taskId: string; status: TaskStatus };
 
 export type AgentDiagnosticsByTaskId = Readonly<Record<string, DynamicAgentDiagnostics>>;
 
-// Diagnostics have no push/invalidation signal (the WS stream doesn't cover them), so
-// data is held fresh for a finite window rather than the client-wide `staleTime: Infinity`.
-// Folding `status` into the key means an agent's status change (e.g. its first prompt
-// completing and a session appearing) is a fresh key — and thus a refetch — on its own,
-// so this only governs the redundant-refetch window within a single status.
+// The key omits the `"git"` segment so the `diffUpdatedAt` cascade doesn't needlessly
+// invalidate it, and lives under the workspace cascade so `removeWorkspaceQueriesCache`
+// evicts it on close.
+const agentDiagnosticsQueryKey = (
+  workspaceId: string,
+  taskId: string,
+): readonly [string, "workspace", string, "agentDiagnostics", string] =>
+  [SCULPTOR_QUERY_KEY_PREFIX, "workspace", workspaceId, "agentDiagnostics", taskId] as const;
+
+// Freshness is driven by the status-change invalidation above, but that signal only
+// fires while this hook is mounted for the workspace. A finite staleTime (instead of
+// the client-wide `staleTime: Infinity`) covers the gap: if statuses changed while the
+// workspace was switched away, the observers remounting on switch-back refetch data
+// older than this window.
 const AGENT_DIAGNOSTICS_STALE_TIME_MS = 30_000;
 
 type AgentDiagnosticsQueryResult = { taskId: string; diagnostics: DynamicAgentDiagnostics | undefined };
@@ -54,16 +70,32 @@ export const useWorkspaceAgentDiagnostics = (
   workspaceId: string,
   targets: ReadonlyArray<AgentDiagnosticsTarget>,
 ): AgentDiagnosticsByTaskId => {
-  // One query per agent under the workspace cascade so `removeWorkspaceQueriesCache`
-  // evicts it on close. The key omits the `"git"` segment so the `diffUpdatedAt`
-  // cascade doesn't needlessly invalidate it; `status` is part of the key so a status
-  // change is its own fresh query (an agent with no session yet returns empty
-  // diagnostics, and the refetch when its status changes picks up the now-available
-  // session). `useQueries` only renders the current `targets`, so the combined map
-  // can't leak entries for agents that no longer exist.
+  const queryClient = useQueryClient();
+
+  // Statuses each task had on the previous run of the invalidation effect. A change
+  // (e.g. RUNNING→READY when a prompt completes) invalidates that task's query so the
+  // now-available session is refetched; a task's first appearance is not a change (its
+  // query is fetching for the first time anyway). Rebuilt from `targets` each run, so
+  // removed tasks don't linger.
+  const previousStatusesRef = useRef<Readonly<Record<string, TaskStatus>>>({});
+  useEffect(() => {
+    const previousStatuses = previousStatusesRef.current;
+    const nextStatuses: Record<string, TaskStatus> = {};
+    for (const { taskId, status } of targets) {
+      nextStatuses[taskId] = status;
+      const previousStatus = previousStatuses[taskId];
+      if (previousStatus !== undefined && previousStatus !== status) {
+        void queryClient.invalidateQueries({ queryKey: agentDiagnosticsQueryKey(workspaceId, taskId) });
+      }
+    }
+    previousStatusesRef.current = nextStatuses;
+  }, [targets, workspaceId, queryClient]);
+
+  // One query per agent. `useQueries` only renders the current `targets`, so the
+  // combined map can't leak entries for agents that no longer exist.
   return useQueries({
-    queries: targets.map(({ taskId, status }) => ({
-      queryKey: [SCULPTOR_QUERY_KEY_PREFIX, "workspace", workspaceId, "agentDiagnostics", taskId, status] as const,
+    queries: targets.map(({ taskId }) => ({
+      queryKey: agentDiagnosticsQueryKey(workspaceId, taskId),
       queryFn: ({ signal }: { signal: AbortSignal }): Promise<AgentDiagnosticsQueryResult> =>
         fetchAgentDiagnostics(workspaceId, taskId, signal).then((diagnostics) => ({ taskId, diagnostics })),
       staleTime: AGENT_DIAGNOSTICS_STALE_TIME_MS,

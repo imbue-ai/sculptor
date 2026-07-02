@@ -1,5 +1,5 @@
 """Integration tests for the Commits panel — the commit-history browser paired
-with its own embedded DiffViewer (FCC-01/02/03).
+with its own embedded DiffViewer.
 
 The Commits panel is one of the three separate panels that replaced the old
 single File-Browser panel with its All/Changes/History tabs. It pairs the
@@ -8,16 +8,16 @@ hover popover, and a commit's expanded per-file rows) with an always-visible
 embedded viewer via the shared ``ExplorerLayout``. There is no tab model: the
 Files and Changes panels are their own panels.
 
-These cases are MIGRATED, not rewritten, from the pre-rewrite History-tab tests
-(see ``e2e_test_plan.md`` §1). The proven assertions carry over unchanged; only
+These cases are MIGRATED, not rewritten, from the pre-rewrite History-tab tests.
+The proven assertions carry over unchanged; only
 the *surface* moved:
 
-* a panel is opened through the section ``+`` add-panel dropdown (the 3.6a
+* a panel is opened through the section ``+`` add-panel dropdown (the shared
   ``open_panel`` helper) instead of clicking the File-Browser History tab;
 * the terminus, commit rows, merge spur, popover, metadata, and per-commit file
   rows are driven through the ``PlaywrightCommitsPanelElement`` POM scoped to the
   opened section, and clicking a commit's file opens its commit-scoped diff into
-  the panel's OWN embedded viewer (FCC-02) rather than a page-wide active diff.
+  the panel's OWN embedded viewer rather than a page-wide active diff.
 
 Opening a panel into the CENTER section makes it the active center tab and
 UNMOUNTS the agent chat (SectionBody renders only the active panel). These
@@ -29,9 +29,9 @@ The old page-wide multi-tab diff surface (commit-diff tabs coexisting with
 Changes-panel "regular" diff tabs in a shared tab bar, tab re-selection, and
 middle-click tab close) is NOT part of the Commits panel: each panel embeds its
 OWN single viewer with its own selection, so the tab-coexistence kernels are
-skipped here with a follow-up reason. Their commit-scoped diff CONTENT — the
-part that proves a commit file opens the right committed diff — is migrated
-against the embedded viewer.
+retired with that surface. Their commit-scoped diff CONTENT — the part that
+proves a commit file opens the right committed diff — is migrated against the
+embedded viewer.
 
 The commit-graph DOT VISUALS (gray / green = HEAD / amber-ring = uncommitted)
 are screenshot-verified, not asserted as layout/color properties, so no test
@@ -44,7 +44,6 @@ Migrated from:
 
 import re
 
-import pytest
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
 from playwright.sync_api import expect
@@ -60,15 +59,6 @@ from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
-
-# --------------------------------------------------------------------------- #
-# Skip reasons (kept as single-line variables so the decorators stay short and
-# avoid adjacent-string-literal concatenation).
-# --------------------------------------------------------------------------- #
-
-_TAB_COEXISTENCE_SKIP_REASON = "Commit-diff tabs coexisting with Changes-panel regular diff tabs (re-selection, cross-panel tab bar) belong to the retired page-wide multi-tab diff surface; the Commits panel embeds its own single viewer, so there is no shared tab bar to migrate this against. Follow-up."
-
-_TAB_CLOSE_SKIP_REASON = "Middle-click tab close + keeping a Changes-panel regular tab alive belongs to the retired page-wide multi-tab diff surface; the Commits panel's embedded viewer has no closable tabs. Follow-up."
 
 # --------------------------------------------------------------------------- #
 # FakeClaude prompts (migrated verbatim from the source tests).
@@ -508,9 +498,9 @@ def _reactivate_agent_chat(task_page: PlaywrightTaskPage) -> PlaywrightChatPanel
     message can be sent and its completion awaited.
     """
     agent_panel_id = f"agent:{task_page.get_task_id()}"
-    agent_tab = task_page.get_agent_tab_bar().get_panel_tab(agent_panel_id)
-    expect(agent_tab).to_be_visible()
-    agent_tab.click()
+    tab = task_page.get_section().get_panel_tab(agent_panel_id)
+    expect(tab).to_be_visible()
+    tab.click()
     return task_page.get_chat_panel()
 
 
@@ -827,7 +817,7 @@ def test_clicking_renamed_file_in_commits_shows_rename_banner(sculptor_instance_
 # Migrated: test_history_panel_diffs.py
 #
 # Each commit-scoped diff renders in the Commits panel's OWN embedded viewer
-# (FCC-02): clicking a commit's file replaces the viewer's content. The
+#: clicking a commit's file replaces the viewer's content. The
 # page-wide multi-tab kernels (commit-diff tabs coexisting with Changes-panel
 # regular tabs, tab re-selection, middle-click close) belong to the retired
 # tab-bar surface and are skipped below; their diff CONTENT is migrated here.
@@ -912,14 +902,6 @@ def test_first_commit_file_open_renders_diff_with_cold_highlighter(sculptor_inst
     expect(viewer.get_unified_diff_views()).to_contain_text("stuff")
 
 
-@pytest.mark.skip(reason=_TAB_COEXISTENCE_SKIP_REASON)
-@user_story("to switch between a commit-diff tab and an uncommitted-diff tab for the same file")
-def test_commit_diff_tab_selectable_alongside_regular_tab(sculptor_instance_: SculptorInstance) -> None:
-    """Placeholder for the commit-diff tab / Changes-panel regular-tab coexistence
-    kernel. The Commits panel embeds its own single viewer with no shared tab bar,
-    so the two-tab coexistence and re-selection surface no longer exists."""
-
-
 @user_story("to open diffs from two different commits and see each commit's content")
 def test_open_files_from_different_commits(sculptor_instance_: SculptorInstance) -> None:
     """Opening files from two different commits should each show that commit's
@@ -927,8 +909,8 @@ def test_open_files_from_different_commits(sculptor_instance_: SculptorInstance)
 
     The retired page-wide surface kept a separate tab per commit-diff; the Commits
     panel's single embedded viewer instead replaces its content on each open, so
-    this migrates the per-commit content assertions (the tab-coexistence /
-    re-selection is covered by the skipped tab kernel above).
+    this migrates the per-commit content assertions (there is no tab bar left to
+    assert coexistence / re-selection against).
     """
     page = sculptor_instance_.page
     _, commits_panel = _open_commits_panel_with(page, _TWO_SINGLE_FILE_COMMITS_PROMPT)
@@ -961,14 +943,6 @@ def test_open_files_from_different_commits(sculptor_instance_: SculptorInstance)
     # The embedded viewer now shows the second commit's file content.
     viewer.assert_diff_shows("first.py")
     expect(viewer).to_contain_text("x = 1")
-
-
-@pytest.mark.skip(reason=_TAB_CLOSE_SKIP_REASON)
-@user_story("to close a commit-diff tab without losing the regular diff tab for the same file")
-def test_close_commit_diff_tab_keeps_regular_tab(sculptor_instance_: SculptorInstance) -> None:
-    """Placeholder for the middle-click commit-diff-tab close kernel. The Commits
-    panel's embedded viewer has no closable tabs and no shared tab bar with the
-    Changes panel, so this retired multi-tab behavior has no equivalent surface."""
 
 
 @user_story("to view the correct diff content when the same file is modified across two commits")
@@ -1102,7 +1076,7 @@ def test_commit_diff_split_handle_hidden_for_added_file(sculptor_instance_: Scul
     viewer.assert_diff_shows("alpha.py")
     expect(viewer).to_contain_text("a = 1")
 
-    # Switch to split view via the relocated header menu (FCC-07).
+    # Switch to split view via the relocated header menu.
     viewer.toggle_view_option_via_menu("split_view")
 
     # Even in split mode, the handle must not appear for an added file — there is

@@ -1,29 +1,35 @@
-"""Integration tests for the new-workspace modal (WSC-01..05/07, FIRST-04).
+"""Integration tests for the new-workspace modal.
 
-The new-workspace dialog is the sanctioned create surface (Task 5.1..5.3). It is
-opened from the Task 5.2 entry points — the Cmd/Meta+T shortcut, the Cmd+K
+The new-workspace dialog is the sanctioned create surface. It is
+opened from three entry points — the Cmd/Meta+T shortcut, the Cmd+K
 "New workspace" command, and a repo group's "+" in the sidebar — while the plain
 sidebar new-workspace button DIRECT-CREATES (reusing the MRU settings + a fresh
 auto branch) and only opens the dialog as a fallback when there is no MRU yet.
 
-These tests cover the dialog's open paths, the WSC-05 form (title + prompt +
+These tests cover the dialog's open paths, the form (title + prompt +
 context pill + keep-open + create), Cmd+Enter create, the keep-open
-reset-but-retain behaviour (Decision B8), prompt-less create, and the
-agent-type picker. They run against the non-empty state (a pre-existing
-workspace), so the modal — not the empty first-run page — is what opens; the
-empty-page first-create path is covered in test_empty_first_run.py.
+reset-but-retain behaviour, prompt-less create, the agent-type
+picker, post-create focus (the chat input holds focus; a terminal first agent
+lands in the terminal panel instead), and the ``focus_input`` keybinding. They
+run against the non-empty state (a pre-existing workspace), so the modal — not
+the empty first-run page — is what opens; the empty-page first-create path is
+covered in test_empty_first_run.py.
 """
 
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.new_workspace_dialog import PlaywrightNewWorkspaceDialog
+from sculptor.testing.elements.terminal import expect_terminal_panel_replaces_chat
+from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.user_config import disable_pi_agent
 from sculptor.testing.elements.user_config import enable_pi_agent
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
+from sculptor.testing.playwright_utils import blur_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
+from sculptor.testing.utils import get_playwright_modifier_key
 
 
 def _seed_one_workspace(page: object) -> None:
@@ -31,7 +37,7 @@ def _seed_one_workspace(page: object) -> None:
 
     The dialog's entry points (Cmd/Meta+T, Cmd+K, the repo "+") are only live
     once a workspace exists — in the empty state the global shortcuts and command
-    palette are disabled (FIRST-03). This also persists the MRU settings that the
+    palette are disabled. This also persists the MRU settings that the
     sidebar button's direct-create reuses.
 
     Uses the helper's auto-unique workspace name (no fixed name): the shared instance
@@ -43,7 +49,7 @@ def _seed_one_workspace(page: object) -> None:
 
 @user_story("to open the new-workspace dialog with the Cmd/Meta+T shortcut")
 def test_modal_opens_via_shortcut(sculptor_instance_: SculptorInstance) -> None:
-    """The ``new_workspace`` keybinding (Cmd/Meta+T) opens the dialog (WSC-02)."""
+    """The ``new_workspace`` keybinding (Cmd/Meta+T) opens the dialog."""
     page = sculptor_instance_.page
     _seed_one_workspace(page)
 
@@ -56,7 +62,7 @@ def test_modal_opens_via_shortcut(sculptor_instance_: SculptorInstance) -> None:
 
 @user_story("to open the new-workspace dialog from the Cmd+K command palette")
 def test_modal_opens_via_command_palette(sculptor_instance_: SculptorInstance) -> None:
-    """Cmd+K → "New workspace" (``nav.new_workspace``) opens the dialog (WSC-03)."""
+    """Cmd+K → "New workspace" (``nav.new_workspace``) opens the dialog."""
     page = sculptor_instance_.page
     _seed_one_workspace(page)
 
@@ -69,7 +75,7 @@ def test_modal_opens_via_command_palette(sculptor_instance_: SculptorInstance) -
 
 @user_story("to open the new-workspace dialog from a repo group's + in the sidebar")
 def test_modal_opens_via_repo_plus(sculptor_instance_: SculptorInstance) -> None:
-    """A repo group's "+" opens the dialog preselecting that repo (WSC-04)."""
+    """A repo group's "+" opens the dialog preselecting that repo."""
     page = sculptor_instance_.page
     _seed_one_workspace(page)
 
@@ -90,7 +96,7 @@ def test_modal_opens_via_repo_plus(sculptor_instance_: SculptorInstance) -> None
 
 @user_story("to direct-create a workspace from the sidebar button once I have created one before")
 def test_sidebar_button_direct_creates_when_mru_exists(sculptor_instance_: SculptorInstance) -> None:
-    """The sidebar new-workspace button direct-creates (no dialog) when an MRU exists (WSC-01).
+    """The sidebar new-workspace button direct-creates (no dialog) when an MRU exists.
 
     After a first create, the last-creation settings are remembered, so clicking
     the plain sidebar button reuses them with a fresh auto branch and navigates
@@ -112,7 +118,7 @@ def test_sidebar_button_direct_creates_when_mru_exists(sculptor_instance_: Sculp
 
 @user_story("to see the new-workspace form's core fields and create control")
 def test_form_renders_core_fields(sculptor_instance_: SculptorInstance) -> None:
-    """The form renders the title, prompt, branch context pill, keep-open, and create (WSC-05)."""
+    """The form renders the title, prompt, branch context pill, keep-open, and create."""
     page = sculptor_instance_.page
     _seed_one_workspace(page)
 
@@ -128,7 +134,7 @@ def test_form_renders_core_fields(sculptor_instance_: SculptorInstance) -> None:
 
 @user_story("to create a workspace from the dialog with Cmd+Enter")
 def test_cmd_enter_creates_workspace(sculptor_instance_: SculptorInstance) -> None:
-    """Cmd+Enter from inside the dialog creates the workspace (WSC-07)."""
+    """Cmd+Enter from inside the dialog creates the workspace."""
     page = sculptor_instance_.page
     _seed_one_workspace(page)
 
@@ -157,7 +163,7 @@ def test_create_without_prompt(sculptor_instance_: SculptorInstance) -> None:
 
 @user_story("to keep the dialog open after create, with the repo retained but the title/prompt reset")
 def test_keep_open_resets_but_retains(sculptor_instance_: SculptorInstance) -> None:
-    """Keep-open resets title/prompt/plan-mode but retains the repo + agent type (Decision B8).
+    """Keep-open resets title/prompt/plan-mode but retains the repo + agent type.
 
     With keep-open on, Create leaves the dialog open and clears the per-workspace
     fields (title, prompt, branch) while the repo selector keeps its value, ready
@@ -199,7 +205,7 @@ def test_agent_type_picker_defaults_to_claude(sculptor_instance_: SculptorInstan
 
     The form's first-agent picker reuses the old page's options: Claude (default)
     and Terminal are always offered; pi is gated behind the experimental
-    pi-agent flag. (Decision B2's "no bare Terminal" applies to the panel-tab
+    pi-agent flag. (The "no bare Terminal agent type" rule applies to the panel-tab
     add-dropdown, not to this first-agent select — verified against the rendered
     form, which DOES offer Terminal here.)
     """
@@ -238,3 +244,59 @@ def test_agent_type_picker_gates_pi(sculptor_instance_: SculptorInstance) -> Non
         page.keyboard.press("Escape")
     finally:
         disable_pi_agent(page)
+
+
+@user_story("to start typing in the chat immediately after creating a workspace")
+def test_chat_input_focused_after_workspace_create(sculptor_instance_: SculptorInstance) -> None:
+    """After creating a workspace from the dialog, the chat input holds focus.
+
+    Drives the dialog POM directly rather than ``start_task_and_wait_for_ready``:
+    that helper re-focuses the chat input itself (to undo its model-selector
+    click), which would mask a missing product-side autofocus.
+    """
+    page = sculptor_instance_.page
+    _seed_one_workspace(page)
+
+    dialog = PlaywrightNewWorkspaceDialog(page)
+    dialog.open_via_shortcut()
+    task_page = dialog.create_and_wait_for_chat_panel(workspace_name="Focus After Create WS")
+
+    chat_input = task_page.get_chat_panel().get_chat_input()
+    expect(chat_input).to_be_focused()
+
+
+@user_story("to land in the terminal when my first agent is a terminal")
+def test_terminal_first_agent_does_not_focus_chat(sculptor_instance_: SculptorInstance) -> None:
+    """Creating a workspace whose first agent is a Terminal lands in the terminal
+    panel — no chat input is mounted for creation to steal focus into."""
+    page = sculptor_instance_.page
+    _seed_one_workspace(page)
+
+    dialog = PlaywrightNewWorkspaceDialog(page)
+    dialog.open_via_shortcut()
+    dialog.select_agent_type(ElementIDs.AGENT_TYPE_OPTION_TERMINAL)
+    dialog.create(workspace_name="Terminal First WS")
+
+    expect(dialog.get_dialog()).to_have_count(0, timeout=60_000)
+    expect(get_agent_terminal_panel(page)).to_be_visible(timeout=60_000)
+    # The terminal replaces the chat as the agent's main panel: no chat input
+    # exists anywhere on the page.
+    expect_terminal_panel_replaces_chat(page)
+
+
+@user_story("to focus the prompt input with the focus_input keybinding")
+def test_focus_input_keybinding_focuses_chat_input(sculptor_instance_: SculptorInstance) -> None:
+    """Cmd/Ctrl+I (the ``focus_input`` keybinding) focuses the chat input on a
+    workspace page after focus has wandered elsewhere."""
+    page = sculptor_instance_.page
+    mod_key = get_playwright_modifier_key()
+
+    task_page = start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Focus Input WS")
+    chat_input = task_page.get_chat_panel().get_chat_input()
+    expect(chat_input).to_be_visible()
+
+    blur_page(page)
+    expect(chat_input).not_to_be_focused()
+
+    page.keyboard.press(f"{mod_key}+i")
+    expect(chat_input).to_be_focused()

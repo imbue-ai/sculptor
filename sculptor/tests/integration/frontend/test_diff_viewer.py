@@ -1,30 +1,30 @@
-"""Integration tests for the shared, embeddable per-panel DiffViewer (FCC-02/06/07).
+"""Integration tests for the shared, embeddable per-panel DiffViewer.
 
-Every Files / Changes / Commits panel embeds its OWN DiffViewer instance (FCC-02)
+Every Files / Changes / Commits panel embeds its OWN DiffViewer instance
 rather than reaching for a single page-wide "active diff" panel. This file
 exercises that shared viewer ONCE — via whichever panel is convenient — so the
 per-panel content files (`test_files_panel.py` etc.) only assert their own
 list/sidebar behavior.
 
-These cases are MIGRATED, not rewritten, from the pre-rewrite diff/markdown tests
-(see `e2e_test_plan.md` §1). The proven content assertions carry over unchanged;
+These cases are MIGRATED, not rewritten, from the pre-rewrite diff/markdown tests.
+The proven content assertions carry over unchanged;
 only the *surface* moved:
 
-* a panel is opened through the section `+` add-panel dropdown (the 3.6a
+* a panel is opened through the section `+` add-panel dropdown (the shared
   ``open_panel`` helper) instead of clicking File-Browser tabs;
 * a file is opened into the panel's embedded viewer via the panel POM;
 * the view toggles (split/unified, line wrap, render-markdown, find-in-file)
-  re-anchored under the header's single triple-dot menu (FCC-07), reached via
+  re-anchored under the header's single triple-dot menu, reached via
   ``toggle_view_option_via_menu``;
-* the empty/loading state asserts FCC-06 (the viewer is always visible with an
+* the empty/loading state asserts the viewer is always visible with an
   empty body when nothing is selected; the loading bar shows only when a file is
-  open).
+  open.
 
 The diff-specific fullscreen/expand surface is deprecated (section maximize
 replaces it), so no expand/fullscreen assertions are migrated. The old multi-tab
 diff surface ("Close other tabs") is likewise gone — each panel now hosts a
 single-selection viewer with no diff tabs — so that test's tab-close kernel is
-replaced by its FCC-02 analog (selecting a different file swaps the one viewer).
+replaced by its single-viewer analog (selecting a different file swaps the one viewer).
 
 Migrated from:
 * `test_diff_refresh_on_branch_change.py`
@@ -33,24 +33,36 @@ Migrated from:
 * `test_markdown_render_toggle.py`
 * `test_markdown_gfm.py`
 * `test_open_in_viewer.py`
+* `test_file_browser.py` (the shared-viewer toggles: split/unified + persistence,
+  line wrap + persistence, find-in-file, copy-file-path, the Shiki
+  decoration-error guard, and the Pierre `renderHunks` guard)
+* `test_file_open_diff_modes.py` (the expansion-line `data-line` guard)
 """
 
 import re
 import subprocess
 from pathlib import Path
 
-import pytest
+from playwright.sync_api import ConsoleMessage
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
+from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropdownElement
+from sculptor.testing.elements.add_panel_dropdown import close_seeded_panel
 from sculptor.testing.elements.add_panel_dropdown import open_panel
+from sculptor.testing.elements.changes_panel import PlaywrightChangesPanelElement
 from sculptor.testing.elements.changes_panel import get_changes_panel_in
 from sculptor.testing.elements.chat_panel import PlaywrightChatPanelElement
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.clipboard import install_clipboard_interceptor
+from sculptor.testing.elements.clipboard import read_intercepted_clipboard
+from sculptor.testing.elements.clipboard import reset_intercepted_clipboard
 from sculptor.testing.elements.diff_viewer import PlaywrightDiffViewerElement
 from sculptor.testing.elements.files_panel import get_files_panel_in
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -173,6 +185,192 @@ fake_claude:edit_file `{
   "new_string": "Hi, everyone!"
 }`"""
 
+# Commit a file on a feature branch then edit it, so the Uncommitted scope shows
+# a MODIFICATION diff. Split view only applies to modifications — added/deleted
+# files always render unified (there is no "before"/"after" pair to compare).
+_COMMIT_THEN_EDIT_MOD_PROMPT = """\
+fake_claude:multi_step `{
+  "steps": [
+    {
+      "command": "bash",
+      "args": {
+        "command": "git checkout -b feature"
+      }
+    },
+    {
+      "command": "write_file",
+      "args": {
+        "file_path": "mod.py",
+        "content": "print('hello')\\n"
+      }
+    },
+    {
+      "command": "bash",
+      "args": {
+        "command": "git add -A && git commit -m 'Add mod.py'"
+      }
+    },
+    {
+      "command": "edit_file",
+      "args": {
+        "file_path": "mod.py",
+        "old_string": "print('hello')",
+        "new_string": "print('goodbye')"
+      }
+    }
+  ]
+}`"""
+
+# A 200-line python file for the Shiki decoration regression. JSON newlines are
+# represented as \\n in the prompt string.
+_LONG_FILE_CONTENT = "\\n".join(f"x{i} = {i}" for i in range(200))
+
+# Strategy: commit a 3-line file and a 200-line file, then edit one line of the
+# short file and three widely-spaced lines of the long one. The uncommitted
+# diffs are then a small single-hunk M and a multi-hunk M where Pierre must use
+# oldLines/newLines to reconstruct unchanged regions between hunks for syntax
+# highlighting. When the stale oldLines/newLines from the short file (~3 lines)
+# are applied to the 200-line file, Shiki throws "Invalid decoration position"
+# because decoration positions reference lines beyond the code length.
+_SHIKI_REGRESSION_PROMPT = f"""\
+fake_claude:multi_step `{{
+  "steps": [
+    {{
+      "command": "bash",
+      "args": {{
+        "command": "git checkout -b feature"
+      }}
+    }},
+    {{
+      "command": "write_file",
+      "args": {{
+        "file_path": "short.py",
+        "content": "a = 1\\nb = 2\\nc = 3\\n"
+      }}
+    }},
+    {{
+      "command": "write_file",
+      "args": {{
+        "file_path": "long.py",
+        "content": "{_LONG_FILE_CONTENT}\\n"
+      }}
+    }},
+    {{
+      "command": "bash",
+      "args": {{
+        "command": "git add -A && git commit -m 'Add short and long files'"
+      }}
+    }},
+    {{
+      "command": "edit_file",
+      "args": {{
+        "file_path": "short.py",
+        "old_string": "b = 2",
+        "new_string": "b = 222"
+      }}
+    }},
+    {{
+      "command": "edit_file",
+      "args": {{
+        "file_path": "long.py",
+        "old_string": "x5 = 5",
+        "new_string": "x5 = 999"
+      }}
+    }},
+    {{
+      "command": "edit_file",
+      "args": {{
+        "file_path": "long.py",
+        "old_string": "x100 = 100",
+        "new_string": "x100 = 999"
+      }}
+    }},
+    {{
+      "command": "edit_file",
+      "args": {{
+        "file_path": "long.py",
+        "old_string": "x195 = 195",
+        "new_string": "x195 = 999"
+      }}
+    }}
+  ]
+}}`"""
+
+# Setup: multi-line file with a unique marker on line 11. Line 7 is edited so
+# the hunk covers lines 4-10 (3 context lines on each side). Lines 11+ lie
+# outside the hunk and are rendered as Pierre expansion lines. When the
+# frontend strips the trailing '\n' from the diff string, Pierre concatenates
+# the last hunk line (line 10) directly with expansion line 11, causing Shiki
+# to treat them as a single line; every subsequent line number is then off by
+# one.
+_LINE_NUMBER_REGRESSION_PROMPT = """\
+fake_claude:multi_step `{
+  "steps": [
+    {
+      "command": "bash",
+      "args": {
+        "command": "git checkout -b feature"
+      }
+    },
+    {
+      "command": "write_file",
+      "args": {
+        "file_path": "multiline.py",
+        "content": "line_01\\nline_02\\nline_03\\nline_04\\nline_05\\nline_06\\nline_07\\nline_08\\nline_09\\nline_10\\nafter_hunk_line_eleven\\nline_12\\nline_13\\nline_14\\nline_15\\n"
+      }
+    },
+    {
+      "command": "bash",
+      "args": {
+        "command": "git add -A && git commit -m 'Add multiline.py'"
+      }
+    },
+    {
+      "command": "edit_file",
+      "args": {
+        "file_path": "multiline.py",
+        "old_string": "line_07",
+        "new_string": "line_07_edited"
+      }
+    }
+  ]
+}`"""
+
+# The mock repo's src/helpers.py is a 75-line module on main. Rewriting it to
+# only the middle function group and committing produces a two-hunk
+# vs-target-branch diff:
+#   Hunk 1  @@ -1,32 +1,6 @@   — removes the add/subtract/.../cube group
+#   Hunk 2  @@ -49,27 +23,3 @@ — removes the unique/chunk/format_name/truncate group
+# with a 16-line gap (main lines 33-48) between the hunks. Pierre's
+# context-expansion loop accesses oldLines[32]..oldLines[47] to fill that gap;
+# when oldLines is incorrectly fetched from HEAD (25 lines) rather than from
+# the target branch (75 lines), those accesses return undefined and Pierre
+# crashes with "renderHunks: oldLine and newLine are null, something is wrong".
+_SHORTEN_HELPERS_FILE_PROMPT = """\
+fake_claude:multi_step `{
+  "steps": [
+    {
+      "command": "write_file",
+      "args": {
+        "file_path": "src/helpers.py",
+        "content": "# Helper utilities for the project.\\n\\n\\ndef is_even(n):\\n    return n % 2 == 0\\n\\n\\ndef is_odd(n):\\n    return n % 2 != 0\\n\\n\\ndef clamp(value, min_val, max_val):\\n    return max(min_val, min(max_val, value))\\n\\n\\ndef reverse_string(s):\\n    return s[::-1]\\n\\n\\ndef count_vowels(s):\\n    return sum(1 for c in s.lower() if c in 'aeiou')\\n\\n\\ndef flatten(nested):\\n    return [item for sublist in nested for item in sublist]\\n"
+      }
+    },
+    {
+      "command": "bash",
+      "args": {
+        "command": "git add -A && git commit -m 'Remove first and last function groups from helpers'"
+      }
+    }
+  ]
+}`"""
+
+_WRITE_ABSOLUTE_PATH_FILE_PROMPT = """\
+fake_claude:write_file `{
+  "file_path": "/tmp/sculptor-test-outside-repo.txt",
+  "content": "This file lives outside the repo.\\n"
+}`"""
+
 
 # --------------------------------------------------------------------------- #
 # Helpers
@@ -218,7 +416,7 @@ def _set_rich_markdown_rendering_via_settings(page: Page, *, enabled: bool) -> N
 
 def _ensure_render_mode(viewer: PlaywrightDiffViewerElement, page: Page, mode: str) -> None:
     """Drive the render-markdown toggle (a flipping item in the triple-dot
-    menu, FCC-07) to ``mode`` (``rendered`` / ``source``).
+    menu) to ``mode`` (``rendered`` / ``source``).
 
     Effective mode is read from CONTENT — the rendered markdown wrapper is mounted
     only in rendered mode — rather than the menu item's label (which is only in
@@ -350,6 +548,100 @@ def _open_diff_via_alpha_chip(chat_panel: PlaywrightChatPanelElement, file_path:
     chat_panel.get_chip_view_full_diff_button().click()
 
 
+def _get_left_section_root(page: Page) -> Locator:
+    """The left section's root, once the open-from-chat flow has revealed it.
+
+    The chip's "View full diff" routes through ``setActiveDiffTabAtom``, which
+    opens + expands the diff's HOST panel (Changes for repo diffs, Files for
+    outside-repo file views) in the left section on its own — no ``open_panel``
+    call is needed first.
+    """
+    section_root = PlaywrightWorkspaceSection(page, "left").get_section()
+    expect(section_root).to_be_visible()
+    return section_root
+
+
+def _open_changes_panel_with(page: Page, prompt: str) -> PlaywrightChangesPanelElement:
+    """Run a FakeClaude prompt, wait for it, then open the Changes panel."""
+    task_page = start_task_and_wait_for_ready(page, prompt=prompt)
+    chat_panel = task_page.get_chat_panel()
+    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
+    section_root = open_panel(page, "changes", sub_section="center")
+    return get_changes_panel_in(section_root, page)
+
+
+def _select_uncommitted_scope(changes_panel: PlaywrightChangesPanelElement) -> None:
+    """Switch the Changes scope picker to Uncommitted (the default is All)."""
+    scope_uncommitted = changes_panel.get_scope_uncommitted()
+    expect(scope_uncommitted).to_be_visible()
+    scope_uncommitted.click()
+    expect(scope_uncommitted).to_have_attribute("data-state", "on")
+
+
+def _reopen_changes_panel_after_close(page: Page) -> PlaywrightChangesPanelElement:
+    """Re-add the (closed) Changes panel from the left section's ``+`` dropdown.
+
+    ``open_panel`` only REVEALS a seeded panel that is still open (it waits on
+    the panel's tab), so re-adding after ``close_seeded_panel`` goes through the
+    dropdown directly — a closed single-instance panel is back on its re-add list.
+    """
+    section = PlaywrightWorkspaceSection(page, "left")
+    section.expand_section()
+    dropdown = PlaywrightAddPanelDropdownElement(page, "left")
+    dropdown.open()
+    dropdown.select_panel("changes")
+    expect(section.get_panel_tab("changes")).to_be_visible()
+    section_root = section.get_section()
+    expect(section_root).to_be_visible()
+    return get_changes_panel_in(section_root, page)
+
+
+def _ensure_unified_view(viewer: PlaywrightDiffViewerElement) -> None:
+    """Drive the viewer into unified mode so the unified diff body is asserted.
+
+    The split/unified preference is a server-persisted config, so a prior test in
+    the same browser context can leave it on either view. The split/unified toggle
+    is a plain menu Item (not a checkbox), so the effective view is read from
+    CONTENT — which of ``DIFF_VIEW_UNIFIED`` / ``DIFF_VIEW_SPLIT`` is mounted —
+    and the toggle is clicked only when the split view is the one showing.
+    Idempotent. (Added/deleted files always render unified regardless.)
+    """
+    unified = viewer.get_unified_diff_views()
+    split = viewer.get_split_view()
+    expect(unified.or_(split)).to_be_visible()
+    if split.count() > 0:
+        viewer.toggle_view_option_via_menu("split_view")
+    expect(viewer.get_unified_diff_views()).to_be_visible()
+
+
+def _ensure_line_wrap_enabled(viewer: PlaywrightDiffViewerElement, page: Page) -> None:
+    """Drive the line-wrap preference to wrapping ON (the default).
+
+    The preference is server-persisted, so a prior test can leave it either way.
+    The menu item is a flipping label ("Wrap lines" while off / "Unwrap lines"
+    while on), so the state is read from the label; clicking the item closes the
+    menu, so the no-op branch dismisses it explicitly.
+    """
+    viewer.open_menu()
+    wrap_item = viewer.get_menu_option("line_wrap")
+    expect(wrap_item).to_be_visible()
+    if "Wrap lines" in (wrap_item.text_content() or ""):
+        wrap_item.click()
+    else:
+        page.keyboard.press("Escape")
+
+
+def _get_copy_path_menu_item(page: Page) -> Locator:
+    """The viewer header menu's "Copy file path" item.
+
+    The per-file actions in the triple-dot menu carry their file-menu keys as
+    raw testids (``copy-path`` etc.) rather than ``ElementIDs`` members, so the
+    item is located page-wide by that key (the menu renders in a Radix portal
+    and the viewer POM only maps the ``ElementIDs``-backed view options).
+    """
+    return page.get_by_test_id("copy-path")
+
+
 # --------------------------------------------------------------------------- #
 # Migrated: test_diff_refresh_on_branch_change.py
 # --------------------------------------------------------------------------- #
@@ -432,7 +724,7 @@ def test_diff_refreshes_when_current_branch_changes(sculptor_instance_: Sculptor
 #
 # The pre-rewrite "Close other tabs" assertion exercised the multi-tab diff
 # surface, which is deprecated in the FCC model: each panel now embeds ONE
-# single-selection viewer with no diff tabs (FCC-02). The surviving behavioral
+# single-selection viewer with no diff tabs. The surviving behavioral
 # kernel — selecting a different file replaces the single viewer's content —
 # is migrated below; the tab-close context-menu assertion is dropped along with
 # the deprecated surface (mirroring the dropped expand/fullscreen assertions).
@@ -441,7 +733,7 @@ def test_diff_refreshes_when_current_branch_changes(sculptor_instance_: Sculptor
 
 @user_story("to open each changed file into the same panel's embedded viewer")
 def test_selecting_files_swaps_the_single_viewer(sculptor_instance_: SculptorInstance) -> None:
-    """Selecting different changed files swaps the one embedded viewer (FCC-02).
+    """Selecting different changed files swaps the one embedded viewer.
 
     Steps:
     1. Create a workspace with 3 uncommitted files.
@@ -458,7 +750,7 @@ def test_selecting_files_swaps_the_single_viewer(sculptor_instance_: SculptorIns
     section_root = open_panel(page, "changes", sub_section="center")
     changes_panel = get_changes_panel_in(section_root, page)
 
-    # Selecting each file drives the SAME embedded viewer (FCC-02): the viewer
+    # Selecting each file drives the SAME embedded viewer: the viewer
     # header tracks whichever file is currently selected.
     viewer = changes_panel.open_file("alpha.py")
     viewer.assert_diff_shows("alpha.py")
@@ -476,8 +768,8 @@ def test_selecting_files_swaps_the_single_viewer(sculptor_instance_: SculptorIns
 # --------------------------------------------------------------------------- #
 # Migrated: test_diff_loading_bar_no_file.py
 #
-# The FCC viewer is always visible with an empty body when nothing is selected
-# (FCC-06), and the loading bar shows ONLY when a file is open and its diff is in
+# The embedded viewer is always visible with an empty body when nothing is
+# selected, and the loading bar shows ONLY when a file is open and its diff is in
 # flight. The pre-rewrite route-hold / close-tab dance targeted the OLD panel's
 # workspace-level ``isFetching`` gating (SCU-1329) and the multi-tab surface,
 # neither of which exists in the new single-viewer model. The surviving contract
@@ -488,7 +780,7 @@ def test_selecting_files_swaps_the_single_viewer(sculptor_instance_: SculptorIns
 @user_story("to not see the diff loading bar when no file is open")
 def test_diff_loading_bar_hidden_when_no_file_open(sculptor_instance_: SculptorInstance) -> None:
     """With a file written but nothing selected, the panel's viewer renders its
-    empty body and shows NO loading bar (FCC-06)."""
+    empty body and shows NO loading bar."""
     page = sculptor_instance_.page
 
     task_page = start_task_and_wait_for_ready(page, prompt=_WRITE_HELLO_PROMPT)
@@ -496,7 +788,7 @@ def test_diff_loading_bar_hidden_when_no_file_open(sculptor_instance_: SculptorI
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
     # Open the Changes panel; nothing is selected yet, so the viewer is in its
-    # always-visible empty state (FCC-06).
+    # always-visible empty state.
     section_root = open_panel(page, "changes", sub_section="center")
     changes_panel = get_changes_panel_in(section_root, page)
     viewer = changes_panel.get_diff_viewer()
@@ -535,7 +827,7 @@ def test_markdown_toggle_switches_views(sculptor_instance_: SculptorInstance) ->
     preview = viewer.get_read_only_preview()
     expect(preview).to_be_visible()
 
-    # The render toggle (now a checkbox in the triple-dot menu, FCC-07) is present.
+    # The render toggle (now a checkbox in the triple-dot menu) is present.
     viewer.open_menu()
     expect(viewer.get_menu_option("render")).to_be_visible()
     page.keyboard.press("Escape")
@@ -712,13 +1004,11 @@ def test_unsafe_markdown_is_neutralised_in_read_only_preview(
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.skip(
-    reason="open-from-chat → new FCC-panel routing not yet wired (no global diff panel target in the new shell). Follow-up."
-)
 @user_story("to open a created repo file in the diff viewer from the chat panel")
 def test_open_created_file_in_diff_viewer(sculptor_instance_: SculptorInstance) -> None:
-    """Clicking 'View full diff' on a Write tool result opens the file's content
-    in the viewer (not 'Could not load file content')."""
+    """Clicking 'View full diff' on a Write tool result reveals the Changes panel
+    and opens the file's content in its embedded viewer (not 'Could not load
+    file content')."""
     page = sculptor_instance_.page
 
     task_page = start_task_and_wait_for_ready(
@@ -729,22 +1019,19 @@ def test_open_created_file_in_diff_viewer(sculptor_instance_: SculptorInstance) 
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # Opening the chat chip's full diff brings the Files panel's viewer on screen
-    # with the file selected. Open the panel via the harness so its embedded
-    # viewer is in the DOM, then trigger the open-from-chat flow.
-    section_root = open_panel(page, "files", sub_section="center")
-    files_panel = get_files_panel_in(section_root, page)
-    viewer = files_panel.get_diff_viewer()
-
     _open_diff_via_alpha_chip(chat_panel, "greeting.txt")
 
-    # The viewer shows the file (not the load-failure placeholder).
+    # A repo-file diff is hosted by the Changes panel: the open-from-chat flow
+    # reveals it in the left section and its viewer shows the file (not the
+    # load-failure placeholder).
+    changes_panel = get_changes_panel_in(_get_left_section_root(page), page)
+    viewer = changes_panel.get_diff_viewer()
     viewer.assert_diff_shows("greeting.txt")
+    diff_body = viewer.get_unified_diff_views().or_(viewer.get_split_view())
+    expect(diff_body).to_be_visible()
+    expect(diff_body).to_contain_text("Hello, world!")
 
 
-@pytest.mark.skip(
-    reason="open-from-chat → new FCC-panel routing not yet wired (see test_open_created_file_in_diff_viewer). Follow-up."
-)
 @user_story("to open an edited repo file in the diff viewer from the chat panel")
 def test_open_edited_file_in_diff_viewer(sculptor_instance_: SculptorInstance) -> None:
     """Clicking 'View full diff' on an Edit tool result opens an actual diff view
@@ -764,17 +1051,346 @@ def test_open_edited_file_in_diff_viewer(sculptor_instance_: SculptorInstance) -
     send_chat_message(chat_panel=chat_panel, message=EDIT_FILE_PROMPT)
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=4)
 
-    # Step 3: Open the Files panel viewer and trigger the open-from-chat flow.
-    section_root = open_panel(page, "files", sub_section="center")
-    files_panel = get_files_panel_in(section_root, page)
-    viewer = files_panel.get_diff_viewer()
-
+    # Step 3: open the Edit chip's full diff; the flow reveals the Changes panel.
     _open_diff_via_alpha_chip(chat_panel, "greeting.txt")
 
-    # The viewer shows an actual diff view (unified or split), not a read-only
-    # full-file preview.
+    # The Changes panel's viewer shows an actual diff view (unified or split),
+    # not a read-only full-file preview.
+    changes_panel = get_changes_panel_in(_get_left_section_root(page), page)
+    viewer = changes_panel.get_diff_viewer()
     viewer.assert_diff_shows("greeting.txt")
     unified = viewer.get_unified_diff_views()
     split = viewer.get_split_view()
-    expect(unified.or_(split)).to_be_visible(timeout=30_000)
+    expect(unified.or_(split)).to_be_visible()
     expect(viewer.get_read_only_preview()).to_have_count(0)
+
+
+# --------------------------------------------------------------------------- #
+# Migrated: test_file_browser.py — split/unified toggle + persistence
+# --------------------------------------------------------------------------- #
+
+
+@user_story("to compare files side-by-side")
+def test_split_view_toggle(sculptor_instance_: SculptorInstance) -> None:
+    """The split-view menu option switches a modification diff between unified
+    and split views and back."""
+    page = sculptor_instance_.page
+    changes_panel = _open_changes_panel_with(page, _COMMIT_THEN_EDIT_MOD_PROMPT)
+
+    _select_uncommitted_scope(changes_panel)
+    viewer = changes_panel.open_file("mod.py")
+    _ensure_unified_view(viewer)
+
+    # Toggle → split.
+    viewer.toggle_view_option_via_menu("split_view")
+    expect(viewer.get_split_view()).to_be_visible()
+    expect(viewer.get_unified_diff_views()).to_have_count(0)
+
+    # Toggle back → unified.
+    viewer.toggle_view_option_via_menu("split_view")
+    expect(viewer.get_unified_diff_views()).to_be_visible()
+    expect(viewer.get_split_view()).to_have_count(0)
+
+
+@user_story("to have my split view preference persist when closing and reopening the panel")
+def test_split_view_toggle_persists_across_panel_reopen(sculptor_instance_: SculptorInstance) -> None:
+    """The split/unified preference survives closing and reopening the host panel."""
+    page = sculptor_instance_.page
+    changes_panel = _open_changes_panel_with(page, _COMMIT_THEN_EDIT_MOD_PROMPT)
+
+    _select_uncommitted_scope(changes_panel)
+    viewer = changes_panel.open_file("mod.py")
+    _ensure_unified_view(viewer)
+
+    viewer.toggle_view_option_via_menu("split_view")
+    expect(viewer.get_split_view()).to_be_visible()
+
+    # Close the Changes panel entirely, then re-add it and re-open the same file.
+    close_seeded_panel(page, "changes")
+    changes_panel = _reopen_changes_panel_after_close(page)
+    _select_uncommitted_scope(changes_panel)
+    viewer = changes_panel.open_file("mod.py")
+
+    # Split mode persisted across the close/reopen.
+    expect(viewer.get_split_view()).to_be_visible()
+    expect(viewer.get_unified_diff_views()).to_have_count(0)
+
+    # Restore unified — the preference is server-persisted, so leaving split on
+    # would bleed into every later viewer test in this browser context.
+    viewer.toggle_view_option_via_menu("split_view")
+    expect(viewer.get_unified_diff_views()).to_be_visible()
+
+
+# --------------------------------------------------------------------------- #
+# Migrated: test_file_browser.py — line-wrap toggle + persistence
+# --------------------------------------------------------------------------- #
+
+
+@user_story("to toggle line wrapping on and off in the diff view")
+def test_line_wrap_toggle_flips_and_persists_across_panel_reopen(sculptor_instance_: SculptorInstance) -> None:
+    """The line-wrap menu option flips the wrapping mode, and the mode survives
+    closing and reopening the host panel.
+
+    The menu item's flipping label is the observable state: it reads "Unwrap
+    lines" while wrapping is on and "Wrap lines" while it is off.
+    """
+    page = sculptor_instance_.page
+    changes_panel = _open_changes_panel_with(page, _WRITE_HELLO_PROMPT)
+
+    viewer = changes_panel.open_file("hello.py")
+    _ensure_line_wrap_enabled(viewer, page)
+
+    # Toggle wrapping OFF; the label now offers to wrap again.
+    viewer.toggle_view_option_via_menu("line_wrap")
+    viewer.open_menu()
+    expect(viewer.get_menu_option("line_wrap")).to_contain_text("Wrap lines")
+    page.keyboard.press("Escape")
+
+    # Close the Changes panel entirely, then re-add it and re-open the same
+    # file: the scroll (no-wrap) mode persisted.
+    close_seeded_panel(page, "changes")
+    changes_panel = _reopen_changes_panel_after_close(page)
+    viewer = changes_panel.open_file("hello.py")
+    viewer.open_menu()
+    wrap_item = viewer.get_menu_option("line_wrap")
+    expect(wrap_item).to_contain_text("Wrap lines")
+
+    # Restore wrapping (the default) so the server-persisted preference does not
+    # bleed into later tests; the item click also closes the menu.
+    wrap_item.click()
+    viewer.open_menu()
+    expect(viewer.get_menu_option("line_wrap")).to_contain_text("Unwrap lines")
+    page.keyboard.press("Escape")
+
+
+# --------------------------------------------------------------------------- #
+# Migrated: test_file_browser.py — find-in-file
+# --------------------------------------------------------------------------- #
+
+
+@user_story("to find text within an open file")
+def test_find_in_file_finds_matches(sculptor_instance_: SculptorInstance) -> None:
+    """The find-in-file menu option opens the search bar, reports matches from
+    the diff content, and toggles back off."""
+    page = sculptor_instance_.page
+    changes_panel = _open_changes_panel_with(page, _WRITE_HELLO_PROMPT)
+
+    viewer = changes_panel.open_file("hello.py")
+    diff_body = viewer.get_unified_diff_views().or_(viewer.get_split_view())
+    expect(diff_body).to_be_visible()
+
+    # The search bar is hidden until requested.
+    search_bar = viewer.get_search_bar()
+    expect(search_bar).not_to_be_visible()
+
+    viewer.toggle_view_option_via_menu("find_in_file")
+    expect(search_bar).to_be_visible()
+
+    # hello.py contains "hello" — the search reports "1 of N", not "No results".
+    search_input = viewer.get_search_input()
+    expect(search_input).to_be_visible()
+    search_input.fill("hello")
+    expect(search_bar).to_contain_text("1 of")
+
+    # Toggling the option again closes the search bar.
+    viewer.toggle_view_option_via_menu("find_in_file")
+    expect(search_bar).not_to_be_visible()
+
+
+# --------------------------------------------------------------------------- #
+# Migrated: test_file_browser.py — copy file path (absolute paths outside the repo)
+# --------------------------------------------------------------------------- #
+
+
+@user_story("to copy the correct path for a file outside the repo")
+def test_copy_file_path_for_absolute_path_file(sculptor_instance_: SculptorInstance) -> None:
+    """Copy file path returns the correct absolute path for files outside the repo.
+
+    When the agent writes a file with an absolute path (outside the repo), the
+    viewer's "Copy file path" must copy just that absolute path — not the repo
+    path prepended to it.
+    """
+    page = sculptor_instance_.page
+
+    task_page = start_task_and_wait_for_ready(page, prompt=_WRITE_ABSOLUTE_PATH_FILE_PROMPT)
+    chat_panel = task_page.get_chat_panel()
+    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
+
+    _open_diff_via_alpha_chip(chat_panel, "sculptor-test-outside-repo.txt")
+
+    # Outside-repo files route to a read-only file view hosted by the FILES
+    # panel (there is no repo diff to show), revealed by the flow itself.
+    files_panel = get_files_panel_in(_get_left_section_root(page), page)
+    viewer = files_panel.get_diff_viewer()
+    viewer.assert_diff_shows("sculptor-test-outside-repo.txt")
+
+    install_clipboard_interceptor(page)
+    viewer.open_menu()
+    copy_path_item = _get_copy_path_menu_item(page)
+    expect(copy_path_item).to_be_visible()
+    reset_intercepted_clipboard(page)
+    copy_path_item.click()
+
+    page.wait_for_function("() => window.__clipboardWritten !== null")
+    clipboard_value = read_intercepted_clipboard(page)
+    assert clipboard_value == "/tmp/sculptor-test-outside-repo.txt", (
+        f"Expected clipboard to contain '/tmp/sculptor-test-outside-repo.txt', got {clipboard_value!r}"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Migrated: test_file_browser.py — Shiki decoration + Pierre renderHunks guards
+# --------------------------------------------------------------------------- #
+
+
+@user_story("to switch between diff files without seeing Shiki decoration errors")
+def test_file_switch_no_shiki_decoration_error(sculptor_instance_: SculptorInstance) -> None:
+    """Switching from a short modified file to a long multi-hunk one must not
+    flash Shiki decoration errors.
+
+    The bug only triggers for modified files (status "M") with multi-hunk diffs,
+    where Pierre needs oldLines/newLines to reconstruct unchanged regions for
+    syntax highlighting; stale lines from the previous (short) file make Shiki
+    throw "Invalid decoration position".
+    """
+    page = sculptor_instance_.page
+
+    console_errors: list[str] = []
+
+    def _on_console(msg: ConsoleMessage) -> None:
+        if msg.type == "error":
+            console_errors.append(msg.text)
+
+    page.on("console", _on_console)
+
+    changes_panel = _open_changes_panel_with(page, _SHIKI_REGRESSION_PROMPT)
+    _select_uncommitted_scope(changes_panel)
+
+    # Open the short file first — this loads its oldLines/newLines (~3 lines).
+    viewer = changes_panel.open_file("short.py")
+    _ensure_unified_view(viewer)
+    viewer.assert_diff_shows("short.py")
+
+    # Wait for useFileLines to complete its async fetch so that both oldLines
+    # and newLines are populated and the Shiki-decorated diff is rendered.
+    # Pierre renders inside a shadow DOM, so there is no element state to
+    # anchor the wait on — a fixed delay is the only viable approach here.
+    page.wait_for_timeout(2000)
+
+    # Switch to the long file — the selection swap that triggers the bug.
+    changes_panel.open_file("long.py")
+    viewer.assert_diff_shows("long.py")
+
+    # Allow any async error to surface (same shadow-DOM limitation as above).
+    page.wait_for_timeout(1000)
+
+    # The bug: stale short.py lines (~3) + long.py diff (200 lines) →
+    # ShikiError: Invalid decoration position.
+    shiki_errors = [e for e in console_errors if "ShikiError" in e or "Invalid decoration" in e]
+    assert shiki_errors == [], f"Shiki decoration errors during file switch: {shiki_errors}"
+
+
+@user_story("to view committed changes to an existing file in the All scope diff")
+def test_all_scope_diff_renders_without_error_for_committed_file(sculptor_instance_: SculptorInstance) -> None:
+    """Opening a committed file in the "All" scope renders without a Pierre crash.
+
+    When the workspace branch has committed changes to a file that also exists
+    in the target branch (main), opening that file in the All scope
+    (vs-target-branch) must not crash Pierre with "renderHunks: oldLine and
+    newLine are null, something is wrong". The crash requires a two-hunk diff
+    with a context-expansion gap between the hunks AND a HEAD that has fewer
+    lines than the merge-base-aligned indices the gap loop accesses — the shape
+    ``_SHORTEN_HELPERS_FILE_PROMPT`` builds from the mock repo's 75-line
+    src/helpers.py.
+    """
+    page = sculptor_instance_.page
+
+    # Capture uncaught JS exceptions AND console errors — Pierre catches the
+    # renderHunks crash internally and reports it as a console error.
+    js_errors: list[str] = []
+    page.on("pageerror", lambda err: js_errors.append(err.message))
+    page.on(
+        "console",
+        lambda msg: js_errors.append(msg.text) if msg.type == "error" else None,
+    )
+
+    changes_panel = _open_changes_panel_with(page, _SHORTEN_HELPERS_FILE_PROMPT)
+
+    # The All scope (vs-target-branch) is the default; opening helpers.py — 25
+    # lines on HEAD but 75 on main — takes the two-hunk render path that crashed.
+    scope_all = changes_panel.get_scope_all()
+    expect(scope_all).to_have_attribute("data-state", "on")
+
+    viewer = changes_panel.open_file("src/helpers.py")
+    _ensure_unified_view(viewer)
+
+    # Wait for Pierre to render the diff content (file-line fetch + Shiki
+    # tokenization) before reading the captured errors.
+    expect(viewer).to_contain_text("Helper utilities")
+
+    render_hunks_errors = [e for e in js_errors if "renderHunks" in e]
+    assert not render_hunks_errors, f"Pierre renderHunks crash: {render_hunks_errors[0]}"
+
+
+# --------------------------------------------------------------------------- #
+# Migrated: test_file_open_diff_modes.py — expansion-line numbering (data-line)
+# --------------------------------------------------------------------------- #
+
+
+@user_story("to see correct line numbers for expansion lines beyond the last diff hunk")
+def test_diff_view_shows_correct_line_numbers(sculptor_instance_: SculptorInstance) -> None:
+    """Lines after the last hunk's 3-context-line window render as Pierre
+    expansion lines drawn from the full file content. Stripping the trailing
+    newline from the diff string makes Pierre concatenate the last hunk line
+    with the first expansion line; Shiki then treats the two as one line,
+    shifting every subsequent line number by one. Every line must carry the
+    correct number."""
+    page = sculptor_instance_.page
+
+    changes_panel = _open_changes_panel_with(page, _LINE_NUMBER_REGRESSION_PROMPT)
+    _select_uncommitted_scope(changes_panel)
+
+    viewer = changes_panel.open_file("multiline.py")
+    _ensure_unified_view(viewer)
+
+    # "after_hunk_line_eleven" is on file line 11, just outside the hunk's
+    # 3-line context window (the hunk covers lines 4-10). Pierre renders inside
+    # a shadow DOM (<diffs-container>), so the per-line check pierces it via
+    # page.evaluate — data-line is a Pierre attribute with no Playwright API
+    # equivalent (read-only DOM inspection, not state manipulation). The
+    # container can be visible before the shadow content finishes rendering
+    # (Shiki tokenisation is async), so poll until a div[data-line] appears.
+    testid = ElementIDs.DIFF_VIEW_UNIFIED
+    page.wait_for_function(
+        """(testid) => {
+            const dv = document.querySelector(`[data-testid="${testid}"]`);
+            const shadow = dv?.querySelector("diffs-container")?.shadowRoot;
+            return shadow?.querySelectorAll("div[data-line]").length > 0;
+        }""",
+        arg=testid,
+    )
+    result = page.evaluate(
+        """(testid) => {
+            const diffView = document.querySelector(`[data-testid="${testid}"]`);
+            if (!diffView) return { error: "no-diff-view" };
+            const shadow = diffView.querySelector("diffs-container")?.shadowRoot;
+            if (!shadow) return { error: "no-shadow-root" };
+            const divs = shadow.querySelectorAll("div[data-line]");
+            for (const div of divs) {
+                if (div.textContent.includes("line_10")) {
+                    return {
+                        dataLine: div.getAttribute("data-line"),
+                        merged: div.textContent.includes("after_hunk_line_eleven"),
+                        text: div.textContent.substring(0, 200),
+                    };
+                }
+            }
+            return { error: "line_10-not-found", divCount: divs.length };
+        }""",
+        testid,
+    )
+    assert isinstance(result, dict) and "error" not in result, f"Could not locate line_10 in the diff view: {result}"
+    assert not result["merged"], (
+        f"Last hunk line (data-line={result['dataLine']}) merged with expansion line 11: {result['text']!r};"
+        + " the trailing newline was likely stripped from the diff string."
+    )
