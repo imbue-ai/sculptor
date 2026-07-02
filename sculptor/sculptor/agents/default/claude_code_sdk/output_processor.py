@@ -39,6 +39,7 @@ from sculptor.interfaces.agents.agent import TaskID
 from sculptor.interfaces.agents.agent import TurnMetricsAgentMessage
 from sculptor.interfaces.agents.agent import UpdatedArtifactAgentMessage
 from sculptor.interfaces.agents.agent import WarningAgentMessage
+from sculptor.interfaces.agents.agent import WorkflowTaskProgressAgentMessage
 from sculptor.interfaces.agents.artifacts import ArtifactType
 from sculptor.interfaces.agents.errors import AgentClientError
 from sculptor.interfaces.agents.errors import AgentTransientError
@@ -61,6 +62,7 @@ from sculptor.state.claude_state import ParsedEndResponse
 from sculptor.state.claude_state import ParsedInitResponse
 from sculptor.state.claude_state import ParsedStreamEvent
 from sculptor.state.claude_state import ParsedTaskNotificationResponse
+from sculptor.state.claude_state import ParsedTaskProgressResponse
 from sculptor.state.claude_state import ParsedTaskStartedResponse
 from sculptor.state.claude_state import ParsedTaskUpdatedResponse
 from sculptor.state.claude_state import ParsedToolResultResponse
@@ -71,6 +73,8 @@ from sculptor.state.claude_state import ToolInputDeltaEvent
 from sculptor.state.claude_state import extract_media_tags_from_text
 from sculptor.state.claude_state import split_text_and_media
 from sculptor.state.messages import AssistantMessageID
+from sculptor.state.workflow_state import WorkflowProgressEntryTypes
+from sculptor.state.workflow_state import WorkflowUsage
 from sculptor.web.data_types import OpenFileUiAction
 from sculptor.web.ui_actions import publish_ui_action
 
@@ -81,11 +85,21 @@ from sculptor.web.ui_actions import publish_ui_action
 _RE_TRAILING_MEDIA_TAG = re.compile(r"<(?:img|video)\b[^>]*$", re.IGNORECASE)
 
 # Tools whose task_updated{completed} cleanup must be delayed by one turn.
-# Monitor emits a follow-up event-delivery turn after task_updated, so clearing
-# the task at the current turn's result/success would drop that delivery turn.
-# Bash run_in_background does NOT do this — its task_updated indicates the bash
-# subprocess is genuinely done, with no further turns coming.
-_DEFERRED_COMPLETION_TOOLS: frozenset[str] = frozenset({"Monitor"})
+# Monitor emits a follow-up event-delivery turn after task_updated, and Workflow
+# completion is delivered to the agent as a follow-up <task-notification> turn,
+# so clearing the task at the current turn's result/success would drop that
+# delivery turn. Bash run_in_background does NOT do this — its task_updated
+# indicates the bash subprocess is genuinely done, with no further turns coming.
+_DEFERRED_COMPLETION_TOOLS: frozenset[str] = frozenset({"Monitor", "Workflow"})
+
+# The task_type the CLI assigns to Workflow-tool background tasks.
+_WORKFLOW_TASK_TYPE = "local_workflow"
+
+# Minimum interval between WorkflowTaskProgressAgentMessage emissions for a
+# task when only usage advanced. The CLI batches task_progress at ~16ms, and
+# each emitted message triggers a full message-conversion pass plus an SSE
+# fan-out; tree changes bypass the throttle so state flips render immediately.
+_WORKFLOW_PROGRESS_MIN_EMIT_INTERVAL_SECONDS: float = 1.0
 
 # Grace period for the deferred cleanup. If no follow-up turn arrives within
 # this window after task_updated{completed} for a deferred tool, the loop
@@ -292,6 +306,15 @@ class ClaudeOutputProcessor:
         # at task_started time so task_updated handling can distinguish tools
         # that need deferred cleanup (Monitor) from those that don't (Bash).
         self._task_id_to_tool_name: dict[str, str] = {}
+        # Per-task Workflow state, keyed by task_id. The CLI omits the
+        # workflow_progress tree on pure token-tick batches, so the last seen
+        # tree is retained here and substituted into every emitted progress
+        # message; the notification handler attaches it as the final tree.
+        self._task_id_to_task_type: dict[str, str] = {}
+        self._task_id_to_workflow_name: dict[str, str] = {}
+        self._last_workflow_entries: dict[str, tuple[WorkflowProgressEntryTypes, ...]] = {}
+        self._last_workflow_usage: dict[str, WorkflowUsage] = {}
+        self._last_workflow_progress_emit: dict[str, float] = {}
         # Timestamp when found_final_message was set. Used for diagnostic
         # logging when waiting for background task notifications.
         self._final_message_time: float | None = None
@@ -653,6 +676,9 @@ class ClaudeOutputProcessor:
                 tool_use_info = self.tool_use_map.get(result.tool_use_id)
                 if tool_use_info is not None:
                     self._task_id_to_tool_name[result.task_id] = tool_use_info[0]
+                self._task_id_to_task_type[result.task_id] = result.task_type
+                if result.workflow_name:
+                    self._task_id_to_workflow_name[result.task_id] = result.workflow_name
                 self.output_message_queue.put(
                     BackgroundTaskStartedAgentMessage(
                         message_id=AgentMessageID(),
@@ -660,8 +686,12 @@ class ClaudeOutputProcessor:
                         tool_use_id=result.tool_use_id,
                         description=result.description,
                         task_type=result.task_type,
+                        workflow_name=result.workflow_name,
                     )
                 )
+
+            elif isinstance(result, ParsedTaskProgressResponse):
+                self._handle_task_progress_response(result)
 
             elif isinstance(result, ParsedTaskNotificationResponse):
                 logger.debug("Background task completed: task_id={} status={}", result.task_id, result.status)
@@ -687,8 +717,16 @@ class ClaudeOutputProcessor:
                         status=result.status,
                         summary=result.summary,
                         duration_seconds=(result.duration_ms / 1000.0) if result.duration_ms is not None else None,
+                        workflow_name=self._task_id_to_workflow_name.get(result.task_id, ""),
+                        final_workflow_entries=self._last_workflow_entries.get(result.task_id),
+                        workflow_usage=self._last_workflow_usage.get(result.task_id),
                     )
                 )
+                self._task_id_to_task_type.pop(result.task_id, None)
+                self._task_id_to_workflow_name.pop(result.task_id, None)
+                self._last_workflow_entries.pop(result.task_id, None)
+                self._last_workflow_usage.pop(result.task_id, None)
+                self._last_workflow_progress_emit.pop(result.task_id, None)
                 # Note: we intentionally do NOT reset _first_response_message_id
                 # here.  The notification is an out-of-band status signal and must
                 # not disturb the streaming state of the current turn.  The reset
@@ -812,6 +850,46 @@ class ClaudeOutputProcessor:
         message = _format_usage_limit_message(rate_limit_info.get("resetsAt"))
         logger.info("Usage limit reached (rate_limit_event status=rejected): {}", message)
         raise AgentTransientError(message, exit_code=self.process.returncode)
+
+    def _handle_task_progress_response(self, result: ParsedTaskProgressResponse) -> None:
+        """Emit a WorkflowTaskProgressAgentMessage for a Workflow task's progress tick.
+
+        Non-workflow task_progress (e.g. background Agent tasks) is dropped.
+        A progress event carrying a tree identifies its task as a workflow even
+        when it arrives before task_started. Progress is a pure side-channel:
+        it must not touch found_final_message, the pending-task set, or
+        streaming state.
+        """
+        is_workflow_task = self._task_id_to_task_type.get(result.task_id) == _WORKFLOW_TASK_TYPE
+        if not is_workflow_task and result.workflow_progress is None:
+            return
+        if not is_workflow_task:
+            self._task_id_to_task_type[result.task_id] = _WORKFLOW_TASK_TYPE
+
+        tree_changed = result.workflow_progress is not None
+        if result.workflow_progress is not None:
+            self._last_workflow_entries[result.task_id] = result.workflow_progress
+        if result.usage is not None:
+            self._last_workflow_usage[result.task_id] = result.usage
+
+        now = time.monotonic()
+        last_emit = self._last_workflow_progress_emit.get(result.task_id)
+        is_tick_due = last_emit is None or now - last_emit >= _WORKFLOW_PROGRESS_MIN_EMIT_INTERVAL_SECONDS
+        if not tree_changed and not is_tick_due:
+            return
+        self._last_workflow_progress_emit[result.task_id] = now
+        self.output_message_queue.put(
+            WorkflowTaskProgressAgentMessage(
+                message_id=AgentMessageID(),
+                background_task_id=result.task_id,
+                tool_use_id=result.tool_use_id,
+                workflow_name=self._task_id_to_workflow_name.get(result.task_id, ""),
+                entries=self._last_workflow_entries.get(result.task_id, ()),
+                usage=self._last_workflow_usage.get(result.task_id),
+                last_tool_name=result.last_tool_name,
+                summary=result.summary,
+            )
+        )
 
     def _parse_init_response(self, result: ParsedInitResponse) -> None:
         session_id = result.session_id

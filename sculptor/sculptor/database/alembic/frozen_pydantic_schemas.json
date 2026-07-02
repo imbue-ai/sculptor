@@ -140,6 +140,304 @@
             ],
             "title": "AgentMessageSource",
             "type": "string"
+          },
+          "WorkflowAgentProgress": {
+            "additionalProperties": true,
+            "description": "One subagent's progress in a workflow (wire type ``workflow_agent``).",
+            "properties": {
+              "agentType": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Custom subagent type, when one is used",
+                "title": "Agenttype"
+              },
+              "cached": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "True when the result was replayed from a resume journal",
+                "title": "Cached"
+              },
+              "durationMs": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Agent run time in milliseconds",
+                "title": "Durationms"
+              },
+              "error": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Error message when state is 'error'",
+                "title": "Error"
+              },
+              "index": {
+                "description": "Position of this agent in the workflow's agent list",
+                "title": "Index",
+                "type": "integer"
+              },
+              "isolation": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Isolation mode (e.g. 'worktree'), when set",
+                "title": "Isolation"
+              },
+              "label": {
+                "default": "",
+                "description": "Display label for the agent",
+                "title": "Label",
+                "type": "string"
+              },
+              "lastToolSummary": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Summary of the agent's most recent tool call",
+                "title": "Lasttoolsummary"
+              },
+              "model": {
+                "default": "",
+                "description": "Model the agent runs on",
+                "title": "Model",
+                "type": "string"
+              },
+              "objectType": {
+                "default": "WorkflowAgentProgress",
+                "title": "Objecttype",
+                "type": "string"
+              },
+              "phaseIndex": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Index of the phase this agent belongs to",
+                "title": "Phaseindex"
+              },
+              "phaseTitle": {
+                "default": "",
+                "description": "Title of the phase this agent belongs to",
+                "title": "Phasetitle",
+                "type": "string"
+              },
+              "promptPreview": {
+                "default": "",
+                "description": "Truncated prompt the agent was given",
+                "title": "Promptpreview",
+                "type": "string"
+              },
+              "queuedAt": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "When the agent was queued; presence distinguishes queued from running",
+                "title": "Queuedat"
+              },
+              "resultPreview": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Truncated final result, once done",
+                "title": "Resultpreview"
+              },
+              "startedAt": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "When the agent actually started; unset while waiting for a slot",
+                "title": "Startedat"
+              },
+              "state": {
+                "default": "start",
+                "description": "Agent lifecycle state: 'start', 'progress', 'done', or 'error' (new states may appear)",
+                "title": "State",
+                "type": "string"
+              },
+              "tokens": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Tokens the agent has used so far",
+                "title": "Tokens"
+              },
+              "toolCalls": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Number of tool calls the agent has made",
+                "title": "Toolcalls"
+              }
+            },
+            "required": [
+              "index"
+            ],
+            "title": "WorkflowAgentProgress",
+            "type": "object"
+          },
+          "WorkflowPhaseProgress": {
+            "additionalProperties": true,
+            "description": "A phase heading in a workflow's progress tree (wire type ``workflow_phase``).",
+            "properties": {
+              "index": {
+                "description": "Position of this phase in the workflow",
+                "title": "Index",
+                "type": "integer"
+              },
+              "kind": {
+                "default": "",
+                "description": "Phase kind; 'child' for a nested workflow() group",
+                "title": "Kind",
+                "type": "string"
+              },
+              "objectType": {
+                "default": "WorkflowPhaseProgress",
+                "title": "Objecttype",
+                "type": "string"
+              },
+              "title": {
+                "default": "",
+                "description": "Phase title from the workflow script's phase() call",
+                "title": "Title",
+                "type": "string"
+              }
+            },
+            "required": [
+              "index"
+            ],
+            "title": "WorkflowPhaseProgress",
+            "type": "object"
+          },
+          "WorkflowUsage": {
+            "additionalProperties": true,
+            "description": "Aggregate usage for a workflow run, from ``task_progress.usage``.",
+            "properties": {
+              "durationMs": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Workflow run time in milliseconds",
+                "title": "Durationms"
+              },
+              "objectType": {
+                "default": "WorkflowUsage",
+                "title": "Objecttype",
+                "type": "string"
+              },
+              "toolUses": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Total tool calls across all workflow agents",
+                "title": "Tooluses"
+              },
+              "totalTokens": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Total tokens used across all workflow agents",
+                "title": "Totaltokens"
+              }
+            },
+            "title": "WorkflowUsage",
+            "type": "object"
           }
         },
         "additionalProperties": true,
@@ -166,6 +464,28 @@
             "default": null,
             "title": "Durationseconds"
           },
+          "finalWorkflowEntries": {
+            "anyOf": [
+              {
+                "items": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/WorkflowPhaseProgress"
+                    },
+                    {
+                      "$ref": "#/$defs/WorkflowAgentProgress"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Finalworkflowentries"
+          },
           "messageId": {
             "title": "Messageid",
             "type": "string"
@@ -191,6 +511,22 @@
           "toolUseId": {
             "title": "Tooluseid",
             "type": "string"
+          },
+          "workflowName": {
+            "default": "",
+            "title": "Workflowname",
+            "type": "string"
+          },
+          "workflowUsage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/WorkflowUsage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           }
         },
         "required": [
@@ -607,6 +943,47 @@
           }
         },
         "title": "KilledAgentRunnerMessage",
+        "type": "object"
+      },
+      "RefreshModelsUserMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "description": "Tell a running pi agent to re-read its credentials and re-emit its catalog.\n\nPersistent like `ClearContextUserMessage` so the harness runs it between turns.\nCarries no payload \u2014 it is a pure \"re-fetch the model catalog and re-emit\n`ModelsAvailableAgentMessage`\" signal, fanned out to every running pi agent when\ncredentials change globally (login/logout terminal close, paste-key write) so\nthe picker reflects the new auth.json without a restart. Claude has no handler\nand ignores it.",
+        "properties": {
+          "approximateCreationTime": {
+            "description": "Approximate UTC timestamp when user message was created",
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "messageId": {
+            "description": "Unique identifier for the user message",
+            "title": "Messageid",
+            "type": "string"
+          },
+          "objectType": {
+            "default": "RefreshModelsUserMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "USER"
+          }
+        },
+        "title": "RefreshModelsUserMessage",
         "type": "object"
       },
       "RemoveQueuedMessageAgentMessage": {

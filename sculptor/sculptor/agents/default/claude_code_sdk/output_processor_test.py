@@ -21,14 +21,18 @@ from sculptor.agents.testing.fake_claude_jsonl import make_init_message
 from sculptor.agents.testing.fake_claude_jsonl import make_streaming_text_events
 from sculptor.agents.testing.fake_claude_jsonl import make_streaming_tool_events
 from sculptor.agents.testing.fake_claude_jsonl import make_task_notification_message
+from sculptor.agents.testing.fake_claude_jsonl import make_task_progress_message
 from sculptor.agents.testing.fake_claude_jsonl import make_task_started_message
 from sculptor.agents.testing.fake_claude_jsonl import make_text_block
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_result_message
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_use_block
+from sculptor.agents.testing.fake_claude_jsonl import make_workflow_agent_entry
+from sculptor.agents.testing.fake_claude_jsonl import make_workflow_phase_entry
 from sculptor.interfaces.agents.agent import BackgroundTaskNotificationAgentMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
+from sculptor.interfaces.agents.agent import WorkflowTaskProgressAgentMessage
 from sculptor.interfaces.agents.errors import AgentClientError
 from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import TaskID
@@ -42,9 +46,11 @@ from sculptor.state.claude_state import ParsedEndResponse
 from sculptor.state.claude_state import ParsedInitResponse
 from sculptor.state.claude_state import ParsedStreamEvent
 from sculptor.state.claude_state import ParsedTaskNotificationResponse
+from sculptor.state.claude_state import ParsedTaskProgressResponse
 from sculptor.state.claude_state import ParsedTaskStartedResponse
 from sculptor.state.claude_state import ParsedTaskUpdatedResponse
 from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.workflow_state import WorkflowAgentProgress
 from sculptor.web.message_conversion import convert_agent_messages_to_task_update
 
 
@@ -334,6 +340,11 @@ def _feed_jsonl(processor: ClaudeOutputProcessor, jsonl_dicts: list[dict]) -> No
             tool_use_info = processor.tool_use_map.get(result.tool_use_id)
             if tool_use_info is not None:
                 processor._task_id_to_tool_name[result.task_id] = tool_use_info[0]
+            processor._task_id_to_task_type[result.task_id] = result.task_type
+            if result.workflow_name:
+                processor._task_id_to_workflow_name[result.task_id] = result.workflow_name
+        elif isinstance(result, ParsedTaskProgressResponse):
+            processor._handle_task_progress_response(result)
         elif isinstance(result, ParsedTaskUpdatedResponse):
             if result.status in ("completed", "failed", "stopped"):
                 tool_name = processor._task_id_to_tool_name.get(result.task_id, "")
@@ -356,8 +367,16 @@ def _feed_jsonl(processor: ClaudeOutputProcessor, jsonl_dicts: list[dict]) -> No
                     tool_use_id=result.tool_use_id,
                     status=result.status,
                     summary=result.summary,
+                    workflow_name=processor._task_id_to_workflow_name.get(result.task_id, ""),
+                    final_workflow_entries=processor._last_workflow_entries.get(result.task_id),
+                    workflow_usage=processor._last_workflow_usage.get(result.task_id),
                 )
             )
+            processor._task_id_to_task_type.pop(result.task_id, None)
+            processor._task_id_to_workflow_name.pop(result.task_id, None)
+            processor._last_workflow_entries.pop(result.task_id, None)
+            processor._last_workflow_usage.pop(result.task_id, None)
+            processor._last_workflow_progress_emit.pop(result.task_id, None)
         elif isinstance(result, ParsedEndResponse):
             processor._parse_stream_end_response(result)
 
@@ -596,6 +615,252 @@ class TestDeferredCompletionCleanup:
         assert processor._completed_pending_deferred == set()
         assert processor._completed_pending_deferred_deadline is None
         assert "task_monitor_1" not in processor._pending_background_tasks
+
+
+class TestWorkflowTaskProgress:
+    """Tests for Workflow background-task progress handling.
+
+    The Workflow tool's tool_result returns immediately; the workflow's real
+    state arrives via system/task_progress events whose workflow_progress tree
+    the processor retains per task and re-emits as ephemeral
+    WorkflowTaskProgressAgentMessages.
+    """
+
+    def _arm_workflow(self, processor: ClaudeOutputProcessor, task_id: str = "task_wf_1") -> None:
+        """Feed init, assistant calls Workflow, and task_started(local_workflow)."""
+        _feed_jsonl(
+            processor,
+            [
+                make_init_message(session_id="s1"),
+                make_assistant_message(
+                    message_id="msg_1",
+                    content_blocks=[
+                        make_tool_use_block(
+                            tool_id="toolu_wf_1",
+                            tool_name="Workflow",
+                            tool_input={"script": "export const meta = {name: 'review'}"},
+                        )
+                    ],
+                ),
+                make_task_started_message(
+                    task_id=task_id,
+                    tool_use_id="toolu_wf_1",
+                    description="review",
+                    task_type="local_workflow",
+                    workflow_name="review",
+                ),
+            ],
+        )
+
+    def _make_tree(self, agent_state: str = "progress") -> list[dict]:
+        return [
+            make_workflow_phase_entry(index=0, title="Review"),
+            make_workflow_agent_entry(
+                index=0,
+                label="review:bugs",
+                phase_index=0,
+                phase_title="Review",
+                state=agent_state,
+                tokens=3100,
+                tool_calls=4,
+                last_tool_summary="Grep: TODO in src/",
+            ),
+        ]
+
+    def test_workflow_progress_with_tree_emits_message(self) -> None:
+        processor = _make_processor_for_jsonl_test()
+        self._arm_workflow(processor)
+
+        _feed_jsonl(
+            processor,
+            [
+                make_task_progress_message(
+                    task_id="task_wf_1",
+                    tool_use_id="toolu_wf_1",
+                    total_tokens=3100,
+                    tool_uses=4,
+                    last_tool_name="Grep",
+                    workflow_progress=self._make_tree(),
+                )
+            ],
+        )
+
+        messages = _drain_queue(processor.output_message_queue)
+        progress = [m for m in messages if isinstance(m, WorkflowTaskProgressAgentMessage)]
+        assert len(progress) == 1
+        assert progress[0].tool_use_id == "toolu_wf_1"
+        assert progress[0].workflow_name == "review"
+        assert progress[0].last_tool_name == "Grep"
+        assert progress[0].usage is not None
+        assert progress[0].usage.total_tokens == 3100
+        assert len(progress[0].entries) == 2
+
+    def test_non_workflow_task_progress_is_dropped(self) -> None:
+        """task_progress for a non-workflow background task (no tree) emits nothing."""
+        processor = _make_processor_for_jsonl_test()
+        _feed_jsonl(
+            processor,
+            [
+                make_init_message(session_id="s1"),
+                make_task_started_message(
+                    task_id="task_bash_1",
+                    tool_use_id="toolu_bash_1",
+                    task_type="local_bash",
+                ),
+                make_task_progress_message(
+                    task_id="task_bash_1",
+                    tool_use_id="toolu_bash_1",
+                    total_tokens=500,
+                ),
+            ],
+        )
+
+        messages = _drain_queue(processor.output_message_queue)
+        assert not any(isinstance(m, WorkflowTaskProgressAgentMessage) for m in messages)
+
+    def test_tick_only_progress_is_throttled_then_carries_retained_tree(self) -> None:
+        """Token ticks within the throttle window are suppressed; once the
+        window elapses the emitted message carries the retained tree even
+        though the tick itself had none.
+        """
+        processor = _make_processor_for_jsonl_test()
+        self._arm_workflow(processor)
+
+        tree_progress = make_task_progress_message(
+            task_id="task_wf_1",
+            tool_use_id="toolu_wf_1",
+            total_tokens=3100,
+            workflow_progress=self._make_tree(),
+        )
+        tick_progress = make_task_progress_message(
+            task_id="task_wf_1",
+            tool_use_id="toolu_wf_1",
+            total_tokens=3500,
+        )
+        _feed_jsonl(processor, [tree_progress, tick_progress])
+
+        messages = _drain_queue(processor.output_message_queue)
+        progress = [m for m in messages if isinstance(m, WorkflowTaskProgressAgentMessage)]
+        assert len(progress) == 1
+
+        # Simulate the throttle window elapsing, then feed another tick.
+        processor._last_workflow_progress_emit["task_wf_1"] = time.monotonic() - 10.0
+        _feed_jsonl(
+            processor,
+            [
+                make_task_progress_message(
+                    task_id="task_wf_1",
+                    tool_use_id="toolu_wf_1",
+                    total_tokens=4000,
+                )
+            ],
+        )
+        messages = _drain_queue(processor.output_message_queue)
+        progress = [m for m in messages if isinstance(m, WorkflowTaskProgressAgentMessage)]
+        assert len(progress) == 1
+        assert len(progress[0].entries) == 2
+        assert progress[0].usage is not None
+        assert progress[0].usage.total_tokens == 4000
+
+    def test_tree_change_bypasses_throttle(self) -> None:
+        processor = _make_processor_for_jsonl_test()
+        self._arm_workflow(processor)
+
+        _feed_jsonl(
+            processor,
+            [
+                make_task_progress_message(
+                    task_id="task_wf_1",
+                    tool_use_id="toolu_wf_1",
+                    workflow_progress=self._make_tree(agent_state="progress"),
+                ),
+                make_task_progress_message(
+                    task_id="task_wf_1",
+                    tool_use_id="toolu_wf_1",
+                    workflow_progress=self._make_tree(agent_state="done"),
+                ),
+            ],
+        )
+
+        messages = _drain_queue(processor.output_message_queue)
+        progress = [m for m in messages if isinstance(m, WorkflowTaskProgressAgentMessage)]
+        assert len(progress) == 2
+        final_agent = progress[1].entries[1]
+        assert isinstance(final_agent, WorkflowAgentProgress)
+        assert final_agent.state == "done"
+
+    def test_progress_with_tree_before_task_started_still_emits(self) -> None:
+        """A tree-carrying progress event identifies its task as a workflow
+        even when task_started hasn't been seen yet."""
+        processor = _make_processor_for_jsonl_test()
+        _feed_jsonl(
+            processor,
+            [
+                make_init_message(session_id="s1"),
+                make_task_progress_message(
+                    task_id="task_wf_race",
+                    tool_use_id="toolu_wf_race",
+                    workflow_progress=self._make_tree(),
+                ),
+            ],
+        )
+
+        messages = _drain_queue(processor.output_message_queue)
+        progress = [m for m in messages if isinstance(m, WorkflowTaskProgressAgentMessage)]
+        assert len(progress) == 1
+        assert processor._task_id_to_task_type["task_wf_race"] == "local_workflow"
+
+    def test_notification_carries_final_tree_and_clears_retention(self) -> None:
+        processor = _make_processor_for_jsonl_test()
+        self._arm_workflow(processor)
+
+        _feed_jsonl(
+            processor,
+            [
+                make_task_progress_message(
+                    task_id="task_wf_1",
+                    tool_use_id="toolu_wf_1",
+                    total_tokens=9000,
+                    workflow_progress=self._make_tree(agent_state="done"),
+                ),
+                make_task_notification_message(
+                    task_id="task_wf_1",
+                    tool_use_id="toolu_wf_1",
+                    status="completed",
+                    summary="Reviewed 4 files",
+                ),
+            ],
+        )
+
+        messages = _drain_queue(processor.output_message_queue)
+        notifications = [m for m in messages if isinstance(m, BackgroundTaskNotificationAgentMessage)]
+        assert len(notifications) == 1
+        notification = notifications[0]
+        assert notification.workflow_name == "review"
+        assert notification.final_workflow_entries is not None
+        assert len(notification.final_workflow_entries) == 2
+        assert notification.workflow_usage is not None
+        assert notification.workflow_usage.total_tokens == 9000
+        assert "task_wf_1" not in processor._last_workflow_entries
+        assert "task_wf_1" not in processor._task_id_to_task_type
+
+    def test_workflow_task_updated_defers_cleanup_like_monitor(self) -> None:
+        """Workflow completion is delivered in a follow-up turn, so its
+        task_updated{completed} must defer cleanup instead of clearing at the
+        current turn's result."""
+        processor = _make_processor_for_jsonl_test()
+        self._arm_workflow(processor)
+
+        _feed_jsonl(
+            processor,
+            [
+                _make_task_updated_message(task_id="task_wf_1", status="completed"),
+                _make_minimal_end_message(session_id="s1"),
+            ],
+        )
+
+        assert "task_wf_1" in processor._pending_background_tasks
+        assert "task_wf_1" in processor._completed_pending_deferred
 
 
 def _make_processor_for_idle_timeout_test(
