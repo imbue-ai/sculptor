@@ -67,6 +67,14 @@ export const changesPanelSelectionAtomFamily = atomFamily((_workspaceId: string)
   atom<ChangesPanelSelection | null>(null),
 );
 
+/** The Files panel's clicked file selection (stamped for recency reconciliation).
+ *  Held per-workspace in an atom — not React state — so the open file survives the
+ *  panel remounting on a section-tab switch or a section maximize/restore. */
+export type FilesPanelSelection = { filePath: string; at: number };
+export const filesPanelSelectionAtomFamily = atomFamily((_workspaceId: string) =>
+  atom<FilesPanelSelection | null>(null),
+);
+
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 const createToggleFolderAtom = (key: FolderStateKey) =>
   atom(null, (get, set, { workspaceId, folderPath }: { workspaceId: string; folderPath: string }) => {

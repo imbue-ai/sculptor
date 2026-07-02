@@ -5,7 +5,7 @@
 // proven file-tree behavior (flat + tree variants, path/tilde display, symlink
 // handling, search) is migrated, not redesigned.
 
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useMemo, useState } from "react";
 
@@ -18,7 +18,12 @@ import { DiffViewer } from "~/pages/workspace/components/diffViewer/index.ts";
 
 import { ExplorerLayout } from "./ExplorerLayout.tsx";
 import { ExplorerTreeHeader } from "./ExplorerTreeHeader.tsx";
-import { collapseAllFoldersAtom, fileBrowserStateAtomFamily, toggleViewModeAtom } from "./fileBrowser/atoms.ts";
+import {
+  collapseAllFoldersAtom,
+  fileBrowserStateAtomFamily,
+  filesPanelSelectionAtomFamily,
+  toggleViewModeAtom,
+} from "./fileBrowser/atoms.ts";
 import { EmptyState, SkeletonLoading } from "./fileBrowser/EmptyStates.tsx";
 import { FileTree } from "./fileBrowser/FileTree.tsx";
 import { useFileSearch, useFileTree } from "./fileBrowser/hooks.ts";
@@ -31,8 +36,10 @@ const FilesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEleme
   const collapseAllFolders = useSetAtom(collapseAllFoldersAtom);
 
   // Per-panel selection from a local tree click, stamped so it can be reconciled with
-  // the atom-driven selection (an agent open) by recency.
-  const [localSelection, setLocalSelection] = useState<{ path: string; at: number } | null>(null);
+  // the atom-driven selection (an agent open) by recency. Persisted per-workspace in
+  // an atom — not React state — so the open file survives the panel remounting on a
+  // section-tab switch or a section maximize/restore.
+  const [localSelection, setLocalSelection] = useAtom(filesPanelSelectionAtomFamily(workspaceId));
 
   // The shared active diff tab — written when an agent opens a file (sculpt open-file,
   // a chat file-chip, plan mode). Reading it here makes those opens render in this
@@ -51,9 +58,12 @@ const FilesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEleme
     return matchingPaths;
   }, [searchQuery, matchingPaths]);
 
-  const handleSelectFile = useCallback((path: string): void => {
-    setLocalSelection({ path, at: Date.now() });
-  }, []);
+  const handleSelectFile = useCallback(
+    (path: string): void => {
+      setLocalSelection({ filePath: path, at: Date.now() });
+    },
+    [setLocalSelection],
+  );
 
   const handleToggleViewMode = useCallback((): void => {
     toggleViewMode({ workspaceId });
@@ -70,7 +80,7 @@ const FilesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEleme
     const atomViewedAt = activeTab?.kind === "file-view" ? activeTab.viewedAt : null;
     const isLocalNewer = localSelection !== null && (atomViewedAt === null || localSelection.at >= atomViewedAt);
     if (isLocalNewer) {
-      return { kind: "file-view", filePath: localSelection.path };
+      return { kind: "file-view", filePath: localSelection.filePath };
     }
     return fileViewSelectionFromTab(activeTab);
   }, [localSelection, activeTab]);
