@@ -19,11 +19,36 @@ beforeEach(() => {
 });
 
 describe("maximized section", () => {
-  it("defaults to null and is a plain settable atom", () => {
+  it("defaults to null and is settable for the active workspace", () => {
     const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-max");
     expect(store.get(maximizedSectionAtom)).toBeNull();
     store.set(maximizedSectionAtom, "center");
     expect(store.get(maximizedSectionAtom)).toBe("center");
+  });
+
+  it("is tracked per workspace: switching away and back restores each workspace's maximize", () => {
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-a");
+    store.set(maximizedSectionAtom, "left");
+
+    // The next workspace starts unmaximized — A's maximize does not leak into B.
+    store.set(activeWorkspaceIdAtom, "ws-b");
+    expect(store.get(maximizedSectionAtom)).toBeNull();
+    store.set(maximizedSectionAtom, "bottom");
+
+    // Returning to A restores A's maximize; B keeps its own.
+    store.set(activeWorkspaceIdAtom, "ws-a");
+    expect(store.get(maximizedSectionAtom)).toBe("left");
+    store.set(activeWorkspaceIdAtom, "ws-b");
+    expect(store.get(maximizedSectionAtom)).toBe("bottom");
+  });
+
+  it("reads null and ignores writes when no workspace is active", () => {
+    const store = createStore();
+    expect(store.get(maximizedSectionAtom)).toBeNull();
+    store.set(maximizedSectionAtom, "center");
+    expect(store.get(maximizedSectionAtom)).toBeNull();
   });
 });
 

@@ -17,9 +17,11 @@ from playwright.sync_api import expect
 from sculptor.testing.elements.add_panel_dropdown import open_panel
 from sculptor.testing.elements.section_helpers import cycle_sections
 from sculptor.testing.elements.section_helpers import maximize_active_section
+from sculptor.testing.elements.section_helpers import toggle_section_via_hotkey
 from sculptor.testing.elements.section_split import PlaywrightSectionSplit
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -121,6 +123,69 @@ def test_maximize_via_hotkey(sculptor_instance_: SculptorInstance) -> None:
     # Toggle the hotkey again -> restore.
     maximize_active_section(page)
     expect(center.get_active_ring()).not_to_have_attribute("data-maximized", "true")
+    expect(task_page.get_workspace_header()).to_be_visible()
+
+
+@user_story("to leave the maximized view when I collapse the section that is maximized")
+def test_collapse_maximized_section_exits_maximize(sculptor_instance_: SculptorInstance) -> None:
+    """Collapsing the maximized section also exits the maximize.
+
+    While a section is maximized the workspace header (with its collapse toggles)
+    is hidden, but the section-toggle hotkey still works. Collapsing the maximized
+    section must restore the normal grid — otherwise the maximize would keep
+    showing a full-screen view of a section the layout says is closed.
+    """
+    page = sculptor_instance_.page
+    task_page = PlaywrightTaskPage(page=page)
+
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Collapse Maximized WS")
+
+    # Expand the left section (Files/Changes/Commits are seeded there) and maximize it.
+    left = PlaywrightWorkspaceSection(page, "left")
+    left.expand_section()
+    left.maximize()
+    expect(task_page.get_workspace_header()).to_have_count(0)
+
+    # Collapse the maximized section via its hotkey (the only collapse control
+    # reachable while maximized).
+    toggle_section_via_hotkey(page, "left")
+
+    # The maximize is exited and the section is collapsed: the workspace header and
+    # the center section are back, and the left section is gone entirely.
+    expect(task_page.get_workspace_header()).to_be_visible()
+    expect(PlaywrightWorkspaceSection(page, "center").get_section()).to_be_visible()
+    expect(left.get_header()).to_have_count(0)
+    expect(left.get_section()).to_have_count(0)
+
+
+@user_story("to come back to a workspace and find it maximized the way I left it")
+def test_maximize_is_tracked_per_workspace_across_switches(sculptor_instance_: SculptorInstance) -> None:
+    """Each workspace remembers its own maximize while the app is open.
+
+    Maximize the center in workspace A, create/switch to workspace B (which must
+    render the normal grid — A's maximize must not leak into it), then return to
+    A: it is still maximized exactly as left. B stays unmaximized on a second
+    visit too.
+    """
+    page = sculptor_instance_.page
+    task_page = PlaywrightTaskPage(page=page)
+
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Maximize Per WS A")
+    center = PlaywrightWorkspaceSection(page, "center")
+    center.maximize()
+    expect(task_page.get_workspace_header()).to_have_count(0)
+
+    # Workspace B starts in the normal grid — no leaked maximize.
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Maximize Per WS B")
+    expect(task_page.get_workspace_header()).to_be_visible()
+
+    # Back to A: still maximized.
+    navigate_to_workspace(page, "Maximize Per WS A")
+    expect(task_page.get_workspace_header()).to_have_count(0)
+    expect(center.get_header()).to_be_visible()
+
+    # Back to B: still the normal grid.
+    navigate_to_workspace(page, "Maximize Per WS B")
     expect(task_page.get_workspace_header()).to_be_visible()
 
 

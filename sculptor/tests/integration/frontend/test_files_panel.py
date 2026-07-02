@@ -54,6 +54,7 @@ import pytest
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_panel_dropdown import open_panel
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
@@ -63,6 +64,7 @@ from sculptor.testing.elements.files_panel import get_files_panel_in
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -205,15 +207,16 @@ fake_claude:multi_step `{
 
 
 def _open_files_panel_with(
-    page: Page, prompt: str, sub_section: str = "center"
+    page: Page, prompt: str, sub_section: str = "center", workspace_name: str | None = None
 ) -> tuple[PlaywrightTaskPage, PlaywrightFilesPanelElement]:
     """Run a FakeClaude prompt, wait for it, then open the Files panel.
 
     Returns the task page and the Files panel POM scoped to the opened section.
     Pass ``sub_section="left"`` to keep the agent chat visible in the center (e.g.
-    when the test still needs to send chat messages).
+    when the test still needs to send chat messages). ``workspace_name`` names the
+    created workspace so a test can navigate back to it later.
     """
-    task_page = start_task_and_wait_for_ready(page, prompt=prompt)
+    task_page = start_task_and_wait_for_ready(page, prompt=prompt, workspace_name=workspace_name)
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
     section_root = open_panel(page, "files", sub_section=sub_section)
@@ -697,6 +700,66 @@ def test_open_file_survives_section_maximize_restore(sculptor_instance_: Sculpto
 
     viewer.assert_diff_shows("README.md")
     expect(viewer.get_read_only_preview()).to_be_visible()
+
+
+@user_story("to keep the file I opened in the Files panel after visiting another panel tab")
+def test_open_file_survives_panel_tab_switch(sculptor_instance_: SculptorInstance) -> None:
+    """Switching the section's active tab away and back must keep the open file.
+
+    The Files panel unmounts entirely while a sibling tab (here Changes) is the
+    section's active panel, so its clicked-file selection must be held
+    per-workspace rather than in component state — otherwise returning to the
+    Files tab silently resets the viewer to its empty state.
+    """
+    page = sculptor_instance_.page
+    _, files_panel = _open_files_panel_with(page, WRITE_FILES_PROMPT, sub_section="left")
+
+    viewer = files_panel.open_file("README.md")
+    viewer.assert_diff_shows("README.md")
+    expect(viewer.get_read_only_preview()).to_be_visible()
+
+    # Activate the sibling Changes tab: the Files panel (and its file-tree list)
+    # unmounts.
+    left = PlaywrightWorkspaceSection(page, "left")
+    left.get_panel_tab("changes").click()
+    expect(files_panel.get_list()).to_have_count(0)
+
+    # Back to Files: the same file is still open in the embedded viewer.
+    left.get_panel_tab("files").click()
+    viewer.assert_diff_shows("README.md")
+    expect(viewer.get_read_only_preview()).to_be_visible()
+
+
+@user_story("to find the file I had open in a workspace's Files panel when I come back to it")
+def test_open_file_is_kept_per_workspace_across_workspace_switch(sculptor_instance_: SculptorInstance) -> None:
+    """A workspace round-trip keeps the Files selection, with no cross-workspace leak.
+
+    The selection is keyed per workspace: a second workspace's Files panel starts
+    with no selection (the first workspace's open file must not leak into it), and
+    returning to the first workspace restores its open file.
+    """
+    page = sculptor_instance_.page
+    _, files_panel = _open_files_panel_with(
+        page, WRITE_FILES_PROMPT, sub_section="left", workspace_name="Files Selection A WS"
+    )
+
+    viewer = files_panel.open_file("README.md")
+    viewer.assert_diff_shows("README.md")
+
+    # Workspace B seeds its own default layout; its Files panel has no selection.
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Files Selection B WS")
+    section_root_b = open_panel(page, "files", sub_section="left")
+    files_panel_b = get_files_panel_in(section_root_b, page)
+    expect(files_panel_b.get_diff_viewer()).to_contain_text("Open a file to view it")
+
+    # Back to A: its Files panel still shows the file opened before the switch.
+    navigate_to_workspace(page, "Files Selection A WS")
+    expect(page.get_by_test_id(ElementIDs.CHAT_PANEL)).to_be_visible(timeout=60_000)
+    left_a = PlaywrightWorkspaceSection(page, "left")
+    files_panel_a = get_files_panel_in(left_a.get_section(), page)
+    viewer_a = files_panel_a.get_diff_viewer()
+    viewer_a.assert_diff_shows("README.md")
+    expect(viewer_a.get_read_only_preview()).to_be_visible()
 
 
 # --------------------------------------------------------------------------- #

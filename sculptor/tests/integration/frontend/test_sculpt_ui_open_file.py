@@ -22,7 +22,11 @@ from pathlib import Path
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
+from sculptor.testing.elements.add_panel_dropdown import open_panel
 from sculptor.testing.elements.diff_panel import get_diff_panel_from_page
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import request_with_retry
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -77,22 +81,29 @@ def _start_empty_workspace(page: Page) -> str:
 
 
 @contextlib.contextmanager
+def _temp_readable_file(*, suffix: str = ".txt", content: str = "hello\n") -> Generator[str, None, None]:
+    """Yield the absolute path of a tempfile the backend can read via the
+    relaxed read-file gate. Cleans the tempfile up on exit."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+    try:
+        yield tmp_path
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+
+@contextlib.contextmanager
 def _workspace_and_file(
     page: Page, *, suffix: str = ".txt", content: str = "hello\n"
 ) -> Generator[tuple[str, str], None, None]:
     """Yield (workspace_id, absolute_file_path).
 
-    Creates an empty workspace and a tempfile that the backend can read via
-    the relaxed read-file gate. Cleans the tempfile up on exit.
+    Creates an empty workspace and a host-readable tempfile.
     """
     workspace_id = _start_empty_workspace(page)
-    with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False) as tmp:
-        tmp.write(content)
-        tmp_path = tmp.name
-    try:
+    with _temp_readable_file(suffix=suffix, content=content) as tmp_path:
         yield workspace_id, tmp_path
-    finally:
-        Path(tmp_path).unlink(missing_ok=True)
 
 
 @user_story("agent surfaces a file via sculpt ui open-file --mode file")
@@ -205,3 +216,50 @@ def test_panel_auto_opens(sculptor_instance_: SculptorInstance) -> None:
         )
         assert exit_code == 0, f"Expected exit 0, got {exit_code}; stderr: {stderr}"
         expect(diff_panel).to_be_visible()
+
+
+@user_story("agent opens a file in another workspace without disturbing the one I'm viewing")
+def test_open_file_for_inactive_workspace_leaves_viewed_workspace_alone(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """An open-file event targeting a NON-active workspace must not touch the viewed one.
+
+    Open-file events arrive over the unified stream for EVERY workspace, but the
+    reveal (open/expand the host panel, jump to its section) may only run in the
+    workspace the event targets. Here the event targets workspace A while
+    workspace B is being viewed: B's layout must stay untouched — its left
+    section stays collapsed and no viewer mounts, including after a round-trip
+    away and back (so no layout change was persisted for B) — while A surfaces
+    the file in its Files viewer on the next visit.
+    """
+    page = sculptor_instance_.page
+
+    # Workspace A (the target): reveal its Files panel so the file the event
+    # records is visible in A's embedded viewer on the next visit.
+    start_task_and_wait_for_ready(page, prompt=_NO_OP_PROMPT, workspace_name="Open File Target WS")
+    target_workspace_id = _extract_workspace_id_from_url(page.url)
+    open_panel(page, "files", sub_section="left")
+
+    # Workspace B (the viewed one): keeps its seeded default — left collapsed.
+    start_task_and_wait_for_ready(page, prompt=_NO_OP_PROMPT, workspace_name="Open File Viewer WS")
+    expect(PlaywrightWorkspaceSection(page, "left").get_header()).to_have_count(0)
+
+    with _temp_readable_file(content="hello from the target workspace\n") as file_path:
+        exit_code, _stdout, stderr = _run_sculpt_ui_open_file(
+            sculptor_instance_, path=file_path, workspace_id=target_workspace_id, mode="file"
+        )
+        assert exit_code == 0, f"Expected exit 0, got {exit_code}; stderr: {stderr}"
+
+        # Visiting A shows the recorded file in its (already revealed) Files
+        # viewer. Seeing it there also confirms the event has been fully
+        # processed, so the untouched-B assertions below check a settled state
+        # rather than racing the WebSocket delivery.
+        navigate_to_workspace(page, "Open File Target WS")
+        get_diff_panel_from_page(page).expect_shows_file(Path(file_path).name)
+
+        # Back to B: nothing was opened or persisted for it — the left section
+        # is still collapsed and no viewer is mounted.
+        navigate_to_workspace(page, "Open File Viewer WS")
+        expect(page.get_by_test_id(ElementIDs.CHAT_PANEL)).to_be_visible(timeout=60_000)
+        expect(PlaywrightWorkspaceSection(page, "left").get_header()).to_have_count(0)
+        expect(get_diff_panel_from_page(page)).to_have_count(0)

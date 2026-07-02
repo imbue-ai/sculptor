@@ -4,19 +4,39 @@
 // subscribe to the narrow per-sub-section slices below so a pointer move during a
 // drag, or a ring fade, re-renders only the affected section.
 
-import type { Atom, PrimitiveAtom } from "jotai";
+import type { Atom, PrimitiveAtom, SetStateAction, WritableAtom } from "jotai";
 import { atom } from "jotai";
-import { selectAtom } from "jotai/utils";
+import { atomFamily, selectAtom } from "jotai/utils";
 
 import { memoizedAtomByKey, shallowArrayEqual } from "./atomCache.ts";
-import { isActiveSubSectionAtom, panelsInSubSectionAtom } from "./sectionAtoms.ts";
+import { activeWorkspaceIdAtom, isActiveSubSectionAtom, panelsInSubSectionAtom } from "./sectionAtoms.ts";
 import type { PanelId, SectionId, SubSectionId } from "./sectionTypes.ts";
 
 // ── Maximized section ─────────────────────────────────────────────────────────
 
-// One section at a time fills the content area. Plain atom: reload always returns
-// to the normal layout, and a stale flag can never strand the app maximized.
-export const maximizedSectionAtom: PrimitiveAtom<SectionId | null> = atom<SectionId | null>(null);
+// One section at a time fills the content area, tracked PER WORKSPACE: each
+// workspace remembers its own maximize while the app is open, so switching away
+// and back restores it — and a maximize never leaks into a workspace whose own
+// layout never set one. Plain non-persisted atoms: reload always returns to the
+// normal layout, and a stale flag can never strand the app maximized.
+const maximizedSectionFamily = atomFamily((_workspaceId: string) => atom<SectionId | null>(null));
+
+// Read/write proxy for the ACTIVE workspace's maximize — the only view components
+// need. Resolves the active workspace on every access (mirroring the
+// workspaceLayoutAtom proxy), so a workspace switch is just the one id write.
+export const maximizedSectionAtom: WritableAtom<SectionId | null, [SetStateAction<SectionId | null>], void> = atom(
+  (get) => {
+    const workspaceId = get(activeWorkspaceIdAtom);
+    return workspaceId === null ? null : get(maximizedSectionFamily(workspaceId));
+  },
+  (get, set, update: SetStateAction<SectionId | null>) => {
+    const workspaceId = get(activeWorkspaceIdAtom);
+    if (workspaceId === null) {
+      return;
+    }
+    set(maximizedSectionFamily(workspaceId), update);
+  },
+);
 
 // ── Drag preview ──────────────────────────────────────────────────────────────
 

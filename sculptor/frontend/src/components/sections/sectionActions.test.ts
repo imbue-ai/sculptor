@@ -14,10 +14,11 @@ import {
   SPLIT_RATIO_MAX,
   SPLIT_RATIO_MIN,
   splitSectionAtom,
+  togglePanelAtom,
   toggleSectionAtom,
 } from "./sectionActions.ts";
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "./sectionAtoms.ts";
-import { activeSectionRingNonceAtom } from "./transientAtoms.ts";
+import { activeSectionRingNonceAtom, maximizedSectionAtom } from "./transientAtoms.ts";
 
 function storeWith(layout: Partial<WorkspaceLayoutState>, workspaceId = "ws-test"): ReturnType<typeof createStore> {
   const store = createStore();
@@ -44,6 +45,29 @@ describe("collapse/expand invariants", () => {
     const layout = store.get(workspaceLayoutAtom);
     expect(layout.expanded.left).toBe(false);
     expect(layout.activeSubSection).toBe("center");
+  });
+
+  it("collapsing the maximized section clears the maximize", () => {
+    const store = storeWith({ expanded: { left: true } });
+    store.set(maximizedSectionAtom, "left");
+    store.set(toggleSectionAtom, { section: "left" });
+    expect(store.get(workspaceLayoutAtom).expanded.left).toBe(false);
+    expect(store.get(maximizedSectionAtom)).toBeNull();
+  });
+
+  it("collapsing a different section keeps the maximize", () => {
+    const store = storeWith({ expanded: { left: true } });
+    store.set(maximizedSectionAtom, "center");
+    store.set(toggleSectionAtom, { section: "left" });
+    expect(store.get(maximizedSectionAtom)).toBe("center");
+  });
+
+  it("expanding a section leaves the maximize untouched", () => {
+    const store = storeWith({ expanded: { left: false } });
+    store.set(maximizedSectionAtom, "left");
+    store.set(toggleSectionAtom, { section: "left" });
+    expect(store.get(workspaceLayoutAtom).expanded.left).toBe(true);
+    expect(store.get(maximizedSectionAtom)).toBe("left");
   });
 });
 
@@ -178,6 +202,57 @@ describe("move + close", () => {
     const layout = store.get(workspaceLayoutAtom);
     expect(layout.placement["agent:1"]).toBeUndefined();
     expect(layout.order.center ?? []).toEqual([]);
+  });
+});
+
+describe("togglePanelAtom", () => {
+  it("closes the panel when it is active in an expanded section", () => {
+    const store = storeWith({
+      placement: { files: "left" },
+      order: { left: ["files"] },
+      activePanel: { left: "files" },
+      expanded: { left: true },
+    });
+    store.set(togglePanelAtom, { panelId: "files", fallbackSection: "left" });
+    expect(store.get(workspaceLayoutAtom).placement.files).toBeUndefined();
+  });
+
+  it("activates the panel and jumps to its section when it is open but inactive", () => {
+    const store = storeWith({
+      placement: { files: "left", changes: "left" },
+      order: { left: ["files", "changes"] },
+      activePanel: { left: "changes" },
+      expanded: { left: true },
+      activeSubSection: "center",
+    });
+    store.set(togglePanelAtom, { panelId: "files", fallbackSection: "left" });
+    const layout = store.get(workspaceLayoutAtom);
+    expect(layout.placement.files).toBe("left");
+    expect(layout.activePanel.left).toBe("files");
+    expect(layout.activeSubSection).toBe("left");
+  });
+
+  it("expands the section when the panel is active in a collapsed section", () => {
+    const store = storeWith({
+      placement: { files: "left" },
+      order: { left: ["files"] },
+      activePanel: { left: "files" },
+      expanded: { left: false },
+      activeSubSection: "center",
+    });
+    store.set(togglePanelAtom, { panelId: "files", fallbackSection: "left" });
+    const layout = store.get(workspaceLayoutAtom);
+    expect(layout.placement.files).toBe("left");
+    expect(layout.expanded.left).toBe(true);
+    expect(layout.activeSubSection).toBe("left");
+  });
+
+  it("is a no-op for a never-placed panel", () => {
+    const store = storeWith({ activeSubSection: "center" });
+    store.set(togglePanelAtom, { panelId: "files", fallbackSection: "left" });
+    const layout = store.get(workspaceLayoutAtom);
+    expect(layout.placement.files).toBeUndefined();
+    expect(layout.activeSubSection).toBe("center");
   });
 });
 

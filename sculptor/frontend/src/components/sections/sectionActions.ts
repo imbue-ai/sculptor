@@ -12,7 +12,7 @@ import { isMultiInstancePanelId } from "./registry/dynamicPanels.tsx";
 import { workspaceLayoutAtom } from "./sectionAtoms.ts";
 import type { PanelId, SectionId, SplitAxis, SubSectionId } from "./sectionTypes.ts";
 import { canSplitAxis, toSecondary, toSection } from "./sectionTypes.ts";
-import { activeSectionRingNonceAtom } from "./transientAtoms.ts";
+import { activeSectionRingNonceAtom, maximizedSectionAtom } from "./transientAtoms.ts";
 
 export { removeWorkspaceLayoutAtom } from "./sectionAtoms.ts";
 
@@ -256,9 +256,15 @@ export const setActivePanelAtom = atom(null, (_get, set, params: SetActivePanelP
   set(workspaceLayoutAtom, (prev) => withSetActivePanel(prev, params)),
 );
 
-export const toggleSectionAtom = atom(null, (_get, set, params: ToggleSectionParams) =>
-  set(workspaceLayoutAtom, (prev) => withToggleSection(prev, params)),
-);
+export const toggleSectionAtom = atom(null, (get, set, params: ToggleSectionParams) => {
+  // A collapsed section must never stay maximized: the transient full-screen view
+  // would otherwise show a section the persisted layout says is closed.
+  const willCollapse = params.section !== "center" && isSectionExpanded(get(workspaceLayoutAtom), params.section);
+  if (willCollapse && get(maximizedSectionAtom) === params.section) {
+    set(maximizedSectionAtom, null);
+  }
+  set(workspaceLayoutAtom, (prev) => withToggleSection(prev, params));
+});
 
 export const splitSectionAtom = atom(null, (_get, set, params: SplitSectionParams) =>
   set(workspaceLayoutAtom, (prev) => withSplitSection(prev, params)),
@@ -294,28 +300,25 @@ export const jumpToSectionAtom = atom(null, (get, set, { subSection }: SetActive
 
 // Smart panel visibility toggle for the Cmd+K "Toggle <panel>" commands: closes the
 // panel when it is already open, active in its sub-section, and that section is
-// expanded; otherwise opens it (in its existing placement, or `fallbackSection` if it
-// has never been placed) and makes it active. Mirrors the docking shell's togglePanel
-// in the new section model.
+// expanded; otherwise activates it in its existing placement and jumps there.
+// Callers only offer the toggle for placed panels, so a never-placed panel is a
+// no-op. Mirrors the docking shell's togglePanel in the new section model.
 type TogglePanelParams = { panelId: PanelId; fallbackSection: SubSectionId };
 
-export const togglePanelAtom = atom(null, (get, set, { panelId, fallbackSection }: TogglePanelParams) => {
+export const togglePanelAtom = atom(null, (get, set, { panelId }: TogglePanelParams) => {
   const layout = get(workspaceLayoutAtom);
   const placement = layout.placement[panelId];
-
-  if (placement !== undefined) {
-    const section = toSection(placement);
-    const isExpanded = isSectionExpanded(layout, section);
-    const isActive = layout.activePanel[placement] === panelId;
-    if (isExpanded && isActive) {
-      set(closePanelAtom, { panelId });
-      return;
-    }
-    set(openPanelAtom, { panelId, in: placement });
-    set(jumpToSectionAtom, { subSection: placement });
+  if (placement === undefined) {
     return;
   }
 
-  set(openPanelAtom, { panelId, in: fallbackSection });
-  set(jumpToSectionAtom, { subSection: fallbackSection });
+  const section = toSection(placement);
+  const isExpanded = isSectionExpanded(layout, section);
+  const isActive = layout.activePanel[placement] === panelId;
+  if (isExpanded && isActive) {
+    set(closePanelAtom, { panelId });
+    return;
+  }
+  set(openPanelAtom, { panelId, in: placement });
+  set(jumpToSectionAtom, { subSection: placement });
 });
