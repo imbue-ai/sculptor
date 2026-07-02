@@ -470,6 +470,13 @@ fake_claude:multi_step `{
   ]
 }`"""
 
+# A text-only task (FakeClaude's default response, no tool calls): the agent
+# touches no files, so no diff chips render in chat and Pierre's shared syntax
+# highlighter stays COLD until the Commits panel renders the session's first
+# diff. Prompts that use ``write_file`` warm the highlighter through the chat's
+# file-edit chips, which masks cold-start rendering bugs.
+_TEXT_ONLY_PROMPT = "Say hello"
+
 
 # --------------------------------------------------------------------------- #
 # Helpers
@@ -860,6 +867,49 @@ def test_click_file_in_multi_file_commit(sculptor_instance_: SculptorInstance) -
     viewer = commits_panel.get_diff_viewer()
     viewer.assert_diff_shows("alpha.py")
     expect(viewer).to_contain_text("a = 1")
+
+
+@user_story("to open a committed file as the session's first diff and see its content")
+def test_first_commit_file_open_renders_diff_with_cold_highlighter(sculptor_instance_: SculptorInstance) -> None:
+    """The FIRST diff rendered in a page session must paint its content.
+
+    The diff body is rendered by Pierre, whose shared syntax highlighter loads
+    asynchronously on the session's first render. A workspace whose agent made
+    no file edits (text-only reply → no diff chips in chat) reaches the Commits
+    panel with that highlighter still cold, so clicking a commit file here
+    exercises the cold-start path directly: the viewer must not stay blank
+    while (or after) the highlighter loads.
+
+    The dev-only StrictMode variant of this cold start (the remounted Pierre
+    instance mistaking the aborted first mount's empty ``<pre>`` for
+    prerendered content and never rendering) cannot manifest here — this
+    harness serves the production bundle, where StrictMode does not remount —
+    and is locked in by ``PierreDiffView.test.tsx`` instead. This test guards
+    the production-bundle half: a cold first render must still end up painting
+    the diff body, not just the header (which renders its stats from the
+    parsed diff even while the body is blank).
+
+    Uses the mock repo's pre-existing "Stuff" commit so the agent never touches
+    a file before the click.
+    """
+    page = sculptor_instance_.page
+    _, commits_panel = _open_commits_panel_with(page, _TEXT_ONLY_PROMPT)
+
+    expect(commits_panel.get_list()).to_be_visible()
+
+    # Expand the pre-existing "Stuff" commit and click its single file.
+    stuff_commit = commits_panel.get_commit_entry_by_text("Stuff")
+    commits_panel.get_commit_message(stuff_commit).click()
+    stuff_row = commits_panel.get_tree_rows(stuff_commit).filter(has_text="stuff.txt")
+    expect(stuff_row).to_be_visible()
+    stuff_row.click()
+
+    viewer = commits_panel.get_diff_viewer()
+    viewer.assert_diff_shows("stuff.txt")
+    # The BODY must paint the committed content — the header alone is not
+    # enough, because it renders its stats from the parsed diff even while the
+    # body is blank.
+    expect(viewer.get_unified_diff_views()).to_contain_text("stuff")
 
 
 @pytest.mark.skip(reason=_TAB_COEXISTENCE_SKIP_REASON)
