@@ -69,6 +69,7 @@ from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
 from sculptor.state.messages import ModelOption
 from sculptor.state.messages import ResponseBlockAgentMessage
+from sculptor.state.workflow_state import WorkflowTaskState
 from sculptor.utils.functional import first
 from sculptor.web.data_types import PrApproval  # noqa: F401 — re-exported for existing import sites
 from sculptor.web.data_types import PrComment  # noqa: F401 — re-exported for existing import sites
@@ -830,6 +831,12 @@ class TaskUpdate(SerializableModel):
     # "harness is idle, waiting for a background task notification"
     # (SCU-387).
     pending_background_task_ids: frozenset[str] = frozenset()
+    # Live/last-known state of Workflow-tool background tasks, keyed by the
+    # launching tool_use_id. Sent as a full snapshot each update; the frontend
+    # replaces the map. Entries persist after completion (flipped to their
+    # final status with the final progress tree) so the workflow popover keeps
+    # rendering once the run is over.
+    workflow_task_states: dict[str, WorkflowTaskState] = {}
 
 
 class UserUpdate(SerializableModel):

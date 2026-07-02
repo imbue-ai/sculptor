@@ -73,6 +73,7 @@ from sculptor.state.claude_state import ToolInputDeltaEvent
 from sculptor.state.claude_state import extract_media_tags_from_text
 from sculptor.state.claude_state import split_text_and_media
 from sculptor.state.messages import AssistantMessageID
+from sculptor.state.workflow_state import WORKFLOW_TASK_TYPE
 from sculptor.state.workflow_state import WorkflowProgressEntryTypes
 from sculptor.state.workflow_state import WorkflowUsage
 from sculptor.web.data_types import OpenFileUiAction
@@ -91,9 +92,6 @@ _RE_TRAILING_MEDIA_TAG = re.compile(r"<(?:img|video)\b[^>]*$", re.IGNORECASE)
 # delivery turn. Bash run_in_background does NOT do this — its task_updated
 # indicates the bash subprocess is genuinely done, with no further turns coming.
 _DEFERRED_COMPLETION_TOOLS: frozenset[str] = frozenset({"Monitor", "Workflow"})
-
-# The task_type the CLI assigns to Workflow-tool background tasks.
-_WORKFLOW_TASK_TYPE = "local_workflow"
 
 # Minimum interval between WorkflowTaskProgressAgentMessage emissions for a
 # task when only usage advanced. The CLI batches task_progress at ~16ms, and
@@ -860,11 +858,11 @@ class ClaudeOutputProcessor:
         it must not touch found_final_message, the pending-task set, or
         streaming state.
         """
-        is_workflow_task = self._task_id_to_task_type.get(result.task_id) == _WORKFLOW_TASK_TYPE
+        is_workflow_task = self._task_id_to_task_type.get(result.task_id) == WORKFLOW_TASK_TYPE
         if not is_workflow_task and result.workflow_progress is None:
             return
         if not is_workflow_task:
-            self._task_id_to_task_type[result.task_id] = _WORKFLOW_TASK_TYPE
+            self._task_id_to_task_type[result.task_id] = WORKFLOW_TASK_TYPE
 
         tree_changed = result.workflow_progress is not None
         if result.workflow_progress is not None:

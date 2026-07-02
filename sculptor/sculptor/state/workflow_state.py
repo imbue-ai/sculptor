@@ -20,6 +20,10 @@ from pydantic import ValidationError
 from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.foundation.pydantic_serialization import build_discriminator
 
+# The task_type the CLI assigns to Workflow-tool background tasks in
+# task_started events.
+WORKFLOW_TASK_TYPE = "local_workflow"
+
 
 class WorkflowPhaseProgress(SerializableModel):
     """A phase heading in a workflow's progress tree (wire type ``workflow_phase``)."""

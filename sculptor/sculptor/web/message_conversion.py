@@ -31,6 +31,7 @@ from sculptor.interfaces.agents.agent import UpdatedArtifactAgentMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.agent import WarningAgentMessage
 from sculptor.interfaces.agents.agent import WarningMessage
+from sculptor.interfaces.agents.agent import WorkflowTaskProgressAgentMessage
 from sculptor.interfaces.agents.artifacts import ArtifactType
 from sculptor.interfaces.agents.harness import Harness
 from sculptor.primitives.ids import AgentMessageID
@@ -56,6 +57,8 @@ from sculptor.state.claude_state import split_text_and_media
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import Message
 from sculptor.state.messages import ResponseBlockAgentMessage
+from sculptor.state.workflow_state import WORKFLOW_TASK_TYPE
+from sculptor.state.workflow_state import WorkflowTaskState
 from sculptor.web.derived import SubmittedQuestionAnswers
 from sculptor.web.derived import TaskUpdate
 
@@ -201,6 +204,12 @@ def convert_agent_messages_to_task_update(
     # distinguishes "agent is thinking" from "harness is idle, waiting on
     # background task completion".
     pending_background_task_ids: set[str] = set(current_state.pending_background_task_ids) if current_state else set()
+    # Workflow-task state keyed by tool_use_id. Carried across batches and
+    # NOT cleared at request boundaries: completed entries must stay around so
+    # the workflow popover keeps rendering the final tree after the run ends.
+    workflow_task_states: dict[str, WorkflowTaskState] = (
+        dict(current_state.workflow_task_states) if current_state else {}
+    )
 
     # Streaming state — groups the variables that control how partial responses
     # are assembled into in-progress chat messages.
@@ -731,9 +740,49 @@ def convert_agent_messages_to_task_update(
             # on a task_notification" (SCU-387). The matching discard fires
             # in BackgroundTaskNotificationAgentMessage below.
             pending_background_task_ids.add(msg.background_task_id)
+            # Seed a running workflow entry at launch so the Workflow pill
+            # reflects the run before the first progress tick arrives.
+            if msg.task_type == WORKFLOW_TASK_TYPE:
+                workflow_task_states[msg.tool_use_id] = WorkflowTaskState(
+                    task_id=msg.background_task_id,
+                    tool_use_id=msg.tool_use_id,
+                    workflow_name=msg.workflow_name,
+                    status="running",
+                )
+
+        elif isinstance(msg, WorkflowTaskProgressAgentMessage):
+            previous_state = workflow_task_states.get(msg.tool_use_id)
+            workflow_task_states[msg.tool_use_id] = WorkflowTaskState(
+                task_id=msg.background_task_id,
+                tool_use_id=msg.tool_use_id,
+                workflow_name=msg.workflow_name or (previous_state.workflow_name if previous_state else ""),
+                status="running",
+                entries=msg.entries,
+                usage=msg.usage,
+                last_tool_name=msg.last_tool_name,
+                summary=msg.summary,
+            )
 
         elif isinstance(msg, BackgroundTaskNotificationAgentMessage):
             pending_background_task_ids.discard(msg.background_task_id)
+            # Flip the workflow entry to its final status. The
+            # ``final_workflow_entries is not None`` condition rebuilds the
+            # entry from history replay (a fresh connection never sees the
+            # ephemeral progress/started messages, only this persisted
+            # notification).
+            if msg.tool_use_id in workflow_task_states or msg.final_workflow_entries is not None:
+                previous_state = workflow_task_states.get(msg.tool_use_id)
+                workflow_task_states[msg.tool_use_id] = WorkflowTaskState(
+                    task_id=msg.background_task_id,
+                    tool_use_id=msg.tool_use_id,
+                    workflow_name=msg.workflow_name or (previous_state.workflow_name if previous_state else ""),
+                    status=msg.status or "completed",
+                    entries=msg.final_workflow_entries
+                    if msg.final_workflow_entries is not None
+                    else (previous_state.entries if previous_state else ()),
+                    usage=msg.workflow_usage or (previous_state.usage if previous_state else None),
+                    summary=msg.summary,
+                )
             # A background task completed. The notification is an out-of-band
             # signal that does not itself end the current request cycle, so we
             # do NOT flush the in-progress message here.  Message boundaries are
@@ -858,6 +907,7 @@ def convert_agent_messages_to_task_update(
         is_in_plan_mode=is_in_plan_mode,
         pending_turn_metrics=pending_turn_metrics,
         pending_background_task_ids=frozenset(pending_background_task_ids),
+        workflow_task_states=workflow_task_states,
     )
 
 
