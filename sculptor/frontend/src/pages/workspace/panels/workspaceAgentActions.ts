@@ -10,17 +10,21 @@
 // route's agent id goes stale. The section layout is the live source of which
 // agents the workspace is showing.
 
+import type { Getter } from "jotai";
 import { atom } from "jotai";
 import { atomFamily } from "jotai/utils";
 
-import { LlmModel, sendWorkspaceAgentMessages } from "~/api";
+import { LlmModel, postAgentTerminalInput, sendWorkspaceAgentMessages, TaskStatus } from "~/api";
 import { taskDetailAtomFamily } from "~/common/state/atoms/taskDetails.ts";
 import {
+  taskAcceptsAutomatedPromptsAtomFamily,
   taskAtomFamily,
   taskModelAtomFamily,
   tasksArrayAtom,
+  taskStatusAtomFamily,
   taskSupportsChatInterfaceAtomFamily,
 } from "~/common/state/atoms/tasks.ts";
+import { terminalPromptRejectedToastAtom } from "~/common/state/atoms/toasts.ts";
 import type { WorkspaceLayoutState } from "~/components/sections/persistence/types.ts";
 import { AGENT_PANEL_ID_PREFIX, makeAgentPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
 import { workspaceLayoutFamily } from "~/components/sections/sectionAtoms.ts";
@@ -48,6 +52,14 @@ const agentTaskIdsIn = (layout: WorkspaceLayoutState, subSection: SubSectionId):
     .filter((taskId): taskId is string => taskId !== undefined);
 };
 
+// Whether the agent's panel is the active tab of the sub-section it lives in,
+// i.e. the agent is actually on screen.
+const isAgentTabVisible = (layout: WorkspaceLayoutState, taskId: string): boolean => {
+  const panelId = makeAgentPanelId(taskId);
+  const subSection = layout.placement[panelId];
+  return subSection !== undefined && layout.activePanel[subSection] === panelId;
+};
+
 // The chat agent the user last interacted with (pointer-down or focus inside
 // a chat panel), per workspace. Deliberately transient — never persisted — so
 // a reload starts from the layout-based resolution below. Kept separate from
@@ -73,8 +85,9 @@ export const lastFocusedChatAgentAtomFamily = atomFamily((workspaceId: string) =
 );
 
 /**
- * The workspace's "current chat agent": the agent a workspace-scoped action
- * (commit prompt, add-notes-to-prompt) should target. Resolution order:
+ * The workspace's "current chat agent": the agent whose chat composer a
+ * chat-targeted feature (Notes "add to prompt", the Skills gate) should
+ * address. Resolution order:
  *
  *   1. the chat panel the user most recently interacted with, while it is
  *      still open (with several chats visible at once, actions follow the
@@ -84,9 +97,12 @@ export const lastFocusedChatAgentAtomFamily = atomFamily((workspaceId: string) =
  *   4. the workspace's first chat-capable task (layout not seeded yet).
  *
  * Terminal-harness agents (`supports_chat_interface` false) are skipped —
- * they can't receive chat prompts, and keeping them out of the resolution is
- * what keeps commit-style actions disabled for terminal-only workspaces.
+ * they have no chat composer, so composer-draft writes aimed at them would
+ * land nowhere; a chat hidden behind a terminal tab still receives them.
  * `undefined` when the workspace has no chat-capable agent (loaded) at all.
+ *
+ * Automated-prompt features (Commit, Create PR) must NOT use this: they can
+ * target prompt-capable terminal agents too — see `activeAgentIdAtomFamily`.
  */
 export const activeChatAgentIdAtomFamily = atomFamily((workspaceId: string) =>
   atom<string | undefined>((get) => {
@@ -123,26 +139,117 @@ export const activeChatAgentIdAtomFamily = atomFamily((workspaceId: string) =>
 );
 
 /**
+ * The workspace's "current agent": the agent an automated-prompt action
+ * (commit prompt, create-PR prompt) should target. Unlike
+ * `activeChatAgentIdAtomFamily`, a visible terminal agent IS the current
+ * agent — prompt-capable terminals receive these prompts as terminal input
+ * (see `promptRouteFor`). Resolution order:
+ *
+ *   1. the chat panel the user most recently interacted with, while it is
+ *      still its sub-section's active tab — once the user activates another
+ *      agent tab over it, that tab is the current agent,
+ *   2. the first sub-section (preference order) whose active tab is an agent
+ *      panel: that visible agent is authoritative, whatever its harness.
+ *      A prompt-incapable terminal here resolves (and `canCommitAtomFamily`
+ *      disables the action) rather than falling through — sending the prompt
+ *      to a chat hidden behind the terminal the user is looking at would be
+ *      invisible and surprising,
+ *   3. no agent is visible (e.g. a static panel is the active tab
+ *      everywhere): any open chat-capable agent panel, in tab order — chat
+ *      messages queue and surface when the chat is re-shown, whereas typing
+ *      into a hidden terminal's PTY would not be seen,
+ *   4. the workspace's first chat-capable task (layout not seeded yet).
+ *
+ * `undefined` when nothing resolves; candidates must have loaded task data
+ * (a stale layout can reference a deleted agent).
+ */
+export const activeAgentIdAtomFamily = atomFamily((workspaceId: string) =>
+  atom<string | undefined>((get) => {
+    const isLoaded = (taskId: string): boolean => get(taskAtomFamily(taskId)) !== null;
+    const isHiddenFallbackTarget = (taskId: string): boolean =>
+      isLoaded(taskId) && get(taskSupportsChatInterfaceAtomFamily(taskId)) !== false;
+
+    const layout = get(workspaceLayoutFamily(workspaceId));
+
+    const lastFocused = get(lastFocusedChatAgentAtomFamily(workspaceId));
+    if (lastFocused !== undefined && isAgentTabVisible(layout, lastFocused) && isLoaded(lastFocused)) {
+      return lastFocused;
+    }
+
+    for (const subSection of SUB_SECTION_PREFERENCE) {
+      const activePanelId = layout.activePanel[subSection];
+      if (activePanelId === undefined || layout.placement[activePanelId] !== subSection) continue;
+      const taskId = agentPanelTaskId(activePanelId);
+      if (taskId !== undefined && isLoaded(taskId)) return taskId;
+    }
+
+    for (const subSection of SUB_SECTION_PREFERENCE) {
+      for (const taskId of agentTaskIdsIn(layout, subSection)) {
+        if (isHiddenFallbackTarget(taskId)) return taskId;
+      }
+    }
+    return get(tasksArrayAtom)?.find((task) => task.workspaceId === workspaceId && isHiddenFallbackTarget(task.id))?.id;
+  }),
+);
+
+// How a workspace-scoped automated prompt reaches the task, if it can at all:
+// chat-capable agents take chat messages; terminal agents take PTY input, but
+// only when their registration opted in via `accepts_automated_prompts` —
+// plain terminals and non-opt-in registrations take nothing (`undefined`).
+// `supports_chat_interface` defaults to the chat route while capabilities are
+// still loading, mirroring the chat resolver's `!== false` check.
+const promptRouteFor = (get: Getter, taskId: string): "chat" | "terminal" | undefined => {
+  if (get(taskSupportsChatInterfaceAtomFamily(taskId)) !== false) return "chat";
+  return get(taskAcceptsAutomatedPromptsAtomFamily(taskId)) === true ? "terminal" : undefined;
+};
+
+/**
  * Whether the commit button may send right now: a target agent resolves and
- * that agent has no queued messages (mirrors the chat input, which disables
- * sends while a message is queued so queue promotion stays unambiguous).
+ * can accept the prompt. Chat agents must have no queued messages (mirrors
+ * the chat input, which disables sends while a message is queued so queue
+ * promotion stays unambiguous); prompt-capable terminal agents must be at
+ * their prompt (READY/WAITING, mirroring `useTerminalChatActions`).
  */
 export const canCommitAtomFamily = atomFamily((workspaceId: string) =>
   atom<boolean>((get) => {
-    const taskId = get(activeChatAgentIdAtomFamily(workspaceId));
+    const taskId = get(activeAgentIdAtomFamily(workspaceId));
     if (taskId === undefined) return false;
+    const route = promptRouteFor(get, taskId);
+    if (route === undefined) return false;
+    if (route === "terminal") {
+      const status = get(taskStatusAtomFamily(taskId));
+      return status === TaskStatus.READY || status === TaskStatus.WAITING;
+    }
     return (get(taskDetailAtomFamily(taskId))?.queuedChatMessages.length ?? 0) === 0;
   }),
 );
 
 /**
- * Send the commit prompt to the workspace's current chat agent. Calls the
- * send API directly so committing works while no chat panel is mounted.
+ * Send the commit prompt to the workspace's current agent. Chat agents get a
+ * chat message via the send API directly, so committing works while no chat
+ * panel is mounted; prompt-capable terminal agents get the prompt typed and
+ * submitted through the terminal-input endpoint.
  */
 export const commitActionAtomFamily = atomFamily((workspaceId: string) =>
-  atom(null, async (get, _set, message: string): Promise<void> => {
-    const taskId = get(activeChatAgentIdAtomFamily(workspaceId));
+  atom(null, async (get, set, message: string): Promise<void> => {
+    const taskId = get(activeAgentIdAtomFamily(workspaceId));
     if (taskId === undefined) return;
+    const route = promptRouteFor(get, taskId);
+    if (route === undefined) return;
+    if (route === "terminal") {
+      try {
+        await postAgentTerminalInput({ path: { agent_id: taskId }, body: { text: message, submit: true } });
+      } catch {
+        // The endpoint's authoritative guard fired: the program went busy (or
+        // its hooks are silent) between the click and the write. Surface it;
+        // do not retry (mirrors `useTerminalChatActions`).
+        set(terminalPromptRejectedToastAtom, {
+          title: "Agent is busy",
+          description: "Try again when it's at its prompt.",
+        });
+      }
+      return;
+    }
     const model = get(taskModelAtomFamily(taskId));
     await sendWorkspaceAgentMessages({
       path: { workspace_id: workspaceId, agent_id: taskId },

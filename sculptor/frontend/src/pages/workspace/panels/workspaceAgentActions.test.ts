@@ -2,27 +2,33 @@ import { createStore } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ChatMessage, CodingAgentTaskView } from "~/api";
-import { LlmModel } from "~/api";
+import { LlmModel, TaskStatus } from "~/api";
 import { getEmptyTaskDetailState, taskDetailAtomFamily } from "~/common/state/atoms/taskDetails.ts";
 import { taskAtomFamily, taskIdsAtom } from "~/common/state/atoms/tasks.ts";
+import { terminalPromptRejectedToastAtom } from "~/common/state/atoms/toasts.ts";
 import type { WorkspaceLayoutState } from "~/components/sections/persistence/types.ts";
 import { EMPTY_WORKSPACE_LAYOUT } from "~/components/sections/persistence/types.ts";
 import { makeAgentPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
 import { workspaceLayoutFamily } from "~/components/sections/sectionAtoms.ts";
 
 import {
+  activeAgentIdAtomFamily,
   activeChatAgentIdAtomFamily,
   canCommitAtomFamily,
   commitActionAtomFamily,
   lastFocusedChatAgentAtomFamily,
 } from "./workspaceAgentActions.ts";
 
-// sendWorkspaceAgentMessages hits the backend; stub it so the commit action's
-// payload can be asserted deterministically.
-const { sendMessagesMock } = vi.hoisted(() => ({ sendMessagesMock: vi.fn() }));
+// sendWorkspaceAgentMessages and postAgentTerminalInput hit the backend; stub
+// them so the commit action's payload and routing can be asserted
+// deterministically.
+const { sendMessagesMock, terminalInputMock } = vi.hoisted(() => ({
+  sendMessagesMock: vi.fn(),
+  terminalInputMock: vi.fn(),
+}));
 vi.mock("~/api", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
-  return { ...actual, sendWorkspaceAgentMessages: sendMessagesMock };
+  return { ...actual, sendWorkspaceAgentMessages: sendMessagesMock, postAgentTerminalInput: terminalInputMock };
 });
 
 const WS = "ws-test";
@@ -34,7 +40,7 @@ const createMockTask = (overrides: Partial<CodingAgentTaskView> = {}): CodingAge
     projectId: "proj-1",
     createdAt: "2024-01-01T00:00:00Z",
     updatedAt: "2024-01-01T00:00:00Z",
-    taskStatus: "RUNNING",
+    status: TaskStatus.RUNNING,
     isAutoCompacting: false,
     artifactNames: [],
     initialPrompt: "Test prompt",
@@ -60,10 +66,12 @@ const seedLayout = (store: StoreType, layout: Partial<WorkspaceLayoutState>, wor
 
 afterEach(() => {
   sendMessagesMock.mockReset();
+  terminalInputMock.mockReset();
   // atomFamily entries are module-level; drop per-test keys so state doesn't
   // leak across tests (the jotai store itself is fresh per test).
   for (const workspaceId of [WS, WS_OTHER]) {
     workspaceLayoutFamily.remove(workspaceId);
+    activeAgentIdAtomFamily.remove(workspaceId);
     activeChatAgentIdAtomFamily.remove(workspaceId);
     canCommitAtomFamily.remove(workspaceId);
     commitActionAtomFamily.remove(workspaceId);
@@ -100,7 +108,7 @@ describe("activeChatAgentIdAtomFamily", () => {
     expect(store.get(activeChatAgentIdAtomFamily(WS))).toBe("agent-a");
   });
 
-  it("skips agents whose harness has no chat interface (terminal agents)", () => {
+  it("skips terminal agents: composer-targeted features address the chat hidden behind them", () => {
     const store = createStore();
     seedTask(
       store,
@@ -284,5 +292,127 @@ describe("commitActionAtomFamily", () => {
       path: { workspace_id: WS, agent_id: "agent-b" },
       body: { message: "Please commit my changes", model: LlmModel.CLAUDE_4_SONNET },
     });
+  });
+});
+
+// The terminal-routing premise: a registered terminal agent is the visible
+// center tab with a chat agent open (but hidden) behind it. Whether the
+// terminal can take automated prompts is per-registration
+// (`accepts_automated_prompts`), so each test picks its own capability/status.
+const seedVisibleTerminalWithHiddenChat = (store: StoreType, terminalOverrides: Partial<CodingAgentTaskView>): void => {
+  seedTask(store, createMockTask({ id: "chat-agent" }));
+  seedTask(
+    store,
+    createMockTask({
+      id: "terminal-agent",
+      harnessCapabilities: { supportsChatInterface: false },
+      status: TaskStatus.READY,
+      ...terminalOverrides,
+    } as Partial<CodingAgentTaskView>),
+  );
+  seedLayout(store, {
+    placement: { [makeAgentPanelId("chat-agent")]: "center", [makeAgentPanelId("terminal-agent")]: "center" },
+    order: { center: [makeAgentPanelId("chat-agent"), makeAgentPanelId("terminal-agent")] },
+    activePanel: { center: makeAgentPanelId("terminal-agent") },
+  });
+};
+
+describe("activeAgentIdAtomFamily", () => {
+  it("resolves the visible terminal agent rather than the chat hidden behind it", () => {
+    const store = createStore();
+    seedVisibleTerminalWithHiddenChat(store, { acceptsAutomatedPrompts: true });
+
+    expect(store.get(activeAgentIdAtomFamily(WS))).toBe("terminal-agent");
+  });
+
+  it("ignores a last-focused chat that is no longer its sub-section's active tab", () => {
+    const store = createStore();
+    seedVisibleTerminalWithHiddenChat(store, { acceptsAutomatedPrompts: true });
+    store.set(lastFocusedChatAgentAtomFamily(WS), "chat-agent");
+
+    expect(store.get(activeAgentIdAtomFamily(WS))).toBe("terminal-agent");
+  });
+
+  it("resolves a prompt-incapable terminal when visible (the action disables instead of re-routing)", () => {
+    const store = createStore();
+    seedVisibleTerminalWithHiddenChat(store, { acceptsAutomatedPrompts: false });
+
+    expect(store.get(activeAgentIdAtomFamily(WS))).toBe("terminal-agent");
+  });
+
+  it("falls back to a hidden chat-capable panel, never a hidden terminal, when no agent tab is visible", () => {
+    const store = createStore();
+    seedVisibleTerminalWithHiddenChat(store, { acceptsAutomatedPrompts: true });
+    // The Changes panel takes over the center tab: both agents are hidden.
+    seedLayout(store, {
+      placement: {
+        [makeAgentPanelId("chat-agent")]: "center",
+        [makeAgentPanelId("terminal-agent")]: "center",
+        changes: "center",
+      },
+      order: { center: [makeAgentPanelId("terminal-agent"), makeAgentPanelId("chat-agent"), "changes"] },
+      activePanel: { center: "changes" },
+    });
+
+    expect(store.get(activeAgentIdAtomFamily(WS))).toBe("chat-agent");
+  });
+});
+
+describe("canCommitAtomFamily for terminal agents", () => {
+  it("is true for a prompt-capable terminal at its prompt", () => {
+    const store = createStore();
+    seedVisibleTerminalWithHiddenChat(store, { acceptsAutomatedPrompts: true, status: TaskStatus.READY });
+
+    expect(store.get(canCommitAtomFamily(WS))).toBe(true);
+  });
+
+  it("is false once the prompt-capable terminal goes busy", () => {
+    const store = createStore();
+    seedVisibleTerminalWithHiddenChat(store, { acceptsAutomatedPrompts: true, status: TaskStatus.RUNNING });
+
+    expect(store.get(canCommitAtomFamily(WS))).toBe(false);
+  });
+
+  it("is false for a non-opt-in terminal even when idle with a chat open behind it", () => {
+    const store = createStore();
+    seedVisibleTerminalWithHiddenChat(store, { acceptsAutomatedPrompts: false, status: TaskStatus.READY });
+
+    expect(store.get(canCommitAtomFamily(WS))).toBe(false);
+  });
+});
+
+describe("commitActionAtomFamily terminal routing", () => {
+  it("types and submits the prompt through the terminal-input endpoint", async () => {
+    const store = createStore();
+    seedVisibleTerminalWithHiddenChat(store, { acceptsAutomatedPrompts: true });
+
+    await store.set(commitActionAtomFamily(WS), "Stage every changed file");
+
+    expect(terminalInputMock).toHaveBeenCalledTimes(1);
+    expect(terminalInputMock).toHaveBeenCalledWith({
+      path: { agent_id: "terminal-agent" },
+      body: { text: "Stage every changed file", submit: true },
+    });
+    expect(sendMessagesMock).not.toHaveBeenCalled();
+  });
+
+  it("no-ops for a non-opt-in terminal instead of re-routing to the hidden chat", async () => {
+    const store = createStore();
+    seedVisibleTerminalWithHiddenChat(store, { acceptsAutomatedPrompts: false });
+
+    await store.set(commitActionAtomFamily(WS), "Stage every changed file");
+
+    expect(terminalInputMock).not.toHaveBeenCalled();
+    expect(sendMessagesMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces the busy toast when the terminal-input endpoint rejects", async () => {
+    const store = createStore();
+    seedVisibleTerminalWithHiddenChat(store, { acceptsAutomatedPrompts: true });
+    terminalInputMock.mockRejectedValueOnce(new Error("409 agent busy"));
+
+    await store.set(commitActionAtomFamily(WS), "Stage every changed file");
+
+    expect(store.get(terminalPromptRejectedToastAtom)).toMatchObject({ title: "Agent is busy" });
   });
 });
