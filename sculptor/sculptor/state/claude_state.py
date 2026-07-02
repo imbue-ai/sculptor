@@ -428,8 +428,20 @@ def _handle_assistant_message(data: dict[str, Any]) -> ParsedAssistantResponse:
     message_data = data["message"]
     message_id = message_data["id"]
 
+    # ``content`` is normally a list of block dicts, but the CLI has been seen to
+    # emit a bare string (claude-agent-sdk-python d47b180 / issue #1058). Wrap it
+    # as a single text block so we don't iterate over its characters and crash on
+    # ``content["type"]``.
+    raw_content = message_data["content"]
+    if isinstance(raw_content, str):
+        raw_content = [{"type": "text", "text": raw_content}]
+
     content_blocks: list[ContentBlockTypes] = []
-    for content in message_data["content"]:
+    for content in raw_content:
+        # Only dict blocks carry a ``type`` we can dispatch on; tolerate stray
+        # non-dict items (e.g. a bare string mixed into the list) by skipping them.
+        if not isinstance(content, dict):
+            continue
         if content["type"] == "text":
             cleaned_text, img_file_paths = extract_media_tags_from_text(content["text"])
             if cleaned_text:
@@ -456,7 +468,13 @@ def _handle_tool_result_message(
 
     if isinstance(message_content, str):
         return ParsedUserResponse(content_blocks=[TextBlock(text=message_content)])
-    elif message_content[0]["type"] == "text":
+
+    # An empty content list has no block to inspect; skip it rather than indexing
+    # ``[0]`` (the CLI has been seen to emit user messages with empty content).
+    if len(message_content) == 0:
+        return None
+
+    if message_content[0]["type"] == "text":
         if len(message_content) > 1:
             logger.warning("Message content has more than one block: {}", message_content)
         return ParsedUserResponse(content_blocks=[TextBlock(text=message_content[0]["text"])])
@@ -474,7 +492,9 @@ def _handle_tool_result_message(
         tool_use_map.get(tool_use_id, ("unknown", ToolInput())) if tool_use_map else ("unknown", ToolInput())
     )
 
-    tool_result_content = tool_result["content"]
+    # ``content`` is optional on tool_result blocks in the Anthropic format;
+    # tolerate its absence (defaulting to empty) instead of raising KeyError.
+    tool_result_content = tool_result.get("content", "")
     invocation_string = get_tool_invocation_string(tool_name, tool_input, tool_result_content)
     tool_content = SimpleToolContent(
         text=str(tool_result_content), tool_input=tool_input, tool_content=tool_result_content
