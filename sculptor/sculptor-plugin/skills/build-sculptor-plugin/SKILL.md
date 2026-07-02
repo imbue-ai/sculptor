@@ -92,11 +92,13 @@ plugins are disabled.
 - `--persist` installs to the top-level `<plugins-dir>/<plugin-id>/` instead —
   a permanent install that survives after this workspace is gone. URLs are
   always persistent sources; `--persist` has no effect on them.
-- The plugin `id` must be a single safe path segment (no `/`, `\`, `.`, `..`)
-  and must not be the reserved name `dev`.
+- The plugin `id` must be a single safe path segment: no `/` or `\`, not
+  exactly `.` or `..` (dots inside an id like `foo.bar` are fine), and not the
+  reserved name `dev`.
 - `load` and `reload` wait for the plugin to **settle**: `load: OK` means it
   reached `status: loaded` (manifest fetched, validated, imported, activated).
-  A failure at any phase (`manifest`, `validate`, `import`, `activate`) prints
+  A failure at any phase (`manifest`, `validate`, `import`, `activate`, or the
+  catch-all `load`) prints
   `load: FAILED` with the phase and error message and exits non-zero. Errors
   thrown *after* activation (e.g. inside a component render) surface in the
   UI's per-plugin error boundary instead — check `inspect` and the UI when
