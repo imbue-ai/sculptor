@@ -1295,3 +1295,110 @@ class TestSubagentInterleavedTurnIds:
 
         expected_tools = {agent_tool, sub_tool, sub_tool_2, main_tool_2, main_tool_3}
         assert expected_tools <= visible_tool_ids, "agent tool calls went missing from the chat"
+
+
+def _collect_text(messages: Iterable) -> str:
+    """Concatenate all TextBlock text reachable across the given chat messages."""
+    texts: list[str] = []
+    for message in messages:
+        for block in message.content:
+            if isinstance(block, TextBlock):
+                texts.append(block.text)
+    return "\n".join(texts)
+
+
+class TestNotificationTurnBeforeUserTurn:
+    """Regression tests for SCU-1660: a task-notification turn delivered *before*
+    the user's own message turn must not end the CLI invocation early.
+
+    When a Monitor background task completes right as a new user prompt is
+    dispatched, the Claude CLI delivers the pending ``<task-notification>`` as
+    its own turn (init → assistant → result) *ahead* of the user's message
+    turn, all within the single CLI process Sculptor spawned for that prompt.
+
+    The turn-completion loop in ``_process_output`` keys on the first ``result``
+    it sees (``found_final_message``). Treating the notification turn's result
+    as terminal makes the loop exit and the process manager tears the CLI down
+    while the user's real request has run at most one tool call — silently
+    abandoning it. The loop must instead stay open until the user's own turn
+    produces its result.
+    """
+
+    @staticmethod
+    def _notification_then_user_turn_jsonl(user_tool_id: str, continuation_text: str) -> list[dict]:
+        """A notification turn (init → assistant → result) followed by the user's
+        own turn that issues one tool call and then continues afterwards.
+
+        The task-notification frame arrives before any ``result``, i.e. while
+        ``found_final_message`` is still False — this is what distinguishes the
+        notification-before-user ordering from the common notification-after
+        ordering that ``handle_background_task_notification`` models.
+        """
+        return [
+            # The CLI delivers the completed Monitor task's notification first.
+            make_task_notification_message(
+                task_id="task_monitor_1",
+                tool_use_id="toolu_monitor_1",
+                status="completed",
+                summary="test-unit watcher finished",
+            ),
+            # Notification turn: the agent briefly acknowledges the notification.
+            make_init_message(session_id="s1"),
+            make_assistant_message(
+                message_id="msg_notif",
+                content_blocks=[make_text_block("This is just the stale Monitor task being cleaned up.")],
+            ),
+            make_end_message(session_id="s1"),
+            # The user's real turn: fetch, then act on the result.
+            make_init_message(session_id="s1"),
+            make_assistant_message(
+                message_id="msg_user_a",
+                content_blocks=[make_text_block("I'll fetch the latest state of that branch.")],
+            ),
+            make_assistant_message(
+                message_id="msg_user_b",
+                content_blocks=[make_tool_use_block(user_tool_id, "Bash", {"command": "git fetch origin"})],
+            ),
+            make_tool_result_message(user_tool_id, "Fetched new commits."),
+            make_assistant_message(
+                message_id="msg_user_c",
+                content_blocks=[make_text_block(continuation_text)],
+            ),
+            make_end_message(session_id="s1"),
+        ]
+
+    def test_user_turn_after_notification_turn_is_not_abandoned(self) -> None:
+        """The user's turn (its tool call and its post-tool continuation) must
+        survive when a notification turn precedes it.
+
+        Before the fix the loop exits at the notification turn's ``result``, so
+        the user turn's frames are never processed and its tool call and
+        continuation text never reach the chat.
+        """
+        user_tool_id = "toolu_user_merge"
+        continuation_text = "MERGE COMPLETE — pushed."
+        jsonl = self._notification_then_user_turn_jsonl(user_tool_id, continuation_text)
+
+        emitted = _run_process_output(jsonl)
+
+        request_id = AgentMessageID()
+        stream = (
+            [
+                ChatInputUserMessage(message_id=request_id, text="merge and repush", files=[]),
+                RequestStartedAgentMessage(request_id=request_id),
+            ]
+            + emitted
+            + [RequestSuccessAgentMessage(request_id=request_id)]
+        )
+        update = convert_agent_messages_to_task_update(stream, TaskID(), {}, CLAUDE_CODE_HARNESS)
+        chat_messages = list(update.chat_messages)
+        if update.in_progress_chat_message is not None:
+            chat_messages.append(update.in_progress_chat_message)
+
+        visible_tool_ids = _collect_tool_ids(chat_messages)
+        assert user_tool_id in visible_tool_ids, (
+            "the user turn's tool call went missing: the loop exited at the notification turn's result and abandoned the user's request"
+        )
+        assert continuation_text in _collect_text(chat_messages), (
+            "the user turn's post-tool continuation never reached the chat: the turn was terminated after its first tool result"
+        )
