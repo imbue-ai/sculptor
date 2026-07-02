@@ -96,8 +96,6 @@ def create_agent_for_run(context: AgentRunContext) -> Agent:
                 system_prompt=context.task_data.system_prompt or "",
                 on_diff_needed=context.on_diff_needed,
                 harness=PI_HARNESS,
-                # The switcher's persisted selection (possibly chosen before the first
-                # message, when no pi process existed) so start() adopts it onto pi.
                 preselected_model=context.task_state.current_model,
             )
         # Terminal configs (TerminalAgentConfig / RegisteredTerminalAgentConfig)

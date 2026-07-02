@@ -1212,17 +1212,14 @@ class PiAgent(DefaultAgentWrapper):
     def _adopt_preselected_model(
         self, pi_default: ModelOption | None, options: list[ModelOption], authenticated: set[str]
     ) -> ModelOption | None:
-        """Adopt the switcher's persisted selection (`preselected_model`) onto pi at start.
+        """Adopt the persisted `preselected_model` onto pi at start, returning the model
+        to surface as current.
 
-        A model chosen before the agent went live lands only in task state — the pi
-        process did not yet exist to receive the `set_model` — so at start pi still
-        reports its own default. Apply the selection here, before the catalog is
-        surfaced, so pi runs it from the first turn and the switcher shows it without
-        flickering through pi's default. Only a selection pi still offers and whose
-        provider is authenticated is adopted; otherwise (e.g. the provider was
-        disconnected) pi's default is kept rather than a model that cannot run, and a
-        failed switch falls back to pi's default too. Returns the model to surface as
-        current.
+        Applied before the catalog is surfaced so pi runs the selection from the first
+        turn without the switcher flickering through pi's default. Only a selection pi
+        still offers and whose provider is authenticated is adopted (via `set_model`);
+        otherwise — a disconnected provider, or a failed switch — pi's own default is
+        kept rather than a model that cannot run.
         """
         preselected = self.preselected_model
         if preselected is None:
@@ -1269,9 +1266,6 @@ class PiAgent(DefaultAgentWrapper):
             if option is not None:
                 options.append(option)
         authenticated = compute_authenticated_provider_ids()
-        # Adopt the switcher's persisted selection (a model the user may have picked
-        # before this pi process existed) so pi runs it from the first turn and the
-        # switcher does not flicker through pi's own default.
         current_model = self._adopt_preselected_model(current_model, options, authenticated)
         curated = _curate_models(options, current_model, authenticated)
         # Don't strand the agent on a model whose provider was just deauthorized

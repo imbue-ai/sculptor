@@ -236,11 +236,8 @@ def run_agent_task_v1(
                         input_message_queue, task_state, shutdown_event
                     )
 
-                    # A model switch made while waiting for the first message writes the
-                    # selection straight to task state (the set_model endpoint), out of
-                    # band from this in-memory copy. Pull those model fields back in so
-                    # the selection reaches agent construction and finalize_task_setup
-                    # does not write the stale in-memory value back over it.
+                    # A pre-first-message model switch is written to task state out of band
+                    # from this in-memory copy; re-read so the selection is not lost here.
                     task_state = _refresh_model_fields_from_db(task.object_id, task_state, services)
 
                     with title_prediction_context(

@@ -2791,11 +2791,10 @@ def set_workspace_agent_model(
             )
 
     # Optimistically reflect the switch in task state so the server-driven switcher
-    # updates at once — even before a pi process exists to acknowledge it, which is
-    # the source of the "sticky" pre-message selector. The agent reconciles pi to this
-    # selection when it next runs (adopting it at start, or on the queued switch) and
-    # rolls it back if pi rejects it. Only a model pi actually offers is written; an
-    # unknown model is left for the switch below to reject.
+    # updates at once, even before a pi process exists to acknowledge it. The agent
+    # reconciles pi to this selection when it next runs (adopting it at start, or on the
+    # queued switch) and rolls it back if pi rejects it. Only a model pi actually offers
+    # is written; an unknown model is left for the switch below to reject.
     selected_model = next(
         (
             option
