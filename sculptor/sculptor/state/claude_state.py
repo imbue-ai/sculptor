@@ -19,6 +19,9 @@ from sculptor.state.chat_state import ToolInput
 from sculptor.state.chat_state import ToolResultBlock
 from sculptor.state.chat_state import ToolResultBlockSimple
 from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.workflow_state import WorkflowProgressEntryTypes
+from sculptor.state.workflow_state import WorkflowUsage
+from sculptor.state.workflow_state import parse_workflow_progress_entries
 
 _RE_STRIP_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[mGKHfABCDhls]|\x1b\[[?][0-9;]*[hlHLdcE]|\x1b[=>]")
 
@@ -275,7 +278,31 @@ class ParsedTaskStartedResponse(ParsedAgentResponse):
     task_id: str = Field(description="Background task ID assigned by Claude Code")
     tool_use_id: str = Field(description="Tool use ID of the tool call that launched the background task")
     description: str = Field(default="", description="Human-readable description of the background task")
-    task_type: str = Field(default="", description="Type of background task (e.g. local_bash)")
+    task_type: str = Field(default="", description="Type of background task (e.g. local_bash, local_workflow)")
+    workflow_name: str = Field(
+        default="", description="Workflow name from the script's meta block; only set for Workflow tasks"
+    )
+
+
+class ParsedTaskProgressResponse(ParsedAgentResponse):
+    """Emitted by Claude Code while a background task runs.
+
+    For Workflow tasks the payload carries the ``workflow_progress`` tree
+    (full snapshot of phases and subagents). The tree is absent on pure
+    token-tick batches, where only ``usage`` advances.
+    """
+
+    object_type: str = Field(default="ParsedTaskProgressResponse")
+    task_id: str = Field(description="Background task ID matching the task_started event")
+    tool_use_id: str = Field(description="Tool use ID of the tool call that launched the background task")
+    description: str = Field(default="", description="Human-readable description of the current activity")
+    usage: WorkflowUsage | None = Field(default=None, description="Aggregate usage so far")
+    last_tool_name: str | None = Field(default=None, description="Most recent tool used by the task")
+    summary: str = Field(default="", description="Latest progress summary")
+    workflow_progress: tuple[WorkflowProgressEntryTypes, ...] | None = Field(
+        default=None,
+        description="Full workflow progress tree; None when this batch carried no tree (unchanged, not empty)",
+    )
 
 
 class ParsedTaskNotificationResponse(ParsedAgentResponse):
@@ -316,6 +343,7 @@ ParsedAgentResponsePassthrough = (
     | ParsedEndResponse
     | ParsedCompactionSummaryResponse
     | ParsedTaskStartedResponse
+    | ParsedTaskProgressResponse
     | ParsedTaskNotificationResponse
     | ParsedTaskUpdatedResponse
 )
@@ -349,6 +377,8 @@ def get_tool_invocation_string(tool_name: str, tool_input: ToolInput, _tool_resu
         result = tool_input.get("query", "")
     elif tool_name == AgentToolName.TASK:
         result = tool_input.get("description", "")
+    elif tool_name == AgentToolName.WORKFLOW:
+        result = tool_input.get("name") or tool_input.get("scriptPath") or "workflow"
     elif tool_name == AgentToolName.SKILL:
         result = tool_input.get("skill", "")
     else:
@@ -391,6 +421,21 @@ def _handle_task_started_message(data: dict[str, Any]) -> ParsedTaskStartedRespo
         tool_use_id=data["tool_use_id"],
         description=data.get("description", ""),
         task_type=data.get("task_type", ""),
+        workflow_name=data.get("workflow_name", ""),
+    )
+
+
+def _handle_task_progress_message(data: dict[str, Any]) -> ParsedTaskProgressResponse:
+    """Handle system/task_progress message type."""
+    usage = data.get("usage")
+    return ParsedTaskProgressResponse(
+        task_id=data["task_id"],
+        tool_use_id=data["tool_use_id"],
+        description=data.get("description", ""),
+        usage=WorkflowUsage.model_validate(usage) if isinstance(usage, dict) else None,
+        last_tool_name=data.get("last_tool_name"),
+        summary=data.get("summary", ""),
+        workflow_progress=parse_workflow_progress_entries(data.get("workflow_progress")),
     )
 
 
@@ -550,10 +595,7 @@ def parse_claude_code_json_lines_simple(
     elif message_type == "system" and data.get("subtype") == "task_notification":
         return (message_type, _handle_task_notification_message(data))
     elif message_type == "system" and data.get("subtype") == "task_progress":
-        # TODO: task_progress carries usage stats and last_tool_name for in-flight
-        # background tasks. Silently drop for now; add a ParsedTaskProgressResponse
-        # when we build the "background task running..." UI indicator.
-        return None
+        return (message_type, _handle_task_progress_message(data))
     elif message_type == "system" and data.get("subtype") == "task_updated":
         return (message_type, _handle_task_updated_message(data))
     elif message_type == "assistant":

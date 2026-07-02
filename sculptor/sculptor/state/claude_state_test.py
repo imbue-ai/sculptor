@@ -3,10 +3,14 @@ import json
 from sculptor.state.chat_state import FileBlock
 from sculptor.state.chat_state import TextBlock
 from sculptor.state.claude_state import ParsedAssistantResponse
+from sculptor.state.claude_state import ParsedTaskProgressResponse
+from sculptor.state.claude_state import ParsedTaskStartedResponse
 from sculptor.state.claude_state import extract_media_tags_from_text
 from sculptor.state.claude_state import get_tool_invocation_string
 from sculptor.state.claude_state import parse_claude_code_json_lines_simple
 from sculptor.state.claude_state import split_text_and_media
+from sculptor.state.workflow_state import WorkflowAgentProgress
+from sculptor.state.workflow_state import WorkflowPhaseProgress
 
 
 def test_extract_img_tags_no_img_tags_returns_text_unchanged() -> None:
@@ -385,3 +389,94 @@ def test_get_tool_invocation_string_skill_returns_skill_name() -> None:
 def test_get_tool_invocation_string_skill_without_args() -> None:
     result = get_tool_invocation_string("Skill", {"skill": "commit"})
     assert result == "commit"
+
+
+def test_get_tool_invocation_string_workflow_prefers_name_then_script_path() -> None:
+    assert get_tool_invocation_string("Workflow", {"name": "deep-research"}) == "deep-research"
+    assert get_tool_invocation_string("Workflow", {"scriptPath": "/tmp/wf.js"}) == "/tmp/wf.js"
+    assert get_tool_invocation_string("Workflow", {"script": "export const meta = {...}"}) == "workflow"
+
+
+def test_parse_task_started_message_captures_task_type_and_workflow_name() -> None:
+    data = {
+        "type": "system",
+        "subtype": "task_started",
+        "task_id": "w18genw0r",
+        "tool_use_id": "toolu_01abc",
+        "description": "review-changes",
+        "task_type": "local_workflow",
+        "workflow_name": "review-changes",
+    }
+    result = parse_claude_code_json_lines_simple(json.dumps(data))
+    assert result is not None
+    _, parsed = result
+    assert isinstance(parsed, ParsedTaskStartedResponse)
+    assert parsed.task_type == "local_workflow"
+    assert parsed.workflow_name == "review-changes"
+
+
+def test_parse_task_progress_message_with_workflow_progress_tree() -> None:
+    data = {
+        "type": "system",
+        "subtype": "task_progress",
+        "task_id": "w18genw0r",
+        "tool_use_id": "toolu_01abc",
+        "description": "Review: verify:bugs",
+        "usage": {"total_tokens": 52310, "tool_uses": 17, "duration_ms": 63210},
+        "last_tool_name": "Grep",
+        "workflow_progress": [
+            {"type": "workflow_phase", "index": 0, "title": "Review", "kind": ""},
+            {
+                "type": "workflow_agent",
+                "index": 0,
+                "label": "review:bugs",
+                "phaseIndex": 0,
+                "phaseTitle": "Review",
+                "model": "claude-fable-5",
+                "state": "progress",
+                "promptPreview": "Review the diff for bugs",
+                "tokens": 31200,
+                "toolCalls": 11,
+                "durationMs": 61200,
+                "lastToolSummary": "Grep: TODO in src/",
+            },
+            {"type": "workflow_log", "message": "3/10 found"},
+        ],
+    }
+    result = parse_claude_code_json_lines_simple(json.dumps(data))
+    assert result is not None
+    message_type, parsed = result
+    assert message_type == "system"
+    assert isinstance(parsed, ParsedTaskProgressResponse)
+    assert parsed.task_id == "w18genw0r"
+    assert parsed.tool_use_id == "toolu_01abc"
+    assert parsed.last_tool_name == "Grep"
+    assert parsed.usage is not None
+    assert parsed.usage.total_tokens == 52310
+    assert parsed.usage.tool_uses == 17
+    assert parsed.workflow_progress is not None
+    assert len(parsed.workflow_progress) == 2
+    phase, agent = parsed.workflow_progress
+    assert isinstance(phase, WorkflowPhaseProgress)
+    assert isinstance(agent, WorkflowAgentProgress)
+    assert agent.phase_index == 0
+    assert agent.last_tool_summary == "Grep: TODO in src/"
+
+
+def test_parse_task_progress_message_without_tree_keeps_workflow_progress_none() -> None:
+    """Token-tick batches omit workflow_progress; None must be preserved so consumers keep the last tree."""
+    data = {
+        "type": "system",
+        "subtype": "task_progress",
+        "task_id": "w18genw0r",
+        "tool_use_id": "toolu_01abc",
+        "description": "Review: verify:bugs",
+        "usage": {"total_tokens": 52500, "tool_uses": 17, "duration_ms": 64000},
+    }
+    result = parse_claude_code_json_lines_simple(json.dumps(data))
+    assert result is not None
+    _, parsed = result
+    assert isinstance(parsed, ParsedTaskProgressResponse)
+    assert parsed.workflow_progress is None
+    assert parsed.usage is not None
+    assert parsed.usage.total_tokens == 52500
