@@ -222,7 +222,7 @@ This is about the *words*, not their pixels. A linter can't judge copy; a design
 
 **Question:** Does every icon-only control have an accessible name?
 
-An icon-only button with no text label is invisible to screen readers and unlabeled in tests unless it carries an accessible name. This is already a strong convention in the app — icon controls pair with an `aria-label` or a `Tooltip` — so a bare one is a regression against an established pattern, not a nitpick.
+An icon-only button with no text label is invisible to screen readers and unlabeled in tests unless it carries an accessible name. A `Tooltip` helps sighted users discover the action, but it does not *name* the control for assistive tech — the accessible name comes from `aria-label` (or visible text). New icon-only controls should carry both where sibling controls do.
 
 **What to look for:**
 - An `<IconButton>` (or any clickable icon-only element) with no `aria-label` and no wrapping `<Tooltip>`
@@ -244,3 +244,5 @@ An icon-only button with no text label is invisible to screen readers and unlabe
 ```
 
 **Fix:** Give the control an `aria-label` describing the action (and a `Tooltip` where sibling controls have one). Keep the label wording consistent with [`voice_and_tone`](#voice_and_tone).
+
+**Exceptions:** When the missing name traces to a shared component (a wrapper that renders the tooltip but no `aria-label`), file one finding against the component rather than one per call site — fixing it there labels every usage at once.
