@@ -20,7 +20,7 @@ import re
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.base import get_tiptap_placeholder_paragraphs
-from sculptor.testing.elements.base import type_into_tiptap
+from sculptor.testing.elements.base import type_paragraphs_into_tiptap
 from sculptor.testing.elements.base import type_trigger_char
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
@@ -106,22 +106,21 @@ def test_placeholder_hidden_when_editor_has_content(sculptor_instance_: Sculptor
 
     chat_input = chat_panel.get_chat_input()
 
-    # Type text into the editor
-    type_into_tiptap(page, chat_input, "hello world")
+    # Build the regressed document: an empty first paragraph above real content —
+    # the state a user reaches by pressing Enter at the start of their text.
+    #
+    # We assemble it with editor commands rather than a literal
+    # ``page.keyboard.press("Enter")``. The integration harness binds
+    # ``send_message`` to Enter, so a raw Enter keystroke here submits the draft
+    # and clears the editor instead of splitting the paragraph. An empty editor
+    # then renders the placeholder (``editor.isEmpty`` is true), which is exactly
+    # the false failure this test used to hit. ``type_paragraphs_into_tiptap``
+    # drives ``editor.commands.enter()``, which bypasses the send keybinding.
+    type_paragraphs_into_tiptap(chat_input, ["", "hello world"])
     expect(chat_input).to_contain_text("hello world")
 
-    # page.keyboard.press acts on whatever currently holds focus. The chat input
-    # can remount after the agent settles, leaving focus on a detached editor;
-    # re-focus the live contenteditable so the keystrokes below provably edit the
-    # editor holding "hello world" rather than a stale one.
-    chat_input.click()
-    expect(chat_input).to_be_focused()
-
-    # Move cursor to the beginning and press Enter to create an empty paragraph above
-    page.keyboard.press("Home")
-    page.keyboard.press("Enter")
-    page.keyboard.press("ArrowUp")
-
-    # The placeholder text must NOT appear — the editor has content ("hello world").
+    # The placeholder text must NOT appear on the empty first paragraph: the
+    # editor has content, so ``editor.isEmpty`` is false and the Placeholder
+    # extension emits ``data-placeholder=""`` there instead of the prompt text.
     placeholder_paragraphs = get_tiptap_placeholder_paragraphs(chat_input, PLACEHOLDER_TEXT)
     expect(placeholder_paragraphs).to_have_count(0)
