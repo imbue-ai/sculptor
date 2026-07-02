@@ -83,25 +83,43 @@ def _expect_home_landed(page: Page) -> None:
     expect(workspace_rows.first.or_(empty_state).or_(empty_first_run)).to_be_visible(timeout=10000)
 
 
-def navigate_to_home_page(page: Page) -> None:
-    """Navigate to the Home page (/home).
+def ensure_sidebar_expanded(page: Page) -> None:
+    """Expand the sidebar when a prior step collapsed it.
 
-    Prefers the sidebar Home link when the sidebar is rendered (the
-    workspace route's shell), and falls back to direct URL navigation when it is
-    not (e.g. the empty first-run route).
+    Collapsing does not hide the sidebar — it unmounts it (``AppShell`` and the
+    empty first-run page render ``CollapsedSidebarToggle`` in its place), so
+    while collapsed the sidebar's nav links do not exist in the DOM at all.
+    Helpers that click sidebar chrome call this first so they find their
+    targets even after a collapse — whether by the test itself or leftover from
+    the previous test on the shared instance (per-test cleanup runs against the
+    prior test's end state before the browser reset restores the default).
+
+    Waits for one of the two mutually exclusive shell states (rail or expand
+    icon) to render before deciding, so a call racing a fresh page load doesn't
+    misread "not rendered yet" as "expanded". The only surface rendering
+    neither is the onboarding wizard, where sidebar navigation is meaningless —
+    a timeout here is the correct loud failure.
     """
-    sidebar_home_link = page.get_by_test_id(ElementIDs.SIDEBAR_HOME_LINK)
-    if sidebar_home_link.is_visible():
-        sidebar_home_link.click()
-        _expect_home_landed(page)
-        return
+    sidebar = page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
+    expand_icon = page.get_by_test_id(ElementIDs.SIDEBAR_EXPAND_ICON)
+    expect(sidebar.or_(expand_icon)).to_be_visible(timeout=10_000)
+    if expand_icon.is_visible():
+        expand_icon.click()
+    expect(sidebar).to_be_visible()
 
-    # Sidebar not present — navigate via URL. Append the hash directly to
-    # the base (no extra "/"): an injected slash would turn a document path
-    # like ".../index.html" into ".../index.html/", breaking relative-to-
-    # document asset resolution under the sculptor://app origin.
-    base_url = page.url.split("#")[0].rstrip("/")
-    page.goto(f"{base_url}#/home")
+
+def navigate_to_home_page(page: Page) -> None:
+    """Navigate to the Home page (/home) via the sidebar Home link.
+
+    The sidebar renders on every in-app route (``AppShell`` hosts them all, and
+    the empty first-run page mounts its own copy), so the Home link is always
+    reachable once the sidebar is expanded — ``ensure_sidebar_expanded``
+    restores it when a prior step collapsed the rail.
+    """
+    ensure_sidebar_expanded(page)
+    sidebar_home_link = page.get_by_test_id(ElementIDs.SIDEBAR_HOME_LINK)
+    expect(sidebar_home_link).to_be_visible()
+    sidebar_home_link.click()
     _expect_home_landed(page)
 
 
@@ -113,19 +131,22 @@ def navigate_to_workspace(page: Page, name_or_index: str | int = 0) -> None:
     (the successor to the home-page rows). ``name_or_index`` selects the row by
     its visible name (substring match) or by zero-based position.
 
-    The sidebar renders on the workspace route's shell, so callers must already
-    be on a workspace (or land there via a prior create/navigate).
+    Workspace rows only exist while at least one workspace does, so callers
+    must have created (or be positioned on) a workspace already.
     """
     # The new-workspace modal renders a dimmed dialog overlay that covers the
     # whole page, so a sidebar row beneath it is not clickable (Playwright's
     # actionability check fails on "stable"). A common caller sequence is
     # ``navigate_to_add_workspace_page`` (which opens that modal) then
     # ``navigate_to_workspace`` to return — so dismiss the modal first.
+    # (First, before expanding the sidebar: the overlay would intercept the
+    # expand-toggle click too.)
     dialog = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)
     if dialog.count() > 0:
         page.keyboard.press("Escape")
         expect(dialog).to_have_count(0)
 
+    ensure_sidebar_expanded(page)
     rows = page.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW)
     if isinstance(name_or_index, int):
         row = rows.nth(name_or_index)
@@ -143,44 +164,10 @@ def new_workspace(page: Page) -> None:
     ``start_task_and_wait_for_ready``); this helper only triggers the entry
     point from the sidebar.
     """
+    ensure_sidebar_expanded(page)
     button = page.get_by_test_id(ElementIDs.SIDEBAR_NEW_WORKSPACE_BUTTON)
     expect(button).to_be_visible()
     button.click()
-
-
-def open_home(page: Page) -> None:
-    """Open the Home page via the sidebar Home link.
-
-    Clicks ``SIDEBAR_HOME_LINK`` when the sidebar is present (workspace route)
-    and waits for the workspace list or empty state. Falls back to
-    ``navigate_to_home_page`` (top-bar Home button or direct URL) when the
-    sidebar is not rendered — e.g. on the still-old-shell Home / Settings /
-    new-workspace routes.
-    """
-    home_link = page.get_by_test_id(ElementIDs.SIDEBAR_HOME_LINK)
-    if home_link.is_visible():
-        home_link.click()
-        workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
-        empty_state = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
-        expect(workspace_rows.first.or_(empty_state)).to_be_visible(timeout=10000)
-        return
-    navigate_to_home_page(page)
-
-
-def open_settings(page: Page) -> PlaywrightSettingsPage:
-    """Open Settings via the sidebar Settings link.
-
-    Clicks ``SIDEBAR_SETTINGS_LINK`` when the sidebar is present (workspace
-    route), then waits for the settings page to render. Falls back to
-    ``navigate_to_settings_page`` (top-bar gear or direct nav) when the sidebar
-    is not rendered.
-    """
-    settings_link = page.get_by_test_id(ElementIDs.SIDEBAR_SETTINGS_LINK)
-    if settings_link.is_visible():
-        settings_link.click()
-        expect(page.get_by_test_id(ElementIDs.SETTINGS_PAGE)).to_be_visible(timeout=10000)
-        return PlaywrightSettingsPage(page=page)
-    return navigate_to_settings_page(page)
 
 
 def get_workspace_creation_button(page: Page) -> tuple[Locator, bool]:
@@ -629,16 +616,15 @@ def request_with_retry(
 
 
 def navigate_to_settings_page(page: Page, **_kwargs: object) -> PlaywrightSettingsPage:
-    """Open Settings the way a user does — click the gear in the top bar.
+    """Open Settings the way a user does — click the sidebar Settings link.
 
-    The settings button lives in the persistent ``TopBar``, which ``PageLayout``
-    renders on every in-app route (Home, Add Workspace, Workspace, Settings), so
-    it is reachable from any state this helper is called from — including the
-    add-workspace page that pre-test cleanup lands on after deleting all
-    workspaces. Clicking routes via React Router with no document reload, so it
-    keeps the WebSocket connection alive and avoids re-fetching ``index.html``
-    (and its assets) under the ``sculptor://app`` origin, where the built
-    renderer references assets via absolute paths.
+    The Settings link lives in the persistent sidebar (``AppShell`` renders it
+    on every in-app route, and the empty first-run page mounts its own copy),
+    so it is reachable from any state this helper is called from. Clicking
+    routes via React Router with no document reload, so it keeps the WebSocket
+    connection alive and avoids re-fetching ``index.html`` (and its assets)
+    under the ``sculptor://app`` origin, where the built renderer references
+    assets via absolute paths.
 
     The click is retried until the settings page actually renders. A single
     click can lose a race with an in-flight imperative redirect: deleting the
@@ -648,14 +634,15 @@ def navigate_to_settings_page(page: Page, **_kwargs: object) -> PlaywrightSettin
     fires while WorkspacePage is mounted, so once we reach Settings nothing
     redirects away again.
     """
-    # The Settings link lives in the persistent sidebar (AppShell renders it on every
-    # in-app route, and the empty-first-run page renders it too), so it is reachable from
-    # any state this helper is called from. Clicking routes via React Router with no
-    # document reload, keeping the WebSocket alive.
     settings_button = page.get_by_test_id(ElementIDs.SIDEBAR_SETTINGS_LINK)
     settings_page_marker = page.get_by_test_id(ElementIDs.SETTINGS_PAGE)
 
     def _click_into_settings() -> None:
+        # Inside the retry body: this helper also runs during per-test cleanup
+        # (_delete_extra_projects_via_ui) against the PREVIOUS test's end
+        # state, where the sidebar may be collapsed — its Settings link is then
+        # unmounted, not just hidden — and the shell may still be churning.
+        ensure_sidebar_expanded(page)
         expect(settings_button).to_be_visible(timeout=5_000)
         settings_button.click()
         expect(settings_page_marker).to_be_visible(timeout=5_000)

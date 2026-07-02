@@ -31,8 +31,8 @@ from sculptor.testing.browser_panel_fixture_server import BrowserPanelFixtureSer
 from sculptor.testing.elements.add_panel_dropdown import open_panel
 from sculptor.testing.elements.browser_panel import PlaywrightBrowserPanelElement
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
+from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import navigate_to_workspace
-from sculptor.testing.playwright_utils import open_settings
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -404,7 +404,7 @@ def test_browser_panel_in_page_state_preserved_across_route_detour(
         panel_a.webview_evaluate("document.getElementById('increment').click()")
     assert panel_a.webview_evaluate("document.getElementById('counter').textContent") == "3"
 
-    open_settings(page)
+    navigate_to_settings_page(page)
     expect(page.get_by_test_id(ElementIDs.SETTINGS_NAV_GENERAL)).to_be_visible()
 
     navigate_to_workspace(page, "Detour A")
