@@ -8,12 +8,15 @@ import type { ToolResultBlock, ToolUseBlock } from "~/api";
 import { isGenericToolContent } from "~/common/Guards.ts";
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
+import type { PluginToolVisualization } from "~/plugins/pluginRegistry.ts";
+import type { ToolCallView } from "~/plugins/types.ts";
 
 import styles from "./AlphaToolPopover.module.scss";
 import { OutsideWorkspaceIcon } from "./OutsideWorkspaceIcon.tsx";
+import { safeSummary, usePluginToolVisualization } from "./pluginToolViz.ts";
 import headerStyles from "./PopoverHeader.module.scss";
 import { PopoverHeader } from "./PopoverHeader.tsx";
-import type { PillData } from "./toolPill.types.ts";
+import type { PillData, PillState } from "./toolPill.types.ts";
 import { makeRelative } from "./toolPillUtils.ts";
 
 export type ToolEntryShellArgs = {
@@ -259,16 +262,25 @@ type ToolEntryContentProps = {
   block: ToolUseBlock | null;
   result: ToolResultBlock | null;
   workspaceCodePath: string | null;
+  /**
+   * The owning pill's lifecycle state, when the caller has it (the expanded row
+   * and the pill-level popover branch). The multi-entry popover renders one
+   * entry per call with no single pill state, so it omits this and the status is
+   * derived from the entry's own result.
+   */
+  pillState?: PillState;
   /** Defaults to the popover-entry layout (header + body). */
   renderShell?: ToolEntryShell;
 };
 
 /**
- * Render a single tool call's per-tool entry. The `renderShell` prop
- * controls layout — popover-entry chrome by default; AlphaToolPillRow
- * passes a row-layout shell for expanded density.
+ * The host's built-in per-tool entry: the specialized renderer for a known tool
+ * name, falling back to `DefaultEntry` (invocation string + `<pre>` dump).
+ * `ToolEntryContent` wraps this with a plugin-registry check; a plugin body's
+ * error boundary falls back to this rendering, so a broken visualizer is never
+ * less readable than stock.
  */
-export const ToolEntryContent = ({
+const BuiltinToolEntry = ({
   toolName,
   block,
   result,
@@ -294,6 +306,80 @@ export const ToolEntryContent = ({
     default:
       return <DefaultEntry {...props} />;
   }
+};
+
+/**
+ * A matched tool-visualization plugin's entry.
+ *
+ * In the popover (no `renderShell`), it renders the plugin summary as the header
+ * and the plugin body below — the body wrapped so a crash degrades to `builtin`
+ * rather than a generic plugin-error card. In the expanded row (a `renderShell`
+ * that drops the body), it renders only the plugin `{title, meta}` through the
+ * shell and never mounts the body — matching built-in row behavior.
+ */
+const PluginToolEntry = ({
+  visualization,
+  call,
+  builtin,
+  renderShell,
+}: {
+  visualization: PluginToolVisualization;
+  call: ToolCallView;
+  /** The stock rendering for this call — the popover body's crash fallback. */
+  builtin: ReactElement;
+  renderShell?: ToolEntryShell;
+}): ReactElement => {
+  const summary = safeSummary(visualization.definition, call);
+
+  if (renderShell) {
+    return renderShell({
+      // The host's default title (invocation string / tool name) covers a plugin
+      // that omits (or throws from) `summary`.
+      title: summary?.title ?? call.invocation ?? call.toolName,
+      meta: summary?.meta,
+      bodyText: "",
+    });
+  }
+
+  const PluginBody = visualization.wrappedBody;
+  return (
+    <div className={styles.entry}>
+      <PopoverHeader title={summary?.title ?? call.invocation ?? call.toolName} meta={summary?.meta} />
+      <PluginBody call={call} fallback={builtin} />
+    </div>
+  );
+};
+
+/**
+ * Render a single tool call's per-tool entry. Consults the plugin
+ * tool-visualization registry first: a matching plugin overrides the built-in
+ * renderer (summary + body in the popover, summary-only in the expanded row).
+ * With no match — or for a call whose pill data isn't available here — the
+ * host's built-in per-tool entry renders. The `renderShell` prop controls
+ * layout: popover-entry chrome by default; AlphaExpandedToolRow passes a
+ * row-layout shell for expanded density.
+ */
+export const ToolEntryContent = ({
+  toolName,
+  block,
+  result,
+  workspaceCodePath,
+  pillState,
+  renderShell,
+}: ToolEntryContentProps): ReactElement => {
+  const derivedState: PillState = result ? (result.isError ? "error" : "completed") : "initializing";
+  const { visualization, call } = usePluginToolVisualization({ block, result, pillState: pillState ?? derivedState });
+  const builtin = (
+    <BuiltinToolEntry
+      toolName={toolName}
+      block={block}
+      result={result}
+      workspaceCodePath={workspaceCodePath}
+      renderShell={renderShell}
+    />
+  );
+  if (!visualization) return builtin;
+  return <PluginToolEntry visualization={visualization} call={call} builtin={builtin} renderShell={renderShell} />;
 };
 
 type AlphaToolPopoverProps = {

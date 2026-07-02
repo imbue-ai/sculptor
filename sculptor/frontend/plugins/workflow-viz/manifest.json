@@ -1,0 +1,7 @@
+{
+  "id": "workflow-viz",
+  "name": "Workflow visualization",
+  "version": "0.1.0",
+  "entry": "main.js",
+  "sdkVersion": "^1.0.0"
+}

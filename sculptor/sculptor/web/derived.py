@@ -36,13 +36,16 @@ from sculptor.foundation.pydantic_serialization import build_discriminator
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingDoneAgentMessage
+from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
 from sculptor.interfaces.agents.agent import EnvironmentAcquiredRunnerMessage
 from sculptor.interfaces.agents.agent import EnvironmentReleasedRunnerMessage
 from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
+from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageAgentMessage
 from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
+from sculptor.interfaces.agents.agent import TerminalAgentConfig
 from sculptor.interfaces.agents.agent import TerminalAgentSignalRunnerMessage
 from sculptor.interfaces.agents.agent import TerminalStatusSignal
 from sculptor.interfaces.agents.agent import UpdatedArtifactAgentMessage
@@ -70,6 +73,7 @@ from sculptor.state.messages import Message
 from sculptor.state.messages import ModelOption
 from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.utils.functional import first
+from sculptor.web.data_types import AgentTypeName
 from sculptor.web.data_types import PrApproval  # noqa: F401 — re-exported for existing import sites
 from sculptor.web.data_types import PrComment  # noqa: F401 — re-exported for existing import sites
 from sculptor.web.data_types import PrStatusInfo  # noqa: F401 — re-exported for existing import sites
@@ -458,6 +462,35 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
         # the terminal-input endpoint.
         agent_config = self.task_input.agent_config
         return isinstance(agent_config, RegisteredTerminalAgentConfig) and agent_config.accepts_automated_prompts
+
+    @computed_field
+    @property
+    def agent_type(self) -> AgentTypeName | None:
+        """The harness the task was created with, derived from the persisted
+        `agent_config` subtype. None for configs with no user-facing agent type
+        (e.g. the internal hello harness) or a shape a future config adds before
+        this mapping is extended — the frontend treats null as "unknown" and
+        skips agent-scoped tool visualizations rather than guessing."""
+        agent_config = self.task_input.agent_config
+        if isinstance(agent_config, ClaudeCodeSDKAgentConfig):
+            return AgentTypeName.CLAUDE
+        if isinstance(agent_config, PiAgentConfig):
+            return AgentTypeName.PI
+        if isinstance(agent_config, RegisteredTerminalAgentConfig):
+            return AgentTypeName.REGISTERED
+        if isinstance(agent_config, TerminalAgentConfig):
+            return AgentTypeName.TERMINAL
+        return None
+
+    @computed_field
+    @property
+    def registration_id(self) -> str | None:
+        """The registered-terminal registration this task was stamped from, or
+        None for every non-registered agent type."""
+        agent_config = self.task_input.agent_config
+        if isinstance(agent_config, RegisteredTerminalAgentConfig):
+            return agent_config.registration_id
+        return None
 
     @computed_field
     @property

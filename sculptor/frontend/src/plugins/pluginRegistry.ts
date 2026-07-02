@@ -1,10 +1,10 @@
 import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 
 import type { PanelDefinition } from "~/components/panels/types.ts";
 
-import type { PluginManifest } from "./types.ts";
+import type { PluginManifest, ToolVisualizationDefinition } from "./types.ts";
 
 /**
  * Panels contributed by loaded plugins, ready to be merged into the host's
@@ -50,6 +50,47 @@ export const pluginWorkspaceWidgetsAtom = atom<
 export const pluginHomeViewsAtom = atom<
   ReadonlyArray<{ id: string; title: string; icon?: ComponentType; component: ComponentType }>
 >([]);
+
+/**
+ * One registered tool-call visualization: the plugin's `definition` plus the
+ * error-boundary-wrapped `body` the chat renders, attributed to its owning
+ * plugin (`pluginId` is the manifest id, so `inspect` can list a plugin's
+ * visualizations). The entry keeps `wrappedBody` separate from
+ * `definition.body` so dispatch reads the raw definition (names, agent types,
+ * `canRender`, `summary`, `icon`) while the chat mounts the wrapped component.
+ */
+export type PluginToolVisualization = {
+  definition: ToolVisualizationDefinition;
+  /**
+   * The chat-rendered body: the plugin's `definition.body` wrapped by the loader
+   * in an error boundary, PluginContext, and WorkspacePluginContext. Takes the
+   * same `call` the definition's body does, plus a host-supplied `fallback` the
+   * error boundary renders on a body crash (the stock tool-call rendering) so a
+   * broken visualizer degrades to it rather than a generic plugin-error card.
+   */
+  wrappedBody: ComponentType<{ call: ToolVisualizationCall; fallback?: ReactNode }>;
+  pluginId: string;
+};
+
+/**
+ * The `call` prop the wrapped body receives. Structurally the SDK's
+ * `ToolCallView`, restated here (rather than imported) so the registry module
+ * doesn't depend on the SDK barrel; the dispatch layer owns the mapping.
+ */
+export type ToolVisualizationCall = ToolVisualizationDefinition extends {
+  body: ComponentType<{ call: infer TCall }>;
+}
+  ? TCall
+  : never;
+
+/**
+ * Tool-call visualizations contributed by plugins via
+ * `registerToolVisualization`. Ordered by registration, so dispatch's
+ * "last registered wins" is a reverse scan. Replace-by-id within the same
+ * definition id. Each entry's `wrappedBody` is already wrapped by the loader in
+ * an error boundary, the plugin's PluginContext, and the WorkspacePluginContext.
+ */
+export const pluginToolVisualizationsAtom = atom<ReadonlyArray<PluginToolVisualization>>([]);
 
 /**
  * User-added plugin sources, persisted to localStorage. A source is a URL or

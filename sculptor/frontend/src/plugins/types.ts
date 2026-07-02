@@ -1,3 +1,4 @@
+import type { LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 
 import type { PanelDefinition } from "~/components/panels/types.ts";
@@ -101,6 +102,86 @@ export type HomeViewDefinition = {
   component: ComponentType;
 };
 
+/** Lifecycle of a single tool call, as a plugin visualizer sees it. */
+export type ToolCallStatus = "running" | "success" | "error";
+
+/**
+ * Curated view of one tool call handed to a tool-visualization plugin.
+ * Deliberately NOT the generated `ToolUseBlock`/`ToolResultBlock` — plugins
+ * must not couple to backend block shapes (same precedent as `WorkspaceView`
+ * in `sdk/hooks.ts`).
+ */
+export type ToolCallView = {
+  /** The tool_use id (a result-only block's `toolUseId`). */
+  id: string;
+  /** Full tool name, including an `mcp__server__tool` for MCP tools. */
+  toolName: string;
+  /**
+   * The owning agent's stored type encoding: `"claude" | "pi" | "terminal" |
+   * "registered:<registrationId>"`, or `null` when the host can't tell which
+   * harness owns the transcript.
+   */
+  agentType: string | null;
+  /**
+   * The tool's input. Complete once visible (never partial — tool input is
+   * revealed as a whole unit), and `null` for result-only blocks that carry no
+   * input.
+   */
+  input: Readonly<Record<string, unknown>> | null;
+  status: ToolCallStatus;
+  /** The host's invocation string, available once a result exists; else `null`. */
+  invocation: string | null;
+  /** The tool's result, or `null` while the call is still running. */
+  result: { text: string; isError: boolean } | null;
+  durationSeconds: number | null;
+};
+
+/** The header line a visualizer contributes for a tool call. */
+export type ToolVisualizationSummary = {
+  title: string;
+  meta?: string;
+};
+
+/**
+ * A plugin contribution that replaces how a matching tool call is rendered in
+ * the chat — its pill/row icon, its summary line, and its popover body.
+ */
+export type ToolVisualizationDefinition = {
+  /** Stable id; registering twice with the same id replaces the previous one. */
+  id: string;
+  /** Tool names this visualizer claims. Exact matches only (no predicates). */
+  toolNames: ReadonlyArray<string>;
+  /**
+   * Restrict the visualizer to calls from these agent types (the stored
+   * encoding, `registered:<id>` for registered agents). Omitted matches every
+   * agent. A scoped registration does NOT match a call whose `agentType` is
+   * `null`/unknown; an unscoped one does.
+   */
+  agentTypes?: ReadonlyArray<string>;
+  /**
+   * Runtime discard, run at dispatch time before the host commits to this
+   * visualizer. Must be pure and cheap. Returning `false` (or throwing —
+   * treated as declined) falls through to the next candidate, then to the
+   * host's built-in/default rendering.
+   */
+  canRender?: (call: ToolCallView) => boolean;
+  /** Pill/row icon override; falls back to the host's `getToolIcon` when omitted. */
+  icon?: LucideIcon;
+  /**
+   * The header line in the popover AND the inline text of the expanded-density
+   * row. Strings only — the expanded row is a `role="button"` click target, so
+   * JSX is not allowed there. When omitted, the host's default title
+   * (invocation string / tool name) is used; a throw falls back the same way.
+   */
+  summary?: (call: ToolCallView) => ToolVisualizationSummary;
+  /**
+   * The popover body, rendered in both densities. Never rendered inline in the
+   * expanded-density row (matching built-in behavior). A crash here falls back
+   * to the host's stock rendering for that call, not a plugin-error panel.
+   */
+  body: ComponentType<{ call: ToolCallView }>;
+};
+
 export type PluginHostApi = {
   registerPanel: (panel: PanelDefinition) => () => void;
   /**
@@ -131,6 +212,14 @@ export type PluginHostApi = {
    * disposer.
    */
   registerHomeView: (view: HomeViewDefinition) => () => void;
+  /**
+   * Registers a custom renderer for a matching tool call in the chat — its
+   * pill/row icon, summary line, and popover body. The `body` is wrapped, like
+   * a panel, in a per-plugin error boundary, the host's PluginContext, and the
+   * WorkspacePluginContext for the workspace the chat is shown in; a body crash
+   * falls back to the host's stock rendering for that call. Returns a disposer.
+   */
+  registerToolVisualization: (definition: ToolVisualizationDefinition) => () => void;
 };
 
 export type PluginActivate = (api: PluginHostApi) => void | (() => void) | Promise<void | (() => void)>;

@@ -2,8 +2,29 @@ import { Theme } from "@radix-ui/themes";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { ToolCallView } from "~/plugins/types.ts";
+
 import { AlphaToolPill } from "../AlphaToolPill.tsx";
 import type { PillData } from "../toolPill.types.ts";
+
+// The pill consults the tool-visualization registry (which reads the workspace
+// route + task atoms). Stub the dispatch to "no plugin" so the pill renders in
+// isolation without the app/router context, exercising its built-in icon path.
+vi.mock("../pluginToolViz.ts", () => ({
+  usePluginToolVisualization: (): { visualization: null; call: ToolCallView } => ({
+    visualization: null,
+    call: {
+      id: "",
+      toolName: "",
+      agentType: null,
+      input: null,
+      status: "success",
+      invocation: null,
+      result: null,
+      durationSeconds: null,
+    },
+  }),
+}));
 
 const createPillData = (overrides: Partial<PillData> = {}): PillData => ({
   id: "pill-1",

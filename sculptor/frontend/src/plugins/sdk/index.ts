@@ -23,6 +23,10 @@ export type {
   OverlayDefinition,
   PluginHostApi,
   PluginManifest,
+  ToolCallStatus,
+  ToolCallView,
+  ToolVisualizationDefinition,
+  ToolVisualizationSummary,
   WorkspaceWidgetDefinition,
 } from "../types.ts";
 export type { PanelDefinition } from "~/components/panels/types.ts";

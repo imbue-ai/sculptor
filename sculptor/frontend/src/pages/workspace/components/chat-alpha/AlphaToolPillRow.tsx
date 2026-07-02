@@ -17,6 +17,7 @@ import { AlphaToolPopover } from "./AlphaToolPopover.tsx";
 import { chatToolDensityAtom } from "./atoms.ts";
 import { useCloseOnChatScroll } from "./hooks/useChatScroll.tsx";
 import { usePillHoverDelay } from "./hooks/usePillHoverDelay.ts";
+import { usePluginToolVisualization } from "./pluginToolViz.ts";
 import { useToolNavigation } from "./ToolNavigationContext.tsx";
 import type { PillData } from "./toolPill.types.ts";
 import { buildPillData } from "./toolPillUtils.ts";
@@ -253,22 +254,6 @@ export const AlphaToolPillRow = ({
 
   if (pillDataList.length === 0) return null;
 
-  const renderPopoverContent = (pill: PillData): ReactElement => {
-    if (pill.label === "Bash" || pill.label === "Monitor") {
-      const block = pill.blocks[0];
-      const result = pill.results[0];
-      return (
-        <AlphaCommandPopover
-          toolName={pill.label}
-          block={block}
-          result={result}
-          isExecuting={pill.state === "initializing"}
-        />
-      );
-    }
-    return <AlphaToolPopover pillData={pill} workspaceCodePath={workspaceCodePath} />;
-  };
-
   return (
     <Popover.Root
       open={isPopoverOpen}
@@ -351,10 +336,43 @@ export const AlphaToolPillRow = ({
             onMouseEnter={handlePopoverMouseEnter}
             onMouseLeave={handlePopoverMouseLeave}
           >
-            {renderPopoverContent(openPill)}
+            <PillPopoverContent pill={openPill} workspaceCodePath={workspaceCodePath} />
           </div>
         )}
       </Popover.Content>
     </Popover.Root>
   );
+};
+
+/**
+ * The popover body for one pill in default density. Consults the plugin
+ * tool-visualization registry first so a matching plugin overrides even the
+ * dedicated Bash/Monitor command popover (which otherwise bypasses the shared
+ * per-entry dispatch). With no plugin match, single-call Bash/Monitor pills use
+ * the command popover; everything else falls to the shared multi-entry tool
+ * popover — whose per-entry `ToolEntryContent` runs the same registry check, so
+ * a plugin hit renders through it there too.
+ */
+const PillPopoverContent = ({
+  pill,
+  workspaceCodePath,
+}: {
+  pill: PillData;
+  workspaceCodePath: string | null;
+}): ReactElement => {
+  const block = pill.blocks[0] ?? null;
+  const result = pill.results[0] ?? null;
+  const { visualization } = usePluginToolVisualization({ block, result, pillState: pill.state });
+
+  if (visualization === null && (pill.label === "Bash" || pill.label === "Monitor")) {
+    return (
+      <AlphaCommandPopover
+        toolName={pill.label}
+        block={block ?? undefined}
+        result={result ?? undefined}
+        isExecuting={pill.state === "initializing"}
+      />
+    );
+  }
+  return <AlphaToolPopover pillData={pill} workspaceCodePath={workspaceCodePath} />;
 };
