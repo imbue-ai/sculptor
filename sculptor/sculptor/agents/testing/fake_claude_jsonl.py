@@ -215,9 +215,18 @@ def make_hook_callback_control_request(
     }
 
 
-def make_end_message(session_id: str | None, is_error: bool = False, result: str = "") -> dict:
-    """Return a dict for the end-of-stream message."""
-    return {
+def make_end_message(
+    session_id: str | None,
+    is_error: bool = False,
+    result: str = "",
+    api_error_status: int | None = None,
+) -> dict:
+    """Return a dict for the end-of-stream message.
+
+    ``api_error_status`` mirrors the real CLI: the HTTP status is included only when
+    the turn failed on an API error, and the key is omitted entirely otherwise.
+    """
+    message = {
         "type": "result",
         "subtype": "success",
         "is_error": is_error,
@@ -234,6 +243,9 @@ def make_end_message(session_id: str | None, is_error: bool = False, result: str
         },
         "total_cost_usd": 0,
     }
+    if api_error_status is not None:
+        message["api_error_status"] = api_error_status
+    return message
 
 
 def make_streaming_text_events(

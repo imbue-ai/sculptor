@@ -899,7 +899,17 @@ class ClaudeOutputProcessor:
         if result.is_error:
             if self._interrupted_event is not None and self._interrupted_event.is_set():
                 logger.info("Suppressing error end response because agent was interrupted: {}", result.result)
+            elif result.api_error_status is not None:
+                # The CLI reports the HTTP status of the failing API call directly, so classify
+                # from that rather than parsing result text — the latter breaks silently if the
+                # CLI rewords its error messages.
+                logger.info("API Error: stdout={}, stderr={}", self.process.read_stdout(), self.process.read_stderr())
+                if result.api_error_status in TRANSIENT_ERROR_CODES:
+                    raise AgentTransientError(result.result, exit_code=self.process.returncode)
+                raise ClaudeAPIError(result.result, exit_code=self.process.returncode)
             elif result.result.startswith("API Error"):
+                # Fallback for CLIs that predate the structured api_error_status field: recover
+                # the status by matching the "API Error: <code> ..." text prefix.
                 logger.info("API Error: stdout={}, stderr={}", self.process.read_stdout(), self.process.read_stderr())
                 if any(result.result.startswith(f"API Error: {code}") for code in TRANSIENT_ERROR_CODES):
                     raise AgentTransientError(result.result, exit_code=self.process.returncode)

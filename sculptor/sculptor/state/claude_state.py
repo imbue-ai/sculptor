@@ -259,6 +259,10 @@ class ParsedEndResponse(ParsedAgentResponse):
     input_tokens: int | None = Field(default=None, description="Input tokens")
     output_tokens: int | None = Field(default=None, description="Output tokens")
     total_cost_usd: float | None = Field(default=None, description="Total cost of agent session")
+    api_error_status: int | None = Field(
+        default=None,
+        description="HTTP status of the API error that ended the turn (e.g. 429/500/529), or None if the turn did not fail on an API error",
+    )
 
 
 class ParsedCompactionSummaryResponse(ParsedAgentResponse):
@@ -520,6 +524,8 @@ def _handle_stream_end_message(data: dict[str, Any]) -> ParsedEndResponse:
         input_tokens=data.get("usage", {}).get("input_tokens", 0),
         output_tokens=data.get("usage", {}).get("output_tokens", 0),
         total_cost_usd=data.get("total_cost_usd", 0),
+        # Present only when the turn failed on an API error; the CLI omits it otherwise.
+        api_error_status=data.get("api_error_status"),
     )
 
 

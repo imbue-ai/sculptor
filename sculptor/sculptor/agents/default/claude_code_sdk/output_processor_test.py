@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from sculptor.agents.default.claude_code_sdk.errors import ClaudeAPIError
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.default.claude_code_sdk.mcp_server import SculptorMcpServer
 from sculptor.agents.default.claude_code_sdk.output_processor import ClaudeOutputProcessor
@@ -30,6 +31,7 @@ from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.errors import AgentClientError
+from sculptor.interfaces.agents.errors import AgentTransientError
 from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import ToolUseID
@@ -769,6 +771,60 @@ class TestInterruptedErrorSuppression:
 
         with pytest.raises(AgentClientError):
             _feed_jsonl(processor, [init, end])
+
+
+class TestApiErrorClassification:
+    """Transient-vs-permanent classification of error end responses.
+
+    These feed real JSONL frames through the parser and processor dispatch loop
+    (via _feed_jsonl), so they exercise both the api_error_status parse site and
+    _parse_stream_end_response's classification end-to-end. The exception type is
+    the only observable that reflects the classification — at the UI layer every
+    recoverable AgentClientError renders identically, so this is the level that
+    can distinguish them.
+    """
+
+    def test_structured_transient_status_raises_transient_error(self) -> None:
+        """A structured api_error_status in TRANSIENT_ERROR_CODES (429) is transient."""
+        processor = _make_processor_for_interrupt_test(interrupted_event=Event())
+        init = make_init_message(session_id="session_001")
+        # Reworded text that does NOT start with "API Error", proving the structured
+        # field drives classification rather than the string-prefix fallback.
+        end = make_end_message(session_id=None, is_error=True, result="Overloaded", api_error_status=429)
+
+        with pytest.raises(AgentTransientError):
+            _feed_jsonl(processor, [init, end])
+
+    def test_structured_permanent_status_raises_claude_api_error(self) -> None:
+        """A structured api_error_status outside TRANSIENT_ERROR_CODES (400) is permanent."""
+        processor = _make_processor_for_interrupt_test(interrupted_event=Event())
+        init = make_init_message(session_id="session_001")
+        end = make_end_message(session_id=None, is_error=True, result="Bad request", api_error_status=400)
+
+        with pytest.raises(ClaudeAPIError) as exc_info:
+            _feed_jsonl(processor, [init, end])
+        # A permanent API error must not be mistaken for a retryable transient one.
+        assert not isinstance(exc_info.value, AgentTransientError)
+
+    def test_string_prefix_fallback_still_classifies_transient(self) -> None:
+        """Without the structured field, "API Error: 429 ..." text still maps to transient."""
+        processor = _make_processor_for_interrupt_test(interrupted_event=Event())
+        init = make_init_message(session_id="session_001")
+        end = make_end_message(session_id=None, is_error=True, result="API Error: 429 Rate limited")
+
+        with pytest.raises(AgentTransientError):
+            _feed_jsonl(processor, [init, end])
+
+    def test_plain_error_text_raises_generic_client_error(self) -> None:
+        """A non-API error with neither the field nor the prefix stays a plain client error."""
+        processor = _make_processor_for_interrupt_test(interrupted_event=Event())
+        init = make_init_message(session_id="session_001")
+        end = make_end_message(session_id=None, is_error=True, result="Something else went wrong")
+
+        with pytest.raises(AgentClientError) as exc_info:
+            _feed_jsonl(processor, [init, end])
+        # Neither transient nor a Claude API error — the base client error, not a subclass.
+        assert type(exc_info.value) is AgentClientError
 
 
 def _make_processor_with_mcp_server(
