@@ -302,6 +302,26 @@ class ClaudeOutputProcessor:
         # for the wakeup turn (a second init → assistant → result cycle) to
         # arrive from the CLI.
         self._pending_wakeup: bool = False
+        # SCU-1660: when a Monitor background task completes at the instant a
+        # new prompt is dispatched, the CLI delivers the pending
+        # ``<task-notification>`` as a full turn (init → assistant → result)
+        # *before* it processes the user's message — all in the single CLI
+        # process spawned for that prompt. That notification turn's ``result``
+        # must NOT end the loop, or the process manager tears the CLI down while
+        # the user's real request has run at most one tool call.
+        #
+        # ``_awaiting_notification_turn_init`` is armed when a task-notification
+        # arrives before the user's turn has ended (found_final_message still
+        # False). It is only *confirmed* as a separate turn if a new
+        # ``system/init`` (a fresh request cycle) then arrives — that is what
+        # distinguishes a notification delivered as its own turn (this bug)
+        # from an inline mid-turn notification that does not start a new cycle
+        # (SCU-267). On confirmation the flag is promoted into
+        # ``_pending_notification_turn_results``: a count of notification-turn
+        # results still to be skipped so the loop stays open for the user's own
+        # turn.
+        self._awaiting_notification_turn_init: bool = False
+        self._pending_notification_turn_results: int = 0
         # Last time we received any stdout line from the CLI. Used to detect
         # hangs where the CLI stops producing output after an interrupt.
         self._last_output_time: float = time.monotonic()
@@ -674,11 +694,28 @@ class ClaudeOutputProcessor:
                 if not self._completed_pending_deferred:
                     self._completed_pending_deferred_deadline = None
                 # A new turn (init → assistant → result) always follows a
-                # task_notification, so reset found_final_message to keep the
-                # loop open for it.  Without this, the loop exits immediately
-                # after the last pending task is cleared — before reading the
-                # post-notification assistant response.
-                self.found_final_message = False
+                # task_notification. Keep the loop open for it — but the way we
+                # do that depends on whether the user's own message turn has
+                # already ended:
+                #
+                #  - found_final_message is True: the common ordering — the
+                #    user's turn finished, THEN the background task completed.
+                #    The notification's follow-up turn is the LAST turn, so
+                #    clearing found_final_message here (and letting the
+                #    follow-up's result set it again) is exactly right.
+                #
+                #  - found_final_message is False: the notification arrived
+                #    BEFORE the user's turn produced a result. Either the CLI is
+                #    delivering it ahead of the user's prompt as its own turn
+                #    (SCU-1660), or it is an inline mid-turn notification with no
+                #    new request cycle (SCU-267). We cannot yet tell which, so
+                #    arm the flag; _parse_init_response confirms the former if a
+                #    fresh init follows, and _parse_stream_end_response drops it
+                #    for the latter.
+                if self.found_final_message:
+                    self.found_final_message = False
+                else:
+                    self._awaiting_notification_turn_init = True
                 self.output_message_queue.put(
                     BackgroundTaskNotificationAgentMessage(
                         message_id=AgentMessageID(),
@@ -821,6 +858,16 @@ class ClaudeOutputProcessor:
         self.session_id_written_event.set()
         logger.info("Stored session_id: {}", session_id)
 
+        # A task-notification that arrived before the user's turn ended armed
+        # _awaiting_notification_turn_init. This init is a fresh request cycle,
+        # which confirms the notification was delivered as its own turn ahead
+        # of the user's prompt (SCU-1660) rather than inline mid-turn. Promote
+        # it to a pending notification-turn result so _parse_stream_end_response
+        # skips that turn's result and keeps the loop open for the user's turn.
+        if self._awaiting_notification_turn_init:
+            self._awaiting_notification_turn_init = False
+            self._pending_notification_turn_results += 1
+
         # A ScheduleWakeup fires as a second init message on the same session.
         # When the wakeup init arrives, reset found_final_message so the loop
         # processes the wakeup turn (assistant → result) instead of exiting.
@@ -920,6 +967,19 @@ class ClaudeOutputProcessor:
 
         self.found_final_message = True
         self._final_message_time = time.monotonic()
+
+        # SCU-1660: if this result terminates a task-notification turn the CLI
+        # delivered ahead of the user's own message turn, it is not the end of
+        # the invocation — the user's real turn still has to run. Re-open the
+        # loop so it is not torn down after its first tool result.
+        if self._pending_notification_turn_results > 0:
+            self._pending_notification_turn_results -= 1
+            self.found_final_message = False
+        # A notification that never started a fresh request cycle before this
+        # result was an inline mid-turn notification (SCU-267), not a separate
+        # turn — drop the pending classification so it doesn't leak into a later
+        # turn's result.
+        self._awaiting_notification_turn_init = False
 
         # Clear pending background tasks that already completed via task_updated.
         # The CLI emits task_updated(status=completed) when a background task
