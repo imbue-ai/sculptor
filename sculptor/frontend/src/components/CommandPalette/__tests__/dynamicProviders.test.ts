@@ -7,7 +7,6 @@ import { workspaceAtomFamily, workspaceIdsAtom } from "../../../common/state/ato
 import { EMPTY_WORKSPACE_LAYOUT } from "../../sections/persistence/types.ts";
 import type { PanelDefinition } from "../../sections/registry/panelRegistry.ts";
 import { panelRegistryAtom } from "../../sections/registry/panelRegistry.ts";
-import { togglePanelAtom } from "../../sections/sectionActions.ts";
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "../../sections/sectionAtoms.ts";
 import type { PanelId, SubSectionId } from "../../sections/sectionTypes.ts";
 import { buildAgentProvider } from "../dynamic/agentCommands.ts";
@@ -474,14 +473,36 @@ describe("buildPanelTogglesProvider", () => {
     }
   });
 
-  it("perform sets togglePanelAtom with the panel id and its fallback section", () => {
+  it("perform reveals the panel in place — activate, expand its section, jump there", () => {
+    // seedRegistry places 'terminal' in the (collapsed) left section.
     seedRegistry([{ id: "terminal", displayName: "Terminal" }]);
     const runtime = makeRuntime();
-    const setSpy = vi.spyOn(runtime.store, "set");
     const cmd = buildPanelTogglesProvider(runtime).produce(WORKSPACE_CTX)[0]!;
+
     cmd.perform({ ctx: WORKSPACE_CTX, keepOpen: true, pushPage: vi.fn() });
-    expect(setSpy).toHaveBeenCalledWith(togglePanelAtom, { panelId: "terminal", fallbackSection: "left" });
-    setSpy.mockRestore();
+
+    const layout = runtime.store.get(workspaceLayoutAtom);
+    expect(layout.placement["terminal" as PanelId]).toBe("left");
+    expect(layout.expanded.left).toBe(true);
+    expect(layout.activePanel.left).toBe("terminal");
+    expect(layout.activeSubSection).toBe("left");
+  });
+
+  it("perform is jump-only: an open, active panel in an expanded section is never closed", () => {
+    // The toggle semantics used to close such a panel; "Show X" must instead
+    // remain a reveal (re-running it is just a jump to the panel's section).
+    seedRegistry([{ id: "terminal", displayName: "Terminal" }]);
+    const runtime = makeRuntime();
+    const cmd = buildPanelTogglesProvider(runtime).produce(WORKSPACE_CTX)[0]!;
+
+    // First run leaves the panel open + active in an expanded left section.
+    cmd.perform({ ctx: WORKSPACE_CTX, keepOpen: true, pushPage: vi.fn() });
+    // Second run must keep it open (the old toggle would close it here).
+    cmd.perform({ ctx: WORKSPACE_CTX, keepOpen: true, pushPage: vi.fn() });
+
+    const layout = runtime.store.get(workspaceLayoutAtom);
+    expect(layout.placement["terminal" as PanelId]).toBe("left");
+    expect(layout.activePanel.left).toBe("terminal");
   });
 
   it("picks up panels added to the registry without re-creating the provider", () => {

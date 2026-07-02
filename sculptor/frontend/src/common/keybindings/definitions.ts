@@ -30,30 +30,25 @@ export const KEYBINDING_DEFINITIONS: ReadonlyArray<KeybindingDefinition> = [
     defaultBinding: "Meta+P",
   },
   {
-    id: "close_workspace",
-    name: "Close workspace",
-    description: "Close the current workspace tab",
-    category: "workspaces",
-    defaultBinding: "Meta+W",
-  },
-  {
     id: "delete_workspace",
     name: "Delete workspace",
     description: "Delete the current workspace and all of its agents",
     category: "workspaces",
     defaultBinding: "Meta+Shift+W",
   },
+  // The next_tab/previous_tab ids predate the sidebar workspace list (they cycled
+  // the old tab strip); the ids are kept so users' persisted overrides still apply.
   {
     id: "next_tab",
-    name: "Next tab",
-    description: "Switch to the next workspace tab",
+    name: "Next workspace",
+    description: "Switch to the next workspace",
     category: "workspaces",
     defaultBinding: "Meta+]",
   },
   {
     id: "previous_tab",
-    name: "Previous tab",
-    description: "Switch to the previous workspace tab",
+    name: "Previous workspace",
+    description: "Switch to the previous workspace",
     category: "workspaces",
     defaultBinding: "Meta+[",
   },

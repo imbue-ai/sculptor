@@ -4,7 +4,7 @@ import { atomFamily, atomWithStorage } from "jotai/utils";
 import { atomWithDebouncedStorage } from "~/common/state/atoms/atomWithDebouncedStorage.ts";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { jumpToSectionAtom, openPanelAtom } from "~/components/sections/sectionActions.ts";
-import { isEmptyLayout, workspaceLayoutFamily } from "~/components/sections/sectionAtoms.ts";
+import { activeWorkspaceIdAtom, isEmptyLayout, workspaceLayoutFamily } from "~/components/sections/sectionAtoms.ts";
 import type { PanelId, SubSectionId } from "~/components/sections/sectionTypes.ts";
 import type { DiffSelection } from "~/pages/workspace/components/diffViewer/types.ts";
 import { getUncommittedFileStatusMap } from "~/pages/workspace/panels/fileBrowser/atoms.ts";
@@ -312,17 +312,26 @@ export const setActiveDiffTabAtom = atom(null, (get, set, payload: SetActiveDiff
   // the section layout is what actually surfaces the viewer. The legacy flag is
   // still written below for backwards compatibility with code/tests that read it.
   //
-  // Guard against an UNSEEDED layout: the workspace-shell bootstrap seeds the default
-  // arrangement (Files/Changes/Commits in the left section, the agent in center, …)
-  // on a workspace's first visit, gated on `isEmptyLayout`. If an open-file event
-  // races that bootstrap (e.g. a buffered WebSocket OpenFileUiAction landing in the
-  // same tick as mount), opening a single host panel here would place it ALONE in the
-  // left section and flip `isEmptyLayout` to false, so the bootstrap would skip seeding
-  // and Files/Changes/Commits would never appear. Skip the reveal until the layout is
-  // seeded; the tab is already recorded above, so once the bootstrap seeds the default
-  // and the user expands the host panel, the viewer renders the right file.
+  // The reveal is skipped in two cases (the tab is already recorded above either way,
+  // so the viewer renders the right file once the host panel is visible):
+  //
+  // 1. A NON-ACTIVE workspace: open-file events arrive over the unified stream for
+  //    ANY workspace, but `openPanelAtom`/`jumpToSectionAtom` write through the
+  //    active-workspace layout proxy — revealing here would open/expand the host
+  //    panel and pulse the ring in the workspace the user is currently VIEWING (and
+  //    persist that layout change). The target workspace keeps its recorded tab and
+  //    surfaces it on the next visit.
+  //
+  // 2. An UNSEEDED layout: the workspace-shell bootstrap seeds the default
+  //    arrangement (Files/Changes/Commits in the left section, the agent in center, …)
+  //    on a workspace's first visit, gated on `isEmptyLayout`. If an open-file event
+  //    races that bootstrap (e.g. a buffered WebSocket OpenFileUiAction landing in the
+  //    same tick as mount), opening a single host panel here would place it ALONE in the
+  //    left section and flip `isEmptyLayout` to false, so the bootstrap would skip
+  //    seeding and Files/Changes/Commits would never appear.
+  const isActiveWorkspace = payload.workspaceId === get(activeWorkspaceIdAtom);
   const layout = get(workspaceLayoutFamily(payload.workspaceId));
-  if (!isEmptyLayout(layout)) {
+  if (isActiveWorkspace && !isEmptyLayout(layout)) {
     const host = HOST_PANEL_BY_KIND[payload.kind];
     set(openPanelAtom, { panelId: host.panelId, in: host.section });
     set(jumpToSectionAtom, { subSection: host.section });
@@ -405,6 +414,21 @@ export const openCombinedDiffTabAtom = atom(
     set(setActiveDiffTabAtom, { kind: "combined", ...params });
   },
 );
+
+/**
+ * Reset the active workspace's combined "Review All" scope to its default —
+ * "All" (vs the target branch), the full branch review the surface is named for.
+ * The add-panel open path fires this only when the Review All panel is NEWLY
+ * placed, so a scope the user picked while the panel is open is never stomped;
+ * merely re-activating or revealing the already-open panel keeps their choice.
+ */
+export const resetReviewAllScopeAtom = atom(null, (get, set) => {
+  const workspaceId = get(activeWorkspaceIdAtom);
+  if (workspaceId === null) {
+    return;
+  }
+  set(diffScopeAtomFamily(workspaceId), "vs-target-branch");
+});
 
 /** Open (or activate) a read-only file view tab. */
 export const openFileViewTabAtom = atom(null, (_get, set, params: { workspaceId: string; filePath: string }) => {

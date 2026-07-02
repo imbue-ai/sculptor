@@ -46,6 +46,9 @@ def test_scope_picker_defaults_to_all(sculptor_instance_: SculptorInstance) -> N
     # The combined diff lives in the Review All panel (the Changes panel renders
     # its own scope picker too), so go through the Review All panel POM to avoid
     # matching two pickers.
-    scope_picker = task_page.get_review_all_panel().get_scope_picker()
+    review_all_panel = task_page.get_review_all_panel()
+    scope_picker = review_all_panel.get_scope_picker()
     expect(scope_picker).to_be_visible()
-    expect(scope_picker).to_contain_text("All")
+    # Assert the "All" segment is the CHECKED one — the picker always renders the
+    # word "All", so a contains-text assertion cannot catch a wrong default.
+    expect(review_all_panel.get_scope_all()).to_have_attribute("data-state", "on")

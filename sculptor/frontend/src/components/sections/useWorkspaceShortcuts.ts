@@ -17,12 +17,21 @@ import { useSetAtom, useStore } from "jotai";
 import { useCallback } from "react";
 
 import { useKeybindingHandler } from "~/common/keybindings";
+import { useImbueNavigate } from "~/common/NavigateUtils.ts";
+import { openWorkspaceTabAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
+import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
+import { workspaceDeleteTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
 import { sidebarCollapsedAtom } from "~/components/layout/sidebarAtoms.ts";
 
 import type { WorkspaceLayoutState } from "./persistence/types.ts";
 import { panelRegistryAtom } from "./registry/panelRegistry.ts";
 import { jumpToSectionAtom, setActivePanelAtom, toggleSectionAtom } from "./sectionActions.ts";
-import { activePanelIdInSubSectionAtom, panelsInSubSectionAtom, workspaceLayoutAtom } from "./sectionAtoms.ts";
+import {
+  activePanelIdInSubSectionAtom,
+  activeWorkspaceIdAtom,
+  panelsInSubSectionAtom,
+  workspaceLayoutAtom,
+} from "./sectionAtoms.ts";
 import type { PanelId, SubSectionId } from "./sectionTypes.ts";
 import { SECTION_IDS, toSecondary, toSection } from "./sectionTypes.ts";
 import { maximizedSectionAtom } from "./transientAtoms.ts";
@@ -79,6 +88,9 @@ export const useWorkspaceShortcuts = (): void => {
   const setActivePanel = useSetAtom(setActivePanelAtom);
   const setMaximizedSection = useSetAtom(maximizedSectionAtom);
   const setSidebarCollapsed = useSetAtom(sidebarCollapsedAtom);
+  const openWorkspaceTab = useSetAtom(openWorkspaceTabAtom);
+  const setWorkspaceDeleteTarget = useSetAtom(workspaceDeleteTargetAtom);
+  const { navigateToWorkspace } = useImbueNavigate();
   const { createRecentAgent } = useAddPanelActions();
 
   // Cycle the active section through the expanded sub-sections incl. split halves,
@@ -129,6 +141,40 @@ export const useWorkspaceShortcuts = (): void => {
     setSidebarCollapsed(!store.get(sidebarCollapsedAtom));
   }, [store, setSidebarCollapsed]);
 
+  // Cycle to the adjacent workspace, wrapping at the ends. Reads the workspace list
+  // imperatively at press time (same rationale as cycleSection). Opening the tab
+  // before navigating gives keyboard cycling the same end state as clicking the
+  // workspace in the sidebar (the palette's navigate does the same).
+  const cycleWorkspace = useCallback(
+    (direction: CycleDirection): void => {
+      const workspaces = store.get(workspacesArrayAtom) ?? [];
+      if (workspaces.length < 2) {
+        return;
+      }
+      const currentId = store.get(activeWorkspaceIdAtom);
+      const currentIndex = workspaces.findIndex((workspace) => workspace.objectId === currentId);
+      const next = workspaces[stepIndex(workspaces.length, currentIndex, direction)];
+      openWorkspaceTab(next.objectId);
+      navigateToWorkspace(next.objectId);
+    },
+    [store, openWorkspaceTab, navigateToWorkspace],
+  );
+
+  // Open the delete-confirmation dialog for the current workspace (the same dialog
+  // the palette's workspace Delete action drives, via workspaceDeleteTargetAtom).
+  // The destructive delete itself only runs once the user confirms there.
+  const beginDeleteWorkspace = useCallback((): void => {
+    const workspaceId = store.get(activeWorkspaceIdAtom);
+    if (workspaceId === null) {
+      return;
+    }
+    const workspace = (store.get(workspacesArrayAtom) ?? []).find((candidate) => candidate.objectId === workspaceId);
+    if (workspace === undefined) {
+      return;
+    }
+    setWorkspaceDeleteTarget({ id: workspace.objectId, name: workspace.description ?? "" });
+  }, [store, setWorkspaceDeleteTarget]);
+
   // Center never collapses: toggleSectionAtom ignores it, so the binding is
   // simply a no-op there.
   useKeybindingHandler(
@@ -163,4 +209,26 @@ export const useWorkspaceShortcuts = (): void => {
   );
   // New agent always lands in center regardless of the active section.
   useKeybindingHandler("new_agent", createRecentAgent);
+  // Workspace navigation and deletion. next_tab/previous_tab keep their legacy ids
+  // (see definitions.ts) but cycle the sidebar's workspace list.
+  useKeybindingHandler(
+    "next_tab",
+    useCallback(() => cycleWorkspace(1), [cycleWorkspace]),
+  );
+  useKeybindingHandler(
+    "previous_tab",
+    useCallback(() => cycleWorkspace(-1), [cycleWorkspace]),
+  );
+  useKeybindingHandler("delete_workspace", beginDeleteWorkspace);
+  // The palette's "Next/Previous workspace" rows dispatch through the command-action
+  // registry (runtime.ui.nextWorkspaceTab → "workspace.nextTab"), so register the
+  // same handlers there — one implementation for the keybinding and the palette.
+  useRegisterCommandAction(
+    "workspace.nextTab",
+    useCallback(() => cycleWorkspace(1), [cycleWorkspace]),
+  );
+  useRegisterCommandAction(
+    "workspace.previousTab",
+    useCallback(() => cycleWorkspace(-1), [cycleWorkspace]),
+  );
 };

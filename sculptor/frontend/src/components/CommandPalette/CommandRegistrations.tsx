@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import { useMemo } from "react";
 
 import { buildChatCommands } from "./builtinCommands/chat.ts";
@@ -8,6 +9,7 @@ import { buildSettingsCommands } from "./builtinCommands/settings.ts";
 import { buildTerminalCommands } from "./builtinCommands/terminal.ts";
 import { buildThemeCommands } from "./builtinCommands/theme.ts";
 import { buildWorkspaceActionCommands } from "./builtinCommands/workspaces.ts";
+import { WorkspaceDeleteConfirmation } from "./contextActions/WorkspaceDeleteConfirmation.tsx";
 import { buildAddPanelProvider } from "./dynamic/addPanel.ts";
 import { buildAgentActionsProvider } from "./dynamic/agentActions.ts";
 import { buildAgentProvider } from "./dynamic/agentCommands.ts";
@@ -33,8 +35,13 @@ import { useContextActionRuntimes } from "./useContextActionRuntimes.ts";
  * Toggles whose label depends on state flip via
  * `Command.getTitle`/`getSubtitle`/`getIcon` at render time, not by
  * re-registering.
+ *
+ * Also mounts the headless workspace delete confirmation — the dialog that
+ * the palette's Delete action and the delete_workspace keybinding drive via
+ * `workspaceDeleteTargetAtom`. It lives here because this is the one mount
+ * point shared by every surface that can set the target.
  */
-export const CommandRegistrations = (): null => {
+export const CommandRegistrations = (): ReactElement => {
   const runtime = useCommandRuntime();
   const { workspaceActionRuntime, agentActionRuntime } = useContextActionRuntimes();
 
@@ -77,5 +84,5 @@ export const CommandRegistrations = (): null => {
   useRegisterDynamicCommands(workspaceActionsProvider);
   useRegisterDynamicCommands(agentActionsProvider);
 
-  return null;
+  return <WorkspaceDeleteConfirmation />;
 };

@@ -1,4 +1,4 @@
-import { useSetAtom } from "jotai";
+import { useSetAtom, useStore } from "jotai";
 import { posthog } from "posthog-js";
 import { useCallback } from "react";
 
@@ -7,6 +7,7 @@ import { ToastType } from "../../../components/Toast.tsx";
 import { useImbueLocation, useImbueNavigate, useImbueParams } from "../../NavigateUtils.ts";
 import { optimisticDeleteTaskAtom, rollbackDeleteTaskAtom } from "../atoms/tasks";
 import { deleteErrorToastAtom } from "../atoms/toasts";
+import { agentIdForWorkspaceAtomFamily, setAgentForWorkspaceAtom } from "../atoms/workspaces.ts";
 
 type UseOptimisticTaskDeleteInputs = {
   workspaceId: string;
@@ -20,9 +21,11 @@ type UseOptimisticTaskDeleteResult = {
 
 export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): UseOptimisticTaskDeleteResult => {
   const { workspaceId, onNavigateAfterDelete } = inputs;
+  const store = useStore();
   const setOptimisticDelete = useSetAtom(optimisticDeleteTaskAtom);
   const setRollbackDelete = useSetAtom(rollbackDeleteTaskAtom);
   const setDeleteErrorToast = useSetAtom(deleteErrorToastAtom);
+  const setAgentForWorkspace = useSetAtom(setAgentForWorkspaceAtom);
   const { navigateToRoot } = useImbueNavigate();
   const { isAgentRoute } = useImbueLocation();
   const { taskID } = useImbueParams();
@@ -32,6 +35,13 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
       const snapshot = setOptimisticDelete(taskId);
       if (snapshot === null) {
         return;
+      }
+
+      // A deleted agent must not linger as the workspace's saved agent, or the next
+      // cold-start redirect targets a dead route. Left cleared on a failed delete —
+      // the mapping re-saves on the next agent visit.
+      if (store.get(agentIdForWorkspaceAtomFamily(workspaceId)) === taskId) {
+        setAgentForWorkspace({ wsId: workspaceId, agentId: null });
       }
 
       if (onNavigateAfterDelete) {
@@ -65,9 +75,11 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
       });
     },
     [
+      store,
       setOptimisticDelete,
       setRollbackDelete,
       setDeleteErrorToast,
+      setAgentForWorkspace,
       onNavigateAfterDelete,
       isAgentRoute,
       taskID,

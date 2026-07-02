@@ -6,7 +6,10 @@ Tests cover:
 - Functional: default keybinding works, customized keybinding honored
 """
 
+import re
+
 import pytest
+from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.base import dismiss_with_escape
@@ -14,6 +17,7 @@ from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import blur_active_element
 from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 from sculptor.testing.utils import get_playwright_modifier_key
@@ -445,6 +449,88 @@ def test_customized_keybinding_is_honored(sculptor_instance_: SculptorInstance) 
     # Reset keybindings for subsequent tests
     keybindings = _navigate_to_keybindings(sculptor_instance_)
     keybindings.reset_all_to_defaults()
+
+
+def _workspace_id_from_url(page: Page) -> str:
+    """Extract the workspace id from the current ``/ws/<id>`` route."""
+    match = re.search(r"/ws/([^/]+)", page.url)
+    assert match is not None, f"expected a workspace route, got {page.url}"
+    return match.group(1)
+
+
+@user_story("to open the delete-workspace confirmation with its keybinding")
+def test_delete_workspace_keybinding_opens_confirmation(sculptor_instance_: SculptorInstance) -> None:
+    """Meta+Shift+W on a workspace page opens the delete confirmation; cancel aborts.
+
+    The handler mounts with the workspace shell, so the shortcut must fire while
+    on a workspace route. Not @release-marked: start_task_and_wait_for_ready
+    selects the Fake Claude model, which is gated off in packaged-release runs.
+    """
+    page = sculptor_instance_.page
+    mod = get_playwright_modifier_key()
+
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Delete Keybinding WS")
+    sidebar = get_workspace_sidebar(page)
+    expect(sidebar.get_workspace_rows()).to_have_count(1)
+    blur_active_element(page)
+
+    page.keyboard.press(f"{mod}+Shift+W")
+
+    dialog = sidebar.get_delete_confirmation_dialog()
+    expect(dialog).to_be_visible()
+    expect(dialog).to_contain_text("Delete Keybinding WS")
+
+    # Cancel aborts: the workspace survives.
+    sidebar.cancel_delete()
+    expect(dialog).to_be_hidden()
+    expect(sidebar.get_workspace_rows()).to_have_count(1)
+
+
+@user_story("to cycle between workspaces with the next/previous workspace keybindings")
+def test_workspace_cycle_keybindings(sculptor_instance_: SculptorInstance) -> None:
+    """Meta+] / Meta+[ switch to the adjacent workspace.
+
+    With exactly two workspaces, cycling in either direction lands on the other
+    one, which keeps the assertion independent of the underlying list order.
+    Not @release-marked: start_task_and_wait_for_ready selects the Fake Claude
+    model, which is gated off in packaged-release runs.
+    """
+    page = sculptor_instance_.page
+    mod = get_playwright_modifier_key()
+
+    start_task_and_wait_for_ready(page, prompt="WS A agent", workspace_name="Cycle WS A")
+    ws_a = _workspace_id_from_url(page)
+    start_task_and_wait_for_ready(page, prompt="WS B agent", workspace_name="Cycle WS B")
+    ws_b = _workspace_id_from_url(page)
+    assert ws_a != ws_b
+    blur_active_element(page)
+
+    # From B, "next workspace" lands on A (the only other workspace)...
+    page.keyboard.press(f"{mod}+]")
+    expect(page).to_have_url(re.compile(re.escape(f"/ws/{ws_a}")))
+
+    # ...and "previous workspace" cycles back to B.
+    blur_active_element(page)
+    page.keyboard.press(f"{mod}+[")
+    expect(page).to_have_url(re.compile(re.escape(f"/ws/{ws_b}")))
+
+
+@pytest.mark.release
+@user_story("to see workspace navigation keybindings without the removed close-workspace entry")
+def test_workspace_keybinding_rows_reflect_removal_and_relabel(sculptor_instance_: SculptorInstance) -> None:
+    """The removed close_workspace binding is gone; next/previous read as workspace navigation.
+
+    A user may still have a persisted override saved under the removed id; the
+    settings page must simply render without that row (the stale override is
+    ignored) while the surviving workspace bindings stay present and labeled.
+    """
+    keybindings = _navigate_to_keybindings(sculptor_instance_)
+
+    expect(keybindings.get_keybinding_row("close_workspace")).to_have_count(0)
+
+    expect(keybindings.get_keybinding_row("delete_workspace")).to_be_visible()
+    expect(keybindings.get_keybinding_row("next_tab")).to_contain_text("Next workspace")
+    expect(keybindings.get_keybinding_row("previous_tab")).to_contain_text("Previous workspace")
 
 
 @pytest.mark.release

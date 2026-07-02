@@ -21,6 +21,7 @@ import { useMarkRead } from "~/common/state/hooks/useMarkRead";
 import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
 import { seedFirstVisitTerminal } from "~/components/sections/addPanelCore.ts";
 import { buildDefaultWorkspaceLayout } from "~/components/sections/persistence/defaultLayout.ts";
+import type { WorkspaceLayoutState } from "~/components/sections/persistence/types.ts";
 import {
   AGENT_PANEL_ID_PREFIX,
   makeAgentPanelId,
@@ -29,18 +30,42 @@ import {
 import { openPanelAtom, setActivePanelAtom } from "~/components/sections/sectionActions.ts";
 import {
   activePanelIdInSubSectionAtom,
+  activeSubSectionAtom,
   isEmptyLayout,
   switchActiveWorkspaceAtom,
   workspaceLayoutAtom,
   workspaceLayoutFamily,
 } from "~/components/sections/sectionAtoms.ts";
+import type { PanelId } from "~/components/sections/sectionTypes.ts";
 import { activeSectionRingNonceAtom } from "~/components/sections/transientAtoms.ts";
 import { useAddPanelActions } from "~/components/sections/useAddPanelActions.ts";
 import { useArtifactSync } from "~/pages/workspace/hooks/useArtifactSync";
 
 import { useWorkspaceDynamicPanels } from "./useWorkspaceDynamicPanels.ts";
 
-export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId: string }): void => {
+// The agent id encoded in an agent panel id, or undefined for any other panel.
+const agentIdFromPanelId = (panelId: PanelId | undefined): string | undefined =>
+  panelId !== undefined && panelId.startsWith(AGENT_PANEL_ID_PREFIX)
+    ? panelId.slice(AGENT_PANEL_ID_PREFIX.length)
+    : undefined;
+
+// The seeded default for a workspace that has NO agents yet: the standard default
+// arrangement with the center left empty (its empty state offers the add-panel
+// quick actions). Built by stripping a placeholder center panel from the standard
+// default so the two arrangements cannot drift structurally.
+function buildAgentlessDefaultLayout(terminalPanelId: PanelId): WorkspaceLayoutState {
+  const placeholderPanelId = makeAgentPanelId("placeholder");
+  const layout = buildDefaultWorkspaceLayout({ agentPanelId: placeholderPanelId, terminalPanelId });
+  const placement = { ...layout.placement };
+  delete placement[placeholderPanelId];
+  const activePanel = { ...layout.activePanel };
+  delete activePanel.center;
+  return { ...layout, placement, activePanel, order: { ...layout.order, center: [] } };
+}
+
+// `taskId` is the route's agent id; it is undefined for a workspace with no agents,
+// which renders the shell with an empty center instead of a blank page.
+export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId?: string }): void => {
   const { workspaceId, taskId } = inputs;
 
   const store = useStore();
@@ -71,21 +96,25 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
   }, [tasks, workspaceId]);
 
   // Per-viewed-agent data effects that the old workspace page owned: sync the
-  // viewed agent's artifacts and mark it read while it is shown in the center.
+  // viewed agent's artifacts and mark it read while the user is looking at it.
   //
-  // The "viewed agent" is the active CENTER panel's agent, not the route's. Switching
-  // agents via the center tab bar only flips the active panel (handleActivate →
-  // setActivePanel) — it does not navigate, so the route's taskId stays on the
-  // last-navigated agent. Keying these off the route would leave the agent you just
-  // switched to unsynced and wrongly marked unread when it receives an update. Falls
-  // back to the route's taskId when the active center panel isn't an agent (e.g. before
-  // the layout settles). Matches ChatInput's per-panel-agent isolation.
+  // The "viewed agent" follows the ACTIVE SUB-SECTION's active panel, not the route:
+  // an agent panel the user is watching in the right/bottom section (or a split
+  // half) counts as viewed just like one in the center. Switching agents via a tab
+  // bar only flips the active panel (handleActivate → setActivePanel) — it does not
+  // navigate — so keying off the route would leave the agent you just switched to
+  // unsynced and wrongly marked unread when it receives an update. When the active
+  // sub-section's panel isn't an agent (a terminal, Files, …) fall back to the
+  // center's agent, then to the route's taskId (e.g. before the layout settles).
+  // Matches ChatInput's per-panel-agent isolation.
+  const activeSubSection = useAtomValue(activeSubSectionAtom) ?? "center";
+  const activePanelId = useAtomValue(activePanelIdInSubSectionAtom(activeSubSection));
   const activeCenterPanelId = useAtomValue(activePanelIdInSubSectionAtom("center"));
-  const viewedAgentId = activeCenterPanelId?.startsWith(AGENT_PANEL_ID_PREFIX)
-    ? activeCenterPanelId.slice(AGENT_PANEL_ID_PREFIX.length)
-    : taskId;
-  useArtifactSync(workspaceId, viewedAgentId);
-  useMarkRead(workspaceId, viewedAgentId);
+  const viewedAgentId = agentIdFromPanelId(activePanelId) ?? agentIdFromPanelId(activeCenterPanelId) ?? taskId;
+  // Both hooks take a required id; in an agentless workspace the empty id matches
+  // no task, so each is a safe no-op (their task lookups miss).
+  useArtifactSync(workspaceId, viewedAgentId ?? "");
+  useMarkRead(workspaceId, viewedAgentId ?? "");
 
   // Switch the layout scope to this workspace, seeding the default on the
   // workspace's first visit (switchActiveWorkspaceAtom only seeds when the snapshot is
@@ -96,10 +125,11 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
   useLayoutEffect(() => {
     if (isEmptyLayout(store.get(workspaceLayoutFamily(workspaceId)))) {
       const terminalIndex = seedFirstVisitTerminal(store, workspaceId);
-      const defaultLayout = buildDefaultWorkspaceLayout({
-        agentPanelId: makeAgentPanelId(taskId),
-        terminalPanelId: makeTerminalPanelId(workspaceId, terminalIndex),
-      });
+      const terminalPanelId = makeTerminalPanelId(workspaceId, terminalIndex);
+      const defaultLayout =
+        taskId === undefined
+          ? buildAgentlessDefaultLayout(terminalPanelId)
+          : buildDefaultWorkspaceLayout({ agentPanelId: makeAgentPanelId(taskId), terminalPanelId });
       switchActiveWorkspace({ workspaceId, defaultLayout });
     } else {
       switchActiveWorkspace({ workspaceId });
@@ -109,6 +139,9 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
   // Place the active agent in the center. Read placement imperatively (via the
   // store) so this runs once per agent id rather than on every layout change.
   useLayoutEffect(() => {
+    if (taskId === undefined) {
+      return; // no agents yet — the center stays empty
+    }
     const panelId = makeAgentPanelId(taskId);
     const placement = store.get(workspaceLayoutAtom).placement[panelId];
     if (placement === undefined) {

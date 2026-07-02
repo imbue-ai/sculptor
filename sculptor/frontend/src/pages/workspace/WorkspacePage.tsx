@@ -17,9 +17,11 @@ import { WorkspaceLayoutShell } from "./WorkspaceLayoutShell.tsx";
 
 // The desktop shell, bootstrapped for the active workspace + agent: scope switch,
 // registry sync, and center-agent placement happen here so the center renders the
-// resolved agent's chat. The mobile branch (MobileWorkspaceShell) is not built yet
-// — useIsMobile is a no-op seam that always takes this path.
-const WorkspacePageContent = ({ workspaceId, taskId }: { workspaceId: string; taskId: string }): ReactElement => {
+// resolved agent's chat. `taskId` is undefined for a workspace with no agents,
+// which renders the shell with an empty center. The mobile branch
+// (MobileWorkspaceShell) is not built yet — useIsMobile is a no-op seam that
+// always takes this path.
+const WorkspacePageContent = ({ workspaceId, taskId }: { workspaceId: string; taskId?: string }): ReactElement => {
   useWorkspaceShellBootstrap({ workspaceId, taskId });
 
   // Workspace-switch profiler: the content rendered with the
@@ -84,8 +86,18 @@ export const WorkspacePage = (): ReactElement | null => {
     removeTab,
   ]);
 
-  if (!agentIDFromUrl) return null;
   // The mobile shell is not built yet; the seam always resolves to desktop for now.
   if (isMobile) return null;
-  return <WorkspacePageContent workspaceId={workspaceID} taskId={agentIDFromUrl} />;
+  if (agentIDFromUrl) {
+    return <WorkspacePageContent workspaceId={workspaceID} taskId={agentIDFromUrl} />;
+  }
+  // No agent in the URL: a workspace that genuinely has no agents (e.g. created
+  // headlessly) renders the shell with an empty center rather than a blank page.
+  // Until the workspace and task lists have loaded we can't tell "agentless" from
+  // "still resolving" — render nothing for that brief window and let the fix-up
+  // effect above navigate once an agent (or a stale-workspace redirect) resolves.
+  const isKnownWorkspace = workspaceIds !== undefined && workspaceIds.includes(workspaceID);
+  const isAgentless = tasks !== undefined && !tasks.some((task) => task.workspaceId === workspaceID);
+  if (!isKnownWorkspace || !isAgentless) return null;
+  return <WorkspacePageContent workspaceId={workspaceID} />;
 };

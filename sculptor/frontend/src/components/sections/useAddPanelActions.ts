@@ -1,13 +1,14 @@
 // React hook for the add-panel surfaces: the section `+` dropdown
 // (AddPanelDropdown) and the empty-state quick actions (EmptySectionState). Wraps
-// the store-driven operations in addPanelCore with React niceties (navigation
-// after create, the live registrations list, pi gating, the recent-agent label).
+// the store-driven operations in addPanelCore with React niceties (the live
+// registrations list, the pi-gated recent-agent label).
 //
-// The actual create/list logic lives in addPanelCore so the Cmd+K "Add panel" flow
-// (which runs outside React) shares one implementation and can't drift. Agents,
-// terminals, and single-instance panels all land in the requesting sub-section; the
-// non-scoped surfaces (the new-agent keybinding and Cmd+K "New agent" command) pass no
-// target and default to center. Agents/terminals are never in the re-add list.
+// The actual create/list logic — including post-create navigation and the failure
+// toast — lives in addPanelCore so the Cmd+K flows (which run outside React) share
+// one implementation and can't drift. Agents, terminals, and single-instance panels
+// all land in the requesting sub-section; the non-scoped surfaces (the new-agent
+// keybinding and Cmd+K "New agent" command) pass no target and default to center.
+// Agents/terminals are never in the re-add list.
 
 import { useAtomValue } from "jotai";
 import { useStore } from "jotai/react";
@@ -23,14 +24,12 @@ import {
   REGISTERED_AGENT_TYPE_PREFIX,
   type StoredAgentType,
 } from "~/common/state/atoms/agentTabs.ts";
-import { createAgentErrorToastAtom } from "~/common/state/atoms/toasts.ts";
 import { isPiAgentEnabledAtom } from "~/common/state/atoms/userConfig.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
-import { ToastType } from "~/components/Toast.tsx";
 
 import {
   type AvailableStaticPanel,
-  createAgentInLocation,
+  createAgentAndNavigate,
   createTerminalInLocation,
   openStaticPanelInLocation,
 } from "./addPanelCore.ts";
@@ -75,7 +74,7 @@ export type AddPanelActions = {
 export const useAddPanelActions = (): AddPanelActions => {
   // state and hooks
   const store = useStore();
-  const { workspaceID, agentID } = useWorkspacePageParams();
+  const { agentID } = useWorkspacePageParams();
   const { navigateToAgent } = useImbueNavigate();
   const lastUsedAgentType = useAtomValue(lastUsedAgentTypeAtom);
   const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
@@ -100,25 +99,16 @@ export const useAddPanelActions = (): AddPanelActions => {
 
   const createAgent = useCallback(
     (agentType: AgentTypeName, registrationId?: string, target: SubSectionId = "center"): void => {
-      void (async (): Promise<void> => {
-        const taskId = await createAgentInLocation(store, target, {
-          agentType,
-          registrationId,
-          activeAgentId: agentID,
-        });
-        if (taskId !== undefined) {
-          navigateToAgent(workspaceID, taskId);
-        } else {
-          store.set(createAgentErrorToastAtom, {
-            title: "Failed to create agent",
-            description: "The agent could not be created. Try again or check your connection.",
-            type: ToastType.ERROR,
-            action: null,
-          });
-        }
-      })();
+      // Navigation and the failure toast live in the shared core so the Cmd+K
+      // "New agent" row behaves identically.
+      void createAgentAndNavigate(
+        store,
+        target,
+        { agentType, registrationId, activeAgentId: agentID },
+        navigateToAgent,
+      );
     },
-    [store, agentID, workspaceID, navigateToAgent],
+    [store, agentID, navigateToAgent],
   );
 
   const createRecentAgent = useCallback(

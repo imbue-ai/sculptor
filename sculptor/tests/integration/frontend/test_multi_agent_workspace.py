@@ -8,11 +8,17 @@ These tests verify:
 - Workspace survival when one agent is deleted from a multi-agent workspace
 """
 
+import re
+
 import pytest
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
+from sculptor.testing.elements.chat_panel import PlaywrightChatPanelElement
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.section_helpers import drag_panel_to_section
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_to_workspace
@@ -143,6 +149,62 @@ def test_workspaces_have_isolated_agent_tabs(
     # Verify workspace B still has 1 agent tab
     agent_tabs = agent_tab_bar.get_agent_tabs()
     expect(agent_tabs).to_have_count(1)
+
+
+@user_story("to have an agent I watch in a side section stay marked read while it streams")
+def test_mark_read_follows_agent_panel_in_active_side_section(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """An agent panel active in the ACTIVE right sub-section is marked read on updates.
+
+    The viewed agent follows the active sub-section's agent panel — not the center
+    panel — so an agent the user watches in the right section must not flip to
+    unread when its reply lands (with two center agents, the center-derived rule
+    would attribute the view to the agent left behind in the center).
+
+    Steps:
+    1. Create a workspace with agent A, then add agent B (both center tabs).
+    2. Drag B's panel tab into the (expanded) right section and activate it there.
+    3. Send B a message from its right-section panel and wait for the reply.
+    4. B's tab keeps its "read" dot — the update was marked read because B is the
+       active panel of the active sub-section.
+    """
+    page = sculptor_instance_.page
+    task_page = PlaywrightTaskPage(page=page)
+    agent_tab_bar = task_page.get_agent_tab_bar()
+
+    # Step 1: Agent A with a completed first exchange, then agent B.
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Side Section Read WS")
+    chat_panel = task_page.get_chat_panel()
+    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
+
+    # add_agent creates B and navigates to it, so the URL carries B's id — that id
+    # keys B's panel tab (``agent:<taskId>``).
+    agent_tab_bar.add_agent()
+    expect(agent_tab_bar.get_agent_tabs()).to_have_count(2)
+    match = re.search(r"/agent/([^/?#]+)", page.url)
+    assert match is not None, f"expected an agent route, got {page.url}"
+    panel_id = f"agent:{match.group(1)}"
+
+    # Step 2: Move B into the right section; clicking its tab makes B the active
+    # panel of the active right sub-section.
+    right = PlaywrightWorkspaceSection(page, "right")
+    right.expand_section()
+    drag_panel_to_section(page, panel_id, "center", "right", "right")
+    b_tab = right.get_panel_tab(panel_id)
+    expect(b_tab).to_be_visible()
+    b_tab.click()
+
+    # Step 3: Message B from its right-section panel (scoped to the right section —
+    # agent A's center panel renders its own CHAT_PANEL).
+    right_chat = PlaywrightChatPanelElement(
+        locator=right.get_section().get_by_test_id(ElementIDs.CHAT_PANEL), page=page
+    )
+    send_chat_message(right_chat, "Still with you?")
+    wait_for_completed_message_count(chat_panel=right_chat, expected_message_count=2)
+
+    # Step 4: The reply landed while B was the watched panel — it stays read.
+    expect(b_tab).to_have_attribute("data-dot-status", "read")
 
 
 @pytest.mark.skip(reason="Workspace auto-deletion when last agent deleted was removed (15ec747c1c3)")

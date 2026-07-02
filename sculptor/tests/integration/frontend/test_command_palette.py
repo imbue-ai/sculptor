@@ -360,6 +360,65 @@ def test_command_palette_maximize_command_reads_minimize_while_maximized(
     expect(center.get_active_ring()).not_to_have_attribute("data-maximized", "true")
 
 
+@user_story("to reveal a panel from the palette without ever closing it")
+def test_command_palette_show_panel_is_jump_only(sculptor_instance_: SculptorInstance) -> None:
+    # Regression lock for the view.toggle_panel.* commands: "Show X" reveals the
+    # panel (activates it, expands its section, jumps there) and must NEVER close
+    # it — running it again while the panel is already visible and active is just
+    # a jump to its section. Not @release-marked: start_task_and_wait_for_ready
+    # selects the Fake Claude model, which is gated off in packaged-release runs.
+    page = sculptor_instance_.page
+    task_page = start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Cmd+K Show Panel WS")
+    left = PlaywrightWorkspaceSection(page, "left")
+
+    # First run: reveals the Files panel (seeded into the collapsed left section).
+    palette = task_page.open_command_palette()
+    palette.type_query("Show Files")
+    palette.select_by_command_id("view.toggle_panel.files")
+    expect(palette).not_to_be_visible()
+    expect(left.get_panel_tab("files")).to_be_visible()
+    expect(task_page.get_file_browser()).to_be_visible()
+
+    # Second run while the panel is open, active, and its section expanded — the
+    # panel must stay visible (a smart-toggle would close it here).
+    blur_active_element(page)
+    palette = task_page.open_command_palette_with_keyboard()
+    palette.type_query("Show Files")
+    palette.select_by_command_id("view.toggle_panel.files")
+    expect(palette).not_to_be_visible()
+    expect(left.get_panel_tab("files")).to_be_visible()
+    expect(task_page.get_file_browser()).to_be_visible()
+
+
+@user_story("to create and land on a new agent via the palette's Add panel flow")
+def test_command_palette_add_panel_agent_create_navigates(sculptor_instance_: SculptorInstance) -> None:
+    # Regression lock for the addpanel.panels.new_agent row: it must share the
+    # add-panel dropdown's create flow — create the agent, then NAVIGATE to it —
+    # rather than creating it in the background and leaving the user on the old
+    # agent. An empty prompt creates a single waiting agent with no LLM run.
+    # Not @release-marked: the helper selects the Fake Claude model, which is
+    # gated off in packaged-release runs.
+    page = sculptor_instance_.page
+    task_page = start_task_and_wait_for_ready(page, prompt="", workspace_name="Cmd+K Add Panel Agent WS")
+
+    agent_tabs = task_page.get_agent_tab_bar().get_agent_tabs()
+    expect(agent_tabs).to_have_count(1)
+    url_before = page.url
+
+    palette = task_page.open_command_palette()
+    palette.select_by_command_id("addpanel.open")
+    # Location page: put the new agent in the center.
+    palette.select_by_command_id("addpanel.location.center")
+    # Panel page: the pinned "New {recent} agent" row.
+    palette.select_by_command_id("addpanel.panels.new_agent")
+
+    # A second agent tab appears AND the route now points at the new agent —
+    # the create navigated, exactly like the section "+" dropdown's flow.
+    expect(palette).not_to_be_visible()
+    expect(agent_tabs).to_have_count(2)
+    expect(page).not_to_have_url(url_before)
+
+
 @user_story("to create a new agent in the current workspace from the command palette")
 def test_command_palette_creates_new_agent(sculptor_instance_: SculptorInstance) -> None:
     # Regression lock for the `nav.new_agent` command: inside a workspace it

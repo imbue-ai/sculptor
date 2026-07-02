@@ -1,10 +1,21 @@
 import { createStore } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createAgentInLocation, listAvailableLocations } from "./addPanelCore.ts";
+import type { UserConfig } from "~/api";
+import { createAgentErrorToastAtom } from "~/common/state/atoms/toasts.ts";
+import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
+import { diffScopeAtomFamily } from "~/pages/workspace/components/diffPanel/atoms.ts";
+
+import {
+  createAgentAndNavigate,
+  createAgentInLocation,
+  listAvailableLocations,
+  openStaticPanelInLocation,
+} from "./addPanelCore.ts";
 import { EMPTY_WORKSPACE_LAYOUT } from "./persistence/types.ts";
 import { makeAgentPanelId } from "./registry/dynamicPanels.tsx";
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "./sectionAtoms.ts";
+import type { PanelId } from "./sectionTypes.ts";
 
 // createWorkspaceAgent hits the backend; stub it so we can assert the resulting layout
 // placement deterministically.
@@ -63,5 +74,98 @@ describe("createAgentInLocation placement", () => {
 
     const panelId = makeAgentPanelId("task-center");
     expect(store.get(workspaceLayoutAtom).placement[panelId]).toBe("center");
+  });
+});
+
+describe("createAgentInLocation pi gating", () => {
+  it("falls back to Claude when a pi agent is requested while the pi harness is disabled", async () => {
+    // Any create surface can hand in a remembered "pi" type from before the flag
+    // was turned off; the core resolves the fallback so no caller has to.
+    createWorkspaceAgentMock.mockResolvedValue({ data: { id: "task-pi" } });
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-test");
+    // No user config → isPiAgentEnabledAtom resolves false.
+
+    await createAgentInLocation(store, "center", { agentType: "pi" });
+
+    expect(createWorkspaceAgentMock).toHaveBeenCalledTimes(1);
+    expect(createWorkspaceAgentMock.mock.calls[0][0].body.agentType).toBe("claude");
+  });
+
+  it("keeps the pi type when the pi harness is enabled", async () => {
+    createWorkspaceAgentMock.mockResolvedValue({ data: { id: "task-pi" } });
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-test");
+    store.set(userConfigAtom, { enablePiAgent: true } as unknown as UserConfig);
+
+    await createAgentInLocation(store, "center", { agentType: "pi" });
+
+    expect(createWorkspaceAgentMock.mock.calls[0][0].body.agentType).toBe("pi");
+  });
+});
+
+describe("createAgentAndNavigate", () => {
+  it("navigates to the created agent on success", async () => {
+    createWorkspaceAgentMock.mockResolvedValue({ data: { id: "task-nav" } });
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-test");
+    const navigate = vi.fn();
+
+    await createAgentAndNavigate(store, "center", { agentType: "claude" }, navigate);
+
+    expect(navigate).toHaveBeenCalledWith("ws-test", "task-nav");
+    expect(store.get(createAgentErrorToastAtom)).toBeNull();
+  });
+
+  it("surfaces the shared error toast (and does not navigate) when the create fails", async () => {
+    createWorkspaceAgentMock.mockRejectedValue(new Error("boom"));
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-test");
+    const navigate = vi.fn();
+
+    await createAgentAndNavigate(store, "center", { agentType: "claude" }, navigate);
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(store.get(createAgentErrorToastAtom)).toMatchObject({ title: "Failed to create agent" });
+  });
+});
+
+describe("openStaticPanelInLocation Review All scope", () => {
+  const reviewAllId = "review-all" as PanelId;
+
+  it("opens Review All on the 'All' (vs target branch) scope when newly placed", () => {
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-test");
+    store.set(workspaceLayoutAtom, { ...EMPTY_WORKSPACE_LAYOUT });
+    expect(store.get(diffScopeAtomFamily("ws-test"))).toBe("uncommitted");
+
+    openStaticPanelInLocation(store, reviewAllId, "left");
+
+    expect(store.get(diffScopeAtomFamily("ws-test"))).toBe("vs-target-branch");
+    expect(store.get(workspaceLayoutAtom).placement[reviewAllId]).toBe("left");
+  });
+
+  it("does not stomp a scope the user picked while the panel is already open", () => {
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-test");
+    store.set(workspaceLayoutAtom, { ...EMPTY_WORKSPACE_LAYOUT });
+    openStaticPanelInLocation(store, reviewAllId, "left");
+
+    // The user flips the open panel to Uncommitted; re-revealing the placed panel
+    // must keep their choice.
+    store.set(diffScopeAtomFamily("ws-test"), "uncommitted");
+    openStaticPanelInLocation(store, reviewAllId, "left");
+
+    expect(store.get(diffScopeAtomFamily("ws-test"))).toBe("uncommitted");
+  });
+
+  it("leaves the Review All scope alone when opening other panels", () => {
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-test");
+    store.set(workspaceLayoutAtom, { ...EMPTY_WORKSPACE_LAYOUT });
+
+    openStaticPanelInLocation(store, "files" as PanelId, "left");
+
+    expect(store.get(diffScopeAtomFamily("ws-test"))).toBe("uncommitted");
   });
 });

@@ -54,7 +54,7 @@ export type CommandRuntime = {
     focusChatInput: () => void;
     showChatSearch: () => void;
     jumpChatToBottom: () => void;
-    /** Cycle to the next/previous workspace tab. Wraps `next_tab` / `previous_tab`. */
+    /** Cycle to the next/previous workspace. Wraps the `next_tab` / `previous_tab` keybindings. */
     nextWorkspaceTab: () => void;
     previousWorkspaceTab: () => void;
     /** Cycle to the next/previous agent within the current workspace. */

@@ -15,7 +15,7 @@ import { MessageSquarePlus, PanelTopIcon, SquareTerminal } from "lucide-react";
 
 import { AGENT_TYPE_LABELS, lastUsedAgentTypeAtom, parseStoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import {
-  createAgentInLocation,
+  createAgentAndNavigate,
   createTerminalInLocation,
   listAvailableLocations,
   listAvailableStaticPanels,
@@ -93,13 +93,16 @@ export const buildAddPanelProvider = (runtime: CommandRuntime): DynamicProvider 
         icon: MessageSquarePlus,
         onPage: "addpanel.panels",
         order: 10,
-        perform: (): void => {
+        // Shares the dropdown's create flow (createAgentAndNavigate): navigate to
+        // the new agent on success, surface the shared error toast on failure.
+        perform: (): Promise<void> => {
           const { agentType, registrationId } = parseStoredAgentType(runtime.store.get(lastUsedAgentTypeAtom));
-          void createAgentInLocation(runtime.store, target, {
-            agentType,
-            registrationId,
-            activeAgentId: ctx.activeAgentId ?? undefined,
-          });
+          return createAgentAndNavigate(
+            runtime.store,
+            target,
+            { agentType, registrationId, activeAgentId: ctx.activeAgentId ?? undefined },
+            runtime.navigate.toAgent,
+          );
         },
       });
       out.push({

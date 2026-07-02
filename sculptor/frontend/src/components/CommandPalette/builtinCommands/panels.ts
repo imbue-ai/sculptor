@@ -13,12 +13,12 @@ import type { CommandRuntime } from "../runtime.ts";
 import type { Command, CommandIcon } from "../types.ts";
 
 // The Panels & Sections group is split into two sub-pages so the root list
-// isn't dominated by 10+ "Toggle X" rows: section toggles (the
-// left/right/bottom sections) live on `view.layout`; individual panel
-// toggles (Files, Actions, Terminal, …) live on `view.panels`. The
+// isn't dominated by 10+ per-panel rows: section toggles (the
+// left/right/bottom sections) live on `view.layout`; individual "Show X"
+// panel reveals (Files, Actions, Terminal, …) live on `view.panels`. The
 // `view.panels` page title intentionally matches what users search for
-// ("Toggle panel visibility...") so typing it surfaces the page that
-// actually lists panels.
+// ("Show panel...") so typing it surfaces the page that actually lists
+// panels.
 export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
   {
     id: "view.toggle_layout",

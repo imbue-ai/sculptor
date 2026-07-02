@@ -18,7 +18,10 @@ import { type AgentTypeName, createWorkspaceAgent } from "~/api";
 import { encodeRegisteredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { terminalNextIndexAtom, terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
-import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
+import { createAgentErrorToastAtom } from "~/common/state/atoms/toasts.ts";
+import { isPiAgentEnabledAtom, userConfigAtom } from "~/common/state/atoms/userConfig.ts";
+import { ToastType } from "~/components/Toast.tsx";
+import { resetReviewAllScopeAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
 import { getNextTerminalLabel } from "~/pages/workspace/panels/terminalLabelUtils.ts";
 
 import { makeAgentPanelId, makeTerminalPanelId } from "./registry/dynamicPanels.tsx";
@@ -81,6 +84,12 @@ export function listAvailableStaticPanels(store: AppStore): ReadonlyArray<Availa
 }
 
 export function openStaticPanelInLocation(store: AppStore, panelId: PanelId, subSection: SubSectionId): void {
+  // Review All always OPENS on the full branch review ("All" scope). Guarded on
+  // the panel not being placed yet, so re-adding/revealing an already-open panel
+  // keeps whatever scope the user picked meanwhile.
+  if (panelId === "review-all" && store.get(workspaceLayoutAtom).placement[panelId] === undefined) {
+    store.set(resetReviewAllScopeAtom);
+  }
   store.set(openPanelAtom, { panelId, in: subSection });
   // Adding a panel is a deliberate interaction: make its section active and pulse the
   // ring. openPanel has already expanded the section, so the jump applies.
@@ -141,13 +150,19 @@ export async function createAgentInLocation(
   subSection: SubSectionId,
   inputs: CreateAgentInputs,
 ): Promise<string | undefined> {
+  // A "pi" agent is unusable while the pi harness is disabled (e.g. a remembered
+  // last-used type from before the flag was turned off) — fall back to Claude so
+  // every create surface degrades the same way.
+  const agentType: AgentTypeName =
+    inputs.agentType === "pi" && !store.get(isPiAgentEnabledAtom) ? "claude" : inputs.agentType;
+
   // Optimistically reflect the chosen harness as the most-recently-used type so the
   // surfaces' "New {recent} agent" label updates immediately; the backend persists
   // it on actual create.
   const stored =
-    inputs.agentType === "registered" && inputs.registrationId !== undefined
+    agentType === "registered" && inputs.registrationId !== undefined
       ? encodeRegisteredAgentType(inputs.registrationId)
-      : inputs.agentType;
+      : agentType;
   store.set(userConfigAtom, (prev) => (prev ? { ...prev, lastUsedAgentType: stored } : prev));
 
   // Inherit the model from the currently viewed agent so the new agent starts with
@@ -164,7 +179,7 @@ export async function createAgentInLocation(
   try {
     const response = await createWorkspaceAgent({
       path: { workspace_id: workspaceId },
-      body: { model, agentType: inputs.agentType, registrationId: inputs.registrationId },
+      body: { model, agentType, registrationId: inputs.registrationId },
     });
     if (!response.data) {
       return undefined;
@@ -178,4 +193,28 @@ export async function createAgentInLocation(
     console.error("Failed to create agent:", error);
     return undefined;
   }
+}
+
+// Create an agent in the sub-section, then navigate to it; on failure surface the
+// shared error toast. The add-panel dropdown / empty-state (via useAddPanelActions)
+// and the Cmd+K "New agent" row all funnel through here so their post-create
+// behavior (navigation + failure feedback) cannot drift.
+export async function createAgentAndNavigate(
+  store: AppStore,
+  subSection: SubSectionId,
+  inputs: CreateAgentInputs,
+  navigateToAgent: (workspaceId: string, taskId: string) => void,
+): Promise<void> {
+  const workspaceId = store.get(activeWorkspaceIdAtom);
+  const taskId = await createAgentInLocation(store, subSection, inputs);
+  if (taskId !== undefined && workspaceId !== null) {
+    navigateToAgent(workspaceId, taskId);
+    return;
+  }
+  store.set(createAgentErrorToastAtom, {
+    title: "Failed to create agent",
+    description: "The agent could not be created. Try again or check your connection.",
+    type: ToastType.ERROR,
+    action: null,
+  });
 }

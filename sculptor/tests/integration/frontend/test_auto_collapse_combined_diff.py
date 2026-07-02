@@ -118,12 +118,10 @@ def test_many_files_start_collapsed_in_review_all(sculptor_instance_: SculptorIn
     task_page.activate_changes_panel()
     task_page.click_review_all()
 
-    # The Review All panel is a thin wrapper around CombinedDiffView, whose scope
-    # picker defaults to "Uncommitted"; switch it to "All" (vs the target branch)
-    # so the committed files count too.
+    # Review All opens on the "All" (vs target branch) scope by default, so the
+    # committed files count without any scope click.
     review_all_panel = task_page.get_review_all_panel()
     expect(review_all_panel).to_be_visible()
-    review_all_panel.get_scope_all().click()
 
     # All 9 file section headers should be visible (7 uncommitted + 2 committed
     # on the testing branch vs main, since Review All is scoped to "All").
@@ -149,11 +147,10 @@ def test_few_files_start_expanded_in_review_all(sculptor_instance_: SculptorInst
     task_page.activate_changes_panel()
     task_page.click_review_all()
 
-    # The Review All panel's scope picker defaults to "Uncommitted"; switch it to
-    # "All" (vs the target branch) so the committed files count too.
+    # Review All opens on the "All" (vs target branch) scope by default, so the
+    # committed files count without any scope click.
     review_all_panel = task_page.get_review_all_panel()
     expect(review_all_panel).to_be_visible()
-    review_all_panel.get_scope_all().click()
 
     # 5 file section headers should be visible (3 uncommitted + 2 committed
     # on the testing branch vs main, since Review All is scoped to "All").

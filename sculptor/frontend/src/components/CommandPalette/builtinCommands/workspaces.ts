@@ -9,7 +9,7 @@ import type { Command } from "../types.ts";
  * binding is a single source of truth — the shortcut hint shown in the
  * palette is whatever the user has remapped to.
  *
- * Tab navigation lives on the `workspace.actions` sub-page; agent
+ * Workspace navigation lives on the `workspace.actions` sub-page; agent
  * navigation lives on `agents.switch` (next to the agent list) so
  * picking an agent and stepping through agents share one entry-point.
  * They still surface at root via fuzzy search (and via their
@@ -18,9 +18,9 @@ import type { Command } from "../types.ts";
 export const buildWorkspaceActionCommands = (runtime: CommandRuntime): Array<Command> => [
   {
     id: "workspaces.next_tab",
-    title: "Next workspace tab",
-    subtitle: "Cycle to the next workspace tab",
-    keywords: ["tab", "switch", "cycle"],
+    title: "Next workspace",
+    subtitle: "Switch to the next workspace",
+    keywords: ["workspace", "tab", "switch", "cycle"],
     group: "workspaces",
     icon: ArrowRightIcon,
     shortcut: "next_tab",
@@ -32,9 +32,9 @@ export const buildWorkspaceActionCommands = (runtime: CommandRuntime): Array<Com
   },
   {
     id: "workspaces.previous_tab",
-    title: "Previous workspace tab",
-    subtitle: "Cycle to the previous workspace tab",
-    keywords: ["tab", "switch", "cycle"],
+    title: "Previous workspace",
+    subtitle: "Switch to the previous workspace",
+    keywords: ["workspace", "tab", "switch", "cycle"],
     group: "workspaces",
     icon: ArrowLeftIcon,
     shortcut: "previous_tab",

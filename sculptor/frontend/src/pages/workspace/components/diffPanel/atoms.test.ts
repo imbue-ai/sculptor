@@ -1,12 +1,16 @@
 import { createStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
+
 import {
   closeAllDiffTabsAtom,
   closeDiffTabAtom,
   diffPanelOpenAtom,
   diffPanelStateAtomFamily,
+  diffScopeAtomFamily,
   openFileViewTabAtom,
+  resetReviewAllScopeAtom,
 } from "./atoms.ts";
 
 const WORKSPACE_ID = "ws-1";
@@ -76,5 +80,26 @@ describe("openFileViewTabAtom", () => {
 
     expect(store.get(diffPanelOpenAtom)).toBe(true);
     expect(store.get(diffPanelStateAtomFamily(WORKSPACE_ID)).openTabs).toHaveLength(1);
+  });
+});
+
+describe("resetReviewAllScopeAtom", () => {
+  it("resets the ACTIVE workspace's combined-diff scope to All (vs the target branch)", () => {
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, WORKSPACE_ID);
+    store.set(diffScopeAtomFamily(WORKSPACE_ID), "uncommitted");
+
+    store.set(resetReviewAllScopeAtom);
+
+    expect(store.get(diffScopeAtomFamily(WORKSPACE_ID))).toBe("vs-target-branch");
+  });
+
+  it("is a no-op when no workspace is active", () => {
+    const store = createStore();
+    store.set(diffScopeAtomFamily(WORKSPACE_ID), "uncommitted");
+
+    store.set(resetReviewAllScopeAtom);
+
+    expect(store.get(diffScopeAtomFamily(WORKSPACE_ID))).toBe("uncommitted");
   });
 });
