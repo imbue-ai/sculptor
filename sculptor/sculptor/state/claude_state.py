@@ -273,7 +273,9 @@ class ParsedTaskStartedResponse(ParsedAgentResponse):
 
     object_type: str = Field(default="ParsedTaskStartedResponse")
     task_id: str = Field(description="Background task ID assigned by Claude Code")
-    tool_use_id: str = Field(description="Tool use ID of the tool call that launched the background task")
+    tool_use_id: str = Field(
+        description="Tool use ID of the tool call that launched the background task. Empty when the CLI omits it (parity with ParsedTaskNotificationResponse — see SCU-1666).",
+    )
     description: str = Field(default="", description="Human-readable description of the background task")
     task_type: str = Field(default="", description="Type of background task (e.g. local_bash)")
 
