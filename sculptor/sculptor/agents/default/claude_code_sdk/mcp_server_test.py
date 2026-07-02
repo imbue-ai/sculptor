@@ -570,6 +570,45 @@ def test_set_respond_drops_stale_expectations_and_unmatched_calls() -> None:
     assert server._unmatched_calls == []
 
 
+def test_exit_plan_mode_replay_with_differing_arguments_is_served_from_cache() -> None:
+    """``exit_plan_mode`` has an open input schema, so a resume replay may
+    forward arguments that differ from the delivered call's. The cache must
+    still serve the approval (via ``_args_match``'s open-schema handling)
+    rather than holding the call — a held plan-approval replay would dangle
+    forever, since a pure replay brings no fresh registration."""
+    server, respond = _make_server()
+    server.register_tool_use_id("toolu_plan", SCULPTOR_MCP_EXIT_PLAN_MODE_TOOL_FQN)
+    server.handle_message(
+        "req_plan",
+        {
+            "jsonrpc": "2.0",
+            "id": 51,
+            "method": "tools/call",
+            "params": {"name": SCULPTOR_MCP_EXIT_PLAN_MODE_TOOL_NAME, "arguments": {"plan": "first"}},
+        },
+    )
+    server.deliver_answer(_make_answer("toolu_plan"))
+    assert len(respond.calls) == 1
+    delivered_text = respond.calls[0][1]["mcp_response"]["result"]["content"][0]["text"]
+
+    # Resume replay with DIFFERENT arguments and no fresh registration.
+    server.handle_message(
+        "req_plan_replay",
+        {
+            "jsonrpc": "2.0",
+            "id": 52,
+            "method": "tools/call",
+            "params": {"name": SCULPTOR_MCP_EXIT_PLAN_MODE_TOOL_NAME, "arguments": {"plan": "different"}},
+        },
+    )
+    assert len(respond.calls) == 2
+    replay_request_id, replay_data = respond.calls[1]
+    assert replay_request_id == "req_plan_replay"
+    assert replay_data["mcp_response"]["id"] == 52
+    assert replay_data["mcp_response"]["result"]["content"][0]["text"] == delivered_text
+    assert server._unmatched_calls == []
+
+
 def test_cache_invalidates_when_a_fresh_auq_panel_is_shown_after_delivery() -> None:
     """If the agent moves on to ask a new question after the first answer,
     the cache must NOT serve stale text for the new question."""

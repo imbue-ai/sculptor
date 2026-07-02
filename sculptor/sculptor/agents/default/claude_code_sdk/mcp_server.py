@@ -335,18 +335,21 @@ class SculptorMcpServer:
             # Serve the cache for a duplicate tools/call against the just-
             # answered question — the resumed CLI re-emits the dangling call
             # with a fresh tool_use_id, so we match against
-            # ``_has_new_auq_since_last_delivery`` plus argument equality
+            # ``_has_new_auq_since_last_delivery`` plus argument matching
             # rather than tool_use_id equality. ``register_tool_use_id``
             # flips that flag whenever a fresh AUQ panel is shown,
             # invalidating the cache; the argument guard keeps a NEW question
             # (e.g. a subagent's, whose tools/call arrives before its
             # registration) from being answered with the previous question's
-            # answer.
+            # answer. Uses ``_args_match`` (not raw equality) so it honors
+            # ``exit_plan_mode``'s open schema — a replayed plan-approval call
+            # is served from cache even if its forwarded arguments differ,
+            # rather than being held forever with no registration coming.
             cached_text: str | None
             if (
                 self._last_delivered_text is not None
                 and not self._has_new_auq_since_last_delivery
-                and self._last_delivered_arguments == arguments
+                and self._args_match(tool_fqn, self._last_delivered_arguments, arguments)
             ):
                 cached_text = self._last_delivered_text
             else:
