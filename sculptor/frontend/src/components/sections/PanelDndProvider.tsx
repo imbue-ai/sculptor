@@ -22,6 +22,8 @@ import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 import { useCallback, useRef } from "react";
 
+import { AgentStatusDot } from "~/components/statusDot";
+
 import type { PanelDragData, PanelDropData } from "./panelDnd.ts";
 import { APPEND_INDEX, sectionBodyDroppableId } from "./panelDnd.ts";
 import {
@@ -90,6 +92,11 @@ const DragOverlayTab = ({ panelId }: { panelId: PanelId }): ReactElement | null 
   }
   return (
     <div className={styles.overlayTab}>
+      {definition.dotStatus !== undefined && (
+        <div className={styles.overlayDot} data-panel-tab-dot={definition.dotStatus} aria-hidden="true">
+          <AgentStatusDot status={definition.dotStatus} size={8} />
+        </div>
+      )}
       <span className={styles.overlayLabel}>{definition.displayName}</span>
     </div>
   );

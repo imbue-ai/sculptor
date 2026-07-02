@@ -12,7 +12,7 @@
 
 import { useDraggable } from "@dnd-kit/core";
 import { ContextMenu, Flex, IconButton, Tooltip } from "@radix-ui/themes";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { Maximize2, Minimize2, Plus, X } from "lucide-react";
 import type { ReactElement } from "react";
 import { memo, useState } from "react";
@@ -20,10 +20,12 @@ import { memo, useState } from "react";
 import { ElementIds } from "~/api";
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { sidebarCollapsedAtom } from "~/components/layout/sidebarAtoms.ts";
+import { AgentStatusDot } from "~/components/statusDot";
 import { getTitleBarLeftPadding } from "~/electron/utils.ts";
 
 import { AddPanelDropdown } from "./AddPanelDropdown.tsx";
-import { panelDefinitionByIdAtom } from "./registry/panelRegistry.ts";
+import type { PanelContextMenuItem, PanelDefinition } from "./registry/panelRegistry.ts";
+import { panelDefinitionByIdAtom, panelRegistryAtom } from "./registry/panelRegistry.ts";
 import { isMultiInstanceKind } from "./registry/panelRegistry.ts";
 import { closePanelAtom, setActivePanelAtom, splitSectionAtom } from "./sectionActions.ts";
 import { activePanelIdInSubSectionAtom, sectionSplitForSectionAtom } from "./sectionAtoms.ts";
@@ -63,7 +65,11 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   const setActivePanel = useSetAtom(setActivePanelAtom);
   const closePanel = useSetAtom(closePanelAtom);
   const recordRecentlyClosed = useSetAtom(recentlyClosedPanelIdsAtom);
+  const store = useStore();
   const [isRenaming, setIsRenaming] = useState<boolean>(false);
+  // The context-menu items shown while the menu is open, resolved fresh on each open
+  // (see resolveLiveDefinition below).
+  const [openMenuActions, setOpenMenuActions] = useState<ReadonlyArray<PanelContextMenuItem>>([]);
   const section = toSection(subSection);
   const existingSplit = useAtomValue(sectionSplitForSectionAtom(section));
   const splitPanel = useSetAtom(splitSectionAtom);
@@ -77,6 +83,15 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   }
 
   const canRename = isMultiInstanceKind(definition.kind);
+
+  // `definition` comes through the equality-guarded per-id slice, which deliberately
+  // suppresses callback-only changes (see panelDefinitionEqual) — so its callbacks and
+  // context-menu actions can be stale (e.g. copy actions built before the agent's
+  // diagnostics arrived). Anything the user invokes therefore re-reads the CURRENT
+  // definition from the registry at interaction time; the slice is only trusted for
+  // the render-relevant fields the comparator covers.
+  const resolveLiveDefinition = (): PanelDefinition =>
+    store.get(panelRegistryAtom).find((candidate) => candidate.id === panelId) ?? definition;
 
   // "Create {direction} split and move panel": one option per allowed
   // axis, offered only while the section has no split (one-split-max).
@@ -108,8 +123,9 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
     // Multi-instance panels (agent/terminal) delete the underlying entity — with its
     // confirmation dialog — instead of just removing the tab from the layout.
     // Static panels have no onRequestClose and just close.
-    if (definition.onRequestClose !== undefined) {
-      definition.onRequestClose();
+    const liveDefinition = resolveLiveDefinition();
+    if (liveDefinition.onRequestClose !== undefined) {
+      liveDefinition.onRequestClose();
     } else {
       // Single-instance panel: closing only removes it from the layout, so remember
       // it for the empty-state quick actions — it can be re-added later.
@@ -124,7 +140,7 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
     // Only multi-instance panels supply onRename; static panels cannot be renamed
     // so this is a no-op for them. InlineRenameInput already trims and drops
     // empty/unchanged values before committing, so newName is a non-empty new label.
-    definition.onRename?.(newName);
+    resolveLiveDefinition().onRename?.(newName);
   };
 
   // The whole tab is the drag activator (no separate handle). The activator ref
@@ -152,6 +168,16 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
       onClick={handleActivate}
       onDoubleClick={handleDoubleClick}
     >
+      {definition.dotStatus !== undefined && (
+        <div
+          className={styles.dot}
+          data-testid={ElementIds.PANEL_TAB_STATUS_DOT}
+          data-panel-tab-dot={definition.dotStatus}
+          aria-hidden="true"
+        >
+          <AgentStatusDot status={definition.dotStatus} size={8} />
+        </div>
+      )}
       {isRenaming && canRename ? (
         <InlineRenameInput
           value={definition.displayName}
@@ -176,17 +202,28 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
     </div>
   );
 
-  const contextActions = definition.contextMenuActions ?? [];
-  const hasContextMenu = canRename || contextActions.length > 0 || splitOptions.length > 0;
+  // The (possibly stale) slice is only used for the has-a-menu decision — whether a
+  // panel carries context actions at all never changes over its lifetime. The items
+  // themselves render from openMenuActions, resolved fresh on each open.
+  const hasContextMenu = canRename || (definition.contextMenuActions ?? []).length > 0 || splitOptions.length > 0;
 
   if (!hasContextMenu) {
     return tabBody;
   }
 
-  const hasMenuAboveSplits = canRename || contextActions.length > 0;
+  const hasMenuAboveSplits = canRename || openMenuActions.length > 0;
+
+  const handleMenuOpenChange = (open: boolean): void => {
+    if (open) {
+      // Resolve the actions at open time so async updates since the slice last
+      // re-emitted (e.g. diagnostics arriving after a status change) are reflected in
+      // the items' disabled state and captured values.
+      setOpenMenuActions(resolveLiveDefinition().contextMenuActions ?? []);
+    }
+  };
 
   return (
-    <ContextMenu.Root>
+    <ContextMenu.Root onOpenChange={handleMenuOpenChange}>
       <ContextMenu.Trigger>{tabBody}</ContextMenu.Trigger>
       <ContextMenu.Content size="1">
         {canRename && (
@@ -194,8 +231,8 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
             Rename
           </ContextMenu.Item>
         )}
-        {canRename && contextActions.length > 0 && <ContextMenu.Separator />}
-        {contextActions.map((action) => (
+        {canRename && openMenuActions.length > 0 && <ContextMenu.Separator />}
+        {openMenuActions.map((action) => (
           <ContextMenu.Item key={action.label} disabled={action.disabled} onSelect={() => action.action()}>
             {action.label}
           </ContextMenu.Item>
@@ -229,6 +266,11 @@ const GhostTabComponent = ({ panelId }: { panelId: PanelId }): ReactElement | nu
   }
   return (
     <div className={`${styles.tab} ${styles.tabGhost}`} data-section-tab-ghost="true" aria-hidden="true">
+      {definition.dotStatus !== undefined && (
+        <div className={styles.dot} data-panel-tab-dot={definition.dotStatus}>
+          <AgentStatusDot status={definition.dotStatus} size={8} />
+        </div>
+      )}
       <span className={styles.label}>{definition.displayName}</span>
     </div>
   );

@@ -636,6 +636,9 @@ class ElementIDs(StrEnum):
     # drive the real drag pipeline (focus → Space → arrows → Space).
     PANEL_TAB = "PANEL_TAB"
     PANEL_TAB_CLOSE = "PANEL_TAB_CLOSE"
+    # The rendered status dot inside an agent tab; its data-panel-tab-dot
+    # attribute carries the same status as the tab's data-dot-status.
+    PANEL_TAB_STATUS_DOT = "PANEL_TAB_STATUS_DOT"
     SECTION_ADD_PANEL_BUTTON = "SECTION_ADD_PANEL_BUTTON"
     SECTION_MAXIMIZE_BUTTON = "SECTION_MAXIMIZE_BUTTON"
     SECTION_ACTIVE_RING = "SECTION_ACTIVE_RING"

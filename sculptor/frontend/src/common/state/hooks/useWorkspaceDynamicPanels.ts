@@ -8,7 +8,7 @@
 // dialogs are rendered by the shell (TerminalCloseConfirmation / AgentDeleteConfirmation).
 
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { useEffect, useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 
 import { renameWorkspaceAgent } from "~/api";
 import { taskAtomFamily, tasksArrayAtom, updateTasksAtom } from "~/common/state/atoms/tasks.ts";
@@ -19,11 +19,35 @@ import { deriveDynamicPanels, makeTerminalPanelId } from "~/components/sections/
 import {
   buildPluginPanelDefinitions,
   buildStaticPanelDefinitions,
+  panelRegistriesEqual,
   panelRegistryAtom,
 } from "~/components/sections/registry/panelRegistry.ts";
 import { pluginPanelsAtom } from "~/plugins/pluginRegistry.ts";
 
+import type { AgentDiagnosticsByTaskId } from "./useWorkspaceAgentDiagnostics.ts";
 import { useWorkspaceAgentDiagnostics } from "./useWorkspaceAgentDiagnostics.ts";
+
+// True when two diagnostics maps carry the same data. Diagnostics feed the tab
+// context-menu copy actions — closures that panelRegistriesEqual deliberately ignores —
+// so the registry write guard compares them separately: a diagnostics change must force
+// a write even when every render-relevant field is unchanged, or the registry would
+// keep serving copy actions built from the old diagnostics.
+const agentDiagnosticsEqual = (a: AgentDiagnosticsByTaskId, b: AgentDiagnosticsByTaskId): boolean => {
+  const aTaskIds = Object.keys(a);
+  if (aTaskIds.length !== Object.keys(b).length) {
+    return false;
+  }
+  return aTaskIds.every((taskId) => {
+    const left = a[taskId];
+    const right = b[taskId];
+    return (
+      right !== undefined &&
+      left.sessionId === right.sessionId &&
+      left.claudeTranscriptPath === right.claudeTranscriptPath &&
+      left.sculptorTranscriptPath === right.sculptorTranscriptPath
+    );
+  });
+};
 
 export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
   const tasks = useAtomValue(tasksArrayAtom);
@@ -120,7 +144,15 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
     }));
   }, [allTerminalTabs, workspaceId, setTerminalCloseTarget, setTerminalTabs]);
 
-  useEffect(() => {
+  // The diagnostics the previous registry rebuild saw, so the write guard below can
+  // tell a callbacks-only change (diagnostics arriving) from a no-op rebuild.
+  const previousDiagnosticsRef = useRef<AgentDiagnosticsByTaskId | undefined>(undefined);
+
+  // A layout effect so the registry commits in the same pre-paint flush as the
+  // workspace-scope flip and agent placement (useWorkspaceShellBootstrap) — with a
+  // passive effect the first committed frame after a workspace switch would still show
+  // the previous workspace's dynamic panels.
+  useLayoutEffect(() => {
     const staticDefinitions = buildStaticPanelDefinitions();
     const dynamicDefinitions = deriveDynamicPanels(agents, terminals);
     // Merge plugin-contributed panels (PANEL-/plugin spec) into the rebuilt registry so
@@ -129,6 +161,18 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
     // built-in surface.
     const reservedIds = new Set([...staticDefinitions.map((p) => p.id), ...dynamicDefinitions.map((p) => p.id)]);
     const pluginDefinitions = buildPluginPanelDefinitions(pluginPanels.filter((panel) => !reservedIds.has(panel.id)));
-    setPanelRegistry([...staticDefinitions, ...pluginDefinitions, ...dynamicDefinitions]);
-  }, [agents, terminals, pluginPanels, setPanelRegistry]);
+    const next = [...staticDefinitions, ...pluginDefinitions, ...dynamicDefinitions];
+    // Skip the write when this rebuild changed nothing: task ticks re-derive the
+    // registry several times per second during streaming, and an unguarded write (a
+    // brand-new array every time) re-renders every whole-registry subscriber.
+    // panelRegistriesEqual ignores the callback fields, so diagnostics — the one
+    // callback input not mirrored in a compared field — are checked separately: without
+    // that, SectionHeader's open-time action resolution would read a registry whose
+    // copy actions still capture the old diagnostics.
+    const areDiagnosticsUnchanged =
+      previousDiagnosticsRef.current !== undefined &&
+      agentDiagnosticsEqual(previousDiagnosticsRef.current, diagnosticsByTaskId);
+    previousDiagnosticsRef.current = diagnosticsByTaskId;
+    setPanelRegistry((previous) => (areDiagnosticsUnchanged && panelRegistriesEqual(previous, next) ? previous : next));
+  }, [agents, terminals, pluginPanels, diagnosticsByTaskId, setPanelRegistry]);
 };

@@ -16,8 +16,8 @@ Known phase gaps applied here (the redesigned PanelTab context menu does not yet
 these affordances — the old agent tab bar did):
 * Diagnostics is a FLAT set of copy items (no "Diagnostics" sub-menu), so items are
   asserted by their visible label rather than a per-item testid.
-* Mark-unread (AGENT-07) and the status-dot `data-dot-status` reader are not wired on
-  the panel tab — skipped.
+* Mark-unread (AGENT-07) is not offered on the panel-tab context menu — skipped.
+  (The status dot itself is covered by test_read_unread_status.py.)
 * Close-others is not offered on the panel-tab context menu — skipped.
 """
 
@@ -34,7 +34,7 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
-_MARK_UNREAD_SKIP_REASON = "Mark-unread (AGENT-07) and the status-dot data-dot-status reader are not wired on the redesigned panel tab's context menu (the dot renders but carries no testable attribute, and there is no Mark-unread item); deferred to a later task."
+_MARK_UNREAD_SKIP_REASON = "Mark-unread (AGENT-07) is not offered on the redesigned panel tab's context menu (there is no Mark-unread item); deferred to a later task."
 
 _CLOSE_OTHERS_SKIP_REASON = "Close-others is not offered on the redesigned panel-tab context menu (only Rename + diagnostics copy items render); deferred to a later task."
 
@@ -146,8 +146,8 @@ def test_agent_tab_close_requires_confirmation(sculptor_instance_: SculptorInsta
 @pytest.mark.skip(reason=_MARK_UNREAD_SKIP_REASON)
 @user_story("to mark an agent unread from its tab context menu")
 def test_agent_tab_mark_unread(sculptor_instance_: SculptorInstance) -> None:
-    """Placeholder for AGENT-07: mark-unread + the status-dot reader are not wired on
-    the redesigned panel tab's context menu."""
+    """Placeholder for AGENT-07: mark-unread is not offered on the redesigned panel
+    tab's context menu."""
 
 
 @pytest.mark.skip(reason=_CLOSE_OTHERS_SKIP_REASON)

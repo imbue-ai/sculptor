@@ -10,7 +10,7 @@ import { atom } from "jotai";
 import { selectAtom } from "jotai/utils";
 import type { LucideIcon } from "lucide-react";
 import { FileText, GitBranch, GitCommitVertical, Globe, ListChecks, NotebookPen, Sparkles, Zap } from "lucide-react";
-import type { ComponentType, ReactNode } from "react";
+import type { ComponentType } from "react";
 
 import type { AgentDotStatus } from "../../statusDot/statusUtils.ts";
 import { memoizedAtomByKey } from "../atomCache.ts";
@@ -29,7 +29,6 @@ export type PanelDefinition = {
   // Optional: review-all and browser have no default section (not opened by default).
   defaultSection?: SubSectionId;
   component: ComponentType;
-  tabIcon?: ReactNode;
   // The agent/terminal-agent status reflected by the tab's status dot. Exposed on the
   // tab element as `data-dot-status` so tests can read read/unread/running/waiting/error
   // without depending on the dot's visual styling. Unset for static/plain-terminal panels.
@@ -133,6 +132,13 @@ export const panelRegistryAtom = atom<ReadonlyArray<PanelDefinition>>(buildStati
 // map / dynamicPanels componentCache) and `dotStatus` is a scalar, so comparing these
 // fields suppresses spurious re-emits while still re-rendering on a real change (e.g.
 // rename or dot-status change).
+//
+// The callback fields (contextMenuActions / onRequestClose / onRename) are deliberately
+// omitted: every registry derivation rebuilds them as fresh closures, so comparing them
+// by reference would defeat the comparator. Omitting them is safe because SectionHeader
+// never invokes a callback captured through this guarded slice — it re-reads the CURRENT
+// definition from panelRegistryAtom at menu-open / invocation time, so a suppressed
+// re-emit cannot strand a stale callback.
 function panelDefinitionEqual(a: PanelDefinition | undefined, b: PanelDefinition | undefined): boolean {
   return (
     a === b ||
@@ -145,6 +151,16 @@ function panelDefinitionEqual(a: PanelDefinition | undefined, b: PanelDefinition
       a.dotStatus === b.dotStatus &&
       a.component === b.component)
   );
+}
+
+// True when two registries hold pairwise render-equal definitions in the same order.
+// The registry sync hook uses this to skip the atom write for rebuilds that changed
+// nothing (task ticks), so whole-registry subscribers don't re-render several times per
+// second during streaming. Because panelDefinitionEqual ignores the callback fields,
+// the hook must separately force a write when a callback INPUT (agent diagnostics)
+// changes — see useWorkspaceDynamicPanels.
+export function panelRegistriesEqual(a: ReadonlyArray<PanelDefinition>, b: ReadonlyArray<PanelDefinition>): boolean {
+  return a.length === b.length && a.every((definition, index) => panelDefinitionEqual(definition, b[index]));
 }
 
 // A single panel's definition, sliced out of the registry and memoized per id.

@@ -15,7 +15,9 @@
   user-select: none;
 }
 
-.overlayIcon {
+// The agent-status dot slot on the floating copy, mirroring the source tab's dot so
+// the pill doesn't change shape when picked up.
+.overlayDot {
   align-items: center;
   display: flex;
   flex-shrink: 0;

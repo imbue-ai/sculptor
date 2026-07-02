@@ -16,7 +16,7 @@ import type { ComponentType } from "react";
 import { createElement } from "react";
 
 import type { TaskStatus } from "~/api";
-import { AgentStatusDot, getAgentDotStatus } from "~/components/statusDot";
+import { getAgentDotStatus } from "~/components/statusDot";
 
 import type { PanelId } from "../sectionTypes.ts";
 import type { PanelContextMenuItem, PanelDefinition } from "./panelRegistry.ts";
@@ -174,7 +174,6 @@ export function deriveDynamicPanels(
       kind: "agent",
       defaultSection: "center",
       component: getAgentComponent(agent.taskId),
-      tabIcon: createElement(AgentStatusDot, { status: dotStatus }),
       dotStatus,
       contextMenuActions: buildAgentContextMenuActions(agent),
       onRequestClose: agent.onRequestClose,
