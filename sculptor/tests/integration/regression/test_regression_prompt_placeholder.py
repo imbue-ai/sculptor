@@ -110,6 +110,13 @@ def test_placeholder_hidden_when_editor_has_content(sculptor_instance_: Sculptor
     type_into_tiptap(page, chat_input, "hello world")
     expect(chat_input).to_contain_text("hello world")
 
+    # page.keyboard.press acts on whatever currently holds focus. The chat input
+    # can remount after the agent settles, leaving focus on a detached editor;
+    # re-focus the live contenteditable so the keystrokes below provably edit the
+    # editor holding "hello world" rather than a stale one.
+    chat_input.click()
+    expect(chat_input).to_be_focused()
+
     # Move cursor to the beginning and press Enter to create an empty paragraph above
     page.keyboard.press("Home")
     page.keyboard.press("Enter")
