@@ -60,7 +60,10 @@ const AgentStatusIcon = ({ agent }: { agent: WorkflowAgentProgress }): ReactElem
   if (agent.state === "error") {
     return <CircleAlert className={styles.statusIconError} aria-label="error" />;
   }
-  const isQueued = agent.startedAt === undefined || agent.startedAt === null;
+  // "start" means the agent was created but may still be waiting for a
+  // concurrency slot; it counts as queued until a start time appears. Any
+  // progress means it's actively running.
+  const isQueued = agent.state === "start" && (agent.startedAt === undefined || agent.startedAt === null);
   if (isQueued) {
     return <Circle className={styles.statusIconQueued} aria-label="queued" />;
   }

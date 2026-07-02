@@ -783,6 +783,16 @@ def convert_agent_messages_to_task_update(
                     usage=msg.workflow_usage or (previous_state.usage if previous_state else None),
                     summary=msg.summary,
                 )
+                # Workflow completions must never synthesize a subagent child.
+                # The tool-name fallback below cannot be relied on here: in
+                # streamed turns the Workflow ToolUseBlock is result-replaced
+                # in the finalized message, so _find_tool_use_by_id comes up
+                # empty and the fallback would attach a child — which makes
+                # AlphaToolGroup misclassify the Workflow call as a subagent
+                # and the pill vanish (same failure mode as SCU-1151's Bash
+                # case). The pill's completion signal is the status flip in
+                # workflow_task_states above, not a child message.
+                continue
             # A background task completed. The notification is an out-of-band
             # signal that does not itself end the current request cycle, so we
             # do NOT flush the in-progress message here.  Message boundaries are
