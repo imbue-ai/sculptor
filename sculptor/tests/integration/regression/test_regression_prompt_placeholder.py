@@ -110,12 +110,11 @@ def test_placeholder_hidden_when_editor_has_content(sculptor_instance_: Sculptor
     # the state a user reaches by pressing Enter at the start of their text.
     #
     # We assemble it with editor commands rather than a literal
-    # ``page.keyboard.press("Enter")``. The integration harness binds
-    # ``send_message`` to Enter, so a raw Enter keystroke here submits the draft
-    # and clears the editor instead of splitting the paragraph. An empty editor
-    # then renders the placeholder (``editor.isEmpty`` is true), which is exactly
-    # the false failure this test used to hit. ``type_paragraphs_into_tiptap``
-    # drives ``editor.commands.enter()``, which bypasses the send keybinding.
+    # ``page.keyboard.press("Enter")``: the integration harness binds
+    # ``send_message`` to Enter, so a raw Enter keystroke here would submit the
+    # draft and clear the editor instead of splitting the paragraph.
+    # ``type_paragraphs_into_tiptap`` drives ``editor.commands.enter()``, which
+    # bypasses the send keybinding.
     type_paragraphs_into_tiptap(chat_input, ["", "hello world"])
     expect(chat_input).to_contain_text("hello world")
 
