@@ -78,9 +78,17 @@ export const isWorkspaceListEmptyAtom: Atom<boolean> = atom<boolean>((get) => {
  * back to just the inline form + Settings. The global keyboard
  * shortcuts hook and the command palette's open path read this and no-op while
  * it's set, so Cmd+K and the rest of the shortcuts stay off until the first
- * workspace exists. Tracks `isWorkspaceListEmptyAtom` exactly today; kept as a
- * separate, intent-named atom so the shortcut-gating contract is explicit and
- * can diverge later (e.g. allow more shortcuts) without touching the
- * empty-page render condition.
+ * workspace exists. Kept as a separate, intent-named atom so the
+ * shortcut-gating contract is explicit and can diverge from the empty-page
+ * render condition — and it does diverge on load: unlike
+ * `isWorkspaceListEmptyAtom` (false while the list is still loading, so the
+ * empty page never flashes), shortcuts stay DISABLED until the first snapshot
+ * arrives. Otherwise a shortcut fired during the load window of a
+ * zero-workspace boot (e.g. Cmd/Meta+T) could set `newWorkspaceModalAtom`
+ * open right before the first-run swap unmounts the modal's host, leaving a
+ * stale open request that pops the dialog over the first created workspace.
  */
-export const areGlobalShortcutsDisabledAtom: Atom<boolean> = atom<boolean>((get) => get(isWorkspaceListEmptyAtom));
+export const areGlobalShortcutsDisabledAtom: Atom<boolean> = atom<boolean>((get) => {
+  const workspaces = get(workspacesArrayAtom);
+  return workspaces === undefined || workspaces.length === 0;
+});

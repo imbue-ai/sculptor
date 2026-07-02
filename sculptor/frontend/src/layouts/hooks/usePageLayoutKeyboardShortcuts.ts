@@ -167,8 +167,9 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
             if (isCommandPaletteOpen) {
               closeCommandPalette();
             }
-            // Open the global new-workspace dialog (mounted in both layouts so
-            // the shortcut works on every route, workspace or not).
+            // Open the global new-workspace dialog. Its host (NewWorkspaceModal)
+            // is mounted in AppShell alongside this hook, so wherever this
+            // handler runs the dialog can actually render.
             setNewWorkspaceModal({ open: true });
           },
         ],
