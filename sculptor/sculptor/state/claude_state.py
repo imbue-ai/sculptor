@@ -283,7 +283,9 @@ class ParsedTaskNotificationResponse(ParsedAgentResponse):
 
     object_type: str = Field(default="ParsedTaskNotificationResponse")
     task_id: str = Field(description="Background task ID matching the task_started event")
-    tool_use_id: str = Field(description="Tool use ID of the tool call that launched the background task")
+    tool_use_id: str = Field(
+        description="Tool use ID of the tool call that launched the background task. Empty when the CLI omits it, e.g. a task orphaned by a process exit and reported as failed on resume (see SCU-1666).",
+    )
     status: str = Field(description="Completion status (e.g. completed)")
     summary: str = Field(default="", description="Human-readable summary of the background task result")
     duration_ms: int | None = Field(
@@ -386,9 +388,11 @@ def _handle_init_message(data: dict[str, Any]) -> ParsedInitResponse:
 
 def _handle_task_started_message(data: dict[str, Any]) -> ParsedTaskStartedResponse:
     """Handle system/task_started message type."""
+    # ``tool_use_id`` is read defensively (see _handle_task_notification_message)
+    # to keep a variant payload from crashing the whole agent.
     return ParsedTaskStartedResponse(
         task_id=data["task_id"],
-        tool_use_id=data["tool_use_id"],
+        tool_use_id=data.get("tool_use_id", ""),
         description=data.get("description", ""),
         task_type=data.get("task_type", ""),
     )
@@ -401,9 +405,13 @@ def _handle_task_notification_message(data: dict[str, Any]) -> ParsedTaskNotific
     # unparsed until a caller asks for them.
     usage = data.get("usage") or {}
     raw_duration_ms = usage.get("duration_ms") if isinstance(usage, dict) else None
+    # ``tool_use_id`` is absent when a background task orphaned by a process exit
+    # is reported as failed on resume: the launching tool call's id died with the
+    # previous process (see SCU-1666). Default to "" rather than indexing so the
+    # notification is surfaced instead of a missing key killing the agent.
     return ParsedTaskNotificationResponse(
         task_id=data["task_id"],
-        tool_use_id=data["tool_use_id"],
+        tool_use_id=data.get("tool_use_id", ""),
         status=data.get("status", ""),
         summary=data.get("summary", ""),
         duration_ms=int(raw_duration_ms) if isinstance(raw_duration_ms, (int, float)) else None,

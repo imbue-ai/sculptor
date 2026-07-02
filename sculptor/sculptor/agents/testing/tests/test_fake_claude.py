@@ -104,6 +104,29 @@ def test_task_notification_message_roundtrip() -> None:
     assert parsed.summary == "Tests passed"
 
 
+def test_task_notification_message_without_tool_use_id_parses() -> None:
+    """A task_notification missing tool_use_id must parse, not raise KeyError.
+
+    The CLI omits tool_use_id when a background task orphaned by a process exit
+    is reported as failed on resume (see SCU-1666). Parsing must degrade to an
+    empty tool_use_id instead of crashing the agent's output-processing thread.
+    """
+    msg = make_task_notification_message(
+        task_id="task-123",
+        tool_use_id=None,
+        status="failed",
+        summary="Background task did not complete",
+    )
+    assert "tool_use_id" not in msg
+    result = parse_claude_code_json_lines_simple(json.dumps(msg))
+    assert result is not None
+    _msg_type, parsed = result
+    assert isinstance(parsed, ParsedTaskNotificationResponse)
+    assert parsed.task_id == "task-123"
+    assert parsed.tool_use_id == ""
+    assert parsed.status == "failed"
+
+
 def test_assistant_text_message_roundtrip() -> None:
     msg_id = f"msg-{uuid4().hex}"
     msg = make_assistant_message(msg_id, [make_text_block("hello")])
