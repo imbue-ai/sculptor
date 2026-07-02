@@ -10,7 +10,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExter
 
 import { ChatMessageRole } from "~/api";
 
-import { contentBottomOffset, distanceFromContentBottom } from "../scroll/geometry.ts";
+import { bottomPinOffset, distanceFromContentBottom } from "../scroll/geometry.ts";
 import type { ReadingAnchor } from "../scroll/scrollStateMachine.ts";
 import {
   createScrollStateMachine,
@@ -39,8 +39,10 @@ const USER_SCROLL_DEBOUNCE_MS = 150;
 
 // How long after a followed turn ends the content observer keeps revealing the
 // tail, so the turn footer (which mounts a beat after the stream stops) is not left
-// below the fold.
-const FOOTER_REVEAL_WINDOW_MS = 1200;
+// below the fold. Exported because useAlphaVirtualizer holds the streaming
+// paddingEnd floor for the same window: both cover the turn-end settle, where
+// late content changes (cursor unmount, footer mount) can still land.
+export const FOOTER_REVEAL_WINDOW_MS = 1200;
 
 /** Cancel any in-progress scroll-to-top transform animation and restore
  *  the virtualizer's scroll-position adjustment callback. */
@@ -147,14 +149,15 @@ export const useAlphaAutoScroll = (
     [virtualizer, machine],
   );
 
-  // The single "scroll to the bottom" primitive: pin the last message's content
-  // bottom flush with the viewport, leaving paddingEnd as slack (see
-  // contentBottomOffset). Down-only — callers reach the bottom from above, so an
-  // upward move would only chase a turn-end shrink, which we leave in place.
-  const pinToContentBottom = useCallback((): void => {
+  // The single "scroll to the bottom" primitive: land the content bottom
+  // PIN_BOTTOM_GAP above the viewport bottom, keeping the rest of paddingEnd as
+  // slack below scrollTop (see bottomPinOffset). Down-only — callers reach the
+  // bottom from above, so an upward move would only chase a turn-end shrink,
+  // which we leave in place.
+  const pinToBottom = useCallback((): void => {
     const el = scrollContainerRef.current;
     if (!el || messageCount === 0) return;
-    const desired = contentBottomOffset(el, virtualizer);
+    const desired = bottomPinOffset(el, virtualizer);
     if (desired <= el.scrollTop + 1) return;
     isProgrammaticScroll.current = true;
     el.scrollTop = desired;
@@ -495,8 +498,8 @@ export const useAlphaAutoScroll = (
     // synchronously — so this never acts on a stale value.
     if (!atBottom()) return;
     if (lastMessageRole === ChatMessageRole.USER) return;
-    pinToContentBottom();
-  }, [messageCount, isAtBottom, isSuppressed, lastMessageRole, atBottom, pinToContentBottom]);
+    pinToBottom();
+  }, [messageCount, isAtBottom, isSuppressed, lastMessageRole, atBottom, pinToBottom]);
 
   // Engage when streaming starts while at bottom; disengage when streaming stops.
   // Reads the live scroll position rather than the isAtBottom state, which can be
@@ -514,12 +517,12 @@ export const useAlphaAutoScroll = (
         }
       }
     } else if (!isStreaming) {
-      // Final settle onto the content bottom before disengaging: the ResizeObserver
+      // Final settle onto the pinned bottom before disengaging: the ResizeObserver
       // disconnects when streaming stops, so later virtualizer re-measurements won't
       // be compensated — pin now, before they land. Skip while anchoring (a short
       // response that never overflowed).
       if (isFollowing() && messageCount > 0) {
-        pinToContentBottom();
+        pinToBottom();
         // The turn footer mounts a beat later and grows the content below the fold;
         // open a short window so the content observer re-pins to reveal it at the
         // bottom, matching where focusing the input lands.
@@ -606,7 +609,7 @@ export const useAlphaAutoScroll = (
             return;
           }
           if (messageCount === 0) return;
-          pinToContentBottom();
+          pinToBottom();
           machine.setGeometryAtBottom(true);
           return;
         }
@@ -628,7 +631,7 @@ export const useAlphaAutoScroll = (
           // occupies the top portion of the viewport.
           if (tailHeight >= el.clientHeight - anchorSize - FILLING_OVERFLOW_BUFFER) {
             machine.dispatch({ kind: "turnAnchored" });
-            pinToContentBottom();
+            pinToBottom();
           }
           return;
         }
@@ -639,7 +642,7 @@ export const useAlphaAutoScroll = (
         }
       }
     },
-    [machine, virtualizer, messageCount, restoreReadingAnchor, pinToContentBottom],
+    [machine, virtualizer, messageCount, restoreReadingAnchor, pinToBottom],
   );
 
   // Unified content-resize observer. One observer, always connected while not
@@ -667,7 +670,7 @@ export const useAlphaAutoScroll = (
         el.scrollHeight > revealFooterBaseHeightRef.current + 1 &&
         `${el.clientWidth}x${el.clientHeight}` === revealFooterViewportRef.current
       ) {
-        pinToContentBottom();
+        pinToBottom();
       }
       applyReflow(el, distance);
     });
@@ -678,7 +681,7 @@ export const useAlphaAutoScroll = (
     // pinBottom, so idle reconnects fall through untouched.
     if (isStreaming && messageCount > 0 && projectReflow(machine.getState()).kind === "pinBottom") {
       if (distanceFromContentBottom(el, virtualizer) <= BOTTOM_THRESHOLD) {
-        pinToContentBottom();
+        pinToBottom();
       }
     }
 
@@ -687,20 +690,11 @@ export const useAlphaAutoScroll = (
       observer.disconnect();
       cancelAnimationFrame(reflowRestoreRafRef.current);
     };
-  }, [
-    isStreaming,
-    isSuppressed,
-    messageCount,
-    virtualizer,
-    scrollContainerRef,
-    machine,
-    applyReflow,
-    pinToContentBottom,
-  ]);
+  }, [isStreaming, isSuppressed, messageCount, virtualizer, scrollContainerRef, machine, applyReflow, pinToBottom]);
 
   const scrollToBottom = useCallback((): void => {
     if (messageCount === 0) return;
-    pinToContentBottom();
+    pinToBottom();
     // Record at-bottom so the jump-to-bottom button hides immediately even if the
     // resulting scroll event is async or coalesced (a non-streaming jump has no
     // other trigger).
@@ -714,7 +708,7 @@ export const useAlphaAutoScroll = (
       // suppression.
       machine.dispatch({ kind: "userScrolled" });
     }
-  }, [messageCount, isStreaming, machine, pinToContentBottom]);
+  }, [messageCount, isStreaming, machine, pinToBottom]);
 
   const scrollToTop = useCallback((): void => {
     if (messageCount === 0) return;

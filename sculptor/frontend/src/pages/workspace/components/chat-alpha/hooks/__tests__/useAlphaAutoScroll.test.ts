@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChatMessageRole } from "~/api";
 
+import { PIN_BOTTOM_GAP } from "../../scroll/geometry.ts";
 import { useAlphaAutoScroll } from "../useAlphaAutoScroll.ts";
 
 // Mock ResizeObserver — jsdom doesn't provide one.
@@ -62,12 +63,14 @@ const triggerResize = (): void => {
 };
 
 /**
- * Assert the container is pinned to the content bottom — scrollTop at
- * contentBottomOffset (scrollHeight - paddingEnd - clientHeight), the observable
- * position rather than a virtualizer mock call.
+ * Assert the container is pinned to the bottom — scrollTop at bottomPinOffset
+ * (content bottom plus the visible PIN_BOTTOM_GAP, clamped to the scroll
+ * range), the observable position rather than a virtualizer mock call.
  */
 const expectPinnedToBottom = (el: HTMLDivElement, paddingEnd = 0): void => {
-  expect(el.scrollTop).toBe(Math.max(0, el.scrollHeight - paddingEnd - el.clientHeight));
+  const contentBottom = Math.max(0, el.scrollHeight - paddingEnd - el.clientHeight);
+  const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
+  expect(el.scrollTop).toBe(Math.min(contentBottom + PIN_BOTTOM_GAP, maxScroll));
 };
 
 describe("useAlphaAutoScroll", () => {

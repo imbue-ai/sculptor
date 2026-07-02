@@ -5,7 +5,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 
 import { ChatMessageRole } from "~/api";
 
+import { IDLE_TAIL_PADDING, STREAMING_TAIL_PADDING } from "../scroll/geometry.ts";
 import type { ScrollStateMachine } from "../scroll/scrollStateMachine.ts";
+import { FOOTER_REVEAL_WINDOW_MS } from "./useAlphaAutoScroll.ts";
 
 const ESTIMATED_MESSAGE_HEIGHT = 120;
 const OVERSCAN = 5;
@@ -19,15 +21,17 @@ const OVERSCAN = 5;
 const MAX_CACHED_TASKS = 20;
 
 /**
- * Vertical padding around the virtualised list.
+ * Vertical padding above the virtualised list.
  *
- * Using `paddingStart`/`paddingEnd` is the correct TanStack Virtual way to
- * reserve space – CSS padding on the container div is ignored by
+ * Using `paddingStart` (and `paddingEnd` below) is the correct TanStack Virtual
+ * way to reserve space – CSS padding on the container div is ignored by
  * absolutely-positioned virtual items.
  *
  * paddingStart matches var(--space-9) so the first message sits at the same
  * vertical position as subsequent user messages (which get a margin-top of
- * var(--space-9) via the .newCycle class).
+ * var(--space-9) via the .newCycle class). The paddingEnd floor is the
+ * streaming-scoped IDLE_TAIL_PADDING / STREAMING_TAIL_PADDING pair — see the
+ * dynamicPaddingEnd derivation below.
  */
 const VIRTUAL_PADDING = 64;
 
@@ -126,6 +130,9 @@ export const useAlphaVirtualizer = (
   // Set true when an item size change triggers a scrollTop adjustment,
   // so chat-level scroll listeners can distinguish it from a user scroll.
   isProgrammaticScrollRef?: MutableRefObject<boolean>,
+  // Whether the task is streaming — drives the paddingEnd floor (see
+  // dynamicPaddingEnd below).
+  isStreaming: boolean = false,
 ): Virtualizer<HTMLDivElement, Element> => {
   const [containerHeight, setContainerHeight] = useState(0);
   const [tailContentHeight, setTailContentHeight] = useState(0);
@@ -179,6 +186,28 @@ export const useAlphaVirtualizer = (
     return (): void => cancelAnimationFrame(settlingRafRef.current);
   }, []);
 
+  // The paddingEnd floor is streaming-scoped. While a stream is active — and
+  // through the settle window after it ends, while late content changes (the
+  // cursor unmounting, the turn footer mounting) can still land — the floor is
+  // STREAMING_TAIL_PADDING: the pin keeps PIN_BOTTOM_GAP of it visible below
+  // the content and relies on the remainder as slack below scrollTop, so the
+  // turn-end shrink never clamps the scroll position. At rest the floor is
+  // IDLE_TAIL_PADDING (== the pin gap), so the scroll range ends exactly at
+  // the pin position: scrolling below the content reveals the gap and no more.
+  // The drop happens with scrollTop at the post-drop range end, so it never
+  // moves the view.
+  const [isTailSettling, setIsTailSettling] = useState(false);
+  useEffect(() => {
+    if (isStreaming) {
+      setIsTailSettling(true);
+      return;
+    }
+    if (!isTailSettling) return;
+    const timer = setTimeout(() => setIsTailSettling(false), FOOTER_REVEAL_WINDOW_MS);
+    return (): void => clearTimeout(timer);
+  }, [isStreaming, isTailSettling]);
+  const tailPaddingFloor = isStreaming || isTailSettling ? STREAMING_TAIL_PADDING : IDLE_TAIL_PADDING;
+
   // paddingEnd needs to be just large enough for the scroll-to-top target
   // (the last user message) to reach the viewport top.  The required padding
   // = containerHeight - tailContentHeight, where tailContentHeight is the sum
@@ -192,8 +221,8 @@ export const useAlphaVirtualizer = (
   // destabilises scroll positions during view switches and task restoration.
   const dynamicPaddingEnd =
     containerHeight > 0 && tailContentHeight > 0
-      ? Math.max(containerHeight - tailContentHeight, VIRTUAL_PADDING)
-      : VIRTUAL_PADDING;
+      ? Math.max(containerHeight - tailContentHeight, tailPaddingFloor)
+      : tailPaddingFloor;
 
   const virtualizer = useVirtualizer({
     count: messageCount,
@@ -235,6 +264,10 @@ export const useAlphaVirtualizer = (
       // contaminated by the incoming task's ref callbacks.  The outgoing
       // task's correct heights were already saved during its last normal
       // (non-task-switch) render.
+
+      // The outgoing task's settle hold is meaningless for the incoming task;
+      // its own isStreaming re-arms the hold if it is mid-stream.
+      setIsTailSettling(false);
 
       // Restore saved state for the incoming task.
       currentEstimatesRef.current = heightCacheRef.current.get(taskId) ?? [];
