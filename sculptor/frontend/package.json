@@ -22,6 +22,7 @@
     "generate-api-json-schema": "uv run python ../../sculptor/sculptor/scripts/generate_json_schema.py ./sculptor_schema.json",
     "fixup-js-types": "uv run python ../../sculptor/sculptor/scripts/fixup_js_types.py ./src/api/types.gen.ts",
     "generate-api": "./scripts/generate-api.sh",
+    "generate-plugin-sdk-dts": "./scripts/generate-plugin-sdk-dts.sh",
     "test": "vitest run",
     "electron:start": "cross-env SCULPTOR_FRONTEND_DIR=$PWD electron-forge start",
     "preelectron:package": "cd .. && uv run --project sculptor builder sync-frontend-version",
@@ -151,6 +152,7 @@
     "concurrently": "10.0.3",
     "cross-env": "10.1.0",
     "depcheck": "1.4.7",
+    "dts-bundle-generator": "9.5.1",
     "electron": "42.4.1",
     "eslint": "9.39.4",
     "eslint-config-prettier": "10.1.8",
@@ -162,6 +164,7 @@
     "eslint-plugin-react-refresh": "0.5.3",
     "eslint-plugin-storybook": "10.4.6",
     "globals": "17.6.0",
+    "jsdom": "29.1.1",
     "playwright": "1.60.0",
     "png2icons": "2.0.1",
     "prettier": "3.8.4",
@@ -175,8 +178,7 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.61.1",
     "vite": "6.4.3",
-    "vitest": "4.1.9",
-    "jsdom": "29.1.1"
+    "vitest": "4.1.9"
   },
   "config": {
     "forge": "./forge.config.ts"
