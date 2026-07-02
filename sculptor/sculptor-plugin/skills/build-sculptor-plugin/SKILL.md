@@ -19,6 +19,16 @@ when they help).
 A plugin is a directory containing `manifest.json` plus an ESM entry module
 that default-exports an `activate(api)` function.
 
+Two files ship next to this SKILL.md (resolve them against this skill's base
+directory):
+
+- `sdk.d.ts` — the **authoritative, generated** contract of
+  `@sculptor/plugin-sdk`: every hook, component, and registration option with
+  its doc comments. Read it before writing plugin code; the prose below only
+  summarizes it.
+- `example/` — the quick-start plugin below as ready-to-load files (Sculptor's
+  e2e tests load this exact directory, so it is known-good).
+
 ## Quick start (no build step)
 
 ```json
@@ -38,8 +48,8 @@ export default function activate(api) {
 ```
 
 ```bash
-sculpt plugin load ./hello      # package + load into the live UI
-sculpt plugin inspect hello     # ALWAYS verify: load OK does not mean activate succeeded
+sculpt plugin load <this-skill's-base-dir>/example   # package + load into the live UI
+sculpt plugin inspect hello                          # see what it registered
 ```
 
 ## Prerequisites — the two settings toggles
@@ -84,13 +94,16 @@ plugins are disabled.
   always persistent sources; `--persist` has no effect on them.
 - The plugin `id` must be a single safe path segment (no `/`, `\`, `.`, `..`)
   and must not be the reserved name `dev`.
-- **`load: OK` only means the manifest was fetched and activate was invoked.**
-  Always `sculpt plugin inspect <id>` afterwards and check for
-  `status: loaded` — activation errors show up there as
-  `error{phase, message}` (phases: `manifest`, `validate`, `activate`).
+- `load` and `reload` wait for the plugin to **settle**: `load: OK` means it
+  reached `status: loaded` (manifest fetched, validated, imported, activated).
+  A failure at any phase (`manifest`, `validate`, `import`, `activate`) prints
+  `load: FAILED` with the phase and error message and exits non-zero. Errors
+  thrown *after* activation (e.g. inside a component render) surface in the
+  UI's per-plugin error boundary instead — check `inspect` and the UI when
+  something registered but doesn't render.
 
-Typical loop: `load` → `inspect` → edit → `reload` → `inspect` → … → `remove`
-(cleanup) or `load --persist` (keep it installed).
+Typical loop: `load` → edit → `reload` → … → `remove` (cleanup) or
+`load --persist` (keep it installed).
 
 Manual no-CLI route: drop the plugin directory into
 `<plugins-dir>/<plugin-id>/` (path from `sculpt plugin dir`) and click the
@@ -125,98 +138,39 @@ type PluginActivate = (api: PluginHostApi) => void | (() => void) | Promise<void
 - On reload the disposer runs, then the module is re-imported (cache-busted)
   and re-activated.
 
-## The host API — `api.register*`
+## The host API and SDK — read `sdk.d.ts`
 
-Every method returns an undo function. Registering twice with the same `id`
-replaces the previous contribution. Every component is rendered inside a
-per-plugin error boundary and receives **no props**.
+The full typed contract — `PluginHostApi`, every registration option shape,
+every hook signature, and their doc comments — is in the generated **`sdk.d.ts`
+next to this file**. It is authoritative; read it rather than trusting any
+summary. What it contains, in one breath:
 
-```ts
-type PluginHostApi = {
-  registerPanel: (panel: PanelDefinition) => () => void;
-  registerSettings: (component: ComponentType) => () => void;
-  registerOverlay: (overlay: OverlayDefinition) => () => void;
-  registerWorkspaceWidget: (widget: WorkspaceWidgetDefinition) => () => void;
-  registerHomeView: (view: HomeViewDefinition) => () => void;
-};
-```
+- `api.registerPanel` / `registerSettings` / `registerOverlay` /
+  `registerWorkspaceWidget` / `registerHomeView` — each returns an undo
+  function; registering twice with the same `id` replaces the previous
+  contribution; every component renders inside a per-plugin error boundary and
+  receives **no props**.
+- Hooks: `useCurrentWorkspace` (selector form available), `useWorkspaces`,
+  `useWorkspaceTasks`, `useNavigateToWorkspace`, `usePluginSetting`,
+  `usePluginSettings`.
+- Components and actions: `Markdown`, `PanelHeader`, `openExternal`.
 
-- **`registerPanel`** — a workspace-scoped panel in the panel layout.
-  ```ts
-  type PanelDefinition = {
-    id: string;
-    displayName: string;              // panel tab label
-    description: string;
-    icon: LucideIcon;                 // from "lucide-react" (host-provided)
-    defaultZone: "top-left" | "bottom-left" | "bottom" | "top-right" | "bottom-right";
-    defaultShortcut: string;          // "" for none
-    component: ComponentType;
-    defaultEnabled?: boolean;         // open by default on first load
-    getFocusTarget?: () => HTMLElement | null;
-    contextMenuItems?: ReadonlyArray<{ label: string; action: () => void }>;
-  };
-  ```
-- **`registerSettings`** — a React component rendered under the plugin's entry
-  in Settings → Plugins (typically form controls bound to `usePluginSetting`).
-- **`registerOverlay`** — `{ id, component }`; an always-mounted, app-global
-  component rendered above every route. The overlay layer has
-  `pointer-events: none` — interactive elements must set
-  `pointer-events: auto` themselves.
-- **`registerWorkspaceWidget`** — `{ id, component, collapsePriority? }`; a
-  compact widget in the workspace banner's action row. The banner collapses
-  widgets progressively when space runs out; omitting `collapsePriority`
-  (default 0) means it collapses before all built-in items.
-- **`registerHomeView`** — `{ id, title, icon?, component }`; a full-page view
-  selectable from the homepage switcher. The id `recent-workspaces` is
-  reserved for the built-in view.
+Semantics that matter beyond the types:
 
-Workspace scope: panels and workspace widgets are mounted per-workspace, so
-workspace-scoped hooks work directly. Overlays, home views, and settings
-components are app-global — `useWorkspaceTasks` is unavailable there, and
-`useCurrentWorkspace` reflects whichever workspace the current route shows
-(or `null`).
-
-## The SDK — `@sculptor/plugin-sdk`
-
-Plugins bare-import the SDK; the host resolves it (and the shared libraries
-below) at runtime via an import map, so everything resolves to the host's own
-singletons.
-
-Hooks:
-
-```ts
-useCurrentWorkspace<T = WorkspaceView | null>(
-  selector?: (w: WorkspaceView | null) => T,
-  equalityFn?: (a: T, b: T) => boolean,
-): T
-useWorkspaces(): ReadonlyArray<WorkspaceView> | undefined      // undefined until first load
-useWorkspaceTasks(): ReadonlyArray<CodingAgentTaskView> | undefined  // panels/widgets only
-useNavigateToWorkspace(): (workspaceId: string) => void        // host-consistent navigation
-usePluginSetting(key: string): [string, (value: string) => void]
-usePluginSettings(keys: ReadonlyArray<string>): ReadonlyMap<string, string>
-```
-
-```ts
-type WorkspaceView = {
-  id: string;
-  description: string;
-  branch: string | null;          // null until the backend reports it
-  targetBranch: string | null;
-  pullRequestUrl: string | null;  // web URL of the workspace's PR/MR, if any
-};
-```
-
-`usePluginSetting` persists per-plugin strings in localStorage
-(`sculptor-plugin:<id>:<key>`). Values are **plaintext** — treat anything the
-user puts there (e.g. an API token) as visible to anyone with devtools access,
-and JSON-encode yourself if you need structure. Prefer the selector form of
-`useCurrentWorkspace` (e.g. `(w) => w?.branch ?? null`) to avoid re-rendering
-on unrelated workspace changes.
-
-Components and actions: `Markdown` (`{ content: string }`, renders GFM;
-links open externally), `PanelHeader` (`{ title, actions?, afterTitle? }`),
-and `openExternal(url)` (opens http/https URLs in the user's browser; other
-schemes are refused).
+- **Workspace scope**: panels and workspace widgets are mounted per-workspace,
+  so workspace-scoped hooks work directly. Overlays, home views, and settings
+  components are app-global — `useWorkspaceTasks` is unavailable there, and
+  `useCurrentWorkspace` reflects whichever workspace the current route shows
+  (or `null`).
+- **Overlays** render in a `pointer-events: none` layer — interactive elements
+  must set `pointer-events: auto` themselves.
+- **`usePluginSetting`** persists per-plugin strings in localStorage
+  (`sculptor-plugin:<id>:<key>`). Values are **plaintext** — treat anything
+  the user puts there (e.g. an API token) as visible to anyone with devtools
+  access, and JSON-encode yourself if you need structure.
+- Prefer the selector form of `useCurrentWorkspace`
+  (e.g. `(w) => w?.branch ?? null`) to avoid re-rendering on unrelated
+  workspace changes.
 
 ### Host-provided modules — never bundle these
 
@@ -280,17 +234,20 @@ export default defineConfig({
 });
 ```
 
-The SDK is not published to npm. For TypeScript, either declare the module
-yourself (`declare module "@sculptor/plugin-sdk";` plus any types you want
-from this file) or point a `paths` alias at the SDK source if you have the
-Sculptor repo. After building, place `manifest.json` next to the bundle
-(`"entry": "main.js"`) and `sculpt plugin load <dist-dir>` — loading the
-output directory keeps the upload small.
+The SDK is not published to npm. For TypeScript, copy the `sdk.d.ts` shipped
+next to this skill into your project and alias it in `tsconfig.json`:
+`"paths": { "@sculptor/plugin-sdk": ["./sdk.d.ts"] }` (you'll want
+`@types/react` installed for full fidelity). After building, place
+`manifest.json` next to the bundle (`"entry": "main.js"`) and
+`sculpt plugin load <dist-dir>` — loading the output directory keeps the
+upload small.
 
 ## Gotchas
 
-- Always `inspect` after `load`/`reload` — the CLI cannot see async
-  activation errors.
+- `load`/`reload` report the settled status, but errors thrown after
+  activation (event handlers, component renders) don't reach the CLI — when
+  something registered but misbehaves, check `inspect` and the UI's plugin
+  error boundary.
 - Disposers are synchronous; clean up injected styles/listeners/timers, not
   just DOM nodes.
 - Overlays: remember `pointer-events: auto` on interactive elements.
@@ -307,9 +264,10 @@ None of this is required — the contract above is complete — but if you have 
 checkout of [github.com/imbue-ai/sculptor](https://github.com/imbue-ai/sculptor)
 (or are already working in it), you can go deeper:
 
-- **Authoritative SDK source**: `sculptor/frontend/src/plugins/types.ts`
-  (host API contract) and `sculptor/frontend/src/plugins/sdk/` (hooks,
-  components, actions) — useful for exact types or TS `paths` aliasing.
+- **SDK source**: `sculptor/frontend/src/plugins/types.ts` (host API
+  contract) and `sculptor/frontend/src/plugins/sdk/` (hooks, components,
+  actions) — the `sdk.d.ts` next to this skill is generated from these
+  (`just generate-plugin-sdk-dts`).
 - **Reference plugins**: `sculptor/frontend/public/plugins/sculpty/`
   (no-build raw DOM), `sculptor/frontend/public/plugins/pomodoro/` (no-build
   React overlay with persisted settings), and
