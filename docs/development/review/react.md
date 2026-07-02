@@ -782,3 +782,37 @@ Reflect the gate through an attribute the rendering and test frameworks already 
 **Fix:** Bind `disabled` (native controls) or `aria-disabled` (non-native elements) to the exact condition the handler early-returns on, so the element is honest about its readiness in the DOM.
 
 **Exceptions:** Handlers that early-return on a transient event detail (`if (event.key !== "Enter") return;`), a null ref, or any guard unrelated to the control's interactive readiness are not gating actionability and do not need a `disabled` attribute.
+
+---
+
+## `read_live_route_in_global_handlers`
+
+**Question:** Does this long-lived global handler (a `window`/`document` `keydown`, `popstate`, or pointer listener registered once in an effect) read the current route from live browser state, or from a React value it closed over when the listener was registered?
+
+A listener registered in a `useEffect` captures every value in its closure at registration time. If the handler branches on the current route — read from React Router state, a route prop, or a `location` value from a router hook — that captured value goes stale the moment the user navigates, unless the route is in the effect's dependency array (which churns the listener on every navigation) or the value is funneled through a ref. The handler then makes route-dependent decisions against a stale route: a shortcut that should only fire on one page fires on another, or a "where am I" branch takes the wrong arm. Because the listener still runs and still does *something*, there's no error — just wrong behavior that depends on navigation history, which is miserable to reproduce.
+
+The robust pattern for a global handler is to read the route from live browser state at handler-invocation time — `window.location.hash` (or `window.location.pathname`) — which is always current regardless of when the listener was registered. The in-repo exemplar is `usePageLayoutKeyboardShortcuts`, whose handler computes `isOnWorkspacePage` from `window.location.hash` on every keydown rather than closing over a router value.
+
+**What to look for:**
+- A `window.addEventListener("keydown" | "popstate" | ...)` (or `document.addEventListener`) inside a `useEffect` whose handler reads a route value from a router hook / prop / state variable
+- A global handler that branches on "which page am I on" using a closed-over React value rather than `window.location.*`
+- A route value added to a global-listener effect's dependency array purely so the closure stays fresh — re-registering the listener on every navigation is a smell that the value should be read live (or held in a ref) instead
+
+**Fix:** Read the route from `window.location.hash` / `window.location.pathname` inside the handler so it's always live, or — if the value genuinely must come from React — mirror it into a ref that an `useEffect` keeps current and read `ref.current` in the handler. Either way, keep the route out of the listener-registration effect's dependency array so the listener isn't torn down and rebuilt on every navigation.
+
+**Exceptions:** Handlers attached to a component's own JSX (`<div onKeyDown=...>`) re-render with fresh props/state each render and don't have this staleness problem — this rule is about *persistent* listeners registered imperatively on `window`/`document`.
+
+---
+
+## `fully_qualify_shortcut_modifiers`
+
+**Question:** Does each keyboard-shortcut branch fully specify which modifier keys must be *absent*, not just which must be present — so that a superset chord can't accidentally satisfy a subset branch?
+
+A branch like `if ((e.metaKey || e.ctrlKey) && e.key === "w")` matches the bare Cmd+W chord *and also* Cmd+Shift+W, Cmd+Alt+W, and every other superset, because it never checks that Shift and Alt are *up*. When a distinct command is bound to the superset chord (Cmd+Shift+W), pressing it satisfies both branches; whichever runs first wins, and the user's intended command is silently shadowed by the under-qualified one. The fix is to make each branch assert the full modifier state it requires — present modifiers with `e.metaKey`/`e.ctrlKey`, and *absent* modifiers with `!e.shiftKey && !e.altKey` — so a subset branch rejects a superset chord. The in-repo exemplar guards its bare close-workspace chord with `(e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key === "w"` precisely so that Cmd+Shift+W (a different command) doesn't trip it.
+
+**What to look for:**
+- A `keydown` branch that checks only the modifiers it wants present and never negates the others — `e.metaKey && e.key === "k"` with no `!e.shiftKey`/`!e.altKey`
+- Two shortcuts where one chord is a modifier-superset of another (Cmd+K vs Cmd+Shift+K) and the subset branch doesn't exclude the extra modifier
+- A custom shortcut matcher that compares a subset of `{ctrl, meta, shift, alt}` rather than all four
+
+**Fix:** In each branch, assert the complete modifier state: require the modifiers that must be held and explicitly negate the ones that must not be (`!e.shiftKey && !e.altKey`). Centralizing chord-matching in a shared helper that compares all four modifier flags against the binding avoids re-deriving this per branch.

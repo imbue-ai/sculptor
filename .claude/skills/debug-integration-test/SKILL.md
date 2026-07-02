@@ -74,6 +74,24 @@ fake_claude:<command> `<json_args>`
 ```
 The JSON must be wrapped in backticks. Use multiline strings for complex JSON to avoid formatting mistakes.
 
+## Known Flakes and Chord-Repro Caveats
+
+### Not every failure is a regression
+
+Some integration-test failures are known **infrastructure** flakes, not bugs in your change — offload-runner hiccups, transient WebSocket/backend timing, or a slow runner tripping a tight wait. Before treating a red run as a regression caused by your diff:
+
+- **Re-run the failing test.** If it passes on re-run and your change doesn't touch the failing area, it's almost certainly infra, not a regression.
+- **Check the failure signature.** A timeout with no relevant error in the backend logs, in a test your diff didn't touch, that doesn't reproduce locally, is a classic infra-flake shape.
+- **Confirm reproducibility before deep-diving.** Only treat it as a real regression once it reproduces deterministically (or fails every run).
+
+This is not license to paper over genuine flakes you introduced — if your change *added* a sleep-then-assert or a chord race, fix it (see the flaky-pattern rules in `docs/development/review/integration_tests.md`). It's about not burning hours bisecting an unrelated infra blip.
+
+### Verify keyboard-chord fixes on offload-Linux, not local macOS
+
+Keyboard-chord flakes don't reproduce faithfully on a local macOS machine. macOS Chromium intermittently **drops the modifier `keyup`** after a chord like `Meta+K`, leaving the modifier "held" so the next plain key arrives modified (e.g. `Escape` → `Cmd+Escape`). The `press_keyboard_shortcut()` helper (`sculptor/sculptor/testing/pages/project_layout.py`) papers over this by explicitly releasing the modifiers — which means a local macOS run can **mask the real chord flake** and make a fix look verified when it isn't.
+
+When you change keyboard-shortcut handling or a chord-driven test, verify the fix on **offload-Linux** (the CI environment), not just locally on macOS. Run it there a few times to shake out the flake; a single green local run is not sufficient evidence for a chord fix.
+
 ## Playwright Test Artifacts
 
 When a test fails, Playwright records several artifacts that are invaluable for debugging. The available artifacts depend on the flags passed to pytest:
