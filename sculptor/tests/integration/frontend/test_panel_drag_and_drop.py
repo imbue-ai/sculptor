@@ -1,4 +1,4 @@
-"""Smoke test for panel drag-and-drop via the KeyboardSensor (PANEL-08).
+"""Smoke test for panel drag-and-drop via the KeyboardSensor.
 
 This proves the keyboard-driven drag pipeline end-to-end before the rest of the
 Phase-4 drag coverage is built on top of it. Dragging a panel from one section into
@@ -17,7 +17,7 @@ from sculptor.testing.user_stories import user_story
 
 @user_story("to drag a panel from one section into another")
 def test_drag_panel_from_center_to_right(sculptor_instance_: SculptorInstance) -> None:
-    """A panel dragged from center to the right section moves there (PANEL-08)."""
+    """A panel dragged from center to the right section moves there."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="DnD Smoke WS")
@@ -41,7 +41,7 @@ def test_drag_panel_from_center_to_right(sculptor_instance_: SculptorInstance) -
 
 @user_story("to drop a panel onto a collapsed section to expand it")
 def test_drag_panel_to_collapsed_section_expands(sculptor_instance_: SculptorInstance) -> None:
-    """Dragging a panel onto a collapsed section's drop rail expands it (PANEL-09)."""
+    """Dragging a panel onto a collapsed section's drop rail expands it."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="DnD Collapsed WS")

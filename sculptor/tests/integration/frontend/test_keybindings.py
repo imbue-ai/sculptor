@@ -35,8 +35,8 @@ def _navigate_to_keybindings(sculptor_instance_: SculptorInstance):
 def _ensure_workspace(sculptor_instance_: SculptorInstance) -> None:
     """Leave the empty first-run state so global shortcuts fire.
 
-    FIRST-03 suppresses every global keyboard shortcut (Cmd+K, Cmd+/, ...) while
-    the workspace list is empty, which is exactly the state the shared instance's
+    Every global keyboard shortcut (Cmd+K, Cmd+/, ...) is suppressed while the
+    workspace list is empty, which is exactly the state the shared instance's
     per-test cleanup leaves behind. Tests that press a global shortcut must first
     create a workspace; this is idempotent (a no-op once one exists).
 
@@ -267,7 +267,7 @@ def test_starting_second_recording_cancels_first(sculptor_instance_: SculptorIns
 def test_help_dialog_reflects_customized_bindings(sculptor_instance_: SculptorInstance) -> None:
     """After changing a keybinding in settings, the help dialog should show the new binding."""
     # The help shortcut (Cmd+/) is suppressed in the empty first-run state, so
-    # create a workspace before exercising it (FIRST-03).
+    # create a workspace before exercising it.
     _ensure_workspace(sculptor_instance_)
     keybindings = _navigate_to_keybindings(sculptor_instance_)
     page = sculptor_instance_.page
@@ -304,7 +304,7 @@ def test_help_dialog_reflects_customized_bindings(sculptor_instance_: SculptorIn
 def test_help_dialog_hides_unbound(sculptor_instance_: SculptorInstance) -> None:
     """Unbound keybindings should not appear in the help dialog."""
     # The help shortcut (Cmd+/) is suppressed in the empty first-run state, so
-    # create a workspace before exercising it (FIRST-03).
+    # create a workspace before exercising it.
     _ensure_workspace(sculptor_instance_)
     keybindings = _navigate_to_keybindings(sculptor_instance_)
     page = sculptor_instance_.page
@@ -355,7 +355,7 @@ def test_keybindings_suppressed_when_overlay_open(sculptor_instance_: SculptorIn
 
     # The help shortcut (Cmd+/) is suppressed in the empty first-run state, so
     # create a workspace first (before the workspace-row count is captured) so
-    # the shortcut fires and the count stays stable (FIRST-03).
+    # the shortcut fires and the count stays stable.
     _ensure_workspace(sculptor_instance_)
 
     # Reset keybindings and navigate away from settings
@@ -395,7 +395,7 @@ def test_default_command_palette_keybinding_works(sculptor_instance_: SculptorIn
     page = sculptor_instance_.page
 
     # Cmd+K is suppressed in the empty first-run state, so create a workspace
-    # before exercising it (FIRST-03).
+    # before exercising it.
     _ensure_workspace(sculptor_instance_)
 
     # Reset keybindings to defaults (earlier tests may have changed them)
@@ -423,7 +423,7 @@ def test_customized_keybinding_is_honored(sculptor_instance_: SculptorInstance) 
     mod = get_playwright_modifier_key()
 
     # Cmd+K / Cmd+J (the remapped palette shortcut) are suppressed in the empty
-    # first-run state, so create a workspace before exercising them (FIRST-03).
+    # first-run state, so create a workspace before exercising them.
     _ensure_workspace(sculptor_instance_)
 
     # Change "Command palette" from Meta+K to Meta+J in settings. Meta+J
@@ -471,7 +471,7 @@ def test_sidebar_toggle_keybinding_works_on_home_page(sculptor_instance_: Sculpt
     page = sculptor_instance_.page
     mod = get_playwright_modifier_key()
 
-    # Global shortcuts are suppressed in the empty first-run state (FIRST-03).
+    # Global shortcuts are suppressed in the empty first-run state.
     _ensure_workspace(sculptor_instance_)
 
     # Reset keybindings to defaults (earlier tests may have changed them).
@@ -503,7 +503,7 @@ def test_sidebar_toggle_keybinding_works_on_settings_page(sculptor_instance_: Sc
     page = sculptor_instance_.page
     mod = get_playwright_modifier_key()
 
-    # Global shortcuts are suppressed in the empty first-run state (FIRST-03).
+    # Global shortcuts are suppressed in the empty first-run state.
     _ensure_workspace(sculptor_instance_)
 
     # Reset keybindings to defaults; this also lands us on the settings page.

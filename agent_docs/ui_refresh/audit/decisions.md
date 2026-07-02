@@ -16,6 +16,10 @@ to green (overnight session). Review and adjust anything you disagree with.
     from the tracked `offload.toml`, or (b) mark some tests `@pytest.mark.isolated`.
     I left `offload.toml` untouched and used the temp file. `offload.tmp.toml`
     should be deleted before merge (it's a local artifact, never committed).
+  - **Resolved 2026-07-02:** option (a) — the dead `[groups.isolated]` group is
+    deleted from `offload.toml` (a 0-collection group is a fatal offload error, and
+    no test carries the `isolated` marker). `offload.tmp.toml` is no longer needed
+    and is removed before merge.
 
 ## Deleted tests (features removed in the section shell)
 - `test_workspace_banner_overflow.py` — the progressive-collapse banner + its inert
@@ -195,3 +199,20 @@ POM already uses the sidebar Cmd+K link, not a topbar) and
 
 Still open (unchanged): the dead `[groups.isolated]` offload group (collects 0 tests).
 Left `offload.toml` untouched; the `offload.tmp.toml` workaround is still needed.
+(Resolved 2026-07-02 — see "Resolutions" below.)
+
+## Resolutions (user-approved verdicts, 2026-07-02)
+- **Dead offload group:** `[groups.isolated]` deleted from `offload.toml`;
+  `offload.tmp.toml` removed at commit time.
+- **Misnamed palette test:** `test_open_command_palette_via_topbar_button` renamed to
+  `test_open_command_palette_via_sidebar_cmdk_link` (its POM already drove the
+  sidebar Cmd+K link; there is no topbar).
+- **Comment cleanup:** the source/test comments referencing the ui_refresh planning
+  docs (`Task X.Y`, decision ids, story ids, `e2e_test_plan.md`, `goals.md`, plan/
+  file pointers) are scrubbed and reworded to self-contained behavior descriptions.
+- **Feature verdicts** (Review All unconditional with default scope "All" on open,
+  visible panel-tab status dot, keybinding relabels, close-others removal, flat
+  diagnostics copy items, mark-as-unread shipped, splits persist when emptied,
+  explorer list drag-resize, debug chat view deletion, bare-terminal pinned-row
+  normalization, per-workspace maximize, automated-prompt routing) are recorded in
+  `removed-and-changed-features.md`.

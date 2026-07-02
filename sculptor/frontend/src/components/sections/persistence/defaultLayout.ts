@@ -23,8 +23,9 @@ const DEFAULT_ACTIVE_LEFT_PANEL_ID: PanelId = "files";
 export type DefaultWorkspaceLayoutInputs = {
   // The active agent panel id (`agent:<taskId>`) placed into the center section.
   agentPanelId: PanelId;
-  // The first-visit terminal panel id (`terminal:<wsId>:0`) placed into bottom. The
-  // terminal itself is seeded by the bootstrap; this only records placement.
+  // The first-visit terminal panel id (`terminal:<wsId>:<index>`, indices start
+  // at 1) placed into bottom. The terminal itself is seeded by the bootstrap;
+  // this only records placement.
   terminalPanelId: PanelId;
 };
 

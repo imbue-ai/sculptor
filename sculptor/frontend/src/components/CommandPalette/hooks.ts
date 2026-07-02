@@ -39,7 +39,7 @@ const COMMAND_TIMEOUT_MS = 30_000;
 /**
  * Build the palette context. Re-runs whenever the React Router location
  * changes (`useImbueLocation` re-renders consumers on every navigation),
- * the zen-mode atom changes, the chat panel mounts/unmounts, or the page
+ * the section-maximize atom changes, the chat panel mounts/unmounts, or the page
  * stack changes. Each ctx field is keyed on a primitive so the returned
  * object is reference-stable across unrelated renders.
  */

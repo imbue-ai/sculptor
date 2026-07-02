@@ -73,8 +73,9 @@ export const buildNavigationCommands = (runtime: CommandRuntime): Array<Command>
   {
     // Agent analog of nav.new_workspace: creates an agent in the current
     // workspace (inheriting the active agent's model) and navigates to it.
-    // The action lives in `AgentTabs` (shared with the `+` button and the
-    // `new_agent` keybinding) and is reached via `runtime.ui.createAgent`.
+    // The action is registered by `useWorkspaceShellBootstrap` (shared with the
+    // add-panel `+` and the `new_agent` keybinding) and is reached via
+    // `runtime.ui.createAgent`.
     // Gated on `activeWorkspaceId` because there's no workspace to add an
     // agent to on Home / Settings / the new-workspace flow.
     id: "nav.new_agent",

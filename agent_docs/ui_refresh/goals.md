@@ -120,7 +120,7 @@ A section (including an empty split sub-section) shows an empty state when it ha
 Centered is an add panel button which opens a dropdown displaying panel options.
 There are also at most five quick actions below the add panel button that can be selected.
 By default, we always show a “New {recent} agent” action (the most recently used agent type, Claude by default) and a “New terminal” action.
-We reserve the last three slots for the most recently created panels that are not open (fewer are shown if there are not three).
+We reserve the last three slots for the most recently closed panels (fewer are shown if there are not three). The recently-closed list is transient — it resets on reload.
 
 #### Split sections
 A section can be split into exactly two sub-sections, and a section can hold at most one split at a time.
@@ -194,7 +194,7 @@ All other modes open the new workspace dialog. When opened from a repo section�
 #### New workspace dialog
 The new workspace page is removed and replaced by the new workspace form and dialog.
 
-The dialog collects a workspace title, a prompt, the repo, the source branch, a new branch name, the agent type, and the initialization strategy (worktree by default; clone and in-place opt-in). Creating the workspace also creates its first agent of the chosen type, seeded with the prompt — today’s creation form has no prompt, so the dialog adds one. A “keep open” option keeps the dialog open after creation for rapid multi-create: the form resets, but the repo and agent type are retained.
+The dialog collects a workspace title, a prompt, the repo, the source branch, a new branch name, the agent type, and the initialization strategy (worktree by default; clone and in-place opt-in). Creating the workspace also creates its first agent of the chosen type, seeded with the prompt — today’s creation form has no prompt, so the dialog adds one. A “keep open” option keeps the dialog open after creation for rapid multi-create: the title, prompt, and branch name reset, while the repo, agent type, initialization mode, source branch, and the per-prompt agent settings (model, effort, fast mode) are retained. Plan mode is the exception — it is a per-task choice and resets on each create.
 
 The styling comes from the `scu-1494` prototype’s `sculptor/frontend/src/components/NewWorkspaceModal` (see “Relationship to the prototype”); the rest of that branch can be ignored.
 
@@ -240,7 +240,6 @@ This redesign reuses the existing styling and components where possible and focu
 - Settings
 	- Experimental settings for sharing panel sizes between workspaces
     - Panels setting page
-- The /btw popup
 - The open/closed-workspace distinction (the closed-workspaces pill and dropdown). All workspaces appear in the sidebar; "archived workspaces" may be revisited later as a separate design.
 
 ## Relationship to the prototype

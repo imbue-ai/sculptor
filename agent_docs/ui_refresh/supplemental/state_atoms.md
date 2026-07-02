@@ -25,7 +25,7 @@ SectionId`, `isSecondary(ss: SubSectionId): boolean`.
 ## Scope atoms (source of truth)
 
 ```ts
-const activeWorkspaceIdAtom: PrimitiveAtom<string | null>;   // set by usePerWorkspacePanelLayout
+const activeWorkspaceIdAtom: PrimitiveAtom<string | null>;   // set by switchActiveWorkspaceAtom (from useWorkspaceShellBootstrap)
 const layoutScopeAtom: Atom<LayoutScope>;                    // derived: workspace scope or global sentinel
 ```
 
@@ -68,13 +68,13 @@ const isActiveSubSectionAtom: (ss: SubSectionId) => Atom<boolean>;
 
 All mutations go through write-only action atoms that update the consolidated
 `workspaceLayoutAtom`. This keeps multi-field moves atomic (one snapshot write →
-one debounced persist) and keeps the rules (split self-heal, center-never-collapse,
-single-instance) in one place.
+one debounced persist) and keeps the rules (center-never-collapse,
+single-instance, emptied-sections-stay-expanded) in one place.
 
 ```ts
 const movePanelAtom:        WriteAtom<{ panelId; to: SubSectionId; index?: number }>;
 const openPanelAtom:        WriteAtom<{ panelId; in: SubSectionId }>;
-const closePanelAtom:       WriteAtom<{ panelId }>;        // also collapses/un-splits emptied sections
+const closePanelAtom:       WriteAtom<{ panelId }>;        // emptied sub-sections stay open (empty state)
 const setActivePanelAtom:   WriteAtom<{ panelId; in: SubSectionId }>;
 const toggleSectionAtom:    WriteAtom<{ section: SectionId }>;     // collapse/expand (center is no-op)
 const splitSectionAtom:     WriteAtom<{ section: SectionId; panelId; axis: SplitAxis }>;
@@ -91,10 +91,10 @@ Invariants enforced inside the actions:
 - **Center never collapses** — `toggleSectionAtom` ignores `center`.
 - **Active section must be expanded** — collapsing the section that holds the
   active sub-section reassigns the active sub-section (default: center).
-- **Split self-heal** — emptying a split sub-section closes the split; emptying a
-  split primary promotes the secondary's panels up and closes the split. (Guard
-  against the reload window where a dynamic panel is assigned but its
-  task/terminal source has not loaded yet — do not collapse during that window.)
+- **Emptied sections and splits stay put** — closing the last panel leaves the
+  section (or split sub-section) expanded, showing the section empty state; splits
+  are only merged back via the explicit close-split action offered from that
+  empty state.
 - **Single-instance** — adding an already-open single-instance panel activates it
   in place instead of duplicating.
 

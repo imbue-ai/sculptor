@@ -142,7 +142,7 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
         // Optimistically record the chosen harness as the most-recently-used type so the
         // add-panel "New {recent} agent" row reflects it immediately. The backend persists
         // it on create too, but there is no live user-config push — without this the
-        // surfaces lag until a reload. Mirrors the add-panel path (addPanelCore.createAgentInCenter).
+        // surfaces lag until a reload. Mirrors the add-panel path (addPanelCore.createAgentInLocation).
         setUserConfig((prev) => (prev ? { ...prev, lastUsedAgentType: effectiveAgentTypeValue } : prev));
 
         posthog.capture("workspace.created", {

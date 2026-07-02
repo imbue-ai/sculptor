@@ -1,17 +1,15 @@
-"""Integration tests for the first-open default workspace layout (SEC-01..04).
+"""Integration tests for the first-open default workspace layout.
 
-On a workspace's FIRST visit the shell seeds the default arrangement (Tasks 6.1/6.2;
-``goals.md`` → "Default layout"):
+On a workspace's FIRST visit the shell seeds the default arrangement:
 
-* center — the only expanded section, holding the active agent (SEC-01);
-* left   — collapsed, with Files/Changes/Commits open and Files active (SEC-02);
-* bottom — collapsed, with one terminal (SEC-03);
-* right  — collapsed and empty (SEC-04).
+* center — the only expanded section, holding the active agent;
+* left   — collapsed, with Files/Changes/Commits open and Files active;
+* bottom — collapsed, with one terminal;
+* right  — collapsed and empty.
 
 These assert the seeded default by driving the section collapse/expand POMs the way a
 user would (the seeded sections start collapsed; expanding one reveals its seeded
-panels). This file was moved here from Phase 4 because it asserts the Task 6.1 seed,
-which does not exist before Phase 6.
+panels).
 """
 
 import re
@@ -27,12 +25,12 @@ from sculptor.testing.user_stories import user_story
 
 @user_story("to land on my active agent in the center section when I open a new workspace")
 def test_default_center_holds_the_active_agent(sculptor_instance_: SculptorInstance) -> None:
-    """The center section is expanded and holds the active agent (SEC-01)."""
+    """The center section is expanded and holds the active agent."""
     page = sculptor_instance_.page
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Default Center WS")
 
     center = PlaywrightWorkspaceSection(page, "center")
-    # Center is always expanded (it has no collapse toggle, SEC-08) and shows the agent.
+    # Center is always expanded (it has no collapse toggle) and shows the agent.
     expect(center.get_section_toggle()).to_have_count(0)
     # The active panel is an agent; the prefix matcher auto-retries through render settle.
     expect(center.get_active_tab()).to_have_attribute("data-panel-id", re.compile(r"^agent:"))
@@ -40,7 +38,7 @@ def test_default_center_holds_the_active_agent(sculptor_instance_: SculptorInsta
 
 @user_story("to find Files/Changes/Commits ready in a collapsed left section")
 def test_default_left_collapsed_with_files_changes_commits(sculptor_instance_: SculptorInstance) -> None:
-    """Left starts collapsed; expanded it holds Files/Changes/Commits with Files active (SEC-02)."""
+    """Left starts collapsed; expanded it holds Files/Changes/Commits with Files active."""
     page = sculptor_instance_.page
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Default Left WS")
 
@@ -63,7 +61,7 @@ def test_default_left_collapsed_with_files_changes_commits(sculptor_instance_: S
 
 @user_story("to find one terminal ready in a collapsed bottom section")
 def test_default_bottom_collapsed_with_one_terminal(sculptor_instance_: SculptorInstance) -> None:
-    """Bottom starts collapsed; expanded it holds exactly one terminal (SEC-03)."""
+    """Bottom starts collapsed; expanded it holds exactly one terminal."""
     page = sculptor_instance_.page
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Default Bottom WS")
 
@@ -78,7 +76,7 @@ def test_default_bottom_collapsed_with_one_terminal(sculptor_instance_: Sculptor
 
 @user_story("to start with a collapsed, empty right section")
 def test_default_right_collapsed_and_empty(sculptor_instance_: SculptorInstance) -> None:
-    """Right starts collapsed; expanded it is empty (no panels), showing the empty state (SEC-04)."""
+    """Right starts collapsed; expanded it is empty (no panels), showing the empty state."""
     page = sculptor_instance_.page
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Default Right WS")
 

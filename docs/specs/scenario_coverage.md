@@ -328,7 +328,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 
 | Scenario | Status | Existing integration test(s) | Integration tests to add |
 |----------|--------|------------------------------|--------------------------|
-| CMDP-001 | Partial | test_command_palette.py::test_open_command_palette_via_topbar_button; ::test_open_command_palette_via_keyboard_shortcut (palette visible + input focused only) | Assert group headers render in spec order (Workspaces → Navigation → Theme & Layout → Chat → Terminal → Help) with the first row selected on open. |
+| CMDP-001 | Partial | test_command_palette.py::test_open_command_palette_via_sidebar_cmdk_link; ::test_open_command_palette_via_keyboard_shortcut (palette visible + input focused only) | Assert group headers render in spec order (Workspaces → Navigation → Theme & Layout → Chat → Terminal → Help) with the first row selected on open. |
 | CMDP-002 | Missing | — | Press Cmd+P; assert the palette opens on the "Go to workspace" sub-page (breadcrumb + "Find a workspace…" placeholder). |
 | CMDP-003 | Missing | — | Open via Cmd+K, press Cmd+K again; assert the palette closes and no command ran. |
 | CMDP-005 | Partial | test_command_palette.py::test_command_palette_filters_on_input (empty-state element only) | Assert the exact `No matches for '{query}'` copy including the typed query string. |
@@ -411,7 +411,7 @@ Every scenario an integration test fully covers — it performs the user action 
 | SHELL-022 | test_closed_workspaces_dropdown.py::test_reopen_workspace_from_dropdown |
 | SHELL-023 | test_closed_workspaces_dropdown.py::test_open_all_reopens_all_closed_workspaces |
 | SHELL-024 | test_closed_workspaces_dropdown.py::test_delete_workspace_from_dropdown |
-| SHELL-025 | test_command_palette.py::test_open_command_palette_via_topbar_button |
+| SHELL-025 | test_command_palette.py::test_open_command_palette_via_sidebar_cmdk_link |
 | SHELL-028 | test_zen_mode.py::test_zen_mode_hides_chrome_and_panels |
 | SHELL-029 | test_zen_mode.py::test_exit_zen_mode_button_works |
 | SHELL-030 | test_zen_mode.py::test_workspace_tab_navigation_works_in_zen_mode |

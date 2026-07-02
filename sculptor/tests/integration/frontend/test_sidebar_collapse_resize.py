@@ -1,4 +1,4 @@
-"""Integration tests for collapsing and resizing the workspace sidebar (SIDE-13/14/15).
+"""Integration tests for collapsing and resizing the workspace sidebar.
 
 The sidebar collapses to a single top-left expand icon (the rail disappears) and
 expands back from it; its right border is a focusable ``role=separator`` resize
@@ -20,7 +20,7 @@ from sculptor.testing.user_stories import user_story
 def test_collapse_hides_sidebar_and_shows_expand_icon(
     sculptor_instance_: SculptorInstance,
 ) -> None:
-    """Clicking the collapse toggle hides the sidebar rail and reveals the expand icon (SIDE-13)."""
+    """Clicking the collapse toggle hides the sidebar rail and reveals the expand icon."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Collapse WS")
@@ -40,7 +40,7 @@ def test_collapse_hides_sidebar_and_shows_expand_icon(
 def test_expand_restores_sidebar(
     sculptor_instance_: SculptorInstance,
 ) -> None:
-    """Clicking the expand icon restores the full sidebar rail (SIDE-14)."""
+    """Clicking the expand icon restores the full sidebar rail."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Expand WS")
@@ -62,7 +62,7 @@ def test_expand_restores_sidebar(
 def test_resize_handle_widens_sidebar(
     sculptor_instance_: SculptorInstance,
 ) -> None:
-    """Driving the sidebar's resize handle changes its width (SIDE-15).
+    """Driving the sidebar's resize handle changes its width.
 
     The handle is an x-axis separator with direction=1, so ArrowRight widens it.
     Only the direction of change is asserted.
@@ -96,7 +96,7 @@ def test_resize_handle_widens_sidebar(
 def test_resize_clamps_to_a_minimum_width(
     sculptor_instance_: SculptorInstance,
 ) -> None:
-    """Shrinking the sidebar well past its minimum clamps rather than vanishing (SIDE-15).
+    """Shrinking the sidebar well past its minimum clamps rather than vanishing.
 
     Repeated narrow steps must leave the sidebar with a positive, non-trivial width
     (it clamps at a minimum of 180px), not zero.

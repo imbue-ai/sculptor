@@ -17,7 +17,7 @@ import { useBrowserWebview } from "./useBrowserWebview";
 // One <webview> per registered workspace, mounted under BrowserViewHost
 // at the root of the React tree. Lifetime is tied to the registry, not
 // to whichever route is currently rendered, so the webContents (and
-// in-page state) survives panel-tab switches, zone visibility flips, and
+// in-page state) survives panel-tab switches, section collapse/expand, and
 // route detours through /settings or /ws/new.
 export const BrowserViewSlot = ({ workspaceId }: { workspaceId: string }): ReactElement => {
   const setPanelState = useSetAtom(browserPanelStateAtomFamily(workspaceId));

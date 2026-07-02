@@ -1,4 +1,4 @@
-"""Integration tests for the workspace-row context menu (SIDE-08/09).
+"""Integration tests for the workspace-row context menu.
 
 The workspace tab strip is gone; a workspace's actions now live on its sidebar
 row. Right-clicking a row (or opening its "..." dropdown) exposes the shared

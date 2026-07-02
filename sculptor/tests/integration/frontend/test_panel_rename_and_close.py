@@ -1,4 +1,4 @@
-"""Integration tests for single-instance panel rename/close (PANEL-07, PANEL-11, PANEL-14).
+"""Integration tests for single-instance panel rename/close.
 
 This file owns the SINGLE-INSTANCE (static) panel half of the tab rename/close
 behaviour: a static panel (e.g. Files) cannot be renamed — its context menu has no
@@ -8,7 +8,7 @@ underlying entity to delete).
 
 The multi-instance (agent/terminal) rename-via-context-menu / double-click and
 close=delete cases are owned by ``test_panel_tab_context_menu.py`` and
-``test_agent_panel.py`` (Decision B9); they are NOT duplicated here.
+``test_agent_panel.py``; they are NOT duplicated here.
 """
 
 from playwright.sync_api import expect
@@ -23,7 +23,7 @@ from sculptor.testing.user_stories import user_story
 
 @user_story("to not be offered a rename for a single-instance panel tab")
 def test_static_panel_tab_has_no_rename_in_context_menu(sculptor_instance_: SculptorInstance) -> None:
-    """A single-instance (Files) panel tab's context menu offers NO Rename item (PANEL-11)."""
+    """A single-instance (Files) panel tab's context menu offers NO Rename item."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Static No Rename WS")
@@ -45,7 +45,7 @@ def test_static_panel_tab_has_no_rename_in_context_menu(sculptor_instance_: Scul
 
 @user_story("to not start an inline rename when I double-click a single-instance panel tab")
 def test_static_panel_tab_double_click_does_not_rename(sculptor_instance_: SculptorInstance) -> None:
-    """Double-clicking a single-instance (Files) panel tab does NOT start an inline rename (PANEL-11)."""
+    """Double-clicking a single-instance (Files) panel tab does NOT start an inline rename."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Static No Dblclick WS")
@@ -64,7 +64,7 @@ def test_static_panel_tab_double_click_does_not_rename(sculptor_instance_: Sculp
 
 @user_story("to close a single-instance panel and remove it from the header")
 def test_static_panel_close_removes_it_from_header(sculptor_instance_: SculptorInstance) -> None:
-    """Closing a single-instance (Files) panel removes its tab with no confirmation (PANEL-07/14)."""
+    """Closing a single-instance (Files) panel removes its tab with no confirmation."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Static Close WS")

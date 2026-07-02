@@ -40,7 +40,7 @@ export type ToastProps = {
 } & PropsWithChildren;
 
 // Memoized so the many always-mounted, closed <Toast> instances (notification,
-// auto-update, and error toasts mounted unconditionally in PageLayout) don't
+// auto-update, and error toasts mounted unconditionally in AppShell) don't
 // re-render on every unrelated React commit. Toast is a pure presentational
 // wrapper with no hooks/context, so memo bails out whenever its props are
 // referentially stable — see the always-mounted call sites, which pass stable

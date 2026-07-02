@@ -1,4 +1,4 @@
-"""Integration tests for section splits (SPLIT-01, SPLIT-02, SPLIT-03).
+"""Integration tests for section splits.
 
 A panel is split off into a new SECONDARY sub-section by right-clicking its tab and
 choosing "Create {direction} split and move panel". The allowed directions are
@@ -7,7 +7,7 @@ section allows only a right (vertical) split, and the center allows both. A sect
 holds at most one split, so the create-split options vanish once a split exists.
 A split persists when a half empties: the emptied half shows the empty-section
 state (never an auto-merge) until the split is closed explicitly from that state.
-(SPLIT-06 — a maximized split shows one sub-section — lives in
+(The maximized-split case — a maximized split shows one sub-section — lives in
 ``test_section_active_and_maximize.py``.)
 
 Layouts are arranged by clicking the real UI (add panels via the ``+`` dropdown, split
@@ -26,8 +26,8 @@ from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
 # Splits move a NOTES panel (not the agent) into the secondary half: rendering two agent
-# chat panels at once exceeds the single active-stream limit (the deferred AGENT-03/05
-# concurrent-rendering work), which is orthogonal to the split behaviour under test here.
+# chat panels at once exceeds the single active-stream limit (concurrent multi-agent
+# rendering is deferred work), which is orthogonal to the split behaviour under test here.
 # Notes is a single-instance panel that is NOT seeded into the default layout, so opening
 # it via the section ``+`` genuinely lands it in the requested section (the seeded
 # Files/Changes/Commits live in the left section and ``open_panel`` only reveals them
@@ -36,7 +36,7 @@ from sculptor.testing.user_stories import user_story
 
 @user_story("to split a center panel into a side-by-side pair")
 def test_create_right_split_moves_panel_to_secondary(sculptor_instance_: SculptorInstance) -> None:
-    """A center "Create right split" moves the panel into a new secondary half (SPLIT-01/02).
+    """A center "Create right split" moves the panel into a new secondary half.
 
     Open a Notes panel in the center, then split it off with the vertical (right) split:
     it leaves the primary half and appears in the secondary half.
@@ -62,7 +62,7 @@ def test_create_right_split_moves_panel_to_secondary(sculptor_instance_: Sculpto
 
 @user_story("to split a center panel into a stacked pair")
 def test_create_bottom_split_moves_panel_to_secondary(sculptor_instance_: SculptorInstance) -> None:
-    """A center "Create bottom split" (horizontal) moves the panel into the secondary half (SPLIT-01/02)."""
+    """A center "Create bottom split" (horizontal) moves the panel into the secondary half."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Bottom Split WS")
@@ -81,7 +81,7 @@ def test_create_bottom_split_moves_panel_to_secondary(sculptor_instance_: Sculpt
 
 @user_story("to be offered only the split directions a section allows")
 def test_center_offers_both_split_directions(sculptor_instance_: SculptorInstance) -> None:
-    """The center section's panel context menu offers BOTH split directions (SPLIT-02)."""
+    """The center section's panel context menu offers BOTH split directions."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Center Dirs WS")
@@ -92,7 +92,7 @@ def test_center_offers_both_split_directions(sculptor_instance_: SculptorInstanc
 
 @user_story("to only split a side section along its allowed direction")
 def test_right_section_offers_only_bottom_split(sculptor_instance_: SculptorInstance) -> None:
-    """The right section's panel context menu offers only the bottom (horizontal) split (SPLIT-02)."""
+    """The right section's panel context menu offers only the bottom (horizontal) split."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Right Dirs WS")
@@ -109,7 +109,7 @@ def test_right_section_offers_only_bottom_split(sculptor_instance_: SculptorInst
 
 @user_story("to only split the bottom section along its allowed direction")
 def test_bottom_section_offers_only_right_split(sculptor_instance_: SculptorInstance) -> None:
-    """The bottom section's panel context menu offers only the right (vertical) split (SPLIT-02)."""
+    """The bottom section's panel context menu offers only the right (vertical) split."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Bottom Dirs WS")
@@ -125,7 +125,7 @@ def test_bottom_section_offers_only_right_split(sculptor_instance_: SculptorInst
 
 @user_story("to be limited to a single split per section")
 def test_one_split_max_removes_create_options(sculptor_instance_: SculptorInstance) -> None:
-    """After a section is split once, the create-split options disappear (SPLIT-03).
+    """After a section is split once, the create-split options disappear.
 
     Split a center panel, then re-open a panel tab's context menu in the now-split
     section: neither create-split option is offered (one-split-max).

@@ -87,14 +87,15 @@ Multi-instance panels are **renamable**; single-instance panels are not
 
 The empty-section launcher (`goals.md` → "Section empty state") shows a centered
 add-panel button plus up to five quick actions: always "New {recent} agent" and
-"New terminal", then up to three most-recently-created panels not currently open.
+"New terminal", then up to three most-recently-closed panels (transient — the
+list resets on reload).
 
 ## Closing / moving
 
 - Closing a panel removes it from `placement` (returns it to the unplaced pool,
-  where the "+" offers it again). Closing the last panel in a section
-  collapses/un-splits per the invariants in `state_atoms.md` → "Write-side action
-  atoms".
+  where the "+" offers it again). Closing the last panel leaves the section (or
+  split sub-section) expanded showing the section empty state — see the
+  invariants in `state_atoms.md` → "Write-side action atoms".
 - Agents/terminals are **not** offered in the "+" re-add list (closing ends them;
   there is no "reopen" pool) — only single-instance panels are.
 - Panels drag between sections and reorder within a section via the single

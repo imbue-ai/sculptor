@@ -1,9 +1,9 @@
-"""Integration tests for the seamless workspace-switch sequence (SWITCH-03/04).
+"""Integration tests for the seamless workspace-switch sequence.
 
-Switching workspaces keeps the shell continuously present (no spinner, no blank frame —
-SWITCH-03) and re-entering a workspace restores what the user was looking at (the
-persisted active sub-section / expanded sections — SWITCH-04). The zero-reflow /
-≤1-mount-per-panel ``[perf]`` guarantees are Task 9.1, not asserted here.
+Switching workspaces keeps the shell continuously present (no spinner, no blank
+frame) and re-entering a workspace restores what the user was looking at (the
+persisted active sub-section / expanded sections). The zero-reflow /
+≤1-mount-per-panel ``[perf]`` guarantees are measured elsewhere, not asserted here.
 """
 
 from playwright.sync_api import expect
@@ -19,7 +19,7 @@ from sculptor.testing.user_stories import user_story
 
 @user_story("to switch workspaces without a spinner or a blank frame")
 def test_switch_keeps_the_shell_present(sculptor_instance_: SculptorInstance) -> None:
-    """Switching to another workspace keeps the sidebar mounted and lands on its chat (SWITCH-03).
+    """Switching to another workspace keeps the sidebar mounted and lands on its chat.
 
     The workspace sidebar is part of the persistent shell, so it stays visible across the
     switch (no full-page loader tears it down), and the destination's chat panel renders.
@@ -44,7 +44,7 @@ def test_switch_keeps_the_shell_present(sculptor_instance_: SculptorInstance) ->
 
 @user_story("to return to a workspace and find the view I left")
 def test_reentry_preserves_last_view(sculptor_instance_: SculptorInstance) -> None:
-    """Re-entering a workspace restores its expanded sections, not the default (SWITCH-04).
+    """Re-entering a workspace restores its expanded sections, not the default.
 
     Expand the (default-collapsed) right section in workspace A, switch to B, then return
     to A — A's right section is still expanded (the last view is preserved, the default is

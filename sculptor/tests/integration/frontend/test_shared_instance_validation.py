@@ -2,8 +2,8 @@
 
 These tests verify that the session-scoped shared instance, between-test
 cleanup, git repo isolation, and fail-fast mechanism all work correctly.
-They are a smoke-test for Phase 1 infrastructure; comprehensive coverage
-comes during Phase 2 test migration.
+They are a smoke-test for the shared-instance infrastructure itself;
+comprehensive coverage comes from the test suites built on top of it.
 
 NOTE: Tests within a file run in definition order by default.  The "first /
 second" test pairs below rely on this ordering.

@@ -1,4 +1,4 @@
-"""Integration tests for optimistic workspace deletion from the sidebar (SIDE-16).
+"""Integration tests for optimistic workspace deletion from the sidebar.
 
 Deleting a workspace is destructive, so it is confirmed first via the shared
 delete-confirmation dialog. Once confirmed, the removal is optimistic: the row

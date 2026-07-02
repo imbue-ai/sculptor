@@ -1,5 +1,4 @@
-"""Integration tests for section collapse/expand + within-section panel cycling
-(SEC-05..08, SEC-20).
+"""Integration tests for section collapse/expand + within-section panel cycling.
 
 The default test layout has only the CENTER section expanded; the left, right, and
 bottom sections are collapsed and render no header until expanded. A non-center
@@ -27,7 +26,7 @@ from sculptor.testing.user_stories import user_story
 
 @user_story("to expand a collapsed side section from its workspace-header toggle")
 def test_expand_side_section_via_header_toggle(sculptor_instance_: SculptorInstance) -> None:
-    """Each non-center section expands (renders its header) via its header toggle (SEC-05/06/07)."""
+    """Each non-center section expands (renders its header) via its header toggle."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Expand Toggle WS")
@@ -42,7 +41,7 @@ def test_expand_side_section_via_header_toggle(sculptor_instance_: SculptorInsta
 
 @user_story("to expand and collapse a side section with the keyboard")
 def test_toggle_side_section_via_hotkey(sculptor_instance_: SculptorInstance) -> None:
-    """The ``mod+Alt+Arrow*`` shortcut expands a collapsed section and collapses it again (SEC-05)."""
+    """The ``mod+Alt+Arrow*`` shortcut expands a collapsed section and collapses it again."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Toggle Hotkey WS")
@@ -61,7 +60,7 @@ def test_toggle_side_section_via_hotkey(sculptor_instance_: SculptorInstance) ->
 
 @user_story("to keep the center section always visible because it cannot be collapsed")
 def test_center_section_cannot_collapse(sculptor_instance_: SculptorInstance) -> None:
-    """The center section has no collapse toggle and its hotkey is a no-op (SEC-08).
+    """The center section has no collapse toggle and its hotkey is a no-op.
 
     The bottom hotkey expands the bottom section while the center stays put; there is
     no header toggle for center, and collapse_section is a no-op for it.
@@ -82,7 +81,7 @@ def test_center_section_cannot_collapse(sculptor_instance_: SculptorInstance) ->
 
 @user_story("to cycle between panels in a section with the keyboard")
 def test_cycle_panels_within_section_wraps(sculptor_instance_: SculptorInstance) -> None:
-    """The panel-cycle hotkey wraps across the active section's panels (SEC-20).
+    """The panel-cycle hotkey wraps across the active section's panels.
 
     Open a second panel (Notes) in the center alongside the agent. Notes is active
     after opening; cycling next moves to the agent and cycling next again wraps back
@@ -111,7 +110,7 @@ def test_cycle_panels_within_section_wraps(sculptor_instance_: SculptorInstance)
 
 @user_story("to have the panel-cycle hotkey do nothing in a single-panel section")
 def test_cycle_panels_is_noop_with_single_panel(sculptor_instance_: SculptorInstance) -> None:
-    """The panel-cycle hotkey is a no-op when the active section has one panel (SEC-20)."""
+    """The panel-cycle hotkey is a no-op when the active section has one panel."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Single Panel Cycle WS")

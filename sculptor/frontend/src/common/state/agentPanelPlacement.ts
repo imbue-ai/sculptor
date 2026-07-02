@@ -23,7 +23,7 @@ import { workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
 import type { PanelId, SubSectionId } from "~/components/sections/sectionTypes.ts";
 
 // New agent panels land in the center section's primary sub-section, mirroring the
-// manual create path (addPanelCore → AGENT_TARGET_SUB_SECTION).
+// manual create path (useAddPanelActions defaults its target sub-section to center).
 const AGENT_CENTER_SUB_SECTION: SubSectionId = "center";
 
 // Ensure each of the given agent task ids has its panel placed (open) in the center

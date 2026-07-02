@@ -1,16 +1,14 @@
-"""Integration tests for the section `+` add-panel dropdown (PANEL-01..06, 12, 15).
+"""Integration tests for the section `+` add-panel dropdown.
 
 The dropdown is the single creation surface for agents, terminals, and single-instance
 panels (co-owned with Sections). Its rows, in order: the pinned "New {recent} agent"
 (with the new-agent keybinding shown), an agent-type sub-menu (Claude / pi-gated /
-registered — NO bare "Terminal" type, Decision B2), "New terminal", then a separator
+registered — NO bare "Terminal" type), "New terminal", then a separator
 and every single-instance panel not currently open. New agents always land in CENTER
-regardless of which section's `+` was used (PANEL-06). Cmd+K offers the same flow
-(PANEL-12).
+regardless of which section's `+` was used. Cmd+K offers the same flow.
 
-These cases are CREATE-not-migrate (per `03_07_agent_terminal_panel_tests.md`): they
-absorb `test_agent_type_menu.py` (sub-menu + pi gating + registered-without-restart).
-Task 8.2 deletes the superseded file.
+These cases absorb the retired `test_agent_type_menu.py` (sub-menu + pi gating +
+registered-without-restart).
 """
 
 import re
@@ -32,7 +30,7 @@ from sculptor.testing.user_stories import user_story
 @user_story("to see the add-panel dropdown's creation rows in order")
 def test_dropdown_shows_new_agent_terminal_and_panels(sculptor_instance_: SculptorInstance) -> None:
     """The center `+` dropdown shows New agent, the agent-type sub-menu, New terminal,
-    and the single-instance panel options (PANEL-01..05)."""
+    and the single-instance panel options."""
     page = sculptor_instance_.page
     dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
 
@@ -78,7 +76,7 @@ def test_agent_type_submenu_offers_claude_no_bare_terminal(sculptor_instance_: S
     dropdown.open_agent_type_submenu()
 
     expect(dropdown.get_agent_type_item_claude()).to_be_visible()
-    # No bare "Terminal" agent type (Decision B2): the old AGENT_TYPE_MENU_ITEM_TERMINAL
+    # No bare "Terminal" agent type: the old AGENT_TYPE_MENU_ITEM_TERMINAL
     # row is never rendered.
     expect(dropdown.get_agent_type_item_terminal()).to_have_count(0)
 
@@ -159,7 +157,7 @@ def test_new_terminal_creates_terminal_panel(sculptor_instance_: SculptorInstanc
 
 @user_story("to not be offered a single-instance panel that is already open")
 def test_open_single_instance_panel_drops_from_list(sculptor_instance_: SculptorInstance) -> None:
-    """Opening Files removes it from the dropdown's single-instance re-add list (PANEL-15)."""
+    """Opening Files removes it from the dropdown's single-instance re-add list."""
     page = sculptor_instance_.page
     dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
 
@@ -247,7 +245,7 @@ def test_add_agent_to_right_section_renders_both_chats(sculptor_instance_: Sculp
 
 @user_story("to add a panel through Cmd+K targeting the center section")
 def test_cmd_k_add_panel_to_center(sculptor_instance_: SculptorInstance) -> None:
-    """Cmd+K → Add panel → Center → New agent creates an agent in center (PANEL-12/06)."""
+    """Cmd+K → Add panel → Center → New agent creates an agent in center."""
     page = sculptor_instance_.page
     task_page = PlaywrightTaskPage(page=page)
     center_tabs = PlaywrightPanelTabElement(page, sub_section="center")

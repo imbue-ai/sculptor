@@ -25,7 +25,7 @@ export const buildAgentActions = (runtime: AgentActionRuntime): ReadonlyArray<Ag
   },
   {
     id: "mark_unread",
-    title: "Mark unread",
+    title: "Mark as unread",
     icon: CircleDot,
     testId: ElementIds.TAB_CONTEXT_MENU_MARK_UNREAD,
     paletteSubtitle: "Mark this agent as unread",

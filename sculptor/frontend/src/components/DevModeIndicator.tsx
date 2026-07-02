@@ -17,8 +17,8 @@ export const DevModeIndicator = (): ReactElement | null => {
   useEffect(() => {
     // Guard against partial `window.sculptor` shapes — older preload scripts
     // and the browser-mode auto-update test mock both expose only a subset of
-    // the API. We mount on every PageLayout, including pages whose tests stub
-    // out `window.sculptor` with a different surface, so a missing method
+    // the API. We mount on every page via AppShell, including pages whose tests
+    // stub out `window.sculptor` with a different surface, so a missing method
     // must not throw.
     if (typeof window.sculptor?.getDevInfo !== "function") return;
     let isCancelled = false;

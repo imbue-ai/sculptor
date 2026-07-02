@@ -72,7 +72,7 @@ it — `bryden/scu-1474-compact-workspace-layout` (layout) and
 | File | What it is |
 |------|------------|
 | `plan.md` | The high-level execution plan in prose: strategy, phase narrative, what to copy from the prototypes, testing approach, risks. |
-| `plan/` | The detailed implementation plan — a folder of self-contained task files (`00_overview.md` is the task index). Modeled on the `/sculptor-workflow:plan` output. **Note:** this folder is gitignored (`.gitignore` excludes `agent_docs/**/plan/`), so it exists locally but is not committed by default — see `plan/DECISIONS_NEEDED.md` → C6 to track it. |
+| `plan/` | The detailed implementation plan — a folder of self-contained task files (`00_overview.md` is the task index). Modeled on the `/sculptor-workflow:plan` output. **Note:** this folder is local-only: it is untracked and `.gitignore` excludes it (`**/agent_docs/**/plan/`), so it is not part of the repo history. |
 | `plan/DECISIONS_NEEDED.md` | The strategy/design decisions — **resolved** (final answers recorded). The A/B/C IDs are referenced by the task files. |
 
 ## Conventions

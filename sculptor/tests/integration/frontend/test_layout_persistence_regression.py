@@ -1,4 +1,4 @@
-"""Round-trip stability regression for the workspace layout (PERSIST-04).
+"""Round-trip stability regression for the workspace layout.
 
 A round trip that reinitializes the Jotai layout atoms from localStorage must not drop
 panels: the agent in the center and a user-added terminal both survive navigating away
@@ -24,7 +24,7 @@ from sculptor.testing.user_stories import user_story
 
 @user_story("to keep my agent and added panels after navigating away and back")
 def test_agent_and_added_panel_survive_round_trip(sculptor_instance_: SculptorInstance) -> None:
-    """Expanding right + adding a terminal there survives an away-and-back round trip (PERSIST-04)."""
+    """Expanding right + adding a terminal there survives an away-and-back round trip."""
     page = sculptor_instance_.page
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Round Trip WS")
 

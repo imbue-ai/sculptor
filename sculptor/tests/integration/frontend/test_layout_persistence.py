@@ -1,13 +1,13 @@
-"""Integration tests for per-workspace layout persistence (PERSIST-01/03/05).
+"""Integration tests for per-workspace layout persistence.
 
 A workspace's arrangement (section expand/collapse, open panels, active panel) is
-persisted per workspace through the localStorage layout adapter (Tasks 1.2/6.1) and
+persisted per workspace through the localStorage layout adapter and
 restored on a fresh load — and one workspace's changes never leak into another's
-(PERSIST-05 isolation).
+(per-workspace isolation).
 
 These arrange a layout by clicking the real UI (expand a section), then verify it
-survives a full frontend reload (PERSIST-03) and that a second workspace keeps the
-seeded default while the first keeps its change (PERSIST-01/05). The reload uses
+survives a full frontend reload and that a second workspace keeps the
+seeded default while the first keeps its change. The reload uses
 ``full_spa_reload`` (about:blank teardown → fresh load), which clears every in-memory
 Jotai atom so the layout is rebuilt purely from localStorage — the same persist →
 fresh-load → restore loop a process restart exercises (the layout is frontend-only, so
@@ -33,7 +33,7 @@ def _workspace_hash(page: Page) -> str:
 
 @user_story("to find my workspace arranged exactly as I left it after a reload")
 def test_layout_persists_across_reload(sculptor_instance_: SculptorInstance) -> None:
-    """A section-expand change survives a full frontend reload (PERSIST-03).
+    """A section-expand change survives a full frontend reload.
 
     Expand the (default-collapsed) right section, force a full SPA reload back into the
     same workspace, and assert the right section is still expanded — the arrangement was
@@ -58,7 +58,7 @@ def test_layout_persists_across_reload(sculptor_instance_: SculptorInstance) -> 
 
 @user_story("to keep each workspace's layout independent from the others")
 def test_per_workspace_layout_is_isolated(sculptor_instance_: SculptorInstance) -> None:
-    """One workspace's layout change does not affect another's (PERSIST-01/05).
+    """One workspace's layout change does not affect another's.
 
     Expand the right section in workspace A, create workspace B (which keeps the seeded
     default — right collapsed), then return to A and confirm A still has the right

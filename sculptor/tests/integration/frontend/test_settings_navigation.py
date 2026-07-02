@@ -1,4 +1,4 @@
-"""Integration tests for navigating to Settings from the sidebar (SIDE-10).
+"""Integration tests for navigating to Settings from the sidebar.
 
 Settings is no longer a closeable pseudo-tab in a workspace tab strip; it is a
 route reached from the sidebar's Settings link, and navigating back to a

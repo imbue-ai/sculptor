@@ -1,5 +1,4 @@
-"""Integration tests for the empty-section state and split close-from-empty
-(SEC-19, SPLIT-04/05).
+"""Integration tests for the empty-section state and split close-from-empty.
 
 An expanded section with no active panel shows a centered "Add panel" button plus
 quick actions: always "New {recent} agent" and "New terminal", then up to three
@@ -26,7 +25,7 @@ from sculptor.testing.user_stories import user_story
 
 @user_story("to see an add-panel button and quick actions in an empty section")
 def test_empty_section_shows_add_button_and_quick_actions(sculptor_instance_: SculptorInstance) -> None:
-    """An expanded, empty section shows the Add-panel button + New-agent / New-terminal actions (SEC-19)."""
+    """An expanded, empty section shows the Add-panel button + New-agent / New-terminal actions."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Empty State WS")
@@ -44,7 +43,7 @@ def test_empty_section_shows_add_button_and_quick_actions(sculptor_instance_: Sc
 
 @user_story("to re-open a recently-closed panel from the empty-section quick actions")
 def test_recently_closed_panel_appears_in_quick_actions(sculptor_instance_: SculptorInstance) -> None:
-    """Closing a single-instance panel surfaces it as a recently-closed quick action (SEC-19).
+    """Closing a single-instance panel surfaces it as a recently-closed quick action.
 
     Open Files in the right section, close it from its tab (a single-instance panel
     closes without a confirmation and is recorded as recently-closed), then the right
@@ -76,7 +75,7 @@ def test_recently_closed_panel_appears_in_quick_actions(sculptor_instance_: Scul
 
 @user_story("to close a split from an emptied half and reclaim the space")
 def test_emptied_split_half_offers_close_split(sculptor_instance_: SculptorInstance) -> None:
-    """An emptied split half shows the empty state with a Close-split button that merges back (SPLIT-04/05).
+    """An emptied split half shows the empty state with a Close-split button that merges back.
 
     Splitting the lone center agent into the secondary half empties the primary half,
     which then shows the empty state plus a "Close split" button; clicking it merges

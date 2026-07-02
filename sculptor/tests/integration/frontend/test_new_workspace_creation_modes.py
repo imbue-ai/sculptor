@@ -1,4 +1,4 @@
-"""Integration tests for new-workspace branch/mode behaviour via the modal (WSC-06/08/09/10).
+"""Integration tests for new-workspace branch/mode behaviour via the modal.
 
 Migrates the real assertion bodies from the /ws/new-page suites —
 test_branch_name_collisions.py, test_clone_mode_branch_name.py,
@@ -144,12 +144,12 @@ def colliding_branch(sculptor_instance_: SculptorInstance) -> Iterator[str]:
         )
 
 
-# -- WSC-06: branch pill (sanitize / shuffle / stable error slot) --
+# -- Branch pill (sanitize / shuffle / stable error slot) --
 
 
 @user_story("to have my typed branch name sanitized so the pill only ever shows a valid git ref")
 def test_branch_name_is_sanitized(sculptor_instance_: SculptorInstance) -> None:
-    """Typing characters git rejects strips them out of the branch pill (WSC-06).
+    """Typing characters git rejects strips them out of the branch pill.
 
     Whitespace collapses to a hyphen and reserved ref characters are dropped, so
     the field can never present a name the create call would reject.
@@ -168,7 +168,7 @@ def test_branch_name_is_sanitized(sculptor_instance_: SculptorInstance) -> None:
 
 @user_story("to re-roll the auto-filled branch name with the shuffle button")
 def test_branch_name_shuffle_rerolls_name(sculptor_instance_: SculptorInstance) -> None:
-    """Shuffle generates a fresh auto-filled branch name (WSC-06)."""
+    """Shuffle generates a fresh auto-filled branch name."""
     page = sculptor_instance_.page
     _seed_one_workspace(page)
 
@@ -184,7 +184,7 @@ def test_branch_name_shuffle_rerolls_name(sculptor_instance_: SculptorInstance) 
 
 @user_story("to see a clear error when my branch name collides with an existing branch")
 def test_worktree_collision_blocks_creation(sculptor_instance_: SculptorInstance, colliding_branch: str) -> None:
-    """A colliding branch name surfaces the inline error and blocks create (WSC-06/08).
+    """A colliding branch name surfaces the inline error and blocks create.
 
     Migrated from test_branch_name_collisions.py::test_worktree_mode_collision_blocks_creation,
     driven through the modal. The git-state check (no stale worktree metadata) is
@@ -223,7 +223,7 @@ def test_worktree_collision_blocks_creation(sculptor_instance_: SculptorInstance
     )
 
 
-# -- WSC-09: worktree happy path (auto / custom / random slug) --
+# -- Worktree happy path (auto / custom / random slug) --
 
 
 @user_story("to create a worktree workspace using the auto-filled branch name")
@@ -268,12 +268,12 @@ def test_worktree_create_with_custom_branch_name(sculptor_instance_: SculptorIns
     assert matching, f"no worktree on branch {custom_name!r}"
 
 
-# -- WSC-10: source-branch selection --
+# -- Source-branch selection --
 
 
 @user_story("to create a workspace from a non-default source branch")
 def test_create_from_non_default_source_branch(sculptor_instance_: SculptorInstance) -> None:
-    """Selecting a source branch in the dialog branches the worktree off it (WSC-10).
+    """Selecting a source branch in the dialog branches the worktree off it.
 
     The fixture repo carries a ``main`` branch in addition to the default
     ``testing`` checkout; selecting it changes the source the new worktree
@@ -293,12 +293,12 @@ def test_create_from_non_default_source_branch(sculptor_instance_: SculptorInsta
     expect(page.get_by_test_id(ElementIDs.CHAT_PANEL)).to_be_visible()
 
 
-# -- WSC-08: mode selector (worktree default; clone/in-place behind flags) --
+# -- Mode selector (worktree default; clone/in-place behind flags) --
 
 
 @user_story("to only see the worktree mode by default, with clone/in-place gated behind flags")
 def test_mode_selector_gates_optional_modes(sculptor_instance_: SculptorInstance) -> None:
-    """The mode selector is hidden by default and lists only the enabled opt-in modes (WSC-08).
+    """The mode selector is hidden by default and lists only the enabled opt-in modes.
 
     Migrated from test_worktree_edge_cases.py::test_clone_mode_hidden_when_flag_off,
     driven through the modal. Worktree is always the default; the selector only
@@ -327,7 +327,7 @@ def test_mode_selector_gates_optional_modes(sculptor_instance_: SculptorInstance
 
 @user_story("to clone a repo and work on a new branch using the auto-filled name")
 def test_clone_mode_kept_branch_name_creates_new_branch(sculptor_instance_: SculptorInstance) -> None:
-    """Migrated from test_clone_mode_branch_name.py, driven through the modal (WSC-08).
+    """Migrated from test_clone_mode_branch_name.py, driven through the modal.
 
     Clone is opt-in: enable the flag, seed a worktree workspace, then create a
     CLONE workspace from the dialog keeping the auto-filled branch name. The
@@ -358,7 +358,7 @@ def test_clone_mode_kept_branch_name_creates_new_branch(sculptor_instance_: Scul
 
 @user_story("to clone a repo and work on the base branch directly by clearing the branch-name field")
 def test_clone_mode_cleared_branch_checks_out_base(sculptor_instance_: SculptorInstance) -> None:
-    """Migrated from test_clone_mode_branch_name.py, driven through the modal (WSC-08/10).
+    """Migrated from test_clone_mode_branch_name.py, driven through the modal.
 
     In CLONE mode the branch field is optional: clearing it checks out the base
     branch directly rather than creating a new branch. The git-state checks are

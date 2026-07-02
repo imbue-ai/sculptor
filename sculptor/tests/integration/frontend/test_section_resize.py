@@ -1,4 +1,4 @@
-"""Integration tests for section resizing (SEC-17, SEC-22).
+"""Integration tests for section resizing.
 
 A section's grid border is a focusable ``role=separator`` resize handle driven by the
 keyboard (arrow keys step by ~10% of the parent), mirroring the shared-sidebar resize
@@ -18,7 +18,7 @@ from sculptor.testing.user_stories import user_story
 
 @user_story("to resize a section by dragging its border")
 def test_resize_right_section_changes_width(sculptor_instance_: SculptorInstance) -> None:
-    """Driving the right section's resize handle changes the section's width (SEC-17).
+    """Driving the right section's resize handle changes the section's width.
 
     The right handle grows the section as it moves toward the section (its onResize
     direction is inverted), so ArrowLeft widens it. The width is read from the
@@ -58,7 +58,7 @@ def test_resize_right_section_changes_width(sculptor_instance_: SculptorInstance
 
 @user_story("to keep a section's width within sensible bounds while resizing")
 def test_resize_clamps_to_a_minimum_width(sculptor_instance_: SculptorInstance) -> None:
-    """Shrinking the right section well past its minimum clamps rather than collapsing (SEC-22).
+    """Shrinking the right section well past its minimum clamps rather than collapsing.
 
     Repeated shrink steps must leave the section with a positive, non-trivial width
     (the geometry clamps each side to a minimum), not zero.
@@ -92,7 +92,7 @@ def test_resize_clamps_to_a_minimum_width(sculptor_instance_: SculptorInstance) 
 
 @user_story("to keep my active panel and layout unchanged when I resize a section")
 def test_resize_does_not_change_active_panel_or_collapse(sculptor_instance_: SculptorInstance) -> None:
-    """Resizing is pure geometry: it leaves the active panel and collapse state intact (SEC-17)."""
+    """Resizing is pure geometry: it leaves the active panel and collapse state intact."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Resize Pure WS")

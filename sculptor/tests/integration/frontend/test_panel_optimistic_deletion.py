@@ -1,15 +1,14 @@
-"""Integration tests for optimistic agent deletion via the panel tab (AGENT-04/08).
+"""Integration tests for optimistic agent deletion via the panel tab.
 
 Closing an agent panel tab deletes the underlying agent optimistically: the tab
 disappears instantly, and a failed backend delete rolls back (the tab reappears) with
 a prominent error toast that offers Retry. Closing the LAST agent leaves the center
-section empty (Decision B1) — no auto-created replacement.
+section empty — no auto-created replacement.
 
-These cases are CREATE-not-migrate (per `03_07_agent_terminal_panel_tests.md`): they
-are the agent portion of `test_optimistic_deletion.py`, re-anchored onto the panel-tab
-close flow, and they replace its old "last agent → auto-create a new one" assertion
-with the empty-center behaviour. The workspace-deletion portion stays with Sidebar.
-Task 8.2 finishes the split.
+These cases are the agent portion of the old `test_optimistic_deletion.py`,
+re-anchored onto the panel-tab close flow; they replace its old "last agent →
+auto-create a new one" assertion with the empty-center behaviour. The
+workspace-deletion portion lives with the sidebar tests.
 """
 
 import re
@@ -63,7 +62,7 @@ def test_optimistic_agent_deletion_removes_tab_immediately(sculptor_instance_: S
 
 @user_story("to not have a replacement agent auto-created when I close my last one")
 def test_optimistic_deletion_last_agent_does_not_auto_create(sculptor_instance_: SculptorInstance) -> None:
-    """Closing the last agent does NOT auto-create a replacement (Decision B1).
+    """Closing the last agent does NOT auto-create a replacement.
 
     Replaces the old "last agent → creates a new one" assertion: after the delete the
     center is left empty (no agent panel tab), rather than refilled.

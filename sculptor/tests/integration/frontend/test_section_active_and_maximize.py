@@ -1,11 +1,10 @@
-"""Integration tests for the active section, ring pulse, and maximize/restore
-(SEC-09..16, SEC-21, SPLIT-06).
+"""Integration tests for the active section, ring pulse, and maximize/restore.
 
 The logical active section persists; the transient active-section RING flashes only on
 a deliberate jump (a keyboard cycle / add / drop), never on a plain click. Maximizing a
 section makes it cover the content: the workspace header is hidden while the section's
 own header (with its maximize/restore toggle) stays. A maximized split shows only one
-sub-section. Maximize is not persisted across a reload (SEC-21).
+sub-section. Maximize is not persisted across a reload.
 
 Layouts are arranged by clicking the real UI (expand sections via the controls, add
 panels via the ``+`` dropdown, split via the panel context menu).
@@ -26,12 +25,12 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
-_RELOAD_TRANSIENT_SKIP_REASON = "SEC-21 (reload clears maximize) can't be exercised here: a hard browser reload is ratchet-blocked, and soft_reload_page is a same-document hash navigation that keeps the JS context so the non-persisted maximize atom never resets; the transient guarantee is structural (a plain non-persisted atom) and unit-tested in Phase 1."
+_RELOAD_TRANSIENT_SKIP_REASON = "The reload-clears-maximize guarantee can't be exercised here: a hard browser reload is ratchet-blocked, and soft_reload_page is a same-document hash navigation that keeps the JS context so the non-persisted maximize atom never resets; the transient guarantee is structural (a plain non-persisted atom) and covered by unit tests."
 
 
 @user_story("to set a section active by clicking it, without a ring flash")
 def test_plain_click_sets_active_without_ring(sculptor_instance_: SculptorInstance) -> None:
-    """A plain click sets the section active but does NOT pulse the ring (SEC-09/10)."""
+    """A plain click sets the section active but does NOT pulse the ring."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Click Active WS")
@@ -58,7 +57,7 @@ def test_plain_click_sets_active_without_ring(sculptor_instance_: SculptorInstan
 
 @user_story("to see the active-section ring flash when I cycle sections with the keyboard")
 def test_cycle_sections_pulses_ring(sculptor_instance_: SculptorInstance) -> None:
-    """The section-cycle hotkey sets a section active AND pulses its ring (SEC-11/12)."""
+    """The section-cycle hotkey sets a section active AND pulses its ring."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Cycle Ring WS")
@@ -86,7 +85,7 @@ def test_cycle_sections_pulses_ring(sculptor_instance_: SculptorInstance) -> Non
 
 @user_story("to maximize a section so it covers the workspace content")
 def test_maximize_hides_workspace_header_and_restore(sculptor_instance_: SculptorInstance) -> None:
-    """Maximizing hides the workspace header but keeps the section header; restore brings it back (SEC-13/14/15)."""
+    """Maximizing hides the workspace header but keeps the section header; restore brings it back."""
     page = sculptor_instance_.page
     task_page = PlaywrightTaskPage(page=page)
 
@@ -108,7 +107,7 @@ def test_maximize_hides_workspace_header_and_restore(sculptor_instance_: Sculpto
 
 @user_story("to maximize the active section with the keyboard")
 def test_maximize_via_hotkey(sculptor_instance_: SculptorInstance) -> None:
-    """The maximize hotkey maximizes the active section and toggles it back (SEC-15)."""
+    """The maximize hotkey maximizes the active section and toggles it back."""
     page = sculptor_instance_.page
     task_page = PlaywrightTaskPage(page=page)
 
@@ -191,7 +190,7 @@ def test_maximize_is_tracked_per_workspace_across_switches(sculptor_instance_: S
 
 @user_story("to see only one sub-section when I maximize a split section")
 def test_maximized_split_shows_one_subsection(sculptor_instance_: SculptorInstance) -> None:
-    """A maximized split section renders only its primary half (SPLIT-06).
+    """A maximized split section renders only its primary half.
 
     Split the center (a Notes panel moved into the secondary half), then maximize:
     only the primary sub-section renders, so the secondary's header is gone.
@@ -202,7 +201,7 @@ def test_maximized_split_shows_one_subsection(sculptor_instance_: SculptorInstan
     center = PlaywrightWorkspaceSection(page, "center")
 
     # Open a Notes panel and split it into the secondary half (a Notes panel, not the
-    # agent, to stay within the single active-stream limit — see AGENT-03/05). Notes is
+    # agent, to stay within the single active-stream limit). Notes is
     # not seeded into the default layout, so opening it via the section ``+`` genuinely
     # lands it in the center (the seeded Files/Changes/Commits stay in the left section).
     open_panel(page, "notes", "center")
@@ -223,12 +222,12 @@ def test_maximized_split_shows_one_subsection(sculptor_instance_: SculptorInstan
 @pytest.mark.skip(reason=_RELOAD_TRANSIENT_SKIP_REASON)
 @user_story("to have a maximized section reset to normal after a reload")
 def test_maximize_not_persisted_across_reload(sculptor_instance_: SculptorInstance) -> None:
-    """Placeholder for SEC-21 (maximize is transient — a reload clears it).
+    """Placeholder: maximize is transient — a reload clears it.
 
     Can't be exercised in this harness: a hard browser reload is ratchet-blocked, and
     ``soft_reload_page`` is a same-document hash navigation (the app is hash-routed) that
     keeps the JS context alive, so the non-persisted ``maximizedSectionAtom`` never
     resets. The transient guarantee is structural — maximize is a plain atom that is
-    never routed through the persistence adapter — and is covered by the Phase-1
+    never routed through the persistence adapter — and is covered by the
     transient-atom unit tests.
     """

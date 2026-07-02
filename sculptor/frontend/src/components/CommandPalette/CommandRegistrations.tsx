@@ -22,7 +22,7 @@ import { useContextActionRuntimes } from "./useContextActionRuntimes.ts";
 
 /**
  * One-time wiring of all builtin commands and dynamic providers. Mounts as
- * a sibling of the palette (in PageLayout). All hooks are extracted:
+ * a sibling of the palette (in AppShell). All hooks are extracted:
  *
  *   - `useCommandRuntime`         — builds the stable runtime object.
  *   - `useContextActionRuntimes`  — builds workspace/agent action runtimes.

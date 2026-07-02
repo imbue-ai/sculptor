@@ -93,7 +93,7 @@ describe("LocalStorageLayoutAdapter", () => {
     expect(adapter.read(WS_SCOPE)).toEqual(makeWorkspaceLayout("c"));
   });
 
-  it("isolates per-workspace snapshots from each other and from global (PERSIST-01/02/05)", () => {
+  it("isolates per-workspace snapshots from each other and from global", () => {
     const wsTwoScope: LayoutScope = { kind: "workspace", workspaceId: "ws-2" };
     const wsOne = makeWorkspaceLayout("agent:one");
     const wsTwo = makeWorkspaceLayout("agent:two");

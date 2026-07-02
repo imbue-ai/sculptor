@@ -1,13 +1,13 @@
-"""Smoke tests for the UI-refresh shell cutover (Task 2.7).
+"""Smoke tests for the redesigned shell (sidebar + section spine).
 
 Proves the new sidebar + section spine works end-to-end with the default
 FakeClaude harness, so the rest of the test migration can build on it:
 
 - the sidebar renders with its Home / Cmd+K / New-workspace links and at least
-  one workspace row (SIDE-01/02/03);
-- clicking a workspace row navigates to that workspace (SIDE-07);
+  one workspace row;
+- clicking a workspace row navigates to that workspace;
 - the workspace header renders;
-- the center section renders the active agent's chat (SEC-01 / AGENT-01).
+- the center section renders the active agent's chat.
 """
 
 import re
@@ -44,7 +44,7 @@ def test_sidebar_renders_with_links_and_rows(
     sidebar = task_page.get_workspace_sidebar()
     expect(sidebar).to_be_visible()
 
-    # Step 3: The top links are present (SIDE-01/02/03).
+    # Step 3: The top links are present.
     expect(sidebar.get_home_link()).to_be_visible()
     expect(sidebar.get_cmdk_link()).to_be_visible()
     expect(sidebar.get_new_workspace_button()).to_be_visible()
@@ -57,7 +57,7 @@ def test_sidebar_renders_with_links_and_rows(
 def test_sidebar_row_navigates_to_workspace(
     sculptor_instance_: SculptorInstance,
 ) -> None:
-    """Clicking a sidebar workspace row navigates to that workspace (SIDE-07).
+    """Clicking a sidebar workspace row navigates to that workspace.
 
     Steps:
     1. Create two workspaces so there are multiple rows to choose between.
@@ -90,7 +90,7 @@ def test_center_section_renders_agent_chat(
     Steps:
     1. Create a workspace with a first agent.
     2. Verify the workspace header renders.
-    3. Verify the center section hosts the active agent's chat panel (SEC-01/AGENT-01).
+    3. Verify the center section hosts the active agent's chat panel.
     4. Verify the agent's panel tab is the active tab in the center section.
     """
     page = sculptor_instance_.page

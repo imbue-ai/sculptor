@@ -1,4 +1,4 @@
-"""Integration tests for the workspace row's hover-revealed actions (SIDE-08/09).
+"""Integration tests for the workspace row's hover-revealed actions.
 
 The old workspace tab strip (and its hover peek popover) is gone; a workspace's
 quick actions now live on its sidebar row, revealed on hover. This rebuilds the

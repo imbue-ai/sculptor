@@ -403,7 +403,7 @@ export const ActionsPanel = (): ReactElement => {
     }
   };
 
-  // --- DnD handlers (DockingLayout pattern) ---
+  // --- DnD handlers ---
 
   const resolveChipGroupId = (chipEl: Element): string | null => {
     const groupSection = chipEl.closest("[data-action-group]");

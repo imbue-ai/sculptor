@@ -5,7 +5,7 @@ import { pluginOverlaysAtom } from "./pluginRegistry.ts";
 
 /**
  * Renders every plugin-contributed overlay (`api.registerOverlay`) above the
- * whole app. Mounted once from `PageLayout`, so overlays live *inside* the
+ * whole app. Mounted once from `AppShell`, so overlays live *inside* the
  * host's Router and Jotai/Theme/QueryClient providers — that is what lets an
  * overlay use route- and store-backed SDK hooks (`useCurrentWorkspaceId`,
  * `useWorkspaces`) even though it floats across every route.

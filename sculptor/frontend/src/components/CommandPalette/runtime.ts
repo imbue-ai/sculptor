@@ -63,8 +63,8 @@ export type CommandRuntime = {
     /**
      * Create a new agent in the current workspace (inheriting the active
      * agent's model) and navigate to it. Delegates to the same handler the
-     * `+` tab button and the `new_agent` keybinding use, registered by
-     * `AgentTabs`. No-op when no workspace is mounted.
+     * add-panel `+` and the `new_agent` keybinding use, registered by
+     * `useWorkspaceShellBootstrap`. No-op when no workspace is mounted.
      */
     createAgent: () => void;
     /** Open the Report a problem (file a bug) popover. */
