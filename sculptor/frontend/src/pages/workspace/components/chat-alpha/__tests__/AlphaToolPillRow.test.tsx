@@ -5,9 +5,8 @@ import type { ReactElement, ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { ToolResultBlock, ToolUseBlock, WorkflowTaskState } from "~/api";
+import type { ToolResultBlock, ToolUseBlock } from "~/api";
 import { ElementIds } from "~/api";
-import type * as UseTaskDetailModule from "~/common/state/hooks/useTaskDetail";
 
 import { AlphaToolPillRow } from "../AlphaToolPillRow.tsx";
 import type * as AlphaToolPopoverModule from "../AlphaToolPopover.tsx";
@@ -16,16 +15,6 @@ import { chatToolDensityAtom } from "../atoms.ts";
 vi.mock("~/pages/workspace/hooks/useWorkspaceCodePath.ts", () => ({
   useWorkspaceCodePath: (): string => "/workspace/code",
 }));
-
-let mockWorkflowTaskStates: Record<string, WorkflowTaskState> = {};
-
-vi.mock("~/common/state/hooks/useTaskDetail", async (importOriginal) => {
-  const actual = await importOriginal<typeof UseTaskDetailModule>();
-  return {
-    ...actual,
-    useCurrentTaskWorkflowStates: (): Record<string, WorkflowTaskState> => mockWorkflowTaskStates,
-  };
-});
 
 vi.mock("../AlphaToolPopover.tsx", async (importOriginal) => {
   // Keep `ToolEntryContent` real — AlphaExpandedToolRow consumes it for the
@@ -110,19 +99,6 @@ const renderPillRow = (
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
-  mockWorkflowTaskStates = {};
-});
-
-const createWorkflowTaskState = (overrides: Partial<WorkflowTaskState> = {}): WorkflowTaskState => ({
-  taskId: "task-wf-1",
-  toolUseId: "tool-1",
-  workflowName: "review",
-  status: "running",
-  entries: [],
-  usage: null,
-  lastToolName: null,
-  summary: "",
-  ...overrides,
 });
 
 describe("AlphaToolPillRow", () => {
@@ -233,41 +209,6 @@ describe("AlphaToolPillRow", () => {
       const rows = screen.getAllByRole("button");
       fireEvent.click(rows[0]!);
       expect(screen.getByTestId(ElementIds.ALPHA_CHAT_TOOL_PILL_POPOVER)).toBeInTheDocument();
-    });
-  });
-
-  describe("workflow pill state override", () => {
-    // The Workflow tool's result arrives immediately (the workflow keeps
-    // running in the background), so the pill state comes from the live
-    // workflow task state rather than from result presence.
-    const renderWorkflowPill = (): ReturnType<typeof render> => {
-      const block = createToolUse({ id: "tool-1", name: "Workflow", input: { name: "review" } });
-      const result = createToolResult("tool-1", { toolName: "Workflow" });
-      const resultMap = new Map<string, ToolResultBlock>([["tool-1", result]]);
-      // Pin default density — atomWithStorage would otherwise leak the
-      // expanded-density tests' localStorage value into this store.
-      return renderPillRow({ blocks: [block, result], toolResultMap: resultMap }, { density: "default" });
-    };
-
-    it("shows the executing state while the workflow task is running", () => {
-      mockWorkflowTaskStates = { "tool-1": createWorkflowTaskState({ status: "running" }) };
-      renderWorkflowPill();
-      const pill = screen.getAllByTestId(ElementIds.ALPHA_CHAT_TOOL_PILL)[0]!;
-      expect(pill).toHaveAttribute("data-tool-state", "initializing");
-      expect(screen.getByLabelText("executing")).toBeInTheDocument();
-    });
-
-    it("shows the error state when the workflow task failed", () => {
-      mockWorkflowTaskStates = { "tool-1": createWorkflowTaskState({ status: "failed" }) };
-      renderWorkflowPill();
-      const pill = screen.getAllByTestId(ElementIds.ALPHA_CHAT_TOOL_PILL)[0]!;
-      expect(pill).toHaveAttribute("data-tool-state", "error");
-    });
-
-    it("falls back to the result-derived state without a workflow entry", () => {
-      renderWorkflowPill();
-      const pill = screen.getAllByTestId(ElementIds.ALPHA_CHAT_TOOL_PILL)[0]!;
-      expect(pill).toHaveAttribute("data-tool-state", "completed");
     });
   });
 });

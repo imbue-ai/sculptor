@@ -1527,8 +1527,16 @@ def handle_workflow_run(args: dict, emit_streaming: bool) -> list[dict]:
             tokens=3100,
             tool_calls=4,
             last_tool_summary="Grep: TODO in src/",
+            prompt_preview="Review the diff for bugs",
         ),
-        make_workflow_agent_entry(index=1, label="review:perf", phase_index=0, phase_title="Review", state="start"),
+        make_workflow_agent_entry(
+            index=1,
+            label="review:perf",
+            phase_index=0,
+            phase_title="Review",
+            state="start",
+            prompt_preview="Review the diff for perf issues",
+        ),
     ]
     # Completion deltas: one payload per agent, carrying ONLY that agent's
     # entry — mirroring how the real CLI streams state changes.
@@ -1543,6 +1551,7 @@ def handle_workflow_run(args: dict, emit_streaming: bool) -> list[dict]:
             tool_calls=11,
             duration_ms=61200,
             result_preview="Found 2 bugs",
+            prompt_preview="Review the diff for bugs",
         ),
     ]
     perf_done_delta = [
@@ -1556,6 +1565,7 @@ def handle_workflow_run(args: dict, emit_streaming: bool) -> list[dict]:
             tool_calls=6,
             duration_ms=48000,
             result_preview="No perf issues",
+            prompt_preview="Review the diff for perf issues",
         ),
     ]
 

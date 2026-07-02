@@ -16,7 +16,6 @@ import { PopoverHeader } from "./PopoverHeader.tsx";
 import { defaultPopoverShell, type ToolEntryProps, type ToolEntryShell } from "./toolEntryShell.tsx";
 import type { PillData } from "./toolPill.types.ts";
 import { makeRelative } from "./toolPillUtils.ts";
-import { WorkflowEntry } from "./WorkflowEntry.tsx";
 
 export type { ToolEntryShell, ToolEntryShellArgs } from "./toolEntryShell.tsx";
 
@@ -263,8 +262,6 @@ export const ToolEntryContent = ({
     case "WebFetch":
     case "WebSearch":
       return <WebEntry {...props} />;
-    case "Workflow":
-      return <WorkflowEntry {...props} />;
     default:
       return <DefaultEntry {...props} />;
   }

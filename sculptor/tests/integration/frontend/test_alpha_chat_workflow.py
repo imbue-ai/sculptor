@@ -1,15 +1,15 @@
-"""Integration tests for the Workflow tool pill and its progress popover.
+"""Integration tests for the Workflow pill and its master-detail popover.
 
 The Workflow tool's tool_result returns immediately ("launched in
 background") while the run continues as a background task streaming
-system/task_progress events. The pill must stay in the executing state until
-the task_notification arrives, and the popover must render the live
-workflow_progress tree (phases and per-agent states).
+system/task_progress deltas. The workflow renders as a subagent-style pill
+describing the run, and its popover shows a Phases sidebar plus expandable
+per-agent rows (Prompt / Activity / Outcome).
 
 The FakeClaude ``workflow_run`` command emits the full lifecycle and accepts
-``pause_path`` to block between the running tree and the final tree, so the
-in-flight state can be asserted deterministically. Use ``FakeClaudePause``
-for the sentinel and call ``release()`` to unblock.
+``pause_path`` to block between the running tree and the completion deltas,
+so the in-flight state can be asserted deterministically. Use
+``FakeClaudePause`` for the sentinel and call ``release()`` to unblock.
 """
 
 import json
@@ -23,11 +23,11 @@ from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
 
-@user_story("to watch a workflow's agents progress live from the Workflow tool pill")
+@user_story("to watch a workflow's agents progress live from the Workflow pill")
 def test_workflow_pill_shows_live_progress_then_final_tree(sculptor_instance_: SculptorInstance) -> None:
-    """The Workflow pill pulses while the run is in flight, its popover shows
-    the running phase/agent tree, and after completion the pill settles to
-    completed with the final tree (result previews) in the popover.
+    """The Workflow pill describes the run and stays in the running state
+    while in flight; the popover shows the phase sidebar with live agent
+    states, and after completion an expanded agent row shows its outcome.
     """
     page = sculptor_instance_.page
     pause = FakeClaudePause()
@@ -56,43 +56,57 @@ def test_workflow_pill_shows_live_progress_then_final_tree(sculptor_instance_: S
     messages = chat_panel.get_messages()
     expect(messages.filter(has_text="Workflow launched.").first).to_be_visible()
 
-    # The pill stays in the executing state even though the tool_result has
-    # already arrived — the workflow task is still running.
-    workflow_pill = chat_panel.get_tool_pills().filter(has_text="Workflow").first
-    expect(workflow_pill).to_have_attribute("data-tool-state", "initializing")
+    # The pill renders subagent-style with a description of the run and stays
+    # in the running state even though the tool_result has already arrived.
+    workflow_pill = chat_panel.get_workflow_pills().first
+    expect(workflow_pill).to_have_attribute("data-workflow-status", "running")
+    expect(workflow_pill).to_contain_text("Workflow review-changes")
+    expect(workflow_pill).to_contain_text("agents")
 
-    # Open the popover and assert the live tree: workflow name + status,
-    # phase section, one agent in progress (with its latest tool activity)
-    # and one queued.
+    # Open the popover: header with name + status, the Review phase in the
+    # sidebar with its agent count, and the live agent rows.
     workflow_pill.click()
-    popover = chat_panel.get_tool_pill_popover()
+    popover = chat_panel.get_workflow_popover()
     expect(popover).to_be_visible()
     expect(popover).to_contain_text("review-changes")
     expect(popover).to_contain_text("Running…")
-    expect(popover).to_contain_text("Review")
+    phase_tab = chat_panel.get_workflow_phase_tabs().first
+    expect(phase_tab).to_contain_text("Review")
+    expect(phase_tab).to_contain_text("0/2")
     expect(popover).to_contain_text("review:bugs")
     expect(popover).to_contain_text("review:perf")
+
+    # Expand the running agent: Prompt and Outcome sections appear, with the
+    # latest tool activity accumulated from the progress deltas.
+    agent_row = chat_panel.get_workflow_agent_rows().first
+    agent_row.click()
+    expect(popover).to_contain_text("Prompt")
+    expect(popover).to_contain_text("Activity")
     expect(popover).to_contain_text("Grep: TODO in src/")
+    expect(popover).to_contain_text("Still running…")
 
     # Close the popover before releasing — the completion turn scrolls the
     # chat, which auto-dismisses open popovers.
     workflow_pill.click()
     expect(popover).not_to_be_visible()
 
-    # Release the workflow: the final tree, notification, and summary turn
-    # stream through and the turn completes.
+    # Release the workflow: the completion deltas, notification, and summary
+    # turn stream through and the turn completes.
     pause.release()
     expect(messages.filter(has_text="[workflow-test] workflow done").first).to_be_visible()
 
     # The summary turn scrolls the chat to the newest message and the
-    # virtualizer unmounts the earlier tool row — scroll back up so the pill
-    # is mounted again before asserting on it.
+    # virtualizer unmounts the earlier rows — scroll back up so the pill is
+    # mounted again before asserting on it.
     scroll_alpha_chat_to_top(page)
-    expect(workflow_pill).to_have_attribute("data-tool-state", "completed")
+    expect(workflow_pill).to_have_attribute("data-workflow-status", "completed")
+    expect(workflow_pill).to_contain_text("2 agents")
 
-    # Reopen the popover: the final tree persists with per-agent results.
+    # Reopen the popover: the final tree persists; an expanded agent row now
+    # shows its result preview as the outcome.
     workflow_pill.click()
     expect(popover).to_be_visible()
     expect(popover).to_contain_text("Completed")
+    expect(chat_panel.get_workflow_phase_tabs().first).to_contain_text("2/2")
+    chat_panel.get_workflow_agent_rows().first.click()
     expect(popover).to_contain_text("Found 2 bugs")
-    expect(popover).to_contain_text("No perf issues")

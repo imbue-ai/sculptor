@@ -13,8 +13,6 @@ export type ToolEntryShellArgs = {
   bodyText: string;
   /** Extra className for the body — e.g. terminal background or error tint. */
   bodyClassName?: string;
-  /** Custom body node. Preferred over bodyText in the popover shell; the row shell ignores it. */
-  body?: ReactNode;
 };
 
 /**
@@ -32,9 +30,9 @@ export type ToolEntryProps = {
   renderShell?: ToolEntryShell;
 };
 
-export const defaultPopoverShell: ToolEntryShell = ({ title, meta, actions, bodyText, bodyClassName, body }) => (
+export const defaultPopoverShell: ToolEntryShell = ({ title, meta, actions, bodyText, bodyClassName }) => (
   <div className={styles.entry}>
     <PopoverHeader title={title} meta={meta} actions={actions} />
-    {body ?? (bodyText && <pre className={bodyClassName ?? styles.entryBody}>{bodyText}</pre>)}
+    {bodyText && <pre className={bodyClassName ?? styles.entryBody}>{bodyText}</pre>}
   </div>
 );

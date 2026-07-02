@@ -286,6 +286,15 @@
                 "description": "When the agent was queued; presence distinguishes queued from running",
                 "title": "Queuedat"
               },
+              "recentToolSummaries": {
+                "default": [],
+                "description": "Rolling window of the agent's most recent tool calls, newest last. Not on the wire \u2014 accumulated from last_tool_summary as deltas merge",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Recenttoolsummaries",
+                "type": "array"
+              },
               "resultPreview": {
                 "anyOf": [
                   {

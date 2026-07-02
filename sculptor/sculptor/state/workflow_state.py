@@ -64,6 +64,10 @@ class WorkflowAgentProgress(SerializableModel):
     tool_calls: int | None = Field(default=None, description="Number of tool calls the agent has made")
     duration_ms: float | None = Field(default=None, description="Agent run time in milliseconds")
     last_tool_summary: str | None = Field(default=None, description="Summary of the agent's most recent tool call")
+    recent_tool_summaries: tuple[str, ...] = Field(
+        default=(),
+        description="Rolling window of the agent's most recent tool calls, newest last. Not on the wire — accumulated from last_tool_summary as deltas merge",
+    )
 
 
 WorkflowProgressEntryTypes = Annotated[
@@ -151,6 +155,12 @@ def parse_workflow_progress_entries(
     return merge_workflow_progress_entries((), entries)
 
 
+# How many of an agent's most recent tool calls to retain for display. The
+# wire only carries the single latest call per delta; the merge accumulates
+# them into a short activity window (mirroring the CLI's own /workflows view).
+_RECENT_TOOL_SUMMARY_LIMIT = 3
+
+
 def merge_workflow_progress_entries(
     existing_entries: Sequence[WorkflowPhaseProgress | WorkflowAgentProgress],
     delta_entries: Sequence[WorkflowPhaseProgress | WorkflowAgentProgress],
@@ -160,11 +170,21 @@ def merge_workflow_progress_entries(
     Entries are keyed by (kind, index) — phases and agents have separate
     index spaces — with the delta winning. An entry that reappears keeps its
     original position in the tree (dict update preserves first-insert order),
-    so rows don't jump around as their state advances.
+    so rows don't jump around as their state advances. Agent entries carry
+    their recent_tool_summaries window forward, appending the delta's
+    last_tool_summary when it is a new call.
     """
     entry_by_kind_and_index: dict[tuple[str, int], WorkflowPhaseProgress | WorkflowAgentProgress] = {
         (entry.object_type, entry.index): entry for entry in existing_entries
     }
     for entry in delta_entries:
-        entry_by_kind_and_index[(entry.object_type, entry.index)] = entry
+        key = (entry.object_type, entry.index)
+        if isinstance(entry, WorkflowAgentProgress):
+            previous = entry_by_kind_and_index.get(key)
+            summaries = previous.recent_tool_summaries if isinstance(previous, WorkflowAgentProgress) else ()
+            if entry.last_tool_summary and (not summaries or summaries[-1] != entry.last_tool_summary):
+                summaries = (*summaries, entry.last_tool_summary)[-_RECENT_TOOL_SUMMARY_LIMIT:]
+            if summaries != entry.recent_tool_summaries:
+                entry = entry.model_copy(update={"recent_tool_summaries": summaries})
+        entry_by_kind_and_index[key] = entry
     return tuple(entry_by_kind_and_index.values())

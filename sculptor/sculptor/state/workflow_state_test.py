@@ -138,6 +138,32 @@ def test_parse_workflow_progress_entries_dedupes_phases_and_agents_in_separate_i
     assert len(entries) == 2
 
 
+def test_merge_workflow_progress_entries_accumulates_recent_tool_summaries() -> None:
+    """Each delta carries only the agent's latest tool call; merging builds a
+    short rolling window (newest last, capped) and skips repeats of the same
+    call across consecutive deltas."""
+    tree: tuple = ()
+    for summary in ["Bash(sleep 57)", "Bash(sleep 57)", "ToolSearch(select:Monitor)", "Bash(pgrep)", "Read(x)"]:
+        delta = parse_workflow_progress_entries(
+            [
+                {
+                    "type": "workflow_agent",
+                    "index": 1,
+                    "label": "sleep-57s",
+                    "state": "progress",
+                    "lastToolSummary": summary,
+                }
+            ]
+        )
+        assert delta is not None
+        tree = merge_workflow_progress_entries(tree, delta)
+
+    (agent,) = tree
+    assert isinstance(agent, WorkflowAgentProgress)
+    assert agent.recent_tool_summaries == ("ToolSearch(select:Monitor)", "Bash(pgrep)", "Read(x)")
+    assert agent.last_tool_summary == "Read(x)"
+
+
 def test_merge_workflow_progress_entries_accumulates_deltas_across_payloads() -> None:
     """The CLI streams deltas: later payloads carry only the entries whose
     state changed. Merging must keep untouched entries and update changed

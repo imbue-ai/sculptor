@@ -18,10 +18,10 @@ type AlphaToolPillProps = {
 export const AlphaToolPill = forwardRef<HTMLButtonElement, AlphaToolPillProps>(
   ({ pillData, isOpen, onToggle, onFocus, tabIndex }, ref): ReactElement => {
     const { state, label } = pillData;
-    // Command-style tools (Bash, Monitor) and Workflow share the pulsing-dot
-    // executing affordance — they're the long-running tools whose duration is
-    // meaningful enough to surface visually.
-    const isCommandStyleTool = label === "Bash" || label === "Monitor" || label === "Workflow";
+    // Command-style tools (Bash, Monitor) share the pulsing-dot executing
+    // affordance — they're the long-running shell-script tools whose
+    // duration is meaningful enough to surface visually.
+    const isCommandStyleTool = label === "Bash" || label === "Monitor";
     const isExecuting = state === "initializing";
     const Icon = getToolIcon(label);
 
