@@ -17,7 +17,7 @@ CREAM="#f2f0e7"
 
 # Manifest icons (purpose "any"): full-bleed rasters of the SVG.
 magick -density 147 -background none "$SVG" -resize 512x512 -depth 8 -strip pwa-512x512.png
-magick -density 56 -background none "$SVG" -resize 192x192 -depth 8 -strip pwa-192x192.png
+magick -density 55 -background none "$SVG" -resize 192x192 -depth 8 -strip pwa-192x192.png
 
 # Maskable icon: glyph shrunk to 80% (the maskable safe zone) and centered
 # on a full-bleed background, so circular launcher masks don't clip it.
