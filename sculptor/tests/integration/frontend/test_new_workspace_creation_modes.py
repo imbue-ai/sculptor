@@ -29,6 +29,7 @@ from sculptor.testing.elements.user_config import enable_in_place_workspaces
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
+from sculptor.testing.utils import get_playwright_modifier_key
 
 COLLIDING_BRANCH = "alice/conflicting"
 
@@ -188,7 +189,7 @@ def test_worktree_collision_blocks_creation(sculptor_instance_: SculptorInstance
     Migrated from test_branch_name_collisions.py::test_worktree_mode_collision_blocks_creation,
     driven through the modal. The git-state check (no stale worktree metadata) is
     unchanged. The seed workspace already created one worktree, so the check is
-    scoped to confirm the FAILED create added none beyond it.
+    scoped to confirm the BLOCKED create added none beyond it.
     """
     page = sculptor_instance_.page
     _seed_one_workspace(page)
@@ -207,8 +208,12 @@ def test_worktree_collision_blocks_creation(sculptor_instance_: SculptorInstance
     expect(collision_error).to_contain_text(colliding_branch)
     expect(collision_error).to_contain_text("already exists")
 
-    # Create is blocked: the dialog stays open and no new worktree appears.
-    dialog.get_create_button().click()
+    # Create is blocked: the inline collision disables the Create button, and a
+    # keyboard submit attempt is a guarded no-op — the dialog stays open and no
+    # new worktree appears. (The backend 409 re-check remains as a race safety
+    # net but is unreachable through the UI once the inline check resolves.)
+    expect(dialog.get_create_button()).to_be_disabled()
+    page.keyboard.press(f"{get_playwright_modifier_key()}+Enter")
     expect(dialog.get_dialog()).to_be_visible()
     expect(page).to_have_url(re.compile(r".*/ws/(ws_[a-z0-9]+)/"))
 
