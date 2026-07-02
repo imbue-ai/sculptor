@@ -10,7 +10,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExter
 
 import { ChatMessageRole } from "~/api";
 
-import { bottomPinOffset, distanceFromContentBottom } from "../scroll/geometry.ts";
+import { bottomPinOffset, distanceFromContentBottom, FOOTER_REVEAL_WINDOW_MS } from "../scroll/geometry.ts";
 import type { ReadingAnchor } from "../scroll/scrollStateMachine.ts";
 import {
   createScrollStateMachine,
@@ -36,13 +36,6 @@ const SCROLL_ANIMATION_EASING = "cubic-bezier(0.33, 1, 0.68, 1)"; // ease-out
 // How long after a wheel/touch/keydown the user is still considered to be
 // actively scrolling, before the user-scroll flag is debounced back off.
 const USER_SCROLL_DEBOUNCE_MS = 150;
-
-// How long after a followed turn ends the content observer keeps revealing the
-// tail, so the turn footer (which mounts a beat after the stream stops) is not left
-// below the fold. Exported because useAlphaVirtualizer holds the streaming
-// paddingEnd floor for the same window: both cover the turn-end settle, where
-// late content changes (cursor unmount, footer mount) can still land.
-export const FOOTER_REVEAL_WINDOW_MS = 1200;
 
 /** Cancel any in-progress scroll-to-top transform animation and restore
  *  the virtualizer's scroll-position adjustment callback. */

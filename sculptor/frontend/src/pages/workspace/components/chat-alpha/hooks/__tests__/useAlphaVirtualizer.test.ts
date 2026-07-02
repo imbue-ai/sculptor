@@ -1,11 +1,16 @@
 import type { VirtualItem, Virtualizer } from "@tanstack/react-virtual";
-import { describe, expect, it } from "vitest";
+import type { RenderHookResult } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { FOOTER_REVEAL_WINDOW_MS, IDLE_TAIL_PADDING, STREAMING_TAIL_PADDING } from "../../scroll/geometry.ts";
+import { createScrollStateMachine } from "../../scroll/scrollStateMachine.ts";
 import {
   buildShouldAdjustScrollPositionOnItemSizeChange,
   shouldAdjustScrollPosition,
   skipNextScrollAdjustForItem,
   touchLRU,
+  useAlphaVirtualizer,
 } from "../useAlphaVirtualizer.ts";
 
 const createMockItem = (start: number, size: number): VirtualItem => ({
@@ -195,5 +200,98 @@ describe("touchLRU", () => {
     ]);
     touchLRU(map, "a", 5);
     expect(map.get("a")).toBe(42);
+  });
+});
+
+describe("streaming paddingEnd floor latch", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe = vi.fn();
+        unobserve = vi.fn();
+        disconnect = vi.fn();
+      },
+    );
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  type FloorLatchProps = { taskId: string; isStreaming: boolean };
+
+  // A null scroll container keeps containerHeight/tailContentHeight at 0, so
+  // dynamicPaddingEnd IS the floor — the latch is observable directly through
+  // options.paddingEnd.
+  const renderFloorLatch = (): RenderHookResult<Virtualizer<HTMLDivElement, Element>, FloorLatchProps> => {
+    const machine = createScrollStateMachine();
+    const initialProps: FloorLatchProps = { taskId: "task-1", isStreaming: false };
+    return renderHook(
+      ({ taskId, isStreaming }: FloorLatchProps) =>
+        useAlphaVirtualizer({ current: null }, 0, null, taskId, machine, 64, undefined, isStreaming),
+      { initialProps },
+    );
+  };
+
+  it("uses the idle floor at rest", () => {
+    const { result } = renderFloorLatch();
+    expect(result.current.options.paddingEnd).toBe(IDLE_TAIL_PADDING);
+  });
+
+  it("uses the streaming floor while a stream is active", () => {
+    const { result, rerender } = renderFloorLatch();
+    rerender({ taskId: "task-1", isStreaming: true });
+    expect(result.current.options.paddingEnd).toBe(STREAMING_TAIL_PADDING);
+  });
+
+  it("holds the streaming floor through the settle window, then drops to idle", () => {
+    const { result, rerender } = renderFloorLatch();
+    rerender({ taskId: "task-1", isStreaming: true });
+    rerender({ taskId: "task-1", isStreaming: false });
+
+    // Still held: the turn-end shrink can land within the settle window.
+    expect(result.current.options.paddingEnd).toBe(STREAMING_TAIL_PADDING);
+
+    act(() => {
+      vi.advanceTimersByTime(FOOTER_REVEAL_WINDOW_MS);
+    });
+    expect(result.current.options.paddingEnd).toBe(IDLE_TAIL_PADDING);
+  });
+
+  it("re-arms the hold when a new stream starts inside the settle window", () => {
+    const { result, rerender } = renderFloorLatch();
+    rerender({ taskId: "task-1", isStreaming: true });
+    rerender({ taskId: "task-1", isStreaming: false });
+    act(() => {
+      vi.advanceTimersByTime(FOOTER_REVEAL_WINDOW_MS / 2);
+    });
+
+    rerender({ taskId: "task-1", isStreaming: true });
+    // The pending drop from the previous turn must not fire mid-stream.
+    act(() => {
+      vi.advanceTimersByTime(FOOTER_REVEAL_WINDOW_MS * 2);
+    });
+    expect(result.current.options.paddingEnd).toBe(STREAMING_TAIL_PADDING);
+  });
+
+  it("drops the outgoing task's hold on task switch", () => {
+    const { result, rerender } = renderFloorLatch();
+    rerender({ taskId: "task-1", isStreaming: true });
+    rerender({ taskId: "task-1", isStreaming: false });
+    expect(result.current.options.paddingEnd).toBe(STREAMING_TAIL_PADDING);
+
+    // The incoming idle task gets the idle floor immediately — the outgoing
+    // task's settle window is meaningless for it.
+    rerender({ taskId: "task-2", isStreaming: false });
+    expect(result.current.options.paddingEnd).toBe(IDLE_TAIL_PADDING);
+
+    // Drain the task-switch settle rAF chain so no state updates fire after
+    // the test ends.
+    act(() => {
+      vi.advanceTimersByTime(48);
+    });
   });
 });

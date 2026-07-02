@@ -225,11 +225,13 @@ def get_max_following_tail_gap(page: Page, frames: int = 18) -> float | None:
     """Over a short ``requestAnimationFrame`` burst, the max gap (px) from the last
     message's bottom edge UP to the viewport bottom.
 
-    A positive gap means the last line is floating above the viewport bottom over
-    empty tail padding; pinned flush to the content bottom is ~0. The max across
-    frames is returned so a transient mid-growth frame (where the streaming tail
-    briefly overflows below the fold, giving a negative gap) does not mask the
-    steady pinned gap. Returns ``None`` if the chat view or its messages are absent.
+    While following, the pin holds this gap at ~PIN_BOTTOM_GAP (64px, see
+    chat-alpha/scroll/geometry.ts): ~0 means the pin is hugging the viewport edge
+    flush, and a full-padding gap (>= the 128px streaming floor) means it is
+    parked at the end of the padded range. The max across frames is returned so a
+    transient mid-growth frame (where the streaming tail briefly overflows below
+    the fold, giving a negative gap) does not mask the steady pinned gap. Returns
+    ``None`` if the chat view or its messages are absent.
     """
     return page.evaluate(
         f"""(frames) => new Promise((resolve) => {{

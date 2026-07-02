@@ -5,9 +5,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 
 import { ChatMessageRole } from "~/api";
 
-import { IDLE_TAIL_PADDING, STREAMING_TAIL_PADDING } from "../scroll/geometry.ts";
+import { FOOTER_REVEAL_WINDOW_MS, IDLE_TAIL_PADDING, STREAMING_TAIL_PADDING } from "../scroll/geometry.ts";
 import type { ScrollStateMachine } from "../scroll/scrollStateMachine.ts";
-import { FOOTER_REVEAL_WINDOW_MS } from "./useAlphaAutoScroll.ts";
 
 const ESTIMATED_MESSAGE_HEIGHT = 120;
 const OVERSCAN = 5;
