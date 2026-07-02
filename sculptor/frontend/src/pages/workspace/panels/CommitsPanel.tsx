@@ -11,6 +11,7 @@ import { useCallback, useMemo } from "react";
 
 import { registerPanelComponent } from "~/components/sections/registry/panelRegistry.ts";
 import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
+import { activeDiffTabAtomFamily, commitSelectionFromTab } from "~/pages/workspace/components/diffPanel/atoms.ts";
 import type { DiffSelection, TreeViewOptions } from "~/pages/workspace/components/diffViewer/index.ts";
 import { DiffViewer } from "~/pages/workspace/components/diffViewer/index.ts";
 
@@ -26,9 +27,15 @@ const CommitsPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
   // panel unmounting on a section-tab switch.
   const [selected, setSelected] = useAtom(commitsPanelSelectionAtomFamily(workspaceId));
 
+  // The shared active diff tab — written when a commit diff is opened outside the
+  // history list (e.g. the header's recent-files dropdown). Reading it here makes
+  // those opens render in this panel's single embedded viewer, mirroring the
+  // Files / Changes panels.
+  const activeTab = useAtomValue(activeDiffTabAtomFamily(workspaceId));
+
   const handleSelectCommitFile = useCallback(
     (commitHash: string, filePath: string): void => {
-      setSelected({ commitHash, filePath });
+      setSelected({ commitHash, filePath, at: Date.now() });
     },
     [setSelected],
   );
@@ -37,10 +44,16 @@ const CommitsPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
     collapseAllCommits({ workspaceId });
   }, [collapseAllCommits, workspaceId]);
 
+  // Reconcile the local click selection with the atom-driven one by recency:
+  // whichever was activated last wins.
   const selection = useMemo((): DiffSelection | null => {
-    if (selected === null) return null;
-    return { kind: "commit-diff", commitHash: selected.commitHash, filePath: selected.filePath };
-  }, [selected]);
+    const atomViewedAt = activeTab?.kind === "commit-diff" ? activeTab.viewedAt : null;
+    const isLocalNewer = selected !== null && (atomViewedAt === null || selected.at >= atomViewedAt);
+    if (isLocalNewer) {
+      return { kind: "commit-diff", commitHash: selected.commitHash, filePath: selected.filePath };
+    }
+    return commitSelectionFromTab(activeTab);
+  }, [selected, activeTab]);
 
   // The commit history has no flat/tree toggle; the menu only offers collapse-all.
   const treeOptions: TreeViewOptions = {

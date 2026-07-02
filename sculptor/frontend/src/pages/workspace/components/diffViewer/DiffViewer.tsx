@@ -38,6 +38,7 @@ import { determineFileStatus } from "~/pages/workspace/panels/fileBrowser/utils.
 import styles from "./DiffViewer.module.scss";
 import { DiffViewerHeader } from "./DiffViewerHeader.tsx";
 import { DiffViewerMenu } from "./DiffViewerMenu.tsx";
+import type { RecentFilesScope } from "./FilePathSelect.tsx";
 import type { DiffSelection, DiffViewOptions, TreeViewOptions } from "./types.ts";
 import { useDiffViewerContent } from "./useDiffViewerContent.ts";
 
@@ -273,6 +274,18 @@ export const DiffViewer = ({
     onToggleRender: handleToggleMarkdownRender,
   };
 
+  // Which panel's recents the header's path dropdown feeds and re-opens into —
+  // derived from the selection kind, which by construction matches the panel
+  // embedding this viewer (Files shows file-views, Commits shows commit diffs,
+  // Changes shows everything else).
+  const recentFilesScope: RecentFilesScope = useMemo(() => {
+    if (content.isFileView) return { panel: "files" };
+    if (content.isCommitDiff && content.commitHash !== null) {
+      return { panel: "commits", commitHash: content.commitHash };
+    }
+    return { panel: "changes" };
+  }, [content.isFileView, content.isCommitDiff, content.commitHash]);
+
   const renderDiffBody = (): ReactElement => {
     const { filePath, errorMessage, isBinary, status, diffString, previousFilePath } = content;
 
@@ -340,6 +353,7 @@ export const DiffViewer = ({
           <DiffViewerHeader
             workspaceId={workspaceId}
             filePath={content.filePath}
+            recentFilesScope={recentFilesScope}
             tabFilePath={content.tabFilePath ?? undefined}
             addedLines={0}
             removedLines={0}
@@ -359,6 +373,7 @@ export const DiffViewer = ({
           <DiffViewerHeader
             workspaceId={workspaceId}
             filePath={content.filePath}
+            recentFilesScope={recentFilesScope}
             tabFilePath={content.tabFilePath ?? undefined}
             addedLines={commitFileLineCounts.added}
             removedLines={commitFileLineCounts.removed}
@@ -404,6 +419,7 @@ export const DiffViewer = ({
           <DiffViewerHeader
             workspaceId={workspaceId}
             filePath={content.filePath}
+            recentFilesScope={recentFilesScope}
             tabFilePath={content.tabFilePath ?? undefined}
             addedLines={content.addedLines}
             removedLines={content.removedLines}

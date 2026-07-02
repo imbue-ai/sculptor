@@ -142,25 +142,49 @@ export const markdownRenderModeAtom = atomWithStorage<MarkdownRenderMode>("diffP
 /** Cap for the viewer header's recently-viewed file dropdown. */
 const MAX_RECENT_FILES = 10;
 
+/** Which panel a viewer header belongs to — each keeps its own recents list. */
+export type RecentFilesPanel = "files" | "changes" | "commits";
+
 /**
- * Recently viewed files per workspace: workspace-relative paths, newest first,
- * deduped, capped at {@link MAX_RECENT_FILES}. Fed by the diff viewer header
- * whenever it shows a file; drives the header's path dropdown.
+ * A recently viewed file: the workspace-relative path, plus (for Commits-panel
+ * entries) the commit the view was scoped to, so re-opening lands back in that
+ * exact commit's diff.
  */
-export const recentDiffFilesAtomFamily = atomFamily((workspaceId: string) =>
-  atomWithStorage<Array<string>>(`diffPanel-recentFiles-${workspaceId}`, []),
+export type RecentDiffFile = { path: string; commitHash?: string };
+
+const recentFilesKey = (workspaceId: string, panel: RecentFilesPanel): string => `${panel}-${workspaceId}`;
+
+/**
+ * Recently viewed files per workspace AND per panel — the Files / Changes /
+ * Commits panels each keep an independent list (a file viewed in Changes must
+ * not appear in the Files dropdown). Newest first, deduped, capped at
+ * {@link MAX_RECENT_FILES}. Fed by each panel's viewer header whenever it
+ * shows a file; drives that header's path dropdown.
+ */
+const recentDiffFilesByKeyAtomFamily = atomFamily((key: string) =>
+  atomWithStorage<Array<RecentDiffFile>>(`diffPanel-recentFiles-${key}`, []),
 );
 
-/** Move (or insert) a file to the front of the workspace's recently-viewed list. */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+export const recentDiffFilesAtomFamily = (workspaceId: string, panel: RecentFilesPanel) =>
+  recentDiffFilesByKeyAtomFamily(recentFilesKey(workspaceId, panel));
+
+/** Move (or insert) a file to the front of a panel's recently-viewed list. */
 export const recordRecentDiffFileAtom = atom(
   null,
-  (get, set, { workspaceId, filePath }: { workspaceId: string; filePath: string }) => {
-    const listAtom = recentDiffFilesAtomFamily(workspaceId);
+  (
+    get,
+    set,
+    { workspaceId, panel, entry }: { workspaceId: string; panel: RecentFilesPanel; entry: RecentDiffFile },
+  ) => {
+    const listAtom = recentDiffFilesAtomFamily(workspaceId, panel);
     const prev = get(listAtom);
-    if (prev[0] === filePath) {
+    const isSameEntry = (candidate: RecentDiffFile): boolean =>
+      candidate.path === entry.path && candidate.commitHash === entry.commitHash;
+    if (prev[0] !== undefined && isSameEntry(prev[0])) {
       return;
     }
-    set(listAtom, [filePath, ...prev.filter((path) => path !== filePath)].slice(0, MAX_RECENT_FILES));
+    set(listAtom, [entry, ...prev.filter((candidate) => !isSameEntry(candidate))].slice(0, MAX_RECENT_FILES));
   },
 );
 

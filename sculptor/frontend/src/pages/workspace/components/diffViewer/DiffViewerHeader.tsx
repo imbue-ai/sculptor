@@ -9,12 +9,15 @@ import { isBinaryFile } from "~/pages/workspace/panels/fileBrowser/utils.ts";
 
 import styles from "./DiffViewerHeader.module.scss";
 import { DiffViewerMenu } from "./DiffViewerMenu.tsx";
+import type { RecentFilesScope } from "./FilePathSelect.tsx";
 import { FilePathSelect } from "./FilePathSelect.tsx";
 import type { DiffViewOptions, TreeViewOptions } from "./types.ts";
 
 type DiffViewerHeaderProps = {
   workspaceId: string;
   filePath: string;
+  /** Which panel's recents the path dropdown feeds and re-opens into. */
+  recentFilesScope: RecentFilesScope;
   tabFilePath?: string;
   addedLines: number;
   removedLines: number;
@@ -42,6 +45,7 @@ type DiffViewerHeaderProps = {
 export const DiffViewerHeader = ({
   workspaceId,
   filePath,
+  recentFilesScope,
   tabFilePath,
   addedLines,
   removedLines,
@@ -77,7 +81,7 @@ export const DiffViewerHeader = ({
       data-testid={ElementIds.DIFF_FILE_HEADER}
     >
       {leadingControl}
-      <FilePathSelect workspaceId={workspaceId} filePath={filePath} />
+      <FilePathSelect workspaceId={workspaceId} filePath={filePath} recentFilesScope={recentFilesScope} />
 
       <span className={styles.spacer} />
 
