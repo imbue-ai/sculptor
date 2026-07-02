@@ -283,8 +283,12 @@ export const DiffViewer = ({
     if (content.isCommitDiff && content.commitHash !== null) {
       return { panel: "commits", commitHash: content.commitHash };
     }
-    return { panel: "changes" };
-  }, [content.isFileView, content.isCommitDiff, content.commitHash]);
+    return {
+      panel: "changes",
+      status: content.status,
+      scope: content.isTargetBranchDiff ? "vs-target-branch" : "uncommitted",
+    };
+  }, [content.isFileView, content.isCommitDiff, content.commitHash, content.status, content.isTargetBranchDiff]);
 
   const renderDiffBody = (): ReactElement => {
     const { filePath, errorMessage, isBinary, status, diffString, previousFilePath } = content;

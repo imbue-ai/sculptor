@@ -137,8 +137,9 @@ export const FilesPanel = (): ReactElement | null => {
   if (workspaceId === null) {
     return null;
   }
-  // Key on the workspace id so switching workspaces resets the panel's local
-  // selection state instead of carrying a stale file path across workspaces.
+  // Key on the workspace id so switching workspaces resets the panel's
+  // transient state (e.g. the search query) instead of carrying it across
+  // workspaces; the file selection is already per-workspace via its atom.
   return <FilesPanelContent key={workspaceId} workspaceId={workspaceId} />;
 };
 

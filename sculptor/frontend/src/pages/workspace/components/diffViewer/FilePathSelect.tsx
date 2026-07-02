@@ -6,22 +6,28 @@ import { useEffect, useMemo } from "react";
 import { ElementIds } from "~/api";
 import type { RecentDiffFile } from "~/pages/workspace/components/diffPanel/atoms.ts";
 import {
+  getRecentDiffFilesAtom,
   openCommitDiffTabAtom,
-  openFileFromUiEventAtom,
+  openDiffTabAtom,
   openFileViewTabAtom,
-  recentDiffFilesAtomFamily,
   recordRecentDiffFileAtom,
 } from "~/pages/workspace/components/diffPanel/atoms.ts";
+import type { DiffScope } from "~/pages/workspace/components/diffPanel/types.ts";
+import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
 
 import styles from "./FilePathSelect.module.scss";
 
 /**
  * Which panel's recents this header feeds and reads. Each panel keeps its own
  * independent list, and picking an entry stays in that panel: Files re-opens a
- * read-only file view, Changes re-opens the file's diff, and Commits re-opens
- * the file's diff within the commit it was viewed in (hence the hash).
+ * read-only file view, Changes re-opens the file's diff (the entry carries the
+ * status/scope it was viewed under), and Commits re-opens the file's diff
+ * within the commit it was viewed in (hence the hash).
  */
-export type RecentFilesScope = { panel: "files" } | { panel: "changes" } | { panel: "commits"; commitHash: string };
+export type RecentFilesScope =
+  | { panel: "files" }
+  | { panel: "changes"; status: FileStatus | null; scope: DiffScope }
+  | { panel: "commits"; commitHash: string };
 
 type FilePathSelectProps = {
   workspaceId: string;
@@ -51,17 +57,19 @@ export const FilePathSelect = ({ workspaceId, filePath, recentFilesScope }: File
   // state and hooks
   const { panel } = recentFilesScope;
   const commitHash = recentFilesScope.panel === "commits" ? recentFilesScope.commitHash : undefined;
-  const recentFiles = useAtomValue(recentDiffFilesAtomFamily(workspaceId, panel));
+  const status = recentFilesScope.panel === "changes" ? (recentFilesScope.status ?? undefined) : undefined;
+  const scope = recentFilesScope.panel === "changes" ? recentFilesScope.scope : undefined;
+  const recentFiles = useAtomValue(getRecentDiffFilesAtom(workspaceId, panel));
   const recordRecentFile = useSetAtom(recordRecentDiffFileAtom);
-  const openDiff = useSetAtom(openFileFromUiEventAtom);
+  const openDiff = useSetAtom(openDiffTabAtom);
   const openFileView = useSetAtom(openFileViewTabAtom);
   const openCommitDiff = useSetAtom(openCommitDiffTabAtom);
 
   // effects
   // Every file the header shows counts as "recently viewed" in this panel.
   useEffect(() => {
-    recordRecentFile({ workspaceId, panel, entry: { path: filePath, commitHash } });
-  }, [workspaceId, panel, filePath, commitHash, recordRecentFile]);
+    recordRecentFile({ workspaceId, panel, entry: { path: filePath, commitHash, status, scope } });
+  }, [workspaceId, panel, filePath, commitHash, status, scope, recordRecentFile]);
 
   // functions and callbacks
   const handleValueChange = (value: string): void => {
@@ -73,7 +81,7 @@ export const FilePathSelect = ({ workspaceId, filePath, recentFilesScope }: File
     if (panel === "files") {
       openFileView({ workspaceId, filePath: entry.path });
     } else if (panel === "changes") {
-      openDiff({ workspaceId, filePath: entry.path, mode: "diff" });
+      openDiff({ workspaceId, filePath: entry.path, status: entry.status ?? "M", scope: entry.scope });
     } else if (entry.commitHash !== undefined) {
       openCommitDiff({ workspaceId, commitHash: entry.commitHash, filePath: entry.path });
     }

@@ -146,11 +146,13 @@ const MAX_RECENT_FILES = 10;
 export type RecentFilesPanel = "files" | "changes" | "commits";
 
 /**
- * A recently viewed file: the workspace-relative path, plus (for Commits-panel
- * entries) the commit the view was scoped to, so re-opening lands back in that
- * exact commit's diff.
+ * A recently viewed file: the workspace-relative path, plus what is needed to
+ * re-open the same view — the commit the view was scoped to for Commits-panel
+ * entries, and the diff's status/scope for Changes-panel entries (without
+ * these, a committed-only file viewed under the "All" scope would re-open as
+ * a plain file view instead of its diff).
  */
-export type RecentDiffFile = { path: string; commitHash?: string };
+export type RecentDiffFile = { path: string; commitHash?: string; status?: FileStatus; scope?: DiffScope };
 
 const recentFilesKey = (workspaceId: string, panel: RecentFilesPanel): string => `${panel}-${workspaceId}`;
 
@@ -166,7 +168,7 @@ const recentDiffFilesByKeyAtomFamily = atomFamily((key: string) =>
 );
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-export const recentDiffFilesAtomFamily = (workspaceId: string, panel: RecentFilesPanel) =>
+export const getRecentDiffFilesAtom = (workspaceId: string, panel: RecentFilesPanel) =>
   recentDiffFilesByKeyAtomFamily(recentFilesKey(workspaceId, panel));
 
 /** Move (or insert) a file to the front of a panel's recently-viewed list. */
@@ -177,14 +179,17 @@ export const recordRecentDiffFileAtom = atom(
     set,
     { workspaceId, panel, entry }: { workspaceId: string; panel: RecentFilesPanel; entry: RecentDiffFile },
   ) => {
-    const listAtom = recentDiffFilesAtomFamily(workspaceId, panel);
+    const listAtom = getRecentDiffFilesAtom(workspaceId, panel);
     const prev = get(listAtom);
-    const isSameEntry = (candidate: RecentDiffFile): boolean =>
+    // Entries are deduped by file identity (path + commit); a re-record of the
+    // same file replaces it so the status/scope stay current.
+    const isSameFile = (candidate: RecentDiffFile): boolean =>
       candidate.path === entry.path && candidate.commitHash === entry.commitHash;
-    if (prev[0] !== undefined && isSameEntry(prev[0])) {
+    const front = prev[0];
+    if (front !== undefined && isSameFile(front) && front.status === entry.status && front.scope === entry.scope) {
       return;
     }
-    set(listAtom, [entry, ...prev.filter((candidate) => !isSameEntry(candidate))].slice(0, MAX_RECENT_FILES));
+    set(listAtom, [entry, ...prev.filter((candidate) => !isSameFile(candidate))].slice(0, MAX_RECENT_FILES));
   },
 );
 
