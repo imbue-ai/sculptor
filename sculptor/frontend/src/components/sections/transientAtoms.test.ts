@@ -8,7 +8,9 @@ import {
   displayedPanelIdsAtom,
   draggedPanelIdAtom,
   ghostPanelIdAtom,
+  isAnySectionMaximizedAtom,
   isDropTargetAtom,
+  isMaximizedSectionAtom,
   isRingVisibleAtom,
   maximizedSectionAtom,
   panelDragStateAtom,
@@ -49,6 +51,31 @@ describe("maximized section", () => {
     expect(store.get(maximizedSectionAtom)).toBeNull();
     store.set(maximizedSectionAtom, "center");
     expect(store.get(maximizedSectionAtom)).toBeNull();
+  });
+
+  it("isMaximizedSectionAtom is true only for the maximized section", () => {
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-max-slice");
+    expect(store.get(isMaximizedSectionAtom("left"))).toBe(false);
+
+    store.set(maximizedSectionAtom, "left");
+    expect(store.get(isMaximizedSectionAtom("left"))).toBe(true);
+    expect(store.get(isMaximizedSectionAtom("center"))).toBe(false);
+
+    store.set(maximizedSectionAtom, null);
+    expect(store.get(isMaximizedSectionAtom("left"))).toBe(false);
+  });
+
+  it("isAnySectionMaximizedAtom flips on the null ↔ non-null transition", () => {
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-max-any");
+    expect(store.get(isAnySectionMaximizedAtom)).toBe(false);
+
+    store.set(maximizedSectionAtom, "bottom");
+    expect(store.get(isAnySectionMaximizedAtom)).toBe(true);
+
+    store.set(maximizedSectionAtom, null);
+    expect(store.get(isAnySectionMaximizedAtom)).toBe(false);
   });
 });
 

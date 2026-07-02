@@ -87,8 +87,11 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
       diagnostics: diagnosticsByTaskId[task.id],
       // Closing an agent tab deletes the agent with confirmation; confirming
       // runs the optimistic delete + rollback + Retry flow. Closing the last
-      // agent leaves the center empty — no auto-create.
-      onRequestClose: (): void => setAgentDeleteTarget({ id: task.id, name: task.title ?? "" }),
+      // agent leaves the center empty — no auto-create. An untitled agent falls
+      // back to the tab's display name (e.g. "Claude 2") so the confirmation
+      // dialog never shows an empty name.
+      onRequestClose: (): void =>
+        setAgentDeleteTarget({ id: task.id, name: task.title ?? task.titleOrSomethingLikeIt }),
       // Committing an inline tab rename persists the new title. Update the task
       // optimistically so the tab text changes immediately, then PATCH the backend; the
       // canonical value arrives back via WebSocket (mirrors markUnread's fire-and-forget).

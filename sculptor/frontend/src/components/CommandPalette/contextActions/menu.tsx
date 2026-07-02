@@ -7,7 +7,7 @@ import { ElementIds, type ExternalApp, type Workspace } from "../../../api";
 import { getOpenWithItems } from "../../../common/openInApp/items.tsx";
 import type { AccentColor } from "../../../common/state/atoms/themeBuilder";
 import { useWorkspaceBranch } from "../../../common/state/hooks/useWorkspaceBranch.ts";
-import type { Agent, AgentAction, ContextActionShared, WorkspaceAction } from "./types.ts";
+import type { ContextActionShared, WorkspaceAction } from "./types.ts";
 
 /** Pixel size shared by every icon rendered in these context menus. */
 const ICON_SIZE = 14;
@@ -51,9 +51,9 @@ const DROPDOWN_MENU_COMPONENTS: WorkspaceMenuComponents = {
 
 /**
  * The slice of an action descriptor the right-click menu reads, narrowed to
- * the menu's target entity. Both `WorkspaceAction` and `AgentAction` satisfy
- * this for `Workspace` and `Agent` respectively, letting `renderMenuItems`
- * stay generic over the target without per-field type assertions.
+ * the menu's target entity. `WorkspaceAction` satisfies this for `Workspace`,
+ * letting `renderMenuItems` stay generic over the target without per-field
+ * type assertions.
  */
 type TargetedAction<TTarget> = ContextActionShared & {
   visible?: (target: TTarget) => boolean;
@@ -299,46 +299,5 @@ export const WorkspaceDropdownMenuContent = ({
     <DropdownMenu.Content size="1" onCloseAutoFocus={(e): void => e.preventDefault()}>
       {items}
     </DropdownMenu.Content>
-  );
-};
-
-export const AgentContextMenuContent = ({
-  actions,
-  agent,
-  trailing,
-}: {
-  actions: ReadonlyArray<AgentAction>;
-  agent: Agent;
-  trailing?: ReactElement;
-}): ReactElement => {
-  // Copy name + the diagnostics copy items (`trailing`) are injected right after
-  // "Mark as unread" (no leading separator) so they sit in the top group above
-  // the divider that sets the destructive Delete apart on its own.
-  const copyName = (
-    <ContextMenu.Item
-      data-testid={ElementIds.TAB_CONTEXT_MENU_COPY_AGENT_NAME}
-      disabled={!agent.title}
-      onSelect={async (): Promise<void> => {
-        if (agent.title) {
-          await navigator.clipboard.writeText(agent.title);
-        }
-      }}
-    >
-      <Copy size={14} /> Copy agent name
-    </ContextMenu.Item>
-  );
-  return (
-    <ContextMenu.Content size="1" onCloseAutoFocus={(e): void => e.preventDefault()}>
-      {renderMenuItems<Agent>({
-        actions,
-        target: agent,
-        destructiveColor: "red",
-        performFor: (action) => (): void | Promise<void> => action.perform(agent),
-        injectAfter: [
-          { actionId: "mark_unread", content: copyName },
-          ...(trailing != null ? [{ actionId: "mark_unread", content: trailing }] : []),
-        ],
-      })}
-    </ContextMenu.Content>
   );
 };

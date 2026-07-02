@@ -6,6 +6,7 @@ import {
   List,
   ListTree,
   MoreHorizontal,
+  RefreshCw,
   Search,
   SplitSquareHorizontal,
   Text,
@@ -85,27 +86,32 @@ type DiffViewerMenuProps = {
   viewOptions?: DiffViewOptions;
   /** The list view controls merged in from the tree side. */
   treeOptions?: TreeViewOptions;
+  /** Manually re-syncs the viewer's data from git (diff / file content). */
+  onRefresh?: () => void;
   isBinary: boolean;
 };
 
 /**
- * The single triple-dot menu in the viewer header. It assembles, in
- * order: the tree (list) view options, the diff view options that used to sit
- * as toolbar icons, and the per-file actions (open / copy / close tab). The
- * trigger carries {@link ElementIds.DIFF_FILE_HEADER_MENU_TRIGGER}; the
- * relocated toggles re-anchor under it.
+ * The single triple-dot menu in the viewer header. It assembles, in order:
+ * the manual refresh, the tree (list) view options, the diff view options
+ * that used to sit as toolbar icons, and the per-file actions (open / copy /
+ * close tab). The trigger carries
+ * {@link ElementIds.DIFF_FILE_HEADER_MENU_TRIGGER}; the relocated toggles
+ * re-anchor under it.
  */
 export const DiffViewerMenu = ({
   workspaceId,
   fileContext,
   viewOptions,
   treeOptions,
+  onRefresh,
   isBinary,
 }: DiffViewerMenuProps): ReactElement => {
   const fileMenuGroups = useFileMenuGroups({ context: fileContext ?? EMPTY_CONTEXT, workspaceId });
   const hasFileActions = fileContext !== null && fileMenuGroups.length > 0;
   const hasTreeOptions = treeOptions !== undefined;
   const hasViewOptions = viewOptions !== undefined;
+  const hasRefresh = onRefresh !== undefined;
 
   return (
     <DropdownMenu.Root>
@@ -115,17 +121,27 @@ export const DiffViewerMenu = ({
         </IconButton>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content size="1">
-        {hasTreeOptions && <TreeOptionItems options={treeOptions} />}
+        {hasRefresh && (
+          <DropdownMenu.Item onSelect={() => onRefresh()}>
+            <RefreshCw size={14} /> Refresh
+          </DropdownMenu.Item>
+        )}
+        {hasTreeOptions && (
+          <>
+            {hasRefresh && <DropdownMenu.Separator />}
+            <TreeOptionItems options={treeOptions} />
+          </>
+        )}
         {hasViewOptions && (
           <>
-            {hasTreeOptions && <DropdownMenu.Separator />}
+            {(hasRefresh || hasTreeOptions) && <DropdownMenu.Separator />}
             <DiffViewOptionItems isBinary={isBinary} options={viewOptions} />
           </>
         )}
         {hasFileActions &&
           fileMenuGroups.map((group, groupIndex) => (
             <Fragment key={group[0].key}>
-              {(groupIndex > 0 || hasTreeOptions || hasViewOptions) && <DropdownMenu.Separator />}
+              {(groupIndex > 0 || hasRefresh || hasTreeOptions || hasViewOptions) && <DropdownMenu.Separator />}
               {group.map((item) => (
                 <DropdownMenu.Item
                   key={item.key}

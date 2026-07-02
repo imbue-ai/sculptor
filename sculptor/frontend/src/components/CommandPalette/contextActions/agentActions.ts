@@ -4,15 +4,11 @@ import { ElementIds } from "../../../api";
 import type { AgentAction, AgentActionRuntime } from "./types.ts";
 
 /**
- * Single source of truth for agent context actions. Both the right-click
- * context menu (`<AgentContextMenuContent />`) and the command palette
- * (`agentActionsProvider` dynamic provider) consume this list.
- *
- * The Diagnostics submenu in the right-click menu is not represented
- * here — its items require an async API fetch on submenu open
- * (`getWorkspaceAgentDiagnostics`) and are still rendered inline by
- * `AgentContextMenuContent`. They are not surfaced in the command palette
- * for that reason.
+ * Single source of truth for the command palette's agent actions, consumed by
+ * the `agentActionsProvider` dynamic provider. The agent panel-tab's
+ * right-click menu builds its own item list (see `dynamicPanels.tsx`) because
+ * its extra entries — the copy/diagnostics items — depend on per-agent
+ * diagnostics fetched outside the palette; those are not surfaced here.
  */
 export const buildAgentActions = (runtime: AgentActionRuntime): ReadonlyArray<AgentAction> => [
   {

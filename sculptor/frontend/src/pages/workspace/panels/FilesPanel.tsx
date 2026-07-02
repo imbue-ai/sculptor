@@ -28,6 +28,7 @@ import { EmptyState, SkeletonLoading } from "./fileBrowser/EmptyStates.tsx";
 import { FileTree } from "./fileBrowser/FileTree.tsx";
 import { useFileSearch, useFileTree } from "./fileBrowser/hooks.ts";
 import styles from "./FilesPanel.module.scss";
+import { reconcileSelectionByRecency } from "./selectionRecency.ts";
 
 /** Renders the file tree list, an empty/loading placeholder, or the tree. */
 const FilesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactElement => {
@@ -76,14 +77,17 @@ const FilesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEleme
   // Reconcile the local click selection with the atom-driven one (an agent open) by
   // recency: whichever was activated last wins, so a local click still takes effect
   // after an agent open and vice-versa.
-  const selection = useMemo((): DiffSelection | null => {
-    const atomViewedAt = activeTab?.kind === "file-view" ? activeTab.viewedAt : null;
-    const isLocalNewer = localSelection !== null && (atomViewedAt === null || localSelection.at >= atomViewedAt);
-    if (isLocalNewer) {
-      return { kind: "file-view", filePath: localSelection.filePath };
-    }
-    return fileViewSelectionFromTab(activeTab);
-  }, [localSelection, activeTab]);
+  const selection = useMemo(
+    (): DiffSelection | null =>
+      reconcileSelectionByRecency({
+        local: localSelection,
+        tab: activeTab,
+        tabKind: "file-view",
+        toSelection: (local) => ({ kind: "file-view", filePath: local.filePath }),
+        fromTab: fileViewSelectionFromTab,
+      }),
+    [localSelection, activeTab],
+  );
 
   // The path highlighted in the tree mirrors whatever the viewer is showing.
   const selectedPath = selection?.kind === "file-view" ? selection.filePath : null;

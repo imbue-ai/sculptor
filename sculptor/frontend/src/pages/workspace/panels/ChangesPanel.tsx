@@ -34,6 +34,7 @@ import { ChangesTreeView } from "./fileBrowser/ChangesTreeView.tsx";
 import { CommitButton } from "./fileBrowser/CommitButton.tsx";
 import { useFileStatusMap } from "./fileBrowser/hooks.ts";
 import type { FileStatus } from "./fileBrowser/types.ts";
+import { reconcileSelectionByRecency } from "./selectionRecency.ts";
 
 const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactElement => {
   const workspace = useWorkspace(workspaceId);
@@ -97,14 +98,17 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
   // The selection carries the active scope so switching All/Uncommitted re-renders the
   // same file against the newly chosen base. Reconcile the local click selection with
   // the atom-driven one (an agent open) by recency: whichever was activated last wins.
-  const selection = useMemo((): DiffSelection | null => {
-    const atomViewedAt = activeTab?.kind === "single" ? activeTab.viewedAt : null;
-    const isLocalNewer = selected !== null && (atomViewedAt === null || selected.at >= atomViewedAt);
-    if (isLocalNewer) {
-      return { kind: "diff", filePath: selected.filePath, status: selected.status, scope };
-    }
-    return changesSelectionFromTab(activeTab);
-  }, [selected, scope, activeTab]);
+  const selection = useMemo(
+    (): DiffSelection | null =>
+      reconcileSelectionByRecency({
+        local: selected,
+        tab: activeTab,
+        tabKind: "single",
+        toSelection: (local) => ({ kind: "diff", filePath: local.filePath, status: local.status, scope }),
+        fromTab: changesSelectionFromTab,
+      }),
+    [selected, scope, activeTab],
+  );
 
   // The path highlighted in the tree mirrors whatever the viewer is showing.
   const selectedPath = selection?.kind === "diff" ? selection.filePath : null;

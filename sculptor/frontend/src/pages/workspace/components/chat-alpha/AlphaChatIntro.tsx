@@ -1,9 +1,7 @@
-import { useAtomValue } from "jotai";
 import { CircleHelpIcon, GitBranchIcon, SparklesIcon, UsersIcon } from "lucide-react";
 import type { ReactElement } from "react";
 
 import { ElementIds, WorkspaceInitializationStrategy } from "~/api";
-import { pendingAgentTitlesAtom } from "~/common/state/atoms/tasks";
 import { useProject } from "~/common/state/hooks/useProjects";
 import { useTask } from "~/common/state/hooks/useTaskHelpers";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
@@ -32,7 +30,6 @@ export const AlphaChatIntro = (): ReactElement => {
   const workspace = useWorkspace(workspaceID);
   const project = useProject(workspace?.projectId ?? "");
   const task = useTask(taskID);
-  const pendingAgentTitles = useAtomValue(pendingAgentTitlesAtom);
 
   const isInPlace = workspace?.initializationStrategy === WorkspaceInitializationStrategy.IN_PLACE;
   const isWorktree = workspace?.initializationStrategy === WorkspaceInitializationStrategy.WORKTREE;
@@ -40,7 +37,7 @@ export const AlphaChatIntro = (): ReactElement => {
   const sourceBranch = workspace?.sourceBranch;
   const createdAt = workspace?.createdAt;
   const workspaceName = workspace?.description ?? "Untitled workspace";
-  const agentName = (taskID ? pendingAgentTitles[taskID] : undefined) ?? task?.titleOrSomethingLikeIt ?? "Agent";
+  const agentName = task?.titleOrSomethingLikeIt ?? "Agent";
 
   return (
     <div className={styles.wrapper} data-testid={ElementIds.ALPHA_CHAT_INTRO}>

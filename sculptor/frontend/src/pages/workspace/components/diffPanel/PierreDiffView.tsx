@@ -11,6 +11,11 @@ import { getShikiThemes } from "~/common/theme/shikiThemes.ts";
 
 import { splitDiffColumnRatioAtom } from "./atoms.ts";
 import styles from "./PierreDiffView.module.scss";
+import {
+  adoptPierreOverrideSheet,
+  createPierreOverrideSheet,
+  HIDE_NATIVE_HSCROLLBAR_CSS,
+} from "./pierreShadowStyles.ts";
 import { SplitDiffHandle } from "./SplitDiffHandle.tsx";
 import { StickyHorizontalScrollbar } from "./StickyHorizontalScrollbar.tsx";
 import type { DiffViewType } from "./types.ts";
@@ -77,28 +82,12 @@ class FileDiffErrorBoundary extends Component<FileDiffErrorBoundaryProps, FileDi
   }
 }
 
-/**
- * Stylesheet injected into Pierre's open shadow DOM to override the theme
- * background color so the diff blends with the rest of the app.
- *
- * Light mode uses `--color-panel-solid` (white) while dark mode uses
- * `--color-background` (#111, set in index.css) to match Sculptor's actual
- * dark background.  We also override `--diffs-bg` directly via `light-dark()`
- * as a safety net in case Pierre's own variable resolution doesn't pick up
- * the overridden light/dark-bg values.
- *
- * The split column override uses inherited CSS custom properties
- * (`--diffs-split-left` / `--diffs-split-right`) set on the outer container
- * to control the width ratio of each side in side-by-side mode.
- */
-const bgOverrideSheet = new CSSStyleSheet();
-bgOverrideSheet.replaceSync(
+// The shared background override (see pierreShadowStyles.ts) plus this view's
+// split-column override: inherited CSS custom properties
+// (`--diffs-split-left` / `--diffs-split-right`) set on the outer container
+// control the width ratio of each side in side-by-side mode.
+const bgOverrideSheet = createPierreOverrideSheet(
   [
-    "[data-diffs], [data-diffs-header], [data-error-wrapper] {",
-    "  --diffs-light-bg: var(--color-panel-solid) !important;",
-    "  --diffs-dark-bg: var(--color-background) !important;",
-    "  --diffs-bg: light-dark(var(--color-panel-solid), var(--color-background)) !important;",
-    "}",
     "[data-type='split'][data-overflow='scroll'] {",
     "  grid-template-columns: var(--diffs-split-left, 1fr) var(--diffs-split-right, 1fr) !important;",
     "}",
@@ -107,11 +96,8 @@ bgOverrideSheet.replaceSync(
     "    minmax(min-content, max-content) var(--diffs-split-left, 1fr)",
     "    minmax(min-content, max-content) var(--diffs-split-right, 1fr) !important;",
     "}",
-    // Hide Pierre's native horizontal scrollbar — replaced by StickyHorizontalScrollbar
-    // at the bottom of the diff panel so it's always visible.
-    "[data-code] { scrollbar-width: none; }",
-    "[data-code]::-webkit-scrollbar { display: none; }",
   ].join("\n"),
+  HIDE_NATIVE_HSCROLLBAR_CSS,
 );
 
 export const PierreDiffView = ({
@@ -178,12 +164,8 @@ export const PierreDiffView = ({
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   /**
-   * Inject our bg-override stylesheet into Pierre's shadow DOM.
-   *
-   * `useLayoutEffect` so the sheet is adopted between React's commit and the
-   * browser's next paint — without this, Pierre's first paint shows the
-   * Shiki theme background (passed inline on the `<pre>`) until our override
-   * lands, which flashes in dark mode against the surrounding `#111`.
+   * Inject our bg-override stylesheet into Pierre's shadow DOM (see
+   * adoptPierreOverrideSheet for why this is a layout effect).
    *
    * Re-runs when `hasFileDiffMetadata` flips, because the inner Pierre
    * component may switch between `<FileDiff>` and `<PatchDiff>`, each of
@@ -192,13 +174,7 @@ export const PierreDiffView = ({
    */
   const hasFileDiffMetadata = !!fileDiffMetadata;
   useLayoutEffect(() => {
-    const el = pierreRef.current;
-    if (!el) return;
-    const shadowRoot = el.querySelector("diffs-container")?.shadowRoot;
-    if (!shadowRoot) return;
-    if (!shadowRoot.adoptedStyleSheets.includes(bgOverrideSheet)) {
-      shadowRoot.adoptedStyleSheets = [...shadowRoot.adoptedStyleSheets, bgOverrideSheet];
-    }
+    adoptPierreOverrideSheet(pierreRef.current, bgOverrideSheet);
   }, [hasFileDiffMetadata, isHighlighterReady]);
 
   /**

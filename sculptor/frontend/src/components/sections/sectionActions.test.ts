@@ -325,4 +325,28 @@ describe("active section: silent vs. pulsing", () => {
     store.set(setActiveSectionAtom, { subSection: "left" });
     expect(store.get(workspaceLayoutAtom).activeSubSection).toBe("center");
   });
+
+  it("ignores jumping into a collapsed section: no active change, no ring pulse", () => {
+    const store = storeWith({ activeSubSection: "center", expanded: { left: false } });
+    const nonceBefore = store.get(activeSectionRingNonceAtom);
+
+    store.set(jumpToSectionAtom, { subSection: "left" });
+    expect(store.get(workspaceLayoutAtom).activeSubSection).toBe("center");
+    expect(store.get(activeSectionRingNonceAtom)).toBe(nonceBefore);
+  });
+
+  it("ignores jumping into a collapsed section's split half", () => {
+    // The split persists while its section is collapsed; jumping to the hidden
+    // secondary must not activate an invisible pane (or pulse the ring).
+    const store = storeWith({
+      activeSubSection: "center",
+      expanded: { left: false },
+      splits: { left: { axis: "horizontal", ratio: 0.5 } },
+    });
+    const nonceBefore = store.get(activeSectionRingNonceAtom);
+
+    store.set(jumpToSectionAtom, { subSection: "left:secondary" });
+    expect(store.get(workspaceLayoutAtom).activeSubSection).toBe("center");
+    expect(store.get(activeSectionRingNonceAtom)).toBe(nonceBefore);
+  });
 });

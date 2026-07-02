@@ -38,6 +38,17 @@ export const maximizedSectionAtom: WritableAtom<SectionId | null, [SetStateActio
   },
 );
 
+// True only when THIS section is the maximized one, so a section subscribes to its
+// own flag instead of re-rendering whenever any other section's maximize changes.
+export const isMaximizedSectionAtom = atomFamily((section: SectionId) =>
+  atom((get) => get(maximizedSectionAtom) === section),
+);
+
+// True while any section is maximized — the whole-shell presentation switch
+// (e.g. hiding the workspace header). Subscribers re-render only on the
+// null ↔ non-null transition, not when the maximize moves between sections.
+export const isAnySectionMaximizedAtom: Atom<boolean> = atom((get) => get(maximizedSectionAtom) !== null);
+
 // ── Drag preview ──────────────────────────────────────────────────────────────
 
 export type PanelDragState = { panelId: PanelId; from: SubSectionId; to: SubSectionId; index: number };

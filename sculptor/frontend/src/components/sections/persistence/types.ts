@@ -4,6 +4,14 @@
 
 import type { PanelId, SectionId, SectionSplit, SubSectionId } from "../sectionTypes.ts";
 
+// Schema version stamped onto every persisted snapshot by the adapter (the
+// in-memory state types below stay version-free). Bump it when a snapshot's
+// shape changes incompatibly; readers treat a MISSING version as this one
+// (snapshots written before the stamp existed) and reject any OTHER version
+// as "nothing stored" so the layout falls back to its defaults instead of
+// hydrating a shape the atoms can't handle.
+export const LAYOUT_SNAPSHOT_VERSION = 1;
+
 export type WorkspaceLayoutState = {
   // Open-panel set + placement: a panel's presence here means it is "open".
   placement: Partial<Record<PanelId, SubSectionId>>;

@@ -11,8 +11,9 @@ import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 
 import { PanelDndProvider } from "~/components/sections/PanelDndProvider.tsx";
+import { useOrphanedLayoutGc } from "~/components/sections/persistence/orphanedLayoutGc.ts";
 import { SectionGrid } from "~/components/sections/SectionGrid.tsx";
-import { maximizedSectionAtom } from "~/components/sections/transientAtoms.ts";
+import { isAnySectionMaximizedAtom } from "~/components/sections/transientAtoms.ts";
 import { useActiveSectionRing } from "~/components/sections/useActiveSectionRing.ts";
 import { useWorkspaceShortcuts } from "~/components/sections/useWorkspaceShortcuts.ts";
 
@@ -22,14 +23,15 @@ import { WorkspaceHeader } from "./WorkspaceHeader.tsx";
 import styles from "./WorkspaceLayoutShell.module.scss";
 
 export const WorkspaceLayoutShell = (): ReactElement => {
-  const maximizedSection = useAtomValue(maximizedSectionAtom);
-  const isMaximized = maximizedSection !== null;
+  const isMaximized = useAtomValue(isAnySectionMaximizedAtom);
 
   // The active-section ring fade timer, mounted once for the whole shell.
   useActiveSectionRing();
   // The new-shell section/panel keyboard shortcuts (collapse/cycle/maximize/sidebar/
   // new-agent), registered through the keybindings registry.
   useWorkspaceShortcuts();
+  // Once-per-session idle sweep of layout snapshots whose workspace no longer exists.
+  useOrphanedLayoutGc();
 
   return (
     <PanelDndProvider>

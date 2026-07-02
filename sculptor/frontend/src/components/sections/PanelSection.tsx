@@ -25,7 +25,7 @@ import { SectionBody } from "./SectionBody.tsx";
 import { SectionHeader } from "./SectionHeader.tsx";
 import type { SubSectionId } from "./sectionTypes.ts";
 import { toSection } from "./sectionTypes.ts";
-import { isDropTargetAtom, isRingVisibleAtom, maximizedSectionAtom } from "./transientAtoms.ts";
+import { isDropTargetAtom, isMaximizedSectionAtom, isRingVisibleAtom } from "./transientAtoms.ts";
 
 type PanelSectionProps = { subSection: SubSectionId };
 
@@ -33,7 +33,7 @@ const PanelSectionComponent = ({ subSection }: PanelSectionProps): ReactElement 
   const isDropTarget = useAtomValue(isDropTargetAtom(subSection));
   const isActive = useAtomValue(isActiveSubSectionAtom(subSection));
   const isRingVisible = useAtomValue(isRingVisibleAtom(subSection));
-  const maximizedSection = useAtomValue(maximizedSectionAtom);
+  const isMaximized = useAtomValue(isMaximizedSectionAtom(toSection(subSection)));
   const setActiveSection = useSetAtom(setActiveSectionAtom);
 
   // This section's body is a drop target keyed by its sub-section id; the drop-target
@@ -42,8 +42,6 @@ const PanelSectionComponent = ({ subSection }: PanelSectionProps): ReactElement 
     id: sectionBodyDroppableId(subSection),
     data: { kind: "section-body", subSection },
   });
-
-  const isMaximized = maximizedSection === toSection(subSection);
 
   const className = [
     styles.section,

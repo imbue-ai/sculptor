@@ -30,8 +30,8 @@ type DiffViewerHeaderProps = {
   treeOptions?: TreeViewOptions;
   /** Rendered before the breadcrumb — the sidebar-visibility toggle. */
   leadingControl?: ReactNode;
-  /** Rendered in the right cluster before the menu (e.g. refresh). */
-  trailingActions?: ReactNode;
+  /** The manual data refresh, surfaced as a triple-dot menu item. */
+  onRefresh?: () => void;
   /** When set, shows a quick-open icon that opens the file's rendered
    *  markdown view in the Files panel (offered on diff/commit headers). */
   onOpenRenderedMarkdown?: () => void;
@@ -39,8 +39,7 @@ type DiffViewerHeaderProps = {
 
 /**
  * The 41px viewer header: an optional leading control (sidebar toggle), the
- * file breadcrumb, line stats, optional trailing actions, and the single
- * triple-dot options menu.
+ * file breadcrumb, line stats, and the single triple-dot options menu.
  */
 export const DiffViewerHeader = ({
   workspaceId,
@@ -54,7 +53,7 @@ export const DiffViewerHeader = ({
   viewOptions,
   treeOptions,
   leadingControl,
-  trailingActions,
+  onRefresh,
   onOpenRenderedMarkdown,
 }: DiffViewerHeaderProps): ReactElement => {
   const isBinary = isBinaryProp || isBinaryFile(filePath.split("/").pop() ?? "");
@@ -107,14 +106,13 @@ export const DiffViewerHeader = ({
         </Tooltip>
       )}
 
-      {trailingActions}
-
       <DiffViewerMenu
         workspaceId={workspaceId}
         fileContext={fileContext}
         viewOptions={viewOptions}
         treeOptions={treeOptions}
         isBinary={isBinary}
+        onRefresh={onRefresh}
       />
     </Flex>
   );

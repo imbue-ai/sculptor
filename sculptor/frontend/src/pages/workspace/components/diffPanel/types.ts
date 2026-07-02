@@ -22,6 +22,11 @@ export type FileViewTab = {
   /** Actual file path used for fetching content. */
   realPath: string;
   viewedAt: number;
+  /** When set, this open explicitly requested rendered markdown (the viewer
+   *  header's quick-open icon). The viewer honors it for THIS open only —
+   *  without rewriting the user's global render-mode preference — until the
+   *  user toggles the mode. */
+  markdownMode?: "rendered";
 };
 
 export type CommitFileDiffTab = {

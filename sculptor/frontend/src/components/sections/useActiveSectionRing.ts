@@ -30,4 +30,11 @@ export function useActiveSectionRing(): void {
     const timer = setTimeout(() => setRingVisible(false), RING_VISIBLE_MS);
     return (): void => clearTimeout(timer);
   }, [nonce, setRingVisible]);
+
+  // The visibility atom outlives this hook (it is app-global), so an unmount
+  // mid-fade must reset it — otherwise the next shell mount would start with the
+  // ring stuck visible until the next jump restarts the timer.
+  useEffect(() => {
+    return (): void => setRingVisible(false);
+  }, [setRingVisible]);
 }

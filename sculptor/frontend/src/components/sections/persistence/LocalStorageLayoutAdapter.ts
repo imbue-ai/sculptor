@@ -6,8 +6,11 @@
 
 import type { LayoutPersistenceAdapter } from "./LayoutPersistenceAdapter.ts";
 import type { LayoutScope, LayoutSnapshotFor } from "./types.ts";
+import { LAYOUT_SNAPSHOT_VERSION } from "./types.ts";
 
-const WORKSPACE_KEY_PREFIX = "sculptor-layout-ws-";
+// Exported for the orphaned-key sweep (orphanedLayoutGc.ts), which scans raw
+// localStorage keys for per-workspace snapshots.
+export const WORKSPACE_KEY_PREFIX = "sculptor-layout-ws-";
 const GLOBAL_KEY = "sculptor-layout-global";
 const WRITE_DEBOUNCE_MS = 250;
 
@@ -25,6 +28,13 @@ function isObject(value: unknown): value is Record<string, unknown> {
 // presence/kind of the top-level fields each scope's atoms rely on, not every nested value.
 function isValidSnapshot(scope: LayoutScope, value: unknown): boolean {
   if (!isObject(value)) {
+    return false;
+  }
+
+  // A snapshot without a version stamp predates the stamp and parses as the
+  // current version; anything else was written by a newer schema, so reject it
+  // (the caller falls back to the default layout) rather than misreading it.
+  if (value.version !== undefined && value.version !== LAYOUT_SNAPSHOT_VERSION) {
     return false;
   }
 
@@ -68,11 +78,16 @@ export class LocalStorageLayoutAdapter implements LayoutPersistenceAdapter {
       }
       const parsed: unknown = JSON.parse(raw);
       if (!isValidSnapshot(scope, parsed)) {
-        // Wrong-shape snapshot (e.g. stale schema or hand-edited entry): treat as
-        // "nothing stored" so the atoms fall back to their safe defaults.
+        // Wrong-shape or future-version snapshot (e.g. stale schema or a
+        // hand-edited entry): treat as "nothing stored" so the atoms fall
+        // back to their safe defaults.
         return undefined;
       }
-      return parsed as LayoutSnapshotFor<TScope>;
+      // The version stamp is storage metadata; strip it so it never leaks into
+      // the in-memory layout state (writes re-stamp it).
+      const snapshot = { ...(parsed as Record<string, unknown>) };
+      delete snapshot.version;
+      return snapshot as LayoutSnapshotFor<TScope>;
     } catch {
       // Missing localStorage or corrupt JSON must not break startup.
       return undefined;
@@ -80,7 +95,7 @@ export class LocalStorageLayoutAdapter implements LayoutPersistenceAdapter {
   }
 
   write<TScope extends LayoutScope>(scope: TScope, snapshot: LayoutSnapshotFor<TScope>): void {
-    this.pending.set(keyFor(scope), snapshot);
+    this.pending.set(keyFor(scope), { ...snapshot, version: LAYOUT_SNAPSHOT_VERSION });
     this.scheduleFlush();
   }
 

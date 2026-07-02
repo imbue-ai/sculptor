@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LocalStorageLayoutAdapter } from "./LocalStorageLayoutAdapter.ts";
 import type { LayoutScope, WorkspaceLayoutState } from "./types.ts";
+import { LAYOUT_SNAPSHOT_VERSION } from "./types.ts";
 
 const WS_SCOPE: LayoutScope = { kind: "workspace", workspaceId: "ws-1" };
 const GLOBAL_SCOPE: LayoutScope = { kind: "global" };
@@ -69,6 +70,48 @@ describe("LocalStorageLayoutAdapter", () => {
     localStorage.setItem(
       "sculptor-layout-global",
       JSON.stringify({ sectionSizes: { left: 20, right: 20, bottom: 30 } }),
+    );
+    expect(adapter.read(GLOBAL_SCOPE)).toBeUndefined();
+  });
+
+  it("stamps the current snapshot version on writes and strips it on reads", () => {
+    const snapshot = makeWorkspaceLayout("agent:1");
+    adapter.write(WS_SCOPE, snapshot);
+    adapter.flush();
+
+    // The stored payload carries the stamp…
+    const stored = JSON.parse(localStorage.getItem("sculptor-layout-ws-ws-1") ?? "null") as Record<string, unknown>;
+    expect(stored.version).toBe(LAYOUT_SNAPSHOT_VERSION);
+
+    // …but the read-back snapshot does not: the stamp is storage metadata,
+    // never in-memory layout state.
+    expect(adapter.read(WS_SCOPE)).toEqual(snapshot);
+    expect(adapter.read(WS_SCOPE)).not.toHaveProperty("version");
+  });
+
+  it("reads a versionless snapshot as the current version", () => {
+    // Snapshots written before the version stamp existed have no `version`
+    // field; they must still hydrate rather than being discarded.
+    localStorage.setItem("sculptor-layout-ws-ws-1", JSON.stringify(makeWorkspaceLayout("files")));
+    expect(adapter.read(WS_SCOPE)).toEqual(makeWorkspaceLayout("files"));
+  });
+
+  it("rejects a future-version snapshot as nothing stored", () => {
+    localStorage.setItem(
+      "sculptor-layout-ws-ws-1",
+      JSON.stringify({ ...makeWorkspaceLayout("files"), version: LAYOUT_SNAPSHOT_VERSION + 1 }),
+    );
+    expect(adapter.read(WS_SCOPE)).toBeUndefined();
+
+    localStorage.setItem(
+      "sculptor-layout-global",
+      JSON.stringify({
+        sectionSizes: { left: 20, right: 20, bottom: 30 },
+        sidebarWidthPx: 240,
+        sidebarCollapsed: false,
+        explorerListWidthPx: 240,
+        version: LAYOUT_SNAPSHOT_VERSION + 1,
+      }),
     );
     expect(adapter.read(GLOBAL_SCOPE)).toBeUndefined();
   });

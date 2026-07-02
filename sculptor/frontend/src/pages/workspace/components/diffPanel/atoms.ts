@@ -73,7 +73,16 @@ export const fileViewSelectionFromTab = (tab: DiffTab | null): DiffSelection | n
   if (tab === null || tab.kind !== "file-view") {
     return null;
   }
-  return { kind: "file-view", filePath: tab.realPath, tabFilePath: tab.filePath };
+  return {
+    kind: "file-view",
+    filePath: tab.realPath,
+    tabFilePath: tab.filePath,
+    markdownMode: tab.markdownMode,
+    // `viewedAt` rides along so a repeat quick-open of the same file (a new
+    // timestamp, same paths) re-applies a render-mode request the user had
+    // dismissed for the previous open.
+    openedAt: tab.viewedAt,
+  };
 };
 
 /**
@@ -106,7 +115,7 @@ export const commitSelectionFromTab = (tab: DiffTab | null): DiffSelection | nul
 };
 
 /** Global preference for how `.md` / `.markdown` files are shown in ReadOnlyPreview. */
-type MarkdownRenderMode = "raw" | "rendered";
+export type MarkdownRenderMode = "raw" | "rendered";
 export const markdownRenderModeAtom = atomWithStorage<MarkdownRenderMode>("diffPanel-markdownRenderMode", "rendered");
 
 /** Cap for the viewer header's recently-viewed file dropdown. */
@@ -182,6 +191,8 @@ type SetActiveFileView = {
   kind: "file-view";
   workspaceId: string;
   filePath: string;
+  /** Set by the quick-open-rendered-markdown path; see {@link FileViewTab}. */
+  markdownMode?: "rendered";
 };
 
 type SetActiveCommitDiff = {
@@ -217,6 +228,7 @@ const buildTabFromPayload = (payload: SetActiveDiffPayload, now: number): DiffTa
         filePath: FILE_VIEW_PREFIX + payload.filePath,
         realPath: payload.filePath,
         viewedAt: now,
+        markdownMode: payload.markdownMode,
       };
     case "commit-diff":
       return {
@@ -344,9 +356,12 @@ export const resetReviewAllScopeAtom = atom(null, (get, set) => {
 });
 
 /** Open (or activate) a read-only file view tab. */
-export const openFileViewTabAtom = atom(null, (_get, set, params: { workspaceId: string; filePath: string }) => {
-  set(setActiveDiffTabAtom, { kind: "file-view", ...params });
-});
+export const openFileViewTabAtom = atom(
+  null,
+  (_get, set, params: { workspaceId: string; filePath: string; markdownMode?: "rendered" }) => {
+    set(setActiveDiffTabAtom, { kind: "file-view", ...params });
+  },
+);
 
 /** Open (or activate) a commit-scoped file diff tab. */
 export const openCommitDiffTabAtom = atom(

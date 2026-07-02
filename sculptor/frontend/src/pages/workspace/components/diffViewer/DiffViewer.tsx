@@ -6,6 +6,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { ElementIds, UserConfigField } from "~/api";
 import { useTimedLatch } from "~/common/Hooks.ts";
 import { useKeybindingHandler } from "~/common/keybindings";
+import { invalidateWorkspaceGitQueries } from "~/common/queryClient.ts";
 import {
   appThemeAtom,
   fileBrowserDiffViewTypeAtom,
@@ -14,8 +15,10 @@ import {
 } from "~/common/state/atoms/userConfig.ts";
 import { useUserConfig } from "~/common/state/hooks/useUserConfig.ts";
 import { useWorkspaceCommitDiff } from "~/common/state/hooks/useWorkspaceCommitDiff.ts";
+import { useForceRefreshWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
 import { getLineCounts, parseDiff } from "~/components/DiffUtils.ts";
 import { IndeterminateProgress } from "~/components/IndeterminateProgress.tsx";
+import type { MarkdownRenderMode } from "~/pages/workspace/components/diffPanel/atoms.ts";
 import {
   isMarkdownPath,
   markdownRenderModeAtom,
@@ -90,8 +93,6 @@ type DiffViewerProps = {
   treeOptions?: TreeViewOptions;
   /** The sidebar-visibility toggle rendered before the breadcrumb. */
   sidebarToggle?: ReactElement;
-  /** Extra header actions (e.g. refresh) rendered before the menu. */
-  headerActions?: ReactElement;
 };
 
 /**
@@ -103,13 +104,7 @@ type DiffViewerProps = {
  * menu. It carries no multi-file tab bar, no combined "review all" view, and no
  * expand/fullscreen control.
  */
-export const DiffViewer = ({
-  workspaceId,
-  selection,
-  treeOptions,
-  sidebarToggle,
-  headerActions,
-}: DiffViewerProps): ReactElement => {
+export const DiffViewer = ({ workspaceId, selection, treeOptions, sidebarToggle }: DiffViewerProps): ReactElement => {
   const content = useDiffViewerContent(workspaceId, selection);
   // Only surface the loading bar when a file is open: the bar means "the diff
   // you're looking at is loading," which is meaningless over the empty
@@ -195,6 +190,18 @@ export const DiffViewer = ({
   const [markdownMode, setMarkdownMode] = useAtom(markdownRenderModeAtom);
   const isRichMarkdownRenderingEnabled = useAtomValue(isRichMarkdownRenderingEnabledAtom);
 
+  // A quick-opened file-view can carry an explicit "rendered" request (see the
+  // DiffSelection type). It overrides the persisted global render-mode WITHOUT
+  // writing it — the user's preference survives the quick look — and stays in
+  // force until the user toggles the mode, which records a dismissal. A repeat
+  // request (newer `openedAt`) re-applies the override.
+  const [renderOverrideDismissedAt, setRenderOverrideDismissedAt] = useState<number | null>(null);
+  const isQuickOpenRenderActive =
+    selection?.kind === "file-view" &&
+    selection.markdownMode === "rendered" &&
+    (renderOverrideDismissedAt === null || (selection.openedAt ?? 0) > renderOverrideDismissedAt);
+  const effectiveMarkdownMode: MarkdownRenderMode = isQuickOpenRenderActive ? "rendered" : markdownMode;
+
   // ReadOnlyPreview is the only path that supports rendered markdown — used for
   // file-view selections and "no diff" states. Hide the toggle elsewhere. Even
   // when visible, the toggle is shown disabled (with a hint) until the
@@ -228,33 +235,49 @@ export const DiffViewer = ({
   }, [clearHighlights]);
 
   const handleToggleMarkdownRender = useCallback((): void => {
-    setMarkdownMode((m) => {
-      const next = m === "rendered" ? "raw" : "rendered";
-      // Find-in-file is hidden in rendered mode; close it on the way in so the
-      // search bar doesn't get stuck open with no button to dismiss it.
-      if (next === "rendered") handleCloseSearch();
-      return next;
-    });
-  }, [setMarkdownMode, handleCloseSearch]);
+    // Flip from the EFFECTIVE mode (a quick-open override may differ from the
+    // persisted preference) and dismiss any active override so the toggle
+    // always visibly changes the view.
+    const next = effectiveMarkdownMode === "rendered" ? "raw" : "rendered";
+    setRenderOverrideDismissedAt(Date.now());
+    setMarkdownMode(next);
+    // Find-in-file is hidden in rendered mode; close it on the way in so the
+    // search bar doesn't get stuck open with no button to dismiss it.
+    if (next === "rendered") handleCloseSearch();
+  }, [effectiveMarkdownMode, setMarkdownMode, handleCloseSearch]);
 
   // Find-in-file walks source-view DOM; rendered markdown has none. The rendered
   // path only mounts when the experimental flag is on, so the persisted
   // "rendered" preference doesn't suppress find-in-file when the flag is off.
   const isRenderedMarkdownActive =
-    isMarkdownToggleVisible && markdownMode === "rendered" && isRichMarkdownRenderingEnabled;
+    isMarkdownToggleVisible && effectiveMarkdownMode === "rendered" && isRichMarkdownRenderingEnabled;
 
   // Quick-open a rendered view of a markdown file in the Files panel — offered
   // on the diff/commit headers (the file-view header has the render toggle
   // instead). Hidden while the experimental rendering flag is off, since the
-  // opened view would just be source.
+  // opened view would just be source. The rendered request rides on the tab
+  // (`markdownMode`) so the receiving viewer renders it without this path
+  // rewriting the global render-mode preference.
   const openFileViewTab = useSetAtom(openFileViewTabAtom);
   const canQuickOpenRenderedMarkdown =
     content.filePath !== null && isMarkdownPath(content.filePath) && isRichMarkdownRenderingEnabled;
   const handleOpenRenderedMarkdown = useCallback((): void => {
     if (!content.filePath) return;
-    setMarkdownMode("rendered");
-    openFileViewTab({ workspaceId, filePath: content.filePath });
-  }, [content.filePath, setMarkdownMode, openFileViewTab, workspaceId]);
+    openFileViewTab({ workspaceId, filePath: content.filePath, markdownMode: "rendered" });
+  }, [content.filePath, openFileViewTab, workspaceId]);
+
+  // Manual refresh from the triple-dot menu. File views and commit diffs are
+  // plain git-derived react-query entries, so an invalidation of the git
+  // subtree refetches them; the workspace diff additionally caches on the
+  // BACKEND, so diff selections go through the force_refresh fetch instead.
+  const refreshWorkspaceDiff = useForceRefreshWorkspaceDiff(workspaceId);
+  const handleRefresh = useCallback((): void => {
+    if (content.isFileView || content.isCommitDiff) {
+      invalidateWorkspaceGitQueries(workspaceId);
+      return;
+    }
+    void refreshWorkspaceDiff();
+  }, [content.isFileView, content.isCommitDiff, workspaceId, refreshWorkspaceDiff]);
 
   useKeybindingHandler("find_in_file", () => {
     if (!content.filePath || isRenderedMarkdownActive) return;
@@ -269,7 +292,7 @@ export const DiffViewer = ({
     onToggleLineWrapping: handleToggleLineWrapping,
     onToggleSearch: handleToggleSearch,
     showRenderToggle: isMarkdownToggleVisible,
-    isRendered: markdownMode === "rendered" && isRichMarkdownRenderingEnabled,
+    isRendered: effectiveMarkdownMode === "rendered" && isRichMarkdownRenderingEnabled,
     isRenderToggleEnabled: isRichMarkdownRenderingEnabled,
     onToggleRender: handleToggleMarkdownRender,
   };
@@ -366,10 +389,14 @@ export const DiffViewer = ({
             viewOptions={viewOptions}
             treeOptions={treeOptions}
             leadingControl={sidebarToggle}
-            trailingActions={headerActions}
+            onRefresh={handleRefresh}
           />
           <Flex ref={diffContentRef} direction="column" flexGrow="1" overflow="hidden" className={styles.content}>
-            <ReadOnlyPreview workspaceId={workspaceId} filePath={content.filePath} />
+            <ReadOnlyPreview
+              workspaceId={workspaceId}
+              filePath={content.filePath}
+              renderModeOverride={isQuickOpenRenderActive ? "rendered" : undefined}
+            />
           </Flex>
         </>
       ) : content.isCommitDiff && content.filePath ? (
@@ -386,7 +413,7 @@ export const DiffViewer = ({
             viewOptions={viewOptions}
             treeOptions={treeOptions}
             leadingControl={sidebarToggle}
-            trailingActions={headerActions}
+            onRefresh={handleRefresh}
             onOpenRenderedMarkdown={
               canQuickOpenRenderedMarkdown && commitFileStatus !== "D" ? handleOpenRenderedMarkdown : undefined
             }
@@ -432,7 +459,7 @@ export const DiffViewer = ({
             viewOptions={viewOptions}
             treeOptions={treeOptions}
             leadingControl={sidebarToggle}
-            trailingActions={headerActions}
+            onRefresh={handleRefresh}
             onOpenRenderedMarkdown={
               canQuickOpenRenderedMarkdown && !content.isBinary && content.status !== "D"
                 ? handleOpenRenderedMarkdown
@@ -458,7 +485,13 @@ export const DiffViewer = ({
             data-testid={ElementIds.DIFF_FILE_HEADER}
           >
             {sidebarToggle ?? <span />}
-            <DiffViewerMenu workspaceId={workspaceId} fileContext={null} isBinary={false} treeOptions={treeOptions} />
+            <DiffViewerMenu
+              workspaceId={workspaceId}
+              fileContext={null}
+              isBinary={false}
+              treeOptions={treeOptions}
+              onRefresh={handleRefresh}
+            />
           </Flex>
           {renderDiffBody()}
         </>

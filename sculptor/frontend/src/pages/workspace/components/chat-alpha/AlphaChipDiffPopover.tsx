@@ -12,6 +12,10 @@ import { themeCodeThemeAtom } from "~/common/state/atoms/themeBuilder.ts";
 import { appThemeAtom } from "~/common/state/atoms/userConfig.ts";
 import { getShikiThemes } from "~/common/theme/shikiThemes.ts";
 import { openDiffTabAtom, openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
+import {
+  adoptPierreOverrideSheet,
+  createPierreOverrideSheet,
+} from "~/pages/workspace/components/diffPanel/pierreShadowStyles.ts";
 import { usePierreHighlighterReady } from "~/pages/workspace/components/diffPanel/usePierreHighlighterReady.ts";
 import { useWorkspaceCodePath } from "~/pages/workspace/hooks/useWorkspaceCodePath.ts";
 
@@ -45,22 +49,8 @@ const splitFilePath = (filePath: string): { dir: string; base: string } => {
   return { dir: filePath.slice(0, lastSlash), base: filePath.slice(lastSlash + 1) };
 };
 
-/**
- * Stylesheet injected into Pierre's shadow DOM to override the background
- * color so the diff blends with the popover.
- */
-const bgOverrideSheet = new CSSStyleSheet();
-if (typeof bgOverrideSheet.replaceSync === "function") {
-  bgOverrideSheet.replaceSync(
-    [
-      "[data-diffs], [data-diffs-header], [data-error-wrapper] {",
-      "  --diffs-light-bg: var(--color-panel-solid) !important;",
-      "  --diffs-dark-bg: var(--color-background) !important;",
-      "  --diffs-bg: light-dark(var(--color-panel-solid), var(--color-background)) !important;",
-      "}",
-    ].join("\n"),
-  );
-}
+// The shared Pierre background override so the diff blends with the popover.
+const bgOverrideSheet = createPierreOverrideSheet();
 
 export const AlphaChipDiffPopover = ({
   chipData,
@@ -106,20 +96,13 @@ export const AlphaChipDiffPopover = ({
       .filter((d) => d.length > 0);
   }, [chipData.results]);
 
-  // Inject bg-override stylesheet into Pierre's shadow DOM. `useLayoutEffect`
-  // so the sheet is adopted between React's commit and the browser's next
-  // paint — `useEffect` runs after paint, leaving a visible flash of Pierre's
-  // raw Shiki theme background. Deps are `diffPatches` because Pierre
-  // re-creates its shadow DOM whenever the patch content changes, and the
-  // highlighter gate, which is when the container first mounts.
+  // Inject the bg-override stylesheet into Pierre's shadow DOM (see
+  // adoptPierreOverrideSheet for why this is a layout effect). Deps are
+  // `diffPatches` because Pierre re-creates its shadow DOM whenever the patch
+  // content changes, and the highlighter gate, which is when the container
+  // first mounts.
   useLayoutEffect(() => {
-    const el = pierreRef.current;
-    if (!el) return;
-    const shadowRoot = el.querySelector("diffs-container")?.shadowRoot;
-    if (!shadowRoot) return;
-    if (!shadowRoot.adoptedStyleSheets.includes(bgOverrideSheet)) {
-      shadowRoot.adoptedStyleSheets = [...shadowRoot.adoptedStyleSheets, bgOverrideSheet];
-    }
+    adoptPierreOverrideSheet(pierreRef.current, bgOverrideSheet);
   }, [diffPatches, isHighlighterReady]);
 
   const handleOpenDiffPanel = useCallback((): void => {

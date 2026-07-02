@@ -19,6 +19,7 @@ import styles from "./CommitsPanel.module.scss";
 import { ExplorerLayout } from "./ExplorerLayout.tsx";
 import { collapseAllCommitsAtom, commitsPanelSelectionAtomFamily } from "./historyPanel/atoms.ts";
 import { HistoryTabContent } from "./historyPanel/HistoryTabContent.tsx";
+import { reconcileSelectionByRecency } from "./selectionRecency.ts";
 
 const CommitsPanelContent = ({ workspaceId }: { workspaceId: string }): ReactElement => {
   const collapseAllCommits = useSetAtom(collapseAllCommitsAtom);
@@ -46,14 +47,17 @@ const CommitsPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
 
   // Reconcile the local click selection with the atom-driven one by recency:
   // whichever was activated last wins.
-  const selection = useMemo((): DiffSelection | null => {
-    const atomViewedAt = activeTab?.kind === "commit-diff" ? activeTab.viewedAt : null;
-    const isLocalNewer = selected !== null && (atomViewedAt === null || selected.at >= atomViewedAt);
-    if (isLocalNewer) {
-      return { kind: "commit-diff", commitHash: selected.commitHash, filePath: selected.filePath };
-    }
-    return commitSelectionFromTab(activeTab);
-  }, [selected, activeTab]);
+  const selection = useMemo(
+    (): DiffSelection | null =>
+      reconcileSelectionByRecency({
+        local: selected,
+        tab: activeTab,
+        tabKind: "commit-diff",
+        toSelection: (local) => ({ kind: "commit-diff", commitHash: local.commitHash, filePath: local.filePath }),
+        fromTab: commitSelectionFromTab,
+      }),
+    [selected, activeTab],
+  );
 
   // The commit history has no flat/tree toggle; the menu only offers collapse-all.
   const treeOptions: TreeViewOptions = {

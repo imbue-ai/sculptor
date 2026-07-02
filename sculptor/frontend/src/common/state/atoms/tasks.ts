@@ -85,12 +85,6 @@ export const rollbackDeleteTaskAtom = atom(
   },
 );
 
-// Holds optimistic agent titles by agent id while a rename is in flight (and for a
-// short trailing window after, to mask stale WebSocket pushes). Only the chat intro
-// still reads this atom; the panel-tab rename flow now updates taskAtomFamily
-// directly, so nothing currently writes it.
-export const pendingAgentTitlesAtom = atom<Readonly<Record<string, string>>>({});
-
 // Fine-grained derived atoms for commonly-read task fields.
 // Components subscribing to these only re-render when the specific field changes.
 // Jotai uses Object.is for primitive comparisons, so string/boolean fields that
