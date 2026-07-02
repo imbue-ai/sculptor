@@ -37,6 +37,16 @@ export const IDLE_TAIL_PADDING = PIN_BOTTOM_GAP;
  */
 export const STREAMING_TAIL_PADDING = PIN_BOTTOM_GAP + TURN_END_SHRINK_SLACK;
 
+/**
+ * The turn-end settle window: how long after a followed turn ends late content
+ * changes are still expected (the streaming cursor unmounting, the turn footer
+ * mounting a beat after the stream stops). Two mechanisms share it: the content
+ * observer keeps revealing the tail so the footer is not left below the fold
+ * (useAlphaAutoScroll), and the virtualizer holds the streaming paddingEnd
+ * floor so the shrink slack outlives the shrink (useAlphaVirtualizer).
+ */
+export const FOOTER_REVEAL_WINDOW_MS = 1200;
+
 /** The largest scrollTop the browser will allow: the very end of the padded
  *  scroll range. For a chat whose last turn is short, the dynamic `paddingEnd`
  *  makes this exactly the anchored-turn rest position (last user message at

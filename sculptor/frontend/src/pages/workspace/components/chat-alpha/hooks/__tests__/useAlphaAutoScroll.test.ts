@@ -65,12 +65,13 @@ const triggerResize = (): void => {
 /**
  * Assert the container is pinned to the bottom — scrollTop at bottomPinOffset
  * (content bottom plus the visible PIN_BOTTOM_GAP, clamped to the scroll
- * range), the observable position rather than a virtualizer mock call.
+ * range; 0 while the content still fits the viewport), the observable position
+ * rather than a virtualizer mock call.
  */
 const expectPinnedToBottom = (el: HTMLDivElement, paddingEnd = 0): void => {
   const contentBottom = Math.max(0, el.scrollHeight - paddingEnd - el.clientHeight);
   const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
-  expect(el.scrollTop).toBe(Math.min(contentBottom + PIN_BOTTOM_GAP, maxScroll));
+  expect(el.scrollTop).toBe(contentBottom === 0 ? 0 : Math.min(contentBottom + PIN_BOTTOM_GAP, maxScroll));
 };
 
 describe("useAlphaAutoScroll", () => {
