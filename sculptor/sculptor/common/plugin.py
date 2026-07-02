@@ -19,7 +19,8 @@ def get_plugin_dirs() -> list[Path]:
     """Return the list of bundled plugin directories that exist on disk.
 
     Sculptor ships three plugins:
-      - `sculptor-plugin` — runtime helpers (/help, /sculpt-cli)
+      - `sculptor-plugin` — runtime helpers (/help, /sculpt-cli,
+        /build-sculptor-plugin)
       - `sculptor-workflow` — opinionated engineering workflow
         (/spec, /mock, /architect, /plan, /build, /review, /fix-bug,
         /setup-repo)

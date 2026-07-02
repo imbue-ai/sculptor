@@ -413,7 +413,7 @@ check:
     # Note: check-large-files is not included here as it checks staged files only (for pre-commit hooks)
     # Run checks in parallel (fastest first for quicker feedback).
     ./sculptor/frontend/node_modules/.bin/concurrently \
-      --names check-yaml,check-uv-lock,check-shellcheck,ratchets,typecheck,check-file-hygiene,check-reserved-plugin-names,lint \
+      --names check-yaml,check-uv-lock,check-shellcheck,ratchets,typecheck,check-file-hygiene,check-reserved-plugin-names,check-plugin-sdk-dts,lint \
       --prefix-colors auto \
       "just _run-check check-yaml" \
       "just _run-check check-uv-lock" \
@@ -422,6 +422,7 @@ check:
       "just _run-check typecheck" \
       "just _run-check check-file-hygiene" \
       "just _run-check check-reserved-plugin-names" \
+      "just _run-check check-plugin-sdk-dts" \
       "just _run-check lint" \
       2>&1 | grep -v 'exited with code 0'
 
@@ -935,6 +936,38 @@ generate-api:
       pnpm run generate-api
     }
     quiet_by_default generate-api _do_generate_api
+
+# Roll up the plugin SDK declarations into the build-sculptor-plugin skill's sdk.d.ts
+[group("codegen")]
+generate-plugin-sdk-dts: generate-api
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ _quiet_by_default_fn }}
+    _do_generate_plugin_sdk_dts() {
+      {{ nvm_use }}
+      cd "{{justfile_directory()}}/sculptor/frontend"
+      pnpm run generate-plugin-sdk-dts
+    }
+    quiet_by_default generate-plugin-sdk-dts _do_generate_plugin_sdk_dts
+
+# Verify the checked-in sdk.d.ts rollup matches the plugin SDK source
+[group("ci")]
+check-plugin-sdk-dts:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ _quiet_by_default_fn }}
+    _do_check_plugin_sdk_dts() {
+      {{ nvm_use }}
+      cd "{{justfile_directory()}}/sculptor/frontend"
+      tmp_file=$(mktemp)
+      trap 'rm -f "$tmp_file"' EXIT
+      ./scripts/generate-plugin-sdk-dts.sh "$tmp_file"
+      if ! diff -u ../sculptor-plugin/skills/build-sculptor-plugin/sdk.d.ts "$tmp_file"; then
+        echo "sdk.d.ts is stale - run 'just generate-plugin-sdk-dts' and commit the result."
+        exit 1
+      fi
+    }
+    quiet_by_default check-plugin-sdk-dts _do_check_plugin_sdk_dts
 
 # Installs all frontend libraries necessary
 [group("install")]

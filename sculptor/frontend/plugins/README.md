@@ -77,6 +77,11 @@ the exact set the import map provides, derived from `RUNTIME_MODULE_SPECIFIERS`
 
 ## SDK surface plugins target (`@sculptor/plugin-sdk`)
 
+The full contract is rolled up into
+`sculptor/sculptor-plugin/skills/build-sculptor-plugin/sdk.d.ts` (generated —
+`just generate-plugin-sdk-dts`, freshness-checked in CI), which ships to every
+Sculptor agent inside the build-sculptor-plugin skill. Highlights:
+
 - `useCurrentWorkspace(selector?)` — the active workspace as a curated view
   (`id`, `description`, `branch`, `targetBranch`, `pullRequestUrl`); pass a
   selector to subscribe to one field, e.g.

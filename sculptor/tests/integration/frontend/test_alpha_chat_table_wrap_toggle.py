@@ -13,8 +13,8 @@ from playwright.sync_api import expect
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.alpha_chat_view import click_visible_in_chat_viewport
 from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
-from sculptor.testing.elements.alpha_chat_view import get_alpha_container_height
-from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_by
+from sculptor.testing.elements.alpha_chat_view import get_alpha_scroll_position
+from sculptor.testing.elements.alpha_chat_view import scroll_test_id_into_chat_viewport
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -68,20 +68,26 @@ def test_table_wrap_toggle_is_per_table_and_does_not_scroll_chat(sculptor_instan
 
     wrap_toggles = alpha_view.get_table_wrap_toggles()
     expect(wrap_toggles).to_have_count(2)
-    # Default per-table state is "scroll" — both toggles say "Switch to wrap".
-    expect(wrap_toggles.nth(0)).to_have_attribute("aria-label", "Switch to wrap")
-    expect(wrap_toggles.nth(1)).to_have_attribute("aria-label", "Switch to wrap")
+    # Default per-table state is "wrap" — both toggles say "Switch to scroll".
+    expect(wrap_toggles.nth(0)).to_have_attribute("aria-label", "Switch to scroll")
+    expect(wrap_toggles.nth(1)).to_have_attribute("aria-label", "Switch to scroll")
 
-    # Scroll up so we are not pinned at the bottom — only then can we see if
-    # the toggle yanks the scroll.
-    container_height = get_alpha_container_height(page)
-    scroll_alpha_chat_by(page, -int(container_height))
+    # Bring the first table's wrap toggle into the viewport, positioned near the
+    # top. Because that table sits high in the (tall) response, plenty of content
+    # remains below it — so we are not pinned at the bottom, and any scroll yank
+    # caused by the toggle would be observable. Scrolling a specific toggle into
+    # view is robust to how tall the wrapped tables render; a fixed pixel delta
+    # from the bottom is not.
+    scroll_test_id_into_chat_viewport(page, ElementIDs.ALPHA_CHAT_TABLE_WRAP_TOGGLE)
     page.wait_for_function(
         f"""() => {{
             const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
-            return el ? el.scrollTop > 100 : false;
+            if (!el) return false;
+            return (el.scrollHeight - el.scrollTop - el.clientHeight) > 200;
         }}"""
     )
+
+    scroll_before = get_alpha_scroll_position(page)
 
     # Dispatch the click directly so Playwright doesn't first scroll the
     # element into view (which would itself shift scrollTop).
@@ -89,16 +95,21 @@ def test_table_wrap_toggle_is_per_table_and_does_not_scroll_chat(sculptor_instan
 
     # Exactly one toggle should have flipped — the other table's wrap state
     # must stay independent.
-    switched = alpha_view.get_table_wrap_toggles_with_label("Switch to scroll")
+    switched = alpha_view.get_table_wrap_toggles_with_label("Switch to wrap")
     expect(switched).to_have_count(1)
-    unchanged = alpha_view.get_table_wrap_toggles_with_label("Switch to wrap")
+    unchanged = alpha_view.get_table_wrap_toggles_with_label("Switch to scroll")
     expect(unchanged).to_have_count(1)
 
-    # Confirm scroll did not jump to the bottom after layout settles.
+    # The toggle changes the table's height, which the virtualizer would
+    # normally compensate for by bumping scrollTop; the per-item skip flag must
+    # suppress that so the view stays put. Confirm scrollTop held steady (and we
+    # did not get yanked toward the bottom) after layout settles.
     page.wait_for_function(
-        f"""() => {{
+        f"""(before) => {{
             const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
             if (!el) return false;
-            return (el.scrollHeight - el.scrollTop - el.clientHeight) > 200;
-        }}"""
+            return Math.abs(el.scrollTop - before) < 100 &&
+                   (el.scrollHeight - el.scrollTop - el.clientHeight) > 200;
+        }}""",
+        arg=scroll_before,
     )

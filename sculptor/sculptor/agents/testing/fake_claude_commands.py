@@ -1184,6 +1184,9 @@ def handle_emit_task_notification(args: dict, emit_streaming: bool) -> list[dict
 
     Args:
         args: Must contain "task_id". Optional: "tool_use_id", "status", "summary".
+            Pass "tool_use_id": null to omit the field, reproducing the orphaned-
+            task-on-restart notification the real CLI emits (see SCU-1666). When
+            "tool_use_id" is absent a placeholder id is generated instead.
     """
     return [
         make_task_notification_message(
@@ -1279,6 +1282,84 @@ def handle_background_task_notification(args: dict, emit_streaming: bool) -> lis
             content_blocks=[make_text_block(response_text)],
         )
     )
+
+    return messages
+
+
+def handle_notification_turn_then_response(args: dict, emit_streaming: bool) -> list[dict]:
+    """Emit a task-notification turn *followed by* the user's own message turn.
+
+    Reproduces SCU-1660: a Monitor background task completes just as a new user
+    prompt is dispatched, so the CLI delivers the pending ``<task-notification>``
+    as its own turn (init -> assistant -> result) BEFORE processing the user's
+    message. Everything below sits inside a single FakeClaude invocation (one
+    CLI process), between the process's own opening ``init`` and the closing
+    ``end`` that ``fake_claude.main()`` appends — that closing ``end`` is the
+    user turn's result.
+
+    Frame order returned by this handler:
+      1. system/task_notification (the Monitor completion, delivered first)
+      2. notification turn: init -> assistant(ack) -> result
+      3. user turn: init -> assistant(text) -> assistant(Bash tool_use) ->
+         tool_result -> assistant(continuation)
+
+    The notification turn's ``result`` is the trap: if the output processor
+    treats it as terminal, the loop exits and the CLI is torn down before the
+    user turn's frames are processed, silently abandoning the request after its
+    first tool result.
+
+    Args:
+        args: Optional "task_id", "tool_use_id", "summary", "ack_text",
+              "user_pre_text", "user_tool_command", "user_post_text".
+    """
+    task_id = args.get("task_id", "task_monitor_1")
+    tool_use_id = args.get("tool_use_id", generate_id("toolu"))
+    summary = args.get("summary", "Background task completed")
+    ack_text = args.get("ack_text", "This is just the stale Monitor task being cleaned up.")
+    user_pre_text = args.get("user_pre_text", "I'll fetch the latest state of that branch.")
+    user_tool_command = args.get("user_tool_command", "git fetch origin")
+    user_post_text = args.get("user_post_text", "Done — merged and repushed.")
+
+    session_id = generate_id("session")
+    user_tool_id = generate_id("toolu")
+    messages: list[dict] = []
+
+    # 1. The completed Monitor task's notification, delivered ahead of the user turn.
+    messages.append(
+        make_task_notification_message(
+            task_id=task_id,
+            tool_use_id=tool_use_id,
+            status="completed",
+            summary=summary,
+        )
+    )
+
+    # 2. Notification turn: init -> assistant(ack) -> result.
+    messages.append(make_init_message(session_id=session_id))
+    ack_msg_id = generate_id("msg")
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=ack_msg_id, text=ack_text))
+    messages.append(make_assistant_message(message_id=ack_msg_id, content_blocks=[make_text_block(ack_text)]))
+    messages.append(make_end_message(session_id=session_id))
+
+    # 3. User turn: init -> text -> Bash tool_use -> tool_result -> continuation.
+    messages.append(make_init_message(session_id=session_id))
+    pre_msg_id = generate_id("msg")
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=pre_msg_id, text=user_pre_text))
+    messages.append(make_assistant_message(message_id=pre_msg_id, content_blocks=[make_text_block(user_pre_text)]))
+
+    tool_block = make_tool_use_block(tool_id=user_tool_id, tool_name="Bash", tool_input={"command": user_tool_command})
+    tool_msg_id = generate_id("msg")
+    if emit_streaming:
+        messages.extend(make_streaming_tool_events(message_id=tool_msg_id, tool_blocks=[tool_block]))
+    messages.append(make_assistant_message(message_id=tool_msg_id, content_blocks=[tool_block]))
+    messages.append(make_tool_result_message(tool_use_id=user_tool_id, content="Fetched new commits."))
+
+    post_msg_id = generate_id("msg")
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=post_msg_id, text=user_post_text))
+    messages.append(make_assistant_message(message_id=post_msg_id, content_blocks=[make_text_block(user_post_text)]))
 
     return messages
 
@@ -2043,12 +2124,17 @@ def handle_usage_limit(args: dict, emit_streaming: bool) -> list[dict]:
 def handle_crash(args: dict, emit_streaming: bool) -> list[dict]:
     """Simulate an unrecoverable agent crash that puts the task into ERROR state.
 
-    Emits an init message followed by a structurally invalid assistant message
-    (valid JSON but ``content`` is a string instead of a list).  When the output
-    processor parses the assistant message it encounters a ``TypeError`` which is
-    **not** an ``AgentClientError``.  This propagates through the agent wrapper's
-    generic ``except Exception`` handler which re-raises, killing the processing
-    thread and ultimately putting the task into ERROR state.
+    Emits an init message followed by a ``tool_result`` (user) message with no
+    assistant turn in flight.  ``_parse_tool_result_response`` asserts a turn is
+    active (``current_turn_id is not None``), so this raises ``AssertionError``,
+    which is **not** an ``AgentClientError``.  The agent wrapper re-raises
+    anything that isn't an ``AgentClientError``, so the exception propagates out
+    of the turn and puts the task into ERROR state — unlike a recoverable API
+    error, which surfaces an error block and leaves the agent running.
+
+    (This deliberately does not rely on a malformed message shape: the output
+    processor now normalizes those and contains any parser exception as a
+    warning, so a bad message alone no longer crashes the turn.)
 
     Args:
         delay_seconds: Optional delay before emitting the crash.  Useful in
@@ -2063,22 +2149,11 @@ def handle_crash(args: dict, emit_streaming: bool) -> list[dict]:
 
     _emit_event(make_init_message(session_id))
 
-    # Emit a malformed assistant message: valid JSON, but "content" is a string
-    # instead of a list.  The parser iterates over the string character by
-    # character, then ``content_char["type"]`` fails with TypeError because
-    # string indices must be integers.
-    _emit_event(
-        {
-            "type": "assistant",
-            "message": {
-                "id": generate_id("msg"),
-                "content": "not_a_list",
-                "role": "assistant",
-                "model": "fake",
-                "type": "message",
-            },
-        }
-    )
+    # A tool_result arriving with no assistant turn in flight violates the output
+    # processor's ``current_turn_id is not None`` invariant and raises
+    # AssertionError — a non-AgentClientError the wrapper treats as an
+    # unrecoverable crash.
+    _emit_event(make_tool_result_message(tool_use_id=generate_id("toolu"), content="crash"))
 
     sys.exit(1)
 
@@ -2284,6 +2359,7 @@ COMMAND_REGISTRY: dict[str, Callable[..., list[dict]]] = {
     "emit_task_notification": handle_emit_task_notification,
     "emit_task_updated": handle_emit_task_updated,
     "emit_result": handle_emit_result,
+    "notification_turn_then_response": handle_notification_turn_then_response,
     "auto_bg_bash": handle_auto_bg_bash,
     "multi_step": handle_multi_step,
     "parallel_tools": handle_parallel_tools,

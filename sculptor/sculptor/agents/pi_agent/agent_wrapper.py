@@ -562,6 +562,13 @@ class PiAgent(DefaultAgentWrapper):
     harness: PiHarness
     config: PiAgentConfig
     git_hash: str
+    # The switcher's persisted value at construction (`AgentTaskStateV2.current_model`).
+    # A user can switch models before the first message — before this pi process
+    # exists — so the switch lands only in task state, not in pi's session. `start()`
+    # adopts it (`_adopt_preselected_model`) so pi runs the selected model from the
+    # first turn and the switcher does not flicker back to pi's own default. None when
+    # the switcher has no persisted selection yet (pi's default is used).
+    preselected_model: ModelOption | None = None
     # Carries chat turns AND between-turns control messages (context reset,
     # model switch) through one FIFO so each runs strictly after any in-flight
     # turn — the sole-reader window where the control RPCs' responses can be
@@ -1202,6 +1209,43 @@ class PiAgent(DefaultAgentWrapper):
         )
         return new_model
 
+    def _adopt_preselected_model(
+        self, pi_default: ModelOption | None, options: list[ModelOption], authenticated: set[str]
+    ) -> ModelOption | None:
+        """Adopt the persisted `preselected_model` onto pi at start, returning the model
+        to surface as current.
+
+        Applied before the catalog is surfaced so pi runs the selection from the first
+        turn without the switcher flickering through pi's default. Only a selection pi
+        still offers and whose provider is authenticated is adopted (via `set_model`);
+        otherwise — a disconnected provider, or a failed switch — pi's own default is
+        kept rather than a model that cannot run.
+        """
+        preselected = self.preselected_model
+        if preselected is None:
+            return pi_default
+        if (
+            pi_default is not None
+            and preselected.provider == pi_default.provider
+            and preselected.model_id == pi_default.model_id
+        ):
+            return pi_default
+        if preselected.provider not in authenticated:
+            return pi_default
+        if not any(
+            option.provider == preselected.provider and option.model_id == preselected.model_id for option in options
+        ):
+            return pi_default
+        adopted = self._request_set_model_blocking(
+            preselected.provider, preselected.model_id, _MODEL_FETCH_TIMEOUT_SECONDS
+        )
+        if adopted is None:
+            logger.info(
+                "PiAgent could not adopt preselected model {} at start; using pi default", preselected.model_id
+            )
+            return pi_default
+        return adopted
+
     def _fetch_models_into_state(self) -> None:
         """Fetch pi's model catalog + current model and surface them onto task state.
 
@@ -1222,6 +1266,7 @@ class PiAgent(DefaultAgentWrapper):
             if option is not None:
                 options.append(option)
         authenticated = compute_authenticated_provider_ids()
+        current_model = self._adopt_preselected_model(current_model, options, authenticated)
         curated = _curate_models(options, current_model, authenticated)
         # Don't strand the agent on a model whose provider was just deauthorized
         # (e.g. the user disconnected it): switch to an authenticated model and
@@ -1766,9 +1811,11 @@ class PiAgent(DefaultAgentWrapper):
         session-level and persists for later turns. On success pi returns the new
         Model; we re-emit a `ModelsAvailableAgentMessage` carrier (same catalog,
         new current model) so the persisted current model and the switcher's
-        selection follow. A `success:false` response (e.g. `Model not found`) or
-        no acknowledgement is raised as `PiSetModelError`, leaving the current
-        model unchanged.
+        selection follow. A `success:false` response (e.g. `Model not found`) is
+        raised as `PiSetModelError` after rolling the switcher back to pi's real
+        current model (the endpoint wrote the requested model optimistically); an
+        unacknowledged switch (pi unreachable) is raised without a rollback, since pi
+        cannot be queried for its state.
         """
         with self._handle_user_message(message):
             command_id = generate_id()
@@ -1783,6 +1830,7 @@ class PiAgent(DefaultAgentWrapper):
                     "pi did not acknowledge set_model within the timeout", exit_code=None, metadata=None
                 )
             if not response.success:
+                self._emit_current_model_rollback()
                 raise PiSetModelError(
                     response.error or f"pi rejected set_model for {message.provider}/{message.model_id}",
                     exit_code=None,
@@ -1808,6 +1856,31 @@ class PiAgent(DefaultAgentWrapper):
                     current_model=new_model,
                 )
             )
+
+    def _emit_current_model_rollback(self) -> None:
+        """Re-emit the model pi is actually on, undoing an optimistically-written switch.
+
+        The set-model endpoint writes the requested model onto task state before pi
+        confirms it, so a rejected switch would otherwise leave the switcher showing a
+        model pi never adopted. Query pi's real current model and re-emit the cached
+        catalog with it so the switcher rolls back. Best-effort: only runs with a
+        cached catalog, and skips when pi reports no current model — the switch
+        failure itself is surfaced separately as a RequestFailure.
+        """
+        if not self._available_models:
+            return
+        state = self._request_state_blocking()
+        current_raw = state.get("model") if isinstance(state, dict) else None
+        current_model = _model_option_from_pi(current_raw) if isinstance(current_raw, dict) else None
+        if current_model is None:
+            return
+        self._output_messages.put(
+            ModelsAvailableAgentMessage(
+                message_id=AgentMessageID(),
+                available_models=self._available_models,
+                current_model=current_model,
+            )
+        )
 
     def _handle_refresh_models(self, message: RefreshModelsUserMessage) -> None:
         """Re-fetch pi's catalog and re-emit it after a global credential change.

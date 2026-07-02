@@ -32,8 +32,10 @@ from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.chat_state import DiffToolContent
 from sculptor.state.chat_state import GenericToolContent
 from sculptor.state.chat_state import QuestionOption
+from sculptor.state.chat_state import TextBlock
 from sculptor.state.chat_state import UserQuestion
 from sculptor.state.chat_state import make_plan_approval_question
+from sculptor.state.claude_state import ParsedAssistantResponse
 from sculptor.state.claude_state import ParsedToolResultResponse
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.tasks.handlers.run_agent.git import run_git_command_in_environment
@@ -669,3 +671,61 @@ def test_create_tool_content_preserves_error_text_for_failed_edit() -> None:
     )
     assert isinstance(content, GenericToolContent)
     assert "File has not been read yet" in content.text
+
+
+# ---------------------------------------------------------------------------
+# Crash-safety for unexpected-but-valid-JSON message shapes.
+#
+# These exercise the full ``parse_claude_code_json_lines`` path (the one the
+# output loop actually calls) rather than the ``_simple`` parser directly, so a
+# regression in either layer is caught. Each shape used to raise out of the
+# parser and kill the agent turn.
+# ---------------------------------------------------------------------------
+
+
+def test_parse_lines_assistant_string_content_does_not_crash() -> None:
+    """A bare-string assistant ``content`` must parse into a single text block."""
+    line = json.dumps(
+        {
+            "type": "assistant",
+            "message": {"id": "msg_str", "content": "plain string content"},
+        }
+    )
+    parsed = parse_claude_code_json_lines(line, tool_use_map=None, diff_tracker=None)
+    assert isinstance(parsed, ParsedAssistantResponse)
+    assert parsed.content_blocks == [TextBlock(text="plain string content")]
+
+
+def test_parse_lines_empty_user_content_list_returns_none() -> None:
+    """A user message with an empty content list must be skipped, not crash."""
+    line = json.dumps(
+        {
+            "type": "user",
+            "message": {"role": "user", "content": []},
+        }
+    )
+    assert parse_claude_code_json_lines(line, tool_use_map=None, diff_tracker=None) is None
+
+
+def test_parse_lines_tool_result_missing_content_does_not_crash() -> None:
+    """A tool_result block with no ``content`` key must parse without raising."""
+    tool_use_id = "toolu_missing_content"
+    line = json.dumps(
+        {
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tool_use_id,
+                        "is_error": False,
+                    }
+                ],
+            },
+        }
+    )
+    parsed = parse_claude_code_json_lines(line, tool_use_map={tool_use_id: ("Bash", {})}, diff_tracker=None)
+    assert isinstance(parsed, ParsedToolResultResponse)
+    (block,) = parsed.content_blocks
+    assert block.tool_use_id == tool_use_id
