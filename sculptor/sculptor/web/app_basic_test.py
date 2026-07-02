@@ -8,7 +8,6 @@ NOTE: Endpoints are not currently tested for cross-user authorization (preventin
 
 from pathlib import Path
 from typing import Generator
-from unittest.mock import patch
 
 import httpx
 import pytest
@@ -720,12 +719,11 @@ def test_set_model_before_first_message_persists_selection_without_a_live_agent(
         task = _create_pi_task_with_catalog(
             transaction, user_session, test_project, test_services, workspace, current_model=_PI_CATALOG[0]
         )
-    # No agent runs to resolve the switch; a short outcome bound keeps the test fast.
-    with patch("sculptor.web.app._SET_MODEL_OUTCOME_TIMEOUT_SECONDS", 0.5):
-        response = client.post(
-            f"/api/v1/workspaces/{workspace.object_id}/agents/{task.object_id}/set_model",
-            json=model_dump(SetModelRequest(provider="anthropic", model_id="claude-haiku-4-5"), is_camel_case=True),
-        )
+    # No agent runs to resolve the switch; the endpoint records the selection and returns.
+    response = client.post(
+        f"/api/v1/workspaces/{workspace.object_id}/agents/{task.object_id}/set_model",
+        json=model_dump(SetModelRequest(provider="anthropic", model_id="claude-haiku-4-5"), is_camel_case=True),
+    )
     assert response.status_code == 200, response.text
     with user_session.open_transaction(test_services) as transaction:
         updated = test_services.task_service.get_task(task.object_id, transaction)
@@ -733,6 +731,31 @@ def test_set_model_before_first_message_persists_selection_without_a_live_agent(
     state = AgentTaskStateV2.model_validate(updated.current_state)
     assert state.current_model is not None
     assert state.current_model.model_id == "claude-haiku-4-5"
+
+
+def test_set_model_rejects_a_model_not_in_the_catalog(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    """A model the agent's catalog does not offer is rejected at the boundary (400)
+    rather than recorded as a selection the agent would never apply."""
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+        task = _create_pi_task_with_catalog(
+            transaction, user_session, test_project, test_services, workspace, current_model=_PI_CATALOG[0]
+        )
+    response = client.post(
+        f"/api/v1/workspaces/{workspace.object_id}/agents/{task.object_id}/set_model",
+        json=model_dump(SetModelRequest(provider="anthropic", model_id="claude-not-a-real-model"), is_camel_case=True),
+    )
+    assert response.status_code == 400, response.text
+    # The rejected request leaves the current model untouched.
+    with user_session.open_transaction(test_services) as transaction:
+        updated = test_services.task_service.get_task(task.object_id, transaction)
+    assert updated is not None
+    state = AgentTaskStateV2.model_validate(updated.current_state)
+    assert state.current_model is not None
+    assert state.current_model.model_id == _PI_CATALOG[0].model_id
 
 
 def test_update_naming_pattern_performs_update(

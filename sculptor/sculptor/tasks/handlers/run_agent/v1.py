@@ -1161,7 +1161,7 @@ def _refresh_model_fields_from_db(
     agent waits for its first message, so this handler's in-memory copy goes stale.
     Refresh only those two fields (leaving the rest of the in-memory state as-is) so a
     pre-message switch reaches agent construction and survives `finalize_task_setup`'s
-    write-back. A no-op when nothing changed or the row is unreadable.
+    write-back. A no-op when nothing changed or the task row is missing.
     """
     with services.data_model_service.open_task_transaction() as transaction:
         task_row = transaction.get_task(task_id)

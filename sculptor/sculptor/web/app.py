@@ -92,7 +92,6 @@ from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessa
 from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageUserMessage
-from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
 from sculptor.interfaces.agents.agent import SetModelUserMessage
 from sculptor.interfaces.agents.agent import TerminalAgentConfig
 from sculptor.interfaces.agents.agent import TerminalAgentSignalRunnerMessage
@@ -2736,13 +2735,6 @@ def interrupt_workspace_agent(
             )
 
 
-# How long the set-model request waits for a live agent to resolve the switch (so a
-# rejection surfaces as a synchronous 400 the frontend can toast). A switch that
-# nothing resolves in time — most importantly, a pre-first-message switch with no live
-# agent — returns 200 on the optimistic write rather than hanging.
-_SET_MODEL_OUTCOME_TIMEOUT_SECONDS = 5.0
-
-
 @router.post("/api/v1/workspaces/{workspace_id}/agents/{agent_id}/set_model")
 def set_workspace_agent_model(
     workspace_id: str,
@@ -2754,9 +2746,11 @@ def set_workspace_agent_model(
     """Switch a running agent's model (the pi out-of-band `set_model` path).
 
     Used by harnesses with a backend model list (pi); Claude's model rides each
-    turn instead. The request blocks until the agent resolves the switch and
-    returns 400 with the agent's error message when the switch is rejected (e.g.
-    pi reports "Model not found"), so the frontend can toast it.
+    turn instead. Rejects (400) a harness that cannot switch models or a model not
+    in the agent's catalog; otherwise records the selection — written onto task
+    state so the server-driven switcher reflects it at once (even before a pi
+    process exists) and enqueued for the agent, which applies it to pi when it next
+    runs and rolls the switcher back if pi rejects it.
     """
     services = get_services_from_request_or_websocket(request)
 
@@ -2778,10 +2772,9 @@ def set_workspace_agent_model(
                 detail="model selection requires a harness that supports it",
             )
         # supports_model_selection also covers per-turn switching (Claude); the
-        # out-of-band set_model RPC is only honored by a harness that sources a
+        # out-of-band set_model path is only honored by a harness that sources a
         # backend model list (pi). A harness without a catalog has no
-        # SetModelUserMessage handler, so reject it rather than block the request
-        # forever on a message nothing resolves.
+        # SetModelUserMessage handler.
         model_state = task.current_state if isinstance(task.current_state, AgentTaskStateV2) else None
         available_models = harness.get_available_models(model_state)
         if not available_models:
@@ -2789,51 +2782,42 @@ def set_workspace_agent_model(
                 status_code=400,
                 detail="this agent does not support switching models",
             )
-
-    # Optimistically reflect the switch in task state so the server-driven switcher
-    # updates at once, even before a pi process exists to acknowledge it. The agent
-    # reconciles pi to this selection when it next runs (adopting it at start, or on the
-    # queued switch) and rolls it back if pi rejects it. Only a model pi actually offers
-    # is written; an unknown model is left for the switch below to reject.
-    selected_model = next(
-        (
-            option
-            for option in available_models
-            if option.provider == set_model_request.provider and option.model_id == set_model_request.model_id
-        ),
-        None,
-    )
-    if selected_model is not None:
-        with user_session.open_transaction(services) as transaction:
-            services.task_service.update_available_models(
-                task_id=task.object_id,
-                available_models=available_models,
-                current_model=selected_model,
-                transaction=transaction,
+        # The switcher only offers models from this catalog, so a request for anything
+        # else cannot be honored — reject it rather than record a selection the agent
+        # would never apply (with no live agent, that would be a silent no-op).
+        selected_model = next(
+            (
+                option
+                for option in available_models
+                if option.provider == set_model_request.provider and option.model_id == set_model_request.model_id
+            ),
+            None,
+        )
+        if selected_model is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"model {set_model_request.provider}/{set_model_request.model_id} is not available for this agent",
             )
 
-    message_id = AgentMessageID()
-    with await_request_outcome(
-        message_id, task.object_id, services, timeout=_SET_MODEL_OUTCOME_TIMEOUT_SECONDS
-    ) as outcome:
-        with user_session.open_transaction(services) as transaction:
-            services.task_service.create_message(
-                message=SetModelUserMessage(
-                    message_id=message_id,
-                    provider=set_model_request.provider,
-                    model_id=set_model_request.model_id,
-                ),
-                task_id=task.object_id,
-                transaction=transaction,
-            )
-    # A live agent that rejects the switch resolves it as a RequestFailure within the
-    # wait; surface it as a 400 so the frontend toasts. A switch nothing resolves in
-    # time (no live agent yet) returns 200 — the optimistic write already reflects the
-    # selection, and the agent applies (or rolls back) the switch when it next runs.
-    terminal = outcome[0] if outcome else None
-    if isinstance(terminal, RequestFailureAgentMessage):
-        detail = str(terminal.error.args[0]) if terminal.error.args else "Failed to set model"
-        raise HTTPException(status_code=400, detail=detail)
+    # Record the selection in one write: reflect it on the server-driven switcher now
+    # (optimistically, so it updates even with no live agent to acknowledge it), and
+    # enqueue the switch for the agent to apply to pi — adopted at start, or on the
+    # queued message — rolling the switcher back if pi rejects it.
+    with user_session.open_transaction(services) as transaction:
+        services.task_service.update_available_models(
+            task_id=task.object_id,
+            available_models=available_models,
+            current_model=selected_model,
+            transaction=transaction,
+        )
+        services.task_service.create_message(
+            message=SetModelUserMessage(
+                provider=set_model_request.provider,
+                model_id=set_model_request.model_id,
+            ),
+            task_id=task.object_id,
+            transaction=transaction,
+        )
 
 
 @router.post("/api/v1/workspaces/{workspace_id}/agents/{agent_id}/btw")
@@ -2956,43 +2940,6 @@ def await_message_response(
             else:
                 if isinstance(update, PersistentRequestCompleteAgentMessage):
                     if update.request_id == message_id:
-                        break
-
-
-@contextlib.contextmanager
-def await_request_outcome(
-    message_id: AgentMessageID,
-    task_id: TaskID,
-    services: CompleteServiceCollection,
-    timeout: float,
-) -> Generator[list[PersistentRequestCompleteAgentMessage], None, None]:
-    """Like `await_message_response`, but captures the terminal request message and
-    bounds the wait.
-
-    Yields a one-element list the caller reads after the block to inspect the
-    outcome (e.g. distinguish RequestSuccess from RequestFailure and surface the
-    failure to the HTTP caller). The list is empty if the subscription is torn down
-    before the request resolves, or if `timeout` (seconds) elapses first — so a
-    request nothing resolves (e.g. no live agent to process the message) returns
-    rather than blocking forever.
-    """
-    outcome: list[PersistentRequestCompleteAgentMessage] = []
-    with services.task_service.subscribe_to_task(task_id) as updates_queue:
-        yield outcome
-        logger.debug("Waiting for outcome of message {} in task {}", message_id, task_id)
-        deadline = time.monotonic() + timeout
-        while True:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                return
-            try:
-                update = updates_queue.get(timeout=min(1.0, remaining))
-            except queue.Empty:
-                pass
-            else:
-                if isinstance(update, PersistentRequestCompleteAgentMessage):
-                    if update.request_id == message_id:
-                        outcome.append(update)
                         break
 
 
