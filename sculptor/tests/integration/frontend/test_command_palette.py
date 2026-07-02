@@ -13,6 +13,7 @@ from playwright.sync_api import expect
 
 from sculptor.testing.elements.base import dismiss_with_escape
 from sculptor.testing.elements.base import wait_for_one_frame
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import blur_active_element
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -318,6 +319,45 @@ def test_command_palette_list_does_not_animate_scrolls(sculptor_instance_: Sculp
     expect(list_locator).to_have_css("scroll-behavior", "auto")
 
     dismiss_with_escape(palette)
+
+
+@user_story("to find a Minimize section command in the palette while a section is maximized")
+def test_command_palette_maximize_command_reads_minimize_while_maximized(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    # Regression lock for the `view.maximize_section` copy: the command toggles
+    # maximize/restore, so while a section is maximized its row must read
+    # "Minimize section" (state-aware getTitle) and be findable by typing
+    # "minimize" — a user staring at a maximized section searches for the way
+    # OUT, not the way in. Not @release-marked: start_task_and_wait_for_ready
+    # selects the Fake Claude model, which is gated off in packaged-release runs.
+    page = sculptor_instance_.page
+    task_page = start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Cmd+K Minimize WS")
+    center = PlaywrightWorkspaceSection(page, "center")
+
+    # Before maximizing, the row reads "Maximize section".
+    palette = task_page.open_command_palette()
+    palette.type_query("maximize")
+    row = palette.get_item_by_command_id("view.maximize_section")
+    expect(row).to_be_visible()
+    expect(row).to_contain_text("Maximize section")
+
+    # Run it — the active (center) section maximizes and the palette closes.
+    palette.select_by_command_id("view.maximize_section")
+    expect(palette).not_to_be_visible()
+    expect(center.get_active_ring()).to_have_attribute("data-maximized", "true")
+
+    # While maximized, searching "minimize" must surface the same command, and
+    # its copy must flip to "Minimize section".
+    blur_active_element(page)
+    palette = task_page.open_command_palette_with_keyboard()
+    palette.type_query("minimize")
+    expect(row).to_be_visible()
+    expect(row).to_contain_text("Minimize section")
+
+    # Running it again restores the section.
+    palette.select_by_command_id("view.maximize_section")
+    expect(center.get_active_ring()).not_to_have_attribute("data-maximized", "true")
 
 
 @user_story("to create a new agent in the current workspace from the command palette")
