@@ -31,6 +31,7 @@ from sculptor.agents.testing.fake_claude_jsonl import make_streaming_text_events
 from sculptor.agents.testing.fake_claude_jsonl import make_streaming_tool_events
 from sculptor.agents.testing.fake_claude_jsonl import make_task_notification_message
 from sculptor.agents.testing.fake_claude_jsonl import make_task_started_message
+from sculptor.agents.testing.fake_claude_jsonl import make_task_updated_message
 from sculptor.agents.testing.fake_claude_jsonl import make_text_block
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_result_message
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_use_block
@@ -1197,6 +1198,40 @@ def handle_emit_task_notification(args: dict, emit_streaming: bool) -> list[dict
     ]
 
 
+def handle_emit_result(args: dict, emit_streaming: bool) -> list[dict]:
+    """Emit ONLY a result/success message (no assistant/init/notification).
+
+    Use this inside ``multi_step`` to close a turn at a controlled point — e.g.
+    to end a background task's follow-up turn so a subsequent background task's
+    ``task_updated`` cleanup is evaluated at that turn boundary.
+
+    Args:
+        args: Optional "session_id".
+    """
+    return [make_end_message(session_id=args.get("session_id"))]
+
+
+def handle_emit_task_updated(args: dict, emit_streaming: bool) -> list[dict]:
+    """Emit ONLY a system/task_updated message (no surrounding result/init/response).
+
+    Use this inside ``multi_step`` to simulate a background task reporting a
+    terminal state via task_updated WITHOUT a following task_notification — the
+    real CLI does this when a task finishes while it is busy emitting another
+    turn. For a subagent (task_type ``local_agent``) the CLI still has a
+    follow-up notification/turn to deliver afterwards, so the harness must not
+    treat this task_updated as the end of the session.
+
+    Args:
+        args: Must contain "task_id". Optional: "status" (default "completed").
+    """
+    return [
+        make_task_updated_message(
+            task_id=args["task_id"],
+            status=args.get("status", "completed"),
+        )
+    ]
+
+
 def handle_background_task_notification(args: dict, emit_streaming: bool) -> list[dict]:
     """Emit task_notification + init + assistant response for a completed background task.
 
@@ -2322,6 +2357,8 @@ COMMAND_REGISTRY: dict[str, Callable[..., list[dict]]] = {
     "background_task_started": handle_background_task_started,
     "background_task_notification": handle_background_task_notification,
     "emit_task_notification": handle_emit_task_notification,
+    "emit_task_updated": handle_emit_task_updated,
+    "emit_result": handle_emit_result,
     "notification_turn_then_response": handle_notification_turn_then_response,
     "auto_bg_bash": handle_auto_bg_bash,
     "multi_step": handle_multi_step,

@@ -87,12 +87,31 @@ _RE_TRAILING_MEDIA_TAG = re.compile(r"<(?:img|video)\b[^>]*$", re.IGNORECASE)
 # subprocess is genuinely done, with no further turns coming.
 _DEFERRED_COMPLETION_TOOLS: frozenset[str] = frozenset({"Monitor"})
 
+# task_started ``task_type`` values that denote a subagent launched via the
+# Task/Agent tool (as opposed to a ``local_bash`` background command). Like
+# Monitor, a subagent emits a follow-up task_notification and synthesis turn
+# AFTER a terminal task_updated (in which the main agent processes the
+# subagent's result), so its cleanup must be deferred to keep the turn alive
+# for that delivery. Covers the current CLI value (``local_agent``) and the
+# older ``agent``.
+_SUBAGENT_TASK_TYPES: frozenset[str] = frozenset({"local_agent", "agent"})
+
 # Grace period for the deferred cleanup. If no follow-up turn arrives within
 # this window after task_updated{completed} for a deferred tool, the loop
 # force-cleans-up so it can exit. This handles the rare case where the CLI
 # drops both task_notification AND the follow-up event-delivery turn (observed
 # when Monitor completes while a foreground tool is also executing).
 _DEFERRED_CLEANUP_GRACE_SECONDS: float = 5.0
+
+# Grace period for a subagent's deferred cleanup. Larger than Monitor's because
+# a subagent's follow-up task_notification can be queued behind another
+# subagent's synthesis turn, arriving several seconds after its task_updated
+# (observed in SCU-1669). Sized to the CLI's own CLAUDE_CODE_STREAM_CLOSE_TIMEOUT
+# default (60s) — its budget for completing close/handshake delivery. This
+# bounds only idle time (the loop exits the instant the real notification/init
+# arrives), so it is a worst-case ceiling, not added latency, and it preserves
+# the anti-hang guarantee if the notification is truly dropped.
+_SUBAGENT_COMPLETION_GRACE_SECONDS: float = 60.0
 
 # Interval between diagnostic logs emitted while the output loop waits, after the
 # final message, for still-pending background tasks or a scheduled wakeup turn.
@@ -278,9 +297,10 @@ class ClaudeOutputProcessor:
         # cleared to prevent the output loop from waiting forever.
         self._completed_via_task_updated: set[str] = set()
         # Tasks whose task_updated{completed} cleanup is deferred by one turn.
-        # Used for Monitor, which emits a follow-up event-delivery turn after
-        # the task_updated; clearing immediately at the current turn's result
-        # cuts off that delivery turn before the agent can react. Promoted to
+        # Used for Monitor and for subagents (task_type in _SUBAGENT_TASK_TYPES),
+        # both of which emit a follow-up event-delivery turn after the
+        # task_updated; clearing immediately at the current turn's result cuts
+        # off that delivery turn before the agent can react. Promoted to
         # _completed_via_task_updated when the next ``system/init`` arrives.
         self._completed_pending_deferred: set[str] = set()
         # Wall-clock deadline for the deferred cleanup. If no follow-up turn
@@ -292,6 +312,10 @@ class ClaudeOutputProcessor:
         # at task_started time so task_updated handling can distinguish tools
         # that need deferred cleanup (Monitor) from those that don't (Bash).
         self._task_id_to_tool_name: dict[str, str] = {}
+        # task_id -> task_type reported at task_started (e.g. "local_bash",
+        # "local_agent"). task_updated does not carry the type, so record it here
+        # to route subagent completions to deferred cleanup (see SCU-1669).
+        self._task_id_to_task_type: dict[str, str] = {}
         # Timestamp when found_final_message was set. Used for diagnostic
         # logging when waiting for background task notifications.
         self._final_message_time: float | None = None
@@ -466,8 +490,7 @@ class ClaudeOutputProcessor:
                         and now >= self._completed_pending_deferred_deadline
                     ):
                         logger.info(
-                            "Deferred-completion grace period expired ({:.1f}s); force-clearing {} task(s): {}",
-                            _DEFERRED_CLEANUP_GRACE_SECONDS,
+                            "Deferred-completion grace period expired; force-clearing {} task(s): {}",
                             len(self._completed_pending_deferred),
                             self._completed_pending_deferred,
                         )
@@ -683,6 +706,7 @@ class ClaudeOutputProcessor:
                 tool_use_info = self.tool_use_map.get(result.tool_use_id)
                 if tool_use_info is not None:
                     self._task_id_to_tool_name[result.task_id] = tool_use_info[0]
+                self._task_id_to_task_type[result.task_id] = result.task_type
                 self.output_message_queue.put(
                     BackgroundTaskStartedAgentMessage(
                         message_id=AgentMessageID(),
@@ -749,11 +773,15 @@ class ClaudeOutputProcessor:
                 # task_notification in this case. Record the completion so
                 # _parse_stream_end_response can clear it at result time.
                 #
-                # Exception: for tools in _DEFERRED_COMPLETION_TOOLS (Monitor),
-                # the CLI emits a follow-up event-delivery turn AFTER
-                # task_updated. Clearing at the current turn's result/success
-                # would drop that delivery turn. Defer cleanup until the next
-                # init promotes the entry, or the grace period expires.
+                # Exception: Monitor and subagents (task_type in
+                # _SUBAGENT_TASK_TYPES) emit a follow-up event-delivery turn
+                # AFTER task_updated — Monitor its event delivery, a subagent its
+                # task_notification + the main agent's synthesis turn. Clearing
+                # at the current turn's result/success would drop that delivery
+                # turn (SCU-1669). Defer cleanup until the next init promotes the
+                # entry, or the grace period expires. Subagents get a longer
+                # grace because their notification can be queued behind another
+                # subagent's synthesis turn.
                 if result.status in ("completed", "failed", "stopped"):
                     logger.info(
                         "Background task updated: task_id={} status={}",
@@ -761,11 +789,23 @@ class ClaudeOutputProcessor:
                         result.status,
                     )
                     tool_name = self._task_id_to_tool_name.get(result.task_id, "")
+                    task_type = self._task_id_to_task_type.get(result.task_id, "")
+                    deferral_grace: float | None = None
                     if tool_name in _DEFERRED_COMPLETION_TOOLS:
+                        deferral_grace = _DEFERRED_CLEANUP_GRACE_SECONDS
+                    elif task_type in _SUBAGENT_TASK_TYPES:
+                        deferral_grace = _SUBAGENT_COMPLETION_GRACE_SECONDS
+                    if deferral_grace is not None:
                         self._completed_pending_deferred.add(result.task_id)
+                        deadline = time.monotonic() + deferral_grace
+                        # The deadline is shared across deferred tasks; keep the
+                        # latest so a subagent's longer grace is not cut short by
+                        # a concurrently-deferred Monitor's shorter one.
                         if self._completed_pending_deferred_deadline is None:
-                            self._completed_pending_deferred_deadline = (
-                                time.monotonic() + _DEFERRED_CLEANUP_GRACE_SECONDS
+                            self._completed_pending_deferred_deadline = deadline
+                        else:
+                            self._completed_pending_deferred_deadline = max(
+                                self._completed_pending_deferred_deadline, deadline
                             )
                     else:
                         self._completed_via_task_updated.add(result.task_id)

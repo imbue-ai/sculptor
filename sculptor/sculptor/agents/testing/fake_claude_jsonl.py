@@ -92,6 +92,26 @@ def make_task_notification_message(
     return msg
 
 
+def make_task_updated_message(
+    task_id: str,
+    status: str = "completed",
+) -> dict:
+    """Return a dict for a system/task_updated message.
+
+    The real Claude CLI emits task_updated as a background task moves through
+    its lifecycle; the status lives under ``patch``. A terminal ``patch.status``
+    (completed/failed/stopped) can arrive with NO accompanying task_notification
+    when the task finishes while the CLI is busy with another turn (see the
+    handling in ``output_processor._process_output``).
+    """
+    return {
+        "type": "system",
+        "subtype": "task_updated",
+        "task_id": task_id,
+        "patch": {"status": status},
+    }
+
+
 def make_text_block(text: str) -> dict:
     """Return a text content block."""
     return {"type": "text", "text": text}
