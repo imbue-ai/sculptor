@@ -572,8 +572,8 @@ class ClaudeOutputProcessor:
                 #     API returned malformed data or the CLI emitted debug output).
                 #   - anything else (TypeError/KeyError/IndexError/...): the line
                 #     is valid JSON but has a message shape the parser cannot
-                #     handle. Layer 1 handles the known shapes; this is the
-                #     backstop for the next unknown one.
+                #     handle. The parser normalizes the shapes we know about; this
+                #     is the backstop for the next unknown one.
                 truncated_line = line[:200] + ("..." if len(line) > 200 else "")
                 if isinstance(e, json.JSONDecodeError):
                     detail = "non-JSON line"
