@@ -125,9 +125,10 @@ class BrowserController:
         if action_type == "focus":
             # Move keyboard focus to a named element. Use this before `type` when
             # another surface (e.g. the agent terminal, which grabs focus on
-            # load) would otherwise capture the keystrokes.
+            # load) would otherwise capture the keystrokes. Uses focus() rather
+            # than a click so it can't accidentally activate a button/checkbox.
             locator = self._resolve_locator(action)
-            locator.click()
+            locator.focus()
             time.sleep(0.3)
             screenshot_path = self._take_screenshot("focus")
             return {"success": True, "screenshot": screenshot_path}
@@ -151,13 +152,20 @@ class BrowserController:
             # the typed draft is non-empty. Pass no `text` to submit the existing
             # draft as-is.
             text = action.get("text")
+            if text is not None and not text.strip():
+                raise ValueError("send_message 'text' is empty — omit 'text' to submit the existing draft")
             chat_input = page.get_by_test_id(_CHAT_INPUT_TEST_ID)
             if text is not None:
                 self._focus_and_replace(chat_input, text)
                 time.sleep(0.2)
             else:
                 chat_input.click()
-            page.get_by_test_id(_SEND_BUTTON_TEST_ID).click()
+            send_button = page.get_by_test_id(_SEND_BUTTON_TEST_ID)
+            # The button disables itself while the draft is empty; report that
+            # plainly instead of letting the click block until it times out.
+            if send_button.is_disabled():
+                raise ValueError("nothing to send — the chat draft is empty")
+            send_button.click()
             time.sleep(0.5)
             screenshot_path = self._take_screenshot("send_message")
             return {"success": True, "screenshot": screenshot_path}

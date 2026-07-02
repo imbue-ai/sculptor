@@ -87,12 +87,16 @@ loc() { curl -s -X POST http://127.0.0.1:$PORT/execute \
   | python3 -c "import json,sys; e=json.load(sys.stdin).get('elements',[]); print(f\"{e[0]['x']} {e[0]['y']}\" if e else '')"; }
 click() { curl -s -X POST http://127.0.0.1:$PORT/execute -d "{\"action\": \"click\", \"x\": ${1% *}, \"y\": ${1#* }}" >/dev/null; }
 
-for i in $(seq 1 6); do
+for i in $(seq 1 8); do
   [ -n "$(loc ONBOARDING_EMAIL_INPUT)" ] && curl -s -X POST http://127.0.0.1:$PORT/execute \
     -d '{"action": "fill", "id": "ONBOARDING_EMAIL_INPUT", "text": "test@test.com"}' >/dev/null
-  SUBMIT=$(loc ONBOARDING_EMAIL_SUBMIT); [ -n "$SUBMIT" ] && click "$SUBMIT"
-  DONE=$(loc ONBOARDING_COMPLETE_BUTTON)
-  if [ -n "$DONE" ]; then click "$DONE"; echo "Onboarding dismissed"; break; fi
+  CLICKED=0
+  for id in ONBOARDING_EMAIL_SUBMIT ONBOARDING_COMPLETE_BUTTON; do
+    COORD=$(loc $id); [ -n "$COORD" ] && { click "$COORD"; CLICKED=1; }
+  done
+  # No advance button on screen means the modal is gone — the flow has several
+  # steps (email and/or an installation check), so keep going until none remain.
+  [ "$CLICKED" -eq 0 ] && { echo "Onboarding dismissed"; break; }
   sleep 1
 done
 ```
