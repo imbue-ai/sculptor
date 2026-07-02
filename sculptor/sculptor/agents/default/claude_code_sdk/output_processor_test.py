@@ -12,8 +12,11 @@ import pytest
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.default.claude_code_sdk.mcp_server import SculptorMcpServer
 from sculptor.agents.default.claude_code_sdk.output_processor import ClaudeOutputProcessor
+from sculptor.agents.default.claude_code_sdk.output_processor import _DEFERRED_CLEANUP_GRACE_SECONDS
 from sculptor.agents.default.claude_code_sdk.output_processor import _DEFERRED_COMPLETION_TOOLS
 from sculptor.agents.default.claude_code_sdk.output_processor import _RE_TRAILING_MEDIA_TAG
+from sculptor.agents.default.claude_code_sdk.output_processor import _SUBAGENT_COMPLETION_GRACE_SECONDS
+from sculptor.agents.default.claude_code_sdk.output_processor import _SUBAGENT_TASK_TYPES
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import parse_claude_code_json_lines
 from sculptor.agents.testing.fake_claude_jsonl import make_assistant_message
 from sculptor.agents.testing.fake_claude_jsonl import make_end_message
@@ -334,13 +337,25 @@ def _feed_jsonl(processor: ClaudeOutputProcessor, jsonl_dicts: list[dict]) -> No
             tool_use_info = processor.tool_use_map.get(result.tool_use_id)
             if tool_use_info is not None:
                 processor._task_id_to_tool_name[result.task_id] = tool_use_info[0]
+            processor._task_id_to_task_type[result.task_id] = result.task_type
         elif isinstance(result, ParsedTaskUpdatedResponse):
             if result.status in ("completed", "failed", "stopped"):
                 tool_name = processor._task_id_to_tool_name.get(result.task_id, "")
+                task_type = processor._task_id_to_task_type.get(result.task_id, "")
+                deferral_grace: float | None = None
                 if tool_name in _DEFERRED_COMPLETION_TOOLS:
+                    deferral_grace = _DEFERRED_CLEANUP_GRACE_SECONDS
+                elif task_type in _SUBAGENT_TASK_TYPES:
+                    deferral_grace = _SUBAGENT_COMPLETION_GRACE_SECONDS
+                if deferral_grace is not None:
                     processor._completed_pending_deferred.add(result.task_id)
+                    deadline = time.monotonic() + deferral_grace
                     if processor._completed_pending_deferred_deadline is None:
-                        processor._completed_pending_deferred_deadline = time.monotonic() + 5.0
+                        processor._completed_pending_deferred_deadline = deadline
+                    else:
+                        processor._completed_pending_deferred_deadline = max(
+                            processor._completed_pending_deferred_deadline, deadline
+                        )
                 else:
                     processor._completed_via_task_updated.add(result.task_id)
         elif isinstance(result, ParsedTaskNotificationResponse):
@@ -1170,6 +1185,85 @@ def _collect_tool_ids(messages: Iterable) -> set[str]:
             elif isinstance(block, ToolResultBlock):
                 tool_ids.add(block.tool_use_id)
     return tool_ids
+
+
+def _collect_text(messages: Iterable) -> str:
+    """Concatenate all TextBlock text across the given emitted chat messages."""
+    texts: list[str] = []
+    for message in messages:
+        for block in getattr(message, "content", None) or []:
+            text = getattr(block, "text", None)
+            if text:
+                texts.append(text)
+    return " | ".join(texts)
+
+
+class TestSubagentCompletionViaTaskUpdated:
+    """Regression tests for SCU-1669: a subagent (task_type ``local_agent``)
+    that reports completion via ``task_updated`` — with no accompanying
+    ``task_notification`` — must not end the turn before its follow-up
+    notification/synthesis turn is delivered.
+
+    The CLI emits a subagent's terminal ``task_updated`` (with the
+    ``task_notification`` and synthesis turn queued behind another turn) when
+    the task finishes while the CLI is busy. Treating that ``task_updated`` like
+    a Bash background task (terminal, nothing more coming) cleared it at the
+    next turn's result, emptied the pending set, and exited the output loop
+    while the subagent's synthesis turn was still queued — silently dropping it.
+    """
+
+    @staticmethod
+    def _two_subagent_sequence() -> list[dict]:
+        """Main turn launches two ``local_agent`` subagents and ends; subagent A
+        completes with a proper notification + synthesis; subagent B reports a
+        terminal ``task_updated`` (no notification) and only then delivers its
+        real notification + synthesis turn.
+
+        The second ``end`` (which closes subagent A's synthesis turn) is the turn
+        boundary at which subagent B was wrongly cleared before the fix.
+        """
+        session_id = "session_scu1669"
+        return [
+            make_task_started_message(
+                task_id="sub-a", tool_use_id="toolu-a", description="Explore A", task_type="local_agent"
+            ),
+            make_task_started_message(
+                task_id="sub-b", tool_use_id="toolu-b", description="Explore B", task_type="local_agent"
+            ),
+            make_assistant_message("msg-main", [make_text_block("Launched both subagents; awaiting results.")]),
+            make_end_message(session_id=session_id),
+            # Subagent A completes normally: notification + synthesis turn.
+            make_task_notification_message(
+                task_id="sub-a", tool_use_id="toolu-a", status="completed", summary="A done"
+            ),
+            make_init_message(session_id=session_id),
+            make_assistant_message("msg-a", [make_text_block("SUBAGENT-A-SYNTHESIS")]),
+            # Subagent B reports terminal status via task_updated ONLY.
+            _make_task_updated_message(task_id="sub-b", status="completed"),
+            # This end closes subagent A's synthesis turn — the boundary at which
+            # subagent B was wrongly cleared, ending the loop before B's synthesis.
+            make_end_message(session_id=session_id),
+            # Subagent B's real notification + synthesis turn.
+            make_task_notification_message(
+                task_id="sub-b", tool_use_id="toolu-b", status="completed", summary="B done"
+            ),
+            make_init_message(session_id=session_id),
+            make_assistant_message("msg-b", [make_text_block("SUBAGENT-B-SYNTHESIS")]),
+            make_end_message(session_id=session_id),
+        ]
+
+    def test_subagent_synthesis_delivered_after_task_updated(self) -> None:
+        """Both subagents' synthesis turns must be delivered.
+
+        Before the fix, subagent B's synthesis (``SUBAGENT-B-SYNTHESIS``) was
+        dropped: the output loop cleared subagent B via the Bash-style
+        task_updated fallback at the intervening ``end`` and exited while B's
+        synthesis turn was still queued.
+        """
+        emitted = _run_process_output(self._two_subagent_sequence())
+        text = _collect_text(emitted)
+        assert "SUBAGENT-A-SYNTHESIS" in text
+        assert "SUBAGENT-B-SYNTHESIS" in text
 
 
 class TestSubagentInterleavedTurnIds:
