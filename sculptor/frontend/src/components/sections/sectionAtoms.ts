@@ -168,6 +168,24 @@ export const setSectionSizeAtom = atom(
   },
 );
 
+// Clamp bounds for the explorer list-pane width. The minimum keeps the list
+// usable (file names readable); the maximum keeps the viewer from being starved
+// even in a wide section.
+export const EXPLORER_LIST_MIN_WIDTH_PX = 180;
+export const EXPLORER_LIST_MAX_WIDTH_PX = 480;
+
+// The explorer (Files / Changes / Commits) list-pane width. One global,
+// persisted value: dragging the divider in any of the three panels resizes all
+// of them, in every workspace. Writes clamp to the bounds above so a drag can
+// neither collapse the list nor swallow the viewer.
+export const explorerListWidthAtom: WritableAtom<number, [number], void> = atom(
+  (get) => get(globalLayoutAtom).explorerListWidthPx,
+  (_get, set, widthPx: number) => {
+    const clamped = Math.max(EXPLORER_LIST_MIN_WIDTH_PX, Math.min(EXPLORER_LIST_MAX_WIDTH_PX, widthPx));
+    set(globalLayoutAtom, (prev) => ({ ...prev, explorerListWidthPx: clamped }));
+  },
+);
+
 // ── Scope switching / removal ─────────────────────────────────────────────────
 
 // A workspace's snapshot is "empty" (never visited / nothing seeded) when no panel is

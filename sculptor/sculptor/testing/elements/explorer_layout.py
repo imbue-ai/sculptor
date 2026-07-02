@@ -12,11 +12,13 @@ class PlaywrightExplorerLayoutElement(PlaywrightIntegrationTestElement):
     """Page Object Model for the shared list-plus-viewer scaffold.
 
     The Files / Changes / Commits panels embed the same ``ExplorerLayout``: a
-    fixed-width list (file tree / changes browser / commit history) on the
-    left — not user-resizable, so the pane stays the same size across panels —
-    and an always-visible viewer on the right. The sidebar-visibility toggle is
-    rendered into the viewer's header; when nothing is selected the
-    viewer shows its empty state.
+    list (file tree / changes browser / commit history) on the left and an
+    always-visible viewer on the right, separated by a drag-resizable divider.
+    The list width is one persisted value shared across the three panels and
+    across workspaces (clamped to a min/max in the atom), so resizing it in one
+    panel resizes it everywhere. The sidebar-visibility toggle is rendered into
+    the viewer's header; when nothing is selected the viewer shows its empty
+    state.
 
     The layout's row container carries no testid and the list / viewer are
     SIBLINGS under it, so this POM is constructed scoped to the owning SECTION
@@ -34,14 +36,65 @@ class PlaywrightExplorerLayoutElement(PlaywrightIntegrationTestElement):
         return self.get_by_test_id(ElementIDs.FILE_BROWSER_PANEL)
 
     def get_resize_handle(self) -> Locator:
-        """The list-resize divider the fixed-width redesign REMOVED.
+        """The drag-resizable divider between the list and the viewer.
 
-        The layout intentionally renders no such separator anymore; this
-        locator exists so tests can assert the affordance stays gone
-        (``to_have_count(0)``). The workspace sidebar's identically named
-        handle lives outside the section scope, so it cannot match here.
+        A ``role=separator`` element labeled distinctly from the workspace
+        sidebar's handle (which lives outside the section scope anyway) and
+        from a split section's ``Resize {section} split`` divider, so it
+        resolves uniquely within the section. Hidden while the sidebar is
+        collapsed.
         """
-        return self.get_by_role("separator", name="Resize sidebar")
+        return self.get_by_role("separator", name="Resize file list")
+
+    def get_list_width_px(self) -> float:
+        """Measure the rendered width of the list pane, in pixels.
+
+        The resize divider sits immediately after the list pane and the pane
+        starts at the section root's left edge, so the distance between their
+        x-positions is the pane's rendered width. Measuring via the divider is
+        uniform across the Files / Changes / Commits lists, whose content
+        carries different testids.
+        """
+        handle_box = self.get_resize_handle().bounding_box()
+        root_box = self.bounding_box()
+        assert handle_box is not None and root_box is not None, "list pane and divider must be visible to measure"
+        return handle_box["x"] - root_box["x"]
+
+    def wait_for_list_width_above(self, min_px: float) -> float:
+        """Poll the rendered list width until it exceeds ``min_px``; return it.
+
+        A divider drag writes the new width synchronously during the pointer
+        moves, but a busy renderer can commit the resulting layout a beat
+        after the pointer-up round-trip returns, so a single post-drag
+        measurement can still read the pre-drag layout. Polling keeps the
+        measurement robust under load; a width that never crosses ``min_px``
+        raises with both values so direction-of-change failures stay readable.
+        """
+        width = self.get_list_width_px()
+        for _attempt in range(50):
+            width = self.get_list_width_px()
+            if width > min_px:
+                return width
+            self._page.wait_for_timeout(100)
+        raise AssertionError(f"List pane width never exceeded {min_px:.0f}px; last measured {width:.0f}px")
+
+    def drag_resize_handle_by(self, delta_px: float) -> None:
+        """Drag the list divider horizontally by ``delta_px`` (positive widens the list).
+
+        Uses raw mouse down / stepped move / up because the handle listens for
+        window-level pointer events during the drag (it is not HTML
+        drag-and-drop, so ``drag_to`` does not apply).
+        """
+        handle = self.get_resize_handle()
+        expect(handle).to_be_visible()
+        box = handle.bounding_box()
+        assert box is not None
+        start_x = box["x"] + box["width"] / 2
+        start_y = box["y"] + box["height"] / 2
+        self._page.mouse.move(start_x, start_y)
+        self._page.mouse.down()
+        self._page.mouse.move(start_x + delta_px, start_y, steps=5)
+        self._page.mouse.up()
 
     def get_diff_viewer(self) -> PlaywrightDiffViewerElement:
         """Get the viewer (detail) embedded in this layout."""

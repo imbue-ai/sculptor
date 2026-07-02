@@ -56,9 +56,9 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_panel_dropdown import open_panel
+from sculptor.testing.elements.changes_panel import get_changes_panel_in
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.elements.explorer_layout import get_explorer_layout_in
 from sculptor.testing.elements.files_panel import PlaywrightFilesPanelElement
 from sculptor.testing.elements.files_panel import get_files_panel_in
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
@@ -211,10 +211,13 @@ def _open_files_panel_with(
 ) -> tuple[PlaywrightTaskPage, PlaywrightFilesPanelElement]:
     """Run a FakeClaude prompt, wait for it, then open the Files panel.
 
-    Returns the task page and the Files panel POM scoped to the opened section.
-    Pass ``sub_section="left"`` to keep the agent chat visible in the center (e.g.
-    when the test still needs to send chat messages). ``workspace_name`` names the
-    created workspace so a test can navigate back to it later.
+    Returns the task page and the Files panel POM scoped to the section that
+    actually hosts the panel. Files is a seeded panel living in the LEFT
+    section, and ``open_panel`` reveals a seeded panel where it lives for both
+    ``sub_section="center"`` (the default) and ``"left"`` — it never moves one
+    to center — so callers must scope panel/layout POMs to the returned POM
+    rather than assuming a section. ``workspace_name`` names the created
+    workspace so a test can navigate back to it later.
     """
     task_page = start_task_and_wait_for_ready(page, prompt=prompt, workspace_name=workspace_name)
     chat_panel = task_page.get_chat_panel()
@@ -611,30 +614,72 @@ def test_directory_replaced_by_symlink_no_duplicate_row(sculptor_instance_: Scul
 
 
 # --------------------------------------------------------------------------- #
-# FCC-04 / FCC-05 / FCC-06: fixed-width sidebar + toggle + always-visible viewer
+# FCC-04 / FCC-05 / FCC-06: resizable shared-width sidebar + toggle +
+# always-visible viewer
 # --------------------------------------------------------------------------- #
 
 
-@user_story("to rely on the file-browser sidebar keeping its size")
-def test_shared_sidebar_is_fixed_width_with_no_resize_handle(sculptor_instance_: SculptorInstance) -> None:
-    """The ExplorerLayout sidebar (FCC-04) is a fixed width: it offers no
-    resize divider, so the list cannot be dragged to a new size and stays
-    consistent across the Files / Changes / Commits panels.
+@user_story("to widen the file-browser list by dragging its divider and see the same width in the Changes panel")
+def test_list_divider_drag_resizes_and_width_is_shared_across_panels(sculptor_instance_: SculptorInstance) -> None:
+    """Dragging the ExplorerLayout divider (FCC-04) widens the list pane, and
+    the new width carries over when the Changes panel becomes the section's
+    active tab — the width is one shared, persisted value across the Files /
+    Changes / Commits panels rather than per-panel state.
 
-    The list and the always-visible viewer render side by side, and no
-    ``role=separator`` resize handle exists inside the layout for a user to
-    drag — a reintroduced divider fails the zero-count assertion.
+    The Files / Changes panels stay in their seeded LEFT section (``open_panel``
+    reveals a seeded panel where it lives; it never moves one to center). That
+    section's ~20% default width is narrower than the list's default width plus
+    the drag growth, so the section is widened first via its keyboard-drivable
+    border to give the drag explicit headroom — otherwise the divider would be
+    pushed past the section edge and clipped by the section's overflow. Width
+    changes are asserted coarsely (direction of change, then equality within a
+    small tolerance), not exact-pixel, to avoid layout-math flakiness.
     """
     page = sculptor_instance_.page
-    _open_files_panel_with(page, WRITE_FILES_PROMPT, sub_section="left")
+    _, files_panel = _open_files_panel_with(page, WRITE_FILES_PROMPT)
 
-    left = PlaywrightWorkspaceSection(page, "left")
-    layout = get_explorer_layout_in(left.get_section(), page)
+    # Scope the layout to the section root that actually hosts the panel (the
+    # seeded left section) via the returned POM, never a hard-coded section.
+    layout = files_panel.get_explorer_layout()
     expect(layout.get_list()).to_be_visible()
-    expect(layout.get_diff_viewer()).to_be_visible()
+    expect(layout.get_resize_handle()).to_be_visible()
 
-    # No resize affordance inside the layout: the divider is gone by design.
-    expect(layout.get_resize_handle()).to_have_count(0)
+    # Widen the left section before dragging: keyboard steps on its border
+    # (each ~10% of the grid) take it from its ~20% default to comfortably
+    # above list-default + drag growth, and the poll waits for the widened
+    # section to actually render before anything is measured.
+    section_handle = PlaywrightWorkspaceSection(page, "left").get_resize_handle()
+    expect(section_handle).to_be_visible()
+    section_handle.focus()
+    for _ in range(3):
+        section_handle.press("ArrowRight")
+    page.wait_for_function(
+        """(testId) => {
+            const el = document.querySelector(`[data-testid="${testId}"]`);
+            return el && el.getBoundingClientRect().width >= 450;
+        }""",
+        arg=str(ElementIDs.SECTION_LEFT),
+    )
+
+    start_width = layout.get_list_width_px()
+    layout.drag_resize_handle_by(80)
+
+    # Poll rather than measure once: the drag writes the width synchronously,
+    # but a busy renderer can commit the resulting layout a beat later.
+    grown_width = layout.wait_for_list_width_above(start_width + 40)
+
+    # Open Changes as the section's active tab: its list renders at the SAME
+    # shared width the drag just set. Gate on the Changes list itself (not the
+    # divider, which the outgoing Files layout also renders) so the width is
+    # measured on the mounted Changes panel.
+    changes_root = open_panel(page, "changes", sub_section="left")
+    changes_panel = get_changes_panel_in(changes_root, page)
+    expect(changes_panel.get_list()).to_be_visible()
+    expect(layout.get_resize_handle()).to_be_visible()
+    changes_width = layout.get_list_width_px()
+    assert abs(changes_width - grown_width) <= 2, (
+        f"Changes list must reuse the shared width: files={grown_width:.0f}, changes={changes_width:.0f}"
+    )
 
 
 @user_story("to hide and show the file-browser sidebar from the viewer header")

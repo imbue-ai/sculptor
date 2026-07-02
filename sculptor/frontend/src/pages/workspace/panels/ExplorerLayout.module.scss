@@ -12,9 +12,10 @@
 }
 
 .list {
-  // Fixed pixel width (set inline); the viewer flexes to fill the rest. A single
-  // 1px right border delineates the list from the viewer.
-  border-right: 1px solid var(--gray-a5);
+  // Pixel width from the shared explorer list-width atom (set inline); the
+  // viewer flexes to fill the rest. The ResizeHandle rendered after this pane
+  // is the single 1px divider delineating the list from the viewer, so the
+  // pane carries no right border of its own.
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
