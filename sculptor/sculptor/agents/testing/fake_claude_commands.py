@@ -2089,12 +2089,17 @@ def handle_usage_limit(args: dict, emit_streaming: bool) -> list[dict]:
 def handle_crash(args: dict, emit_streaming: bool) -> list[dict]:
     """Simulate an unrecoverable agent crash that puts the task into ERROR state.
 
-    Emits an init message followed by a structurally invalid assistant message
-    (valid JSON but ``content`` is a string instead of a list).  When the output
-    processor parses the assistant message it encounters a ``TypeError`` which is
-    **not** an ``AgentClientError``.  This propagates through the agent wrapper's
-    generic ``except Exception`` handler which re-raises, killing the processing
-    thread and ultimately putting the task into ERROR state.
+    Emits an init message followed by a ``tool_result`` (user) message with no
+    assistant turn in flight.  ``_parse_tool_result_response`` asserts a turn is
+    active (``current_turn_id is not None``), so this raises ``AssertionError``,
+    which is **not** an ``AgentClientError``.  The agent wrapper re-raises
+    anything that isn't an ``AgentClientError``, so the exception propagates out
+    of the turn and puts the task into ERROR state — unlike a recoverable API
+    error, which surfaces an error block and leaves the agent running.
+
+    (This deliberately does not rely on a malformed message shape: the output
+    processor now normalizes those and contains any parser exception as a
+    warning, so a bad message alone no longer crashes the turn.)
 
     Args:
         delay_seconds: Optional delay before emitting the crash.  Useful in
@@ -2109,22 +2114,11 @@ def handle_crash(args: dict, emit_streaming: bool) -> list[dict]:
 
     _emit_event(make_init_message(session_id))
 
-    # Emit a malformed assistant message: valid JSON, but "content" is a string
-    # instead of a list.  The parser iterates over the string character by
-    # character, then ``content_char["type"]`` fails with TypeError because
-    # string indices must be integers.
-    _emit_event(
-        {
-            "type": "assistant",
-            "message": {
-                "id": generate_id("msg"),
-                "content": "not_a_list",
-                "role": "assistant",
-                "model": "fake",
-                "type": "message",
-            },
-        }
-    )
+    # A tool_result arriving with no assistant turn in flight violates the output
+    # processor's ``current_turn_id is not None`` invariant and raises
+    # AssertionError — a non-AgentClientError the wrapper treats as an
+    # unrecoverable crash.
+    _emit_event(make_tool_result_message(tool_use_id=generate_id("toolu"), content="crash"))
 
     sys.exit(1)
 
