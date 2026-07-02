@@ -47,9 +47,9 @@ from playwright.sync_api import Locator
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
-from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
@@ -85,15 +85,14 @@ _AUQ_PROMPT = 'fake_claude:ask_user_question `{"questions": [{"question": "Pick 
 
 
 def _open_workspace_after_restart(page: Page) -> None:
-    """Click the persisted workspace tab on a fresh Sculptor instance."""
-    layout = PlaywrightProjectLayoutPage(page)
-    workspace_tab = layout.get_workspace_tabs().first
-    expect(workspace_tab).to_be_visible(timeout=_RESTART_VISIBILITY_TIMEOUT_MS)
-    workspace_tab.click()
+    """Click the persisted workspace's sidebar row on a fresh Sculptor instance."""
+    workspace_row = get_workspace_sidebar(page).get_workspace_rows().first
+    expect(workspace_row).to_be_visible(timeout=_RESTART_VISIBILITY_TIMEOUT_MS)
+    workspace_row.click()
 
 
 def _agent_tab(page: Page) -> Locator:
-    return PlaywrightAgentTabBarElement(page).get_agent_tabs().first
+    return PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs().first
 
 
 @user_story("not have my interrupted prompt silently re-run after Sculptor restarts")

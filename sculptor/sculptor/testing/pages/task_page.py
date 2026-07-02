@@ -7,7 +7,6 @@ from playwright.sync_api import expect
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.actions_panel import PlaywrightActionsPanelElement
 from sculptor.testing.elements.add_panel_dropdown import open_panel
-from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.changes_panel import PlaywrightChangesPanelElement
 from sculptor.testing.elements.chat_panel import PlaywrightChatPanelElement
 from sculptor.testing.elements.compaction_header import PlaywrightCompactionBarElement
@@ -22,16 +21,6 @@ class PlaywrightTaskPage(PlaywrightProjectLayoutPage):
     def get_chat_panel(self) -> PlaywrightChatPanelElement:
         chat_panel = self.get_by_test_id(ElementIDs.CHAT_PANEL)
         return PlaywrightChatPanelElement(locator=chat_panel, page=self._page)
-
-    def get_agent_tab_bar(self) -> PlaywrightAgentTabBarElement:
-        """Get the agent-tab-bar shim over the center section's panel tabs.
-
-        Agents render as panel tabs in the center section header
-        (``PANEL_TAB-agent:<id>``), created from the section's add-panel dropdown.
-        The returned shim maps the legacy agent-tab-bar API (reads / creation /
-        rename / close / diagnostics / status dot) onto the new panel-tab POMs.
-        """
-        return PlaywrightAgentTabBarElement(self._page)
 
     def get_branch_name_element(self) -> Locator:
         branch_name = self.get_by_test_id(ElementIDs.BRANCH_NAME)

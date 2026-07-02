@@ -49,11 +49,11 @@ from playwright.sync_api import Locator
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.chat_panel import PlaywrightChatPanelElement
 from sculptor.testing.elements.chat_panel import send_chat_message
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.fake_claude_pause import FakeClaudePause
-from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -126,11 +126,10 @@ def _start_paused_turn_and_queue_followup(instance: SculptorInstance, pause: Fak
 
 
 def _open_workspace_after_restart(page: Page) -> PlaywrightChatPanelElement:
-    """Click the persisted workspace tab on a fresh Sculptor instance."""
-    layout = PlaywrightProjectLayoutPage(page)
-    workspace_tab = layout.get_workspace_tabs().first
-    expect(workspace_tab).to_be_visible(timeout=_RESTART_VISIBILITY_TIMEOUT_MS)
-    workspace_tab.click()
+    """Click the persisted workspace's sidebar row on a fresh Sculptor instance."""
+    workspace_row = get_workspace_sidebar(page).get_workspace_rows().first
+    expect(workspace_row).to_be_visible(timeout=_RESTART_VISIBILITY_TIMEOUT_MS)
+    workspace_row.click()
     task_page = PlaywrightTaskPage(page=page)
     chat_panel = task_page.get_chat_panel()
     expect(chat_panel).to_be_visible(timeout=_RESTART_VISIBILITY_TIMEOUT_MS)
@@ -138,7 +137,7 @@ def _open_workspace_after_restart(page: Page) -> PlaywrightChatPanelElement:
 
 
 def _agent_tab(page: Page) -> Locator:
-    return PlaywrightAgentTabBarElement(page).get_agent_tabs().first
+    return PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs().first
 
 
 def _assert_recovered_transcript(page: Page, chat_panel: PlaywrightChatPanelElement) -> None:

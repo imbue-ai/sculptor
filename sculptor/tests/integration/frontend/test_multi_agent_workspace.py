@@ -14,9 +14,11 @@ import pytest
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.chat_panel import PlaywrightChatPanelElement
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.section_helpers import drag_panel_to_section
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
@@ -33,25 +35,25 @@ def test_create_second_agent_in_existing_workspace(
 ) -> None:
     """Create a workspace with one agent, then add a second agent via the "+" button.
 
-    Verifies that clicking ADD_AGENT_BUTTON creates a new agent tab and that
-    two agent tabs are visible in the workspace.
+    Verifies that the add-panel dropdown's agent row creates a new agent tab and
+    that two agent tabs are visible in the workspace.
     """
     page = sculptor_instance_.page
     task_page = PlaywrightTaskPage(page=page)
-    agent_tab_bar = task_page.get_agent_tab_bar()
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
 
     # Create first agent in a new workspace
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Multi Agent WS")
 
     # Verify one agent tab exists
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(1)
+    tabs = panel_tabs.get_panel_tabs()
+    expect(tabs).to_have_count(1)
 
     # Click the "+" button in the agent tabs bar to add a second agent
-    agent_tab_bar.add_agent()
+    create_agent_panel(page, section="center")
 
     # Wait for the second agent tab to appear
-    expect(agent_tabs).to_have_count(2)
+    expect(tabs).to_have_count(2)
 
     # Verify the chat panel is visible for the new agent
     chat_panel = task_page.get_chat_panel()
@@ -67,18 +69,16 @@ def test_multiple_agent_tabs_shown_for_shared_workspace(
     The number of agent tabs indicates workspace sharing.
     """
     page = sculptor_instance_.page
-    task_page = PlaywrightTaskPage(page=page)
-    agent_tab_bar = task_page.get_agent_tab_bar()
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
 
     # Create first agent in a new workspace
     start_task_and_wait_for_ready(page, prompt="First agent task", workspace_name="Shared WS")
 
     # Add a second agent to the same workspace
-    agent_tab_bar.add_agent()
+    create_agent_panel(page, section="center")
 
     # Verify 2 agent tabs are visible
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(2)
+    expect(panel_tabs.get_panel_tabs()).to_have_count(2)
 
 
 @user_story("to see which agents share a workspace")
@@ -87,15 +87,13 @@ def test_single_agent_shows_one_agent_tab(
 ) -> None:
     """Create a workspace with a single agent. Verify exactly 1 agent tab."""
     page = sculptor_instance_.page
-    task_page = PlaywrightTaskPage(page=page)
-    agent_tab_bar = task_page.get_agent_tab_bar()
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
 
     # Create one agent in a new workspace
     start_task_and_wait_for_ready(page, prompt="Only agent in workspace", workspace_name="Solo WS")
 
     # Verify exactly one agent tab
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(1)
+    expect(panel_tabs.get_panel_tabs()).to_have_count(1)
 
     # Verify exactly one workspace tab
     expect(get_workspace_sidebar(page).get_workspace_rows()).to_have_count(1)
@@ -112,26 +110,24 @@ def test_workspaces_have_isolated_agent_tabs(
     of agent tabs for each workspace.
     """
     page = sculptor_instance_.page
-    task_page = PlaywrightTaskPage(page=page)
-    agent_tab_bar = task_page.get_agent_tab_bar()
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
 
     # Create workspace A with first agent
     start_task_and_wait_for_ready(page, prompt="Agent A1", workspace_name="Workspace A")
 
     # Add a second agent to workspace A
-    agent_tab_bar.add_agent()
+    create_agent_panel(page, section="center")
 
     # Verify workspace A has 2 agent tabs
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(2)
+    tabs = panel_tabs.get_panel_tabs()
+    expect(tabs).to_have_count(2)
 
     # Create workspace B with one agent (this navigates to the Add Workspace page
     # and creates a new workspace)
     start_task_and_wait_for_ready(page, prompt="Agent B1", workspace_name="Workspace B")
 
     # Verify workspace B has 1 agent tab
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(1)
+    expect(tabs).to_have_count(1)
 
     # Verify there are now 2 workspace tabs
     expect(get_workspace_sidebar(page).get_workspace_rows()).to_have_count(2)
@@ -140,15 +136,13 @@ def test_workspaces_have_isolated_agent_tabs(
     navigate_to_workspace(page, "Workspace A")
 
     # Verify workspace A still has 2 agent tabs
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(2)
+    expect(tabs).to_have_count(2)
 
     # Navigate to workspace B by clicking its sidebar row
     navigate_to_workspace(page, "Workspace B")
 
     # Verify workspace B still has 1 agent tab
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(1)
+    expect(tabs).to_have_count(1)
 
 
 @user_story("to have an agent I watch in a side section stay marked read while it streams")
@@ -171,17 +165,17 @@ def test_mark_read_follows_agent_panel_in_active_side_section(
     """
     page = sculptor_instance_.page
     task_page = PlaywrightTaskPage(page=page)
-    agent_tab_bar = task_page.get_agent_tab_bar()
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
 
     # Step 1: Agent A with a completed first exchange, then agent B.
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Side Section Read WS")
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # add_agent creates B and navigates to it, so the URL carries B's id — that id
-    # keys B's panel tab (``agent:<taskId>``).
-    agent_tab_bar.add_agent()
-    expect(agent_tab_bar.get_agent_tabs()).to_have_count(2)
+    # create_agent_panel creates B and navigates to it, so the URL carries B's id —
+    # that id keys B's panel tab (``agent:<taskId>``).
+    create_agent_panel(page, section="center")
+    expect(panel_tabs.get_panel_tabs()).to_have_count(2)
     match = re.search(r"/agent/([^/?#]+)", page.url)
     assert match is not None, f"expected an agent route, got {page.url}"
     panel_id = f"agent:{match.group(1)}"
@@ -219,8 +213,7 @@ def test_workspace_deleted_when_last_agent_deleted(
     workspace directory is cleaned up from disk.
     """
     page = sculptor_instance_.page
-    task_page = PlaywrightTaskPage(page=page)
-    agent_tab_bar = task_page.get_agent_tab_bar()
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
 
     # Create a workspace with one agent
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Deletable WS")
@@ -228,8 +221,8 @@ def test_workspace_deleted_when_last_agent_deleted(
     # Verify workspace row and agent tab exist
     workspace_rows = get_workspace_sidebar(page).get_workspace_rows()
     expect(workspace_rows).to_have_count(1)
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(1)
+    tabs = panel_tabs.get_panel_tabs()
+    expect(tabs).to_have_count(1)
 
     # Snapshot workspace directories on disk before deletion (filter out MRU tracking files)
     workspaces_dir = sculptor_instance_.sculptor_folder / "workspaces"
@@ -237,17 +230,17 @@ def test_workspace_deleted_when_last_agent_deleted(
     assert len(workspace_dirs_before) > 0, "Expected at least one workspace directory after agent creation"
 
     # Delete the agent via the close button
-    agent_tabs.first.click()
-    close_button = agent_tab_bar.get_tab_close_button(agent_tabs.first)
+    tabs.first.click()
+    close_button = panel_tabs.get_tab_close_button_of(tabs.first)
     close_button.click()
 
     # Confirm the deletion
-    confirm_button = agent_tab_bar.get_delete_confirmation_confirm_button()
+    confirm_button = panel_tabs.get_delete_confirmation_confirm_button()
     expect(confirm_button).to_be_visible()
     confirm_button.click()
 
     # Wait for the deletion dialog to close
-    expect(agent_tab_bar.get_delete_confirmation_dialog()).to_be_hidden()
+    expect(panel_tabs.get_delete_confirmation_dialog()).to_be_hidden()
 
     # Workspace tab should be removed (last agent was deleted)
     expect(workspace_rows).to_have_count(0)
@@ -274,7 +267,7 @@ def test_workspace_survives_when_other_agents_remain(
     """
     page = sculptor_instance_.page
     task_page = PlaywrightTaskPage(page=page)
-    agent_tab_bar = task_page.get_agent_tab_bar()
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
     workspaces_dir = sculptor_instance_.sculptor_folder / "workspaces"
 
     # Snapshot directories before creating our workspace (shared instance may have others)
@@ -284,11 +277,11 @@ def test_workspace_survives_when_other_agents_remain(
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Surviving WS")
 
     # Add a second agent to the same workspace
-    agent_tab_bar.add_agent()
+    create_agent_panel(page, section="center")
 
     # Wait for 2 agent tabs
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(2)
+    tabs = panel_tabs.get_panel_tabs()
+    expect(tabs).to_have_count(2)
 
     # Identify workspace directories created by this test
     dirs_after_creation = {p for p in workspaces_dir.iterdir() if p.is_dir()}
@@ -296,27 +289,27 @@ def test_workspace_survives_when_other_agents_remain(
     assert len(new_dirs) >= 1, f"Expected at least one new workspace directory, found: {new_dirs}"
 
     # Delete the second agent (the currently active one) via close button
-    agent_tabs.last.click()
-    close_button = agent_tab_bar.get_tab_close_button(agent_tabs.last)
+    tabs.last.click()
+    close_button = panel_tabs.get_tab_close_button_of(tabs.last)
     close_button.click()
 
     # Confirm the deletion
-    confirm_button = agent_tab_bar.get_delete_confirmation_confirm_button()
+    confirm_button = panel_tabs.get_delete_confirmation_confirm_button()
     expect(confirm_button).to_be_visible()
     confirm_button.click()
 
     # Wait for the deletion dialog to close
-    expect(agent_tab_bar.get_delete_confirmation_dialog()).to_be_hidden()
+    expect(panel_tabs.get_delete_confirmation_dialog()).to_be_hidden()
 
     # Verify only 1 agent tab remains
-    expect(agent_tabs).to_have_count(1)
+    expect(tabs).to_have_count(1)
 
     # Workspace directories should still be intact on disk
     for ws_dir in new_dirs:
         assert ws_dir.is_dir(), f"Workspace directory {ws_dir} should still exist"
 
     # Verify the remaining agent is operational by navigating to it and sending a message
-    agent_tabs.first.click()
+    tabs.first.click()
     chat_panel = task_page.get_chat_panel()
     expect(chat_panel).to_be_visible()
 
@@ -341,50 +334,49 @@ def test_agent_tab_reuses_lowest_available_number(
     4. Click "+" — the new agent should be "Claude 2", not "Claude 4"
     """
     page = sculptor_instance_.page
-    task_page = PlaywrightTaskPage(page=page)
-    agent_tab_bar = task_page.get_agent_tab_bar()
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
 
     # Create a workspace — the first agent is auto-named "Claude 1".
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Reuse WS")
 
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(1)
-    expect(agent_tabs.first).to_have_text("Claude 1")
+    tabs = panel_tabs.get_panel_tabs()
+    expect(tabs).to_have_count(1)
+    expect(tabs.first).to_have_text("Claude 1")
 
     # Add two more agents via the "+" button — they get "Claude 2" and "Claude 3".
-    agent_tab_bar.add_agent()
-    expect(agent_tabs).to_have_count(2)
-    expect(agent_tabs.nth(1)).to_have_text("Claude 2")
+    create_agent_panel(page, section="center")
+    expect(tabs).to_have_count(2)
+    expect(tabs.nth(1)).to_have_text("Claude 2")
 
-    agent_tab_bar.add_agent()
-    expect(agent_tabs).to_have_count(3)
-    expect(agent_tabs.nth(2)).to_have_text("Claude 3")
+    create_agent_panel(page, section="center")
+    expect(tabs).to_have_count(3)
+    expect(tabs.nth(2)).to_have_text("Claude 3")
 
     # Delete "Claude 2". On slow CI the close+confirm flow occasionally loses
     # the click (Radix AlertDialog.Action auto-closes the dialog before
     # onConfirm fires), so target Agent 2 by text and retry the UI flow
     # until the tab actually disappears.
     for _attempt in range(3):
-        tab2 = agent_tab_bar.get_agent_tab_by_name("Claude 2").first
+        tab2 = panel_tabs.get_panel_tab_by_name("Claude 2").first
         if not tab2.is_visible():
             break  # already gone — a previous attempt succeeded
         tab2.click()
-        close_button = agent_tab_bar.get_tab_close_button(tab2)
+        close_button = panel_tabs.get_tab_close_button_of(tab2)
         expect(close_button).to_be_visible()
         close_button.click()
-        confirm_button = agent_tab_bar.get_delete_confirmation_confirm_button()
+        confirm_button = panel_tabs.get_delete_confirmation_confirm_button()
         expect(confirm_button).to_be_visible()
         expect(confirm_button).to_be_enabled()
         confirm_button.click()
-        expect(agent_tab_bar.get_delete_confirmation_dialog()).to_be_hidden()
+        expect(panel_tabs.get_delete_confirmation_dialog()).to_be_hidden()
         try:
-            expect(agent_tab_bar.get_agent_tab_by_name("Claude 2")).to_have_count(0)
+            expect(panel_tabs.get_panel_tab_by_name("Claude 2")).to_have_count(0)
             break
         except AssertionError:
             continue
     else:
-        expect(agent_tab_bar.get_agent_tab_by_name("Claude 2")).to_have_count(0)
-    expect(agent_tabs).to_have_count(2)
+        expect(panel_tabs.get_panel_tab_by_name("Claude 2")).to_have_count(0)
+    expect(tabs).to_have_count(2)
 
     # The UI removes the tab optimistically, but the backend's "lowest
     # available number" query for the next add needs to see the deletion
@@ -394,9 +386,9 @@ def test_agent_tab_reuses_lowest_available_number(
     page.wait_for_timeout(3_000)
 
     # Add another agent — should reuse number 2, not increment to 4.
-    agent_tab_bar.add_agent()
-    expect(agent_tabs).to_have_count(3)
-    expect(agent_tabs.nth(2)).to_have_text("Claude 2")
+    create_agent_panel(page, section="center")
+    expect(tabs).to_have_count(3)
+    expect(tabs.nth(2)).to_have_text("Claude 2")
 
 
 @pytest.mark.skip(

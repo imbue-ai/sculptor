@@ -12,6 +12,7 @@ Covers:
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import send_chat_message
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.playwright_utils import navigate_to_home_page
 from sculptor.testing.playwright_utils import navigate_to_workspace
@@ -163,8 +164,8 @@ def test_api_error_shows_error_in_workspace_peek_and_clears_on_return(
 
     # The agent tab dot should revert to read (gray) — the error is
     # acknowledged by viewing the workspace.
-    agent_tab = task_page.get_agent_tab_bar().get_agent_tabs().first
-    expect(agent_tab).to_have_attribute("data-dot-status", "read")
+    first_tab = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs().first
+    expect(first_tab).to_have_attribute("data-dot-status", "read")
 
 
 # ---------------------------------------------------------------------------
@@ -210,5 +211,5 @@ def test_crash_shows_error_in_workspace_peek_and_persists_on_return(
 
     # The agent tab dot should STILL be red — the crash requires an explicit
     # restore, not just viewing the workspace.
-    agent_tab = task_page.get_agent_tab_bar().get_agent_tabs().first
-    expect(agent_tab).to_have_attribute("data-dot-status", "error")
+    first_tab = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs().first
+    expect(first_tab).to_have_attribute("data-dot-status", "error")

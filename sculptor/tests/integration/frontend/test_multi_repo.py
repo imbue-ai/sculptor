@@ -290,7 +290,9 @@ def test_mru_project_updates_after_creating_workspace(
     expect(add_ws_page.get_project_selector()).to_contain_text(project_a_name)
 
 
-@pytest.mark.skip(reason="Duplicate project name disambiguation requires redesign for workspace-tabs UI")
+@pytest.mark.skip(
+    reason="Projects are labeled by bare folder name everywhere (sidebar repo groups, new-workspace repo selector) with no path-based disambiguation, so two repos sharing a leaf name render identically. This placeholder has no behavior to assert until a disambiguation affordance exists."
+)
 @user_story("to distinguish between projects with the same folder name")
 def test_duplicate_project_names() -> None:
     """Test handling of projects with same leaf folder names but different paths."""

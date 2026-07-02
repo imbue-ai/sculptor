@@ -12,7 +12,9 @@ from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
 
 
-@pytest.mark.skip(reason="AddWorkspacePage does not persist prompt drafts yet (useNewTaskPromptDraft is unused)")
+@pytest.mark.skip(
+    reason="The new-workspace form does not persist prompt drafts: the prompt is per-mount useState, reset on every open, so nothing survives a restart. The legacy TASK_INPUT testid this test drives also no longer renders; rewrite the test onto NEW_WORKSPACE_PROMPT_TEXTAREA if draft persistence lands."
+)
 @user_story("my selections to stay on backend restarts")
 def test_home_page_prompts_persist_on_restart(sculptor_instance_factory_: SculptorInstanceFactory) -> None:
     prompt_text = "This prompt should persist across restarts"

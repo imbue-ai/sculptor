@@ -126,10 +126,9 @@ def navigate_to_home_page(page: Page) -> None:
 def navigate_to_workspace(page: Page, name_or_index: str | int = 0) -> None:
     """Navigate to a workspace by clicking its sidebar row.
 
-    Replaces the old ``get_workspace_tabs().nth(i).click()``: the workspace tab
-    strip is gone, so navigation happens through the sidebar's workspace rows
-    (the successor to the home-page rows). ``name_or_index`` selects the row by
-    its visible name (substring match) or by zero-based position.
+    Navigation happens through the sidebar's workspace rows (the successor to
+    the home-page rows). ``name_or_index`` selects the row by its visible name
+    (substring match) or by zero-based position.
 
     Workspace rows only exist while at least one workspace does, so callers
     must have created (or be positioned on) a workspace already.

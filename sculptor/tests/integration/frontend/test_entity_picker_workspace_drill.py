@@ -24,8 +24,10 @@ from playwright.sync_api import Locator
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
+from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.entity_picker import PlaywrightEntityPickerElement
 from sculptor.testing.elements.entity_picker import open_workspace_entity_drill
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.user_config import enable_entity_mentions
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -85,9 +87,8 @@ def test_tab_on_workspace_drills_into_agent_list(
     chat_input = task_page.get_chat_panel().get_chat_input()
     expect(chat_input).to_be_visible()
 
-    agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tab_bar.add_agent()
-    expect(agent_tab_bar.get_agent_tabs()).to_have_count(2)
+    create_agent_panel(page, section="center")
+    expect(PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()).to_have_count(2)
 
     chat_input = task_page.get_chat_panel().get_chat_input()
     expect(chat_input).to_be_visible()
@@ -124,9 +125,8 @@ def test_click_on_workspace_drills_into_agent_list(
     chat_input = task_page.get_chat_panel().get_chat_input()
     expect(chat_input).to_be_visible()
 
-    agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tab_bar.add_agent()
-    expect(agent_tab_bar.get_agent_tabs()).to_have_count(2)
+    create_agent_panel(page, section="center")
+    expect(PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()).to_have_count(2)
 
     chat_input = task_page.get_chat_panel().get_chat_input()
     expect(chat_input).to_be_visible()

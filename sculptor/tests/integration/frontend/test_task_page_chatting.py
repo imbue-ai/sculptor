@@ -46,8 +46,8 @@ def test_prompt_drafts_persist_on_multiple_tasks_and_home_page(sculptor_instance
     # Type a follow-up message draft in chat input (don't send it)
     chat_panel.get_chat_input().fill(follow_up_text)
 
-    # The sidebar's new-workspace button direct-creates from the last settings
-    # (WSC-01); use the add-workspace surface opener, which deterministically
+    # The sidebar's new-workspace button direct-creates from the last-used
+    # settings; use the add-workspace surface opener, which deterministically
     # brings up the create form (and its create button) for this navigate-away
     # step. The point of this step is to leave workspace 1 and come back to it.
     navigate_to_add_workspace_page(page)

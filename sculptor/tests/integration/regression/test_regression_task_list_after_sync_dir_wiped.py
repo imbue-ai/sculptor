@@ -19,9 +19,9 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.plan_item import get_plan_checkmark
-from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
-from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
@@ -84,17 +84,16 @@ fake_claude:multi_step `{
     shutil.rmtree(task_sync_dir)
 
     with sculptor_instance_factory_.spawn_instance() as instance:
-        workspace_tab = PlaywrightProjectLayoutPage(instance.page).get_workspace_tabs().first
-        expect(workspace_tab).to_be_visible(timeout=_VISIBILITY_TIMEOUT_MS)
-        workspace_tab.click()
+        workspace_row = get_workspace_sidebar(instance.page).get_workspace_rows().first
+        expect(workspace_row).to_be_visible(timeout=_VISIBILITY_TIMEOUT_MS)
+        workspace_row.click()
 
-        # Agents render as panel tabs in the center section now (PANEL_TAB-agent:<id>),
-        # not the old AGENT_TAB strip. Reach the active agent's tab through the
-        # agent-tab-bar shim and click it to focus the agent.
-        task_page = PlaywrightTaskPage(page=instance.page)
-        agent_tab = task_page.get_agent_tab_bar().get_agent_tabs().first
-        expect(agent_tab).to_be_visible(timeout=_BUILD_TIMEOUT_MS)
-        agent_tab.click()
+        # Agents render as panel tabs in the center section (PANEL_TAB-agent:<id>).
+        # Click the active agent's tab to focus the agent.
+        panel_tabs = PlaywrightPanelTabElement(instance.page, sub_section="center")
+        first_tab = panel_tabs.get_panel_tabs().first
+        expect(first_tab).to_be_visible(timeout=_BUILD_TIMEOUT_MS)
+        first_tab.click()
 
         status_pill = instance.page.get_by_test_id(ElementIDs.STATUS_PILL)
         expect(status_pill).to_be_visible(timeout=_BUILD_TIMEOUT_MS)

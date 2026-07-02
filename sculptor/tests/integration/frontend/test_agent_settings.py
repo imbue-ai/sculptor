@@ -10,8 +10,10 @@ Verifies that:
 
 from playwright.sync_api import expect
 
+from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -74,9 +76,8 @@ def test_agent_settings_persist_and_apply_to_new_agents(sculptor_instance_: Scul
     expect(chat_panel.get_fast_mode_toggle()).to_have_attribute("data-active", "false")
 
     # Add a second agent via the "+" button
-    agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tab_bar.add_agent()
-    expect(agent_tab_bar.get_agent_tabs()).to_have_count(2)
+    create_agent_panel(page, section="center")
+    expect(PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()).to_have_count(2)
 
     # Agent 2 should pick up the configured default (fast mode ON),
     # NOT inherit agent 1's manual override (fast mode OFF)
@@ -121,16 +122,16 @@ def test_effort_level_persists_without_sending_message(sculptor_instance_: Sculp
     expect(chat_panel.get_effort_selector()).to_have_attribute("data-value", "high")
 
     # Add a second agent to the workspace
-    agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tab_bar.add_agent()
-    expect(agent_tab_bar.get_agent_tabs()).to_have_count(2)
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    create_agent_panel(page, section="center")
+    expect(panel_tabs.get_panel_tabs()).to_have_count(2)
 
     # Second agent should show default effort (Extra High)
     expect(chat_panel.get_chat_input()).to_be_visible()
     expect(chat_panel.get_effort_selector()).to_have_attribute("data-value", "xhigh")
 
     # Navigate back to the first agent
-    agent_tab_bar.get_agent_tabs().first.click()
+    panel_tabs.get_panel_tabs().first.click()
 
     # Effort level should still be High on the first agent
     expect(chat_panel.get_effort_selector()).to_have_attribute("data-value", "high")

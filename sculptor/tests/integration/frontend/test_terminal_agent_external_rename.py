@@ -25,7 +25,8 @@ from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.foundation.itertools import only
-from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
+from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropdownElement
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.terminal import get_agent_terminal_textarea
 from sculptor.testing.elements.terminal import run_command_in_agent_terminal
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
@@ -35,14 +36,16 @@ from sculptor.testing.user_stories import user_story
 
 # A registered terminal agent whose launch command announces readiness then
 # falls through to an idle login shell. The bare "terminal" agent type was
-# removed (Decision B2); a registered agent — the model the bundled Claude CLI
+# removed from the product; a registered agent — the model the bundled Claude CLI
 # agent uses — exercises the same idle-terminal rename path.
 _IDLE_TERM_LAUNCH = "echo idle-term-ready"
 
 
-def _create_terminal_agent(agent_tab_bar: PlaywrightAgentTabBarElement) -> None:
-    agent_tab_bar.open_agent_type_menu()
-    agent_tab_bar.get_agent_type_menu_item_registered("idle-term").click()
+def _create_terminal_agent(page: Page) -> None:
+    dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
+    dropdown.open()
+    dropdown.open_agent_type_submenu()
+    dropdown.get_agent_type_item_registered("idle-term").click()
 
 
 def _drive_terminal_to_idle(page: Page) -> None:
@@ -76,9 +79,9 @@ def test_terminal_agent_external_rename_updates_tab_live(
     """
     page = sculptor_instance_.page
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="External Rename WS")
-    agent_tab_bar = PlaywrightAgentTabBarElement(page)
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(1)
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    tabs = panel_tabs.get_panel_tabs()
+    expect(tabs).to_have_count(1)
 
     registrations_dir = sculptor_instance_.sculptor_folder / "terminal_agents"
     registrations_dir.mkdir(parents=True, exist_ok=True)
@@ -89,9 +92,9 @@ def test_terminal_agent_external_rename_updates_tab_live(
     # Step 1: Add a registered terminal agent. It is created second, so it is the
     # tab at index 1 and is labeled "Idle Term 1". Drive it to idle so its
     # startup task message can't mask the rename broadcast.
-    _create_terminal_agent(agent_tab_bar)
-    expect(agent_tabs).to_have_count(2)
-    terminal_tab = agent_tabs.nth(1)
+    _create_terminal_agent(page)
+    expect(tabs).to_have_count(2)
+    terminal_tab = tabs.nth(1)
     expect(terminal_tab).to_have_text("Idle Term 1")
     _drive_terminal_to_idle(page)
 

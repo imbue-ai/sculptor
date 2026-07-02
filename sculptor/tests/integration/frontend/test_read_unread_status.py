@@ -13,8 +13,10 @@ from playwright.sync_api import Locator
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -52,13 +54,12 @@ def test_unread_indicator_when_switching_agents_within_workspace(
     task_page = start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Read Test WS")
 
     # Agent 1 should be read (we're viewing it and it finished)
-    agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(1)
-    expect(agent_tabs.first).to_have_attribute("data-dot-status", "read")
+    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
+    expect(tabs).to_have_count(1)
+    expect(tabs.first).to_have_attribute("data-dot-status", "read")
 
     # The tab renders a visible status dot, not just the data attribute.
-    status_dot = _get_tab_status_dot(agent_tabs.first)
+    status_dot = _get_tab_status_dot(tabs.first)
     expect(status_dot).to_be_visible()
     expect(status_dot).to_have_attribute("data-panel-tab-dot", "read")
 
@@ -67,8 +68,8 @@ def test_unread_indicator_when_switching_agents_within_workspace(
     expect(workspace_tabs.first).to_have_attribute("data-has-unread", "false")
 
     # Add a second agent (auto-navigates to it)
-    agent_tab_bar.add_agent()
-    expect(agent_tabs).to_have_count(2)
+    create_agent_panel(page, section="center")
+    expect(tabs).to_have_count(2)
 
     # Send a message on agent 2 so it gets response activity
     chat_panel = task_page.get_chat_panel()
@@ -76,20 +77,20 @@ def test_unread_indicator_when_switching_agents_within_workspace(
     wait_for_completed_message_count(chat_panel, expected_message_count=2)
 
     # Agent 2 should be read (we're viewing it)
-    expect(agent_tabs.last).to_have_attribute("data-dot-status", "read")
+    expect(tabs.last).to_have_attribute("data-dot-status", "read")
 
     # Switch to agent 1 — we leave agent 2 behind
-    agent_tabs.first.click()
+    tabs.first.click()
 
     # Wait for chat panel to update (we're now on agent 1)
     expect(chat_panel.get_thinking_indicator()).not_to_be_visible()
 
     # Agent 1 should be read (we just navigated to it)
-    expect(agent_tabs.first).to_have_attribute("data-dot-status", "read")
+    expect(tabs.first).to_have_attribute("data-dot-status", "read")
 
     # Agent 2 should still be read — no new updates happened after we left
-    expect(agent_tabs.last).to_have_attribute("data-dot-status", "read")
-    expect(_get_tab_status_dot(agent_tabs.last)).to_be_visible()
+    expect(tabs.last).to_have_attribute("data-dot-status", "read")
+    expect(_get_tab_status_dot(tabs.last)).to_be_visible()
 
     # Now send a follow-up to agent 1 (which will make agent 1's updatedAt change,
     # but we're viewing it so it stays read)
@@ -97,7 +98,7 @@ def test_unread_indicator_when_switching_agents_within_workspace(
     wait_for_completed_message_count(chat_panel, expected_message_count=4)
 
     # Agent 1 should still be read (we're viewing it while it updates)
-    expect(agent_tabs.first).to_have_attribute("data-dot-status", "read")
+    expect(tabs.first).to_have_attribute("data-dot-status", "read")
 
 
 @user_story("to see which workspaces have unseen agent updates")
@@ -179,13 +180,12 @@ def test_focused_agent_stays_read_while_receiving_updates(
     # Create a workspace with an agent
     task_page = start_task_and_wait_for_ready(page, prompt="Initial prompt", workspace_name="Focused WS")
 
-    agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(1)
+    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
+    expect(tabs).to_have_count(1)
 
     # Agent should be read (we just viewed the initial response), with a visible dot.
-    expect(agent_tabs.first).to_have_attribute("data-dot-status", "read")
-    status_dot = _get_tab_status_dot(agent_tabs.first)
+    expect(tabs.first).to_have_attribute("data-dot-status", "read")
+    status_dot = _get_tab_status_dot(tabs.first)
     expect(status_dot).to_be_visible()
     expect(status_dot).to_have_attribute("data-panel-tab-dot", "read")
 
@@ -195,14 +195,14 @@ def test_focused_agent_stays_read_while_receiving_updates(
     wait_for_completed_message_count(chat_panel, expected_message_count=4)
 
     # Agent should still be read (useMarkRead re-fires on updatedAt change)
-    expect(agent_tabs.first).to_have_attribute("data-dot-status", "read")
+    expect(tabs.first).to_have_attribute("data-dot-status", "read")
 
     # Send another follow-up
     send_chat_message(chat_panel, "Follow up 2")
     wait_for_completed_message_count(chat_panel, expected_message_count=6)
 
     # Agent should still be read
-    expect(agent_tabs.first).to_have_attribute("data-dot-status", "read")
+    expect(tabs.first).to_have_attribute("data-dot-status", "read")
 
     # Workspace should also show no unread
     workspace_tabs = get_workspace_sidebar(page).get_workspace_rows()
@@ -241,10 +241,9 @@ def test_read_status_persists_after_restart(
         wait_for_completed_message_count(chat_panel, expected_message_count=2)
 
         # Step 2: Verify the workspace and agent show as read
-        agent_tab_bar = task_page.get_agent_tab_bar()
-        agent_tabs = agent_tab_bar.get_agent_tabs()
-        expect(agent_tabs).to_have_count(1)
-        expect(agent_tabs.first).to_have_attribute("data-dot-status", "read")
+        tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
+        expect(tabs).to_have_count(1)
+        expect(tabs.first).to_have_attribute("data-dot-status", "read")
 
         workspace_tabs = get_workspace_sidebar(page).get_workspace_rows()
         expect(workspace_tabs.first).to_have_attribute("data-has-unread", "false")

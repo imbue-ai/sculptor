@@ -13,8 +13,9 @@ import re
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.action_dialog import get_action_dialog
-from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
+from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropdownElement
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -64,13 +65,15 @@ def test_prompt_features_route_to_capable_terminal_agent(sculptor_instance_: Scu
         f'display_name = "No Prompt"\nlaunch_command = "{_NO_OPT_IN_COMMAND}"\n'
     )
     try:
-        agent_tab_bar = PlaywrightAgentTabBarElement(page)
-        agent_tab_bar.open_agent_type_menu()
-        registered_item = agent_tab_bar.get_agent_type_menu_item_registered("fake-prompts")
+        panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+        dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
+        dropdown.open()
+        dropdown.open_agent_type_submenu()
+        registered_item = dropdown.get_agent_type_item_registered("fake-prompts")
         expect(registered_item).to_be_visible()
         registered_item.click()
 
-        prompts_tab = agent_tab_bar.get_agent_tab_by_name("Fake Prompts 1").first
+        prompts_tab = panel_tabs.get_panel_tab_by_name("Fake Prompts 1").first
         expect(prompts_tab).to_be_visible()
         expect(get_agent_terminal_panel(page)).to_be_visible()
         wait_for_xterm_substring(page, "FAKE-PROMPTS-BANNER")
@@ -92,18 +95,19 @@ def test_prompt_features_route_to_capable_terminal_agent(sculptor_instance_: Scu
         expect(commit_button).to_be_disabled()
 
         # A registered agent WITHOUT the opt-in: disabled even when idle.
-        agent_tab_bar.open_agent_type_menu()
-        no_opt_in_item = agent_tab_bar.get_agent_type_menu_item_registered("fake-noprompt")
+        dropdown.open()
+        dropdown.open_agent_type_submenu()
+        no_opt_in_item = dropdown.get_agent_type_item_registered("fake-noprompt")
         expect(no_opt_in_item).to_be_visible()
         no_opt_in_item.click()
-        no_opt_in_tab = agent_tab_bar.get_agent_tab_by_name("No Prompt 1").first
+        no_opt_in_tab = panel_tabs.get_panel_tab_by_name("No Prompt 1").first
         expect(no_opt_in_tab).to_be_visible()
         wait_for_xterm_substring(page, "NOPROMPT-DONE")
         expect(no_opt_in_tab).to_have_attribute("data-dot-status", _NEUTRAL_DOT)
         expect(commit_button).to_be_disabled()
 
         # Back on the chat agent the button sends a chat message as before.
-        chat_tab = agent_tab_bar.get_agent_tab_by_name("Claude 1").first
+        chat_tab = panel_tabs.get_panel_tab_by_name("Claude 1").first
         expect(chat_tab).to_be_visible()
         chat_tab.click()
         expect(commit_button).to_be_enabled()
@@ -167,12 +171,14 @@ def test_non_auto_send_action_drafts_into_terminal_without_submitting(sculptor_i
         expect(send_dialog).not_to_be_visible()
 
         # Launch the capable terminal agent and wait until it is at its prompt.
-        agent_tab_bar = PlaywrightAgentTabBarElement(page)
-        agent_tab_bar.open_agent_type_menu()
-        registered_item = agent_tab_bar.get_agent_type_menu_item_registered("fake-prompts")
+        panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+        dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
+        dropdown.open()
+        dropdown.open_agent_type_submenu()
+        registered_item = dropdown.get_agent_type_item_registered("fake-prompts")
         expect(registered_item).to_be_visible()
         registered_item.click()
-        prompts_tab = agent_tab_bar.get_agent_tab_by_name("Fake Prompts 1").first
+        prompts_tab = panel_tabs.get_panel_tab_by_name("Fake Prompts 1").first
         expect(prompts_tab).to_be_visible()
         expect(get_agent_terminal_panel(page)).to_be_visible()
         wait_for_xterm_substring(page, "FAKE-PROMPTS-BANNER")

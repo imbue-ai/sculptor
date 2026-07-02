@@ -6,7 +6,7 @@ injected shell env and posts to the local HTTP event API. busy → spinner,
 waiting → attention dot, idle → calm neutral; files-changed refreshes the
 Changes panel.
 
-The bare "terminal" agent type was removed (Decision B2); this exercises the
+The bare "terminal" agent type was removed from the product; this exercises the
 same signal→dot mechanism on a registered terminal agent — the model the bundled
 Claude CLI agent uses — by registering a `.toml` whose launch command drops to a
 usable shell prompt so the test can drive `sculpt signal` directly.
@@ -17,8 +17,9 @@ import re
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
+from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropdownElement
 from sculptor.testing.elements.file_tree import get_changes_tree
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.terminal import get_agent_terminal_textarea
 from sculptor.testing.elements.terminal import run_command_in_agent_terminal
@@ -46,7 +47,8 @@ def _post_signal_from_terminal(page: Page, subcommand: str) -> None:
 def test_terminal_agent_signals_drive_tab_status_dot(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
     task_page = start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Terminal Signals WS")
-    agent_tab_bar = PlaywrightAgentTabBarElement(page)
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
 
     registrations_dir = sculptor_instance_.sculptor_folder / "terminal_agents"
     registrations_dir.mkdir(parents=True, exist_ok=True)
@@ -54,9 +56,10 @@ def test_terminal_agent_signals_drive_tab_status_dot(sculptor_instance_: Sculpto
         f'display_name = "Signal Agent"\nlaunch_command = "{_SIGNAL_AGENT_LAUNCH}"\n'
     )
     try:
-        agent_tab_bar.open_agent_type_menu()
-        agent_tab_bar.get_agent_type_menu_item_registered("signal-agent").click()
-        terminal_tab = agent_tab_bar.get_agent_tab_by_name("Signal Agent 1").first
+        dropdown.open()
+        dropdown.open_agent_type_submenu()
+        dropdown.get_agent_type_item_registered("signal-agent").click()
+        terminal_tab = panel_tabs.get_panel_tab_by_name("Signal Agent 1").first
         expect(terminal_tab).to_be_visible()
         expect(get_agent_terminal_panel(page)).to_be_visible()
         expect(get_agent_terminal_textarea(page)).to_be_attached()

@@ -16,9 +16,9 @@ class PlaywrightAddPanelDropdownElement:
     static-panel options open into THAT sub-section (a new agent always lands in
     center). Items render in a Radix portal, so they are located page-wide.
 
-    Carries the add affordances consolidated out of ``agent_tab.py``
-    (recent-agent + agent-type sub-menu, with the Radix-teardown retry) and
-    ``terminal.py`` (new-terminal), plus the single-instance panel options.
+    Carries the recent-agent row, the agent-type sub-menu (with the
+    Radix-teardown retry), the new-terminal row, and the single-instance
+    panel options.
 
     Constructed with the ``sub_section`` whose `+` opens it so the content root
     resolves uniquely even when two sub-sections both have an open dropdown id in
@@ -72,8 +72,7 @@ class PlaywrightAddPanelDropdownElement:
 
         Retries the hover: a hover landing while Radix is still tearing down a
         just-dismissed menu can be swallowed (or never open the sub-content), and
-        ``expect`` alone cannot recover from a lost hover. (Salvaged from
-        ``agent_tab.open_agent_type_menu``'s Radix-teardown retry.)
+        ``expect`` alone cannot recover from a lost hover.
         """
         submenu = self.get_agent_type_submenu()
         trigger = self.get_agent_type_submenu_trigger()

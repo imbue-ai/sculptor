@@ -9,10 +9,12 @@ tab and back.
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_by
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -55,12 +57,12 @@ def test_dynamic_padding_survives_agent_switch(sculptor_instance_: SculptorInsta
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=4)
 
     # --- Add agent 2 to the same workspace ---
-    agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tab_bar.add_agent()
-    expect(agent_tab_bar.get_agent_tabs()).to_have_count(2)
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    create_agent_panel(page, section="center")
+    expect(panel_tabs.get_panel_tabs()).to_have_count(2)
 
     # Navigate to agent 1 to verify baseline padding.
-    agent_tab_bar.get_agent_tabs().first.click()
+    panel_tabs.get_panel_tabs().first.click()
     expect(get_alpha_chat_view(page)).to_be_visible()
 
     # Baseline check: scroll down maximally — user message at index 2 should
@@ -79,10 +81,10 @@ def test_dynamic_padding_survives_agent_switch(sculptor_instance_: SculptorInsta
     )
 
     # --- Switch to agent 2 ---
-    agent_tab_bar.get_agent_tabs().last.click()
+    panel_tabs.get_panel_tabs().last.click()
 
     # --- Switch back to agent 1 ---
-    agent_tab_bar.get_agent_tabs().first.click()
+    panel_tabs.get_panel_tabs().first.click()
     expect(chat_panel.get_messages()).to_have_count(4)
 
     # Scroll down maximally — user message at index 2 should STILL be visible.
@@ -125,11 +127,11 @@ def test_scroll_height_settles_after_agent_switch(sculptor_instance_: SculptorIn
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=4)
 
     # --- Add agent 2 ---
-    agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tab_bar.add_agent()
-    expect(agent_tab_bar.get_agent_tabs()).to_have_count(2)
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    create_agent_panel(page, section="center")
+    expect(panel_tabs.get_panel_tabs()).to_have_count(2)
 
-    agent_tab_bar.get_agent_tabs().first.click()
+    panel_tabs.get_panel_tabs().first.click()
     expect(get_alpha_chat_view(page)).to_be_visible()
 
     # Record the scrollHeight BEFORE switching.
@@ -142,10 +144,10 @@ def test_scroll_height_settles_after_agent_switch(sculptor_instance_: SculptorIn
     before_scroll_height = handle.json_value()
 
     # --- Switch to agent 2 ---
-    agent_tab_bar.get_agent_tabs().last.click()
+    panel_tabs.get_panel_tabs().last.click()
 
     # --- Switch back to agent 1 ---
-    agent_tab_bar.get_agent_tabs().first.click()
+    panel_tabs.get_panel_tabs().first.click()
     expect(chat_panel.get_messages()).to_have_count(4)
 
     # The scrollHeight should settle to the same value as before the switch.

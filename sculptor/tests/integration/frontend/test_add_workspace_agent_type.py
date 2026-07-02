@@ -10,7 +10,7 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropdownElement
-from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.terminal import expect_terminal_panel_replaces_chat
 from sculptor.testing.elements.user_config import disable_pi_agent
 from sculptor.testing.elements.user_config import enable_pi_agent
@@ -77,7 +77,8 @@ def test_terminal_first_agent(
     )
 
     expect_terminal_panel_replaces_chat(page)
-    expect(PlaywrightAgentTabBarElement(page).get_agent_tab_by_name("Terminal 1")).to_have_count(1)
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    expect(panel_tabs.get_panel_tab_by_name("Terminal 1")).to_have_count(1)
 
 
 @user_story("to have the new-workspace picker remember my last-used agent type")
@@ -103,7 +104,7 @@ def test_first_agent_type_defaults_to_shared_last_used(
     # persists it on create). The pinned "New {recent} agent" row NORMALIZES
     # that to Claude — terminal creation is owned by the dedicated "New
     # terminal" row offered alongside it.
-    agent_tab_bar = PlaywrightAgentTabBarElement(page)
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
     dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
     dropdown.open()
     new_agent_item = dropdown.get_new_agent_item()
@@ -125,8 +126,8 @@ def test_first_agent_type_defaults_to_shared_last_used(
     # Claude agent ("Claude 1" — numbering is per type prefix), not "Terminal 2".
     dropdown.open()
     dropdown.get_new_agent_item().click()
-    expect(agent_tab_bar.get_agent_tab_by_name("Claude 1")).to_have_count(1)
-    expect(agent_tab_bar.get_agent_tab_by_name("Terminal 2")).to_have_count(0)
+    expect(panel_tabs.get_panel_tab_by_name("Claude 1")).to_have_count(1)
+    expect(panel_tabs.get_panel_tab_by_name("Terminal 2")).to_have_count(0)
 
     # Only terminal is normalized — a NON-terminal MRU still flows through both
     # surfaces: a pi-first workspace makes the pinned row read "New pi agent"

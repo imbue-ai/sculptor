@@ -9,6 +9,7 @@ the add-panel quick actions — never a blank page.
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.panel_empty_state import PlaywrightEmptySectionState
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import create_zero_agent_workspace
@@ -75,6 +76,6 @@ def test_agentless_workspace_empty_state_creates_first_agent(
     quick_action.click()
 
     # The agent lands as a center tab and its chat renders.
-    agent_tabs = task_page.get_agent_tab_bar().get_agent_tabs()
-    expect(agent_tabs).to_have_count(1)
+    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
+    expect(tabs).to_have_count(1)
     expect(task_page.get_chat_panel()).to_be_visible()

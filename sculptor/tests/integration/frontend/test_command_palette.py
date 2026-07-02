@@ -13,6 +13,7 @@ from playwright.sync_api import expect
 
 from sculptor.testing.elements.base import dismiss_with_escape
 from sculptor.testing.elements.base import wait_for_one_frame
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import blur_active_element
@@ -33,8 +34,8 @@ def _layout(sculptor_instance: SculptorInstance) -> PlaywrightProjectLayoutPage:
 
 
 @pytest.mark.release
-@user_story("to open the command palette via the topbar button")
-def test_open_command_palette_via_topbar_button(sculptor_instance_: SculptorInstance) -> None:
+@user_story("to open the command palette via the sidebar Cmd+K link")
+def test_open_command_palette_via_sidebar_cmdk_link(sculptor_instance_: SculptorInstance) -> None:
     layout = _layout(sculptor_instance_)
     palette = layout.open_command_palette()
     expect(palette).to_be_visible()
@@ -156,7 +157,7 @@ def test_command_palette_keyboard_suppressed_when_overlay_open(sculptor_instance
     mod = get_playwright_modifier_key()
     layout = _layout(sculptor_instance_)
     # Cmd+/ (help) and Cmd+K are suppressed in the empty first-run state, so
-    # create a workspace before exercising them (FIRST-03).
+    # create a workspace before exercising them.
     layout.ensure_workspace_exists()
     blur_active_element(page)
 
@@ -178,7 +179,7 @@ def test_command_palette_keyboard_suppressed_when_overlay_open(sculptor_instance
 def test_command_palette_open_button_visible_in_sidebar(sculptor_instance_: SculptorInstance) -> None:
     # Regression lock: the legacy SearchModal was removed in favour of the
     # Command Palette. The open affordance moved off the old top bar onto the
-    # sidebar Cmd+K link (SIDE-02), which must continue to render.
+    # sidebar Cmd+K link, which must continue to render.
     layout = _layout(sculptor_instance_)
     expect(layout.get_workspace_sidebar().get_cmdk_link()).to_be_visible()
 
@@ -407,8 +408,8 @@ def test_command_palette_add_panel_agent_create_navigates(sculptor_instance_: Sc
     page = sculptor_instance_.page
     task_page = start_task_and_wait_for_ready(page, prompt="", workspace_name="Cmd+K Add Panel Agent WS")
 
-    agent_tabs = task_page.get_agent_tab_bar().get_agent_tabs()
-    expect(agent_tabs).to_have_count(1)
+    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
+    expect(tabs).to_have_count(1)
     url_before = page.url
 
     palette = task_page.open_command_palette()
@@ -421,7 +422,7 @@ def test_command_palette_add_panel_agent_create_navigates(sculptor_instance_: Sc
     # A second agent tab appears AND the route now points at the new agent —
     # the create navigated, exactly like the section "+" dropdown's flow.
     expect(palette).not_to_be_visible()
-    expect(agent_tabs).to_have_count(2)
+    expect(tabs).to_have_count(2)
     expect(page).not_to_have_url(url_before)
 
 
@@ -437,10 +438,9 @@ def test_command_palette_creates_new_agent(sculptor_instance_: SculptorInstance)
     page = sculptor_instance_.page
     task_page = start_task_and_wait_for_ready(page, prompt="", workspace_name="Cmd+K New Agent")
 
-    # Agents render as panel tabs in the center section (PANEL_TAB-agent:<id>);
-    # the agent-tab-bar shim counts them.
-    agent_tabs = task_page.get_agent_tab_bar().get_agent_tabs()
-    expect(agent_tabs).to_have_count(1)
+    # Agents render as panel tabs in the center section (PANEL_TAB-agent:<id>).
+    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
+    expect(tabs).to_have_count(1)
 
     palette = task_page.open_command_palette()
     palette.type_query("New agent")
@@ -451,4 +451,4 @@ def test_command_palette_creates_new_agent(sculptor_instance_: SculptorInstance)
     # The palette auto-closes (not a keep-open command) and a second agent
     # tab appears — the command created and navigated to the new agent.
     expect(palette).not_to_be_visible()
-    expect(agent_tabs).to_have_count(2)
+    expect(tabs).to_have_count(2)

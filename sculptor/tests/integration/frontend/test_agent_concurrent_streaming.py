@@ -1,41 +1,31 @@
-"""Regression tests for multi-agent workspaces acting on the right agent (AGENT-05).
+"""Regression tests for multi-agent workspaces acting on the right agent.
 
 Two agents — one in the center section, one in the right section — each driven by a
 streaming FakeClaude task should update independently: neither blocks, drops, nor
-overwrites the other's content or status dot.
+overwrites the other's chat content.
 
-The concurrent-streaming case is a NEW regression test (no pre-rewrite analog). It is
-currently skipped: it depends on rendering an agent in a NON-center section at the
-same time as the center agent, which needs the drag / move-to-section affordance
-(Task 4.1) — new agents always land in center today and there is no UI to relocate
-one to the right.
-
-The scaffolding helper below (create two agents, drive both) is the net-new test
-territory the plan calls for — NOT a new FakeClaude verb. It is retained so the
-regression lands intact the moment the placement affordance is wired.
-
-The panel-vs-route targeting case below needs no relocation: creating a second agent
-navigates the route to it, while re-activating the first agent's TAB does not
+The panel-vs-route targeting case below needs no second section: creating a second
+agent navigates the route to it, while re-activating the first agent's TAB does not
 navigate — so a chat panel can render an agent that is not the route's agent, and
 actions inside the panel (Stop) must target the panel's agent.
 """
 
 import re
 
-import pytest
-from playwright.sync_api import Page
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
+from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropdownElement
 from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
+from sculptor.testing.elements.chat_panel import PlaywrightChatPanelElement
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
-
-_CONCURRENT_SKIP_REASON = "Concurrent center+right streaming (AGENT-05) needs an agent rendered in the right section alongside the center agent, which requires the drag / move-to-section affordance not wired until Task 4.1."
 
 _STREAM_PROMPT = 'fake_claude:text `{"text": "streaming response from this agent"}`'
 
@@ -44,50 +34,54 @@ _STREAM_PROMPT = 'fake_claude:text `{"text": "streaming response from this agent
 _SLEEP_PROMPT = 'fake_claude:sleep `{"seconds": 120}`'
 
 
-def _create_two_agents(page: Page) -> tuple[str, str]:
-    """Create a workspace with one agent, then add a second; return both panel ids.
-
-    Net-new scaffolding for the two-agent regression (not a FakeClaude verb): the
-    first agent comes from the workspace-create flow, the second from the `+`
-    add-panel dropdown. Both land in center today; Task 4.1's move affordance is
-    what lets the second be relocated to the right for the concurrent assertion.
-    """
-    task_page = PlaywrightTaskPage(page=page)
-    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
-
-    start_task_and_wait_for_ready(page, prompt=_STREAM_PROMPT, workspace_name="Concurrent WS")
-    first_panel_id = f"agent:{task_page.get_task_id()}"
-
-    create_agent_panel(page, section="center")
-    expect(panel_tabs.get_panel_tabs()).to_have_count(2)
-    second_panel_id = f"agent:{task_page.get_task_id()}"
-    return first_panel_id, second_panel_id
-
-
-@pytest.mark.skip(reason=_CONCURRENT_SKIP_REASON)
 @user_story("to run two agents streaming at once without one blocking the other")
 def test_two_agents_stream_independently(sculptor_instance_: SculptorInstance) -> None:
     """Two agents (center + right) stream concurrently and update independently.
 
-    Placeholder for AGENT-05 until the move-to-section affordance (Task 4.1) lands.
-    The intended flow: create two agents, relocate the second to the right section,
-    drive a streaming prompt into each, and assert both chats reach their completed
-    message counts without one stalling the other.
+    The first agent comes from the workspace-create flow (center); the second is
+    added from the right section's `+` add-panel dropdown, landing it in the right
+    section — so both chat panels are mounted at once. Drive a prompt into each
+    without waiting in between and assert both chats reach their completed message
+    counts: neither agent's turn blocks, drops, or overwrites the other's.
     """
     page = sculptor_instance_.page
-    first_panel_id, second_panel_id = _create_two_agents(page)
-    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    center = PlaywrightWorkspaceSection(page, "center")
+    right = PlaywrightWorkspaceSection(page, "right")
+    right_tabs = PlaywrightPanelTabElement(page, sub_section="right")
 
-    # (Once Task 4.1 lands: move second_panel_id to the right section here.)
+    # First agent: created with the workspace; its first exchange completes.
+    start_task_and_wait_for_ready(page, prompt=_STREAM_PROMPT, workspace_name="Concurrent WS")
 
-    task_page = PlaywrightTaskPage(page=page)
-    panel_tabs.get_panel_tab(second_panel_id).click()
-    chat_panel = task_page.get_chat_panel()
-    send_chat_message(chat_panel=chat_panel, message=_STREAM_PROMPT)
+    # Second agent from the right section's `+` — it lands in the right section.
+    right.expand_section()
+    right_dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="right")
+    right_dropdown.open()
+    new_agent_item = right_dropdown.get_new_agent_item()
+    expect(new_agent_item).to_be_visible()
+    new_agent_item.click()
+    expect(right_tabs.get_panel_tabs()).to_have_count(1)
 
-    panel_tabs.get_panel_tab(first_panel_id).click()
-    first_chat = task_page.get_chat_panel()
-    wait_for_completed_message_count(chat_panel=first_chat, expected_message_count=2)
+    # Each section renders its own mounted chat panel; scope a chat POM to each
+    # (a page-wide CHAT_PANEL locator would resolve to both).
+    center_chat = PlaywrightChatPanelElement(
+        locator=center.get_section().get_by_test_id(ElementIDs.CHAT_PANEL), page=page
+    )
+    right_chat = PlaywrightChatPanelElement(
+        locator=right.get_section().get_by_test_id(ElementIDs.CHAT_PANEL), page=page
+    )
+    expect(right_chat).to_be_visible()
+    expect(center_chat).to_be_visible()
+
+    # Kick off a turn in each chat without waiting in between, so both agents
+    # are streaming their responses concurrently.
+    send_chat_message(chat_panel=right_chat, message=_STREAM_PROMPT)
+    send_chat_message(chat_panel=center_chat, message=_STREAM_PROMPT)
+
+    # Both turns complete independently: the center chat reaches its second
+    # exchange (4 messages) and the right chat its first (2), with neither
+    # stalling the other.
+    wait_for_completed_message_count(chat_panel=center_chat, expected_message_count=4)
+    wait_for_completed_message_count(chat_panel=right_chat, expected_message_count=2)
 
 
 @user_story("to stop an agent from its own panel while another agent holds the route")

@@ -8,9 +8,11 @@ model when creating a new agent and the backend fell back to CLAUDE_4_OPUS.
 
 from playwright.sync_api import expect
 
+from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.chat_panel import select_model_by_name
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_2_MODEL_NAME
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
@@ -57,12 +59,11 @@ def test_new_agent_inherits_model_from_existing_agent(
     expect(model_selector).to_have_text(FAKE_CLAUDE_2_MODEL_NAME)
 
     # Add a new agent via the section "+" add-panel dropdown
-    agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tab_bar.add_agent()
+    create_agent_panel(page, section="center")
 
     # Wait for the second agent tab to appear
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(2)
+    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
+    expect(tabs).to_have_count(2)
 
     # The new agent's model selector should show "Fake Claude 2" (inherited)
     task_page_2 = PlaywrightTaskPage(page=page)

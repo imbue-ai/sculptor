@@ -8,8 +8,10 @@ Verifies that:
 
 from playwright.sync_api import expect
 
+from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.chat_panel import select_model_by_name
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -168,11 +170,10 @@ def test_model_selector_is_isolated_per_agent(sculptor_instance_: SculptorInstan
     expect(model_selector).to_contain_text("Fake Claude 2")
 
     # Add Agent 2 via the "+" button.
-    agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tab_bar.add_agent()
+    create_agent_panel(page, section="center")
 
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(2)
+    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
+    expect(tabs).to_have_count(2)
 
     # Wait for Agent 2's chat input to appear.
     task_page_2 = PlaywrightTaskPage(page=page)
@@ -186,5 +187,5 @@ def test_model_selector_is_isolated_per_agent(sculptor_instance_: SculptorInstan
     expect(agent_2_model_selector).not_to_contain_text("Fake Claude 2")
 
     # Navigate back to Agent 1 — its model choice must be preserved.
-    agent_tabs.first.click()
+    tabs.first.click()
     expect(model_selector).to_contain_text("Fake Claude 2")

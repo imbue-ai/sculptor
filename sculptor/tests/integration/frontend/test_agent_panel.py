@@ -1,35 +1,29 @@
-"""Integration tests for the agent panel (AGENT-01..04, PANEL-11).
+"""Integration tests for the agent panel.
 
 Agents render as panel tabs in the center section, created from the section `+`
 add-panel dropdown (or the workspace-create flow). This file owns the agent-panel
 TAB-MODEL behaviour: the chat is preserved across switches, zero/one/multiple agents,
 closing an agent = a delete confirmation, and closing the LAST agent leaves the
-center section empty (Decision B1 — no auto-create).
+center section empty (no auto-create).
 
-These cases are CREATE-not-migrate (per `03_07_agent_terminal_panel_tests.md`): they
-supersede the agent-count / multi-agent / survive-deleted / lowest-number-reuse
-kernels of `test_multi_agent_workspace.py`, re-anchored onto the panel-tab model and
-the new add-panel dropdown. Task 8.2 deletes the superseded file; this task only
-creates the replacement.
-
-Known phase gaps applied here:
-* An agent in the center AND the right section at once (AGENT-03) needs the
-  drag/move-to-section affordance, which is not wired until Task 4.1 — skipped.
+These cases supersede the agent-count / multi-agent / survive-deleted /
+lowest-number-reuse kernels of the old `test_multi_agent_workspace.py`,
+re-anchored onto the panel-tab model and the new add-panel dropdown.
 """
 
-import pytest
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
+from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropdownElement
 from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
-
-_AGENT_IN_RIGHT_SKIP_REASON = "An agent in center + right at once (AGENT-03) needs the drag / move-to-section affordance, which is not wired until Task 4.1; new agents always land in center and there is no UI to relocate them yet."
 
 
 @user_story("to keep the agent chat mounted while I switch panels")
@@ -96,20 +90,47 @@ def test_multiple_agents_show_multiple_tabs(sculptor_instance_: SculptorInstance
     expect(panel_tabs.get_panel_tabs()).to_have_count(3)
 
 
-@pytest.mark.skip(reason=_AGENT_IN_RIGHT_SKIP_REASON)
 @user_story("to view two agents side by side in the center and right sections")
 def test_agent_in_center_and_right_at_once(sculptor_instance_: SculptorInstance) -> None:
     """Two agents rendered at once — one in center, one in the right section.
 
-    Placeholder for AGENT-03: a new agent always lands in center and there is no UI
-    to move/split it into the right section until the drag affordance (Task 4.1)."""
+    The first agent comes from the workspace-create flow (center). The second is
+    added from the right section's `+` add-panel dropdown, which lands it in the
+    right section. Both agent panels stay mounted side by side: each section keeps
+    its own agent tab and renders its own chat panel.
+    """
+    page = sculptor_instance_.page
+    center_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    right_tabs = PlaywrightPanelTabElement(page, sub_section="right")
+
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Center And Right WS")
+    expect(center_tabs.get_panel_tabs()).to_have_count(1)
+
+    # Expand the (empty) right section and add an agent from its `+` dropdown.
+    right = PlaywrightWorkspaceSection(page, "right")
+    right.expand_section()
+    right_dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="right")
+    right_dropdown.open()
+    new_agent_item = right_dropdown.get_new_agent_item()
+    expect(new_agent_item).to_be_visible()
+    new_agent_item.click()
+
+    # The new agent lands in the right section; the center keeps its own agent.
+    expect(right_tabs.get_panel_tabs()).to_have_count(1)
+    expect(center_tabs.get_panel_tabs()).to_have_count(1)
+
+    # Both agents render at once: each section hosts its own mounted chat panel.
+    center_chat = PlaywrightWorkspaceSection(page, "center").get_section().get_by_test_id(ElementIDs.CHAT_PANEL)
+    right_chat = right.get_section().get_by_test_id(ElementIDs.CHAT_PANEL)
+    expect(center_chat).to_be_visible()
+    expect(right_chat).to_be_visible()
 
 
 @user_story("to delete an agent by closing its tab, with a confirmation")
 def test_closing_agent_tab_requires_confirmation(sculptor_instance_: SculptorInstance) -> None:
     """Closing an agent panel tab opens a delete confirmation; confirming removes it.
 
-    Closing is a destructive delete (AGENT-04), not a hide — it surfaces the delete
+    Closing is a destructive delete, not a hide — it surfaces the delete
     confirmation dialog before the agent is removed.
     """
     page = sculptor_instance_.page
@@ -142,7 +163,7 @@ def test_closing_agent_tab_requires_confirmation(sculptor_instance_: SculptorIns
 
 @user_story("to not have a replacement agent auto-created when I close my last one")
 def test_closing_last_agent_does_not_auto_create(sculptor_instance_: SculptorInstance) -> None:
-    """Closing the last agent does NOT auto-create a replacement (Decision B1).
+    """Closing the last agent does NOT auto-create a replacement.
 
     The old shell created a fresh agent when the last one was deleted; the redesign
     relaxes that — after the delete there is no agent panel tab (the center is left
@@ -169,7 +190,7 @@ def test_closing_last_agent_does_not_auto_create(sculptor_instance_: SculptorIns
 
 @user_story("to rename an agent from its panel tab")
 def test_agent_tab_offers_rename_for_multiple_instances(sculptor_instance_: SculptorInstance) -> None:
-    """An agent panel tab offers inline rename (multi-instance panel, PANEL-11).
+    """An agent panel tab offers inline rename (a multi-instance panel affordance).
 
     Renaming is a multi-instance affordance: the context menu exposes Rename and an
     inline edit input appears. (The committed-label persistence is wired to the data
