@@ -5,7 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 import { alphaScrollPositionAtomFamily } from "~/common/state/atoms/alphaScroll.ts";
 
-import { contentBottomOffset, distanceFromContentBottom } from "../scroll/geometry.ts";
+import { contentBottomOffset, distanceFromContentBottom, maxScrollOffset } from "../scroll/geometry.ts";
 import type { ScrollStateMachine } from "../scroll/scrollStateMachine.ts";
 
 /** Cancel all pending rAFs tracked in the set and clear it. */
@@ -56,9 +56,11 @@ export const useAlphaScrollPersistence = (
         setScrollPosition({
           firstVisibleMessageId: message.id,
           pixelOffset: scrollTop - firstVisible.start,
-          // Distance to the real content bottom (paddingEnd excluded), so a user
-          // pinned at the bottom while the virtualizer is padded still restores
-          // to the bottom rather than into the empty tail padding.
+          // Signed distance to the real content bottom (paddingEnd excluded,
+          // negative inside the tail padding). The restore re-lands at this
+          // distance from the then-current content bottom, so an at-bottom
+          // reader follows content that grew while away and a position inside
+          // the padding (the anchored rest / a max scroll) round-trips.
           distanceFromBottom: distanceFromContentBottom(el, virtualizer),
         });
       });
@@ -79,10 +81,26 @@ export const useAlphaScrollPersistence = (
     const el = scrollContainerRef.current;
     if (!el || filteredMessages.length === 0) return;
 
-    if (!scrollPosition || scrollPosition.distanceFromBottom <= BOTTOM_THRESHOLD) {
-      // First visit or user was at bottom: restore flush to the content bottom (see
-      // contentBottomOffset — not scrollToIndex, which lands in the tail padding).
-      el.scrollTop = contentBottomOffset(el, virtualizer);
+    if (!scrollPosition) {
+      // First visit: land at the very end of the padded scroll range. For a
+      // task whose last turn is short, the dynamic paddingEnd makes this the
+      // anchored-turn rest position (last user message at the viewport top) —
+      // the view the task's owner last saw.
+      el.scrollTop = maxScrollOffset(el);
+      return;
+    }
+
+    if (scrollPosition.distanceFromBottom <= BOTTOM_THRESHOLD) {
+      // At (or past) the bottom: re-land at the saved distance from the
+      // *current* content bottom, not at the saved message anchor — when
+      // content grew while away, an at-bottom reader should see the new
+      // bottom. The distance is signed: negative means the viewport sat
+      // inside the tail padding (a max scroll / the anchored rest), and
+      // honoring it round-trips that position instead of clamping it flush
+      // to the content. Clamp to the scrollable range, since paddingEnd may
+      // have converged differently than when the distance was recorded.
+      const target = contentBottomOffset(el, virtualizer) - scrollPosition.distanceFromBottom;
+      el.scrollTop = Math.min(Math.max(0, target), maxScrollOffset(el));
       return;
     }
 
