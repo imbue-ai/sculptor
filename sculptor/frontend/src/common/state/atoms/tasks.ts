@@ -49,7 +49,12 @@ export const updateTasksAtom = atom(null, (get, set, updates: Record<string, Cod
     }
   });
 
-  if (didIdsChange) {
+  // Write even when nothing changed if the list is still undefined: every
+  // stream frame carries a task-view map, so the first one — empty in a
+  // zero-task instance — marks the list as loaded. Consumers rely on the
+  // undefined → array transition to tell "still loading" from "no tasks"
+  // (e.g. WorkspacePage's agentless-workspace gate).
+  if (didIdsChange || get(taskIdsAtom) === undefined) {
     set(taskIdsAtom, Array.from(seenIds));
   }
 });
