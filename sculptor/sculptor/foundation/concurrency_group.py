@@ -475,6 +475,7 @@ class ConcurrencyGroup(MutableModel, AbstractContextManager):
         env: Mapping[str, str] | None = None,
         shutdown_event: ReadOnlyEvent | None = None,
         log_command: bool = True,
+        prefer_posix_spawn: bool = False,
     ) -> RunningProcess:
         """
         Run a process in the background, returning immediately.
@@ -495,6 +496,7 @@ class ConcurrencyGroup(MutableModel, AbstractContextManager):
             process_class=RunningProcessWithOnLineCallback,
             process_class_kwargs={"on_line_callback": on_output},
             log_command=log_command,
+            prefer_posix_spawn=prefer_posix_spawn,
         )
         return self.start_background_process_from_factory(process_factory)
 
@@ -510,6 +512,7 @@ class ConcurrencyGroup(MutableModel, AbstractContextManager):
         shutdown_event: ReadOnlyEvent | None = None,
         progress_handle: ProgressHandle | None = None,
         log_command: bool = True,
+        prefer_posix_spawn: bool = False,
     ) -> FinishedProcess:
         """
         Run a process to completion, blocking until it finishes.
@@ -540,6 +543,7 @@ class ConcurrencyGroup(MutableModel, AbstractContextManager):
                 # Reason: the concurrency group would raise an exception later on even if the failure of the process was properly handled by the caller.
                 is_checked_by_group=False,
                 log_command=log_command,
+                prefer_posix_spawn=prefer_posix_spawn,
             )
             process.wait()
             if is_checked_after:
