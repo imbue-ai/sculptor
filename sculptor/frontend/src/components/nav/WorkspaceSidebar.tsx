@@ -8,7 +8,6 @@ import type { Workspace } from "~/api";
 import { ElementIds } from "~/api";
 import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { projectsArrayAtom } from "~/common/state/atoms/projects.ts";
-import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { agentIdsByWorkspaceAtom, ensurePseudoTabAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 import { useOptimisticWorkspaceDelete } from "~/common/state/hooks/useOptimisticWorkspaceDelete.ts";
 import { AddRepoDialog } from "~/components/add-repo/AddRepoDialog.tsx";
@@ -25,8 +24,6 @@ import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCrea
 import { ReportProblemPopover } from "~/components/ReportProblemPopover.tsx";
 import { layoutPersistenceAdapter } from "~/components/sections/persistence/LocalStorageLayoutAdapter.ts";
 import { ResizeHandle } from "~/components/sections/ResizeHandle.tsx";
-import type { WorkspaceDotStatus } from "~/components/statusDot";
-import { computeWorkspaceDotStatus } from "~/components/statusDot";
 import { Toast, type ToastContent } from "~/components/Toast.tsx";
 import { useWorkspaceTabActions } from "~/components/useWorkspaceTabActions.ts";
 import { VersionDisplay } from "~/components/VersionDisplay.tsx";
@@ -61,7 +58,6 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   const ensurePseudoTab = useSetAtom(ensurePseudoTabAtom);
   const workspaces = useAtomValue(workspacesArrayAtom);
   const projects = useAtomValue(projectsArrayAtom);
-  const tasks = useAtomValue(tasksArrayAtom);
   const agentIdsByWorkspace = useAtomValue(agentIdsByWorkspaceAtom);
   const setRenamingWorkspaceId = useSetAtom(renamingWorkspaceIdAtom);
   // In the empty first-run state the repo area shows its own
@@ -123,16 +119,6 @@ export const WorkspaceSidebar = (): ReactElement | null => {
     }),
     [gitAndOpenIn],
   );
-
-  const workspaceStatuses = useMemo(() => {
-    const statusMap = new Map<string, WorkspaceDotStatus>();
-    const activeTasks = tasks ?? [];
-    for (const workspace of workspaces ?? []) {
-      const workspaceTasks = activeTasks.filter((task) => task.workspaceId === workspace.objectId);
-      statusMap.set(workspace.objectId, computeWorkspaceDotStatus(workspaceTasks));
-    }
-    return statusMap;
-  }, [workspaces, tasks]);
 
   // Group workspaces by repo (project). Every workspace has a projectId, but the
   // project record itself may not have loaded yet — those fall back to an "Other"
@@ -274,7 +260,6 @@ export const WorkspaceSidebar = (): ReactElement | null => {
           <SidebarRepoGroup
             key={group.projectId}
             group={group}
-            statuses={workspaceStatuses}
             actions={workspaceActions}
             openInRuntime={openInRuntime}
             onWorkspaceClick={handleWorkspaceClick}
@@ -313,10 +298,12 @@ export const WorkspaceSidebar = (): ReactElement | null => {
       <ResizeHandle
         axis="x"
         direction={1}
+        variant="edge-overlay"
         getSize={() => width}
         onResize={handleResize}
-        className={styles.resizeHandle}
         ariaLabel="Resize sidebar"
+        ariaValueNow={Math.round(width)}
+        ariaValueMin={MIN_SIDEBAR_WIDTH_PX}
         data-testid={ElementIds.SIDEBAR_RESIZE_HANDLE}
       />
 

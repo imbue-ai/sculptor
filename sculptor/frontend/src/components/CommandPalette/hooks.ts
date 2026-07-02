@@ -1,4 +1,4 @@
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { atom, useAtom, useAtomValue, useSetAtom } from "jotai";
 import { posthog } from "posthog-js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 
@@ -208,46 +208,65 @@ const useRegistrySize = (): number => {
 };
 
 /**
+ * The atoms that dynamic providers (and their action runtimes) read
+ * imperatively via `runtime.store.get(atom)` inside `produce()`, bundled into
+ * one derived value and gated on the palette being open.
+ *
+ * Two jobs:
+ *  - While OPEN, the bundle's identity changes whenever any input changes,
+ *    which forces the visible-set memo to recompute and re-invoke every
+ *    provider's `produce`. Without these subscriptions, providers would see
+ *    stale data after the user edits state outside the palette (e.g. closing
+ *    a tab while the palette is open would leave "Close others" stale until
+ *    the palette reopens).
+ *  - While CLOSED, the read function returns before touching any input, so
+ *    the only tracked dependency is `commandPaletteOpenAtom`. The palette
+ *    host stays mounted for the whole session and several inputs churn
+ *    constantly (every task streaming tick rebuilds `tasksArrayAtom`, every
+ *    layout write bumps `workspaceLayoutAtom`) — the gate keeps that churn
+ *    from re-rendering the host. First-open contents stay correct because
+ *    the open transition itself recomputes this atom from current state.
+ *
+ * INVARIANT: any atom a dynamic provider or its action runtime reads through
+ * `runtime.store.get(...)` MUST appear here. The static builtin commands
+ * don't need this — their `when` predicates already re-evaluate on every
+ * `ctx` change inside `registry.list()`.
+ */
+const dynamicProviderInputsAtom = atom((get) => {
+  if (!get(commandPaletteOpenAtom)) {
+    return null;
+  }
+  return {
+    workspaces: get(workspacesArrayAtom),
+    tasks: get(tasksArrayAtom),
+    openTabIds: get(effectiveOpenTabIdsAtom),
+    panelRegistry: get(panelRegistryAtom),
+    // The panel-toggle provider reads the layout's placement to list only
+    // actively-placed panels; the add-panel location page reads it via
+    // listAvailableLocations.
+    workspaceLayout: get(workspaceLayoutAtom),
+    // The add-panel provider reads this to build the panel page for the
+    // chosen section; without it, picking a section wouldn't recompute the
+    // list and the panel page would show "No commands here".
+    addPanelTarget: get(addPanelTargetSubSectionAtom),
+  };
+});
+
+/**
  * The list of visible commands for the current ctx, with `when` and
  * `onPage` already applied. Sorting + grouping is done in the component.
  *
- * Subscribes to the workspace and task atoms so that dynamic providers
- * which read those atoms via `getDefaultStore()` re-evaluate when their
- * inputs change. Without this, opening the palette and then navigating
- * (or having a workspace added in the background) would leave the list
- * stale.
- *
- * Short-circuits when the palette is closed so we don't pay the
- * `commandRegistry.list()` cost on every render.
+ * While the palette is closed, the dynamic-provider inputs are not
+ * subscribed at all (see `dynamicProviderInputsAtom`) and the memo
+ * short-circuits, so the always-mounted host neither re-renders on
+ * unrelated state churn nor pays the `commandRegistry.list()` cost.
  */
 export const useVisibleCommands = (ctx: PaletteContext): Array<Command> => {
   const registry = useCommandRegistry();
   const isOpen = useAtomValue(commandPaletteOpenAtom);
   const search = useAtomValue(commandPaletteSearchAtom);
   const size = useRegistrySize();
-  // Subscriptions to atoms that dynamic providers read imperatively
-  // (`runtime.store.get(atom)` inside `produce()`). Listing them here
-  // forces the visible-set memo to recompute when any of them changes,
-  // which in turn re-invokes every provider's `produce`. Without these
-  // subscriptions, providers see stale data after the user edits state
-  // outside the palette (e.g. closing a tab while the palette is open
-  // would leave "Close others" stale until the palette reopens).
-  //
-  // INVARIANT: any atom a dynamic provider or its action runtime reads
-  // through `runtime.store.get(...)` MUST appear here. The static
-  // builtin commands don't need this — their `when` predicates already
-  // re-evaluate on every `ctx` change inside `registry.list()`.
-  const workspaces = useAtomValue(workspacesArrayAtom);
-  const tasks = useAtomValue(tasksArrayAtom);
-  const openTabIds = useAtomValue(effectiveOpenTabIdsAtom);
-  const panelRegistry = useAtomValue(panelRegistryAtom);
-  // The panel-toggle provider reads the layout's placement to list only actively-placed
-  // panels; the add-panel location page reads it via listAvailableLocations.
-  const workspaceLayout = useAtomValue(workspaceLayoutAtom);
-  // The add-panel provider reads this imperatively to build the panel page for the
-  // chosen section; without subscribing, picking a section wouldn't recompute the
-  // list and the panel page would show "No commands here".
-  const addPanelTarget = useAtomValue(addPanelTargetSubSectionAtom);
+  const dynamicInputs = useAtomValue(dynamicProviderInputsAtom);
   const hasQuery = search.trim().length > 0;
   return useMemo(() => {
     if (!isOpen) return [];
@@ -255,28 +274,11 @@ export const useVisibleCommands = (ctx: PaletteContext): Array<Command> => {
     // ESLint flagging them as unused. The actual data is consumed by
     // dynamic providers via `runtime.store.get(...)`.
     void size;
-    void workspaces;
-    void tasks;
-    void openTabIds;
-    void panelRegistry;
-    void workspaceLayout;
-    void addPanelTarget;
+    void dynamicInputs;
     // While the user is typing at the root, surface page-scoped commands
     // too so fuzzy search can land them on sub-page items directly.
     return registry.list(ctx, { includeAllPages: hasQuery });
-  }, [
-    registry,
-    isOpen,
-    ctx,
-    hasQuery,
-    size,
-    workspaces,
-    tasks,
-    openTabIds,
-    panelRegistry,
-    workspaceLayout,
-    addPanelTarget,
-  ]);
+  }, [registry, isOpen, ctx, hasQuery, size, dynamicInputs]);
 };
 
 /**

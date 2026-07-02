@@ -303,7 +303,7 @@ record in `removed-and-changed-features.md`.
 
 ## P4 — Simplifications (highest leverage first)
 
-- [ ] **P4.1 One `layoutQueries.ts` for the read predicates.** **[×3]**
+- [x] **P4.1 One `layoutQueries.ts` for the read predicates.** **[×3]**
   `isSectionExpanded` exists in 4 copies (`sectionActions.ts:23-25`,
   `sectionAtoms.ts:124-127`, `addPanelCore.ts:56`,
   `useWorkspaceShortcuts.ts:39`); `panelsIn`/`openPanelsInSubSection` in 2
@@ -314,14 +314,14 @@ record in `removed-and-changed-features.md`.
   sub-section enumerators (`activeableSubSections` /
   `listAvailableLocations`). Single most likely source of future invariant
   drift.
-- [ ] **P4.2 Subscription-free add-panel hook** (fixes the P3 contract
+- [x] **P4.2 Subscription-free add-panel hook** (fixes the P3 contract
   violation): one derived `availableStaticPanelsAtom` in `addPanelCore.ts`
   read by React and by Cmd+K via `store.get`; move list/label building inside
   `DropdownMenu.Content` (mounts only while open).
-- [ ] **P4.3 `atomCache.ts` re-implements jotai's `atomFamily`** — 1:1 swap at
+- [x] **P4.3 `atomCache.ts` re-implements jotai's `atomFamily`** — 1:1 swap at
   the ~14 definition sites; gains `.remove()` for eviction (fixes the
   `panelDefinitionByIdAtom` per-agent leak, low-impact but free).
-- [ ] **P4.4 `AppShell` toast scaffolding** (~100 of 214 lines): six
+- [x] **P4.4 `AppShell` toast scaffolding** (~100 of 214 lines): six
   hand-wired toast atoms → one `AtomToast` component over a config array.
 - [ ] **P4.5** Merge `GhostTab`/`DragOverlayTab` into one `TabPill`; extract a
   `MenuRow` for `AddPanelDropdown`'s 5× repeated row markup.
@@ -332,11 +332,11 @@ record in `removed-and-changed-features.md`.
   pi-disabled fallback (3 copies); one `recentAgentLabel` in `addPanelCore`
   (dropdown and Cmd+K currently disagree); single-source the 400px center
   min-width (TS constant → inline style or CSS var, drop the scss literal).
-- [ ] **P4.7 (medium-risk, do with integration suite in hand)** Unify the two
+- [x] **P4.7 (medium-risk, do with integration suite in hand)** Unify the two
   bootstrap agent-placement paths (`useWorkspaceShellBootstrap.ts:111-131` +
   `agentPanelPlacement.ts`) into one additive ensure + one route-keyed
   activation effect.
-- [ ] **P4.8 (optional)** Extract `SidebarRepoGroup` + the empty-first-run
+- [x] **P4.8 (optional)** Extract `SidebarRepoGroup` + the empty-first-run
   block from the 638-line `WorkspaceSidebar.tsx`.
 
 Estimated net effect of P4.1–P4.6 + the P2 dead-code deletions: **~400+ lines

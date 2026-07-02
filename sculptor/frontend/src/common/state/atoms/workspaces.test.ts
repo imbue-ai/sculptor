@@ -2,20 +2,23 @@ import { createStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as api from "../../../api";
-import type { Workspace } from "../../../api";
-import { updateWorkspace } from "../../../api";
+import type { CodingAgentTaskView, Workspace } from "../../../api";
+import { TaskStatus, updateWorkspace } from "../../../api";
+import { taskAtomFamily, taskIdsAtom } from "./tasks.ts";
 import { workspaceOpenCloseErrorToastAtom } from "./toasts";
 import {
   closeWorkspaceTabAtom,
   createMigratingTabsStorage,
   effectiveOpenTabIdsAtom,
   INVALID_ACTIVE_INDEX,
+  isWorkspaceKnownAtomFamily,
   openWorkspaceTabAtom,
   optimisticDeleteWorkspaceAtom,
   tabOrderAtom,
   tabsAtom,
   updateWorkspacesAtom,
   workspaceAtomFamily,
+  workspaceDotStatusAtomFamily,
   workspaceIdsAtom,
 } from "./workspaces";
 
@@ -458,5 +461,88 @@ describe("createMigratingTabsStorage", () => {
       ],
       activeIndex: INVALID_ACTIVE_INDEX,
     });
+  });
+});
+
+describe("isWorkspaceKnownAtomFamily", () => {
+  it("is undefined before the first workspace snapshot arrives", () => {
+    const store = createStore();
+    expect(store.get(isWorkspaceKnownAtomFamily("w1"))).toBeUndefined();
+  });
+
+  it("reports membership once the id list is loaded", () => {
+    const store = createStore();
+    store.set(workspaceIdsAtom, ["w1"]);
+    expect(store.get(isWorkspaceKnownAtomFamily("w1"))).toBe(true);
+    expect(store.get(isWorkspaceKnownAtomFamily("w2"))).toBe(false);
+  });
+
+  it("does not notify subscribers when the id array is rebuilt with the same membership", () => {
+    const store = createStore();
+    store.set(workspaceIdsAtom, ["w1", "w2"]);
+    const listener = vi.fn();
+    const unsubscribe = store.sub(isWorkspaceKnownAtomFamily("w1"), listener);
+
+    // A fresh array identity with identical contents — the boolean slice
+    // resolves to the same primitive, so no notification is expected.
+    store.set(workspaceIdsAtom, ["w1", "w2"]);
+    expect(listener).not.toHaveBeenCalled();
+
+    store.set(workspaceIdsAtom, ["w2"]);
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+});
+
+describe("workspaceDotStatusAtomFamily", () => {
+  const dotTask = (
+    id: string,
+    workspaceId: string,
+    overrides: Partial<CodingAgentTaskView> = {},
+  ): CodingAgentTaskView =>
+    ({
+      id,
+      workspaceId,
+      status: TaskStatus.RUNNING,
+      lastReadAt: "2026-01-02T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+      isDeleted: false,
+      isArchived: false,
+      ...overrides,
+    }) as CodingAgentTaskView;
+
+  it("aggregates only the workspace's own tasks", () => {
+    const store = createStore();
+    store.set(taskIdsAtom, ["t1", "t2"]);
+    store.set(taskAtomFamily("t1"), dotTask("t1", "ws-a"));
+    store.set(taskAtomFamily("t2"), dotTask("t2", "ws-b", { status: TaskStatus.ERROR }));
+
+    expect(store.get(workspaceDotStatusAtomFamily("ws-a"))).toMatchObject({ hasRunning: true, hasError: false });
+    expect(store.get(workspaceDotStatusAtomFamily("ws-b"))).toMatchObject({ hasRunning: false, hasError: true });
+  });
+
+  it("keeps reference identity across a task tick that does not flip any flag", () => {
+    const store = createStore();
+    store.set(taskIdsAtom, ["t1"]);
+    store.set(taskAtomFamily("t1"), dotTask("t1", "ws-a"));
+
+    const first = store.get(workspaceDotStatusAtomFamily("ws-a"));
+    store.set(taskAtomFamily("t1"), dotTask("t1", "ws-a", { title: "tick" }));
+
+    expect(store.get(workspaceDotStatusAtomFamily("ws-a"))).toBe(first);
+  });
+
+  it("notifies subscribers when an aggregate flag flips", () => {
+    const store = createStore();
+    store.set(taskIdsAtom, ["t1"]);
+    store.set(taskAtomFamily("t1"), dotTask("t1", "ws-a"));
+    const listener = vi.fn();
+    const unsubscribe = store.sub(workspaceDotStatusAtomFamily("ws-a"), listener);
+
+    store.set(taskAtomFamily("t1"), dotTask("t1", "ws-a", { status: TaskStatus.WAITING }));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(store.get(workspaceDotStatusAtomFamily("ws-a"))).toMatchObject({ hasRunning: false, hasWaiting: true });
+    unsubscribe();
   });
 });

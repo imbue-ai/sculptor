@@ -1,16 +1,16 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 
 import { useIsMobile } from "../../common/hooks/useLayoutMode.ts";
 import { useImbueNavigate, useWorkspacePageParams } from "../../common/NavigateUtils.ts";
 import { markSwitchMilestone } from "../../common/perf/workspaceSwitchProfiler.ts";
-import { tasksArrayAtom } from "../../common/state/atoms/tasks.ts";
+import { workspaceAgentIdsWhenLoadedAtomFamily } from "../../common/state/agentPanelPlacement.ts";
 import {
   agentIdForWorkspaceAtomFamily,
+  isWorkspaceKnownAtomFamily,
   removeTabFromOrderAtom,
   setAgentForWorkspaceAtom,
-  workspaceIdsAtom,
 } from "../../common/state/atoms/workspaces.ts";
 import { useWorkspaceShellBootstrap } from "../../common/state/hooks/useWorkspaceShellBootstrap.ts";
 import { WorkspaceLayoutShell } from "./WorkspaceLayoutShell.tsx";
@@ -42,10 +42,13 @@ export const WorkspacePage = (): ReactElement | null => {
   const { workspaceID, agentID: agentIDFromUrl } = useWorkspacePageParams();
   const { navigateToAgent, navigateToAddWorkspace } = useImbueNavigate();
   const isMobile = useIsMobile();
-  const tasks = useAtomValue(tasksArrayAtom);
-  const workspaceIds = useAtomValue(workspaceIdsAtom);
-  const savedAgentIdAtom = useMemo(() => agentIdForWorkspaceAtomFamily(workspaceID), [workspaceID]);
-  const savedAgentId = useAtomValue(savedAgentIdAtom);
+  // Narrow per-workspace slices, never the raw workspace/task arrays: those
+  // rebuild on every streaming tick, and this component sits above the whole
+  // shell subtree. Both slices keep the `undefined` loading state so the
+  // gates below can tell "still resolving" from "genuinely absent".
+  const isKnownWorkspace = useAtomValue(isWorkspaceKnownAtomFamily(workspaceID));
+  const agentIds = useAtomValue(workspaceAgentIdsWhenLoadedAtomFamily(workspaceID));
+  const savedAgentId = useAtomValue(agentIdForWorkspaceAtomFamily(workspaceID));
   const setAgentForWorkspace = useSetAtom(setAgentForWorkspaceAtom);
   const removeTab = useSetAtom(removeTabFromOrderAtom);
 
@@ -54,31 +57,30 @@ export const WorkspacePage = (): ReactElement | null => {
   // is set and we render the shell immediately. This effect only covers the
   // cleanup paths: stale workspace, stale or missing agent.
   useEffect(() => {
-    if (workspaceIds === undefined) return; // first WS snapshot hasn't arrived
-    if (!workspaceIds.includes(workspaceID)) {
+    if (isKnownWorkspace === undefined) return; // first WS snapshot hasn't arrived
+    if (!isKnownWorkspace) {
       // Workspace was deleted between sessions — drop the tab and bail out.
       removeTab(workspaceID);
       navigateToAddWorkspace();
       return;
     }
     if (agentIDFromUrl) return; // URL is authoritative, nothing to fix up
-    if (tasks === undefined) return; // tasks haven't loaded; can't validate yet
+    if (agentIds === undefined) return; // tasks haven't loaded; can't validate yet
 
-    const workspaceTasks = tasks.filter((task) => task.workspaceId === workspaceID);
-    if (savedAgentId !== null && workspaceTasks.some((task) => task.id === savedAgentId)) {
+    if (savedAgentId !== null && agentIds.includes(savedAgentId)) {
       navigateToAgent(workspaceID, savedAgentId);
       return;
     }
-    const fallback = workspaceTasks[0];
-    if (fallback) {
-      setAgentForWorkspace({ wsId: workspaceID, agentId: fallback.id });
-      navigateToAgent(workspaceID, fallback.id);
+    const fallback = agentIds[0];
+    if (fallback !== undefined) {
+      setAgentForWorkspace({ wsId: workspaceID, agentId: fallback });
+      navigateToAgent(workspaceID, fallback);
     }
   }, [
     workspaceID,
     agentIDFromUrl,
-    workspaceIds,
-    tasks,
+    isKnownWorkspace,
+    agentIds,
     savedAgentId,
     navigateToAgent,
     navigateToAddWorkspace,
@@ -96,8 +98,7 @@ export const WorkspacePage = (): ReactElement | null => {
   // Until the workspace and task lists have loaded we can't tell "agentless" from
   // "still resolving" — render nothing for that brief window and let the fix-up
   // effect above navigate once an agent (or a stale-workspace redirect) resolves.
-  const isKnownWorkspace = workspaceIds !== undefined && workspaceIds.includes(workspaceID);
-  const isAgentless = tasks !== undefined && !tasks.some((task) => task.workspaceId === workspaceID);
-  if (!isKnownWorkspace || !isAgentless) return null;
+  const isAgentless = agentIds !== undefined && agentIds.length === 0;
+  if (isKnownWorkspace !== true || !isAgentless) return null;
   return <WorkspacePageContent workspaceId={workspaceID} />;
 };

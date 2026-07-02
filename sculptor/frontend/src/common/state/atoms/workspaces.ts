@@ -1,11 +1,14 @@
 import type { Atom, PrimitiveAtom } from "jotai";
 import { atom } from "jotai";
-import { atomFamily, atomWithStorage, createJSONStorage } from "jotai/utils";
+import { atomFamily, atomWithStorage, createJSONStorage, selectAtom } from "jotai/utils";
 
 import type { Workspace } from "../../../api";
 import { batchUpdateOpenState, updateWorkspace as updateWorkspaceApi } from "../../../api";
+import type { WorkspaceDotStatus } from "../../../components/statusDot/statusUtils.ts";
+import { computeWorkspaceDotStatus } from "../../../components/statusDot/statusUtils.ts";
 import { ToastType } from "../../../components/Toast.tsx";
 import { invalidateWorkspaceGitQueries, removeWorkspaceQueriesCache } from "../../queryClient.ts";
+import { tasksArrayAtom } from "./tasks.ts";
 import { workspaceOpenCloseErrorToastAtom } from "./toasts";
 import type { SetupStatusSnapshot } from "./workspaceSetupStatus";
 import { workspaceSetupStatusAtomFamily } from "./workspaceSetupStatus";
@@ -33,6 +36,42 @@ export const workspacesArrayAtom = atom<ReadonlyArray<Workspace> | undefined>((g
     .map((id) => get(workspaceAtomFamily(id)))
     .filter((workspace): workspace is Workspace => workspace !== null && !workspace.isDeleted);
 });
+
+/**
+ * Whether `workspaceId` is present in the loaded workspace list — `undefined`
+ * while the first workspace snapshot hasn't arrived. Returns a primitive so
+ * subscribers (e.g. the workspace page's stale-workspace redirect) are not
+ * re-rendered when the ids array is rebuilt with the same membership.
+ */
+export const isWorkspaceKnownAtomFamily = atomFamily<string, Atom<boolean | undefined>>((workspaceId) =>
+  atom((get) => {
+    const ids = get(workspaceIdsAtom);
+    return ids === undefined ? undefined : ids.includes(workspaceId);
+  }),
+);
+
+const areWorkspaceDotStatusesEqual = (a: WorkspaceDotStatus, b: WorkspaceDotStatus): boolean =>
+  a.hasError === b.hasError &&
+  a.hasWaiting === b.hasWaiting &&
+  a.hasRunning === b.hasRunning &&
+  a.isAllError === b.isAllError &&
+  a.hasUnread === b.hasUnread;
+
+/**
+ * The aggregated status-dot state of one workspace's agent tasks.
+ * `tasksArrayAtom` rebuilds its array on EVERY per-task update (streaming
+ * ticks included), so the slice is equality-guarded: subscribers — one
+ * sidebar workspace row each — re-render only when their workspace's
+ * aggregate flags actually flip.
+ */
+export const workspaceDotStatusAtomFamily = atomFamily((workspaceId: string) =>
+  selectAtom(
+    tasksArrayAtom,
+    (tasks): WorkspaceDotStatus =>
+      computeWorkspaceDotStatus((tasks ?? []).filter((task) => task.workspaceId === workspaceId)),
+    areWorkspaceDotStatusesEqual,
+  ),
+);
 
 /**
  * IDs of workspaces the backend considers open, derived from workspace models.

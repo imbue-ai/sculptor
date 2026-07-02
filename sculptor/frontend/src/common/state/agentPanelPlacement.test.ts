@@ -11,6 +11,7 @@ import {
   activateAgentPanelAtom,
   ensureAgentPanelsPlacedAtom,
   workspaceAgentIdsAtomFamily,
+  workspaceAgentIdsWhenLoadedAtomFamily,
 } from "./agentPanelPlacement.ts";
 import { taskAtomFamily, taskIdsAtom } from "./atoms/tasks.ts";
 
@@ -200,6 +201,40 @@ describe("workspaceAgentIdsAtomFamily", () => {
     store.set(taskAtomFamily("t1"), taskFor("t1", "ws-a", { title: "tick" }));
 
     expect(store.get(workspaceAgentIdsAtomFamily("ws-a"))).toBe(first);
+  });
+});
+
+describe("workspaceAgentIdsWhenLoadedAtomFamily", () => {
+  const taskFor = (
+    id: string,
+    workspaceId: string,
+    overrides: Partial<CodingAgentTaskView> = {},
+  ): CodingAgentTaskView => ({ id, workspaceId, isDeleted: false, ...overrides }) as CodingAgentTaskView;
+
+  it("is undefined until the first task snapshot arrives", () => {
+    const store = createStore();
+    expect(store.get(workspaceAgentIdsWhenLoadedAtomFamily("ws-a"))).toBeUndefined();
+  });
+
+  it("lists the workspace's ids — and [] for an agentless workspace — once loaded", () => {
+    const store = createStore();
+    store.set(taskIdsAtom, ["t1", "t2"]);
+    store.set(taskAtomFamily("t1"), taskFor("t1", "ws-a"));
+    store.set(taskAtomFamily("t2"), taskFor("t2", "ws-b"));
+
+    expect(store.get(workspaceAgentIdsWhenLoadedAtomFamily("ws-a"))).toEqual(["t1"]);
+    expect(store.get(workspaceAgentIdsWhenLoadedAtomFamily("ws-agentless"))).toEqual([]);
+  });
+
+  it("is reference-stable across a task tick that does not change the id list", () => {
+    const store = createStore();
+    store.set(taskIdsAtom, ["t1"]);
+    store.set(taskAtomFamily("t1"), taskFor("t1", "ws-a"));
+
+    const first = store.get(workspaceAgentIdsWhenLoadedAtomFamily("ws-a"));
+    store.set(taskAtomFamily("t1"), taskFor("t1", "ws-a", { title: "tick" }));
+
+    expect(store.get(workspaceAgentIdsWhenLoadedAtomFamily("ws-a"))).toBe(first);
   });
 });
 

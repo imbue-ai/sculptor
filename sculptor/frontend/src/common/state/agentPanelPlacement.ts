@@ -47,6 +47,20 @@ export const workspaceAgentIdsAtomFamily = atomFamily((workspaceId: string) =>
   ),
 );
 
+// The same per-workspace slice, but preserving tasksArrayAtom's `undefined`
+// "first task snapshot hasn't arrived" state. Consumers that must tell an
+// agentless workspace apart from tasks-still-loading (e.g. the workspace
+// page's agentless render gate) read this one; the reconcile input above
+// coalesces to [] because placing zero panels is a no-op either way.
+export const workspaceAgentIdsWhenLoadedAtomFamily = atomFamily((workspaceId: string) =>
+  selectAtom(
+    tasksArrayAtom,
+    (tasks): ReadonlyArray<string> | undefined =>
+      tasks === undefined ? undefined : tasks.filter((task) => task.workspaceId === workspaceId).map((task) => task.id),
+    (a, b) => (a === undefined || b === undefined ? a === b : shallowArrayEqual(a, b)),
+  ),
+);
+
 // Pure reducer behind ensureAgentPanelsPlacedAtom: place every given agent task's
 // panel, appending the missing ones to the center section. Returns the input
 // snapshot (same reference) when nothing needs to change, so the caller can skip
