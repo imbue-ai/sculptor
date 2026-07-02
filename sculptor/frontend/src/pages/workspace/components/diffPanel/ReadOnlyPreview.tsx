@@ -172,9 +172,7 @@ export const ReadOnlyPreview = ({ workspaceId, filePath }: ReadOnlyPreviewProps)
     return { name: fileName, contents: content, lang };
   }, [content, fileName, lang]);
 
-  // The highlighter gate resolves in milliseconds, so it shares the file
-  // fetch's loading placeholder rather than adding a distinct state.
-  if (isPending || !isHighlighterReady) {
+  if (isPending) {
     return (
       <Flex align="center" justify="center" flexGrow="1">
         <Text size="2" color="gray">
@@ -217,6 +215,19 @@ export const ReadOnlyPreview = ({ workspaceId, filePath }: ReadOnlyPreviewProps)
           </ReactMarkdown>
         </Box>
       </div>
+    );
+  }
+
+  // Only the Pierre source view below needs the highlighter; the markdown
+  // branch above renders without it. The gate resolves in milliseconds, so it
+  // shares the file fetch's loading placeholder rather than a distinct state.
+  if (!isHighlighterReady) {
+    return (
+      <Flex align="center" justify="center" flexGrow="1">
+        <Text size="2" color="gray">
+          Loading file...
+        </Text>
+      </Flex>
     );
   }
 
