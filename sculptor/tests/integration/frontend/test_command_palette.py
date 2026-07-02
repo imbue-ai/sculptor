@@ -17,12 +17,18 @@ from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSecti
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import blur_active_element
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
+from sculptor.testing.playwright_utils import wait_for_workspace_list_loaded
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 from sculptor.testing.utils import get_playwright_modifier_key
 
 
 def _layout(sculptor_instance: SculptorInstance) -> PlaywrightProjectLayoutPage:
+    # Every palette open path (sidebar Cmd+K link, keyboard shortcut) no-ops
+    # while the workspace list is still loading, and ensure_workspace_exists's
+    # momentary first-run probe misreads that window as "workspaces exist".
+    # Wait for the list before any test drives the palette.
+    wait_for_workspace_list_loaded(sculptor_instance.page)
     return PlaywrightProjectLayoutPage(page=sculptor_instance.page)
 
 

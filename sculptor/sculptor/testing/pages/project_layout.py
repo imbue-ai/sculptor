@@ -126,6 +126,13 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         # settings_page, which playwright_utils imports, so a module-level
         # import here would close that cycle.
         from sculptor.testing.playwright_utils import create_zero_agent_workspace
+        from sculptor.testing.playwright_utils import wait_for_workspace_list_loaded
+
+        # The momentary is_visible() probe below can't distinguish "list still
+        # loading" (first-run page deliberately not rendered then) from "list
+        # loaded with workspaces" — settle the load first, or a slow runner
+        # skips the create and every later shortcut/palette open silently no-ops.
+        wait_for_workspace_list_loaded(self._page)
 
         if self.get_by_test_id(ElementIDs.EMPTY_FIRST_RUN_PAGE).is_visible():
             create_zero_agent_workspace(self._page)

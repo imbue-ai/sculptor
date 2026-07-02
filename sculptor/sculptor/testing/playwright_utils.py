@@ -851,6 +851,27 @@ def navigate_to_workspace_without_agent(page: Page, workspace_id: str) -> None:
     page.evaluate(f"window.location.hash = '/ws/{workspace_id}'")
 
 
+def wait_for_workspace_list_loaded(page: Page) -> None:
+    """Wait until the frontend's workspace list has finished its initial load.
+
+    Global keyboard shortcuts and every command-palette open path no-op while
+    ``areGlobalShortcutsDisabledAtom`` is set, and it stays set while the
+    workspace list is still loading (``undefined``) — not just while it is
+    empty. The empty first-run page is deliberately NOT rendered during that
+    load window (so it never flashes), which means a momentary
+    ``EMPTY_FIRST_RUN_PAGE.is_visible()`` probe — e.g. the one inside
+    ``ensure_workspace_exists`` — cannot distinguish "list still loading" from
+    "list loaded with workspaces", and on a slow runner it lands in the load
+    window, skips workspace creation, and every later palette open / shortcut
+    press is silently suppressed. Wait for one of the two loaded-list signals
+    before deciding anything: a sidebar workspace row (loaded, non-empty) or
+    the empty first-run page (loaded, empty).
+    """
+    workspace_rows = page.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW)
+    empty_first_run = page.get_by_test_id(ElementIDs.EMPTY_FIRST_RUN_PAGE)
+    expect(workspace_rows.or_(empty_first_run).first).to_be_visible()
+
+
 def create_zero_agent_workspace(page: Page, *, description: str | None = None, source_branch: str = "testing") -> str:
     """Create a WORKTREE workspace with NO agent and navigate to it, returning its id.
 
