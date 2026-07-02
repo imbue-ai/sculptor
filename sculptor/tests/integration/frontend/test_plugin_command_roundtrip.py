@@ -19,7 +19,6 @@ from pathlib import Path
 
 from playwright.sync_api import Error as PlaywrightError
 
-from sculptor.foundation.git import get_git_repo_root
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.user_config.user_config import load_config
 from sculptor.services.user_config.user_config import save_config
@@ -33,9 +32,7 @@ from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 # the exact directory the skill tells agents to load first. Loading it here
 # doc-tests the skill: reaching "loaded" proves the served bundle was fetched,
 # imported, and activated, so the skill's quick start cannot rot.
-_EXAMPLE_PLUGIN_DIR = (
-    get_git_repo_root() / "sculptor" / "sculptor-plugin" / "skills" / "build-sculptor-plugin" / "example"
-)
+_EXAMPLE_PLUGIN_DIR = Path(__file__).parents[3] / "sculptor-plugin" / "skills" / "build-sculptor-plugin" / "example"
 
 # How long to wait for the renderer's stream to connect and answer a command
 # before giving up — the page is still booting when the test starts.
@@ -117,9 +114,11 @@ def test_plugin_command_load_reaches_the_live_renderer(sculptor_instance_factory
             f"/api/v1/workspaces/{workspace_id}/plugins/install",
             {
                 "pluginId": plugin_id,
+                # Mirror the CLI's packaging filter: regular files only, no dotfiles.
                 "files": [
                     {"path": path.name, "contentBase64": _b64(path.read_text())}
                     for path in sorted(_EXAMPLE_PLUGIN_DIR.iterdir())
+                    if path.is_file() and not path.name.startswith(".")
                 ],
             },
         )
