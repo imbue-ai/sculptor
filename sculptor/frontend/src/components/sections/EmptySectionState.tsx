@@ -12,15 +12,17 @@ import type { ReactElement } from "react";
 import { memo } from "react";
 
 import { ElementIds } from "~/api";
+import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 
+import { availableStaticPanelsAtom, recentAgentLabel, recentAgentTypeAtom } from "./addPanelCore.ts";
 import { AddPanelDropdown } from "./AddPanelDropdown.tsx";
 import styles from "./EmptySectionState.module.scss";
+import type { AvailableStaticPanel } from "./layoutQueries.ts";
 import { closeSplitAtom } from "./sectionActions.ts";
 import { isSplitHalfAtom } from "./sectionAtoms.ts";
 import type { SubSectionId } from "./sectionTypes.ts";
 import { isSecondary, toSection } from "./sectionTypes.ts";
 import { recentlyClosedPanelIdsAtom } from "./transientAtoms.ts";
-import type { StaticPanelOption } from "./useAddPanelActions.ts";
 import { useAddPanelActions } from "./useAddPanelActions.ts";
 
 // At most three recently-closed panel quick actions, so the total stays ≤ five
@@ -35,6 +37,15 @@ const EmptySectionStateComponent = ({ subSection }: EmptySectionStateProps): Rea
   const closeSplit = useSetAtom(closeSplitAtom);
   const recentlyClosedIds = useAtomValue(recentlyClosedPanelIdsAtom);
   const actions = useAddPanelActions();
+  // Unlike the dropdown (whose content mounts on open), the quick-add list and the
+  // "New {recent} agent" label render whenever the empty pane is visible, so this
+  // component subscribes to the derived add-panel atoms itself. Both are
+  // equality-guarded, so layout writes / task ticks that change neither list nor
+  // type do not re-render the pane. It only mounts for EMPTY sub-sections, so the
+  // registrations query gains at most a handful of observers.
+  const recentAgentType = useAtomValue(recentAgentTypeAtom);
+  const availableStaticPanels = useAtomValue(availableStaticPanelsAtom);
+  const { registrations } = useTerminalAgentRegistrations();
 
   // functions and callbacks
   const handleCloseSplit = (): void => {
@@ -46,15 +57,15 @@ const EmptySectionStateComponent = ({ subSection }: EmptySectionStateProps): Rea
   // primary of a section that currently has a split.
   const isSplitPane = isSecondary(subSection) || isSectionSplit;
 
+  const recentAgentDisplayLabel = recentAgentLabel(recentAgentType, registrations);
+
   // Recently-closed single-instance panels that are not currently open anywhere:
   // intersect the recent-closed list (newest first) with the available
   // single-instance panels (which already excludes open panels and dynamic ids).
-  const availableById = new Map<string, StaticPanelOption>(
-    actions.availableStaticPanels.map((panel) => [panel.id, panel]),
-  );
-  const recentPanelActions: ReadonlyArray<StaticPanelOption> = recentlyClosedIds
+  const availableById = new Map<string, AvailableStaticPanel>(availableStaticPanels.map((panel) => [panel.id, panel]));
+  const recentPanelActions: ReadonlyArray<AvailableStaticPanel> = recentlyClosedIds
     .map((id) => availableById.get(id))
-    .filter((panel): panel is StaticPanelOption => panel !== undefined)
+    .filter((panel): panel is AvailableStaticPanel => panel !== undefined)
     .slice(0, MAX_RECENT_PANEL_ACTIONS);
 
   return (
@@ -86,7 +97,7 @@ const EmptySectionStateComponent = ({ subSection }: EmptySectionStateProps): Rea
             onClick={() => actions.createRecentAgent(subSection)}
             data-testid={`${ElementIds.SECTION_EMPTY_QUICK_ACTION}-new-agent`}
           >
-            New {actions.recentAgentLabel} agent
+            New {recentAgentDisplayLabel} agent
           </Button>
           <Button
             variant="soft"

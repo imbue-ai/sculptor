@@ -13,15 +13,46 @@
 // Reuses the add-panel row styling, rendered as dropdown items.
 
 import { DropdownMenu, Tooltip } from "@radix-ui/themes";
+import { useAtomValue } from "jotai";
+import type { LucideIcon } from "lucide-react";
 import { MessageSquarePlus, SquareTerminal } from "lucide-react";
 import type { ReactElement } from "react";
 
 import { type AgentTypeName, ElementIds } from "~/api";
 import { useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
+import { isPiAgentEnabledAtom } from "~/common/state/atoms/userConfig.ts";
+import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 
+import {
+  availableStaticPanelsAtom,
+  buildAgentTypeOptions,
+  recentAgentLabel,
+  recentAgentTypeAtom,
+} from "./addPanelCore.ts";
 import styles from "./AddPanelDropdown.module.scss";
 import type { SubSectionId } from "./sectionTypes.ts";
 import { useAddPanelActions } from "./useAddPanelActions.ts";
+
+// The shared row body rendered inside every dropdown item and sub-trigger: leading
+// icon + label, with an optional trailing keybinding hint. Hover/active backgrounds
+// come from the wrapping Radix item, so this only lays out the contents.
+const MenuRow = ({
+  icon: Icon,
+  label,
+  shortcut,
+}: {
+  icon: LucideIcon;
+  label: string;
+  shortcut?: string;
+}): ReactElement => (
+  <span className={styles.item}>
+    <span className={styles.itemIcon}>
+      <Icon size={16} />
+    </span>
+    <span className={styles.itemTitle}>{label}</span>
+    {shortcut !== undefined && shortcut !== "" && <span className={styles.shortcut}>{shortcut}</span>}
+  </span>
+);
 
 type AddPanelDropdownProps = {
   subSection: SubSectionId;
@@ -48,107 +79,98 @@ const agentTypeTestId = (agentType: AgentTypeName): string => {
   }
 };
 
-export const AddPanelDropdown = ({ subSection, trigger, tooltip }: AddPanelDropdownProps): ReactElement => {
+// The dropdown's item list. A separate component (rather than inline JSX in
+// AddPanelDropdown) so its subscriptions — the layout/registry-derived panel list,
+// the recent agent type, the registrations query — mount only while the menu is
+// OPEN: Radix mounts DropdownMenu.Content's children on open and unmounts them on
+// close, so a closed dropdown costs its host section header nothing. Do not lift
+// these reads into AddPanelDropdown/useAddPanelActions, which stay mounted in every
+// section header and would re-render the shell on every layout write.
+const AddPanelMenuItems = ({ subSection }: { subSection: SubSectionId }): ReactElement => {
   // state and hooks
   const actions = useAddPanelActions();
   const newAgentShortcut = useKeybindingDisplayText("new_agent");
-
-  // functions and callbacks
-  const handleOpenChange = (isOpen: boolean): void => {
-    // Re-read the registrations directory on open so the agent-type sub-menu
-    // tracks the filesystem without a restart.
-    if (isOpen) {
-      actions.refreshRegistrations();
-    }
-  };
+  const recentAgentType = useAtomValue(recentAgentTypeAtom);
+  const availableStaticPanels = useAtomValue(availableStaticPanelsAtom);
+  const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
+  // Mounting on menu open re-fetches the registrations (staleTime 0 +
+  // refetchOnMount), so the agent-type sub-menu tracks the registrations
+  // directory without a restart or an explicit refetch call.
+  const { registrations } = useTerminalAgentRegistrations();
 
   // rendering / derived data
+  const agentTypeOptions = buildAgentTypeOptions({ isPiAgentEnabled, registrations });
+
   return (
-    <DropdownMenu.Root onOpenChange={handleOpenChange}>
-      {tooltip !== undefined ? (
-        <Tooltip content={tooltip}>
-          <DropdownMenu.Trigger>{trigger}</DropdownMenu.Trigger>
-        </Tooltip>
-      ) : (
-        <DropdownMenu.Trigger>{trigger}</DropdownMenu.Trigger>
+    <>
+      <DropdownMenu.Item
+        data-testid={ElementIds.ADD_PANEL_NEW_AGENT}
+        onSelect={() => actions.createRecentAgent(subSection)}
+      >
+        <MenuRow
+          icon={MessageSquarePlus}
+          label={`New ${recentAgentLabel(recentAgentType, registrations)} agent`}
+          shortcut={newAgentShortcut}
+        />
+      </DropdownMenu.Item>
+
+      <DropdownMenu.Sub>
+        <DropdownMenu.SubTrigger data-testid={ElementIds.ADD_PANEL_AGENT_TYPE_SUBMENU}>
+          <MenuRow icon={MessageSquarePlus} label="New agent of type…" />
+        </DropdownMenu.SubTrigger>
+        <DropdownMenu.SubContent data-testid={ElementIds.AGENT_TYPE_MENU}>
+          {agentTypeOptions.map((option) => (
+            <DropdownMenu.Item
+              key={option.key}
+              data-testid={agentTypeTestId(option.agentType)}
+              data-registration-id={option.registrationId}
+              onSelect={() => actions.createAgent(option.agentType, option.registrationId, subSection)}
+            >
+              <MenuRow
+                icon={option.agentType === "registered" ? SquareTerminal : MessageSquarePlus}
+                label={option.label}
+              />
+            </DropdownMenu.Item>
+          ))}
+        </DropdownMenu.SubContent>
+      </DropdownMenu.Sub>
+
+      <DropdownMenu.Item
+        data-testid={ElementIds.ADD_PANEL_NEW_TERMINAL}
+        onSelect={() => actions.createTerminal(subSection)}
+      >
+        <MenuRow icon={SquareTerminal} label="New terminal" />
+      </DropdownMenu.Item>
+
+      {availableStaticPanels.length > 0 && (
+        <>
+          <DropdownMenu.Separator />
+          {availableStaticPanels.map((panel) => (
+            <DropdownMenu.Item
+              key={panel.id}
+              data-testid={`${ElementIds.ADD_PANEL_PANEL_OPTION}-${panel.id}`}
+              onSelect={() => actions.openStaticPanel(panel.id, subSection)}
+            >
+              <MenuRow icon={panel.icon} label={panel.displayName} />
+            </DropdownMenu.Item>
+          ))}
+        </>
       )}
-      <DropdownMenu.Content size="1" data-testid={`${ElementIds.ADD_PANEL_DROPDOWN}-${subSection}`}>
-        <DropdownMenu.Item
-          data-testid={ElementIds.ADD_PANEL_NEW_AGENT}
-          onSelect={() => actions.createRecentAgent(subSection)}
-        >
-          <span className={styles.item}>
-            <span className={styles.itemIcon}>
-              <MessageSquarePlus size={16} />
-            </span>
-            <span className={styles.itemTitle}>New {actions.recentAgentLabel} agent</span>
-            {newAgentShortcut !== "" && <span className={styles.shortcut}>{newAgentShortcut}</span>}
-          </span>
-        </DropdownMenu.Item>
-
-        <DropdownMenu.Sub>
-          <DropdownMenu.SubTrigger data-testid={ElementIds.ADD_PANEL_AGENT_TYPE_SUBMENU}>
-            <span className={styles.item}>
-              <span className={styles.itemIcon}>
-                <MessageSquarePlus size={16} />
-              </span>
-              <span className={styles.itemTitle}>New agent of type…</span>
-            </span>
-          </DropdownMenu.SubTrigger>
-          <DropdownMenu.SubContent data-testid={ElementIds.AGENT_TYPE_MENU}>
-            {actions.agentTypeOptions.map((option) => (
-              <DropdownMenu.Item
-                key={option.key}
-                data-testid={agentTypeTestId(option.agentType)}
-                data-registration-id={option.registrationId}
-                onSelect={() => actions.createAgent(option.agentType, option.registrationId, subSection)}
-              >
-                <span className={styles.item}>
-                  <span className={styles.itemIcon}>
-                    {option.agentType === "registered" ? <SquareTerminal size={16} /> : <MessageSquarePlus size={16} />}
-                  </span>
-                  <span className={styles.itemTitle}>{option.label}</span>
-                </span>
-              </DropdownMenu.Item>
-            ))}
-          </DropdownMenu.SubContent>
-        </DropdownMenu.Sub>
-
-        <DropdownMenu.Item
-          data-testid={ElementIds.ADD_PANEL_NEW_TERMINAL}
-          onSelect={() => actions.createTerminal(subSection)}
-        >
-          <span className={styles.item}>
-            <span className={styles.itemIcon}>
-              <SquareTerminal size={16} />
-            </span>
-            <span className={styles.itemTitle}>New terminal</span>
-          </span>
-        </DropdownMenu.Item>
-
-        {actions.availableStaticPanels.length > 0 && (
-          <>
-            <DropdownMenu.Separator />
-            {actions.availableStaticPanels.map((panel) => {
-              const Icon = panel.icon;
-              return (
-                <DropdownMenu.Item
-                  key={panel.id}
-                  data-testid={`${ElementIds.ADD_PANEL_PANEL_OPTION}-${panel.id}`}
-                  onSelect={() => actions.openStaticPanel(panel.id, subSection)}
-                >
-                  <span className={styles.item}>
-                    <span className={styles.itemIcon}>
-                      <Icon size={16} />
-                    </span>
-                    <span className={styles.itemTitle}>{panel.displayName}</span>
-                  </span>
-                </DropdownMenu.Item>
-              );
-            })}
-          </>
-        )}
-      </DropdownMenu.Content>
-    </DropdownMenu.Root>
+    </>
   );
 };
+
+export const AddPanelDropdown = ({ subSection, trigger, tooltip }: AddPanelDropdownProps): ReactElement => (
+  <DropdownMenu.Root>
+    {tooltip !== undefined ? (
+      <Tooltip content={tooltip}>
+        <DropdownMenu.Trigger>{trigger}</DropdownMenu.Trigger>
+      </Tooltip>
+    ) : (
+      <DropdownMenu.Trigger>{trigger}</DropdownMenu.Trigger>
+    )}
+    <DropdownMenu.Content size="1" data-testid={`${ElementIds.ADD_PANEL_DROPDOWN}-${subSection}`}>
+      <AddPanelMenuItems subSection={subSection} />
+    </DropdownMenu.Content>
+  </DropdownMenu.Root>
+);

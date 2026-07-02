@@ -23,7 +23,7 @@ import { openWorkspaceTabAtom, workspacesArrayAtom } from "~/common/state/atoms/
 import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
 import { workspaceDeleteTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
 
-import type { WorkspaceLayoutState } from "./persistence/types.ts";
+import { listSubSections } from "./layoutQueries.ts";
 import { panelRegistryAtom } from "./registry/panelRegistry.ts";
 import { jumpToSectionAtom, setActivePanelAtom, toggleSectionAtom } from "./sectionActions.ts";
 import {
@@ -32,30 +32,12 @@ import {
   panelsInSubSectionAtom,
   workspaceLayoutAtom,
 } from "./sectionAtoms.ts";
-import type { PanelId, SubSectionId } from "./sectionTypes.ts";
-import { SECTION_IDS, toSecondary, toSection } from "./sectionTypes.ts";
+import type { PanelId } from "./sectionTypes.ts";
+import { toSection } from "./sectionTypes.ts";
 import { maximizedSectionAtom } from "./transientAtoms.ts";
 import { useAddPanelActions } from "./useAddPanelActions.ts";
 
 type CycleDirection = 1 | -1;
-
-// The ordered active-able sub-sections: each expanded section's primary (center is
-// always expanded), plus its secondary half when split. This is the sequence the
-// section-cycle steps through.
-function activeableSubSections(layout: WorkspaceLayoutState): ReadonlyArray<SubSectionId> {
-  const subSections: Array<SubSectionId> = [];
-  for (const section of SECTION_IDS) {
-    const isExpanded = section === "center" || (layout.expanded[section] ?? false);
-    if (!isExpanded) {
-      continue;
-    }
-    subSections.push(section);
-    if (layout.splits[section] !== undefined) {
-      subSections.push(toSecondary(section));
-    }
-  }
-  return subSections;
-}
 
 function stepIndex(length: number, current: number, direction: CycleDirection): number {
   const base = current === -1 ? 0 : current;
@@ -97,7 +79,9 @@ export const useWorkspaceShortcuts = (): void => {
   const cycleSection = useCallback(
     (direction: CycleDirection): void => {
       const layout = store.get(workspaceLayoutAtom);
-      const order = activeableSubSections(layout);
+      // The active-able sub-sections: the section-cycle only steps through expanded
+      // sections (and their split halves) — a collapsed section cannot be active.
+      const order = listSubSections(layout, { includeCollapsed: false });
       if (order.length === 0) {
         return;
       }

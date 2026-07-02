@@ -6,17 +6,21 @@
 // full layout:
 //   1. the scope flip to this workspace, seeding the full default arrangement
 //      on the workspace's FIRST visit (and seeding the bottom terminal so it is real);
-//   2. placement of the active agent's panel into the center section.
+//   2. activation of the route's agent panel (placed into center on first sight);
+//   3. the additive reconcile that gives every other agent of the workspace a tab.
 // A separate passive effect pulses the active-section ring on entry. The panel
 // registry is kept in sync with this workspace's agents/terminals by
 // useWorkspaceDynamicPanels. A restored snapshot is never re-seeded, preserving
 // what the user was looking at.
 
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { useEffect, useLayoutEffect, useMemo } from "react";
+import { useEffect, useLayoutEffect } from "react";
 
-import { ensureAgentPanelsPlacedAtom } from "~/common/state/agentPanelPlacement.ts";
-import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
+import {
+  activateAgentPanelAtom,
+  ensureAgentPanelsPlacedAtom,
+  workspaceAgentIdsAtomFamily,
+} from "~/common/state/agentPanelPlacement.ts";
 import { useMarkRead } from "~/common/state/hooks/useMarkRead";
 import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
 import { seedFirstVisitTerminal } from "~/components/sections/addPanelCore.ts";
@@ -27,13 +31,11 @@ import {
   makeAgentPanelId,
   makeTerminalPanelId,
 } from "~/components/sections/registry/dynamicPanels.tsx";
-import { openPanelAtom, setActivePanelAtom } from "~/components/sections/sectionActions.ts";
 import {
   activePanelIdInSubSectionAtom,
   activeSubSectionAtom,
   isEmptyLayout,
   switchActiveWorkspaceAtom,
-  workspaceLayoutAtom,
   workspaceLayoutFamily,
 } from "~/components/sections/sectionAtoms.ts";
 import type { PanelId } from "~/components/sections/sectionTypes.ts";
@@ -70,11 +72,9 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
 
   const store = useStore();
   const switchActiveWorkspace = useSetAtom(switchActiveWorkspaceAtom);
-  const openPanel = useSetAtom(openPanelAtom);
-  const setActivePanel = useSetAtom(setActivePanelAtom);
   const bumpRingNonce = useSetAtom(activeSectionRingNonceAtom);
+  const activateAgentPanel = useSetAtom(activateAgentPanelAtom);
   const ensureAgentPanelsPlaced = useSetAtom(ensureAgentPanelsPlacedAtom);
-  const tasks = useAtomValue(tasksArrayAtom);
   const { createRecentAgent } = useAddPanelActions();
 
   // Keep the registry in sync with this workspace's agents.
@@ -87,13 +87,10 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
   // single per-workspace mount that always has the add-panel actions in scope.
   useRegisterCommandAction("agent.create", createRecentAgent);
 
-  // This workspace's agent task ids. Note the useMemo re-runs on every per-task tick
-  // (tasksArrayAtom returns a new array reference on any task field change), so the
-  // auto-open effect below re-fires per tick — but ensureAgentPanelsPlaced no-ops when
-  // nothing is missing, so it is harmless.
-  const workspaceAgentIds = useMemo(() => {
-    return (tasks ?? []).filter((task) => task.workspaceId === workspaceId).map((task) => task.id);
-  }, [tasks, workspaceId]);
+  // This workspace's agent task ids, through the shallow-equal slice so streaming
+  // ticks (which rebuild tasksArrayAtom's array without changing the id list) neither
+  // re-render this host nor re-fire the reconcile effect below.
+  const workspaceAgentIds = useAtomValue(workspaceAgentIdsAtomFamily(workspaceId));
 
   // Per-viewed-agent data effects that the old workspace page owned: sync the
   // viewed agent's artifacts and mark it read while the user is looking at it.
@@ -136,29 +133,28 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
     }
   }, [workspaceId, taskId, store, switchActiveWorkspace]);
 
-  // Place the active agent in the center. Read placement imperatively (via the
-  // store) so this runs once per agent id rather than on every layout change.
+  // Activate the ROUTE's agent (placing it in center if it has never been placed).
+  // Keyed strictly off the route — workspaceId/taskId — and NEVER off layout state:
+  // switching tabs writes activePanel without navigating, so a layout-keyed re-run
+  // would snap focus straight back to the routed agent. A layout effect, so a
+  // freshly-created agent's activation commits in the same pre-paint flush as its
+  // navigation. Agentless workspaces (no taskId) skip activation and keep the
+  // center's empty state.
   useLayoutEffect(() => {
     if (taskId === undefined) {
-      return; // no agents yet — the center stays empty
+      return;
     }
-    const panelId = makeAgentPanelId(taskId);
-    const placement = store.get(workspaceLayoutAtom).placement[panelId];
-    if (placement === undefined) {
-      openPanel({ panelId, in: "center" });
-    } else {
-      setActivePanel({ panelId, in: placement });
-    }
-  }, [workspaceId, taskId, store, openPanel, setActivePanel]);
+    activateAgentPanel(taskId);
+  }, [workspaceId, taskId, activateAgentPanel]);
 
-  // Auto-open every agent for this workspace as a center panel tab. The active-agent
-  // effect above only places the route's agent; an agent that appears WITHOUT a
+  // Reconcile: every agent of this workspace owns a center panel tab. The activation
+  // effect above only touches the route's agent; an agent that appears WITHOUT a
   // navigation (a CI-babysitter the backend spawns, or a second agent created from
-  // the add-panel "+" / Cmd+K) would otherwise be registered but never placed, so no
-  // tab rendered. This reconcile is additive only — it never changes the active panel,
-  // so a background agent surfaces as a new tab without stealing focus from the agent
-  // the user is currently viewing. Runs as a layout effect so a freshly-created agent's
-  // tab is committed in the same pre-paint flush as its navigation.
+  // the add-panel "+" / Cmd+K) surfaces here. The reconcile is additive-only and
+  // idempotent — it never changes the active panel (a background agent's tab appears
+  // without stealing focus) and re-running it on every task tick cannot duplicate a
+  // tab. Runs as a layout effect so a freshly-created agent's tab is committed in the
+  // same pre-paint flush as its navigation.
   useLayoutEffect(() => {
     ensureAgentPanelsPlaced(workspaceAgentIds);
   }, [workspaceAgentIds, ensureAgentPanelsPlaced]);

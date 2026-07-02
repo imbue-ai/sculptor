@@ -1,56 +1,124 @@
-// Agent-panel placement: keep the active workspace's agents surfaced as center
-// panel tabs.
+// Agent-panel placement for the workspace shell: the two write atoms through which
+// agent panels enter the layout and become visible.
 //
-// The shell only ever placed the route's agent into the center section (the
-// useWorkspaceShellBootstrap "active agent" effect). Agents that appear WITHOUT a
-// navigation — a CI-babysitter agent the backend spawns in the background, or the
-// second agent created from the add-panel "+" / Cmd+K "New agent" — were registered
-// as panel definitions but never placed in a section, so no tab rendered for them.
+//   - ensureAgentPanelsPlacedAtom — the additive reconcile: every agent task of the
+//     active workspace owns a center tab. Safe to run on every task tick.
+//   - activateAgentPanelAtom — the navigation activation: the routed agent's panel
+//     becomes its sub-section's active panel (placed into center on first sight).
 //
-// This action atom reconciles the layout so every agent task for the active
-// workspace owns a center tab. It is purely ADDITIVE: it appends any missing
-// agent:<taskId> panels into the center section and never removes one, changes the
-// active panel, or moves the active sub-section — so surfacing a background agent as
-// a new tab does not steal focus from the agent the user is currently viewing
-// (the route's agent stays active via the bootstrap's own active-agent effect).
-// Deleting an agent removes its panel through the agent close/delete flow, so this
-// atom only needs to handle appearances.
+// The reconcile is purely ADDITIVE and idempotent: it appends missing agent:<taskId>
+// panels to the center section and never removes a panel, changes the active panel,
+// or moves the active sub-section — an agent that appears WITHOUT a navigation (a
+// CI-babysitter the backend spawns, an agent created from another surface) gains a
+// tab without stealing focus from whatever the user is viewing. It never prunes
+// either: a placed panel whose task is gone is removed by the agent close/delete
+// flow, not here.
+//
+// Activation, by contrast, deliberately moves focus, so its caller must key it off
+// actual navigations (the route's task id) — never off layout state, because
+// switching tabs writes activePanel without navigating and would be snapped right
+// back (see useWorkspaceShellBootstrap).
 
 import { atom } from "jotai";
+import { atomFamily, selectAtom } from "jotai/utils";
 
+import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
+import type { WorkspaceLayoutState } from "~/components/sections/persistence/types.ts";
 import { makeAgentPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
+import { openPanelAtom, setActivePanelAtom } from "~/components/sections/sectionActions.ts";
 import { workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
 import type { PanelId, SubSectionId } from "~/components/sections/sectionTypes.ts";
+import { shallowArrayEqual } from "~/components/sections/shallowArrayEqual.ts";
 
 // New agent panels land in the center section's primary sub-section, mirroring the
 // manual create path (useAddPanelActions defaults its target sub-section to center).
 const AGENT_CENTER_SUB_SECTION: SubSectionId = "center";
 
-// Ensure each of the given agent task ids has its panel placed (open) in the center
-// section. Writes once with the full reconciled snapshot, and no-ops when nothing is
-// missing so it never spins the layout's persist/notify cycle on every task tick.
-export const ensureAgentPanelsPlacedAtom = atom(null, (get, set, agentTaskIds: ReadonlyArray<string>) => {
-  const layout = get(workspaceLayoutAtom);
+// The agent task ids of one workspace — the reconcile's input. tasksArrayAtom
+// rebuilds its array on EVERY per-task update (a streaming token tick included), so
+// subscribers of this slice re-render only when the workspace's agent id list
+// actually changes — an agent created or deleted — not on every tick.
+export const workspaceAgentIdsAtomFamily = atomFamily((workspaceId: string) =>
+  selectAtom(
+    tasksArrayAtom,
+    (tasks): ReadonlyArray<string> =>
+      (tasks ?? []).filter((task) => task.workspaceId === workspaceId).map((task) => task.id),
+    shallowArrayEqual,
+  ),
+);
 
+// Pure reducer behind ensureAgentPanelsPlacedAtom: place every given agent task's
+// panel, appending the missing ones to the center section. Returns the input
+// snapshot (same reference) when nothing needs to change, so the caller can skip
+// the write (and the persist/notify cycle) on the every-task-tick invocations.
+//
+// Idempotent and duplicate-proof by construction: a panel is "missing" only while
+// it has no placement, and the center order is rebuilt so each panel id appears at
+// most once — a newly placed id is filtered out of the existing entries before it
+// is appended, and entries duplicated in a persisted snapshot are collapsed to
+// their first occurrence. A duplicate order entry would render as a duplicate tab,
+// so the invariant is repaired here rather than trusted.
+export function withAgentPanelsEnsured(
+  layout: WorkspaceLayoutState,
+  agentTaskIds: ReadonlyArray<string>,
+): WorkspaceLayoutState {
   const missing: Array<PanelId> = [];
+  const missingSet = new Set<PanelId>();
   for (const taskId of agentTaskIds) {
     const panelId = makeAgentPanelId(taskId);
-    if (layout.placement[panelId] === undefined) {
+    if (layout.placement[panelId] === undefined && !missingSet.has(panelId)) {
       missing.push(panelId);
+      missingSet.add(panelId);
     }
   }
 
-  if (missing.length === 0) {
-    return;
+  const existingOrder = layout.order[AGENT_CENTER_SUB_SECTION] ?? [];
+  const kept = new Set<PanelId>();
+  const dedupedExisting = existingOrder.filter((panelId) => {
+    if (kept.has(panelId) || missingSet.has(panelId)) {
+      return false;
+    }
+    kept.add(panelId);
+    return true;
+  });
+  const nextOrder = [...dedupedExisting, ...missing];
+
+  const isOrderUnchanged =
+    nextOrder.length === existingOrder.length && nextOrder.every((panelId, index) => panelId === existingOrder[index]);
+  if (missing.length === 0 && isOrderUnchanged) {
+    return layout;
   }
 
   const placement = { ...layout.placement };
   for (const panelId of missing) {
     placement[panelId] = AGENT_CENTER_SUB_SECTION;
   }
-  const order = {
-    ...layout.order,
-    [AGENT_CENTER_SUB_SECTION]: [...(layout.order[AGENT_CENTER_SUB_SECTION] ?? []), ...missing],
-  };
-  set(workspaceLayoutAtom, { ...layout, placement, order });
+  return { ...layout, placement, order: { ...layout.order, [AGENT_CENTER_SUB_SECTION]: nextOrder } };
+}
+
+// Ensure each of the given agent task ids has its panel placed (open) in the center
+// section. Writes once with the full reconciled snapshot, and skips the write
+// entirely when nothing is missing so it never spins the layout's persist/notify
+// cycle on every task tick.
+export const ensureAgentPanelsPlacedAtom = atom(null, (get, set, agentTaskIds: ReadonlyArray<string>) => {
+  const layout = get(workspaceLayoutAtom);
+  const next = withAgentPanelsEnsured(layout, agentTaskIds);
+  if (next !== layout) {
+    set(workspaceLayoutAtom, next);
+  }
+});
+
+// Make the agent's panel the visible one: a panel that has never been placed opens
+// in the center (openPanelAtom activates it and expands the section as part of
+// opening); an already-placed panel is activated in whatever sub-section it lives
+// in — activation never MOVES a panel out of a section the user put it in. Both
+// branches go through the layout reducers, which keep the order duplicate-free.
+export const activateAgentPanelAtom = atom(null, (get, set, taskId: string) => {
+  const panelId = makeAgentPanelId(taskId);
+  const placement = get(workspaceLayoutAtom).placement[panelId];
+  if (placement === undefined) {
+    set(openPanelAtom, { panelId, in: AGENT_CENTER_SUB_SECTION });
+  } else {
+    set(setActivePanelAtom, { panelId, in: placement });
+  }
 });

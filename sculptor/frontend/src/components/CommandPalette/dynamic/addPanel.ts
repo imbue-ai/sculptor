@@ -13,43 +13,27 @@
 
 import { MessageSquarePlus, PanelTopIcon, SquareTerminal } from "lucide-react";
 
+import { parseStoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import {
-  AGENT_TYPE_LABELS,
-  lastUsedAgentTypeAtom,
-  parseStoredAgentType,
-  type StoredAgentType,
-} from "~/common/state/atoms/agentTabs.ts";
-import { isPiAgentEnabledAtom } from "~/common/state/atoms/userConfig.ts";
-import {
+  availableLocationsAtom,
+  availableStaticPanelsAtom,
   createAgentAndNavigate,
   createTerminalInLocation,
-  listAvailableLocations,
-  listAvailableStaticPanels,
-  normalizeRecentAgentType,
   openStaticPanelInLocation,
+  recentAgentLabel,
+  recentAgentTypeAtom,
 } from "~/components/sections/addPanelCore.ts";
 
 import { addPanelTargetSubSectionAtom } from "../contextActions/atoms.ts";
 import type { CommandRuntime } from "../runtime.ts";
 import type { Command, DynamicProvider } from "../types.ts";
 
-// The stored recent agent type, run through the shared normalizer (a bare
-// "terminal" or a disabled "pi" falls back to Claude) so the Cmd+K row and the
-// section "+" dropdown resolve the same type from the same stored value.
-function resolveRecentAgentType(runtime: CommandRuntime): StoredAgentType {
-  return normalizeRecentAgentType(runtime.store.get(lastUsedAgentTypeAtom), runtime.store.get(isPiAgentEnabledAtom));
-}
-
-// The recent-agent label for the Cmd+K row. Registered terminal-agent programs label
-// as a generic "agent" here (their display names need the registrations list, which
-// isn't available synchronously in the provider) — the built-in types read straight
-// from the stored default.
-function recentAgentLabel(runtime: CommandRuntime): string {
-  const { agentType, registrationId } = parseStoredAgentType(resolveRecentAgentType(runtime));
-  if (agentType === "registered" || registrationId !== undefined) {
-    return "agent";
-  }
-  return AGENT_TYPE_LABELS[agentType];
+// The recent-agent label for the Cmd+K row. The registrations directory isn't
+// available synchronously in the provider, so none is passed and registered
+// terminal-agent programs take the shared helper's generic "agent" fallback; the
+// built-in types label from the stored default.
+function recentAgentRowLabel(runtime: CommandRuntime): string {
+  return recentAgentLabel(runtime.store.get(recentAgentTypeAtom), []);
 }
 
 export const buildAddPanelProvider = (runtime: CommandRuntime): DynamicProvider => ({
@@ -78,7 +62,7 @@ export const buildAddPanelProvider = (runtime: CommandRuntime): DynamicProvider 
     });
 
     // Location page: one row per available section / sub-section.
-    for (const location of listAvailableLocations(runtime.store)) {
+    for (const location of runtime.store.get(availableLocationsAtom)) {
       out.push({
         id: `addpanel.location.${location.subSection}`,
         title: location.label,
@@ -99,7 +83,7 @@ export const buildAddPanelProvider = (runtime: CommandRuntime): DynamicProvider 
     if (target !== null) {
       out.push({
         id: "addpanel.panels.new_agent",
-        title: `New ${recentAgentLabel(runtime)} agent`,
+        title: `New ${recentAgentRowLabel(runtime)} agent`,
         subtitle: "Create an agent in this section",
         keywords: ["agent", "new", "claude", "create"],
         group: "panels",
@@ -109,7 +93,7 @@ export const buildAddPanelProvider = (runtime: CommandRuntime): DynamicProvider 
         // Shares the dropdown's create flow (createAgentAndNavigate): navigate to
         // the new agent on success, surface the shared error toast on failure.
         perform: (): Promise<void> => {
-          const { agentType, registrationId } = parseStoredAgentType(resolveRecentAgentType(runtime));
+          const { agentType, registrationId } = parseStoredAgentType(runtime.store.get(recentAgentTypeAtom));
           return createAgentAndNavigate(
             runtime.store,
             target,
@@ -131,7 +115,7 @@ export const buildAddPanelProvider = (runtime: CommandRuntime): DynamicProvider 
           createTerminalInLocation(runtime.store, target);
         },
       });
-      for (const panel of listAvailableStaticPanels(runtime.store)) {
+      for (const panel of runtime.store.get(availableStaticPanelsAtom)) {
         const Icon = panel.icon;
         out.push({
           id: `addpanel.panels.${panel.id}`,

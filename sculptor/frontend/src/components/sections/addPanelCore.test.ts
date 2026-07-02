@@ -1,17 +1,22 @@
 import { createStore } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { UserConfig } from "~/api";
+import type { TerminalAgentRegistration, UserConfig } from "~/api";
 import { createAgentErrorToastAtom } from "~/common/state/atoms/toasts.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import { diffScopeAtomFamily } from "~/pages/workspace/components/diffPanel/atoms.ts";
 
 import {
+  availableLocationsAtom,
+  availableStaticPanelsAtom,
+  buildAgentTypeOptions,
   createAgentAndNavigate,
   createAgentInLocation,
-  listAvailableLocations,
   normalizeRecentAgentType,
   openStaticPanelInLocation,
+  recentAgentLabel,
+  recentAgentTypeAtom,
+  resolveStoredAgentType,
 } from "./addPanelCore.ts";
 import { EMPTY_WORKSPACE_LAYOUT } from "./persistence/types.ts";
 import { makeAgentPanelId } from "./registry/dynamicPanels.tsx";
@@ -30,19 +35,40 @@ afterEach(() => {
   createWorkspaceAgentMock.mockReset();
 });
 
-describe("listAvailableLocations", () => {
-  it("offers every section, including collapsed ones (adding a panel expands them)", () => {
-    const store = createStore();
-    store.set(activeWorkspaceIdAtom, "ws-test");
-    // Only 'left' is expanded; right/bottom are collapsed. Center is always available.
-    store.set(workspaceLayoutAtom, { ...EMPTY_WORKSPACE_LAYOUT, expanded: { left: true } });
+describe("resolveStoredAgentType", () => {
+  it("falls back to Claude for 'pi' while the pi harness is disabled", () => {
+    expect(resolveStoredAgentType("pi", false)).toBe("claude");
+    expect(resolveStoredAgentType("pi", true)).toBe("pi");
+  });
 
-    const subSections = listAvailableLocations(store).map((l) => l.subSection);
-    expect(subSections).toContain("center");
-    expect(subSections).toContain("left");
-    // Collapsed sections must still be offered so a panel can be added to them.
-    expect(subSections).toContain("right");
-    expect(subSections).toContain("bottom");
+  it("passes a bare 'terminal' through (a legitimate new-workspace first agent)", () => {
+    expect(resolveStoredAgentType("terminal", false)).toBe("terminal");
+    expect(resolveStoredAgentType("terminal", true)).toBe("terminal");
+  });
+
+  it("keeps Claude and registered terminal-agent types as-is", () => {
+    expect(resolveStoredAgentType("claude", false)).toBe("claude");
+    expect(resolveStoredAgentType("registered:my-agent", false)).toBe("registered:my-agent");
+  });
+});
+
+describe("recentAgentLabel", () => {
+  const registration = { registrationId: "my-agent", displayName: "My Agent" } as TerminalAgentRegistration;
+
+  it("labels the built-in types from AGENT_TYPE_LABELS", () => {
+    expect(recentAgentLabel("claude", [])).toBe("Claude");
+    expect(recentAgentLabel("pi", [])).toBe("pi");
+  });
+
+  it("labels a registered type from its registration's display name", () => {
+    expect(recentAgentLabel("registered:my-agent", [registration])).toBe("My Agent");
+  });
+
+  it("falls back to the generic 'agent' when the registration is unknown", () => {
+    // A remembered registration that has since been removed, or a caller (the
+    // Cmd+K provider) that has no registrations list.
+    expect(recentAgentLabel("registered:gone", [registration])).toBe("agent");
+    expect(recentAgentLabel("registered:my-agent", [])).toBe("agent");
   });
 });
 
@@ -151,6 +177,136 @@ describe("createAgentAndNavigate", () => {
 
     expect(navigate).not.toHaveBeenCalled();
     expect(store.get(createAgentErrorToastAtom)).toMatchObject({ title: "Failed to create agent" });
+  });
+});
+
+describe("recentAgentTypeAtom", () => {
+  it("defaults to Claude when no type has been stored", () => {
+    const store = createStore();
+    expect(store.get(recentAgentTypeAtom)).toBe("claude");
+  });
+
+  it("normalizes a stored bare 'terminal' and a disabled 'pi' to Claude", () => {
+    const store = createStore();
+    store.set(userConfigAtom, { lastUsedAgentType: "terminal" } as unknown as UserConfig);
+    expect(store.get(recentAgentTypeAtom)).toBe("claude");
+
+    store.set(userConfigAtom, { lastUsedAgentType: "pi" } as unknown as UserConfig);
+    expect(store.get(recentAgentTypeAtom)).toBe("claude");
+  });
+
+  it("keeps 'pi' while the pi harness is enabled, and registered types as-is", () => {
+    const store = createStore();
+    store.set(userConfigAtom, { lastUsedAgentType: "pi", enablePiAgent: true } as unknown as UserConfig);
+    expect(store.get(recentAgentTypeAtom)).toBe("pi");
+
+    store.set(userConfigAtom, { lastUsedAgentType: "registered:my-agent" } as unknown as UserConfig);
+    expect(store.get(recentAgentTypeAtom)).toBe("registered:my-agent");
+  });
+});
+
+describe("availableStaticPanelsAtom", () => {
+  it("lists the single-instance static panels that are not placed anywhere", () => {
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-test");
+    store.set(workspaceLayoutAtom, {
+      ...EMPTY_WORKSPACE_LAYOUT,
+      placement: { files: "left" },
+      order: { left: ["files"] },
+    });
+
+    const ids = store.get(availableStaticPanelsAtom).map((panel) => panel.id);
+    expect(ids).not.toContain("files");
+    expect(ids).toContain("changes");
+    expect(ids).toContain("notes");
+  });
+
+  it("returns a reference-stable list across layout writes that do not change it", () => {
+    // The menu content subscribes to this atom while open; the equality guard must
+    // swallow unrelated layout writes (e.g. the active sub-section moving, a split
+    // ratio drag) so the open menu does not re-render on them.
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-test");
+    store.set(workspaceLayoutAtom, {
+      ...EMPTY_WORKSPACE_LAYOUT,
+      placement: { files: "left" },
+      order: { left: ["files"] },
+    });
+
+    const first = store.get(availableStaticPanelsAtom);
+    store.set(workspaceLayoutAtom, (prev) => ({ ...prev, activeSubSection: "left" }));
+    expect(store.get(availableStaticPanelsAtom)).toBe(first);
+  });
+
+  it("recomputes when a panel opens or closes", () => {
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-test");
+    store.set(workspaceLayoutAtom, { ...EMPTY_WORKSPACE_LAYOUT });
+
+    const before = store.get(availableStaticPanelsAtom).map((panel) => panel.id);
+    expect(before).toContain("files");
+
+    openStaticPanelInLocation(store, "files" as PanelId, "left");
+    const after = store.get(availableStaticPanelsAtom).map((panel) => panel.id);
+    expect(after).not.toContain("files");
+  });
+});
+
+describe("availableLocationsAtom", () => {
+  it("lists the four plain sections for an unsplit layout", () => {
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-test");
+    store.set(workspaceLayoutAtom, { ...EMPTY_WORKSPACE_LAYOUT });
+
+    expect(store.get(availableLocationsAtom)).toEqual([
+      { subSection: "left", label: "Left" },
+      { subSection: "center", label: "Center" },
+      { subSection: "right", label: "Right" },
+      { subSection: "bottom", label: "Bottom" },
+    ]);
+  });
+
+  it("disambiguates a split section's halves and stays reference-stable otherwise", () => {
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-test");
+    store.set(workspaceLayoutAtom, {
+      ...EMPTY_WORKSPACE_LAYOUT,
+      splits: { center: { axis: "vertical", ratio: 0.5 } },
+    });
+
+    const locations = store.get(availableLocationsAtom);
+    expect(locations).toContainEqual({ subSection: "center", label: "Center (primary)" });
+    expect(locations).toContainEqual({ subSection: "center:secondary", label: "Center (secondary)" });
+
+    // A placement-only write leaves the location list untouched.
+    store.set(workspaceLayoutAtom, (prev) => ({ ...prev, placement: { files: "left" }, order: { left: ["files"] } }));
+    expect(store.get(availableLocationsAtom)).toBe(locations);
+  });
+});
+
+describe("buildAgentTypeOptions", () => {
+  const registration = { registrationId: "my-agent", displayName: "My Agent" } as TerminalAgentRegistration;
+
+  it("offers only Claude when pi is disabled and nothing is registered", () => {
+    expect(buildAgentTypeOptions({ isPiAgentEnabled: false, registrations: [] })).toEqual([
+      { key: "claude", stored: "claude", agentType: "claude", registrationId: undefined, label: "Claude" },
+    ]);
+  });
+
+  it("adds pi while the pi harness is enabled", () => {
+    const options = buildAgentTypeOptions({ isPiAgentEnabled: true, registrations: [] });
+    expect(options.map((option) => option.key)).toEqual(["claude", "pi"]);
+  });
+
+  it("maps each registered terminal-agent program to a registered option", () => {
+    const options = buildAgentTypeOptions({ isPiAgentEnabled: false, registrations: [registration] });
+    expect(options).toContainEqual({
+      key: "registered:my-agent",
+      stored: "registered:my-agent",
+      agentType: "registered",
+      registrationId: "my-agent",
+      label: "My Agent",
+    });
   });
 });
 

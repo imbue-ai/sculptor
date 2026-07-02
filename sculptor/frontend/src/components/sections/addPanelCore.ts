@@ -1,9 +1,11 @@
-// Store-driven add-panel operations and lists, shared by the React add-panel
-// surfaces (AddPanelDropdown / EmptySectionState via useAddPanelActions) and the
-// Cmd+K "Add panel" command flow (which runs outside React, through the command
-// runtime's Jotai store). Keeping the create/list logic here — rather than only in
+// Store-driven add-panel operations and the derived read atoms behind the
+// add-panel surfaces: the section `+` dropdown / empty-state quick actions
+// (AddPanelDropdown / EmptySectionState via useAddPanelActions) and the Cmd+K
+// "Add panel" command flow (which runs outside React, through the command
+// runtime's Jotai store). Keeping the create logic here — rather than only in
 // the React hook — means the dropdown and Cmd+K can't drift, and the Cmd+K
 // provider doesn't need React hooks (which would crash on non-workspace routes).
+// The pure location/panel LIST queries the derived atoms wrap live in layoutQueries.
 //
 // New agents land in the requesting sub-section (createAgentInLocation) — the section
 // "+" dropdown / empty-state / Cmd+K "Add panel" pass their own sub-section, while the
@@ -12,10 +14,20 @@
 // Agents/terminals are multi-instance and are never in the single-instance re-add list
 // (closing one ends it).
 
+import type { Atom } from "jotai";
+import { atom } from "jotai";
 import type { useStore } from "jotai/react";
+import { selectAtom } from "jotai/utils";
 
-import { type AgentTypeName, createWorkspaceAgent } from "~/api";
-import { encodeRegisteredAgentType, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
+import { type AgentTypeName, createWorkspaceAgent, type TerminalAgentRegistration } from "~/api";
+import {
+  AGENT_TYPE_LABELS,
+  encodeRegisteredAgentType,
+  lastUsedAgentTypeAtom,
+  parseStoredAgentType,
+  REGISTERED_AGENT_TYPE_PREFIX,
+  type StoredAgentType,
+} from "~/common/state/atoms/agentTabs.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { terminalNextIndexAtom, terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
 import { createAgentErrorToastAtom } from "~/common/state/atoms/toasts.ts";
@@ -24,64 +36,15 @@ import { ToastType } from "~/components/Toast.tsx";
 import { resetReviewAllScopeAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
 import { getNextTerminalLabel } from "~/pages/workspace/panels/terminalLabelUtils.ts";
 
+import type { AddPanelLocation, AvailableStaticPanel } from "./layoutQueries.ts";
+import { listAvailableLocations, listAvailableStaticPanels } from "./layoutQueries.ts";
 import { makeAgentPanelId, makeTerminalPanelId } from "./registry/dynamicPanels.tsx";
-import { type PanelDefinition, panelRegistryAtom } from "./registry/panelRegistry.ts";
+import { panelRegistryAtom } from "./registry/panelRegistry.ts";
 import { jumpToSectionAtom, openPanelAtom, setActivePanelAtom } from "./sectionActions.ts";
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "./sectionAtoms.ts";
-import type { PanelId, SectionId, SubSectionId } from "./sectionTypes.ts";
-import { SECTION_IDS, toSecondary } from "./sectionTypes.ts";
+import type { PanelId, SubSectionId } from "./sectionTypes.ts";
 
 type AppStore = ReturnType<typeof useStore>;
-
-export type AddPanelLocation = { subSection: SubSectionId; label: string };
-
-export type AvailableStaticPanel = {
-  id: PanelId;
-  displayName: string;
-  icon: PanelDefinition["icon"];
-};
-
-const SECTION_LABELS: Readonly<Record<SectionId, string>> = {
-  left: "Left",
-  center: "Center",
-  right: "Right",
-  bottom: "Bottom",
-};
-
-// The locations a panel can be added to: EVERY section (including collapsed ones —
-// adding a panel there expands the section), plus the secondary half of any section
-// that is both expanded and split. A collapsed section only offers its primary; its
-// split half isn't shown until the section is expanded.
-export function listAvailableLocations(store: AppStore): ReadonlyArray<AddPanelLocation> {
-  const layout = store.get(workspaceLayoutAtom);
-  const locations: Array<AddPanelLocation> = [];
-  for (const section of SECTION_IDS) {
-    const isExpanded = section === "center" || (layout.expanded[section] ?? false);
-    const isSplit = layout.splits[section] !== undefined;
-    const shouldShowSecondary = isExpanded && isSplit;
-    locations.push({
-      subSection: section,
-      label: shouldShowSecondary ? `${SECTION_LABELS[section]} (primary)` : SECTION_LABELS[section],
-    });
-    if (shouldShowSecondary) {
-      locations.push({ subSection: toSecondary(section), label: `${SECTION_LABELS[section]} (secondary)` });
-    }
-  }
-  return locations;
-}
-
-// Single-instance static panels not currently open anywhere — the re-add list.
-// Sourced from the live registry (not STATIC_PANEL_METADATA) so plugin-contributed
-// panels — also kind "static" — are offered too; the multi-instance agent/terminal
-// panels are excluded by the kind filter.
-export function listAvailableStaticPanels(store: AppStore): ReadonlyArray<AvailableStaticPanel> {
-  const layout = store.get(workspaceLayoutAtom);
-  const openPanelIds = new Set<PanelId>(Object.keys(layout.placement));
-  return store
-    .get(panelRegistryAtom)
-    .filter((def) => def.kind === "static" && !openPanelIds.has(def.id))
-    .map((def) => ({ id: def.id, displayName: def.displayName, icon: def.icon }));
-}
 
 export function openStaticPanelInLocation(store: AppStore, panelId: PanelId, subSection: SubSectionId): void {
   // Review All always OPENS on the full branch review ("All" scope). Guarded on
@@ -98,18 +61,24 @@ export function openStaticPanelInLocation(store: AppStore, panelId: PanelId, sub
 
 // Append a fresh tab to the workspace's persisted terminal state (the same state
 // TerminalPanel reads), mirroring TerminalPanel's handleAddTerminal so index/label
-// numbering stays consistent, then place the terminal panel in the sub-section.
+// numbering stays consistent. Returns the new tab's index (which keys the terminal's
+// panel id); placement is the caller's concern.
+function appendTerminalTab(store: AppStore, workspaceId: string): number {
+  const index = store.get(terminalNextIndexAtom)[workspaceId] ?? 1;
+  const existingTabs = store.get(terminalTabStateAtom)[workspaceId] ?? [];
+  const newTab = { id: `terminal-${index}`, index, label: getNextTerminalLabel(existingTabs) };
+  store.set(terminalTabStateAtom, (prev) => ({ ...prev, [workspaceId]: [...(prev[workspaceId] ?? []), newTab] }));
+  store.set(terminalNextIndexAtom, (prev) => ({ ...prev, [workspaceId]: index + 1 }));
+  return index;
+}
+
+// Append a fresh terminal tab, then place the terminal panel in the sub-section.
 export function createTerminalInLocation(store: AppStore, subSection: SubSectionId): void {
   const workspaceId = store.get(activeWorkspaceIdAtom);
   if (workspaceId === null) {
     return;
   }
-  const nextIndexByWorkspace = store.get(terminalNextIndexAtom);
-  const index = nextIndexByWorkspace[workspaceId] ?? 1;
-  const existingTabs = store.get(terminalTabStateAtom)[workspaceId] ?? [];
-  const newTab = { id: `terminal-${index}`, index, label: getNextTerminalLabel(existingTabs) };
-  store.set(terminalTabStateAtom, (prev) => ({ ...prev, [workspaceId]: [...(prev[workspaceId] ?? []), newTab] }));
-  store.set(terminalNextIndexAtom, (prev) => ({ ...prev, [workspaceId]: index + 1 }));
+  const index = appendTerminalTab(store, workspaceId);
 
   const panelId = makeTerminalPanelId(workspaceId, index);
   store.set(openPanelAtom, { panelId, in: subSection });
@@ -125,36 +94,159 @@ export function createTerminalInLocation(store: AppStore, subSection: SubSection
 // reference its panel id. Unlike createTerminalInLocation it does NOT place/activate the
 // panel — buildDefaultWorkspaceLayout owns the bottom placement.
 export function seedFirstVisitTerminal(store: AppStore, workspaceId: string): number {
-  const existingTabs = store.get(terminalTabStateAtom)[workspaceId] ?? [];
-  const firstExisting = existingTabs[0];
+  const firstExisting = (store.get(terminalTabStateAtom)[workspaceId] ?? [])[0];
   if (firstExisting !== undefined) {
     return firstExisting.index;
   }
-  const index = store.get(terminalNextIndexAtom)[workspaceId] ?? 1;
-  const newTab = { id: `terminal-${index}`, index, label: getNextTerminalLabel(existingTabs) };
-  store.set(terminalTabStateAtom, (prev) => ({ ...prev, [workspaceId]: [...(prev[workspaceId] ?? []), newTab] }));
-  store.set(terminalNextIndexAtom, (prev) => ({ ...prev, [workspaceId]: index + 1 }));
-  return index;
+  return appendTerminalTab(store, workspaceId);
+}
+
+// Resolve a stored/requested agent type against the pi feature flag: "pi" while the
+// pi harness is disabled falls back to Claude (e.g. a remembered type from before
+// the flag was turned off). This is the single definition of that fallback — every
+// surface that turns a stored type into an effective one (the add-panel surfaces
+// via normalizeRecentAgentType, agent creation, the new-workspace form's first-agent
+// seed) resolves through here so they cannot drift. A bare "terminal" passes
+// through: the new-workspace form legitimately stores it, and surfaces that cannot
+// use it layer their own fallback on top (see normalizeRecentAgentType).
+export function resolveStoredAgentType<T extends StoredAgentType>(stored: T, isPiAgentEnabled: boolean): T | "claude" {
+  return stored === "pi" && !isPiAgentEnabled ? "claude" : stored;
 }
 
 // The stored last-used agent type, normalized for the pinned "New {recent} agent"
 // row shared by the section "+" dropdown, the empty-section quick actions, the
-// new-agent keybinding/command, and the Cmd+K "Add panel" flow. Two stored values
-// cannot back an agent row and fall back to Claude:
-//  - "terminal": the new-workspace form's first-agent select legitimately stores
-//    it, but the add-panel model has no bare terminal AGENT — the dedicated
-//    "New terminal" row owns terminal creation;
-//  - "pi" while the pi harness is disabled (a remembered type from before the
-//    flag was turned off).
+// new-agent keybinding/command, and the Cmd+K "Add panel" flow. A stored bare
+// "terminal" cannot back an agent row and falls back to Claude — the add-panel
+// model has no bare terminal AGENT; the dedicated "New terminal" row owns terminal
+// creation. A disabled "pi" falls back through resolveStoredAgentType.
 export function normalizeRecentAgentType(stored: StoredAgentType, isPiAgentEnabled: boolean): StoredAgentType {
   if (stored === "terminal") {
     return "claude";
   }
+  return resolveStoredAgentType(stored, isPiAgentEnabled);
+}
 
-  if (stored === "pi" && !isPiAgentEnabled) {
-    return "claude";
+// Display label for the pinned "New {recent} agent" row, shared by the section "+"
+// dropdown and the Cmd+K "Add panel" flow so the two surfaces label the row
+// identically: built-in labels for Claude/pi/terminal, the registration's display
+// name for a registered terminal agent, and the generic "agent" when the
+// registration is unknown (removed since it was stored, or the caller has no
+// registrations list — the Cmd+K provider runs outside React and passes none).
+export function recentAgentLabel(
+  stored: StoredAgentType,
+  registrations: ReadonlyArray<TerminalAgentRegistration>,
+): string {
+  if (stored.startsWith(REGISTERED_AGENT_TYPE_PREFIX)) {
+    const { registrationId } = parseStoredAgentType(stored);
+    return registrations.find((registration) => registration.registrationId === registrationId)?.displayName ?? "agent";
   }
-  return stored;
+  return AGENT_TYPE_LABELS[stored as Exclude<AgentTypeName, "registered">];
+}
+
+// ── Derived read atoms for the add-panel surfaces ─────────────────────────────
+//
+// The menu surfaces subscribe to these atoms only while their content is MOUNTED
+// (Radix mounts dropdown content on open), and the Cmd+K provider reads them
+// imperatively per produce — so the always-mounted shell (section headers,
+// shortcuts, bootstrap) carries no layout/registry subscription for the add-panel
+// feature. Each atom carries an equality guard so an OPEN menu does not re-render
+// when an unrelated layout write (split-ratio drag) or a registry rebuild (task
+// tick) recomputes an identical list.
+
+// The stored recent agent type, normalized (bare "terminal" / disabled "pi" fall
+// back to Claude — see normalizeRecentAgentType). A string, so Jotai's Object.is
+// guard already dedupes recomputes that land on the same value.
+export const recentAgentTypeAtom: Atom<StoredAgentType> = atom((get) =>
+  normalizeRecentAgentType(get(lastUsedAgentTypeAtom), get(isPiAgentEnabledAtom)),
+);
+
+function availableStaticPanelListsEqual(
+  a: ReadonlyArray<AvailableStaticPanel>,
+  b: ReadonlyArray<AvailableStaticPanel>,
+): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (panel, index) =>
+        panel.id === b[index].id && panel.displayName === b[index].displayName && panel.icon === b[index].icon,
+    )
+  );
+}
+
+// listAvailableStaticPanels over two sources; the selectAtom wrapper is what holds
+// the equality guard (a plain derived atom would emit a fresh array per recompute).
+const unguardedAvailableStaticPanelsAtom = atom((get) =>
+  listAvailableStaticPanels(get(panelRegistryAtom), get(workspaceLayoutAtom).placement),
+);
+
+// Single-instance static panels not currently open anywhere — the re-add list
+// offered by the section "+" dropdown, the empty-state quick actions, and the
+// Cmd+K "Add panel" page.
+export const availableStaticPanelsAtom: Atom<ReadonlyArray<AvailableStaticPanel>> = selectAtom(
+  unguardedAvailableStaticPanelsAtom,
+  (panels) => panels,
+  availableStaticPanelListsEqual,
+);
+
+function locationListsEqual(a: ReadonlyArray<AddPanelLocation>, b: ReadonlyArray<AddPanelLocation>): boolean {
+  return (
+    a.length === b.length &&
+    a.every((location, index) => location.subSection === b[index].subSection && location.label === b[index].label)
+  );
+}
+
+// The labeled locations a panel can be added to (the Cmd+K "Add panel" location
+// page; the section "+" dropdown is already scoped to its own sub-section).
+export const availableLocationsAtom: Atom<ReadonlyArray<AddPanelLocation>> = selectAtom(
+  workspaceLayoutAtom,
+  listAvailableLocations,
+  locationListsEqual,
+);
+
+export type AgentTypeOption = {
+  key: string;
+  stored: StoredAgentType;
+  agentType: AgentTypeName;
+  registrationId: string | undefined;
+  label: string;
+};
+
+// The agent-type sub-menu options: Claude, pi (gated), and each registered
+// terminal-agent program. No bare "Terminal" agent type — terminal creation
+// belongs to the dedicated "New terminal" row.
+export function buildAgentTypeOptions(inputs: {
+  isPiAgentEnabled: boolean;
+  registrations: ReadonlyArray<TerminalAgentRegistration>;
+}): ReadonlyArray<AgentTypeOption> {
+  const options: Array<AgentTypeOption> = [
+    {
+      key: "claude",
+      stored: "claude",
+      agentType: "claude",
+      registrationId: undefined,
+      label: AGENT_TYPE_LABELS.claude,
+    },
+  ];
+  if (inputs.isPiAgentEnabled) {
+    options.push({
+      key: "pi",
+      stored: "pi",
+      agentType: "pi",
+      registrationId: undefined,
+      label: AGENT_TYPE_LABELS.pi,
+    });
+  }
+
+  for (const registration of inputs.registrations) {
+    options.push({
+      key: `registered:${registration.registrationId}`,
+      stored: encodeRegisteredAgentType(registration.registrationId),
+      agentType: "registered",
+      registrationId: registration.registrationId,
+      label: registration.displayName,
+    });
+  }
+  return options;
 }
 
 type CreateAgentInputs = { agentType: AgentTypeName; registrationId?: string; activeAgentId?: string };
@@ -170,11 +262,9 @@ export async function createAgentInLocation(
   subSection: SubSectionId,
   inputs: CreateAgentInputs,
 ): Promise<string | undefined> {
-  // A "pi" agent is unusable while the pi harness is disabled (e.g. a remembered
-  // last-used type from before the flag was turned off) — fall back to Claude so
-  // every create surface degrades the same way.
-  const agentType: AgentTypeName =
-    inputs.agentType === "pi" && !store.get(isPiAgentEnabledAtom) ? "claude" : inputs.agentType;
+  // Any create surface can hand in a remembered "pi" type from before the pi flag
+  // was turned off — resolve the fallback here so no caller has to.
+  const agentType: AgentTypeName = resolveStoredAgentType(inputs.agentType, store.get(isPiAgentEnabledAtom));
 
   // Optimistically reflect the chosen harness as the most-recently-used type so the
   // surfaces' "New {recent} agent" label updates immediately; the backend persists

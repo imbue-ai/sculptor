@@ -1,65 +1,39 @@
-// React hook for the add-panel surfaces: the section `+` dropdown
-// (AddPanelDropdown) and the empty-state quick actions (EmptySectionState). Wraps
-// the store-driven operations in addPanelCore with React niceties (the live
-// registrations list, the pi-gated recent-agent label).
+// React ACTIONS hook for the add-panel surfaces: the section `+` dropdown
+// (AddPanelDropdown), the empty-state quick actions (EmptySectionState), the
+// new-agent keybinding (useWorkspaceShortcuts), and the bootstrap's Cmd+K
+// "agent.create" registration.
 //
-// The actual create/list logic — including post-create navigation and the failure
+// Deliberately subscription-free: the hook mounts in every section header and in
+// the always-mounted shell spine, so it must not re-render its hosts on layout or
+// registry churn. Every callback reads the state it needs (the normalized recent
+// agent type) imperatively via the Jotai store at INVOCATION time. The lists the
+// menus display (available static panels, agent-type options, the recent-agent
+// label) are not the hook's concern — the menu content subscribes to the derived
+// atoms in addPanelCore itself, and only while it is mounted (i.e. open).
+//
+// The actual create logic — including post-create navigation and the failure
 // toast — lives in addPanelCore so the Cmd+K flows (which run outside React) share
 // one implementation and can't drift. Agents, terminals, and single-instance panels
 // all land in the requesting sub-section; the non-scoped surfaces (the new-agent
 // keybinding and Cmd+K "New agent" command) pass no target and default to center.
 // Agents/terminals are never in the re-add list.
 
-import { useAtomValue } from "jotai";
 import { useStore } from "jotai/react";
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 
-import type { AgentTypeName, TerminalAgentRegistration } from "~/api";
+import type { AgentTypeName } from "~/api";
 import { useImbueNavigate, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
-import {
-  AGENT_TYPE_LABELS,
-  encodeRegisteredAgentType,
-  lastUsedAgentTypeAtom,
-  parseStoredAgentType,
-  REGISTERED_AGENT_TYPE_PREFIX,
-  type StoredAgentType,
-} from "~/common/state/atoms/agentTabs.ts";
-import { isPiAgentEnabledAtom } from "~/common/state/atoms/userConfig.ts";
-import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
+import { parseStoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 
 import {
-  type AvailableStaticPanel,
   createAgentAndNavigate,
   createTerminalInLocation,
-  normalizeRecentAgentType,
   openStaticPanelInLocation,
+  recentAgentTypeAtom,
 } from "./addPanelCore.ts";
-import { type PanelDefinition, panelRegistryAtom } from "./registry/panelRegistry.ts";
-import { workspaceLayoutAtom } from "./sectionAtoms.ts";
-import type { PanelId, SubSectionId } from "./sectionTypes.ts";
-
-export type StaticPanelOption = AvailableStaticPanel;
-
-export type AgentTypeOption = {
-  key: string;
-  stored: StoredAgentType;
-  agentType: AgentTypeName;
-  registrationId: string | undefined;
-  label: string;
-};
+import type { SubSectionId } from "./sectionTypes.ts";
 
 export type AddPanelActions = {
-  // The recently-used agent type's display label (e.g. "Claude"), used for the
-  // pinned "New {recent} agent" row.
-  recentAgentLabel: string;
-  // The agent types offered in the "different agent type" sub-menu: Claude, pi
-  // (only when enabled), and each registered terminal-agent program. There is no
-  // bare "Terminal" agent type.
-  agentTypeOptions: ReadonlyArray<AgentTypeOption>;
-  // Re-read the registrations directory (call when the menu opens).
-  refreshRegistrations: () => void;
-  // Single-instance static panels not currently open anywhere — the re-add list.
-  availableStaticPanels: ReadonlyArray<StaticPanelOption>;
   // Create an agent of the recently-used type (Claude by default). Lands in the given
   // sub-section, defaulting to center for the non-scoped surfaces (keybinding / command).
   createRecentAgent: (target?: SubSectionId) => void;
@@ -77,28 +51,8 @@ export const useAddPanelActions = (): AddPanelActions => {
   const store = useStore();
   const { agentID } = useWorkspacePageParams();
   const { navigateToAgent } = useImbueNavigate();
-  const lastUsedAgentType = useAtomValue(lastUsedAgentTypeAtom);
-  const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
-  const { registrations, refetch } = useTerminalAgentRegistrations();
-  // Subscribe to the layout so the re-add list recomputes when panels open/close.
-  // (The Cmd+K path stays on the imperative listAvailableStaticPanels(store), which
-  // runs outside React.)
-  const layout = useAtomValue(workspaceLayoutAtom);
-  // Subscribe to the registry so plugin-contributed static panels appear in the
-  // re-add list once their plugin loads (the registry, not STATIC_PANEL_METADATA,
-  // is the source of truth — see listAvailableStaticPanelsFromRegistry).
-  const registry = useAtomValue(panelRegistryAtom);
-
-  // A stored "terminal" (from the new-workspace form's first-agent select) or a
-  // "pi" with the pi harness off cannot back the pinned agent row — the shared
-  // normalizer falls back to Claude (terminal creation stays on "New terminal").
-  const defaultAgentType: StoredAgentType = normalizeRecentAgentType(lastUsedAgentType, isPiAgentEnabled);
 
   // functions and callbacks
-  const refreshRegistrations = useCallback((): void => {
-    void refetch();
-  }, [refetch]);
-
   const createAgent = useCallback(
     (agentType: AgentTypeName, registrationId?: string, target: SubSectionId = "center"): void => {
       // Navigation and the failure toast live in the shared core so the Cmd+K
@@ -115,10 +69,12 @@ export const useAddPanelActions = (): AddPanelActions => {
 
   const createRecentAgent = useCallback(
     (target: SubSectionId = "center"): void => {
-      const { agentType, registrationId } = parseStoredAgentType(defaultAgentType);
+      // Read at press time (not render time) so the callback never goes stale and
+      // the hosts never subscribe to the recent-type's inputs.
+      const { agentType, registrationId } = parseStoredAgentType(store.get(recentAgentTypeAtom));
       createAgent(agentType, registrationId, target);
     },
-    [defaultAgentType, createAgent],
+    [store, createAgent],
   );
 
   const createTerminal = useCallback(
@@ -135,88 +91,10 @@ export const useAddPanelActions = (): AddPanelActions => {
     [store],
   );
 
-  // rendering / derived data
-  const recentAgentLabel = agentTypeDisplayLabel(defaultAgentType, registrations);
-  const agentTypeOptions = buildAgentTypeOptions({ isPiAgentEnabled, registrations });
-  const availableStaticPanels = useMemo(
-    () => listAvailableStaticPanelsFromRegistry(registry, layout.placement),
-    [registry, layout.placement],
-  );
-
   return {
-    recentAgentLabel,
-    agentTypeOptions,
-    refreshRegistrations,
-    availableStaticPanels,
     createRecentAgent,
     createAgent,
     createTerminal,
     openStaticPanel,
   };
 };
-
-// Display label for a stored agent type: built-in labels for Claude/pi/terminal,
-// the registration's display name for a registered terminal agent, falling back to
-// "agent" if a remembered registration has since been removed.
-function agentTypeDisplayLabel(
-  stored: StoredAgentType,
-  registrations: ReadonlyArray<TerminalAgentRegistration>,
-): string {
-  if (stored.startsWith(REGISTERED_AGENT_TYPE_PREFIX)) {
-    const { registrationId } = parseStoredAgentType(stored);
-    return registrations.find((reg) => reg.registrationId === registrationId)?.displayName ?? "agent";
-  }
-  return AGENT_TYPE_LABELS[stored as Exclude<AgentTypeName, "registered">];
-}
-
-// The agent-type sub-menu options: Claude, pi (gated), and each registered
-// terminal-agent program. No bare "Terminal" agent type.
-function buildAgentTypeOptions(inputs: {
-  isPiAgentEnabled: boolean;
-  registrations: ReadonlyArray<TerminalAgentRegistration>;
-}): ReadonlyArray<AgentTypeOption> {
-  const options: Array<AgentTypeOption> = [
-    {
-      key: "claude",
-      stored: "claude",
-      agentType: "claude",
-      registrationId: undefined,
-      label: AGENT_TYPE_LABELS.claude,
-    },
-  ];
-  if (inputs.isPiAgentEnabled) {
-    options.push({
-      key: "pi",
-      stored: "pi",
-      agentType: "pi",
-      registrationId: undefined,
-      label: AGENT_TYPE_LABELS.pi,
-    });
-  }
-
-  for (const registration of inputs.registrations) {
-    options.push({
-      key: `registered:${registration.registrationId}`,
-      stored: encodeRegisteredAgentType(registration.registrationId),
-      agentType: "registered",
-      registrationId: registration.registrationId,
-      label: registration.displayName,
-    });
-  }
-  return options;
-}
-
-// React-side mirror of addPanelCore's listAvailableStaticPanels: single-instance
-// static panels not currently open anywhere — the re-add list. Reads the subscribed
-// registry (so plugin-contributed static panels appear once loaded) and the
-// subscribed layout's placement (so it recomputes whenever panels open/close).
-// The kind === "static" filter excludes the multi-instance agent/terminal panels.
-function listAvailableStaticPanelsFromRegistry(
-  registry: ReadonlyArray<PanelDefinition>,
-  placement: Partial<Record<PanelId, SubSectionId>>,
-): ReadonlyArray<AvailableStaticPanel> {
-  const openPanelIds = new Set<PanelId>(Object.keys(placement) as ReadonlyArray<PanelId>);
-  return registry
-    .filter((def) => def.kind === "static" && !openPanelIds.has(def.id))
-    .map((def) => ({ id: def.id, displayName: def.displayName, icon: def.icon }));
-}
