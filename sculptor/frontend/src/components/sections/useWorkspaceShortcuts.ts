@@ -7,9 +7,10 @@
 // empty first-run state (no workspaces) never mounts these handlers, so global
 // shortcuts are disabled in the empty state for free.
 //
-// new_workspace (Meta+T) is intentionally NOT handled here: it is served by the
-// surviving page-layout hook (usePageLayoutKeyboardShortcuts), which opens the global
-// new-workspace dialog. Registering it here too would fire two openers per press.
+// new_workspace (Meta+T) and toggle_sidebar are intentionally NOT handled here: both
+// are served by the surviving page-layout hook (usePageLayoutKeyboardShortcuts), which
+// mounts on every sidebar-bearing route (workspace, Home, Settings). Registering either
+// here too would fire two handlers per press on workspace pages.
 // Cycling reads live state through the Jotai store at press time to avoid stale
 // closures and per-keystroke re-subscription.
 
@@ -21,7 +22,6 @@ import { useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { openWorkspaceTabAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
 import { workspaceDeleteTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
-import { sidebarCollapsedAtom } from "~/components/layout/sidebarAtoms.ts";
 
 import type { WorkspaceLayoutState } from "./persistence/types.ts";
 import { panelRegistryAtom } from "./registry/panelRegistry.ts";
@@ -87,7 +87,6 @@ export const useWorkspaceShortcuts = (): void => {
   const jumpToSection = useSetAtom(jumpToSectionAtom);
   const setActivePanel = useSetAtom(setActivePanelAtom);
   const setMaximizedSection = useSetAtom(maximizedSectionAtom);
-  const setSidebarCollapsed = useSetAtom(sidebarCollapsedAtom);
   const openWorkspaceTab = useSetAtom(openWorkspaceTabAtom);
   const setWorkspaceDeleteTarget = useSetAtom(workspaceDeleteTargetAtom);
   const { navigateToWorkspace } = useImbueNavigate();
@@ -137,10 +136,6 @@ export const useWorkspaceShortcuts = (): void => {
     setMaximizedSection(toSection(layout.activeSubSection ?? "center"));
   }, [store, setMaximizedSection]);
 
-  const toggleSidebar = useCallback((): void => {
-    setSidebarCollapsed(!store.get(sidebarCollapsedAtom));
-  }, [store, setSidebarCollapsed]);
-
   // Cycle to the adjacent workspace, wrapping at the ends. Reads the workspace list
   // imperatively at press time (same rationale as cycleSection). Opening the tab
   // before navigating gives keyboard cycling the same end state as clicking the
@@ -189,7 +184,6 @@ export const useWorkspaceShortcuts = (): void => {
     "toggle_bottom_panel",
     useCallback(() => toggleSection({ section: "bottom" }), [toggleSection]),
   );
-  useKeybindingHandler("toggle_sidebar", toggleSidebar);
   useKeybindingHandler("maximize_section", toggleMaximize);
   useKeybindingHandler(
     "next_section",

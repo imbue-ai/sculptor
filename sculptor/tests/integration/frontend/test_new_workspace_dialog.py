@@ -157,11 +157,12 @@ def test_create_without_prompt(sculptor_instance_: SculptorInstance) -> None:
 
 @user_story("to keep the dialog open after create, with the repo retained but the title/prompt reset")
 def test_keep_open_resets_but_retains(sculptor_instance_: SculptorInstance) -> None:
-    """Keep-open resets title/prompt but retains the repo + agent type (Decision B8).
+    """Keep-open resets title/prompt/plan-mode but retains the repo + agent type (Decision B8).
 
     With keep-open on, Create leaves the dialog open and clears the per-workspace
     fields (title, prompt, branch) while the repo selector keeps its value, ready
-    for a rapid second create.
+    for a rapid second create. Plan mode is per-task, so it also resets to off
+    rather than carrying into the next workspace.
     """
     page = sculptor_instance_.page
     _seed_one_workspace(page)
@@ -171,6 +172,11 @@ def test_keep_open_resets_but_retains(sculptor_instance_: SculptorInstance) -> N
 
     repo_before = dialog.get_project_selector().text_content()
     dialog.get_prompt_textarea().fill("first task")
+    # The per-prompt agent settings (incl. plan mode) surface once a prompt is
+    # typed. Turn plan mode on for this create so the reset is observable.
+    plan_toggle = dialog.get_form().get_by_test_id(ElementIDs.PLAN_MODE_TOGGLE)
+    plan_toggle.click()
+    expect(plan_toggle).to_have_attribute("data-active", "true")
     # create() normalizes the (persisted) keep-open switch, so request it on here
     # rather than toggling it manually.
     dialog.create(workspace_name="Keep Open WS", keep_open=True)
@@ -181,6 +187,10 @@ def test_keep_open_resets_but_retains(sculptor_instance_: SculptorInstance) -> N
     expect(dialog.get_prompt_textarea()).to_have_value("")
     # The repo selection is retained.
     expect(dialog.get_project_selector()).to_have_text(repo_before or "")
+    # Plan mode does NOT carry over: type a second prompt to reveal the agent
+    # settings again and confirm the toggle is back off.
+    dialog.get_prompt_textarea().fill("second task")
+    expect(plan_toggle).to_have_attribute("data-active", "false")
 
 
 @user_story("to pick the first agent's type with Claude as the default")

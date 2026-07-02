@@ -270,9 +270,13 @@ export const NewWorkspaceForm = ({
 
     if (isKeepOpen) {
       // Keep the dialog open for rapid multi-create — reset the
-      // per-workspace fields but retain the repo + agent type (+ mode/source).
+      // per-workspace fields but retain the repo + agent type (+ mode/source)
+      // and the per-prompt agent settings. Plan mode is the exception: it is
+      // a per-task choice, so it resets to off rather than silently carrying
+      // into the next workspace.
       setWorkspaceName("");
       setPrompt("");
+      setIsAgentPlanMode(false);
       setBranchNameOverride(null);
       setShuffleNonce((prev) => prev + 1);
       nameInputRef.current?.focus();

@@ -10,22 +10,12 @@ diff onto the (short) target-branch `oldLines`, crashing the diff view.
 The diff initially appears but disappears once decorations are applied.
 """
 
-from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
-
-
-def _enable_review_all_via_settings(page: Page) -> None:
-    """Enable the Review All experimental setting via the Settings UI."""
-    settings_page = navigate_to_settings_page(page=page)
-    experimental = settings_page.click_on_experimental()
-    experimental.enable_review_all()
-
 
 # Build a 200-line file.  JSON newlines are represented as \\n.
 _LONG_README = "\\n".join(f"# Line {i}" for i in range(200))
@@ -95,8 +85,6 @@ def test_review_all_diff_stays_visible_with_committed_line_count_changes(
     decorations were applied, because oldLines came from the wrong ref.
     """
     page = sculptor_instance_.page
-
-    _enable_review_all_via_settings(page)
 
     task_page = start_task_and_wait_for_ready(page, prompt=_PROMPT)
     chat_panel = task_page.get_chat_panel()

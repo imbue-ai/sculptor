@@ -31,6 +31,7 @@ import {
   type AvailableStaticPanel,
   createAgentAndNavigate,
   createTerminalInLocation,
+  normalizeRecentAgentType,
   openStaticPanelInLocation,
 } from "./addPanelCore.ts";
 import { type PanelDefinition, panelRegistryAtom } from "./registry/panelRegistry.ts";
@@ -88,9 +89,10 @@ export const useAddPanelActions = (): AddPanelActions => {
   // is the source of truth — see listAvailableStaticPanelsFromRegistry).
   const registry = useAtomValue(panelRegistryAtom);
 
-  // A stored "pi" is unusable once pi-agent is turned off — fall back to Claude.
-  const defaultAgentType: StoredAgentType =
-    lastUsedAgentType === "pi" && !isPiAgentEnabled ? "claude" : lastUsedAgentType;
+  // A stored "terminal" (from the new-workspace form's first-agent select) or a
+  // "pi" with the pi harness off cannot back the pinned agent row — the shared
+  // normalizer falls back to Claude (terminal creation stays on "New terminal").
+  const defaultAgentType: StoredAgentType = normalizeRecentAgentType(lastUsedAgentType, isPiAgentEnabled);
 
   // functions and callbacks
   const refreshRegistrations = useCallback((): void => {

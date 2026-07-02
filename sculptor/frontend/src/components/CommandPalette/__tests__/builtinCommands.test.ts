@@ -358,9 +358,16 @@ describe("buildPanelCommands", () => {
     }
   });
 
-  it("all when predicates require route.isWorkspace", () => {
+  it("when predicates require route.isWorkspace, except the sidebar toggle", () => {
+    // The sidebar rail is app-shell chrome mounted on every route (workspace,
+    // Home, Settings), so its toggle is deliberately ungated. The section/layout
+    // commands act on workspace sections and stay workspace-only.
     const cmds = buildPanelCommands(makeRuntime());
     for (const cmd of cmds) {
+      if (cmd.id === "view.toggle_sidebar") {
+        expect(cmd.when).toBeUndefined();
+        continue;
+      }
       expect(cmd.when).toBeDefined();
       expect(cmd.when!(WORKSPACE_CTX)).toBe(true);
       expect(cmd.when!(ROOT_CTX)).toBe(false);

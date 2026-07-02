@@ -288,10 +288,6 @@ class UserConfig(SerializableModel):
         default="delete_if_safe",
         description="What to do with a worktree workspace's auto-generated branch when the workspace is deleted: never (preserve), delete_if_safe (refuses to delete unmerged), always (force-delete).",
     )
-    enable_review_all: bool = Field(
-        default=False,
-        description="When enabled, the Review All combined diff view is available in the File Browser",
-    )
     enable_entity_mentions: bool = Field(
         default=False,
         description="When enabled, typing % in the chat input opens entity mention completions for repositories, workspaces, and agents",

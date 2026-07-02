@@ -8,7 +8,6 @@ from sculptor.testing.elements.base import dismiss_with_escape
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.sculptor_instance import SculptorInstance
-from sculptor.testing.user_stories import user_story
 from sculptor.testing.utils import get_playwright_modifier_key
 
 
@@ -95,21 +94,7 @@ def test_keybinding_settings_command_palette_shortcut(sculptor_instance_: Sculpt
     keybindings.reset_all_to_defaults()
 
 
-@user_story("to find the Review All toggle in the Settings > Experimental section")
-def test_settings_experimental_has_review_all_toggle(sculptor_instance_: SculptorInstance) -> None:
-    """The Settings page should have an Experimental section with a Review All toggle."""
-    page = sculptor_instance_.page
-
-    settings_page = navigate_to_settings_page(page=page)
-    experimental = settings_page.click_on_experimental()
-    toggle = experimental.get_review_all_toggle()
-    expect(toggle).to_be_visible()
-
-
-# NOTE: ``test_enable_review_all_via_settings_shows_button`` was removed in the
-# section-shell migration. The old "Review all" button lived in the file-browser
-# panel header, gated by the experimental flag + the presence of changes. That
-# button is gone: review-all is now its own no-default-section registered panel,
-# opened from a section's add-panel ``+`` dropdown (see ``task_page.click_review_all``),
-# so there is no longer a flag-gated button to assert visible. Review-all panel
-# behavior is covered by the review-all panel tests.
+# NOTE: there are no Review All tests here because Review All has no settings gate:
+# it is a no-default-section registered panel, always available from a section's
+# add-panel ``+`` dropdown (see ``task_page.click_review_all``). Its behavior is
+# covered by the review-all panel tests.

@@ -2,7 +2,6 @@ import type { Editor as TipTapEditor } from "@tiptap/react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { type ReactElement, useEffect, useRef } from "react";
 
-import { debugViewAtomFamily } from "~/common/state/atoms/alphaScroll.ts";
 import { closeBtwPopupIfNotForAgentAtom, isBtwPopupOpenAtom } from "~/common/state/atoms/btwPopup.ts";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
 import { taskAtomFamily } from "~/common/state/atoms/tasks.ts";
@@ -14,7 +13,6 @@ import { AgentTerminalPanel } from "./AgentTerminalPanel.tsx";
 import { BtwPopup } from "./BtwPopup.tsx";
 import { AlphaChatInterface } from "./chat-alpha/AlphaChatInterface.tsx";
 import { ChatTaskProvider } from "./chat-alpha/ChatTaskContext.tsx";
-import { DebugChatView } from "./chat-alpha/DebugChatView.tsx";
 import styles from "./ChatPanelContent.module.scss";
 import { useChatData } from "./useChatData.ts";
 
@@ -94,7 +92,6 @@ const ChatPanelInner = ({
   const appendTextRef = appendTextRefProp ?? fallbackAppendTextRef;
   const insertSkillRef = insertSkillRefProp ?? fallbackInsertSkillRef;
   const editorRef = editorRefProp ?? fallbackEditorRef;
-  const isDebugView = useAtomValue(debugViewAtomFamily(taskId));
   const closeBtwPopupIfNotForAgent = useSetAtom(closeBtwPopupIfNotForAgentAtom);
   const isBtwPopupOpen = useAtomValue(isBtwPopupOpenAtom);
   const setChatPanelMounted = useSetAtom(chatPanelMountedAtom);
@@ -112,17 +109,15 @@ const ChatPanelInner = ({
 
   // Reactive signal for "is a chat panel currently rendered?" — read by the
   // command palette (via `chatPanelMountedAtom`) instead of poking the DOM.
-  // The debug view replaces the chat panel and so doesn't count. Increment/decrement
-  // a shared counter so the signal stays correct when two chat panels are mounted at
-  // once (e.g. one in the center section and one moved to the right).
-  const isChatPanelRendered = !isDebugView;
+  // Increment/decrement a shared counter so the signal stays correct when two
+  // chat panels are mounted at once (e.g. one in the center section and one
+  // moved to the right).
   useEffect(() => {
-    if (!isChatPanelRendered) return;
     setChatPanelMounted((count) => count + 1);
     return (): void => {
       setChatPanelMounted((count) => count - 1);
     };
-  }, [isChatPanelRendered, setChatPanelMounted]);
+  }, [setChatPanelMounted]);
 
   // Workspace-scoped actions (commit prompt, Notes/Skills insertion) target
   // the most-recently-focused chat, so any pointer-down or focus inside this
@@ -136,10 +131,6 @@ const ChatPanelInner = ({
       recordChatAgentFocus(taskId);
     }
   };
-
-  if (isDebugView) {
-    return <DebugChatView messages={chatData.chatMessages} />;
-  }
 
   // Render the popup as a sibling of the chat interface so it lives at the
   // workspace-route scope (only mounted when the user is looking at a chat

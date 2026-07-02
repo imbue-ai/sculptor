@@ -15,7 +15,7 @@
 import type { useStore } from "jotai/react";
 
 import { type AgentTypeName, createWorkspaceAgent } from "~/api";
-import { encodeRegisteredAgentType } from "~/common/state/atoms/agentTabs.ts";
+import { encodeRegisteredAgentType, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { terminalNextIndexAtom, terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
 import { createAgentErrorToastAtom } from "~/common/state/atoms/toasts.ts";
@@ -135,6 +135,26 @@ export function seedFirstVisitTerminal(store: AppStore, workspaceId: string): nu
   store.set(terminalTabStateAtom, (prev) => ({ ...prev, [workspaceId]: [...(prev[workspaceId] ?? []), newTab] }));
   store.set(terminalNextIndexAtom, (prev) => ({ ...prev, [workspaceId]: index + 1 }));
   return index;
+}
+
+// The stored last-used agent type, normalized for the pinned "New {recent} agent"
+// row shared by the section "+" dropdown, the empty-section quick actions, the
+// new-agent keybinding/command, and the Cmd+K "Add panel" flow. Two stored values
+// cannot back an agent row and fall back to Claude:
+//  - "terminal": the new-workspace form's first-agent select legitimately stores
+//    it, but the add-panel model has no bare terminal AGENT — the dedicated
+//    "New terminal" row owns terminal creation;
+//  - "pi" while the pi harness is disabled (a remembered type from before the
+//    flag was turned off).
+export function normalizeRecentAgentType(stored: StoredAgentType, isPiAgentEnabled: boolean): StoredAgentType {
+  if (stored === "terminal") {
+    return "claude";
+  }
+
+  if (stored === "pi" && !isPiAgentEnabled) {
+    return "claude";
+  }
+  return stored;
 }
 
 type CreateAgentInputs = { agentType: AgentTypeName; registrationId?: string; activeAgentId?: string };

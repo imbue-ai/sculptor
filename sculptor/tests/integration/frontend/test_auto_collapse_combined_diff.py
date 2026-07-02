@@ -7,7 +7,6 @@ they start collapsed, and the expand-all button works.
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -95,21 +94,11 @@ fake_claude:multi_step `{
 }`"""
 
 
-def _enable_review_all_via_settings(page) -> None:  # noqa: ANN001
-    """Enable the Review All setting via the Settings UI (idempotent)."""
-    settings_page = navigate_to_settings_page(page=page)
-    experimental_section = settings_page.click_on_experimental()
-    experimental_section.enable_review_all()
-
-
 @user_story("to see files auto-collapsed when there are many files in Review All")
 def test_many_files_start_collapsed_in_review_all(sculptor_instance_: SculptorInstance) -> None:
     """When the combined diff view has more than 5 files, all files should
     start collapsed. File headers should be visible but diff content hidden."""
     page = sculptor_instance_.page
-
-    # Enable Review All via Settings UI (persists through navigation)
-    _enable_review_all_via_settings(page)
 
     task_page = start_task_and_wait_for_ready(page, prompt=_SEVEN_FILES_PROMPT, wait_for_agent_to_finish=False)
     chat_panel = task_page.get_chat_panel()
@@ -137,8 +126,6 @@ def test_few_files_start_expanded_in_review_all(sculptor_instance_: SculptorInst
     """When the combined diff view has 5 or fewer files, they should
     start expanded (not collapsed)."""
     page = sculptor_instance_.page
-
-    _enable_review_all_via_settings(page)
 
     task_page = start_task_and_wait_for_ready(page, prompt=_THREE_FILES_PROMPT, wait_for_agent_to_finish=False)
     chat_panel = task_page.get_chat_panel()

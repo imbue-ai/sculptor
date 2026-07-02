@@ -12,12 +12,15 @@ import pytest
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import dismiss_with_escape
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import blur_active_element
+from sculptor.testing.playwright_utils import navigate_to_home_page
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
+from sculptor.testing.playwright_utils import wait_for_workspace_list_loaded
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 from sculptor.testing.utils import get_playwright_modifier_key
@@ -36,7 +39,12 @@ def _ensure_workspace(sculptor_instance_: SculptorInstance) -> None:
     the workspace list is empty, which is exactly the state the shared instance's
     per-test cleanup leaves behind. Tests that press a global shortcut must first
     create a workspace; this is idempotent (a no-op once one exists).
+
+    Shortcuts are also suppressed while the list is still LOADING, and
+    ensure_workspace_exists's momentary first-run probe misreads that window
+    as "workspaces exist" — so wait for the list to load first.
     """
+    wait_for_workspace_list_loaded(sculptor_instance_.page)
     PlaywrightProjectLayoutPage(page=sculptor_instance_.page).ensure_workspace_exists()
 
 
@@ -449,6 +457,71 @@ def test_customized_keybinding_is_honored(sculptor_instance_: SculptorInstance) 
     # Reset keybindings for subsequent tests
     keybindings = _navigate_to_keybindings(sculptor_instance_)
     keybindings.reset_all_to_defaults()
+
+
+@pytest.mark.release
+@user_story("to toggle the sidebar with its keybinding from the home page")
+def test_sidebar_toggle_keybinding_works_on_home_page(sculptor_instance_: SculptorInstance) -> None:
+    """The sidebar-toggle shortcut fires on /home, not just on workspace routes.
+
+    The sidebar rail is app-shell chrome mounted on every route, so its
+    keybinding handler must live at the shell level rather than in the
+    workspace-only shortcut set.
+    """
+    page = sculptor_instance_.page
+    mod = get_playwright_modifier_key()
+
+    # Global shortcuts are suppressed in the empty first-run state (FIRST-03).
+    _ensure_workspace(sculptor_instance_)
+
+    # Reset keybindings to defaults (earlier tests may have changed them).
+    keybindings = _navigate_to_keybindings(sculptor_instance_)
+    keybindings.reset_all_to_defaults()
+
+    navigate_to_home_page(page)
+    blur_active_element(page)
+
+    sidebar_root = page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
+    expect(sidebar_root).to_be_visible()
+
+    # Meta+Alt+B collapses the sidebar down to the expand icon...
+    page.keyboard.press(f"{mod}+Alt+b")
+    expect(sidebar_root).to_be_hidden()
+    expect(get_workspace_sidebar(page).get_expand_icon()).to_be_visible()
+
+    # ...and pressing it again restores the rail (also resets shared state
+    # for subsequent tests on the same worker).
+    blur_active_element(page)
+    page.keyboard.press(f"{mod}+Alt+b")
+    expect(sidebar_root).to_be_visible()
+
+
+@pytest.mark.release
+@user_story("to toggle the sidebar with its keybinding from the settings page")
+def test_sidebar_toggle_keybinding_works_on_settings_page(sculptor_instance_: SculptorInstance) -> None:
+    """The sidebar-toggle shortcut fires on /settings, not just on workspace routes."""
+    page = sculptor_instance_.page
+    mod = get_playwright_modifier_key()
+
+    # Global shortcuts are suppressed in the empty first-run state (FIRST-03).
+    _ensure_workspace(sculptor_instance_)
+
+    # Reset keybindings to defaults; this also lands us on the settings page.
+    keybindings = _navigate_to_keybindings(sculptor_instance_)
+    keybindings.reset_all_to_defaults()
+    blur_active_element(page)
+
+    sidebar_root = page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
+    expect(sidebar_root).to_be_visible()
+
+    page.keyboard.press(f"{mod}+Alt+b")
+    expect(sidebar_root).to_be_hidden()
+    expect(get_workspace_sidebar(page).get_expand_icon()).to_be_visible()
+
+    # Restore the rail for subsequent tests on the same worker.
+    blur_active_element(page)
+    page.keyboard.press(f"{mod}+Alt+b")
+    expect(sidebar_root).to_be_visible()
 
 
 def _workspace_id_from_url(page: Page) -> str:

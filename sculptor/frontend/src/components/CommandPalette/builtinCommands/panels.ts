@@ -103,7 +103,8 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
   },
   // The sidebar is workspace-navigation chrome rather than a section, so its
   // toggle lives in the Navigation group at the root (not on the sections
-  // sub-page).
+  // sub-page). It is deliberately NOT route-gated: the sidebar rail renders on
+  // every route (workspace, Home, Settings), so the toggle must too.
   {
     id: "view.toggle_sidebar",
     title: "Toggle sidebar",
@@ -113,7 +114,6 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
     icon: Sidebar,
     shortcut: "toggle_sidebar",
     order: 100,
-    when: (ctx) => ctx.route.isWorkspace,
     perform: () => runtime.ui.toggleSidebar(),
     keepOpen: true,
   },

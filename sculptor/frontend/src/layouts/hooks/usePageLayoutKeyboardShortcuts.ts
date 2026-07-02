@@ -1,4 +1,4 @@
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useEffect, useRef } from "react";
 
 import { ElementIds } from "../../api";
@@ -15,6 +15,7 @@ import { useHelpDialog } from "../../common/state/hooks/useHelpDialog.ts";
 import { useOpenSettings } from "../../common/state/hooks/useOpenSettings.ts";
 import { useResolvedTheme } from "../../common/Utils.ts";
 import { useCommandPalette } from "../../components/CommandPalette";
+import { sidebarCollapsedAtom } from "../../components/layout/sidebarAtoms.ts";
 import {
   areGlobalShortcutsDisabledAtom,
   newWorkspaceModalAtom,
@@ -22,6 +23,7 @@ import {
 import { chatToolDensityAtom } from "../../pages/workspace/components/chat-alpha/atoms.ts";
 
 export const usePageLayoutKeyboardShortcuts = (): void => {
+  const store = useStore();
   const { toggleDevPanel } = useDevPanel();
   const {
     isOpen: isCommandPaletteOpen,
@@ -187,6 +189,15 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
         ["home", (): void => navigateToHome()],
         ["settings", (): void => openSettings()],
         [
+          // The sidebar rail is mounted by AppShell on every route (workspace,
+          // Home, Settings), so its toggle lives here — the shell-level hook —
+          // rather than in the workspace-only shortcut set. Reads the current
+          // value through the store at press time so the listener does not
+          // re-subscribe on every toggle.
+          "toggle_sidebar",
+          (): void => store.set(sidebarCollapsedAtom, !store.get(sidebarCollapsedAtom)),
+        ],
+        [
           "toggle_theme",
           (): void => {
             const newTheme = resolvedTheme === "dark" ? "light" : "dark";
@@ -219,6 +230,7 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
     window.addEventListener("keydown", handleKeyDown);
     return (): void => window.removeEventListener("keydown", handleKeyDown);
   }, [
+    store,
     setChatSearchVisible,
     setFocusRequest,
     closeCommandPalette,

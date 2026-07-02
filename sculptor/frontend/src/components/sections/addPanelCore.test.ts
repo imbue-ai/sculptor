@@ -10,6 +10,7 @@ import {
   createAgentAndNavigate,
   createAgentInLocation,
   listAvailableLocations,
+  normalizeRecentAgentType,
   openStaticPanelInLocation,
 } from "./addPanelCore.ts";
 import { EMPTY_WORKSPACE_LAYOUT } from "./persistence/types.ts";
@@ -42,6 +43,29 @@ describe("listAvailableLocations", () => {
     // Collapsed sections must still be offered so a panel can be added to them.
     expect(subSections).toContain("right");
     expect(subSections).toContain("bottom");
+  });
+});
+
+describe("normalizeRecentAgentType", () => {
+  it("falls back to Claude for a stored bare 'terminal' type", () => {
+    // The new-workspace form's first-agent select can persist "terminal", but the
+    // add-panel surfaces have no bare terminal AGENT row — terminal creation
+    // belongs to the dedicated "New terminal" row.
+    expect(normalizeRecentAgentType("terminal", true)).toBe("claude");
+    expect(normalizeRecentAgentType("terminal", false)).toBe("claude");
+  });
+
+  it("falls back to Claude for 'pi' while the pi harness is disabled", () => {
+    expect(normalizeRecentAgentType("pi", false)).toBe("claude");
+  });
+
+  it("keeps 'pi' while the pi harness is enabled", () => {
+    expect(normalizeRecentAgentType("pi", true)).toBe("pi");
+  });
+
+  it("keeps Claude and registered terminal-agent types as-is", () => {
+    expect(normalizeRecentAgentType("claude", false)).toBe("claude");
+    expect(normalizeRecentAgentType("registered:my-agent", false)).toBe("registered:my-agent");
   });
 });
 

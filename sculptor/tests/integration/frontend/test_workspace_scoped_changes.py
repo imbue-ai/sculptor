@@ -13,24 +13,15 @@ different file, and verify that both files appear in the Changes tab
 for BOTH agents.
 """
 
-from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
-from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
-
-
-def _enable_review_all_via_settings(page: Page) -> None:
-    """Enable the Review All experimental setting via the Settings UI."""
-    settings_page = navigate_to_settings_page(page=page)
-    experimental = settings_page.click_on_experimental()
-    experimental.enable_review_all()
 
 
 @user_story("to see all workspace changes regardless of which agent made them")
@@ -105,8 +96,6 @@ def test_review_modal_shows_changes_from_all_agents(
     3. Open Review All — should contain diffs for BOTH files
     """
     page = sculptor_instance_.page
-
-    _enable_review_all_via_settings(page)
 
     task_page = start_task_and_wait_for_ready(
         page,

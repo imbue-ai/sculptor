@@ -25,7 +25,6 @@ import {
   isInPlaceWorkspacesEnabledAtom,
   isPanelLayoutPerWorkspaceAtom,
   isPiAgentEnabledAtom,
-  isReviewAllEnabledAtom,
   isRichMarkdownRenderingEnabledAtom,
   isSmoothStreamingUserPreferenceAtom,
   userEmailAtom,
@@ -87,7 +86,6 @@ export const SettingsPage = (): ReactElement => {
   const isAlwaysInterruptAndSend = useAtomValue(isAlwaysInterruptAndSendAtom);
   const isInPlaceWorkspacesEnabled = useAtomValue(isInPlaceWorkspacesEnabledAtom);
   const isCloneWorkspacesEnabled = useAtomValue(isCloneWorkspacesEnabledAtom);
-  const isReviewAllEnabled = useAtomValue(isReviewAllEnabledAtom);
   const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
   const isFrontendPluginsEnabled = useAtomValue(isFrontendPluginsEnabledAtom);
   // The Plugins section only shows once the experimental flag is on; the
@@ -459,16 +457,6 @@ export const SettingsPage = (): ReactElement => {
                         handleSettingChange(UserConfigField.ENABLE_CLONE_WORKSPACES, checked)
                       }
                       data-testid={ElementIds.SETTINGS_ENABLE_CLONE_WORKSPACES_TOGGLE}
-                    />
-                  </SettingRow>
-                  <SettingRow
-                    title="Review All"
-                    description="Show the Review All combined diff view in the File Browser."
-                  >
-                    <Switch
-                      checked={isReviewAllEnabled}
-                      onCheckedChange={(checked) => handleSettingChange(UserConfigField.ENABLE_REVIEW_ALL, checked)}
-                      data-testid={ElementIds.SETTINGS_ENABLE_REVIEW_ALL_TOGGLE}
                     />
                   </SettingRow>
                   <SettingRow

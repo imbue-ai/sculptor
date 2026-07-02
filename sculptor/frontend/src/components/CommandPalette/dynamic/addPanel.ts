@@ -13,12 +13,19 @@
 
 import { MessageSquarePlus, PanelTopIcon, SquareTerminal } from "lucide-react";
 
-import { AGENT_TYPE_LABELS, lastUsedAgentTypeAtom, parseStoredAgentType } from "~/common/state/atoms/agentTabs.ts";
+import {
+  AGENT_TYPE_LABELS,
+  lastUsedAgentTypeAtom,
+  parseStoredAgentType,
+  type StoredAgentType,
+} from "~/common/state/atoms/agentTabs.ts";
+import { isPiAgentEnabledAtom } from "~/common/state/atoms/userConfig.ts";
 import {
   createAgentAndNavigate,
   createTerminalInLocation,
   listAvailableLocations,
   listAvailableStaticPanels,
+  normalizeRecentAgentType,
   openStaticPanelInLocation,
 } from "~/components/sections/addPanelCore.ts";
 
@@ -26,13 +33,19 @@ import { addPanelTargetSubSectionAtom } from "../contextActions/atoms.ts";
 import type { CommandRuntime } from "../runtime.ts";
 import type { Command, DynamicProvider } from "../types.ts";
 
+// The stored recent agent type, run through the shared normalizer (a bare
+// "terminal" or a disabled "pi" falls back to Claude) so the Cmd+K row and the
+// section "+" dropdown resolve the same type from the same stored value.
+function resolveRecentAgentType(runtime: CommandRuntime): StoredAgentType {
+  return normalizeRecentAgentType(runtime.store.get(lastUsedAgentTypeAtom), runtime.store.get(isPiAgentEnabledAtom));
+}
+
 // The recent-agent label for the Cmd+K row. Registered terminal-agent programs label
 // as a generic "agent" here (their display names need the registrations list, which
 // isn't available synchronously in the provider) — the built-in types read straight
 // from the stored default.
 function recentAgentLabel(runtime: CommandRuntime): string {
-  const stored = runtime.store.get(lastUsedAgentTypeAtom);
-  const { agentType, registrationId } = parseStoredAgentType(stored);
+  const { agentType, registrationId } = parseStoredAgentType(resolveRecentAgentType(runtime));
   if (agentType === "registered" || registrationId !== undefined) {
     return "agent";
   }
@@ -96,7 +109,7 @@ export const buildAddPanelProvider = (runtime: CommandRuntime): DynamicProvider 
         // Shares the dropdown's create flow (createAgentAndNavigate): navigate to
         // the new agent on success, surface the shared error toast on failure.
         perform: (): Promise<void> => {
-          const { agentType, registrationId } = parseStoredAgentType(runtime.store.get(lastUsedAgentTypeAtom));
+          const { agentType, registrationId } = parseStoredAgentType(resolveRecentAgentType(runtime));
           return createAgentAndNavigate(
             runtime.store,
             target,

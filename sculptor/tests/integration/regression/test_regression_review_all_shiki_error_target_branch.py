@@ -20,22 +20,12 @@ used in the single-file DiffPanel view: when scope is `vs-target-branch`,
 let `useFileLines` fall back to the target branch ref.
 """
 
-from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
-
-
-def _enable_review_all_via_settings(page: Page) -> None:
-    """Enable the Review All experimental setting via the Settings UI."""
-    settings_page = navigate_to_settings_page(page=page)
-    experimental = settings_page.click_on_experimental()
-    experimental.enable_review_all()
-
 
 # Strategy: src/helpers.py is 75 lines on `main` (the target branch).  This
 # prompt overwrites it with a 25-line version on the workspace branch and
@@ -85,8 +75,6 @@ def test_review_all_diff_stays_visible_when_target_branch_longer_than_head(
     branch length.
     """
     page = sculptor_instance_.page
-
-    _enable_review_all_via_settings(page)
 
     task_page = start_task_and_wait_for_ready(page, prompt=_PROMPT)
     chat_panel = task_page.get_chat_panel()

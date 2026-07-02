@@ -14,6 +14,7 @@ from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.terminal import expect_terminal_panel_replaces_chat
 from sculptor.testing.elements.user_config import disable_pi_agent
 from sculptor.testing.elements.user_config import enable_pi_agent
+from sculptor.testing.fake_pi import install_fake_pi_binary
 from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -83,9 +84,12 @@ def test_terminal_first_agent(
 def test_first_agent_type_defaults_to_shared_last_used(
     sculptor_instance_: SculptorInstance,
 ) -> None:
-    """Both creation surfaces share one MRU: creating a workspace whose first
-    agent is a Terminal makes the tab bar's plain + click create a Terminal
-    too, and the next new-workspace form opens preset to Terminal."""
+    """Both creation surfaces share one MRU, but the pinned "New {recent} agent"
+    row normalizes a remembered "terminal" to Claude: the add-panel model has no
+    bare terminal AGENT (the dedicated "New terminal" row owns terminal
+    creation), while the new-workspace form's picker legitimately offers
+    Terminal and so reads the shared MRU un-normalized. A non-terminal type
+    (pi) still surfaces on BOTH."""
     page = sculptor_instance_.page
     start_task_and_wait_for_ready(
         sculptor_page=page,
@@ -94,23 +98,55 @@ def test_first_agent_type_defaults_to_shared_last_used(
         agent_type="terminal",
     )
 
-    # The form's creation recorded the MRU — a plain + click (no menu) now
-    # creates another Terminal in the tab bar. createWorkspace optimistically sets
-    # lastUsedAgentType in userConfigAtom (and the backend persists it on create),
-    # so the pinned "New {recent} agent" row reflects it without a reload.
-    # Open the center dropdown and wait for the pinned row to read "Terminal"
-    # before clicking it, so the click isn't raced against a still-"Claude" MRU.
+    # The form's creation recorded the MRU as "terminal" (createWorkspace
+    # optimistically sets lastUsedAgentType in userConfigAtom, and the backend
+    # persists it on create). The pinned "New {recent} agent" row NORMALIZES
+    # that to Claude — terminal creation is owned by the dedicated "New
+    # terminal" row offered alongside it.
     agent_tab_bar = PlaywrightAgentTabBarElement(page)
     dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
     dropdown.open()
     new_agent_item = dropdown.get_new_agent_item()
-    expect(new_agent_item).to_contain_text("Terminal")
-    new_agent_item.click()
-    expect(agent_tab_bar.get_agent_tab_by_name("Terminal 2")).to_have_count(1)
+    expect(new_agent_item).to_contain_text("New Claude agent")
+    expect(dropdown.get_new_terminal_item()).to_be_visible()
+    page.keyboard.press("Escape")
 
-    # And the next new-workspace form opens preset to Terminal. (No cleanup
-    # needed: the per-test browser reset clears localStorage, so the MRU
-    # cannot leak into other tests.)
+    # The FORM still reads the shared MRU un-normalized: the next new-workspace
+    # form opens preset to Terminal. Checked BEFORE clicking the pinned row
+    # below, because that click re-records the MRU as the type it creates
+    # (Claude), which would overwrite the form's Terminal preset.
     navigate_to_add_workspace_page(page)
     picker = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_AGENT_TYPE_SELECT)
     expect(picker).to_contain_text("Terminal")
+    page.keyboard.press("Escape")
+    expect(picker).to_have_count(0)
+
+    # Clicking the pinned row acts on the NORMALIZED type too: it creates a
+    # Claude agent ("Claude 1" — numbering is per type prefix), not "Terminal 2".
+    dropdown.open()
+    dropdown.get_new_agent_item().click()
+    expect(agent_tab_bar.get_agent_tab_by_name("Claude 1")).to_have_count(1)
+    expect(agent_tab_bar.get_agent_tab_by_name("Terminal 2")).to_have_count(0)
+
+    # Only terminal is normalized — a NON-terminal MRU still flows through both
+    # surfaces: a pi-first workspace makes the pinned row read "New pi agent"
+    # AND presets the next new-workspace form to pi.
+    install_fake_pi_binary(sculptor_instance_.fake_bin_dir)
+    try:
+        start_task_and_wait_for_ready(
+            sculptor_page=page,
+            workspace_name="MRU Pi WS",
+            model_name=None,
+            agent_type="pi",
+        )
+        dropdown.open()
+        expect(dropdown.get_new_agent_item()).to_contain_text("New pi agent")
+        page.keyboard.press("Escape")
+
+        navigate_to_add_workspace_page(page)
+        expect(picker).to_contain_text("pi")
+    finally:
+        # start_task_and_wait_for_ready enabled the sticky pi flag — reset it.
+        # Leaving the MRU as "pi" is benign: with the flag off, both surfaces
+        # fall back to Claude.
+        disable_pi_agent(page)
