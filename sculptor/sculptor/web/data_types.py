@@ -99,6 +99,10 @@ class PrStatusInfo(SerializableModel):
     pipeline_updated_at: str | None = None
     approvals: list[PrApproval] = Field(default_factory=list)
     unresolved_comments: list[PrComment] = Field(default_factory=list)
+    # True when an open GitHub PR is sitting in the repository's merge queue.
+    # Only GitHub populates this (via `isInMergeQueue`); other providers leave
+    # it at its default. Drives the "Merge queued" status dot on the PR button.
+    is_in_merge_queue: bool = False
     error_category: (
         Literal["cli_missing", "not_authenticated", "no_access", "network_error", "rate_limited", "transient"] | None
     ) = None

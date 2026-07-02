@@ -125,7 +125,7 @@ def _build_open_pr_status(
     workspace_id: WorkspaceID,
     pr_node: dict,
 ) -> PrStatusInfo:
-    """Build a full PrStatusInfo for an open PR (checks, reviews, comments).
+    """Build a full PrStatusInfo for an open PR (checks, reviews, comments, merge queue).
 
     All detail fields already live on ``pr_node`` (the single graphql query
     fetches them alongside the PR identity), so this does no further I/O.
@@ -140,6 +140,7 @@ def _build_open_pr_status(
         pipeline_status=_parse_check_status(pr_node),
         approvals=_parse_reviews(pr_node),
         unresolved_comments=_parse_review_comments(pr_node),
+        is_in_merge_queue=bool(pr_node.get("isInMergeQueue", False)),
     )
 
 
@@ -158,6 +159,8 @@ _PR_QUERY_LIMIT = 5
 # enum) rather than every individual check context also lowers the point cost.
 # ``mergeable`` (MERGEABLE / CONFLICTING / UNKNOWN) surfaces merge conflicts so
 # the CI babysitter can act on a conflicted PR.
+# ``isInMergeQueue`` reports whether the PR is sitting in the repository's merge
+# queue, which the open-PR button surfaces as a "Merge queued" state.
 # ``{owner}`` / ``{repo}`` in the field args are expanded by gh from the
 # working directory's ``origin`` remote, so no repo plumbing is needed here.
 _GRAPHQL_PR_QUERY = """
@@ -171,6 +174,7 @@ query($owner: String!, $name: String!, $branch: String!, $limit: Int!) {
         state
         baseRefName
         mergeable
+        isInMergeQueue
         commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
         latestReviews(first: 20) { nodes { state author { login } } }
         reviewThreads(first: 10) {
@@ -241,9 +245,9 @@ _SEARCH_QUERY_STRING = "is:pr state:open author:@me archived:false sort:updated"
 # Token-wide search query that replaces one ``_GRAPHQL_PR_QUERY`` per workspace
 # with one query per (host, token) per round. ``author:@me`` returns all of the
 # user's open PRs across every repo at once, each node carrying the same
-# check/review/comment/``mergeable`` detail the per-workspace query does, plus
-# ``repository { nameWithOwner }`` and ``headRefName`` so the poller can index a
-# node back to the workspace(s) it belongs to. The sibling ``rateLimit`` block
+# check/review/comment/``mergeable``/``isInMergeQueue`` detail the per-workspace
+# query does, plus ``repository { nameWithOwner }`` and ``headRefName`` so the
+# poller can index a node back to the workspace(s) it belongs to. The sibling ``rateLimit`` block
 # rides in the same response so the governor can read the token's budget with no
 # extra call. ``reviewThreads`` is trimmed to 10 and ``latestReviews`` left at 20
 # (cost-free — it nests no connection).
@@ -261,6 +265,7 @@ query($q: String!, $prCount: Int!, $after: String) {
         repository { nameWithOwner }
         headRefName
         mergeable
+        isInMergeQueue
         commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
         latestReviews(first: 20) { nodes { state author { login } } }
         reviewThreads(first: 10) {
