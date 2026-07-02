@@ -1,8 +1,7 @@
 import { useSetAtom } from "jotai";
 import { useMemo } from "react";
 
-import { markWorkspaceAgentUnread } from "../../api";
-import { updateTasksAtom } from "../../common/state/atoms/tasks.ts";
+import { markAgentUnreadAtom } from "../../common/state/atoms/unreadOverrides.ts";
 import {
   agentDeleteTargetAtom,
   renamingAgentIdAtom,
@@ -24,7 +23,7 @@ export const useContextActionRuntimes = (): {
   const setWorkspaceDeleteTarget = useSetAtom(workspaceDeleteTargetAtom);
   const setRenamingAgentId = useSetAtom(renamingAgentIdAtom);
   const setAgentDeleteTarget = useSetAtom(agentDeleteTargetAtom);
-  const updateTasks = useSetAtom(updateTasksAtom);
+  const markAgentUnread = useSetAtom(markAgentUnreadAtom);
   const gitAndOpenIn = useGitAndOpenInRuntime();
 
   // Identity-stable (jotai's `useSetAtom` returns stable refs; `gitAndOpenIn`
@@ -41,18 +40,16 @@ export const useContextActionRuntimes = (): {
   const agentActionRuntime = useMemo<AgentActionRuntime>(
     () => ({
       beginRename: (agent): void => setRenamingAgentId(agent.id),
+      // Shares markAgentUnreadAtom with the panel-tab "Mark as unread" so both
+      // paths record the unread override (which keeps useMarkRead's auto
+      // mark-read from undoing the action) alongside the persisted update.
       markUnread: (agent): void => {
         if (agent.workspaceId == null) return;
-        updateTasks({ [agent.id]: { ...agent, lastReadAt: null } });
-        markWorkspaceAgentUnread({
-          path: { workspace_id: agent.workspaceId, agent_id: agent.id },
-        }).catch(() => {
-          // Fire-and-forget: server value will arrive via WebSocket.
-        });
+        markAgentUnread({ workspaceId: agent.workspaceId, taskId: agent.id });
       },
       beginDelete: (agent): void => setAgentDeleteTarget({ id: agent.id, name: agent.title ?? "" }),
     }),
-    [setRenamingAgentId, updateTasks, setAgentDeleteTarget],
+    [setRenamingAgentId, markAgentUnread, setAgentDeleteTarget],
   );
 
   return { workspaceActionRuntime, agentActionRuntime };

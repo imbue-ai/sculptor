@@ -233,7 +233,12 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
         )}
         {canRename && openMenuActions.length > 0 && <ContextMenu.Separator />}
         {openMenuActions.map((action) => (
-          <ContextMenu.Item key={action.label} disabled={action.disabled} onSelect={() => action.action()}>
+          <ContextMenu.Item
+            key={action.label}
+            disabled={action.disabled}
+            data-testid={action.testId}
+            onSelect={() => action.action()}
+          >
             {action.label}
           </ContextMenu.Item>
         ))}

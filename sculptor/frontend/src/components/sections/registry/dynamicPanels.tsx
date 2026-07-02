@@ -16,6 +16,8 @@ import type { ComponentType } from "react";
 import { createElement } from "react";
 
 import type { TaskStatus } from "~/api";
+import { ElementIds } from "~/api";
+import { clearUnreadOverride, isUnreadOverrideActive } from "~/common/state/atoms/unreadOverrides.ts";
 import { getAgentDotStatus } from "~/components/statusDot";
 
 import type { PanelId } from "../sectionTypes.ts";
@@ -111,18 +113,24 @@ export type DynamicAgentInput = {
   // Committing an inline tab rename persists the new title on the agent;
   // supplied by the sync hook (renameWorkspaceAgent + optimistic title update).
   onRename?: (newName: string) => void;
+  // "Mark as unread" from the tab context menu: records the unread override and
+  // persists it (see unreadOverrides.ts). Supplied by the sync hook
+  // (markAgentUnreadAtom); allowed on every agent tab, including the one the
+  // user is currently viewing — the override suppresses the auto mark-read.
+  onMarkUnread?: () => void;
 };
 
 async function copyToClipboard(text: string): Promise<void> {
   await navigator.clipboard.writeText(text);
 }
 
-// Build the flat diagnostics copy actions for an agent's tab context menu.
-// Copy agent id / name are always available; session id and transcript paths are
-// disabled until a session exists.
+// Build an agent's tab context-menu actions: "Mark as unread" first, then the flat
+// diagnostics copy actions. Copy agent id / name are always available; session id
+// and transcript paths are disabled until a session exists.
 function buildAgentContextMenuActions(agent: DynamicAgentInput): ReadonlyArray<PanelContextMenuItem> {
   const { sessionId, claudeTranscriptPath, sculptorTranscriptPath } = agent.diagnostics ?? {};
   return [
+    { label: "Mark as unread", action: () => agent.onMarkUnread?.(), testId: ElementIds.TAB_CONTEXT_MENU_MARK_UNREAD },
     { label: "Copy agent id", action: () => void copyToClipboard(agent.taskId) },
     { label: "Copy agent name", action: () => void copyToClipboard(agent.displayName) },
     {
@@ -166,7 +174,14 @@ export function deriveDynamicPanels(
   for (const agent of agents) {
     const id = makeAgentPanelId(agent.taskId);
     liveIds.add(id);
-    const dotStatus = getAgentDotStatus(agent.status, agent.lastReadAt, agent.updatedAt);
+    const baseDotStatus = getAgentDotStatus(agent.status, agent.lastReadAt, agent.updatedAt);
+    // An explicit "Mark as unread" wins over "read": while the override is active
+    // a stale lastReadAt (e.g. a WebSocket frame that raced the mark-unread
+    // round-trip) must not show the tab as read. Activity dots
+    // (running/waiting/error) keep precedence — the override only affects the
+    // read/unread classification.
+    const dotStatus =
+      baseDotStatus === "read" && isUnreadOverrideActive(agent.taskId, agent.updatedAt) ? "unread" : baseDotStatus;
     definitions.push({
       id,
       displayName: agent.displayName,
@@ -197,10 +212,14 @@ export function deriveDynamicPanels(
     });
   }
 
-  // Evict cached components whose task/terminal no longer exists.
+  // Evict cached components whose task/terminal no longer exists, dropping any
+  // unread override for a deleted agent along with its component.
   for (const id of [...componentCache.keys()]) {
     if (!liveIds.has(id)) {
       componentCache.delete(id);
+      if (id.startsWith(AGENT_PANEL_ID_PREFIX)) {
+        clearUnreadOverride(id.slice(AGENT_PANEL_ID_PREFIX.length));
+      }
     }
   }
 

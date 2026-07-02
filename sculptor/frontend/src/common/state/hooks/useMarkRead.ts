@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 
 import { markWorkspaceAgentRead } from "../../../api";
 import { taskAtomFamily } from "../atoms/tasks";
+import { clearUnreadOverride, isUnreadOverrideActive } from "../atoms/unreadOverrides";
 
 const DEBOUNCE_MS = 1000;
 
@@ -24,11 +25,14 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
     });
   };
 
-  // Mark as read on mount
+  // Mark as read on mount / agent change. This is the "fresh activation" of the
+  // agent, so it also ends any explicit "Mark as unread" (see unreadOverrides.ts):
+  // the user coming back to the agent has seen it again.
   useEffect(() => {
     if (!task) {
       return;
     }
+    clearUnreadOverride(agentID);
     markRead();
     // Only run on mount and when agentID changes, not on every task update
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -52,9 +56,13 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
     }
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
-      // Skip if the user explicitly marked unread (lastReadAt=null) while the
-      // timer was pending — don't undo their action.
-      if (taskRef.current?.lastReadAt === null) {
+      // Skip while the user's explicit "Mark as unread" is still active (they
+      // marked the agent unread after the update that scheduled this timer) —
+      // don't undo their action. An override recorded BEFORE this update has
+      // expired (updatedAt advanced), so a new agent turn resumes the normal
+      // auto mark-read for the agent being viewed.
+      const latest = taskRef.current;
+      if (latest && isUnreadOverrideActive(agentID, latest.updatedAt)) {
         return;
       }
       markRead();

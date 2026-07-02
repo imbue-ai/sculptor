@@ -1,10 +1,11 @@
-"""Integration tests for the shared panel-tab context menu (PANEL-07/11/14, AGENT-06, TERM-02).
+"""Integration tests for the shared panel-tab context menu (PANEL-07/11/14, AGENT-06/07, TERM-02).
 
 The redesigned shell renders ONE context menu for every panel tab (agent and
-terminal alike): Rename for multi-instance panels (PANEL-11), plus — for agents — the
-flat diagnostics copy items (AGENT-06: copy agent id / name, copy claude session id /
-transcript paths, disabled until a session exists). Closing a tab routes through the
-close (X) button to a confirmation dialog (AGENT-04 / TERM-02).
+terminal alike): Rename for multi-instance panels (PANEL-11), plus — for agents —
+"Mark as unread" (AGENT-07) and the flat diagnostics copy items (AGENT-06: copy
+agent id / name, copy claude session id / transcript paths, disabled until a
+session exists). Closing a tab routes through the close (X) button to a
+confirmation dialog (AGENT-04 / TERM-02).
 
 These cases are CREATE-not-migrate (per `03_07_agent_terminal_panel_tests.md`): they
 consolidate `test_agent_tab_context_menu.py`, `test_agent_diagnostics_context_menu.py`,
@@ -14,10 +15,9 @@ files.
 
 Known phase gaps applied here (the redesigned PanelTab context menu does not yet carry
 these affordances — the old agent tab bar did):
-* Diagnostics is a FLAT set of copy items (no "Diagnostics" sub-menu), so items are
-  asserted by their visible label rather than a per-item testid.
-* Mark-unread (AGENT-07) is not offered on the panel-tab context menu — skipped.
-  (The status dot itself is covered by test_read_unread_status.py.)
+* Diagnostics is a FLAT set of copy items (no "Diagnostics" sub-menu), so items —
+  like "Mark as unread" — are asserted by their visible label rather than a
+  per-item testid.
 * Close-others is not offered on the panel-tab context menu — skipped.
 """
 
@@ -26,6 +26,7 @@ from playwright.sync_api import expect
 
 from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.add_panel_dropdown import create_terminal_panel
+from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.clipboard import install_clipboard_interceptor
 from sculptor.testing.elements.clipboard import read_intercepted_clipboard
 from sculptor.testing.elements.clipboard import reset_intercepted_clipboard
@@ -34,9 +35,7 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
-_MARK_UNREAD_SKIP_REASON = "Mark-unread (AGENT-07) is not offered on the redesigned panel tab's context menu (there is no Mark-unread item); deferred to a later task."
-
-_CLOSE_OTHERS_SKIP_REASON = "Close-others is not offered on the redesigned panel-tab context menu (only Rename + diagnostics copy items render); deferred to a later task."
+_CLOSE_OTHERS_SKIP_REASON = "Close-others is not offered on the redesigned panel-tab context menu (only Rename, Mark as unread, and the diagnostics copy items render); deferred to a later task."
 
 
 @user_story("to rename an agent panel tab but not close it via a dedicated menu item")
@@ -143,11 +142,31 @@ def test_agent_tab_close_requires_confirmation(sculptor_instance_: SculptorInsta
     expect(tabs).to_have_count(1)
 
 
-@pytest.mark.skip(reason=_MARK_UNREAD_SKIP_REASON)
 @user_story("to mark an agent unread from its tab context menu")
 def test_agent_tab_mark_unread(sculptor_instance_: SculptorInstance) -> None:
-    """Placeholder for AGENT-07: mark-unread is not offered on the redesigned panel
-    tab's context menu."""
+    """The agent tab context menu offers "Mark as unread", and clicking it flips the
+    tab's ``data-dot-status`` to unread (AGENT-07).
+
+    Marking the currently viewed agent unread is allowed — the unread
+    override suppresses the auto mark-read, so the dot must not revert.
+    """
+    page = sculptor_instance_.page
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+
+    task_page = start_task_and_wait_for_ready(page, prompt="Mark unread agent", workspace_name="Mark Unread Menu WS")
+    chat_panel = task_page.get_chat_panel()
+    wait_for_completed_message_count(chat_panel, expected_message_count=2)
+
+    tabs = panel_tabs.get_panel_tabs()
+    expect(tabs).to_have_count(1)
+    expect(tabs.first).to_have_attribute("data-dot-status", "read")
+
+    panel_tabs.open_context_menu(tabs.first)
+    mark_unread_item = panel_tabs.get_context_menu_mark_unread_item()
+    expect(mark_unread_item).to_be_visible()
+    mark_unread_item.click()
+
+    expect(tabs.first).to_have_attribute("data-dot-status", "unread")
 
 
 @pytest.mark.skip(reason=_CLOSE_OTHERS_SKIP_REASON)

@@ -13,6 +13,7 @@ import { useLayoutEffect, useMemo, useRef } from "react";
 import { renameWorkspaceAgent } from "~/api";
 import { taskAtomFamily, tasksArrayAtom, updateTasksAtom } from "~/common/state/atoms/tasks.ts";
 import { terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
+import { markAgentUnreadAtom } from "~/common/state/atoms/unreadOverrides.ts";
 import { agentDeleteTargetAtom, terminalCloseTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
 import type { DynamicAgentInput, DynamicTerminalInput } from "~/components/sections/registry/dynamicPanels.tsx";
 import { deriveDynamicPanels, makeTerminalPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
@@ -106,6 +107,9 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
           // Fire-and-forget: server value will arrive via WebSocket.
         });
       },
+      // "Mark as unread" on the tab context menu: record the unread override, flip
+      // lastReadAt optimistically, and persist — all owned by markAgentUnreadAtom.
+      onMarkUnread: (): void => store.set(markAgentUnreadAtom, { workspaceId, taskId: task.id }),
     }));
   }, [workspaceTasks, diagnosticsByTaskId, setAgentDeleteTarget, updateTasks, store, workspaceId]);
 

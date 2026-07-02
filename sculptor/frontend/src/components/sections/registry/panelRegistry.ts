@@ -19,7 +19,7 @@ import type { PanelId, SubSectionId } from "../sectionTypes.ts";
 
 export type PanelKind = "static" | "agent" | "terminal";
 
-export type PanelContextMenuItem = { label: string; action: () => void; disabled?: boolean };
+export type PanelContextMenuItem = { label: string; action: () => void; disabled?: boolean; testId?: string };
 
 export type PanelDefinition = {
   id: PanelId;
