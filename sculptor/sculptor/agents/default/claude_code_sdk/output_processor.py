@@ -76,6 +76,7 @@ from sculptor.state.messages import AssistantMessageID
 from sculptor.state.workflow_state import WORKFLOW_TASK_TYPE
 from sculptor.state.workflow_state import WorkflowProgressEntryTypes
 from sculptor.state.workflow_state import WorkflowUsage
+from sculptor.state.workflow_state import merge_workflow_progress_entries
 from sculptor.web.data_types import OpenFileUiAction
 from sculptor.web.ui_actions import publish_ui_action
 
@@ -304,10 +305,11 @@ class ClaudeOutputProcessor:
         # at task_started time so task_updated handling can distinguish tools
         # that need deferred cleanup (Monitor) from those that don't (Bash).
         self._task_id_to_tool_name: dict[str, str] = {}
-        # Per-task Workflow state, keyed by task_id. The CLI omits the
-        # workflow_progress tree on pure token-tick batches, so the last seen
-        # tree is retained here and substituted into every emitted progress
-        # message; the notification handler attaches it as the final tree.
+        # Per-task Workflow state, keyed by task_id. The CLI's
+        # workflow_progress payloads are deltas (and absent on pure
+        # token-tick batches), so the accumulated tree lives here and is
+        # carried on every emitted progress message; the notification
+        # handler attaches it as the final tree.
         self._task_id_to_task_type: dict[str, str] = {}
         self._task_id_to_workflow_name: dict[str, str] = {}
         self._last_workflow_entries: dict[str, tuple[WorkflowProgressEntryTypes, ...]] = {}
@@ -866,7 +868,12 @@ class ClaudeOutputProcessor:
 
         tree_changed = result.workflow_progress is not None
         if result.workflow_progress is not None:
-            self._last_workflow_entries[result.task_id] = result.workflow_progress
+            # The CLI emits deltas (only entries whose state changed), so
+            # accumulate into the retained tree instead of replacing it.
+            self._last_workflow_entries[result.task_id] = merge_workflow_progress_entries(
+                self._last_workflow_entries.get(result.task_id, ()),
+                result.workflow_progress,
+            )
         if result.usage is not None:
             self._last_workflow_usage[result.task_id] = result.usage
 

@@ -789,6 +789,47 @@ class TestWorkflowTaskProgress:
         assert isinstance(final_agent, WorkflowAgentProgress)
         assert final_agent.state == "done"
 
+    def test_delta_payloads_accumulate_into_tree(self) -> None:
+        """The CLI's workflow_progress payloads are deltas — a later payload
+        carrying one agent must not evict the other agents from the tree."""
+        processor = _make_processor_for_jsonl_test()
+        self._arm_workflow(processor)
+
+        _feed_jsonl(
+            processor,
+            [
+                make_task_progress_message(
+                    task_id="task_wf_1",
+                    tool_use_id="toolu_wf_1",
+                    workflow_progress=self._make_tree(),
+                ),
+                make_task_progress_message(
+                    task_id="task_wf_1",
+                    tool_use_id="toolu_wf_1",
+                    workflow_progress=[
+                        make_workflow_agent_entry(
+                            index=0,
+                            label="review:bugs",
+                            phase_index=0,
+                            phase_title="Review",
+                            state="done",
+                            result_preview="Found 2 bugs",
+                        )
+                    ],
+                ),
+            ],
+        )
+
+        messages = _drain_queue(processor.output_message_queue)
+        progress = [m for m in messages if isinstance(m, WorkflowTaskProgressAgentMessage)]
+        assert len(progress) == 2
+        merged_entries = progress[1].entries
+        assert len(merged_entries) == 2
+        final_agent = merged_entries[1]
+        assert isinstance(final_agent, WorkflowAgentProgress)
+        assert final_agent.state == "done"
+        assert final_agent.result_preview == "Found 2 bugs"
+
     def test_progress_with_tree_before_task_started_still_emits(self) -> None:
         """A tree-carrying progress event identifies its task as a workflow
         even when task_started hasn't been seen yet."""

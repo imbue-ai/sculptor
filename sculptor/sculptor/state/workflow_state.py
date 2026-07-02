@@ -2,10 +2,11 @@
 
 The Workflow tool launches a background task that orchestrates many subagents.
 The CLI streams ``system/task_progress`` events whose ``workflow_progress``
-payload is a full snapshot of the workflow's state: phase entries and one
-entry per subagent. These models mirror that wire format (camelCase via the
-SerializableModel alias generator) while tolerating unknown fields and entry
-types, since the CLI adds fields across releases.
+payload is an incremental delta of the workflow's state: phase entries and
+per-subagent entries, re-emitted whenever their state changes. These models
+mirror that wire format (camelCase via the SerializableModel alias generator)
+while tolerating unknown fields and entry types, since the CLI adds fields
+across releases.
 """
 
 from typing import Annotated
@@ -100,7 +101,7 @@ class WorkflowTaskState(SerializableModel):
     )
     entries: tuple[WorkflowProgressEntryTypes, ...] = Field(
         default=(),
-        description="Last seen full progress tree, flat and in wire order; agents reference phases by phase_index",
+        description="Progress tree accumulated from the CLI's delta payloads, one entry per phase/agent; agents reference phases by phase_index",
     )
     usage: WorkflowUsage | None = Field(default=None, description="Aggregate usage across the workflow's agents")
     last_tool_name: str | None = Field(default=None, description="Most recent tool used by any workflow agent")
@@ -119,8 +120,15 @@ def parse_workflow_progress_entries(
     """Parse the ``workflow_progress`` list from a task_progress event.
 
     Returns None when the payload is absent — the CLI omits the tree on pure
-    token-tick batches, and absent means "unchanged", not "empty". Callers
-    must retain the last seen tree.
+    token-tick batches.
+
+    The wire payloads are incremental deltas, not full snapshots: the first
+    carries the phase entries plus the initial agent entries, and later ones
+    carry only the entries whose state changed (an agent may also repeat
+    within one payload — queued, then started). Entries are deduplicated here
+    by (kind, index) with the LAST occurrence winning; accumulating deltas
+    across payloads is the caller's job via
+    :func:`merge_workflow_progress_entries`.
 
     Entries of unknown type (including ``workflow_log``) and entries that fail
     validation are skipped so a malformed or newer-CLI payload never breaks
@@ -140,4 +148,23 @@ def parse_workflow_progress_entries(
             entries.append(entry_model.model_validate(raw_entry))
         except ValidationError:
             logger.debug("Skipping malformed workflow progress entry: {}", raw_entry)
-    return tuple(entries)
+    return merge_workflow_progress_entries((), entries)
+
+
+def merge_workflow_progress_entries(
+    existing_entries: Sequence[WorkflowPhaseProgress | WorkflowAgentProgress],
+    delta_entries: Sequence[WorkflowPhaseProgress | WorkflowAgentProgress],
+) -> tuple[WorkflowPhaseProgress | WorkflowAgentProgress, ...]:
+    """Merge a delta payload into an accumulated workflow progress tree.
+
+    Entries are keyed by (kind, index) — phases and agents have separate
+    index spaces — with the delta winning. An entry that reappears keeps its
+    original position in the tree (dict update preserves first-insert order),
+    so rows don't jump around as their state advances.
+    """
+    entry_by_kind_and_index: dict[tuple[str, int], WorkflowPhaseProgress | WorkflowAgentProgress] = {
+        (entry.object_type, entry.index): entry for entry in existing_entries
+    }
+    for entry in delta_entries:
+        entry_by_kind_and_index[(entry.object_type, entry.index)] = entry
+    return tuple(entry_by_kind_and_index.values())

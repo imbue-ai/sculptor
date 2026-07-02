@@ -81,9 +81,10 @@ def make_task_progress_message(
 ) -> dict:
     """Return a dict for a system/task_progress message.
 
-    ``workflow_progress`` mirrors the real CLI: present (a full snapshot of
-    workflow_phase/workflow_agent entries, camelCase keys) when the tree
-    changed, and omitted entirely on pure token-tick batches.
+    ``workflow_progress`` mirrors the real CLI: a delta of
+    workflow_phase/workflow_agent entries (camelCase keys) whose state
+    changed since the previous payload, omitted entirely on pure token-tick
+    batches.
     """
     msg: dict = {
         "type": "system",

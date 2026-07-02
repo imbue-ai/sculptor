@@ -36,19 +36,27 @@ type WorkflowEntryData = {
 };
 
 const groupEntriesByPhase = (state: WorkflowTaskState): WorkflowEntryData => {
-  const phases: Array<WorkflowPhaseProgress> = [];
-  const agentsByPhaseIndex = new Map<number | null, Array<WorkflowAgentProgress>>();
+  // The backend dedupes the wire's event-log-shaped tree, but persisted or
+  // older payloads may still repeat an entry index — keep the last
+  // occurrence so an agent renders once with its current state.
+  const phaseByIndex = new Map<number, WorkflowPhaseProgress>();
+  const agentByIndex = new Map<number, WorkflowAgentProgress>();
   for (const entry of state.entries ?? []) {
     if (isPhaseEntry(entry)) {
-      phases.push(entry);
+      phaseByIndex.set(entry.index, entry);
     } else if (isAgentEntry(entry)) {
-      const key = entry.phaseIndex ?? null;
-      const agents = agentsByPhaseIndex.get(key) ?? [];
-      agents.push(entry);
-      agentsByPhaseIndex.set(key, agents);
+      agentByIndex.set(entry.index, entry);
     }
   }
-  phases.sort((a, b) => a.index - b.index);
+
+  const phases = Array.from(phaseByIndex.values()).sort((a, b) => a.index - b.index);
+  const agentsByPhaseIndex = new Map<number | null, Array<WorkflowAgentProgress>>();
+  for (const agent of agentByIndex.values()) {
+    const key = agent.phaseIndex ?? null;
+    const agents = agentsByPhaseIndex.get(key) ?? [];
+    agents.push(agent);
+    agentsByPhaseIndex.set(key, agents);
+  }
   return { phases, agentsByPhaseIndex };
 };
 
@@ -183,7 +191,7 @@ const buildUsageMeta = (state: WorkflowTaskState): ReactNode => {
   }
 
   if (usage?.toolUses !== undefined && usage?.toolUses !== null) {
-    parts.push(`${usage.toolUses} tools`);
+    parts.push(`${usage.toolUses} ${usage.toolUses === 1 ? "tool" : "tools"}`);
   }
 
   if (usage?.durationMs !== undefined && usage?.durationMs !== null) {

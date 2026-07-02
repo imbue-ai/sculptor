@@ -17,15 +17,19 @@
   font-size: var(--font-size-1);
 }
 
+// The entry shell adds no padding of its own (each part styles itself, like
+// .entryBody in AlphaToolPopover.module.scss), so the body carries the
+// horizontal inset that keeps agent rows off the popover edges.
 .body {
   display: flex;
   flex-direction: column;
+  padding: 0 var(--space-3);
 }
 
 .emptyBody {
   color: var(--gray-a10);
   font-size: var(--font-size-1);
-  padding: var(--space-2) 0;
+  padding: var(--space-2) var(--space-3);
 }
 
 .section {

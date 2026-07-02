@@ -1,5 +1,6 @@
 from sculptor.state.workflow_state import WorkflowAgentProgress
 from sculptor.state.workflow_state import WorkflowPhaseProgress
+from sculptor.state.workflow_state import merge_workflow_progress_entries
 from sculptor.state.workflow_state import parse_workflow_progress_entries
 
 
@@ -84,6 +85,94 @@ def test_parse_workflow_progress_entries_skips_malformed_entries_without_raising
     assert entries is not None
     assert len(entries) == 1
     assert isinstance(entries[0], WorkflowPhaseProgress)
+
+
+def test_parse_workflow_progress_entries_dedupes_repeated_indexes_keeping_last_state() -> None:
+    """The wire tree is event-log shaped: the same agent index reappears with
+    updated state (queued, then started, then progress). Only the last
+    occurrence must survive, at the position where the entry first appeared."""
+    entries = parse_workflow_progress_entries(
+        [
+            {"type": "workflow_phase", "index": 1, "title": "Recon"},
+            {"type": "workflow_agent", "index": 1, "label": "count-files", "phaseIndex": 1, "state": "start"},
+            {"type": "workflow_agent", "index": 2, "label": "read-readme", "phaseIndex": 1, "state": "start"},
+            {
+                "type": "workflow_agent",
+                "index": 1,
+                "label": "count-files",
+                "phaseIndex": 1,
+                "state": "progress",
+                "startedAt": 1783017018742,
+            },
+            {
+                "type": "workflow_agent",
+                "index": 2,
+                "label": "read-readme",
+                "phaseIndex": 1,
+                "state": "done",
+                "resultPreview": '{"firstLine":"# Test Project"}',
+            },
+        ]
+    )
+    assert entries is not None
+    assert len(entries) == 3
+    phase, count_files, read_readme = entries
+    assert isinstance(phase, WorkflowPhaseProgress)
+    assert isinstance(count_files, WorkflowAgentProgress)
+    assert count_files.state == "progress"
+    assert count_files.started_at == 1783017018742
+    assert isinstance(read_readme, WorkflowAgentProgress)
+    assert read_readme.state == "done"
+    assert read_readme.result_preview == '{"firstLine":"# Test Project"}'
+
+
+def test_parse_workflow_progress_entries_dedupes_phases_and_agents_in_separate_index_spaces() -> None:
+    """Phase index 0 and agent index 0 are different entries and must both survive."""
+    entries = parse_workflow_progress_entries(
+        [
+            {"type": "workflow_phase", "index": 0, "title": "Review"},
+            {"type": "workflow_agent", "index": 0, "label": "review:bugs", "phaseIndex": 0},
+        ]
+    )
+    assert entries is not None
+    assert len(entries) == 2
+
+
+def test_merge_workflow_progress_entries_accumulates_deltas_across_payloads() -> None:
+    """The CLI streams deltas: later payloads carry only the entries whose
+    state changed. Merging must keep untouched entries and update changed
+    ones in place."""
+    initial = parse_workflow_progress_entries(
+        [
+            {"type": "workflow_phase", "index": 1, "title": "Recon"},
+            {"type": "workflow_agent", "index": 1, "label": "count-files", "phaseIndex": 1, "state": "progress"},
+            {"type": "workflow_agent", "index": 2, "label": "read-readme", "phaseIndex": 1, "state": "progress"},
+        ]
+    )
+    delta = parse_workflow_progress_entries(
+        [
+            {
+                "type": "workflow_agent",
+                "index": 2,
+                "label": "read-readme",
+                "phaseIndex": 1,
+                "state": "done",
+                "resultPreview": '{"firstLine":"# Test Project"}',
+            }
+        ]
+    )
+    assert initial is not None and delta is not None
+
+    merged = merge_workflow_progress_entries(initial, delta)
+
+    assert len(merged) == 3
+    phase, count_files, read_readme = merged
+    assert isinstance(phase, WorkflowPhaseProgress)
+    assert isinstance(count_files, WorkflowAgentProgress)
+    assert count_files.state == "progress"
+    assert isinstance(read_readme, WorkflowAgentProgress)
+    assert read_readme.state == "done"
+    assert read_readme.result_preview == '{"firstLine":"# Test Project"}'
 
 
 def test_parse_workflow_progress_entries_keeps_wire_order_across_phases_and_agents() -> None:

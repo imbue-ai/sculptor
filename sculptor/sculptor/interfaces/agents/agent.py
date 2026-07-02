@@ -424,9 +424,9 @@ class BackgroundTaskStartedAgentMessage(EphemeralAgentMessage):
 class WorkflowTaskProgressAgentMessage(EphemeralAgentMessage):
     """Progress snapshot for a running Workflow background task.
 
-    Always carries the full latest progress tree — the output processor
-    substitutes its retained tree when the CLI batch omits one — so any
-    consumer can rebuild the workflow's state from a single message.
+    Always carries the full accumulated progress tree — the output processor
+    merges the CLI's delta payloads into it — so any consumer can rebuild
+    the workflow's state from a single message.
     """
 
     object_type: str = "WorkflowTaskProgressAgentMessage"

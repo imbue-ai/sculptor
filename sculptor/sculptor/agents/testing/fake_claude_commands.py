@@ -1478,17 +1478,18 @@ def handle_workflow_run(args: dict, emit_streaming: bool) -> list[dict]:
 
     Models the real CLI flow: the Workflow tool_result returns immediately
     ("launched in background"), the run streams system/task_progress events
-    whose ``workflow_progress`` payload is a full snapshot of phases and
-    agents, and completion arrives via task_notification followed by a fresh
-    request cycle where the agent summarizes the result.
+    whose ``workflow_progress`` payloads are DELTAS — the first carries the
+    phase plus the initial agent entries, later ones carry only the entries
+    whose state changed — and completion arrives via task_notification
+    followed by a fresh request cycle where the agent summarizes the result.
 
     Produces the JSONL sequence:
     1. Main agent assistant message with text + Workflow tool_use
     2. Workflow tool_result (immediate "launched in background" response)
     3. task_started event (task_type=local_workflow, workflow_name)
-    4. task_progress with a running tree (one agent in progress, one queued)
+    4. task_progress with the initial tree (one agent in progress, one queued)
     5. Main agent "launched" text and turn end (result/success)
-    6. task_progress with the final tree (all agents done)
+    6. task_progress deltas completing each agent, one payload per agent
     7. task_notification
     8. New request cycle (init + summary text)
 
@@ -1515,7 +1516,7 @@ def handle_workflow_run(args: dict, emit_streaming: bool) -> list[dict]:
     session_id = generate_id("session")
 
     phase_entry = make_workflow_phase_entry(index=0, title="Review")
-    running_tree = [
+    initial_tree = [
         phase_entry,
         make_workflow_agent_entry(
             index=0,
@@ -1529,8 +1530,9 @@ def handle_workflow_run(args: dict, emit_streaming: bool) -> list[dict]:
         ),
         make_workflow_agent_entry(index=1, label="review:perf", phase_index=0, phase_title="Review", state="start"),
     ]
-    final_tree = [
-        phase_entry,
+    # Completion deltas: one payload per agent, carrying ONLY that agent's
+    # entry — mirroring how the real CLI streams state changes.
+    bugs_done_delta = [
         make_workflow_agent_entry(
             index=0,
             label="review:bugs",
@@ -1542,6 +1544,8 @@ def handle_workflow_run(args: dict, emit_streaming: bool) -> list[dict]:
             duration_ms=61200,
             result_preview="Found 2 bugs",
         ),
+    ]
+    perf_done_delta = [
         make_workflow_agent_entry(
             index=1,
             label="review:perf",
@@ -1592,7 +1596,7 @@ def handle_workflow_run(args: dict, emit_streaming: bool) -> list[dict]:
         )
     )
 
-    # 4. Mid-turn task_progress with the running tree.
+    # 4. Mid-turn task_progress with the initial tree.
     messages.append(
         make_task_progress_message(
             task_id=task_id,
@@ -1602,7 +1606,7 @@ def handle_workflow_run(args: dict, emit_streaming: bool) -> list[dict]:
             tool_uses=4,
             duration_ms=12000,
             last_tool_name="Grep",
-            workflow_progress=running_tree,
+            workflow_progress=initial_tree,
         )
     )
 
@@ -1628,7 +1632,18 @@ def handle_workflow_run(args: dict, emit_streaming: bool) -> list[dict]:
         if not _wait_until(timeout_seconds=120, poll_interval=0.05, done=sentinel.exists):
             raise RuntimeError(f"workflow_run pause timed out waiting for {sentinel}")
 
-    # 6. Final task_progress with everything done.
+    # 6. Completion deltas — one payload per agent, like the real CLI.
+    messages.append(
+        make_task_progress_message(
+            task_id=task_id,
+            tool_use_id=workflow_tool_id,
+            description="Review: review:bugs done",
+            total_tokens=12900,
+            tool_uses=11,
+            duration_ms=61200,
+            workflow_progress=bugs_done_delta,
+        )
+    )
     messages.append(
         make_task_progress_message(
             task_id=task_id,
@@ -1637,7 +1652,7 @@ def handle_workflow_run(args: dict, emit_streaming: bool) -> list[dict]:
             total_tokens=17000,
             tool_uses=17,
             duration_ms=63210,
-            workflow_progress=final_tree,
+            workflow_progress=perf_done_delta,
         )
     )
 

@@ -287,9 +287,11 @@ class ParsedTaskStartedResponse(ParsedAgentResponse):
 class ParsedTaskProgressResponse(ParsedAgentResponse):
     """Emitted by Claude Code while a background task runs.
 
-    For Workflow tasks the payload carries the ``workflow_progress`` tree
-    (full snapshot of phases and subagents). The tree is absent on pure
-    token-tick batches, where only ``usage`` advances.
+    For Workflow tasks the payload carries a ``workflow_progress`` delta:
+    only the phase/agent entries whose state changed since the previous
+    payload. The tree is absent on pure token-tick batches, where only
+    ``usage`` advances. Consumers accumulate deltas with
+    ``merge_workflow_progress_entries``.
     """
 
     object_type: str = Field(default="ParsedTaskProgressResponse")
@@ -301,7 +303,7 @@ class ParsedTaskProgressResponse(ParsedAgentResponse):
     summary: str = Field(default="", description="Latest progress summary")
     workflow_progress: tuple[WorkflowProgressEntryTypes, ...] | None = Field(
         default=None,
-        description="Full workflow progress tree; None when this batch carried no tree (unchanged, not empty)",
+        description="Workflow progress delta, deduplicated per entry; None when this batch carried no tree",
     )
 
 
