@@ -144,6 +144,36 @@ def test_commits_dropdown_reopens_commit_diff_in_panel(sculptor_instance_: Sculp
     expect(viewer).to_contain_text("return 1")
 
 
+@user_story("to re-open a file's diff from the Changes panel's recent-files dropdown")
+def test_changes_dropdown_reopens_diff_in_panel(sculptor_instance_: SculptorInstance) -> None:
+    """Picking a Changes recent stays in the Changes panel and re-opens the
+    diff the user previously viewed — including for a committed-only file
+    viewed under the "All" (vs-target-branch) scope, which must not degrade
+    to a read-only file view."""
+    page = sculptor_instance_.page
+    _start_workspace_with_setup(page, "Recents Changes WS")
+
+    section_root = open_panel(page, "changes")
+    changes_panel = get_changes_panel_in(section_root, page)
+
+    # Under the default "All" scope, view guide.md (committed-only — it has no
+    # uncommitted changes) and then util.py, so guide.md is a non-current recent.
+    changes_panel.open_file("guide.md").assert_diff_shows("guide.md")
+    viewer = changes_panel.open_file("util.py")
+    viewer.assert_diff_shows("util.py")
+
+    # Pick guide.md from the dropdown: the Changes panel must stay active and
+    # show guide.md's diff again — its committed content as added lines — not
+    # a read-only preview.
+    viewer.select_recent_file("guide.md")
+
+    left = PlaywrightWorkspaceSection(page, "left")
+    expect(left.get_panel_tab("changes")).to_have_attribute("aria-selected", "true")
+    viewer.assert_diff_shows("guide.md")
+    expect(viewer.get_unified_diff_views().first).to_be_visible()
+    expect(viewer).to_contain_text("# Guide")
+
+
 @user_story("to switch between recently viewed files within the Files panel")
 def test_files_dropdown_switches_file_within_panel(sculptor_instance_: SculptorInstance) -> None:
     """Picking a Files recent stays in the Files panel as a read-only file
