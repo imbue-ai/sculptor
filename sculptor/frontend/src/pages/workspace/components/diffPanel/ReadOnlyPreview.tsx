@@ -25,6 +25,7 @@ import {
 import { isMarkdownPath, markdownRenderModeAtom } from "./atoms.ts";
 import styles from "./ReadOnlyPreview.module.scss";
 import { StickyHorizontalScrollbar } from "./StickyHorizontalScrollbar.tsx";
+import { usePierreHighlighterReady } from "./usePierreHighlighterReady.ts";
 
 // react-markdown hands its components map a renderer-internal `node` prop
 // alongside the regular HTML attributes. We deliberately destructure only
@@ -118,6 +119,10 @@ export const ReadOnlyPreview = ({ workspaceId, filePath }: ReadOnlyPreviewProps)
   const appTheme = useAtomValue(appThemeAtom);
   const codeTheme = useAtomValue(themeCodeThemeAtom);
   const shikiThemes = getShikiThemes(codeTheme);
+  // Pierre must not MOUNT before its shared highlighter has these themes
+  // attached — a cold-themes first mount paints nothing and does not survive
+  // React StrictMode's remount (see usePierreHighlighterReady).
+  const isHighlighterReady = usePierreHighlighterReady(shikiThemes);
   const markdownMode = useAtomValue(markdownRenderModeAtom);
   const isRichMarkdownRenderingEnabled = useAtomValue(isRichMarkdownRenderingEnabledAtom);
   const pierreRef = useRef<HTMLDivElement>(null);
@@ -167,7 +172,9 @@ export const ReadOnlyPreview = ({ workspaceId, filePath }: ReadOnlyPreviewProps)
     return { name: fileName, contents: content, lang };
   }, [content, fileName, lang]);
 
-  if (isPending) {
+  // The highlighter gate resolves in milliseconds, so it shares the file
+  // fetch's loading placeholder rather than adding a distinct state.
+  if (isPending || !isHighlighterReady) {
     return (
       <Flex align="center" justify="center" flexGrow="1">
         <Text size="2" color="gray">

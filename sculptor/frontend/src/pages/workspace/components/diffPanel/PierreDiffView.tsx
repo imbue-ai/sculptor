@@ -14,6 +14,7 @@ import styles from "./PierreDiffView.module.scss";
 import { SplitDiffHandle } from "./SplitDiffHandle.tsx";
 import { StickyHorizontalScrollbar } from "./StickyHorizontalScrollbar.tsx";
 import type { DiffViewType } from "./types.ts";
+import { usePierreHighlighterReady } from "./usePierreHighlighterReady.ts";
 
 type PierreDiffViewProps = {
   diffString: string;
@@ -126,6 +127,10 @@ export const PierreDiffView = ({
   const splitRatio = useAtomValue(splitDiffColumnRatioAtom);
   const codeTheme = useAtomValue(themeCodeThemeAtom);
   const shikiThemes = getShikiThemes(codeTheme);
+  // Pierre must not MOUNT before its shared highlighter has these themes
+  // attached — a cold-themes first mount paints nothing and does not survive
+  // React StrictMode's remount (see usePierreHighlighterReady).
+  const isHighlighterReady = usePierreHighlighterReady(shikiThemes);
   const options = useMemo(
     (): FileDiffOptions<undefined> => ({
       diffStyle: viewType,
@@ -182,7 +187,8 @@ export const PierreDiffView = ({
    *
    * Re-runs when `hasFileDiffMetadata` flips, because the inner Pierre
    * component may switch between `<FileDiff>` and `<PatchDiff>`, each of
-   * which creates a *new* `<diffs-container>` with a fresh shadow root.
+   * which creates a *new* `<diffs-container>` with a fresh shadow root — and
+   * when the highlighter gate opens, which is when the container first mounts.
    */
   const hasFileDiffMetadata = !!fileDiffMetadata;
   useLayoutEffect(() => {
@@ -193,7 +199,7 @@ export const PierreDiffView = ({
     if (!shadowRoot.adoptedStyleSheets.includes(bgOverrideSheet)) {
       shadowRoot.adoptedStyleSheets = [...shadowRoot.adoptedStyleSheets, bgOverrideSheet];
     }
-  }, [hasFileDiffMetadata]);
+  }, [hasFileDiffMetadata, isHighlighterReady]);
 
   /**
    * Forward horizontal wheel events from the empty space below the diff
@@ -253,13 +259,14 @@ export const PierreDiffView = ({
           data-testid={viewType === "unified" ? ElementIds.DIFF_VIEW_UNIFIED : ElementIds.DIFF_VIEW_SPLIT}
         >
           <div ref={pierreRef}>
-            {fileDiffMetadata ? (
-              <FileDiffErrorBoundary resetKey={diffString} fallback={patchFallback}>
-                <FileDiff fileDiff={fileDiffMetadata} options={options} />
-              </FileDiffErrorBoundary>
-            ) : (
-              patchFallback
-            )}
+            {isHighlighterReady &&
+              (fileDiffMetadata ? (
+                <FileDiffErrorBoundary resetKey={diffString} fallback={patchFallback}>
+                  <FileDiff fileDiff={fileDiffMetadata} options={options} />
+                </FileDiffErrorBoundary>
+              ) : (
+                patchFallback
+              ))}
           </div>
         </div>
         {hasScrollbar && <StickyHorizontalScrollbar containerRef={pierreRef} />}
