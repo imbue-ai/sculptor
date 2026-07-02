@@ -93,6 +93,7 @@ describe("Settings section drift", () => {
           activeAgentId: null,
           hasChatPanel: false,
           hasTerminalPanel: false,
+          isSectionMaximized: false,
           page: null,
         },
         keepOpen: false,

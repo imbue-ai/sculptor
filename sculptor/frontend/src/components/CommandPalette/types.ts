@@ -49,6 +49,9 @@ export type PaletteContext = {
   activeAgentId: string | null;
   hasChatPanel: boolean;
   hasTerminalPanel: boolean;
+  /** True while a workspace section is maximized — lets toggle commands
+   *  (e.g. maximize/minimize section) surface state-aware copy. */
+  isSectionMaximized: boolean;
   /** The current sub-page id, or null for the root page. */
   page: PageId | null;
 };

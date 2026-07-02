@@ -7,6 +7,7 @@ import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { effectiveOpenTabIdsAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 import { panelRegistryAtom } from "~/components/sections/registry/panelRegistry.ts";
 import { workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
+import { maximizedSectionAtom } from "~/components/sections/transientAtoms.ts";
 import { chatPanelMountedAtom, terminalPanelMountedAtom } from "~/pages/workspace/atoms.ts";
 
 import { areGlobalShortcutsDisabledAtom } from "../newWorkspace/newWorkspaceAtoms.ts";
@@ -49,6 +50,7 @@ export const usePaletteContext = (): PaletteContext => {
   // least one such panel is currently mounted.
   const hasChatPanel = useAtomValue(chatPanelMountedAtom) > 0;
   const hasTerminalPanel = useAtomValue(terminalPanelMountedAtom) > 0;
+  const isSectionMaximized = useAtomValue(maximizedSectionAtom) !== null;
   const pages = useAtomValue(commandPalettePagesAtom);
   const page = pages.length === 0 ? null : (pages[pages.length - 1] ?? null);
 
@@ -71,6 +73,7 @@ export const usePaletteContext = (): PaletteContext => {
       activeAgentId,
       hasChatPanel,
       hasTerminalPanel,
+      isSectionMaximized,
       page,
     }),
     [
@@ -83,6 +86,7 @@ export const usePaletteContext = (): PaletteContext => {
       activeAgentId,
       hasChatPanel,
       hasTerminalPanel,
+      isSectionMaximized,
       page,
     ],
   );

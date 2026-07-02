@@ -1,6 +1,7 @@
 import {
   LayoutPanelLeftIcon,
   Maximize2,
+  Minimize2,
   PanelBottomIcon,
   PanelLeftIcon,
   PanelRightIcon,
@@ -9,7 +10,7 @@ import {
 } from "lucide-react";
 
 import type { CommandRuntime } from "../runtime.ts";
-import type { Command } from "../types.ts";
+import type { Command, CommandIcon } from "../types.ts";
 
 // The Panels & Sections group is split into two sub-pages so the root list
 // isn't dominated by 10+ "Toggle X" rows: section toggles (the
@@ -118,11 +119,20 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
   },
   {
     id: "view.maximize_section",
+    // Stable title for fuzzy-search ranking; the keywords carry the
+    // "minimize" vocabulary so the row is findable in both states, and
+    // `getTitle`/`getSubtitle`/`getIcon` flip the display copy while a
+    // section is maximized (the command toggles, so the copy should name
+    // the action it will actually perform).
     title: "Maximize section",
     subtitle: "Maximize the active section, or restore if already maximized",
-    keywords: ["maximize", "fullscreen", "expand", "restore", "section", "focus"],
+    keywords: ["maximize", "minimize", "fullscreen", "expand", "restore", "section", "focus"],
     group: "panels",
     icon: Maximize2,
+    getTitle: (ctx): string => (ctx.isSectionMaximized ? "Minimize section" : "Maximize section"),
+    getSubtitle: (ctx): string =>
+      ctx.isSectionMaximized ? "Restore the maximized section to the normal layout" : "Maximize the active section",
+    getIcon: (ctx): CommandIcon => (ctx.isSectionMaximized ? Minimize2 : Maximize2),
     shortcut: "maximize_section",
     onPage: "view.layout",
     order: 50,
