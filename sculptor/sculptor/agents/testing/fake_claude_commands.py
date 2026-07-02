@@ -30,10 +30,13 @@ from sculptor.agents.testing.fake_claude_jsonl import make_streaming_interleaved
 from sculptor.agents.testing.fake_claude_jsonl import make_streaming_text_events
 from sculptor.agents.testing.fake_claude_jsonl import make_streaming_tool_events
 from sculptor.agents.testing.fake_claude_jsonl import make_task_notification_message
+from sculptor.agents.testing.fake_claude_jsonl import make_task_progress_message
 from sculptor.agents.testing.fake_claude_jsonl import make_task_started_message
 from sculptor.agents.testing.fake_claude_jsonl import make_text_block
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_result_message
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_use_block
+from sculptor.agents.testing.fake_claude_jsonl import make_workflow_agent_entry
+from sculptor.agents.testing.fake_claude_jsonl import make_workflow_phase_entry
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_FROM_SIGTERM
 
 SCULPTOR_MCP_SERVER_NAME = CLAUDE_CODE_HARNESS.mcp_server_name
@@ -1470,6 +1473,199 @@ def handle_background_subagent(args: dict, emit_streaming: bool) -> list[dict]:
     return messages
 
 
+def handle_workflow_run(args: dict, emit_streaming: bool) -> list[dict]:
+    """Simulate the Workflow tool's full background-task lifecycle.
+
+    Models the real CLI flow: the Workflow tool_result returns immediately
+    ("launched in background"), the run streams system/task_progress events
+    whose ``workflow_progress`` payload is a full snapshot of phases and
+    agents, and completion arrives via task_notification followed by a fresh
+    request cycle where the agent summarizes the result.
+
+    Produces the JSONL sequence:
+    1. Main agent assistant message with text + Workflow tool_use
+    2. Workflow tool_result (immediate "launched in background" response)
+    3. task_started event (task_type=local_workflow, workflow_name)
+    4. task_progress with a running tree (one agent in progress, one queued)
+    5. Main agent "launched" text and turn end (result/success)
+    6. task_progress with the final tree (all agents done)
+    7. task_notification
+    8. New request cycle (init + summary text)
+
+    When ``pause_path`` is set, messages through step 5 are flushed to stdout
+    and the handler blocks until the sentinel file appears before emitting
+    steps 6-8, so tests can observe the running pill/popover deterministically.
+    Use ``FakeClaudePause`` for the sentinel and call ``release()`` to unblock.
+
+    Args:
+        args: Optional: "workflow_name", "launched_text", "summary_text",
+              "notification_summary", "pause_path".
+    """
+    workflow_name = args.get("workflow_name", "review-changes")
+    launched_text = args.get("launched_text", "Workflow launched. I'll report back when it completes.")
+    summary_text = args.get("summary_text", "[FakeClaude] Workflow finished. Here is the summary.")
+    notification_summary = args.get("notification_summary", f'Workflow "{workflow_name}" completed')
+    pause_path: str | None = args.get("pause_path")
+
+    main_msg_id = generate_id("msg")
+    workflow_tool_id = generate_id("toolu")
+    launched_msg_id = generate_id("msg")
+    summary_msg_id = generate_id("msg")
+    task_id = generate_id("task")
+    session_id = generate_id("session")
+
+    phase_entry = make_workflow_phase_entry(index=0, title="Review")
+    running_tree = [
+        phase_entry,
+        make_workflow_agent_entry(
+            index=0,
+            label="review:bugs",
+            phase_index=0,
+            phase_title="Review",
+            state="progress",
+            tokens=3100,
+            tool_calls=4,
+            last_tool_summary="Grep: TODO in src/",
+        ),
+        make_workflow_agent_entry(index=1, label="review:perf", phase_index=0, phase_title="Review", state="start"),
+    ]
+    final_tree = [
+        phase_entry,
+        make_workflow_agent_entry(
+            index=0,
+            label="review:bugs",
+            phase_index=0,
+            phase_title="Review",
+            state="done",
+            tokens=9800,
+            tool_calls=11,
+            duration_ms=61200,
+            result_preview="Found 2 bugs",
+        ),
+        make_workflow_agent_entry(
+            index=1,
+            label="review:perf",
+            phase_index=0,
+            phase_title="Review",
+            state="done",
+            tokens=7200,
+            tool_calls=6,
+            duration_ms=48000,
+            result_preview="No perf issues",
+        ),
+    ]
+
+    # 1. Main agent: text + Workflow tool_use
+    workflow_tool_block = make_tool_use_block(
+        tool_id=workflow_tool_id,
+        tool_name="Workflow",
+        tool_input={"script": f"export const meta = {{name: '{workflow_name}'}}"},
+    )
+    messages: list[dict] = []
+    if emit_streaming:
+        messages.extend(
+            make_streaming_tool_events(
+                message_id=main_msg_id,
+                tool_blocks=[workflow_tool_block],
+                text_prefix="I'll run a workflow for this.",
+            )
+        )
+    messages.append(
+        make_assistant_message(
+            message_id=main_msg_id,
+            content_blocks=[make_text_block("I'll run a workflow for this."), workflow_tool_block],
+        )
+    )
+
+    # 2. Workflow tool_result (immediate "launched" response)
+    raw_result = f"Workflow launched in background. Task ID: {task_id}\nYou will be notified when it completes."
+    messages.append(make_tool_result_message(tool_use_id=workflow_tool_id, content=raw_result))
+
+    # 3. task_started event
+    messages.append(
+        make_task_started_message(
+            task_id=task_id,
+            tool_use_id=workflow_tool_id,
+            description=workflow_name,
+            task_type="local_workflow",
+            workflow_name=workflow_name,
+        )
+    )
+
+    # 4. Mid-turn task_progress with the running tree.
+    messages.append(
+        make_task_progress_message(
+            task_id=task_id,
+            tool_use_id=workflow_tool_id,
+            description="Review: review:bugs",
+            total_tokens=3100,
+            tool_uses=4,
+            duration_ms=12000,
+            last_tool_name="Grep",
+            workflow_progress=running_tree,
+        )
+    )
+
+    # 5. Main agent "launched" text and turn end. The workflow keeps running
+    # in the background, so the output loop stays open for the notification.
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=launched_msg_id, text=launched_text))
+    messages.append(
+        make_assistant_message(
+            message_id=launched_msg_id,
+            content_blocks=[make_text_block(launched_text)],
+        )
+    )
+    messages.append(make_end_message(session_id=session_id))
+
+    # Optional pause so tests can observe the running pill/popover before the
+    # workflow completes. Signaled (not wall-clock) so the wait survives
+    # arbitrary CI load between the test's "go" and "release" steps.
+    if pause_path is not None:
+        _emit_messages_to_stdout(messages)
+        messages = []
+        sentinel = Path(pause_path)
+        if not _wait_until(timeout_seconds=120, poll_interval=0.05, done=sentinel.exists):
+            raise RuntimeError(f"workflow_run pause timed out waiting for {sentinel}")
+
+    # 6. Final task_progress with everything done.
+    messages.append(
+        make_task_progress_message(
+            task_id=task_id,
+            tool_use_id=workflow_tool_id,
+            description="Review: done",
+            total_tokens=17000,
+            tool_uses=17,
+            duration_ms=63210,
+            workflow_progress=final_tree,
+        )
+    )
+
+    # 7. task_notification
+    messages.append(
+        make_task_notification_message(
+            task_id=task_id,
+            tool_use_id=workflow_tool_id,
+            status="completed",
+            summary=notification_summary,
+            duration_ms=63210,
+        )
+    )
+
+    # 8. New request cycle: init + main agent summary
+    messages.append(make_init_message(session_id=session_id))
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=summary_msg_id, text=summary_text))
+    messages.append(
+        make_assistant_message(
+            message_id=summary_msg_id,
+            content_blocks=[make_text_block(summary_text)],
+        )
+    )
+
+    return messages
+
+
 def handle_auto_bg_bash(args: dict, emit_streaming: bool) -> list[dict]:
     """Emit the auto-background-promotion sequence for a slow foreground Bash call.
 
@@ -2263,6 +2459,7 @@ COMMAND_REGISTRY: dict[str, Callable[..., list[dict]]] = {
     "spawn_sigterm_immune_subprocess_and_hang": handle_spawn_sigterm_immune_subprocess_and_hang,
     "subagent": handle_subagent,
     "background_subagent": handle_background_subagent,
+    "workflow_run": handle_workflow_run,
     "read_file": handle_read_file,
     "glob": handle_glob,
 }
