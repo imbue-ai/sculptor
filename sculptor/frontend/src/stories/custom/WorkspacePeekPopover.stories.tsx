@@ -65,6 +65,8 @@ function makeTask(overrides: Partial<CodingAgentTaskView> & { id: string }): Cod
     taskStatus: "RUNNING" as TaskState,
     isAutoCompacting: false,
     acceptsAutomatedPrompts: false,
+    agentType: null,
+    registrationId: null,
     artifactNames: [],
     updatedAt: "2026-03-05T01:30:00Z",
     initialPrompt: "Do something",

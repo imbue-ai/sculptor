@@ -1,5 +1,5 @@
 import type { createStore } from "jotai";
-import type { ComponentType, ReactElement } from "react";
+import type { ComponentType, ReactElement, ReactNode } from "react";
 
 import {
   getLocalPlugins,
@@ -28,6 +28,7 @@ import {
   pluginSourcesAtom,
   type PluginSourceState,
   pluginSourceStatesAtom,
+  pluginToolVisualizationsAtom,
   pluginWorkspaceWidgetsAtom,
 } from "./pluginRegistry.ts";
 import { getRendererIdentity } from "./rendererIdentity.ts";
@@ -39,6 +40,8 @@ import type {
   PluginLoadError,
   PluginManifest,
   PluginModule,
+  ToolCallView,
+  ToolVisualizationDefinition,
   WorkspaceWidgetDefinition,
 } from "./types.ts";
 import { WorkspacePluginContext } from "./WorkspaceContext.tsx";
@@ -109,6 +112,7 @@ const BUILTIN_SOURCES: ReadonlyArray<BuiltinSource> = [
   { path: "/plugins/sculpty", disabledByDefault: true },
   { path: "/plugins/pomodoro", disabledByDefault: true },
   { path: "/plugins/linear-issue" },
+  { path: "/plugins/workflow-viz" },
 ];
 
 /**
@@ -950,6 +954,43 @@ export class PluginManager {
         store.set(pluginHomeViewsAtom, (prev) => [...prev.filter((v) => v.id !== view.id), entry]);
         const undo = (): void => {
           store.set(pluginHomeViewsAtom, (prev) => prev.filter((v) => v !== entry));
+        };
+        loadDisposers.push(undo);
+        return undo;
+      },
+      registerToolVisualization: (definition: ToolVisualizationDefinition): (() => void) => {
+        // The chat is workspace-scoped, so wrap the body like a panel: error
+        // boundary + PluginContext + a per-render WorkspacePluginContext read
+        // fresh from the route. The `call` prop is forwarded from the chat's
+        // dispatch layer, which owns building the ToolCallView.
+        const PluginBody = definition.body;
+        // `fallback` is a host-supplied detail, not part of the plugin's body
+        // contract: the chat passes the stock tool-call rendering so a body
+        // crash degrades to it instead of the generic plugin-error card.
+        const WrappedBody = ({ call, fallback }: { call: ToolCallView; fallback?: ReactNode }): ReactElement | null => {
+          const { workspaceID } = useWorkspacePageParams();
+          if (!workspaceID) return null;
+          return (
+            <PluginErrorBoundary pluginId={manifest.id} pluginName={manifest.name} fallback={fallback}>
+              <PluginContext.Provider value={{ pluginId: manifest.id }}>
+                <WorkspacePluginContext.Provider value={{ workspaceId: workspaceID }}>
+                  <PluginBody call={call} />
+                </WorkspacePluginContext.Provider>
+              </PluginContext.Provider>
+            </PluginErrorBoundary>
+          );
+        };
+        WrappedBody.displayName = `PluginToolVisualization(${definition.id})`;
+        const entry = { definition, wrappedBody: WrappedBody, pluginId: manifest.id };
+
+        // Replace-by-id; undo by instance (see the panel undo above). Order is
+        // preserved so the chat's "last registered wins" is a reverse scan.
+        store.set(pluginToolVisualizationsAtom, (prev) => [
+          ...prev.filter((v) => v.definition.id !== definition.id),
+          entry,
+        ]);
+        const undo = (): void => {
+          store.set(pluginToolVisualizationsAtom, (prev) => prev.filter((v) => v !== entry));
         };
         loadDisposers.push(undo);
         return undo;

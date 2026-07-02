@@ -86,7 +86,6 @@ from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import ModelOption
 from sculptor.state.messages import ResponseBlockAgentMessage
 
-
 _PROMPT_ID = "prompt-1"
 
 

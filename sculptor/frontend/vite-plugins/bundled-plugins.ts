@@ -11,8 +11,9 @@ import { RUNTIME_MODULE_SPECIFIERS } from "./plugin-runtime-stubs.ts";
  * compiling) as part of the host build, emitting each bundle into
  * `public/plugins/<id>/` — the same tree the no-build, pure-JS plugins live in.
  *
- * `linear-issue` is the only such plugin today; pure-JS plugins need no build
- * (their source is committed directly under `public/plugins/<id>/`). Wiring the
+ * The compiled plugins are listed in `COMPILED_PLUGIN_IDS`; pure-JS plugins need
+ * no build (their source is committed directly under `public/plugins/<id>/`).
+ * Wiring the
  * compile into the host build means `npm run build` and the dev server produce
  * the bundle — there's no separate `cd plugins/<id> && npm run build` step, and
  * no second toolchain: the plugin reuses the host's Vite, React, and TypeScript.
@@ -24,7 +25,7 @@ import { RUNTIME_MODULE_SPECIFIERS } from "./plugin-runtime-stubs.ts";
  */
 
 /** Plugins built from TS/TSX source at `plugins/<id>/src/index.tsx`. */
-const COMPILED_PLUGIN_IDS: ReadonlyArray<string> = ["linear-issue"];
+const COMPILED_PLUGIN_IDS: ReadonlyArray<string> = ["linear-issue", "workflow-viz"];
 
 const buildCompiledPlugin = async (frontendRoot: string, id: string): Promise<void> => {
   const sourceDir = path.join(frontendRoot, "plugins", id);

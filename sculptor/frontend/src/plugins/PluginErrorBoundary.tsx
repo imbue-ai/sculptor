@@ -5,6 +5,14 @@ type Props = {
   pluginId: string;
   pluginName: string;
   children: ReactNode;
+  /**
+   * What to render instead of the default "stopped responding" panel when the
+   * wrapped component crashes. Used where a broken plugin must degrade to the
+   * host's own rendering rather than an error card — e.g. a tool-visualization
+   * body falling back to the stock tool-call entry, so a crash never makes a
+   * call less readable than without the plugin.
+   */
+  fallback?: ReactNode;
 };
 
 type State = { error: Error | null };
@@ -29,6 +37,7 @@ export class PluginErrorBoundary extends Component<Props, State> {
 
   render(): ReactNode {
     if (this.state.error) {
+      if (this.props.fallback !== undefined) return this.props.fallback;
       return (
         <Flex direction="column" gap="2" p="3">
           <Text size="2" weight="medium">

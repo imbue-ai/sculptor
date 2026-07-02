@@ -7,6 +7,7 @@ import { ElementIds } from "~/api";
 import styles from "./AlphaExpandedToolRow.module.scss";
 import { ToolEntryContent, type ToolEntryShell } from "./AlphaToolPopover.tsx";
 import { formatDuration } from "./durationUtils.ts";
+import { safeSummary, usePluginToolVisualization } from "./pluginToolViz.ts";
 import type { PillData } from "./toolPill.types.ts";
 import { getToolIcon } from "./toolPillIcons.tsx";
 import { useElapsedTime } from "./useElapsedTime.ts";
@@ -42,8 +43,16 @@ const AlphaExpandedToolRowImpl = forwardRef<HTMLDivElement, AlphaExpandedToolRow
     // a row layout, popover, and pulsing status dot while executing.
     const isCommandStyleTool = label === "Bash" || label === "Monitor";
     const isExecuting = state === "initializing";
-    const Icon = getToolIcon(label);
-    const isShowingStatusDot = isCommandStyleTool && isExecuting;
+
+    const block = pillData.blocks[0] ?? null;
+    const result = pillData.results[0] ?? null;
+    // A matched tool-visualization plugin overrides the icon and the row's
+    // inline summary; its body never renders inline (matching built-ins). This
+    // wins over the command-style branch, so a plugin can claim Bash/Monitor.
+    const { visualization, call } = usePluginToolVisualization({ block, result, pillState: state });
+
+    const Icon = visualization?.definition.icon ?? getToolIcon(label);
+    const isShowingStatusDot = isCommandStyleTool && isExecuting && visualization === null;
 
     const handleKeyDown = useCallback(
       (e: KeyboardEvent<HTMLDivElement>): void => {
@@ -58,9 +67,6 @@ const AlphaExpandedToolRowImpl = forwardRef<HTMLDivElement, AlphaExpandedToolRow
     const classNames = [styles.row];
     if (isOpen) classNames.push(styles.rowOpen);
     if (state === "error") classNames.push(styles.rowError);
-
-    const block = pillData.blocks[0] ?? null;
-    const result = pillData.results[0] ?? null;
 
     // Expanded rows deliberately drop the per-tool action buttons (copy
     // path, open in editor, etc.). The whole row is a click target that
@@ -81,6 +87,32 @@ const AlphaExpandedToolRowImpl = forwardRef<HTMLDivElement, AlphaExpandedToolRow
     // Bash keeps its dedicated testID so the existing integration tests stay
     // anchored to it; Monitor and everything else share the generic pill ID.
     const testId = label === "Bash" ? ElementIds.ALPHA_CHAT_BASH_BLOCK : ElementIds.ALPHA_CHAT_TOOL_PILL;
+
+    let rowContent: ReactElement;
+    if (visualization !== null) {
+      // A plugin owns the inline summary: its `{title, meta}` only (the body
+      // stays in the popover). The host default title covers an omitted or
+      // throwing `summary`.
+      const summary = safeSummary(visualization.definition, call);
+      rowContent = rowShell({
+        title: summary?.title ?? call.invocation ?? call.toolName,
+        meta: summary?.meta,
+        bodyText: "",
+      });
+    } else if (isCommandStyleTool) {
+      rowContent = <CommandRowContent block={block} result={result} isExecuting={isExecuting} shell={rowShell} />;
+    } else {
+      rowContent = (
+        <ToolEntryContent
+          toolName={label}
+          block={block}
+          result={result}
+          workspaceCodePath={workspaceCodePath}
+          pillState={state}
+          renderShell={rowShell}
+        />
+      );
+    }
 
     return (
       <div
@@ -108,17 +140,7 @@ const AlphaExpandedToolRowImpl = forwardRef<HTMLDivElement, AlphaExpandedToolRow
             ·
           </span>
         </span>
-        {isCommandStyleTool ? (
-          <CommandRowContent block={block} result={result} isExecuting={isExecuting} shell={rowShell} />
-        ) : (
-          <ToolEntryContent
-            toolName={label}
-            block={block}
-            result={result}
-            workspaceCodePath={workspaceCodePath}
-            renderShell={rowShell}
-          />
-        )}
+        {rowContent}
       </div>
     );
   },

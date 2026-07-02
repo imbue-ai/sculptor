@@ -4,6 +4,7 @@ import { forwardRef } from "react";
 import { ElementIds } from "~/api";
 
 import styles from "./AlphaToolPill.module.scss";
+import { usePluginToolVisualization } from "./pluginToolViz.ts";
 import type { PillData } from "./toolPill.types.ts";
 import { getToolIcon } from "./toolPillIcons.tsx";
 
@@ -23,7 +24,13 @@ export const AlphaToolPill = forwardRef<HTMLButtonElement, AlphaToolPillProps>(
     // duration is meaningful enough to surface visually.
     const isCommandStyleTool = label === "Bash" || label === "Monitor";
     const isExecuting = state === "initializing";
-    const Icon = getToolIcon(label);
+    const block = pillData.blocks[0] ?? null;
+    const result = pillData.results[0] ?? null;
+    // A matched tool-visualization plugin overrides the icon; its presence also
+    // suppresses the command-style executing dot so the plugin's icon shows,
+    // matching the expanded row.
+    const { visualization } = usePluginToolVisualization({ block, result, pillState: state });
+    const Icon = visualization?.definition.icon ?? getToolIcon(label);
 
     const classNames = [styles.pill];
     if (isOpen) classNames.push(styles.pillOpen);
@@ -37,7 +44,7 @@ export const AlphaToolPill = forwardRef<HTMLButtonElement, AlphaToolPillProps>(
     // a pulsing status dot. Once it finishes (completed or error) the Lucide
     // icon comes back. The dot's margin matches the icon's width so the
     // label position is identical across the swap.
-    const isShowingStatusDot = isCommandStyleTool && isExecuting;
+    const isShowingStatusDot = isCommandStyleTool && isExecuting && visualization === null;
 
     return (
       <button

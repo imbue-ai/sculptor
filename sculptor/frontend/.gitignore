@@ -34,10 +34,10 @@ generated-*.ts
 # Lint caches
 .stylelintcache
 
-# Plugin output. Compiled plugins (currently only `linear-issue`) keep their
-# source in `plugins/<id>/` and are built into public/plugins/<id>/ by the host
-# Vite build (see vite-plugins/bundled-plugins.ts); that generated output is
-# ignored.
+# Plugin output. Compiled plugins (see COMPILED_PLUGIN_IDS in
+# vite-plugins/bundled-plugins.ts) keep their source in `plugins/<id>/` and are
+# built into public/plugins/<id>/ by the host Vite build; that generated output
+# is ignored.
 #
 # The no-build example plugins (`sculpty`, `pomodoro`) are the exception: they
 # are hand-authored as a manifest.json + main.js with no build step, so they
