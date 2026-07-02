@@ -6,7 +6,6 @@ import type { ChatMessage, FileBlock, TextBlock } from "../../../api";
 import { deleteWorkspaceAgentMessage, ElementIds } from "../../../api";
 import type { BlockUnion } from "../../../common/Guards.ts";
 import { isFileBlock, isTextBlock } from "../../../common/Guards.ts";
-import { useWorkspacePageParams } from "../../../common/NavigateUtils.ts";
 import { useDraftAttachedFiles } from "../../../common/state/hooks/useDraftAttachedFiles.ts";
 import { useInterruptAgent } from "../../../common/state/hooks/useInterruptAgent.ts";
 import { usePromptDraft } from "../../../common/state/hooks/usePromptDraft.ts";
@@ -15,6 +14,7 @@ import { CapabilityGate } from "../../../components/CapabilityGate.tsx";
 import { Toast, type ToastContent, ToastType } from "../../../components/Toast.tsx";
 import { getMetaKey } from "../../../electron/utils.ts";
 import { stripHtml } from "../utils/utils.ts";
+import { useChatTask } from "./chat-alpha/ChatTaskContext.tsx";
 import styles from "./QueuedMessageBar.module.scss";
 
 export type EditConflictData = {
@@ -29,7 +29,9 @@ type QueuedMessageBarProps = {
 };
 
 export const QueuedMessageBar = ({ message, onEditConflict }: QueuedMessageBarProps): ReactElement => {
-  const { workspaceID, agentID: taskID } = useWorkspacePageParams();
+  // The owning chat panel's agent — `message.id` belongs to that agent's
+  // queue, so delete/interrupt must target it rather than the route's agent.
+  const { workspaceId: workspaceID, taskId: taskID } = useChatTask();
   const [toast, setToast] = useState<ToastContent | null>(null);
   const {
     isInterrupting,
@@ -37,8 +39,8 @@ export const QueuedMessageBar = ({ message, onEditConflict }: QueuedMessageBarPr
     toast: interruptToast,
     setToast: setInterruptToast,
   } = useInterruptAgent(workspaceID, taskID);
-  const [promptDraft, setPromptDraft] = usePromptDraft(taskID ?? "");
-  const [, setAttachedFiles] = useDraftAttachedFiles(taskID ?? "");
+  const [promptDraft, setPromptDraft] = usePromptDraft(taskID);
+  const [, setAttachedFiles] = useDraftAttachedFiles(taskID);
 
   // Stable callbacks so the memoized <Toast> instances below bail out instead
   // of re-rendering on every unrelated parent render. (SCU-1455)
@@ -55,7 +57,7 @@ export const QueuedMessageBar = ({ message, onEditConflict }: QueuedMessageBarPr
   // A harness that can't be interrupted (pi) hides the button entirely; the
   // message simply stays queued until the turn ends. `?? true` keeps it shown
   // until the task loads — Claude reports true, pi false.
-  const canInterrupt = useTaskSupportsInterruption(taskID ?? "") ?? true;
+  const canInterrupt = useTaskSupportsInterruption(taskID) ?? true;
 
   const textBlocks = message.content.filter((block: BlockUnion): block is TextBlock => isTextBlock(block));
   const fileBlocks = message.content.filter((block: BlockUnion): block is FileBlock => isFileBlock(block));

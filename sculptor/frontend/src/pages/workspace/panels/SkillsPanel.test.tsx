@@ -2,11 +2,11 @@ import { Theme } from "@radix-ui/themes";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { chatActionsAtom } from "~/common/state/atoms/chatActions";
 import type { SkillEntry } from "~/common/state/hooks/useSkills";
+import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 
 import { SkillsPanel } from "./SkillsPanel";
 
@@ -60,6 +60,9 @@ const renderSkillsPanel = (
   mockUseSkills.mockReturnValue({ skills, isLoading, error });
 
   const store = createStore();
+  // The panel resolves its workspace from the section shell's active
+  // workspace rather than the route.
+  store.set(activeWorkspaceIdAtom, "test-workspace-id");
   store.set(chatActionsAtom, {
     appendText: vi.fn(),
     insertSkill,
@@ -69,13 +72,7 @@ const renderSkillsPanel = (
 
   const Wrapper = ({ children }: { children: ReactNode }): ReactElement => (
     <Provider store={store}>
-      <Theme>
-        <MemoryRouter initialEntries={["/ws/test-workspace-id"]}>
-          <Routes>
-            <Route path="/ws/:workspaceID" element={children} />
-          </Routes>
-        </MemoryRouter>
-      </Theme>
+      <Theme>{children}</Theme>
     </Provider>
   );
 

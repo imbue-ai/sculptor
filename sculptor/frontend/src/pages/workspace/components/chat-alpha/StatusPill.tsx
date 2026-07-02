@@ -8,7 +8,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatMessage, TaskStatus } from "~/api";
 import { AgentTaskStatus, ArtifactType, ElementIds } from "~/api";
 import { useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { isCancellableAtomFamily } from "~/common/state/atoms/interruptState.ts";
 import {
   activeTurnIdAtomFamily,
@@ -23,6 +22,7 @@ import { Toast } from "~/components/Toast.tsx";
 import { useCapabilityGate } from "~/components/useCapabilityGate.ts";
 
 import { AgentTasksPanel } from "./AgentTasksPanel.tsx";
+import { useChatTask } from "./ChatTaskContext.tsx";
 import type { AnimationProps } from "./pill-animations";
 import { ANIMATION_POOL, pickAnimationIndex, SpinnerAnimation } from "./pill-animations";
 import styles from "./StatusPill.module.scss";
@@ -75,7 +75,9 @@ export const StatusPill = ({
   workingUserMessageId,
   pendingBackgroundTaskCount,
 }: StatusPillProps): ReactElement | null => {
-  const { workspaceID, agentID: taskID } = useWorkspacePageParams();
+  // The owning chat panel's agent — Stop and the PLAN-artifact tasks below
+  // must follow the panel, not the route.
+  const { workspaceId: workspaceID, taskId: taskID } = useChatTask();
   const { isInterrupting: isStoppingTask, interrupt, toast, setToast } = useInterruptAgent(workspaceID, taskID);
   // Stable callback so the memoized <Toast> below bails out instead of
   // re-rendering on every unrelated parent render. (SCU-1455)
@@ -111,7 +113,7 @@ export const StatusPill = ({
   // reports true, pi false. `canStop` gates both the clickable button and the
   // `isCancellable` mirror that arms the Ctrl+C keybinding, so neither path
   // fires for a non-interruptible harness.
-  const canBeInterrupted = useTaskSupportsInterruption(taskID ?? "") ?? true;
+  const canBeInterrupted = useTaskSupportsInterruption(taskID) ?? true;
   const canStop = isCancellable && canBeInterrupted;
   // When the agent is cancellable but the harness can't honor a mid-turn
   // interrupt, the Stop control is shown disabled-with-tooltip rather than hidden.
@@ -120,7 +122,7 @@ export const StatusPill = ({
   // Pull tasks from the PLAN artifact. When tasks exist and the pill is
   // in an active state, the pill's label is replaced with the current
   // in-progress task, and hover/click reveals a popover with the full list.
-  const { artifacts } = useTaskDetailWithDefaults(taskID ?? "");
+  const { artifacts } = useTaskDetailWithDefaults(taskID);
   const successColor = useThemeSuccessColor();
   const tasks = artifacts[ArtifactType.PLAN]?.tasks ?? null;
   const hasTasks = tasks !== null && tasks.length > 0;
@@ -135,7 +137,7 @@ export const StatusPill = ({
   // count as stale once a new turn starts, even after that new turn finishes
   // and `workingUserMessageId` goes back to null. Persisted per-task so the
   // staleness verdict survives tab switches and app restarts.
-  const [activeTurnId, setActiveTurnId] = useAtom(activeTurnIdAtomFamily(taskID ?? ""));
+  const [activeTurnId, setActiveTurnId] = useAtom(activeTurnIdAtomFamily(taskID));
   useEffect(() => {
     if (workingUserMessageId !== null && workingUserMessageId !== activeTurnId) {
       setActiveTurnId(workingUserMessageId);
@@ -147,7 +149,7 @@ export const StatusPill = ({
   // carried-over all-complete artifact is stale — showing "X of N done" for it
   // would misleadingly imply it belongs to the new turn. Persisted alongside
   // activeTurnId so the comparison is stable across remounts and restarts.
-  const [liveTaskTurnId, setLiveTaskTurnId] = useAtom(liveTaskTurnIdAtomFamily(taskID ?? ""));
+  const [liveTaskTurnId, setLiveTaskTurnId] = useAtom(liveTaskTurnIdAtomFamily(taskID));
   useEffect(() => {
     if (hasInProgress && activeTurnId !== null && liveTaskTurnId !== activeTurnId) {
       setLiveTaskTurnId(activeTurnId);
@@ -172,7 +174,7 @@ export const StatusPill = ({
   // Survives workspace-tab switches (Jotai atom outlives component unmount).
   // Not persisted to localStorage: re-derives correctly on restart from the
   // artifact + persisted turn ids via the effects below.
-  const [tasksPhase, setTasksPhase] = useAtom(tasksPhaseAtomFamily(taskID ?? ""));
+  const [tasksPhase, setTasksPhase] = useAtom(tasksPhaseAtomFamily(taskID));
 
   // Reset to `idle` when a new user turn begins (a new non-null
   // workingUserMessageId), so a stale completed list from the previous turn
@@ -248,7 +250,7 @@ export const StatusPill = ({
   // (post-turn idle) we keep the previous turn's key so the frozen value
   // remains on display; a new non-null id rotates the key, which
   // `useElapsedTime` treats as a fresh session.
-  const elapsedKey = `${taskID ?? ""}-${activeTurnId ?? "init"}`;
+  const elapsedKey = `${taskID}-${activeTurnId ?? "init"}`;
   const { elapsed } = useElapsedTime(isVisible, isTicking, elapsedKey);
 
   // Hover + click-to-pin popover state for the tasks view.

@@ -6,7 +6,6 @@ import type { ReactElement } from "react";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
-import { useImbueParams, useWorkspacePageParams } from "~/common/NavigateUtils";
 import { chatActionsAtom } from "~/common/state/atoms/chatActions";
 import type { SkillEntry } from "~/common/state/hooks/useSkills";
 import { useSkills } from "~/common/state/hooks/useSkills";
@@ -23,6 +22,7 @@ import { openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atom
 
 import styles from "./SkillsPanel.module.scss";
 import { SkillsSearch } from "./SkillsSearch";
+import { activeChatAgentIdAtomFamily } from "./workspaceAgentActions.ts";
 
 const SKILL_TYPE_LABELS: Record<SkillType, string> = {
   builtin: "Built-in",
@@ -80,8 +80,12 @@ const computePopoverAnchor = (rect: DOMRect): { x: number; side: PopoverSide } =
 export const SkillsPanel = (): ReactElement => {
   const { skills: rawSkills, isLoading, error } = useSkills();
   const chatActions = useAtomValue(chatActionsAtom);
-  const { workspaceID } = useWorkspacePageParams();
-  const { taskID } = useImbueParams();
+  // Identity comes from the section shell, not the route: the capability gate
+  // must reflect the workspace's current chat agent (the one skill inserts
+  // land in), and the route's agent id goes stale when a different center
+  // tab is activated.
+  const workspaceID = useAtomValue(activeWorkspaceIdAtom) ?? "";
+  const taskID = useAtomValue(activeChatAgentIdAtomFamily(workspaceID));
   const openFileViewTab = useSetAtom(openFileViewTabAtom);
   // A harness that doesn't support skills collapses the panel to an empty
   // state so the user sees a clear signal instead of stale skill content.

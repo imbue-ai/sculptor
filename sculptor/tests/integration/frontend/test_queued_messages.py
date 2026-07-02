@@ -1,12 +1,16 @@
 """Integration tests for queued message behavior."""
 
+import re
+
 from playwright.sync_api import expect
 
+from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
 from sculptor.testing.elements.base import type_into_tiptap
 from sculptor.testing.elements.base import wait_for_one_frame
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.fake_claude_pause import FakeClaudePause
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import navigate_to_workspace
@@ -130,6 +134,64 @@ def test_cancel_queued_message(sculptor_instance_: SculptorInstance) -> None:
     # Bar disappears, agent is still streaming
     expect(chat_panel.get_queued_message_bar()).to_have_count(0)
     expect(chat_panel.get_thinking_indicator()).to_be_visible()
+
+
+@user_story("to manage a queued message from its panel while another agent holds the route")
+def test_queued_message_actions_target_the_panels_agent(sculptor_instance_: SculptorInstance) -> None:
+    """Queued delete/edit act on the PANEL's agent, not the route's agent.
+
+    Queue a message on the first agent, then create a second agent — creation
+    navigates the route to the new agent. Re-activating the first agent's tab
+    does NOT navigate, so the route still points at the second agent while the
+    panel (and the queued message id) belong to the first. Delete and edit must
+    resolve the message against the first agent — aimed at the route's agent
+    they would 404 and leave the bar in place.
+    """
+    page = sculptor_instance_.page
+    task_page = start_task_and_wait_for_ready(
+        sculptor_page=page,
+        prompt='fake_claude:sleep `{"seconds": 120}`',
+        wait_for_agent_to_finish=False,
+    )
+    first_agent_id = task_page.get_task_id()
+    first_panel_id = f"agent:{first_agent_id}"
+    chat_panel = task_page.get_chat_panel()
+    expect(chat_panel.get_thinking_indicator()).to_be_visible()
+
+    send_chat_message(chat_panel=chat_panel, message="queued for the first agent")
+    expect(chat_panel.get_queued_message_bar()).to_have_count(1)
+
+    # The new agent lands in center, becomes the active tab, and takes the
+    # route. Wait for the navigation before reading the new agent's id — the
+    # tab can render a beat before the URL updates.
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    create_agent_panel(page, section="center")
+    expect(panel_tabs.get_panel_tabs()).to_have_count(2)
+    expect(page).not_to_have_url(re.compile(f"/agent/{first_agent_id}$"))
+    second_agent_id = task_page.get_task_id()
+    assert second_agent_id != first_agent_id
+
+    # Back to the first agent's tab. Tab activation is a layout write, not a
+    # navigation — the route (the load-bearing premise) stays on the second agent.
+    panel_tabs.get_panel_tab(first_panel_id).click()
+    assert task_page.get_task_id() == second_agent_id
+
+    chat_panel = task_page.get_chat_panel()
+    queued_bar = chat_panel.get_queued_message_bar()
+    expect(queued_bar).to_have_count(1)
+    expect(queued_bar).to_contain_text("queued for the first agent")
+
+    # Delete resolves the message id against the panel's agent (force=True
+    # bypasses the opacity:0 visibility check on the hover-revealed button).
+    chat_panel.get_queued_message_cancel_button().click(force=True)
+    expect(chat_panel.get_queued_message_bar()).to_have_count(0)
+
+    # Re-queue and edit: the message text must land in THIS panel's chat input.
+    send_chat_message(chat_panel=chat_panel, message="edit me on the first agent")
+    expect(chat_panel.get_queued_message_bar()).to_have_count(1)
+    chat_panel.get_queued_message_edit_button().click(force=True)
+    expect(chat_panel.get_queued_message_bar()).to_have_count(0)
+    expect(chat_panel.get_chat_input()).to_have_text("edit me on the first agent")
 
 
 @user_story("to interrupt the agent and send a queued message immediately")

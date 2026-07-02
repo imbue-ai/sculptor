@@ -8,11 +8,14 @@ import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
 import { taskAtomFamily } from "~/common/state/atoms/tasks.ts";
 import { useTaskSupportsChatInterface } from "~/common/state/hooks/useTaskHelpers.ts";
 import { chatPanelMountedAtom } from "~/pages/workspace/atoms.ts";
+import { lastFocusedChatAgentAtomFamily } from "~/pages/workspace/panels/workspaceAgentActions.ts";
 
 import { AgentTerminalPanel } from "./AgentTerminalPanel.tsx";
 import { BtwPopup } from "./BtwPopup.tsx";
 import { AlphaChatInterface } from "./chat-alpha/AlphaChatInterface.tsx";
+import { ChatTaskProvider } from "./chat-alpha/ChatTaskContext.tsx";
 import { DebugChatView } from "./chat-alpha/DebugChatView.tsx";
+import styles from "./ChatPanelContent.module.scss";
 import { useChatData } from "./useChatData.ts";
 
 type ChatPanelContentProps = {
@@ -95,6 +98,7 @@ const ChatPanelInner = ({
   const closeBtwPopupIfNotForAgent = useSetAtom(closeBtwPopupIfNotForAgentAtom);
   const isBtwPopupOpen = useAtomValue(isBtwPopupOpenAtom);
   const setChatPanelMounted = useSetAtom(chatPanelMountedAtom);
+  const recordChatAgentFocus = useSetAtom(lastFocusedChatAgentAtomFamily(workspaceID));
 
   const chatData = useChatData({ taskID: taskId, workspaceID, appendTextRef, insertSkillRef });
 
@@ -120,6 +124,19 @@ const ChatPanelInner = ({
     };
   }, [isChatPanelRendered, setChatPanelMounted]);
 
+  // Workspace-scoped actions (commit prompt, Notes/Skills insertion) target
+  // the most-recently-focused chat, so any pointer-down or focus inside this
+  // panel marks its agent as that target. Capture-phase handlers see events
+  // that inner components swallow; the atom setter is equality-guarded, so
+  // recording on every interaction stays cheap. The workspace id is briefly
+  // "" while the task atom loads — skip recording rather than key a family
+  // entry on a placeholder id.
+  const handleChatInteraction = (): void => {
+    if (workspaceID !== "") {
+      recordChatAgentFocus(taskId);
+    }
+  };
+
   if (isDebugView) {
     return <DebugChatView messages={chatData.chatMessages} />;
   }
@@ -130,17 +147,29 @@ const ChatPanelInner = ({
   // tree doesn't affect its on-screen anchor — viewport bottom-right.
   // Mount it only while the popup is open so close→reopen produces a fresh
   // component instance with no carry-over local state (e.g. drag position).
+  //
+  // ChatTaskProvider seeds the chat surface with this PANEL's agent identity;
+  // every component underneath reads it from context rather than the route,
+  // so a panel showing a non-route agent still targets its own agent.
+  //
+  // The focus-recording wrapper is `display: contents`: the chat surface
+  // sizes itself against the panel container (height: 100%), so the wrapper
+  // must not introduce a layout box of its own.
   return (
-    <>
-      <AlphaChatInterface
-        {...chatData}
-        appendTextRef={appendTextRef}
-        insertSkillRef={insertSkillRef}
-        editorRef={editorRef}
-        taskId={taskId}
-        workspaceId={workspaceID}
-      />
-      {isBtwPopupOpen && <BtwPopup />}
-    </>
+    <ChatTaskProvider workspaceId={workspaceID} taskId={taskId}>
+      <div
+        className={styles.focusRecorder}
+        onFocusCapture={handleChatInteraction}
+        onPointerDownCapture={handleChatInteraction}
+      >
+        <AlphaChatInterface
+          {...chatData}
+          appendTextRef={appendTextRef}
+          insertSkillRef={insertSkillRef}
+          editorRef={editorRef}
+        />
+        {isBtwPopupOpen && <BtwPopup />}
+      </div>
+    </ChatTaskProvider>
   );
 };

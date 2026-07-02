@@ -1,12 +1,13 @@
 import { Button, ContextMenu } from "@radix-ui/themes";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import type { CSSProperties, ReactElement } from "react";
 import { useState } from "react";
 
 import { ElementIds } from "~/api";
-import { chatActionsAtom } from "~/common/state/atoms/chatActions.ts";
 import { commitPromptAtom } from "~/common/state/atoms/userConfig.ts";
+import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 
+import { canCommitAtomFamily, commitActionAtomFamily } from "../workspaceAgentActions.ts";
 import { CommitPromptDialog } from "./CommitPromptDialog.tsx";
 
 const COMMIT_BUTTON_STYLE: CSSProperties = { minWidth: 180 };
@@ -18,14 +19,19 @@ type CommitButtonProps = {
 };
 
 export const CommitButton = ({ changesCount, onCommit }: CommitButtonProps): ReactElement => {
-  const chatActions = useAtomValue(chatActionsAtom);
+  // Committing sends the prompt through the workspace-scoped action rather
+  // than the mounted chat's `chatActionsAtom` closures — the Changes panel is
+  // usually the active center tab, which unmounts the chat.
+  const workspaceId = useAtomValue(activeWorkspaceIdAtom) ?? "";
+  const canCommit = useAtomValue(canCommitAtomFamily(workspaceId));
+  const sendCommitMessage = useSetAtom(commitActionAtomFamily(workspaceId));
   const commitPrompt = useAtomValue(commitPromptAtom);
   const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
 
-  const isDisabled = changesCount === 0 || chatActions.isDisabled;
+  const isDisabled = changesCount === 0 || !canCommit;
 
   const handleClick = (): void => {
-    chatActions.sendMessage?.(commitPrompt);
+    void sendCommitMessage(commitPrompt);
     onCommit?.();
   };
 

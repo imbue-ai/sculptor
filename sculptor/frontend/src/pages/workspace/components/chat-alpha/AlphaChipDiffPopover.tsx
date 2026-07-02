@@ -8,14 +8,15 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 
 import { ElementIds } from "~/api";
 import { isDiffToolContent } from "~/common/Guards.ts";
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { themeCodeThemeAtom } from "~/common/state/atoms/themeBuilder.ts";
 import { appThemeAtom } from "~/common/state/atoms/userConfig.ts";
 import { getShikiThemes } from "~/common/theme/shikiThemes.ts";
 import { openDiffTabAtom, openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
+import { usePierreHighlighterReady } from "~/pages/workspace/components/diffPanel/usePierreHighlighterReady.ts";
 import { useWorkspaceCodePath } from "~/pages/workspace/hooks/useWorkspaceCodePath.ts";
 
 import styles from "./AlphaChipDiffPopover.module.scss";
+import { useChatTask } from "./ChatTaskContext.tsx";
 import type { ChipData } from "./chipRow.types.ts";
 import { makeRelative } from "./toolPillUtils.ts";
 
@@ -67,8 +68,8 @@ export const AlphaChipDiffPopover = ({
   onNavigate,
   actionRef,
 }: AlphaChipDiffPopoverProps): ReactElement => {
-  const { workspaceID } = useWorkspacePageParams();
-  const workspaceCodePath = useWorkspaceCodePath();
+  const { workspaceId: workspaceID } = useChatTask();
+  const workspaceCodePath = useWorkspaceCodePath(workspaceID);
   const setOpenDiffTab = useSetAtom(openDiffTabAtom);
   const setOpenFileViewTab = useSetAtom(openFileViewTabAtom);
   const pierreRef = useRef<HTMLDivElement>(null);
@@ -76,6 +77,11 @@ export const AlphaChipDiffPopover = ({
   const appTheme = useAtomValue(appThemeAtom);
   const codeTheme = useAtomValue(themeCodeThemeAtom);
   const shikiThemes = getShikiThemes(codeTheme);
+  // Pierre must not MOUNT before its shared highlighter has these themes
+  // attached — a cold-themes first mount paints nothing and does not survive
+  // React StrictMode's remount (see usePierreHighlighterReady), leaving the
+  // first chip popover of a session permanently blank.
+  const isHighlighterReady = usePierreHighlighterReady(shikiThemes);
 
   const pierreOptions = useMemo(
     (): FileDiffOptions<undefined> => ({
@@ -103,8 +109,9 @@ export const AlphaChipDiffPopover = ({
   // Inject bg-override stylesheet into Pierre's shadow DOM. `useLayoutEffect`
   // so the sheet is adopted between React's commit and the browser's next
   // paint — `useEffect` runs after paint, leaving a visible flash of Pierre's
-  // raw Shiki theme background. Dep is `diffPatches` because Pierre re-creates
-  // its shadow DOM whenever the patch content changes.
+  // raw Shiki theme background. Deps are `diffPatches` because Pierre
+  // re-creates its shadow DOM whenever the patch content changes, and the
+  // highlighter gate, which is when the container first mounts.
   useLayoutEffect(() => {
     const el = pierreRef.current;
     if (!el) return;
@@ -113,7 +120,7 @@ export const AlphaChipDiffPopover = ({
     if (!shadowRoot.adoptedStyleSheets.includes(bgOverrideSheet)) {
       shadowRoot.adoptedStyleSheets = [...shadowRoot.adoptedStyleSheets, bgOverrideSheet];
     }
-  }, [diffPatches]);
+  }, [diffPatches, isHighlighterReady]);
 
   const handleOpenDiffPanel = useCallback((): void => {
     // Files inside the workspace clone get a diff tab so the user can review
@@ -262,16 +269,15 @@ export const AlphaChipDiffPopover = ({
       <div className={styles.body}>
         {chipData.state === "completed" && diffPatches.length > 0 && (
           <div ref={pierreRef}>
-            {diffPatches.map((patch, i) => (
-              <PatchDiff key={i} patch={patch} options={pierreOptions} />
-            ))}
+            {isHighlighterReady &&
+              diffPatches.map((patch, i) => <PatchDiff key={i} patch={patch} options={pierreOptions} />)}
           </div>
         )}
         {chipData.state === "error" && (
           <div className={chipData.errorContentType === "diff" ? styles.body : styles.bodyError}>
             {chipData.errorContentType === "diff" && chipData.errorDetail ? (
               <div ref={pierreRef}>
-                <PatchDiff patch={chipData.errorDetail} options={pierreOptions} />
+                {isHighlighterReady && <PatchDiff patch={chipData.errorDetail} options={pierreOptions} />}
               </div>
             ) : chipData.errorDetail ? (
               <pre className={styles.errorDetail}>{chipData.errorDetail}</pre>

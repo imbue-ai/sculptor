@@ -816,15 +816,16 @@ def test_changes_panel_updates_on_target_branch_change(sculptor_instance_: Sculp
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.skip(
-    reason="commit-from-changes reads chatActionsAtom (populated only while the agent chat is mounted), but the Changes panel as the active center panel unmounts the chat, so the button is disabled. Needs decoupling commit-from-changes from the chat mount. Follow-up."
-)
 @user_story("to commit changes using the commit button in the Changes panel")
 def test_commit_button_sends_commit_message(sculptor_instance_: SculptorInstance) -> None:
-    """The commit button sends the commit prompt to the agent.
+    """The commit button sends the commit prompt while no chat is mounted.
 
-    After writing a file, open the Changes panel, click the commit button, then
-    re-activate the agent tab and verify the agent received the commit message.
+    After writing a file, open the Changes panel into the center — which makes
+    it the active tab and UNMOUNTS the agent chat. The commit button must not
+    depend on a mounted chat (it sends through the workspace-scoped commit
+    action, not the chat's registered closures), so it stays enabled and
+    committing works. Then re-activate the agent tab and verify the agent
+    received the commit message.
     """
     page = sculptor_instance_.page
     task_page, changes_panel = _open_changes_panel_with(page, _WRITE_FILE_PROMPT)
@@ -838,9 +839,12 @@ def test_commit_button_sends_commit_message(sculptor_instance_: SculptorInstance
     expect(tree_rows).to_have_count(1)
     expect(tree_rows.first).to_contain_text("hello.py")
 
+    # The Changes panel is the active center tab, so the chat is unmounted —
+    # the button must be enabled anyway.
     commit_btn = changes_panel.get_commit_button()
     expect(commit_btn).to_be_visible()
     expect(commit_btn).to_contain_text("Commit 1 change")
+    expect(commit_btn).to_be_enabled()
 
     # Clicking the commit button sends the commit prompt to the agent.
     commit_btn.click()

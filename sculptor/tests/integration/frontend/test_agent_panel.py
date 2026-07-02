@@ -21,6 +21,7 @@ import pytest
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
+from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
@@ -60,6 +61,12 @@ def test_agent_chat_is_preserved(sculptor_instance_: SculptorInstance) -> None:
     chat_panel = task_page.get_chat_panel()
     expect(chat_panel).to_be_visible()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
+
+    # The intro banner names THIS panel's agent. Creating the second agent moved
+    # the route to it, and tab activation doesn't navigate — so a route-derived
+    # identity would name the second agent here instead of the panel's own.
+    first_tab_label = panel_tabs.get_panel_tab(first_panel_id).inner_text()
+    expect(get_alpha_chat_view(page).get_intro()).to_contain_text(first_tab_label)
 
 
 @user_story("to see exactly one agent tab for a single-agent workspace")
