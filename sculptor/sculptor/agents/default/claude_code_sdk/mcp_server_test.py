@@ -456,6 +456,120 @@ def test_ask_user_question_with_zero_questions_returns_invalid_params_error() ->
     assert "1-4" in mcp_response["error"]["message"]
 
 
+def _make_auq_arguments(question_text: str) -> dict:
+    return {
+        "questions": [
+            {
+                "question": question_text,
+                "header": "Header",
+                "options": [{"label": "A", "description": ""}, {"label": "B", "description": ""}],
+                "multiSelect": False,
+            }
+        ]
+    }
+
+
+def _send_tools_call(server: SculptorMcpServer, request_id: str, rpc_id: int, arguments: dict) -> None:
+    server.handle_message(
+        request_id,
+        {
+            "jsonrpc": "2.0",
+            "id": rpc_id,
+            "method": "tools/call",
+            "params": {"name": SCULPTOR_MCP_ASK_TOOL_NAME, "arguments": arguments},
+        },
+    )
+
+
+def test_tools_call_arriving_before_registration_is_held_and_paired() -> None:
+    """The SUBAGENT event ordering: the CLI emits the tools/call
+    control_request BEFORE the sidechain assistant message carrying the
+    ToolUseBlock. The call must be held (not dropped) and paired when the
+    registration catches up, so the user's answer can resolve it."""
+    server, respond = _make_server()
+
+    _send_tools_call(server, "req_inverted", 61, _VALID_AUQ_ARGUMENTS)
+    # Held, not dropped and not answered.
+    assert respond.calls == []
+    assert server._pending == {}
+
+    server.register_tool_use_id("toolu_side", SCULPTOR_MCP_ASK_TOOL_FQN, tool_input=_VALID_AUQ_ARGUMENTS)
+    assert "toolu_side" in server._pending
+
+    answer = _make_answer("toolu_side")
+    server.deliver_answer(answer)
+    assert len(respond.calls) == 1
+    request_id, data = respond.calls[0]
+    assert request_id == "req_inverted"
+    assert data["mcp_response"]["id"] == 61
+    assert data["mcp_response"]["result"]["content"][0]["text"] == format_ask_user_question_result(answer)
+
+
+def test_cache_does_not_answer_a_different_question() -> None:
+    """After an answer was delivered, a tools/call for a DIFFERENT question
+    (e.g. a subagent's, arriving before its registration) must NOT be served
+    the previous answer from the replay cache — it must be held."""
+    server, respond = _make_server()
+    first_arguments = _make_auq_arguments("Pick one")
+    server.register_tool_use_id("toolu_first", SCULPTOR_MCP_ASK_TOOL_FQN, tool_input=first_arguments)
+    _send_tools_call(server, "req_first", 71, first_arguments)
+    server.deliver_answer(_make_answer("toolu_first"))
+    assert len(respond.calls) == 1
+
+    second_arguments = _make_auq_arguments("A different question?")
+    _send_tools_call(server, "req_second", 72, second_arguments)
+    # Not served from cache — held until its registration arrives.
+    assert len(respond.calls) == 1
+
+    server.register_tool_use_id("toolu_second", SCULPTOR_MCP_ASK_TOOL_FQN, tool_input=second_arguments)
+    assert "toolu_second" in server._pending
+
+    server.deliver_answer(_make_answer("toolu_second", question_text="A different question?", answer="B"))
+    assert len(respond.calls) == 2
+    assert respond.calls[1][0] == "req_second"
+
+
+def test_two_interleaved_calls_pair_by_question_content() -> None:
+    """Two concurrent subagents asking different questions (each with the
+    inverted ordering) must each pair with their own registration, so each
+    answer resolves the matching control_request."""
+    server, respond = _make_server()
+    arguments_a = _make_auq_arguments("Question A?")
+    arguments_b = _make_auq_arguments("Question B?")
+
+    _send_tools_call(server, "req_a", 81, arguments_a)
+    server.register_tool_use_id("toolu_a", SCULPTOR_MCP_ASK_TOOL_FQN, tool_input=arguments_a)
+    _send_tools_call(server, "req_b", 82, arguments_b)
+    server.register_tool_use_id("toolu_b", SCULPTOR_MCP_ASK_TOOL_FQN, tool_input=arguments_b)
+
+    assert set(server._pending) == {"toolu_a", "toolu_b"}
+
+    server.deliver_answer(_make_answer("toolu_b", question_text="Question B?"))
+    assert len(respond.calls) == 1
+    assert respond.calls[0][0] == "req_b"
+
+    server.deliver_answer(_make_answer("toolu_a", question_text="Question A?"))
+    assert len(respond.calls) == 2
+    assert respond.calls[1][0] == "req_a"
+
+
+def test_set_respond_drops_stale_expectations_and_unmatched_calls() -> None:
+    """Queued expectations and held unmatched calls belong to the previous CLI
+    invocation and can never be answered through the new one — a new
+    invocation's registrations must not pair with them."""
+    server, _respond = _make_server()
+    _send_tools_call(server, "req_stale", 91, _VALID_AUQ_ARGUMENTS)
+    server.register_tool_use_id(
+        "toolu_expected", SCULPTOR_MCP_ASK_TOOL_FQN, tool_input=_make_auq_arguments("Unrelated question?")
+    )
+    assert server._unmatched_calls != []
+    assert server._expected_calls != []
+
+    server.set_respond(lambda _request_id, _data: None)
+    assert server._expected_calls == []
+    assert server._unmatched_calls == []
+
+
 def test_cache_invalidates_when_a_fresh_auq_panel_is_shown_after_delivery() -> None:
     """If the agent moves on to ask a new question after the first answer,
     the cache must NOT serve stale text for the new question."""
