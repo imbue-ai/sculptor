@@ -1,9 +1,9 @@
 #!/bin/sh
-# Boot script for the OpenHost Sculptor image.
+# Entrypoint for the OpenHost Sculptor image.
 #
-# Resolves the persistent app-data dir, re-establishes git identity + the
-# host-wide agent skill on every boot (both are lost when /home is wiped on
-# rebuild), then execs the Sculptor backend from the built venv.
+# Runs the Sculptor backend on 127.0.0.1:5051 behind an nginx front on :5050 (the
+# port OpenHost proxies to). nginx adds a /proxy/<port>/ reverse-proxy to localhost
+# dev servers for mobile live-preview. See openhost-nginx.conf for the routing.
 set -eu
 
 # Persist into whichever app-data dir OpenHost granted THIS app
@@ -15,7 +15,7 @@ if [ -n "${OPENHOST_APP_DATA_DIR:-}" ]; then
     export CLAUDE_CONFIG_DIR="$OPENHOST_APP_DATA_DIR/claude"
     export GH_CONFIG_DIR="$OPENHOST_APP_DATA_DIR/gh"
 fi
-mkdir -p "$SCULPTOR_FOLDER" "$CLAUDE_CONFIG_DIR" "$GH_CONFIG_DIR"
+mkdir -p "$SCULPTOR_FOLDER" "$CLAUDE_CONFIG_DIR" "$GH_CONFIG_DIR" /tmp/nginx
 
 # Re-establish the gh credential helper + a git identity on every boot: /home is
 # wiped on each rebuild, so ~/.gitconfig is lost even though the gh TOKEN persists
@@ -51,6 +51,11 @@ fi
 [ -e "$CLAUDE_CONFIG_DIR/AGENTS.md" ] || cp /app/openhost-agent/AGENTS.md "$CLAUDE_CONFIG_DIR/AGENTS.md" 2>/dev/null || true
 [ -e "$CLAUDE_CONFIG_DIR/CLAUDE.md" ] || ln -s AGENTS.md "$CLAUDE_CONFIG_DIR/CLAUDE.md" 2>/dev/null || true
 
-# Run the backend from the built venv (the venv lives at the uv workspace root
-# /app/.venv, not /app/sculptor). It serves the web UI built into the image.
-exec /app/.venv/bin/python -m sculptor.cli.main --no-open-browser /workspace
+# Backend behind nginx (SCULPTOR_API_PORT=5051 is set in the Dockerfile).
+/app/.venv/bin/python -m sculptor.cli.main --no-open-browser /workspace &
+backend_pid=$!
+
+# If nginx exits, take the backend down too (and vice-versa on container stop).
+trap 'kill "$backend_pid" 2>/dev/null || true' EXIT INT TERM
+
+exec nginx -c /app/openhost-nginx.conf -g 'daemon off;'

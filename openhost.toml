@@ -9,21 +9,29 @@
 # container under rootless podman, and reverse-proxies HTTPS to it at
 # https://sculptor.<your-zone-domain>/ behind OpenHost's owner login.
 #
+# This branch adds an in-container nginx front that exposes /proxy/<port>/ for
+# mobile live preview of dev servers (all still behind OpenHost's owner SSO). It
+# was validated first as a throwaway `sculptor-dev` app, then pointed back at the
+# main `sculptor` app here. Redeploy over the existing app with --keep-data so the
+# persistent /data/app_data/sculptor (DB, workspaces, Claude+gh auth) survives;
+# the run script reads OPENHOST_APP_DATA_DIR, so the data dir tracks the app name.
+#
 # See docs/development/ in the openhost repo, or docs/src/manifest_spec.md there,
 # for the full field reference.
 
 [app]
 name = "sculptor"
 version = "0.1.0"
-description = "Sculptor — AI coding agent platform by Imbue"
+description = "Sculptor — AI coding agent platform by Imbue (with nginx /proxy live-preview front)"
 authors = ["Imbue"]
 
 [runtime.container]
 # Path to the Dockerfile, relative to the repo root. The build context is always
 # the repo root, so this Dockerfile can COPY the existing container recipe scripts.
 image = "openhost.Dockerfile"
-# Port the Sculptor backend listens on inside the container (SCULPTOR_API_PORT).
-# Kept in sync with the value set in openhost.Dockerfile.
+# Public-facing container port. On this branch that's the nginx front, not the
+# backend: nginx listens on 5050 and proxies to the backend on loopback :5051
+# (SCULPTOR_API_PORT in openhost.Dockerfile) plus /proxy/<port>/ to dev servers.
 port = 5050
 
 [routing]

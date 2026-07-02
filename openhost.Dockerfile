@@ -20,9 +20,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 # extensions (e.g. typeid-python's Rust module) compile from sdist whenever no
 # prebuilt wheel matches the interpreter, and uv/maturin's on-demand Rust install
 # still needs a system C toolchain to link.
+# nginx-light is the in-container front door (this dev branch): it owns port 5050
+# and reverse-proxies /proxy/<port>/ to localhost dev servers for mobile live
+# preview, everything else to the Sculptor backend (see openhost-nginx.conf).
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        git curl ca-certificates xz-utils libnss-wrapper build-essential && \
+        git curl ca-certificates xz-utils libnss-wrapper build-essential nginx-light && \
     rm -rf /var/lib/apt/lists/*
 
 # Node.js 24 — for the frontend build and the API-client codegen. Matches the
@@ -101,10 +104,11 @@ RUN usermod -l sculptor -d /home/sculptor -m ubuntu && \
     chmod -R a+rX /app /opt/uv-python
 
 ENV HOME=/home/sculptor
-# Serve on all interfaces so the OpenHost router can proxy to us.
-ENV SCULPTOR_BIND_HOST=0.0.0.0
-# Port the backend listens on. Keep in sync with `port` in openhost.toml.
-ENV SCULPTOR_API_PORT=5050
+# The backend now sits BEHIND nginx, reachable only on loopback. nginx owns the
+# public-facing port (5050, what openhost.toml declares) and proxies to here.
+ENV SCULPTOR_BIND_HOST=127.0.0.1
+# Backend port (internal). nginx listens on 5050 and forwards to 5051.
+ENV SCULPTOR_API_PORT=5051
 # Persist DB, workspaces, downloaded agent binaries, and user config into the
 # OpenHost backed-up app data dir (the app is named "sculptor" in openhost.toml).
 ENV SCULPTOR_FOLDER=/data/app_data/sculptor
@@ -149,10 +153,9 @@ RUN NSS_WRAPPER_LIB="$(dpkg -L libnss-wrapper | grep -m1 '/libnss_wrapper\.so$')
 
 USER sculptor
 ENTRYPOINT ["/usr/local/bin/openhost-entrypoint.sh"]
-# Run via the boot script: it resolves the app-data dir, ensures the persistent
-# dirs exist, re-establishes git identity + the host-wide agent skill, then execs
-# the backend from the built venv (/app/.venv, the uv workspace root). No
-# --no-serve-static: the backend serves the web UI built above (resolved via the
-# 'sculptor' package's editable install at /app/sculptor/frontend/dist). See
-# openhost-run.sh.
+# Start the backend (on loopback :5051) behind the nginx front (on :5050) via the
+# run script: it resolves the app-data dir, ensures persistent dirs exist, launches
+# the backend from the built venv (/app/.venv, the uv workspace root), and execs
+# nginx. The backend still serves the bundled web UI it built above; nginx only
+# adds the /proxy/<port>/ live-preview route on top. See openhost-run.sh.
 CMD ["sh", "/app/openhost-run.sh"]
