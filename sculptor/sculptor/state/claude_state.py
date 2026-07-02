@@ -259,6 +259,10 @@ class ParsedEndResponse(ParsedAgentResponse):
     input_tokens: int | None = Field(default=None, description="Input tokens")
     output_tokens: int | None = Field(default=None, description="Output tokens")
     total_cost_usd: float | None = Field(default=None, description="Total cost of agent session")
+    api_error_status: int | None = Field(
+        default=None,
+        description="HTTP status of the API error that ended the turn (e.g. 429/500/529), or None if the turn did not fail on an API error",
+    )
 
 
 class ParsedCompactionSummaryResponse(ParsedAgentResponse):
@@ -273,7 +277,9 @@ class ParsedTaskStartedResponse(ParsedAgentResponse):
 
     object_type: str = Field(default="ParsedTaskStartedResponse")
     task_id: str = Field(description="Background task ID assigned by Claude Code")
-    tool_use_id: str = Field(description="Tool use ID of the tool call that launched the background task")
+    tool_use_id: str = Field(
+        description="Tool use ID of the tool call that launched the background task. Empty when the CLI omits it (parity with ParsedTaskNotificationResponse — see SCU-1666).",
+    )
     description: str = Field(default="", description="Human-readable description of the background task")
     task_type: str = Field(default="", description="Type of background task (e.g. local_bash)")
 
@@ -283,7 +289,9 @@ class ParsedTaskNotificationResponse(ParsedAgentResponse):
 
     object_type: str = Field(default="ParsedTaskNotificationResponse")
     task_id: str = Field(description="Background task ID matching the task_started event")
-    tool_use_id: str = Field(description="Tool use ID of the tool call that launched the background task")
+    tool_use_id: str = Field(
+        description="Tool use ID of the tool call that launched the background task. Empty when the CLI omits it, e.g. a task orphaned by a process exit and reported as failed on resume (see SCU-1666).",
+    )
     status: str = Field(description="Completion status (e.g. completed)")
     summary: str = Field(default="", description="Human-readable summary of the background task result")
     duration_ms: int | None = Field(
@@ -386,9 +394,11 @@ def _handle_init_message(data: dict[str, Any]) -> ParsedInitResponse:
 
 def _handle_task_started_message(data: dict[str, Any]) -> ParsedTaskStartedResponse:
     """Handle system/task_started message type."""
+    # ``tool_use_id`` is read defensively (see _handle_task_notification_message)
+    # to keep a variant payload from crashing the whole agent.
     return ParsedTaskStartedResponse(
         task_id=data["task_id"],
-        tool_use_id=data["tool_use_id"],
+        tool_use_id=data.get("tool_use_id", ""),
         description=data.get("description", ""),
         task_type=data.get("task_type", ""),
     )
@@ -401,9 +411,13 @@ def _handle_task_notification_message(data: dict[str, Any]) -> ParsedTaskNotific
     # unparsed until a caller asks for them.
     usage = data.get("usage") or {}
     raw_duration_ms = usage.get("duration_ms") if isinstance(usage, dict) else None
+    # ``tool_use_id`` is absent when a background task orphaned by a process exit
+    # is reported as failed on resume: the launching tool call's id died with the
+    # previous process (see SCU-1666). Default to "" rather than indexing so the
+    # notification is surfaced instead of a missing key killing the agent.
     return ParsedTaskNotificationResponse(
         task_id=data["task_id"],
-        tool_use_id=data["tool_use_id"],
+        tool_use_id=data.get("tool_use_id", ""),
         status=data.get("status", ""),
         summary=data.get("summary", ""),
         duration_ms=int(raw_duration_ms) if isinstance(raw_duration_ms, (int, float)) else None,
@@ -428,10 +442,9 @@ def _handle_assistant_message(data: dict[str, Any]) -> ParsedAssistantResponse:
     message_data = data["message"]
     message_id = message_data["id"]
 
-    # ``content`` is normally a list of block dicts, but the CLI has been seen to
-    # emit a bare string (claude-agent-sdk-python d47b180 / issue #1058). Wrap it
-    # as a single text block so we don't iterate over its characters and crash on
-    # ``content["type"]``.
+    # ``content`` is normally a list of block dicts, but the CLI can emit a bare
+    # string instead. Wrap it as a single text block so we don't iterate over its
+    # characters and crash on ``content["type"]``.
     raw_content = message_data["content"]
     if isinstance(raw_content, str):
         raw_content = [{"type": "text", "text": raw_content}]
@@ -540,6 +553,8 @@ def _handle_stream_end_message(data: dict[str, Any]) -> ParsedEndResponse:
         input_tokens=data.get("usage", {}).get("input_tokens", 0),
         output_tokens=data.get("usage", {}).get("output_tokens", 0),
         total_cost_usd=data.get("total_cost_usd", 0),
+        # Present only when the turn failed on an API error; the CLI omits it otherwise.
+        api_error_status=data.get("api_error_status"),
     )
 
 

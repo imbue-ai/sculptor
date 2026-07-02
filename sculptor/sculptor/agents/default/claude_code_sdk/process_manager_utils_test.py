@@ -674,7 +674,7 @@ def test_create_tool_content_preserves_error_text_for_failed_edit() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Crash-safety for unexpected-but-valid-JSON message shapes (SCU-1667).
+# Crash-safety for unexpected-but-valid-JSON message shapes.
 #
 # These exercise the full ``parse_claude_code_json_lines`` path (the one the
 # output loop actually calls) rather than the ``_simple`` parser directly, so a

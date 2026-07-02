@@ -1,9 +1,11 @@
 import json
 
+from sculptor.agents.testing.fake_claude_jsonl import make_end_message
 from sculptor.state.chat_state import FileBlock
 from sculptor.state.chat_state import TextBlock
 from sculptor.state.claude_state import ParsedAssistantResponse
 from sculptor.state.claude_state import ParsedToolResultResponseSimple
+from sculptor.state.claude_state import _handle_stream_end_message
 from sculptor.state.claude_state import extract_media_tags_from_text
 from sculptor.state.claude_state import get_tool_invocation_string
 from sculptor.state.claude_state import parse_claude_code_json_lines_simple
@@ -378,7 +380,7 @@ def test_parse_assistant_message_extracts_video_tag_into_file_block() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Crash-safety for unexpected-but-valid-JSON message shapes (SCU-1667).
+# Crash-safety for unexpected-but-valid-JSON message shapes.
 #
 # These shapes are valid JSON with a layout the parser did not originally
 # expect. Each one used to raise out of the parser (TypeError / IndexError /
@@ -485,3 +487,18 @@ def test_get_tool_invocation_string_skill_returns_skill_name() -> None:
 def test_get_tool_invocation_string_skill_without_args() -> None:
     result = get_tool_invocation_string("Skill", {"skill": "commit"})
     assert result == "commit"
+
+
+def test_handle_stream_end_message_reads_api_error_status() -> None:
+    """A result frame carrying api_error_status populates the parsed field."""
+    data = make_end_message(session_id="s1", is_error=True, result="Overloaded", api_error_status=429)
+    parsed = _handle_stream_end_message(data)
+    assert parsed.api_error_status == 429
+
+
+def test_handle_stream_end_message_api_error_status_defaults_to_none() -> None:
+    """A result frame without api_error_status leaves the parsed field None."""
+    data = make_end_message(session_id="s1", is_error=False, result="")
+    assert "api_error_status" not in data
+    parsed = _handle_stream_end_message(data)
+    assert parsed.api_error_status is None

@@ -13,7 +13,7 @@
 #   post <#name|ID> <text>               post a message; print its ts
 #   reply <#name|ID> <thread_ts> <text>  post a threaded reply; print its ts
 #   find-ts <#name|ID> <substring>       print ts of the latest message containing <substring>
-#   done <#name|ID> <ts>                 add the :done: reaction (idempotent)
+#   done <#name|ID> <ts>                 add the :merged: reaction (idempotent)
 #
 set -euo pipefail
 
@@ -110,13 +110,13 @@ cmd_find_ts() {
     | jq -r --arg u "$2" '[.messages[] | select(.text | contains($u)) | .ts][0] // ""'
 }
 
-# Idempotent: a pre-existing :done: (already_reacted) counts as success.
+# Idempotent: a pre-existing :merged: (already_reacted) counts as success.
 cmd_done() {
   [ $# -eq 2 ] || die "usage: done <#name|ID> <ts>"
   local ch resp ok err
   ch="$(resolve "$1")"
   resp="$(slack_post reactions.add \
-    "$(jq -n --arg c "$ch" --arg ts "$2" '{channel: $c, timestamp: $ts, name: "done"}')")"
+    "$(jq -n --arg c "$ch" --arg ts "$2" '{channel: $c, timestamp: $ts, name: "merged"}')")"
   [ -n "$resp" ] || die "empty response from reactions.add"
   ok="$(printf '%s' "$resp" | jq -r '.ok')"
   err="$(printf '%s' "$resp" | jq -r '.error // ""')"
