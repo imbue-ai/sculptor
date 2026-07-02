@@ -1,4 +1,10 @@
-import type { AskUserQuestionData, ChatMessage, SubmittedQuestionAnswers, TaskUpdate } from "../../api";
+import type {
+  AskUserQuestionData,
+  ChatMessage,
+  SubmittedQuestionAnswers,
+  TaskUpdate,
+  WorkflowTaskState,
+} from "../../api";
 
 type ChatMessagesState = {
   completedChatMessages: Array<ChatMessage>;
@@ -9,6 +15,7 @@ type ChatMessagesState = {
   submittedQuestionAnswers: Record<string, SubmittedQuestionAnswers>;
   isInPlanMode: boolean;
   pendingBackgroundTaskIds: Array<string>;
+  workflowTaskStates: Record<string, WorkflowTaskState>;
 };
 
 export const chatMessagesReducer = (currentState: ChatMessagesState, taskUpdate: TaskUpdate): ChatMessagesState => {
@@ -39,6 +46,12 @@ export const chatMessagesReducer = (currentState: ChatMessagesState, taskUpdate:
       taskUpdate.pendingBackgroundTaskIds !== undefined
         ? taskUpdate.pendingBackgroundTaskIds
         : (currentState.pendingBackgroundTaskIds ?? []),
+    // Full snapshot each update, same as pendingBackgroundTaskIds — replace,
+    // don't merge.
+    workflowTaskStates:
+      taskUpdate.workflowTaskStates !== undefined
+        ? taskUpdate.workflowTaskStates
+        : (currentState.workflowTaskStates ?? {}),
   };
 };
 

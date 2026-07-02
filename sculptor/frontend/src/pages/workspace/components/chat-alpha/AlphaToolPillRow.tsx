@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ToolResultBlock, ToolUseBlock } from "~/api";
 import { ElementIds } from "~/api";
+import { useCurrentTaskWorkflowStates } from "~/common/state/hooks/useTaskDetail";
 import { useWorkspaceCodePath } from "~/pages/workspace/hooks/useWorkspaceCodePath.ts";
 
 import { AlphaCommandPopover } from "./AlphaCommandPopover.tsx";
@@ -68,10 +69,20 @@ export const AlphaToolPillRow = ({
     notifyPinnedToggle,
   } = usePillHoverDelay({ openPillId, setOpenPillId, isPinnedRef, popoverElRef: popoverContentRef });
 
-  const pillDataList = useMemo(
-    () => buildPillData(blocks, toolResultMap, inProgressMessageId),
-    [blocks, toolResultMap, inProgressMessageId],
-  );
+  const workflowTaskStates = useCurrentTaskWorkflowStates();
+  const pillDataList = useMemo(() => {
+    const basePills = buildPillData(blocks, toolResultMap, inProgressMessageId);
+    // The Workflow tool's result arrives instantly ("launched in background"),
+    // so the pill's result-derived state says completed while the workflow is
+    // still running. Override it from the live background-task state.
+    return basePills.map((pill): PillData => {
+      if (pill.label !== "Workflow") return pill;
+      const workflowStatus = workflowTaskStates[pill.id]?.status;
+      if (workflowStatus === "running") return { ...pill, state: "initializing" };
+      if (workflowStatus === "failed") return { ...pill, state: "error" };
+      return pill;
+    });
+  }, [blocks, toolResultMap, inProgressMessageId, workflowTaskStates]);
 
   // Register this row's pills with the shared nav context.
   useEffect(() => {

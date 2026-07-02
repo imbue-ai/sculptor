@@ -147,6 +147,7 @@ export const useUnifiedStream = (): void => {
                   submittedQuestionAnswers: state.submittedQuestionAnswers,
                   isInPlanMode: state.isInPlanMode,
                   pendingBackgroundTaskIds: state.pendingBackgroundTaskIds,
+                  workflowTaskStates: state.workflowTaskStates,
                 },
                 taskUpdate,
               );

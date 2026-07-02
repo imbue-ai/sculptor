@@ -1,9 +1,15 @@
-import type { PrimitiveAtom } from "jotai";
+import type { Atom, PrimitiveAtom } from "jotai";
 import { atom } from "jotai";
-import { atomFamily } from "jotai/utils";
+import { atomFamily, selectAtom } from "jotai/utils";
 import isEqual from "lodash/isEqual";
 
-import type { ArtifactType, AskUserQuestionData, ChatMessage, SubmittedQuestionAnswers } from "../../../api";
+import type {
+  ArtifactType,
+  AskUserQuestionData,
+  ChatMessage,
+  SubmittedQuestionAnswers,
+  WorkflowTaskState,
+} from "../../../api";
 import type { ArtifactsMap } from "../../../pages/workspace/Types";
 
 /**
@@ -24,11 +30,28 @@ export type TaskDetailState = {
   // "waiting for background task" label so it doesn't claim the agent is
   // thinking while the harness is actually idle (SCU-387).
   pendingBackgroundTaskIds: Array<string>;
+  // Live/last-known state of Workflow-tool background tasks, keyed by the
+  // launching tool_use_id. Drives the Workflow pill's executing state and
+  // the workflow popover's phase/agent tree.
+  workflowTaskStates: Record<string, WorkflowTaskState>;
   error?: string;
 };
 
 export const taskDetailAtomFamily = atomFamily<string, PrimitiveAtom<TaskDetailState | null>>(() =>
   atom<TaskDetailState | null>(null),
+);
+
+const EMPTY_WORKFLOW_TASK_STATES: Record<string, WorkflowTaskState> = {};
+
+// Selected with deep equality so pill rows subscribed to workflow state don't
+// re-render on every streaming partial — the backend ships the map as a fresh
+// object on each TaskUpdate even when its contents are unchanged.
+export const workflowTaskStatesAtomFamily = atomFamily<string, Atom<Record<string, WorkflowTaskState>>>((taskId) =>
+  selectAtom(
+    taskDetailAtomFamily(taskId),
+    (detail) => detail?.workflowTaskStates ?? EMPTY_WORKFLOW_TASK_STATES,
+    isEqual,
+  ),
 );
 
 export const getEmptyTaskDetailState = (): TaskDetailState => {
@@ -42,6 +65,7 @@ export const getEmptyTaskDetailState = (): TaskDetailState => {
     submittedQuestionAnswers: {},
     isInPlanMode: false,
     pendingBackgroundTaskIds: [],
+    workflowTaskStates: {},
   };
 };
 
