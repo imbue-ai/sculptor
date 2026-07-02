@@ -1,9 +1,10 @@
 // Write-only action atoms that mutate the consolidated per-workspace layout. Every
 // action computes the full next snapshot and writes it once (one atomic persist),
 // and the layout invariants live here in one place: center never collapses, the
-// active sub-section stays in an expanded section, splits self-heal and are capped
-// at one per section, and single-instance panels activate in place instead of
-// duplicating.
+// active sub-section stays in an expanded section, splits are capped at one per
+// section and persist even when a half empties (only the explicit close-split
+// action merges one back; an emptied half shows the empty-section state), and
+// single-instance panels activate in place instead of duplicating.
 
 import { atom } from "jotai";
 
@@ -26,7 +27,7 @@ function isSectionExpanded(layout: WorkspaceLayoutState, section: SectionId): bo
 
 // Open panels in a sub-section, ordered. Membership is placement-based, so a dynamic
 // panel that is placed but whose source has not loaded yet still counts as occupying
-// its sub-section (this is the self-heal reload guard).
+// its sub-section (and is still merged back by an explicit close-split).
 function panelsIn(layout: WorkspaceLayoutState, subSection: SubSectionId): ReadonlyArray<PanelId> {
   const placed = (Object.keys(layout.placement) as ReadonlyArray<PanelId>).filter(
     (id) => layout.placement[id] === subSection,
@@ -68,16 +69,6 @@ function closeSplitInLayout(layout: WorkspaceLayoutState, section: SectionId): W
 
   const activeSubSection = layout.activeSubSection === secondary ? section : layout.activeSubSection;
   return { ...layout, placement, order, splits, activePanel, activeSubSection };
-}
-
-// Self-heal a section's split when either half has emptied.
-function selfHealSection(layout: WorkspaceLayoutState, section: SectionId): WorkspaceLayoutState {
-  if (layout.splits[section] === undefined) {
-    return layout;
-  }
-  const isPrimaryEmpty = panelsIn(layout, section).length === 0;
-  const isSecondaryEmpty = panelsIn(layout, toSecondary(section)).length === 0;
-  return isPrimaryEmpty || isSecondaryEmpty ? closeSplitInLayout(layout, section) : layout;
 }
 
 function reassignActiveOnRemoval(
@@ -135,11 +126,10 @@ function withMovePanel(layout: WorkspaceLayoutState, { panelId, to, index }: Mov
     }
   }
 
-  let next: WorkspaceLayoutState = withExpandedSection({ ...layout, placement, order, activePanel }, toSection(to));
-  if (from !== undefined && from !== to) {
-    next = selfHealSection(next, toSection(from));
-  }
-  return next;
+  // Moving the last panel out of a split half deliberately leaves the split in
+  // place: the emptied half shows the empty-section state until the user closes
+  // the split explicitly.
+  return withExpandedSection({ ...layout, placement, order, activePanel }, toSection(to));
 }
 
 function withOpenPanel(layout: WorkspaceLayoutState, { panelId, in: target }: OpenPanelParams): WorkspaceLayoutState {
@@ -173,7 +163,9 @@ function withClosePanel(layout: WorkspaceLayoutState, { panelId }: ClosePanelPar
   const order = { ...layout.order, [subSection]: (layout.order[subSection] ?? []).filter((id) => id !== panelId) };
   const activePanel = { ...layout.activePanel };
   reassignActiveOnRemoval(activePanel, subSection, panelId, order[subSection] ?? []);
-  return selfHealSection({ ...layout, placement, order, activePanel }, toSection(subSection));
+  // Closing the last panel in a split half deliberately leaves the split in place
+  // (see withMovePanel): the emptied half shows the empty-section state.
+  return { ...layout, placement, order, activePanel };
 }
 
 function withSetActivePanel(

@@ -4,8 +4,9 @@
 An expanded section with no active panel shows a centered "Add panel" button plus
 quick actions: always "New {recent} agent" and "New terminal", then up to three
 most-recently-closed single-instance panels. Closing a single-instance panel records
-it so it appears as a recently-closed quick action. An emptied split half shows the
-same empty state plus a "Close split" button that merges the split back.
+it so it appears as a recently-closed quick action. An emptied split half keeps the
+split and shows the same empty state; its "Close split" button is the only way a
+split merges back (splits never auto-merge when a half empties).
 
 Layouts are arranged by clicking the real UI (expand sections via the controls, open /
 close panels via the ``+`` dropdown and tab close, split via the panel context menu).

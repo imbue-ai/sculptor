@@ -5,6 +5,8 @@ choosing "Create {direction} split and move panel". The allowed directions are
 per-section: left/right sections allow only a bottom (horizontal) split, the bottom
 section allows only a right (vertical) split, and the center allows both. A section
 holds at most one split, so the create-split options vanish once a split exists.
+A split persists when a half empties: the emptied half shows the empty-section
+state (never an auto-merge) until the split is closed explicitly from that state.
 (SPLIT-06 — a maximized split shows one sub-section — lives in
 ``test_section_active_and_maximize.py``.)
 
@@ -15,6 +17,8 @@ via the panel context menu).
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.add_panel_dropdown import open_panel
+from sculptor.testing.elements.panel_empty_state import PlaywrightEmptySectionState
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.section_split import PlaywrightSectionSplit
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -141,3 +145,50 @@ def test_one_split_max_removes_create_options(sculptor_instance_: SculptorInstan
     # Re-opening a tab's context menu (in the still-populated primary half) offers no
     # create-split options now that the section is split.
     split.assert_directions_available(())
+
+
+@user_story("to keep a split after closing its last panel and refill the empty half in place")
+def test_split_persists_after_closing_last_panel_and_refills_in_place(sculptor_instance_: SculptorInstance) -> None:
+    """Closing the secondary half's last panel keeps the split; a quick action refills that half.
+
+    Split a Notes panel into the center secondary half, then close it from its tab:
+    the split persists and the emptied half shows the empty state instead of merging
+    back. The empty state's recently-closed "notes" quick action then re-opens Notes
+    into that same half, leaving the primary half untouched.
+    """
+    page = sculptor_instance_.page
+
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Split Persists WS")
+    center = PlaywrightWorkspaceSection(page, "center")
+    agent_panel_id = center.get_active_tab().get_attribute("data-panel-id")
+    assert agent_panel_id is not None
+
+    open_panel(page, "notes", "center")
+    expect(center.get_panel_tab("notes")).to_be_visible()
+
+    split = PlaywrightSectionSplit(page, "center")
+    split.create_split("notes", "vertical")
+    split.assert_split_count(1)
+
+    # Close the split-off panel from its tab (single-instance: closes silently and is
+    # recorded as recently-closed). The secondary half empties but the split stays.
+    secondary = split.get_subsection("secondary")
+    secondary_tabs = PlaywrightPanelTabElement(page, sub_section="center:secondary")
+    secondary_tabs.get_tab_close_button("notes").click()
+    expect(secondary.get_panel_tab("notes")).to_have_count(0)
+    split.assert_split_count(1)
+
+    # The emptied half shows the empty state, including its close-split affordance.
+    empty_state = PlaywrightEmptySectionState(page, "center:secondary")
+    expect(empty_state.get_add_panel_button()).to_be_visible()
+    expect(empty_state.get_close_split_button()).to_be_visible()
+
+    # The recently-closed "notes" quick action re-opens Notes into the SAME half.
+    notes_action = empty_state.get_quick_action("notes")
+    expect(notes_action).to_be_visible()
+    notes_action.click()
+    expect(secondary.get_panel_tab("notes")).to_be_visible()
+    split.assert_split_count(1)
+
+    # The primary half is untouched: the agent still lives there.
+    expect(split.get_subsection("primary").get_panel_tab(agent_panel_id)).to_be_visible()

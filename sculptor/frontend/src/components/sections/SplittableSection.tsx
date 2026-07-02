@@ -6,8 +6,9 @@
 // A horizontal divider stacks the halves top/bottom (ResizeHandle axis "y"); a
 // vertical divider places them side-by-side (axis "x"). The primary half carries an
 // explicit flex-basis from the ratio (clamped to SPLIT_RATIO_MIN/MAX) and the
-// secondary fills the rest. Self-heal (collapsing the split when a half empties)
-// lives in the action atoms; this component just reflects the resulting split slice.
+// secondary fills the rest. Splits persist when a half empties (the empty half
+// renders its empty state); only the explicit close-split action merges — this
+// component just reflects the resulting split slice.
 
 import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";

@@ -111,7 +111,7 @@ describe("split invariants", () => {
     expect(store.get(workspaceLayoutAtom).splits.left).toBeUndefined();
   });
 
-  it("self-heals: emptying a split secondary closes the split and merges back", () => {
+  it("closing the last panel in a split half keeps the split with an empty half", () => {
     const store = storeWith({
       placement: { "agent:1": "center", "agent:2": "center" },
       order: { center: ["agent:1", "agent:2"] },
@@ -123,21 +123,73 @@ describe("split invariants", () => {
 
     store.set(closePanelAtom, { panelId: "agent:2" });
     const layout = store.get(workspaceLayoutAtom);
-    expect(layout.splits.center).toBeUndefined();
+    expect(layout.splits.center).toBeDefined();
+    expect(layout.placement["agent:2"]).toBeUndefined();
+    expect(layout.order["center:secondary"] ?? []).toEqual([]);
+    expect(layout.activePanel["center:secondary"]).toBeUndefined();
+    // The other half is untouched, and the emptied half stays the active sub-section
+    // (it still renders, as the empty-section state).
     expect(layout.placement["agent:1"]).toBe("center");
+    expect(layout.activePanel.center).toBe("agent:1");
+    expect(layout.activeSubSection).toBe("center:secondary");
   });
 
-  it("does not self-heal a split whose half holds a not-yet-loaded dynamic panel", () => {
+  it("moving the only panel out of a split half keeps the split with an empty half", () => {
     const store = storeWith({
-      placement: { files: "left", "agent:1": "left:secondary" },
-      order: { left: ["files"] }, // agent:1 placed but not yet ordered (mid-load)
-      splits: { left: { axis: "horizontal", ratio: 0.5 } },
-      expanded: { left: true },
+      placement: { "agent:1": "center", "agent:2": "center:secondary" },
+      order: { center: ["agent:1"], "center:secondary": ["agent:2"] },
+      splits: { center: { axis: "vertical", ratio: 0.5 } },
+      activePanel: { center: "agent:1", "center:secondary": "agent:2" },
     });
-    store.set(setActiveSectionAtom, { subSection: "left" });
+    store.set(movePanelAtom, { panelId: "agent:2", to: "center" });
     const layout = store.get(workspaceLayoutAtom);
-    expect(layout.splits.left).toBeDefined();
-    expect(layout.placement["agent:1"]).toBe("left:secondary");
+    expect(layout.splits.center).toBeDefined();
+    expect(layout.placement["agent:2"]).toBe("center");
+    expect(layout.order.center).toEqual(["agent:1", "agent:2"]);
+    expect(layout.order["center:secondary"]).toEqual([]);
+    expect(layout.activePanel["center:secondary"]).toBeUndefined();
+  });
+
+  it("closeSplit on a split with an empty secondary drops the split and keeps the primary sane", () => {
+    const store = storeWith({
+      placement: { "agent:1": "center" },
+      order: { center: ["agent:1"], "center:secondary": [] },
+      splits: { center: { axis: "vertical", ratio: 0.5 } },
+      activePanel: { center: "agent:1" },
+      activeSubSection: "center:secondary",
+    });
+    store.set(closeSplitAtom, { section: "center" });
+    const layout = store.get(workspaceLayoutAtom);
+    expect(layout.splits.center).toBeUndefined();
+    expect(layout.order.center).toEqual(["agent:1"]);
+    expect(layout.activePanel.center).toBe("agent:1");
+    expect(layout.activePanel["center:secondary"]).toBeUndefined();
+    expect(layout.activeSubSection).toBe("center");
+  });
+
+  it("an empty split half can still become the active sub-section", () => {
+    const store = storeWith({
+      placement: { "agent:1": "center" },
+      order: { center: ["agent:1"], "center:secondary": [] },
+      splits: { center: { axis: "vertical", ratio: 0.5 } },
+      activeSubSection: "center",
+    });
+    store.set(setActiveSectionAtom, { subSection: "center:secondary" });
+    expect(store.get(workspaceLayoutAtom).activeSubSection).toBe("center:secondary");
+  });
+
+  it("opening a panel into an empty split half lands it in that half", () => {
+    const store = storeWith({
+      placement: { "agent:1": "center" },
+      order: { center: ["agent:1"], "center:secondary": [] },
+      splits: { center: { axis: "vertical", ratio: 0.5 } },
+    });
+    store.set(openPanelAtom, { panelId: "notes", in: "center:secondary" });
+    const layout = store.get(workspaceLayoutAtom);
+    expect(layout.splits.center).toBeDefined();
+    expect(layout.placement.notes).toBe("center:secondary");
+    expect(layout.order["center:secondary"]).toEqual(["notes"]);
+    expect(layout.activePanel["center:secondary"]).toBe("notes");
   });
 
   it("closeSplit merges the secondary back into the primary preserving order", () => {
