@@ -348,7 +348,10 @@ def _feed_jsonl(processor: ClaudeOutputProcessor, jsonl_dicts: list[dict]) -> No
             processor._completed_pending_deferred.discard(result.task_id)
             if not processor._completed_pending_deferred:
                 processor._completed_pending_deferred_deadline = None
-            processor.found_final_message = False
+            if processor.found_final_message:
+                processor.found_final_message = False
+            else:
+                processor._awaiting_notification_turn_init = True
             processor.output_message_queue.put(
                 BackgroundTaskNotificationAgentMessage(
                     message_id=AgentMessageID(),
