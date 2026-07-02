@@ -4,6 +4,7 @@ from sculptor.agents.testing.fake_claude_jsonl import make_end_message
 from sculptor.state.chat_state import FileBlock
 from sculptor.state.chat_state import TextBlock
 from sculptor.state.claude_state import ParsedAssistantResponse
+from sculptor.state.claude_state import ParsedToolResultResponseSimple
 from sculptor.state.claude_state import _handle_stream_end_message
 from sculptor.state.claude_state import extract_media_tags_from_text
 from sculptor.state.claude_state import get_tool_invocation_string
@@ -376,6 +377,105 @@ def test_parse_assistant_message_extracts_video_tag_into_file_block() -> None:
     file_block = blocks[1]
     assert isinstance(file_block, FileBlock)
     assert file_block.source == "/workspace/attachments/screenshots/recording.webm"
+
+
+# ---------------------------------------------------------------------------
+# Crash-safety for unexpected-but-valid-JSON message shapes.
+#
+# These shapes are valid JSON with a layout the parser did not originally
+# expect. Each one used to raise out of the parser (TypeError / IndexError /
+# KeyError) and kill the whole agent turn. The parser must tolerate them.
+# ---------------------------------------------------------------------------
+
+
+def test_parse_assistant_message_string_content_becomes_text_block() -> None:
+    """An assistant message whose ``content`` is a bare string (a shape the CLI
+    has been observed to emit) must be wrapped as a single text block. Iterating
+    a string yields characters and indexing ``content["type"]`` raised TypeError.
+    """
+    data = {
+        "type": "assistant",
+        "message": {
+            "id": "msg_str",
+            "content": "just a plain string, not a list of blocks",
+        },
+    }
+    line = json.dumps(data)
+    result = parse_claude_code_json_lines_simple(line)
+    assert result is not None
+    message_type, parsed = result
+    assert message_type == "assistant"
+    assert isinstance(parsed, ParsedAssistantResponse)
+    assert parsed.content_blocks == [TextBlock(text="just a plain string, not a list of blocks")]
+
+
+def test_parse_assistant_message_skips_non_dict_content_items() -> None:
+    """Stray non-dict items in the content list must be skipped, not indexed
+    with ``content["type"]`` (which raised TypeError on e.g. a bare string).
+    The surrounding real blocks must still be parsed.
+    """
+    data = {
+        "type": "assistant",
+        "message": {
+            "id": "msg_mixed",
+            "content": [
+                "stray string that is not a block",
+                {"type": "text", "text": "real text block"},
+            ],
+        },
+    }
+    line = json.dumps(data)
+    result = parse_claude_code_json_lines_simple(line)
+    assert result is not None
+    message_type, parsed = result
+    assert message_type == "assistant"
+    assert isinstance(parsed, ParsedAssistantResponse)
+    assert parsed.content_blocks == [TextBlock(text="real text block")]
+
+
+def test_parse_user_message_empty_content_list_is_skipped() -> None:
+    """A user message with an empty content list must be skipped (parsed value
+    is None) instead of indexing ``content[0]`` (which raised IndexError).
+    """
+    data = {
+        "type": "user",
+        "message": {"role": "user", "content": []},
+    }
+    line = json.dumps(data)
+    result = parse_claude_code_json_lines_simple(line)
+    assert result is not None
+    message_type, parsed = result
+    assert message_type == "user"
+    assert parsed is None
+
+
+def test_parse_tool_result_missing_content_does_not_crash() -> None:
+    """``content`` is optional on tool_result blocks in the Anthropic format;
+    its absence must not raise KeyError. The block should still parse, with the
+    tool_use_id preserved and the missing content rendered as empty text.
+    """
+    data = {
+        "type": "user",
+        "message": {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_missing_content",
+                    "is_error": False,
+                }
+            ],
+        },
+    }
+    line = json.dumps(data)
+    result = parse_claude_code_json_lines_simple(line)
+    assert result is not None
+    message_type, parsed = result
+    assert message_type == "user"
+    assert isinstance(parsed, ParsedToolResultResponseSimple)
+    (block,) = parsed.content_blocks
+    assert block.tool_use_id == "toolu_missing_content"
+    assert block.content.text == ""
 
 
 def test_get_tool_invocation_string_skill_returns_skill_name() -> None:

@@ -30,6 +30,7 @@ from sculptor.interfaces.agents.agent import BackgroundTaskNotificationAgentMess
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
+from sculptor.interfaces.agents.agent import WarningAgentMessage
 from sculptor.interfaces.agents.errors import AgentClientError
 from sculptor.interfaces.agents.errors import AgentTransientError
 from sculptor.primitives.ids import AgentMessageID
@@ -1354,6 +1355,62 @@ class TestSubagentInterleavedTurnIds:
 
         expected_tools = {agent_tool, sub_tool, sub_tool_2, main_tool_2, main_tool_3}
         assert expected_tools <= visible_tool_ids, "agent tool calls went missing from the chat"
+
+
+class TestParserExceptionContainment:
+    """A parser exception on one line must not kill the whole turn.
+
+    A line that is valid JSON but has a shape the parser cannot handle used to
+    raise (TypeError/KeyError/IndexError) straight out of the worker thread,
+    ending the whole turn. The output loop must instead contain it as a
+    WarningAgentMessage and keep processing subsequent lines, so an unexpected
+    message shape degrades to a visible warning rather than an aborted turn.
+    """
+
+    def test_parser_exception_becomes_warning_and_loop_continues(self) -> None:
+        input_queue: Queue = Queue()
+        # A valid-JSON assistant message missing its ``message`` key: the parser
+        # raises KeyError on ``data["message"]``. The parser deliberately does
+        # not normalize this shape, so it stands in for the next unknown shape.
+        malformed = {"type": "assistant"}
+        # A well-formed line AFTER the crash whose handling emits an
+        # identifiable message, proving the loop kept going.
+        recovery = make_task_notification_message(
+            task_id="bg_after_crash", tool_use_id="toolu_after_crash", status="completed"
+        )
+        for d in [make_init_message(session_id="s1"), malformed, recovery, _make_minimal_end_message("s1")]:
+            input_queue.put((json.dumps(d), True))
+
+        mock_process = MagicMock()
+        mock_process.get_queue.return_value = input_queue
+        mock_process.is_finished.return_value = True
+
+        processor = ClaudeOutputProcessor(
+            process=mock_process,
+            source_command="test",
+            output_message_queue=Queue(),
+            environment=MagicMock(),
+            diff_tracker=None,
+            task_id=TaskID(),
+            session_id_written_event=Event(),
+            harness=CLAUDE_CODE_HARNESS,
+            streaming_enabled=True,
+        )
+
+        # Before the fix the KeyError propagates out of the loop; after it, the
+        # loop finishes normally.
+        processor._process_output()
+
+        messages = _drain_queue(processor.output_message_queue)
+        warnings = [m for m in messages if isinstance(m, WarningAgentMessage)]
+        assert len(warnings) == 1, f"expected exactly one containment warning, got {messages!r}"
+
+        # The line after the crash was still processed → the loop did not die.
+        notifications = [m for m in messages if isinstance(m, BackgroundTaskNotificationAgentMessage)]
+        assert len(notifications) == 1
+        assert notifications[0].background_task_id == "bg_after_crash"
+        # And the turn still reached its terminating result frame.
+        assert processor.found_final_message
 
 
 def _collect_text(messages: Iterable) -> str:
