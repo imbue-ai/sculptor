@@ -1248,6 +1248,84 @@ def handle_background_task_notification(args: dict, emit_streaming: bool) -> lis
     return messages
 
 
+def handle_notification_turn_then_response(args: dict, emit_streaming: bool) -> list[dict]:
+    """Emit a task-notification turn *followed by* the user's own message turn.
+
+    Reproduces SCU-1660: a Monitor background task completes just as a new user
+    prompt is dispatched, so the CLI delivers the pending ``<task-notification>``
+    as its own turn (init -> assistant -> result) BEFORE processing the user's
+    message. Everything below sits inside a single FakeClaude invocation (one
+    CLI process), between the process's own opening ``init`` and the closing
+    ``end`` that ``fake_claude.main()`` appends — that closing ``end`` is the
+    user turn's result.
+
+    Frame order returned by this handler:
+      1. system/task_notification (the Monitor completion, delivered first)
+      2. notification turn: init -> assistant(ack) -> result
+      3. user turn: init -> assistant(text) -> assistant(Bash tool_use) ->
+         tool_result -> assistant(continuation)
+
+    The notification turn's ``result`` is the trap: if the output processor
+    treats it as terminal, the loop exits and the CLI is torn down before the
+    user turn's frames are processed, silently abandoning the request after its
+    first tool result.
+
+    Args:
+        args: Optional "task_id", "tool_use_id", "summary", "ack_text",
+              "user_pre_text", "user_tool_command", "user_post_text".
+    """
+    task_id = args.get("task_id", "task_monitor_1")
+    tool_use_id = args.get("tool_use_id", generate_id("toolu"))
+    summary = args.get("summary", "Background task completed")
+    ack_text = args.get("ack_text", "This is just the stale Monitor task being cleaned up.")
+    user_pre_text = args.get("user_pre_text", "I'll fetch the latest state of that branch.")
+    user_tool_command = args.get("user_tool_command", "git fetch origin")
+    user_post_text = args.get("user_post_text", "Done — merged and repushed.")
+
+    session_id = generate_id("session")
+    user_tool_id = generate_id("toolu")
+    messages: list[dict] = []
+
+    # 1. The completed Monitor task's notification, delivered ahead of the user turn.
+    messages.append(
+        make_task_notification_message(
+            task_id=task_id,
+            tool_use_id=tool_use_id,
+            status="completed",
+            summary=summary,
+        )
+    )
+
+    # 2. Notification turn: init -> assistant(ack) -> result.
+    messages.append(make_init_message(session_id=session_id))
+    ack_msg_id = generate_id("msg")
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=ack_msg_id, text=ack_text))
+    messages.append(make_assistant_message(message_id=ack_msg_id, content_blocks=[make_text_block(ack_text)]))
+    messages.append(make_end_message(session_id=session_id))
+
+    # 3. User turn: init -> text -> Bash tool_use -> tool_result -> continuation.
+    messages.append(make_init_message(session_id=session_id))
+    pre_msg_id = generate_id("msg")
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=pre_msg_id, text=user_pre_text))
+    messages.append(make_assistant_message(message_id=pre_msg_id, content_blocks=[make_text_block(user_pre_text)]))
+
+    tool_block = make_tool_use_block(tool_id=user_tool_id, tool_name="Bash", tool_input={"command": user_tool_command})
+    tool_msg_id = generate_id("msg")
+    if emit_streaming:
+        messages.extend(make_streaming_tool_events(message_id=tool_msg_id, tool_blocks=[tool_block]))
+    messages.append(make_assistant_message(message_id=tool_msg_id, content_blocks=[tool_block]))
+    messages.append(make_tool_result_message(tool_use_id=user_tool_id, content="Fetched new commits."))
+
+    post_msg_id = generate_id("msg")
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=post_msg_id, text=user_post_text))
+    messages.append(make_assistant_message(message_id=post_msg_id, content_blocks=[make_text_block(user_post_text)]))
+
+    return messages
+
+
 def handle_subagent(args: dict, emit_streaming: bool) -> list[dict]:
     """Simulate a subagent (Agent tool) call.
 
@@ -2247,6 +2325,7 @@ COMMAND_REGISTRY: dict[str, Callable[..., list[dict]]] = {
     "background_task_started": handle_background_task_started,
     "background_task_notification": handle_background_task_notification,
     "emit_task_notification": handle_emit_task_notification,
+    "notification_turn_then_response": handle_notification_turn_then_response,
     "auto_bg_bash": handle_auto_bg_bash,
     "multi_step": handle_multi_step,
     "parallel_tools": handle_parallel_tools,

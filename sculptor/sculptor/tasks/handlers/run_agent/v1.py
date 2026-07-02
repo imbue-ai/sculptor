@@ -236,6 +236,10 @@ def run_agent_task_v1(
                         input_message_queue, task_state, shutdown_event
                     )
 
+                    # A pre-first-message model switch is written to task state out of band
+                    # from this in-memory copy; re-read so the selection is not lost here.
+                    task_state = _refresh_model_fields_from_db(task.object_id, task_state, services)
+
                     with title_prediction_context(
                         task_state,
                         initial_message,
@@ -1144,6 +1148,32 @@ def _record_available_models_in_state(
         task_state=task_state,
         services=services,
     )
+
+
+def _refresh_model_fields_from_db(
+    task_id: TaskID,
+    task_state: AgentTaskStateV2,
+    services: ServiceCollectionForTask,
+) -> AgentTaskStateV2:
+    """Pull the switcher's model fields (`available_models` / `current_model`) from the DB.
+
+    The set_model endpoint writes the selected model straight to task state while the
+    agent waits for its first message, so this handler's in-memory copy goes stale.
+    Refresh only those two fields (leaving the rest of the in-memory state as-is) so a
+    pre-message switch reaches agent construction and survives `finalize_task_setup`'s
+    write-back. A no-op when nothing changed or the task row is missing.
+    """
+    with services.data_model_service.open_task_transaction() as transaction:
+        task_row = transaction.get_task(task_id)
+    if task_row is None:
+        return task_state
+    db_state = AgentTaskStateV2.model_validate(task_row.current_state)
+    if db_state.available_models == task_state.available_models and db_state.current_model == task_state.current_model:
+        return task_state
+    mutable_task_state = evolver(task_state)
+    assign(mutable_task_state.available_models, lambda: db_state.available_models)
+    assign(mutable_task_state.current_model, lambda: db_state.current_model)
+    return chill(mutable_task_state)
 
 
 def _persist_available_models(
