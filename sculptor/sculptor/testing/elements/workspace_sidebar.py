@@ -7,7 +7,7 @@ from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 
 
 class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
-    """Page Object Model for the workspace navigation sidebar (SIDE-*).
+    """Page Object Model for the workspace navigation sidebar.
 
     The sidebar is the global chrome rail that replaces the old top bar + tab
     strip: top links (Home / Cmd+K / New workspace), repos as collapsible groups
@@ -104,15 +104,6 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
 
     def get_context_menu_rename(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_RENAME)
-
-    def get_context_menu_close(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_CLOSE)
-
-    def get_context_menu_close_others(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_CLOSE_OTHERS)
-
-    def get_context_menu_close_all(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_CLOSE_ALL)
 
     def get_context_menu_delete(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_DELETE)

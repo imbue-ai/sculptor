@@ -45,9 +45,6 @@ class PlaywrightDiffPanelElement(PlaywrightIntegrationTestElement):
     def get_line_wrap_toggle(self) -> Locator:
         return self.get_by_test_id(ElementIDs.DIFF_LINE_WRAP_TOGGLE)
 
-    def get_close_panel_button(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.DIFF_CLOSE_PANEL_BUTTON)
-
     def get_render_toggle(self) -> Locator:
         return self.get_by_test_id(ElementIDs.DIFF_RENDER_TOGGLE)
 

@@ -23,7 +23,6 @@ import {
   isEntityMentionsEnabledAtom,
   isFrontendPluginsEnabledAtom,
   isInPlaceWorkspacesEnabledAtom,
-  isPanelLayoutPerWorkspaceAtom,
   isPiAgentEnabledAtom,
   isRichMarkdownRenderingEnabledAtom,
   isSmoothStreamingUserPreferenceAtom,
@@ -98,7 +97,6 @@ export const SettingsPage = (): ReactElement => {
   const isEntityMentionsEnabled = useAtomValue(isEntityMentionsEnabledAtom);
   const isRichMarkdownRenderingEnabled = useAtomValue(isRichMarkdownRenderingEnabledAtom);
   const isSmoothStreamingEnabled = useAtomValue(isSmoothStreamingUserPreferenceAtom);
-  const isPanelLayoutPerWorkspace = useAtomValue(isPanelLayoutPerWorkspaceAtom);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
   const autoUpdateStatus = useAtomValue(autoUpdateStatusAtom);
@@ -421,17 +419,6 @@ export const SettingsPage = (): ReactElement => {
                       checked={isSmoothStreamingEnabled}
                       onCheckedChange={(checked) =>
                         handleSettingChange(UserConfigField.IS_SMOOTH_STREAMING_ENABLED, checked)
-                      }
-                    />
-                  </SettingRow>
-                  <SettingRow
-                    title="Per-workspace panel layout"
-                    description="Panel visibility and sizes are local to each workspace. Panel positions are still shared."
-                  >
-                    <Switch
-                      checked={isPanelLayoutPerWorkspace}
-                      onCheckedChange={(checked) =>
-                        handleSettingChange(UserConfigField.IS_PANEL_LAYOUT_PER_WORKSPACE, checked)
                       }
                     />
                   </SettingRow>

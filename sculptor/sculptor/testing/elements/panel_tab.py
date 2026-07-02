@@ -4,7 +4,7 @@ of FCC's shared viewer POMs).
 Agents and terminals render as panel tabs in a section header
 (``PANEL_TAB-agent:<taskId>`` / ``PANEL_TAB-terminal:<wsId>:<n>``), created from the
 same section ``+`` add-panel dropdown. This POM consolidates the tab-model affordances
-that used to live in ``agent_tab.py`` and the tab half of ``terminal.py``:
+shared by agent and terminal tabs:
 rename (double-click or context menu), close (→ delete/close confirmation),
 diagnostics copy actions, the ``data-dot-status`` reader, and the close button.
 
@@ -67,6 +67,14 @@ class PlaywrightPanelTabElement:
         """Get a panel tab's always-visible close (X) button by panel id."""
         return self._page.get_by_test_id(f"{ElementIDs.PANEL_TAB_CLOSE}-{panel_id}")
 
+    def get_tab_close_button_of(self, tab: Locator) -> Locator:
+        """Get the close (X) button scoped under a tab locator.
+
+        For callers holding a positional/by-name tab locator without its panel id
+        (the testid is panel-id-suffixed, so a prefix match is required).
+        """
+        return tab.locator(f'[data-testid^="{ElementIDs.PANEL_TAB_CLOSE}-"]')
+
     def get_delete_confirmation_dialog(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)
 
@@ -79,8 +87,8 @@ class PlaywrightPanelTabElement:
     def delete_panel_via_close_button(self, panel_id: str) -> None:
         """Click a panel tab's close button and confirm in the delete/close dialog.
 
-        Mirrors today's ``delete_agent_via_close_button`` but keyed by panel id and
-        usable for both agent (delete) and terminal (close) confirmations.
+        Keyed by panel id and usable for both agent (delete) and terminal (close)
+        confirmations.
         """
         tab = self.get_panel_tab(panel_id)
         tab.click()
@@ -99,12 +107,6 @@ class PlaywrightPanelTabElement:
 
     def get_context_menu_rename_item(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_RENAME)
-
-    def get_context_menu_close_item(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_CLOSE)
-
-    def get_context_menu_close_others_item(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_CLOSE_OTHERS)
 
     def get_context_menu_mark_unread_item(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_MARK_UNREAD)

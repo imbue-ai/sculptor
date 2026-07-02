@@ -80,16 +80,6 @@ class PiConfig(SerializableModel):
     api_key_env_var_names: tuple[str, ...] = ("ANTHROPIC_API_KEY",)
 
 
-class PanelLayoutConfig(SerializableModel):
-    """Panel layout preferences for the workspace page."""
-
-    zone_assignments: dict[str, str] = Field(default_factory=dict)
-    active_panel_per_zone: dict[str, str] = Field(default_factory=dict)
-    zone_visibility: dict[str, bool] = Field(default_factory=dict)
-    zone_sizes: dict[str, float] = Field(default_factory=dict)
-    zone_order: dict[str, list[str]] = Field(default_factory=dict)
-
-
 class BabysitterAgentMRU(SerializableModel):
     """Inherit the workspace's most-recently-used agent type (the default)."""
 
@@ -196,10 +186,6 @@ class UserConfig(SerializableModel):
         default=2.0,
         description="The minimum free disk space before Sculptor will stop allowing new tasks and messages",
     )
-    panel_layout: PanelLayoutConfig | None = Field(
-        default=None,
-        description="Panel layout preferences for the workspace page",
-    )
     custom_actions: CustomActionsConfig | None = Field(
         default=None,
         description="Custom action buttons configuration",
@@ -223,14 +209,6 @@ class UserConfig(SerializableModel):
     pr_default_target_branch: str = Field(
         default="origin/main",
         description="Default target branch for new workspaces",
-    )
-    file_browser_default_split_ratio: int = Field(
-        default=50,
-        description="Default split ratio (percentage for diff panel) when the diff panel opens",
-    )
-    file_browser_tab_close_behavior: str = Field(
-        default="mru",
-        description="Which tab becomes active after closing: 'mru' (most recently used) or 'adjacent'",
     )
     file_browser_line_wrapping: str = Field(
         default="wrap",
@@ -267,10 +245,6 @@ class UserConfig(SerializableModel):
     is_smooth_streaming_enabled: bool = Field(
         default=True,
         description="Whether to enable smooth text streaming animation in the chat",
-    )
-    is_panel_layout_per_workspace: bool = Field(
-        default=False,
-        description="When enabled, panel visibility and sizes are local to each workspace instead of shared",
     )
     enable_in_place_workspaces: bool = Field(
         default=False,

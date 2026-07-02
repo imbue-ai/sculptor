@@ -1,7 +1,6 @@
-import { Flex, Select, Text, TextField } from "@radix-ui/themes";
+import { Select } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
-import { useEffect, useState } from "react";
 
 import { UserConfigField } from "~/api";
 import {
@@ -9,76 +8,23 @@ import {
   DEFAULT_COMMIT_PROMPT,
   fileBrowserDiffViewTypeAtom,
   fileBrowserLineWrappingAtom,
-  fileBrowserSplitRatioAtom,
-  fileBrowserTabCloseBehaviorAtom,
 } from "~/common/state/atoms/userConfig.ts";
 
 import { SettingRow } from "./SettingRow.tsx";
 import { SettingsSectionLayout } from "./SettingsSection.tsx";
 import { TextAreaSettingRow } from "./TextAreaSettingRow.tsx";
 
-const MIN_SPLIT_RATIO = 20;
-const MAX_SPLIT_RATIO = 80;
-const SPLIT_RATIO_STEP = 5;
-
 type FileBrowserSettingsSectionProps = {
   onSettingChange: (field: UserConfigField, value: unknown) => Promise<void>;
 };
 
 export const FileBrowserSettingsSection = ({ onSettingChange }: FileBrowserSettingsSectionProps): ReactElement => {
-  const splitRatio = useAtomValue(fileBrowserSplitRatioAtom);
-  const tabCloseBehavior = useAtomValue(fileBrowserTabCloseBehaviorAtom);
   const lineWrapping = useAtomValue(fileBrowserLineWrappingAtom);
   const diffViewType = useAtomValue(fileBrowserDiffViewTypeAtom);
   const commitPrompt = useAtomValue(commitPromptAtom);
 
-  const [splitRatioValue, setSplitRatioValue] = useState(String(splitRatio));
-
-  useEffect(() => setSplitRatioValue(String(splitRatio)), [splitRatio]);
-
-  const handleSplitRatioBlur = (): void => {
-    const parsed = parseInt(splitRatioValue, 10);
-    if (isNaN(parsed) || parsed < MIN_SPLIT_RATIO || parsed > MAX_SPLIT_RATIO) {
-      setSplitRatioValue(String(splitRatio));
-      return;
-    }
-
-    if (parsed !== splitRatio) {
-      onSettingChange(UserConfigField.FILE_BROWSER_DEFAULT_SPLIT_RATIO, parsed);
-    }
-  };
-
   return (
     <SettingsSectionLayout description="Customize how files and diffs are displayed.">
-      <SettingRow title="Default split ratio" description="Controls the initial width ratio when the diff panel opens">
-        <Flex align="center" gap="2">
-          <TextField.Root
-            type="number"
-            min={MIN_SPLIT_RATIO}
-            max={MAX_SPLIT_RATIO}
-            step={SPLIT_RATIO_STEP}
-            value={splitRatioValue}
-            onChange={(e) => setSplitRatioValue(e.target.value)}
-            onBlur={handleSplitRatioBlur}
-            style={{ width: 80 }}
-          />
-          <Text size="2">%</Text>
-        </Flex>
-      </SettingRow>
-
-      <SettingRow title="Tab close behavior" description="Which tab becomes active after closing the current tab">
-        <Select.Root
-          value={tabCloseBehavior}
-          onValueChange={(value) => onSettingChange(UserConfigField.FILE_BROWSER_TAB_CLOSE_BEHAVIOR, value)}
-        >
-          <Select.Trigger variant="soft" />
-          <Select.Content>
-            <Select.Item value="mru">Most recently used</Select.Item>
-            <Select.Item value="adjacent">Adjacent (right, then left)</Select.Item>
-          </Select.Content>
-        </Select.Root>
-      </SettingRow>
-
       <SettingRow title="Line wrapping" description="How long lines are displayed in the diff view">
         <Select.Root
           value={lineWrapping}

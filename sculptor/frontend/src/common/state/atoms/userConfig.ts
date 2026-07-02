@@ -146,12 +146,6 @@ export const ciBabysitterAgentAtom = atom<NonNullable<CiBabysitterConfig["agent"
 );
 
 // File browser settings
-export const fileBrowserSplitRatioAtom = atom<number>((get) => get(userConfigAtom)?.fileBrowserDefaultSplitRatio ?? 50);
-
-export const fileBrowserTabCloseBehaviorAtom = atom<"mru" | "adjacent">(
-  (get) => (get(userConfigAtom)?.fileBrowserTabCloseBehavior as "mru" | "adjacent") ?? "mru",
-);
-
 export const fileBrowserLineWrappingAtom = atom<"wrap" | "scroll">(
   (get) => (get(userConfigAtom)?.fileBrowserLineWrapping as "wrap" | "scroll") ?? "wrap",
 );
@@ -172,11 +166,6 @@ export const envVarOverrideEnabledAtom = atom<boolean>((get) => get(userConfigAt
 // Smooth streaming preference
 export const isSmoothStreamingUserPreferenceAtom = atom<boolean>(
   (get) => (get(userConfigAtom)?.isSmoothStreamingEnabled as boolean | undefined) ?? true,
-);
-
-// Per-workspace panel layout
-export const isPanelLayoutPerWorkspaceAtom = atom<boolean>(
-  (get) => get(userConfigAtom)?.isPanelLayoutPerWorkspace ?? false,
 );
 
 // In-place workspaces (opt-in — off by default)

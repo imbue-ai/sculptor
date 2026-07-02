@@ -342,10 +342,6 @@ def confirm_close_terminal(page: Page) -> None:
     confirm_button.click()
 
 
-def get_tab_context_menu_close_others(page: Page) -> Locator:
-    return page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_CLOSE_OTHERS)
-
-
 def get_tab_context_menu_rename(page: Page) -> Locator:
     return page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_RENAME)
 
