@@ -563,14 +563,24 @@ class ClaudeOutputProcessor:
                     self.tool_use_map,
                     self.diff_tracker,
                 )
-            except json.JSONDecodeError as e:
-                # Non-JSON lines can appear when the Anthropic API returns
-                # malformed data or the CLI emits unexpected debug output.
-                # Rather than crashing the agent, skip the bad line and surface
-                # a warning so the user knows something went wrong.
+            except Exception as e:
+                # Two failure modes are contained here so one bad line degrades
+                # to a visible warning instead of killing the whole turn (an
+                # uncaught exception here escapes the worker thread and ends the
+                # turn):
+                #   - JSONDecodeError: the line is not valid JSON (the Anthropic
+                #     API returned malformed data or the CLI emitted debug output).
+                #   - anything else (TypeError/KeyError/IndexError/...): the line
+                #     is valid JSON but has a message shape the parser cannot
+                #     handle. Layer 1 handles the known shapes; this is the
+                #     backstop for the next unknown one.
                 truncated_line = line[:200] + ("..." if len(line) > 200 else "")
+                if isinstance(e, json.JSONDecodeError):
+                    detail = "non-JSON line"
+                else:
+                    detail = "unexpected message shape"
                 warning = get_warning_message(
-                    message=f"Received malformed output from Claude CLI (non-JSON line): {truncated_line}",
+                    message=f"Received malformed output from Claude CLI ({detail}): {truncated_line}",
                     error=e,
                     task_id=self.task_id,
                 )
