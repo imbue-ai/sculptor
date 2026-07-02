@@ -35,6 +35,7 @@ import {
   lastWorkspaceCreationSettingsAtom,
 } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { RepoSelector } from "~/components/RepoSelector.tsx";
+import { resolveStoredAgentType } from "~/components/sections/addPanelCore.ts";
 import { Toast, type ToastContent, ToastType } from "~/components/Toast.tsx";
 import { getMetaKey, isModifierPressed } from "~/electron/utils.ts";
 
@@ -103,8 +104,9 @@ export const NewWorkspaceForm = ({
   );
   const [agentTypeValue, setAgentTypeValue] = useState<StoredAgentType>(() => {
     const seed = lastSettings?.agentType ?? lastUsedAgentType;
-    // A stored "pi" is unusable when pi-agent is off — fall back to Claude.
-    return seed === "pi" && !isPiAgentEnabled ? "claude" : seed;
+    // The shared pi-disabled fallback. A bare "terminal" stays: it is a
+    // legitimate first-agent choice here.
+    return resolveStoredAgentType(seed, isPiAgentEnabled);
   });
   const [userSelectedBranch, setUserSelectedBranch] = useState<string | undefined>(() => lastSettings?.sourceBranch);
   // `null` means "use the auto-filled preview"; any string means the user has

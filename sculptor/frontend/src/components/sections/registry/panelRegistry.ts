@@ -7,13 +7,12 @@
 // gone.
 
 import { atom } from "jotai";
-import { selectAtom } from "jotai/utils";
+import { atomFamily, selectAtom } from "jotai/utils";
 import type { LucideIcon } from "lucide-react";
 import { FileText, GitBranch, GitCommitVertical, Globe, ListChecks, NotebookPen, Sparkles, Zap } from "lucide-react";
 import type { ComponentType } from "react";
 
 import type { AgentDotStatus } from "../../statusDot/statusUtils.ts";
-import { memoizedAtomByKey } from "../atomCache.ts";
 import { activePanelIdInSubSectionAtom } from "../sectionAtoms.ts";
 import type { PanelId, SubSectionId } from "../sectionTypes.ts";
 
@@ -163,10 +162,14 @@ export function panelRegistriesEqual(a: ReadonlyArray<PanelDefinition>, b: Reado
 // Tabs subscribe to this rather than the whole registry so a registry rebuild on a
 // task tick (which produces a new array but the same per-id definition) does not
 // re-render every tab — only the tab whose own definition changed.
-export const panelDefinitionByIdAtom = memoizedAtomByKey<PanelId, PanelDefinition | undefined>((panelId) =>
+//
+// The family is keyed by panel id, which for agents/terminals is unbounded across a
+// session, so the dynamic-panel eviction (deriveDynamicPanels) removes an entry once
+// its task/terminal is gone — alongside its cached component.
+export const panelDefinitionByIdAtom = atomFamily((panelId: PanelId) =>
   selectAtom(
     panelRegistryAtom,
-    (registry) => registry.find((definition) => definition.id === panelId),
+    (registry): PanelDefinition | undefined => registry.find((definition) => definition.id === panelId),
     panelDefinitionEqual,
   ),
 );
@@ -175,13 +178,12 @@ export const panelDefinitionByIdAtom = memoizedAtomByKey<PanelId, PanelDefinitio
 // sub-section's active panel. Returns a stable reference per panel id (static
 // component or identity-cached dynamic component), so a registry rebuild on a task
 // tick never remounts live panel content.
-export const activePanelComponentInSubSectionAtom = memoizedAtomByKey<SubSectionId, ComponentType | undefined>(
-  (subSection) =>
-    atom((get) => {
-      const activePanelId = get(activePanelIdInSubSectionAtom(subSection));
-      if (activePanelId === undefined) {
-        return undefined;
-      }
-      return get(panelRegistryAtom).find((definition) => definition.id === activePanelId)?.component;
-    }),
+export const activePanelComponentInSubSectionAtom = atomFamily((subSection: SubSectionId) =>
+  atom((get): ComponentType | undefined => {
+    const activePanelId = get(activePanelIdInSubSectionAtom(subSection));
+    if (activePanelId === undefined) {
+      return undefined;
+    }
+    return get(panelRegistryAtom).find((definition) => definition.id === activePanelId)?.component;
+  }),
 );

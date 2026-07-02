@@ -5,20 +5,21 @@
 // reads the active workspace through the `workspaceLayoutAtom` proxy, which resolves
 // the active scope on every read/write so switching workspaces is a single write to
 // `activeWorkspaceIdAtom`. Components subscribe to the narrow, per-key read slices
-// below — each memoized into a module-load Map so the same atom instance is reused
-// per key (a fresh derived atom per render causes Jotai re-render loops).
+// below — each an atomFamily so the same atom instance is reused per key (a fresh
+// derived atom per render causes Jotai re-render loops).
 
 import type { Atom, WritableAtom } from "jotai";
 import { atom } from "jotai";
 import { atomFamily, selectAtom } from "jotai/utils";
 
-import { memoizedAtomByKey, shallowArrayEqual } from "./atomCache.ts";
+import { isSectionExpanded, openPanelsInSubSection } from "./layoutQueries.ts";
 import { layoutPersistenceAdapter } from "./persistence/LocalStorageLayoutAdapter.ts";
 import type { GlobalLayoutState, WorkspaceLayoutState } from "./persistence/types.ts";
 import { DEFAULT_GLOBAL_LAYOUT, EMPTY_WORKSPACE_LAYOUT } from "./persistence/types.ts";
 import { SECTION_SIZE_MAX_PERCENT, SECTION_SIZE_MIN_PERCENT } from "./sectionGeometry.ts";
 import type { PanelId, SectionId, SectionSplit, SubSectionId } from "./sectionTypes.ts";
 import { toSection } from "./sectionTypes.ts";
+import { shallowArrayEqual } from "./shallowArrayEqual.ts";
 
 type WorkspaceLayoutUpdater = WorkspaceLayoutState | ((prev: WorkspaceLayoutState) => WorkspaceLayoutState);
 type GlobalLayoutUpdater = GlobalLayoutState | ((prev: GlobalLayoutState) => GlobalLayoutState);
@@ -85,28 +86,14 @@ export const globalLayoutAtom: WritableAtom<GlobalLayoutState, [GlobalLayoutUpda
   },
 );
 
-// ── Narrow read slices (per-key, memoized) ────────────────────────────────────
+// ── Narrow read slices (per-key atom families) ────────────────────────────────
 
-// Open panels in a sub-section, ordered. A panel's presence in `placement` is its
-// "open" state; `order` gives the tab order. Any placed-but-unordered panel is
-// appended so the slice never drops an open panel.
-function openPanelsInSubSection(layout: WorkspaceLayoutState, subSection: SubSectionId): ReadonlyArray<PanelId> {
-  const placedHere = (Object.keys(layout.placement) as ReadonlyArray<PanelId>).filter(
-    (panelId) => layout.placement[panelId] === subSection,
-  );
-  const placedSet = new Set(placedHere);
-  const ordered = (layout.order[subSection] ?? []).filter((panelId) => placedSet.has(panelId));
-  const orderedSet = new Set(ordered);
-  const rest = placedHere.filter((panelId) => !orderedSet.has(panelId));
-  return [...ordered, ...rest];
-}
-
-export const panelsInSubSectionAtom = memoizedAtomByKey<SubSectionId, ReadonlyArray<PanelId>>((subSection) =>
+export const panelsInSubSectionAtom = atomFamily((subSection: SubSectionId) =>
   selectAtom(workspaceLayoutAtom, (layout) => openPanelsInSubSection(layout, subSection), shallowArrayEqual),
 );
 
-export const activePanelIdInSubSectionAtom = memoizedAtomByKey<SubSectionId, PanelId | undefined>((subSection) =>
-  selectAtom(workspaceLayoutAtom, (layout) => {
+export const activePanelIdInSubSectionAtom = atomFamily((subSection: SubSectionId) =>
+  selectAtom(workspaceLayoutAtom, (layout): PanelId | undefined => {
     const open = openPanelsInSubSection(layout, subSection);
     const stored = layout.activePanel[subSection];
     if (stored !== undefined && open.includes(stored)) {
@@ -116,16 +103,15 @@ export const activePanelIdInSubSectionAtom = memoizedAtomByKey<SubSectionId, Pan
   }),
 );
 
-export const isSectionExpandedAtom = memoizedAtomByKey<SectionId, boolean>((section) =>
-  // Center is always expanded and is never in the collapsed set.
-  selectAtom(workspaceLayoutAtom, (layout) => (section === "center" ? true : (layout.expanded[section] ?? false))),
+export const isSectionExpandedAtom = atomFamily((section: SectionId) =>
+  selectAtom(workspaceLayoutAtom, (layout) => isSectionExpanded(layout, section)),
 );
 
-export const sectionSplitForSectionAtom = memoizedAtomByKey<SectionId, SectionSplit | undefined>((section) =>
-  selectAtom(workspaceLayoutAtom, (layout) => layout.splits[section]),
+export const sectionSplitForSectionAtom = atomFamily((section: SectionId) =>
+  selectAtom(workspaceLayoutAtom, (layout): SectionSplit | undefined => layout.splits[section]),
 );
 
-export const isSplitHalfAtom = memoizedAtomByKey<SubSectionId, boolean>((subSection) =>
+export const isSplitHalfAtom = atomFamily((subSection: SubSectionId) =>
   selectAtom(workspaceLayoutAtom, (layout) => layout.splits[toSection(subSection)] !== undefined),
 );
 
@@ -134,7 +120,7 @@ export const activeSubSectionAtom: Atom<SubSectionId | null> = selectAtom(
   (layout) => layout.activeSubSection,
 );
 
-export const isActiveSubSectionAtom = memoizedAtomByKey<SubSectionId, boolean>((subSection) =>
+export const isActiveSubSectionAtom = atomFamily((subSection: SubSectionId) =>
   selectAtom(workspaceLayoutAtom, (layout) => layout.activeSubSection === subSection),
 );
 

@@ -10,6 +10,7 @@ import {
   lastWorkspaceCreationSettingsAtom,
   newWorkspaceModalAtom,
 } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
+import { resolveStoredAgentType } from "~/components/sections/addPanelCore.ts";
 
 type UseCreateWorkspaceFromSidebarReturn = {
   /** True while a direct-create is in flight. */
@@ -51,10 +52,9 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
     }
 
     const mode = lastSettings.initStrategy;
-    // A stored "pi" is unusable when pi-agent is off — fall back to Claude,
-    // mirroring the dialog's seeding.
-    const agentType: StoredAgentType =
-      lastSettings.agentType === "pi" && !isPiAgentEnabled ? "claude" : lastSettings.agentType;
+    // The shared pi-disabled fallback, mirroring the dialog's seeding. A bare
+    // "terminal" stays: it is a legitimate first-agent choice here.
+    const agentType: StoredAgentType = resolveStoredAgentType(lastSettings.agentType, isPiAgentEnabled);
 
     // In-place reuses the current branch, so it never needs an auto-generated
     // branch name. Worktree/clone do — generate a fresh unique one (a blank

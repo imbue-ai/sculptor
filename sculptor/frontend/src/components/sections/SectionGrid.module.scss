@@ -25,13 +25,13 @@
   overflow: hidden;
 }
 
+// The center's min-width comes from CENTER_MIN_WIDTH_PX (sectionGeometry.ts),
+// applied inline by SectionGrid so the geometry math and the CSS floor cannot drift.
 .center {
   display: flex;
   flex: 1 1 0;
   flex-direction: column;
   height: 100%;
-  // stylelint-disable-next-line sculptor/no-hardcoded-values -- matches CENTER_MIN_WIDTH_PX in sectionGeometry.ts
-  min-width: 400px;
   overflow: hidden;
 }
 

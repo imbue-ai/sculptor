@@ -8,9 +8,9 @@ import type { Atom, PrimitiveAtom, SetStateAction, WritableAtom } from "jotai";
 import { atom } from "jotai";
 import { atomFamily, selectAtom } from "jotai/utils";
 
-import { memoizedAtomByKey, shallowArrayEqual } from "./atomCache.ts";
 import { activeWorkspaceIdAtom, isActiveSubSectionAtom, panelsInSubSectionAtom } from "./sectionAtoms.ts";
 import type { PanelId, SectionId, SubSectionId } from "./sectionTypes.ts";
+import { shallowArrayEqual } from "./shallowArrayEqual.ts";
 
 // ── Maximized section ─────────────────────────────────────────────────────────
 
@@ -49,7 +49,7 @@ export const panelDragStateAtom: PrimitiveAtom<PanelDragState | null> = atom<Pan
 // insertion index moves. PanelDndProvider subscribes to this.
 export const draggedPanelIdAtom: Atom<PanelId | null> = selectAtom(panelDragStateAtom, (drag) => drag?.panelId ?? null);
 
-export const isDropTargetAtom = memoizedAtomByKey<SubSectionId, boolean>((subSection) =>
+export const isDropTargetAtom = atomFamily((subSection: SubSectionId) =>
   selectAtom(panelDragStateAtom, (drag) => drag !== null && drag.to === subSection),
 );
 
@@ -80,12 +80,14 @@ export const dragPointerHalvesAtom = atom(
 
 // The single half slice a collapsed section's drop overlay watches (a section's
 // overlay shows while the pointer is in the same-named window half).
-export const isDragPointerInHalfAtom = memoizedAtomByKey<"left" | "right" | "bottom", boolean>((half) =>
+export const isDragPointerInHalfAtom = atomFamily((half: "left" | "right" | "bottom") =>
   selectAtom(dragPointerHalvesBaseAtom, (halves) => halves[half]),
 );
 
-export const ghostPanelIdAtom = memoizedAtomByKey<SubSectionId, PanelId | null>((subSection) =>
-  selectAtom(panelDragStateAtom, (drag) => (drag !== null && drag.to === subSection ? drag.panelId : null)),
+export const ghostPanelIdAtom = atomFamily((subSection: SubSectionId) =>
+  selectAtom(panelDragStateAtom, (drag): PanelId | null =>
+    drag !== null && drag.to === subSection ? drag.panelId : null,
+  ),
 );
 
 // True while a panel is being reordered WITHIN this sub-section (drag origin and
@@ -94,14 +96,14 @@ export const ghostPanelIdAtom = memoizedAtomByKey<SubSectionId, PanelId | null>(
 // panel appears twice (the real draggable stays in its source while a ghost preview
 // shows in the target), so the target must render a non-draggable placeholder to
 // avoid registering the same draggable id twice. SectionHeader uses this to decide.
-export const isReorderWithinSubSectionAtom = memoizedAtomByKey<SubSectionId, boolean>((subSection) =>
+export const isReorderWithinSubSectionAtom = atomFamily((subSection: SubSectionId) =>
   selectAtom(panelDragStateAtom, (drag) => drag !== null && drag.to === subSection && drag.from === subSection),
 );
 
 // The sub-section's open panels with the in-flight ghost spliced in at its
 // prospective insertion index, so the live preview shows the panel where it would
 // land. Caches the last array to stay reference-stable (no notify when unchanged).
-export const displayedPanelIdsAtom = memoizedAtomByKey<SubSectionId, ReadonlyArray<PanelId>>((subSection) => {
+export const displayedPanelIdsAtom = atomFamily((subSection: SubSectionId) => {
   let lastResult: ReadonlyArray<PanelId> | undefined;
   return atom((get) => {
     const base = get(panelsInSubSectionAtom(subSection));
@@ -157,6 +159,6 @@ export const activeSectionRingNonceAtom: PrimitiveAtom<number> = atom<number>(0)
 
 // True only when this sub-section is the active one AND the ring is visible, so the
 // fade timer re-renders only the highlighted section.
-export const isRingVisibleAtom = memoizedAtomByKey<SubSectionId, boolean>((subSection) =>
+export const isRingVisibleAtom = atomFamily((subSection: SubSectionId) =>
   atom((get) => get(isActiveSubSectionAtom(subSection)) && get(activeSectionRingVisibleAtom)),
 );

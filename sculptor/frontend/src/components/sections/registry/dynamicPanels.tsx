@@ -22,6 +22,7 @@ import { getAgentDotStatus } from "~/components/statusDot";
 
 import type { PanelId } from "../sectionTypes.ts";
 import type { PanelContextMenuItem, PanelDefinition } from "./panelRegistry.ts";
+import { panelDefinitionByIdAtom } from "./panelRegistry.ts";
 
 export type AgentPanelBaseComponent = ComponentType<{ taskId: string }>;
 export type TerminalPanelBaseComponent = ComponentType<{ workspaceId: string; index: number }>;
@@ -213,10 +214,13 @@ export function deriveDynamicPanels(
   }
 
   // Evict cached components whose task/terminal no longer exists, dropping any
-  // unread override for a deleted agent along with its component.
+  // unread override for a deleted agent along with its component. The per-id
+  // definition slice is evicted too — its family is keyed by panel id, so without
+  // this it would grow one entry per agent/terminal forever.
   for (const id of [...componentCache.keys()]) {
     if (!liveIds.has(id)) {
       componentCache.delete(id);
+      panelDefinitionByIdAtom.remove(id);
       if (id.startsWith(AGENT_PANEL_ID_PREFIX)) {
         clearUnreadOverride(id.slice(AGENT_PANEL_ID_PREFIX.length));
       }

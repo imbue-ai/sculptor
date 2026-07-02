@@ -15,7 +15,7 @@ import { CollapsedSectionDropOverlay } from "./CollapsedSectionDropOverlay.tsx";
 import { PanelSection } from "./PanelSection.tsx";
 import { ResizeHandle } from "./ResizeHandle.tsx";
 import { isSectionExpandedAtom, sectionSizesAtom, setSectionSizeAtom } from "./sectionAtoms.ts";
-import { resolveSectionPixelSizes, sizeToPercent } from "./sectionGeometry.ts";
+import { CENTER_MIN_WIDTH_PX, resolveSectionPixelSizes, sizeToPercent } from "./sectionGeometry.ts";
 import styles from "./SectionGrid.module.scss";
 import { primaryOf } from "./sectionTypes.ts";
 import { SplittableSection } from "./SplittableSection.tsx";
@@ -96,7 +96,13 @@ export const SectionGrid = (): ReactElement => {
           </>
         )}
 
-        <div className={styles.center} data-testid={ElementIds.SECTION_CENTER}>
+        {/* The min width is set inline (not in the stylesheet) so the geometry
+            math and the CSS floor share the one CENTER_MIN_WIDTH_PX constant. */}
+        <div
+          className={styles.center}
+          style={{ minWidth: CENTER_MIN_WIDTH_PX }}
+          data-testid={ElementIds.SECTION_CENTER}
+        >
           <SplittableSection section="center" />
         </div>
 

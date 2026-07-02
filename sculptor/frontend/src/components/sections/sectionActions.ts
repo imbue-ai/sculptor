@@ -8,6 +8,7 @@
 
 import { atom } from "jotai";
 
+import { isSectionExpanded, openPanelsInSubSection } from "./layoutQueries.ts";
 import type { WorkspaceLayoutState } from "./persistence/types.ts";
 import { isMultiInstancePanelId } from "./registry/dynamicPanels.tsx";
 import { workspaceLayoutAtom } from "./sectionAtoms.ts";
@@ -19,31 +20,16 @@ export const SPLIT_RATIO_MIN = 0.15;
 export const SPLIT_RATIO_MAX = 0.85;
 const DEFAULT_SPLIT_RATIO = 0.5;
 
-function isSectionExpanded(layout: WorkspaceLayoutState, section: SectionId): boolean {
-  return section === "center" ? true : (layout.expanded[section] ?? false);
-}
-
-// Open panels in a sub-section, ordered. Membership is placement-based, so a dynamic
-// panel that is placed but whose source has not loaded yet still counts as occupying
-// its sub-section (and is still merged back by an explicit close-split).
-function panelsIn(layout: WorkspaceLayoutState, subSection: SubSectionId): ReadonlyArray<PanelId> {
-  const placed = (Object.keys(layout.placement) as ReadonlyArray<PanelId>).filter(
-    (id) => layout.placement[id] === subSection,
-  );
-  const placedSet = new Set(placed);
-  const ordered = (layout.order[subSection] ?? []).filter((id) => placedSet.has(id));
-  const orderedSet = new Set(ordered);
-  return [...ordered, ...placed.filter((id) => !orderedSet.has(id))];
-}
-
 // Merge a section's split secondary back into its primary and drop the split.
+// Membership is placement-based (see openPanelsInSubSection), so a dynamic panel
+// that is placed but whose source has not loaded yet is still merged back.
 function closeSplitInLayout(layout: WorkspaceLayoutState, section: SectionId): WorkspaceLayoutState {
   if (layout.splits[section] === undefined) {
     return layout;
   }
   const secondary = toSecondary(section);
-  const secondaryPanels = panelsIn(layout, secondary);
-  const mergedOrder = [...panelsIn(layout, section), ...secondaryPanels];
+  const secondaryPanels = openPanelsInSubSection(layout, secondary);
+  const mergedOrder = [...openPanelsInSubSection(layout, section), ...secondaryPanels];
 
   const placement = { ...layout.placement };
   for (const id of secondaryPanels) {

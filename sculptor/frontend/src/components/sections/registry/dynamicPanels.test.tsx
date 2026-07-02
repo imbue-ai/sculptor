@@ -9,6 +9,7 @@ import {
 
 import type { DynamicAgentInput } from "./dynamicPanels.tsx";
 import { deriveDynamicPanels, makeAgentPanelId } from "./dynamicPanels.tsx";
+import { panelDefinitionByIdAtom } from "./panelRegistry.ts";
 
 const UPDATED_AT = "2024-01-01T00:00:00Z";
 const LATER_UPDATED_AT = "2024-01-01T00:05:00Z";
@@ -60,6 +61,16 @@ describe("deriveDynamicPanels dot status with the unread override", () => {
     deriveDynamicPanels([createAgentInput()], []);
     deriveDynamicPanels([], []);
     expect(isUnreadOverrideActive("task-1", UPDATED_AT)).toBe(false);
+  });
+
+  it("evicts the per-id definition slice when its agent disappears", () => {
+    // The definition family is keyed by panel id, so a deleted agent's entry must
+    // be removed with its component — otherwise the family grows forever. A fresh
+    // atom instance for the same id proves the old entry was dropped.
+    deriveDynamicPanels([createAgentInput()], []);
+    const whileLive = panelDefinitionByIdAtom(makeAgentPanelId("task-1"));
+    deriveDynamicPanels([], []);
+    expect(panelDefinitionByIdAtom(makeAgentPanelId("task-1"))).not.toBe(whileLive);
   });
 });
 
