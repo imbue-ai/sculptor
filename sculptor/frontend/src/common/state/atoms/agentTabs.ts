@@ -1,16 +1,8 @@
 import { atom } from "jotai";
-import { atomWithStorage } from "jotai/utils";
 
 import type { AgentTypeName } from "~/api";
 
 import { userConfigAtom } from "./userConfig";
-
-export const agentTabOrderAtom = atomWithStorage<Record<string, Array<string>>>(
-  "sculptor-agent-tab-order",
-  {},
-  undefined,
-  { getOnInit: true },
-);
 
 /** The agent type a plain `+` click creates.
  *

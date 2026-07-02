@@ -76,10 +76,6 @@ export function registerPanelComponent(id: PanelId, component: ComponentType): v
   registeredComponents.set(id, component);
 }
 
-export function getRegisteredPanelComponent(id: PanelId): ComponentType | undefined {
-  return registeredComponents.get(id);
-}
-
 export function buildStaticPanelDefinitions(): ReadonlyArray<PanelDefinition> {
   return STATIC_PANEL_METADATA.map((meta) => ({
     id: meta.id,

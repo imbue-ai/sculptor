@@ -4,9 +4,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 
 import {
-  closeAllDiffTabsAtom,
+  activeDiffTabAtomFamily,
   closeDiffTabAtom,
-  diffPanelOpenAtom,
   diffPanelStateAtomFamily,
   diffScopeAtomFamily,
   openFileViewTabAtom,
@@ -18,68 +17,40 @@ const WORKSPACE_ID = "ws-1";
 beforeEach(() => localStorage.clear());
 afterEach(() => localStorage.clear());
 
-// Opens two file-view tabs so each test starts from "panel open, 2 tabs" state.
-const seedTwoTabs = (store: ReturnType<typeof createStore>): void => {
-  store.set(openFileViewTabAtom, { workspaceId: WORKSPACE_ID, filePath: "a.ts" });
-  store.set(openFileViewTabAtom, { workspaceId: WORKSPACE_ID, filePath: "b.ts" });
-};
-
 describe("closeDiffTabAtom", () => {
-  it("when closing the last remaining tab, keeps the panel open and clears the active tab", () => {
+  it("clears the active tab when closing it (the host panel shows its empty placeholder)", () => {
     const store = createStore();
     store.set(openFileViewTabAtom, { workspaceId: WORKSPACE_ID, filePath: "only.ts" });
+    const activeTabPath = store.get(diffPanelStateAtomFamily(WORKSPACE_ID)).activeTab!.filePath;
 
-    const onlyTabPath = store.get(diffPanelStateAtomFamily(WORKSPACE_ID)).activeTabPath!;
-    expect(store.get(diffPanelOpenAtom)).toBe(true);
+    store.set(closeDiffTabAtom, { workspaceId: WORKSPACE_ID, filePath: activeTabPath });
 
-    store.set(closeDiffTabAtom, { workspaceId: WORKSPACE_ID, filePath: onlyTabPath, tabCloseBehavior: "mru" });
-
-    const state = store.get(diffPanelStateAtomFamily(WORKSPACE_ID));
-    expect(state.openTabs).toEqual([]);
-    expect(state.activeTabPath).toBeNull();
-    // The panel must NOT auto-close — the placeholder is shown instead.
-    expect(store.get(diffPanelOpenAtom)).toBe(true);
+    expect(store.get(activeDiffTabAtomFamily(WORKSPACE_ID))).toBeNull();
   });
 
-  it("when closing a non-last tab, keeps the panel open and advances the active tab", () => {
+  it("is a no-op when the given path is not the active tab", () => {
     const store = createStore();
-    seedTwoTabs(store);
-    const before = store.get(diffPanelStateAtomFamily(WORKSPACE_ID));
-    expect(before.openTabs).toHaveLength(2);
-    const activePath = before.activeTabPath!;
+    store.set(openFileViewTabAtom, { workspaceId: WORKSPACE_ID, filePath: "keep.ts" });
+    const before = store.get(activeDiffTabAtomFamily(WORKSPACE_ID));
+    expect(before).not.toBeNull();
 
-    store.set(closeDiffTabAtom, { workspaceId: WORKSPACE_ID, filePath: activePath, tabCloseBehavior: "mru" });
+    store.set(closeDiffTabAtom, { workspaceId: WORKSPACE_ID, filePath: "unrelated.ts" });
 
-    const after = store.get(diffPanelStateAtomFamily(WORKSPACE_ID));
-    expect(after.openTabs).toHaveLength(1);
-    expect(after.activeTabPath).not.toBe(activePath);
-    expect(store.get(diffPanelOpenAtom)).toBe(true);
-  });
-});
-
-describe("closeAllDiffTabsAtom", () => {
-  it("clears all tabs but leaves the panel open", () => {
-    const store = createStore();
-    seedTwoTabs(store);
-
-    store.set(closeAllDiffTabsAtom, { workspaceId: WORKSPACE_ID });
-
-    const state = store.get(diffPanelStateAtomFamily(WORKSPACE_ID));
-    expect(state.openTabs).toEqual([]);
-    expect(state.activeTabPath).toBeNull();
-    expect(store.get(diffPanelOpenAtom)).toBe(true);
+    expect(store.get(activeDiffTabAtomFamily(WORKSPACE_ID))).toEqual(before);
   });
 });
 
 describe("openFileViewTabAtom", () => {
-  it("opens the panel globally when a file is opened from a closed state", () => {
+  it("replaces the active tab — only the most recently opened tab is kept", () => {
     const store = createStore();
-    expect(store.get(diffPanelOpenAtom)).toBe(false);
-
     store.set(openFileViewTabAtom, { workspaceId: WORKSPACE_ID, filePath: "a.ts" });
+    store.set(openFileViewTabAtom, { workspaceId: WORKSPACE_ID, filePath: "b.ts" });
 
-    expect(store.get(diffPanelOpenAtom)).toBe(true);
-    expect(store.get(diffPanelStateAtomFamily(WORKSPACE_ID)).openTabs).toHaveLength(1);
+    const activeTab = store.get(activeDiffTabAtomFamily(WORKSPACE_ID));
+    expect(activeTab?.kind).toBe("file-view");
+    if (activeTab?.kind === "file-view") {
+      expect(activeTab.realPath).toBe("b.ts");
+    }
   });
 });
 

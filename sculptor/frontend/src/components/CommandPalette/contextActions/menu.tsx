@@ -163,7 +163,7 @@ const useWorkspaceMenuItems = (
 ): Array<ReactElement> => {
   // Branch info is pushed over the WebSocket, so this is a plain atom read
   // (no fetch). Fall back to the source branch when the live branch hasn't
-  // arrived yet — mirrors how `ClosedWorkspaceRow` picks a branch to show.
+  // arrived yet.
   const branch = useWorkspaceBranch(workspace.objectId)?.currentBranch ?? workspace.sourceBranch ?? null;
   const isOpenInVisible =
     openInRuntime != null && openInRuntime.canOpenInOS() && openInRuntime.isMacUi() && getOpenWithItems().length > 0;
@@ -311,8 +311,8 @@ export const AgentContextMenuContent = ({
   agent: Agent;
   trailing?: ReactElement;
 }): ReactElement => {
-  // Copy name + the Diagnostics submenu (`trailing`) are injected right after
-  // "Mark unread" (no leading separator) so they sit in the top group above
+  // Copy name + the diagnostics copy items (`trailing`) are injected right after
+  // "Mark as unread" (no leading separator) so they sit in the top group above
   // the divider that sets the destructive Delete apart on its own.
   const copyName = (
     <ContextMenu.Item

@@ -1,10 +1,9 @@
 import { Button, Flex, Text } from "@radix-ui/themes";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useSetAtom } from "jotai";
 import { AlertTriangle } from "lucide-react";
 import type { ReactElement } from "react";
 import { useCallback } from "react";
 
-import { fileBrowserTabCloseBehaviorAtom } from "~/common/state/atoms/userConfig.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 
 import { closeDiffTabAtom } from "./atoms.ts";
@@ -17,12 +16,11 @@ type DeletedFileBannerProps = {
 
 export const DeletedFileBanner = ({ workspaceId, filePath }: DeletedFileBannerProps): ReactElement => {
   const closeDiffTab = useSetAtom(closeDiffTabAtom);
-  const tabCloseBehavior = useAtomValue(fileBrowserTabCloseBehaviorAtom);
   const dangerColor = useThemeDangerColor();
 
   const handleCloseTab = useCallback((): void => {
-    closeDiffTab({ workspaceId, filePath, tabCloseBehavior });
-  }, [closeDiffTab, workspaceId, filePath, tabCloseBehavior]);
+    closeDiffTab({ workspaceId, filePath });
+  }, [closeDiffTab, workspaceId, filePath]);
 
   return (
     <Flex

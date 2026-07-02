@@ -1,6 +1,5 @@
 import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
 
-export const COMBINED_REVIEW_PATH = "__combined_review__";
 export const FILE_VIEW_PREFIX = "__file_view__:";
 export const COMMIT_DIFF_PREFIX = "__commit_diff__:";
 export const TARGET_BRANCH_DIFF_PREFIX = "__target_branch_diff__:";
@@ -14,13 +13,6 @@ export type SingleFileDiffTab = {
   viewedAt: number;
   /** Tool-specific diff string when opened from a chip popover. When absent, the workspace diff is used. */
   diffString?: string;
-};
-
-export type CombinedDiffTab = {
-  kind: "combined";
-  filePath: typeof COMBINED_REVIEW_PATH;
-  defaultScope?: DiffScope;
-  viewedAt: number;
 };
 
 export type FileViewTab = {
@@ -42,31 +34,17 @@ export type CommitFileDiffTab = {
   viewedAt: number;
 };
 
-export type DiffTab = SingleFileDiffTab | CombinedDiffTab | FileViewTab | CommitFileDiffTab;
-
-export const isCombinedTab = (tab: DiffTab): tab is CombinedDiffTab => tab.kind === "combined";
-
-export const isFileViewTab = (tab: DiffTab): tab is FileViewTab => tab.kind === "file-view";
-
-export const isCommitDiffTab = (tab: DiffTab): tab is CommitFileDiffTab => tab.kind === "commit-diff";
+export type DiffTab = SingleFileDiffTab | FileViewTab | CommitFileDiffTab;
 
 export type SplitPosition = "left" | "right";
 
 /**
- * Per-workspace diff-panel state persisted to localStorage.
- *
- * The visibility flag (`diffPanelOpenAtom`) and split ratio
- * (`diffPanelSplitRatioAtom`) are intentionally *not* stored here.  They
- * live in global atoms so the diff panel behaves like other docked panels:
- * shared across workspaces by default, with optional per-workspace
- * persistence via the experimental "per-workspace panel layout" flag.
- *
- * Dock position is derived from `fileBrowserDockSideAtom` — the diff
- * viewer always snaps to the same side as the file browser panel.
+ * Per-workspace diff-panel state persisted to localStorage. Only the active
+ * tab is stored: there is no tab bar to display a list, so keeping more than
+ * the active tab would grow the persisted state with entries nothing reads.
  */
 export type DiffPanelTabState = {
-  openTabs: Array<DiffTab>;
-  activeTabPath: string | null;
+  activeTab: DiffTab | null;
 };
 
 export type DiffViewType = "unified" | "split";

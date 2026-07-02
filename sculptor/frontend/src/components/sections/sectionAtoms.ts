@@ -14,7 +14,7 @@ import { atomFamily, selectAtom } from "jotai/utils";
 
 import { memoizedAtomByKey, shallowArrayEqual } from "./atomCache.ts";
 import { layoutPersistenceAdapter } from "./persistence/LocalStorageLayoutAdapter.ts";
-import type { GlobalLayoutState, LayoutScope, WorkspaceLayoutState } from "./persistence/types.ts";
+import type { GlobalLayoutState, WorkspaceLayoutState } from "./persistence/types.ts";
 import { DEFAULT_GLOBAL_LAYOUT, EMPTY_WORKSPACE_LAYOUT } from "./persistence/types.ts";
 import { SECTION_SIZE_MAX_PERCENT, SECTION_SIZE_MIN_PERCENT } from "./sectionGeometry.ts";
 import type { PanelId, SectionId, SectionSplit, SubSectionId } from "./sectionTypes.ts";
@@ -30,11 +30,6 @@ function applyUpdater<T>(prev: T, updater: T | ((prev: T) => T)): T {
 // ── Scope atoms ──────────────────────────────────────────────────────────────
 
 export const activeWorkspaceIdAtom = atom<string | null>(null);
-
-export const layoutScopeAtom: Atom<LayoutScope> = atom((get) => {
-  const workspaceId = get(activeWorkspaceIdAtom);
-  return workspaceId === null ? { kind: "global" } : { kind: "workspace", workspaceId };
-});
 
 // ── Consolidated per-workspace layout ─────────────────────────────────────────
 

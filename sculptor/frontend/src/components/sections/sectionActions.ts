@@ -15,8 +15,6 @@ import type { PanelId, SectionId, SplitAxis, SubSectionId } from "./sectionTypes
 import { canSplitAxis, toSecondary, toSection } from "./sectionTypes.ts";
 import { activeSectionRingNonceAtom, maximizedSectionAtom } from "./transientAtoms.ts";
 
-export { removeWorkspaceLayoutAtom } from "./sectionAtoms.ts";
-
 export const SPLIT_RATIO_MIN = 0.15;
 export const SPLIT_RATIO_MAX = 0.85;
 const DEFAULT_SPLIT_RATIO = 0.5;

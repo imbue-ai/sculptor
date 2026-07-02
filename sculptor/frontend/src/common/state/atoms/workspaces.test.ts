@@ -6,7 +6,6 @@ import type { Workspace } from "../../../api";
 import { updateWorkspace } from "../../../api";
 import { workspaceOpenCloseErrorToastAtom } from "./toasts";
 import {
-  closedWorkspaceIdsAtom,
   closeWorkspaceTabAtom,
   createMigratingTabsStorage,
   effectiveOpenTabIdsAtom,
@@ -237,43 +236,6 @@ describe("openWorkspaceTabAtom", () => {
     await flushMicrotasks();
 
     expect(store.get(tabOrderAtom)).toContain("ws-1");
-  });
-});
-
-describe("closedWorkspaceIdsAtom — pill visibility while close is in flight", () => {
-  // See SCU-455: the ClosedWorkspacesPill derives from closedWorkspaceIdsAtom,
-  // which today only surfaces workspaces whose backend isOpen has flipped to
-  // false. If the websocket is slow, stale, or drops an update, the pill never
-  // appears. Including pending-close IDs makes the pill appear instantly and
-  // stay stable through any mid-flight stale snapshot.
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(updateWorkspace).mockReturnValue(new Promise(() => {}) as ReturnType<typeof updateWorkspace>);
-  });
-
-  afterEach(() => {
-    vi.mocked(updateWorkspace).mockReset();
-  });
-
-  it("includes the workspace ID the moment close is requested (before any ack)", () => {
-    const ws = mockWorkspace({ objectId: "ws-1", isOpen: true });
-    const store = seedHydratedStore([ws], ["ws-1"]);
-
-    expect(store.get(closedWorkspaceIdsAtom)).not.toContain("ws-1");
-
-    store.set(closeWorkspaceTabAtom, "ws-1");
-
-    expect(store.get(closedWorkspaceIdsAtom)).toContain("ws-1");
-  });
-
-  it("keeps the workspace ID visible as closed even when a stale isOpen=true snapshot arrives", () => {
-    const ws = mockWorkspace({ objectId: "ws-1", isOpen: true });
-    const store = seedHydratedStore([ws], ["ws-1"]);
-
-    store.set(closeWorkspaceTabAtom, "ws-1");
-    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-1", isOpen: true })]);
-
-    expect(store.get(closedWorkspaceIdsAtom)).toContain("ws-1");
   });
 });
 

@@ -110,7 +110,6 @@
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-markdown": "10.1.0",
-    "react-resizable-panels": "3.0.6",
     "react-router-dom": "7.18.0",
     "remark-emoji": "5.0.2",
     "remark-gfm": "4.0.1",

@@ -337,24 +337,6 @@ export const effectiveOpenTabIdsAtom = atom<Array<string>>((get) => {
 });
 
 /**
- * IDs of workspaces that exist but are closed (is_open=false on the backend),
- * plus any with a close request in flight. Including pending-close IDs makes
- * the ClosedWorkspacesPill appear instantly on close and stay stable through
- * any stale isOpen=true snapshot that arrives before the ack (SCU-455).
- */
-export const closedWorkspaceIdsAtom = atom<Array<string>>((get) => {
-  const workspaces = get(workspacesArrayAtom);
-  if (workspaces === undefined) {
-    return [];
-  }
-  const pendingClose = get(pendingCloseWorkspaceIdsAtom);
-  const pendingOpen = get(pendingOpenWorkspaceIdsAtom);
-  return workspaces
-    .filter((ws) => !pendingOpen.has(ws.objectId) && (ws.isOpen === false || pendingClose.has(ws.objectId)))
-    .map((ws) => ws.objectId);
-});
-
-/**
  * Close a workspace tab.
  * - For pseudo-tabs (Home, Settings, etc.): remove from tab order locally.
  * - For real workspace IDs: record the close intent in pendingClose so the tab
