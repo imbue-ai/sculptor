@@ -351,9 +351,12 @@ def _run_agent_in_environment(
     last_user_chat_message_id: AgentMessageID | None = None
     # track the full history of persistent messages we've seen
     persistent_message_history: list[PersistentUserMessage | PersistentAgentMessage] = []
-    # tracks whether the agent has asked a question that hasn't been answered yet;
-    # while True, queued messages must not be dequeued — only the answer should be sent
-    is_waiting_for_question_answer: bool = False
+    # tool_use_ids of questions the agent asked that haven't been answered yet;
+    # while non-empty, queued messages must not be dequeued — only answers should
+    # be sent. A set (not a flag) because multiple questions can pend at once:
+    # subagents can each ask mid-turn, and answering one must not make the
+    # runner forget it is still waiting on the others.
+    pending_question_tool_use_ids: set[str] = set()
     with log_runtime("run_agent_in_environment pre-processing"):
         # figure out what command we need to run (eg, which agent to invoke)
         in_testing = settings.TESTING.INTEGRATION_ENABLED
@@ -512,8 +515,8 @@ def _run_agent_in_environment(
         # detect if the agent asked a question during this batch of messages
         for message in new_messages:
             if isinstance(message, AskUserQuestionAgentMessage):
-                is_waiting_for_question_answer = True
-            elif is_waiting_for_question_answer and isinstance(
+                pending_question_tool_use_ids.add(message.question_data.tool_use_id)
+            elif pending_question_tool_use_ids and isinstance(
                 message, (RequestFailureAgentMessage, RequestStoppedAgentMessage)
             ):
                 # SCU-530: the agent's chat request failed or was stopped while we
@@ -521,7 +524,7 @@ def _run_agent_in_environment(
                 # that answer is gone, so stop waiting. Without this, subsequent
                 # ChatInputUserMessages match the guard at line 624 and get silently
                 # appended to ``queued_user_input_messages`` forever.
-                is_waiting_for_question_answer = False
+                pending_question_tool_use_ids.clear()
 
         # add any persistent messages to our history
         for message in new_messages:
@@ -573,8 +576,8 @@ def _run_agent_in_environment(
         # AUQ anymore), so ``is_agent_turn_finished`` never fires for the
         # AUQ-triggering message — gate this block on either condition so
         # the answer can be dispatched mid-turn.
-        if is_agent_turn_finished or is_waiting_for_question_answer:
-            if is_waiting_for_question_answer:
+        if is_agent_turn_finished or pending_question_tool_use_ids:
+            if pending_question_tool_use_ids:
                 # The agent asked a question — don't dequeue the next message yet.
                 # Wait for the UserQuestionAnswerMessage before continuing.
                 # However, the answer may have already arrived and been queued while the
@@ -588,7 +591,7 @@ def _run_agent_in_environment(
                         remaining.append(queued_msg)
                 queued_user_input_messages = remaining
                 if queued_answer is not None:
-                    is_waiting_for_question_answer = False
+                    pending_question_tool_use_ids.discard(queued_answer.tool_use_id)
                     user_input_message_being_processed = _send_user_input_message(
                         agent_wrapper,
                         queued_answer,
@@ -627,13 +630,13 @@ def _run_agent_in_environment(
             if isinstance(message, PersistentUserMessage):
                 if isinstance(message, ChatInputUserMessage) and last_user_chat_message_id is None:
                     last_user_chat_message_id = message.message_id
-                if is_waiting_for_question_answer and not isinstance(message, UserQuestionAnswerMessage):
+                if pending_question_tool_use_ids and not isinstance(message, UserQuestionAnswerMessage):
                     # While the agent is waiting for a question answer, queue all other
                     # messages — only the answer should be sent to the agent.
                     queued_user_input_messages.append(message)
                 elif user_input_message_being_processed is None:
                     if isinstance(message, UserQuestionAnswerMessage):
-                        is_waiting_for_question_answer = False
+                        pending_question_tool_use_ids.discard(message.tool_use_id)
                     user_input_message_being_processed = _send_user_input_message(
                         agent_wrapper,
                         message,
