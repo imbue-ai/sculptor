@@ -131,6 +131,53 @@ class PlaywrightDiffViewerElement(PlaywrightIntegrationTestElement):
         expect(item).to_be_visible()
         item.click()
 
+    # -- The recent-files dropdown on the header file path --
+
+    def get_file_path_select(self) -> Locator:
+        """The header's file-path breadcrumb, which doubles as the
+        recently-viewed-files dropdown trigger."""
+        return self.get_file_header().get_by_test_id(ElementIDs.DIFF_FILE_PATH_SELECT)
+
+    def open_recent_files_dropdown(self) -> None:
+        """Open the header path's recently-viewed-files dropdown.
+
+        Idempotent and retried like ``open_menu``: the Radix Select trigger
+        toggles, and a click landing while Radix is still tearing down a
+        just-dismissed popover can be swallowed.
+        """
+        trigger = self.get_file_path_select()
+        expect(trigger).to_be_visible()
+        for _ in range(5):
+            if trigger.get_attribute("data-state") == "open":
+                return
+            trigger.click()
+            try:
+                expect(trigger).to_have_attribute("data-state", "open", timeout=2_000)
+                return
+            except AssertionError:
+                self._page.wait_for_timeout(250)
+        expect(trigger).to_have_attribute("data-state", "open")
+
+    def get_recent_file_options(self) -> Locator:
+        """All options in the open recent-files dropdown.
+
+        The dropdown renders in a Radix portal, so options are located
+        page-wide by their ARIA role rather than scoped to this viewer.
+        """
+        return self._page.get_by_role("option")
+
+    def close_recent_files_dropdown(self) -> None:
+        """Close the recent-files dropdown without selecting an option."""
+        self._page.keyboard.press("Escape")
+        expect(self.get_file_path_select()).not_to_have_attribute("data-state", "open")
+
+    def select_recent_file(self, file_name: str) -> None:
+        """Open the recent-files dropdown and pick the option for ``file_name``."""
+        self.open_recent_files_dropdown()
+        option = self.get_recent_file_options().filter(has_text=file_name)
+        expect(option).to_be_visible()
+        option.click()
+
     # -- The sidebar-visibility toggle --
 
     def get_hide_sidebar_button(self) -> Locator:
