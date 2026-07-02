@@ -258,7 +258,7 @@ record in `removed-and-changed-features.md`.
 
 ## P3 — Consistency & quality
 
-- [ ] **Wide subscriptions above the memo boundaries.** **[×2]**
+- [x] **Wide subscriptions above the memo boundaries.** **[×2]**
   `useAddPanelActions.ts:86-90` subscribes to the whole layout + whole
   registry and is mounted by every `SectionHeader`, `EmptySectionState`,
   `useWorkspaceShortcuts` (→ the shell), and the bootstrap — so every
@@ -266,24 +266,24 @@ record in `removed-and-changed-features.md`.
   `PanelDndProvider`, `WorkspaceHeader`, and all four dropdowns. The contract
   (`component_tree.md`) says "on open only". Fix: subscription-free actions
   hook + list-building inside the opened dropdown content (see P4.2).
-- [ ] `CommandPalette/hooks.ts:239,242` — whole layout + registry subscribed
+- [x] `CommandPalette/hooks.ts:239,242` — whole layout + registry subscribed
   while the palette is closed; gate on `isOpen`.
-- [ ] `WorkspaceSidebar.tsx:247,330-338,557-571` — whole `tasksArrayAtom`
+- [x] `WorkspaceSidebar.tsx:247,330-338,557-571` — whole `tasksArrayAtom`
   subscription, O(workspaces×tasks) recompute per tick, unmemoized
   `SidebarWorkspaceRow` with five inline-closure props. Apply the branch's own
   per-key-slice pattern.
-- [ ] `WorkspacePage.tsx:43` + `useWorkspaceShellBootstrap.ts:52` — top-level
+- [x] `WorkspacePage.tsx:43` + `useWorkspaceShellBootstrap.ts:52` — top-level
   `tasksArrayAtom` subscriptions; narrow to a per-workspace deduped slice;
   consider `memo(WorkspaceHeader)`.
-- [ ] **Keyboard a11y on panel tabs:** `role="tab"` divs are draggable but not
+- [x] **Keyboard a11y on panel tabs:** `role="tab"` divs are draggable but not
   activatable (Enter starts a drag, no `onKeyDown` to switch panels; no
   `role="tablist"` ancestor; close button is interactive-inside-interactive)
   (`SectionHeader.tsx:140-154,279`).
-- [ ] Resize-handle cascade fix is a patch, not a structure: callers must win
+- [x] Resize-handle cascade fix is a patch, not a structure: callers must win
   a cross-module specificity fight to reposition the handle
   (`WorkspaceSidebar.module.scss:271-283`); add a first-class
   `variant="edge-overlay"` to `ResizeHandle` instead.
-- [ ] Smaller: duplicated recency-`useMemo` between `FilesPanel.tsx:69-76` and
+- [x] Smaller: duplicated recency-`useMemo` between `FilesPanel.tsx:69-76` and
   `ChangesPanel.tsx:100-107`; `bgOverrideSheet` shadow-DOM effect duplicated
   between `PierreDiffView.tsx` and `ReadOnlyPreview.tsx`; quick-open book icon
   silently flips the global `markdownRenderModeAtom` to "rendered"
@@ -323,9 +323,9 @@ record in `removed-and-changed-features.md`.
   `panelDefinitionByIdAtom` per-agent leak, low-impact but free).
 - [x] **P4.4 `AppShell` toast scaffolding** (~100 of 214 lines): six
   hand-wired toast atoms → one `AtomToast` component over a config array.
-- [ ] **P4.5** Merge `GhostTab`/`DragOverlayTab` into one `TabPill`; extract a
+- [x] **P4.5** Merge `GhostTab`/`DragOverlayTab` into one `TabPill`; extract a
   `MenuRow` for `AddPanelDropdown`'s 5× repeated row markup.
-- [ ] **P4.6** Fold `splitDirection.ts` (22 lines, one consumer) into
+- [x] **P4.6** Fold `splitDirection.ts` (22 lines, one consumer) into
   `sectionTypes.ts`; delete `isMultiInstanceKind` (use
   `definition.kind !== "static"`); extract `appendTerminalTab` inside
   `addPanelCore` (duplicated block); one `resolveStoredAgentType` for the
