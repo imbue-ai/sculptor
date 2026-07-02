@@ -89,6 +89,36 @@ class PendingCall(SerializableModel):
     mcp_message_id: int | str
     tool_fqn: str
     tool_use_id: str
+    arguments: dict[str, Any] = {}
+
+
+class ExpectedCall(SerializableModel):
+    """A registered tool_use awaiting its matching `tools/call` request.
+
+    ``tool_input`` is the ToolUseBlock's input from the assistant stream,
+    used to pair by content. ``None`` acts as a wildcard (matches any
+    arguments of the same tool).
+    """
+
+    tool_use_id: str
+    tool_fqn: str
+    tool_input: dict[str, Any] | None = None
+
+
+class UnmatchedCall(SerializableModel):
+    """A `tools/call` that arrived before its tool_use registration.
+
+    For SUBAGENT tool calls the CLI emits the `tools/call` control_request
+    BEFORE the sidechain assistant message that carries the ToolUseBlock —
+    the inverse of the main-agent ordering. The call is held here until
+    ``register_tool_use_id`` pairs it; dropping it would leave the subagent
+    blocked forever on a response that never comes, freezing the turn.
+    """
+
+    control_request_id: str
+    mcp_message_id: int | str
+    tool_fqn: str
+    arguments: dict[str, Any]
 
 
 class SculptorMcpServer:
@@ -97,6 +127,14 @@ class SculptorMcpServer:
     `handle_message` runs on the output-processor thread. `deliver_answer`
     runs on the task-handler thread. The internal pending-call registry is
     guarded by a lock so the two paths can coexist.
+
+    Pairing model: a `tools/call` request does not carry Claude's
+    ``tool_use_id``, so calls are paired with ToolUseBlocks from the
+    assistant stream by tool name + arguments. Either side may arrive
+    first — the main agent emits the assistant message before the
+    `tools/call`, while subagents emit them in the opposite order — so both
+    an expectation queue (registrations awaiting calls) and an
+    unmatched-call queue (calls awaiting registrations) are kept.
     """
 
     def __init__(
@@ -113,35 +151,82 @@ class SculptorMcpServer:
         # (CLI-driven replay after `--resume` re-emits the dangling
         # tool_use with a fresh ``tool_use_id``, so a tool_use_id-keyed
         # cache wouldn't match). Invalidated when a fresh AUQ panel is
-        # shown via ``register_tool_use_id``.
+        # shown via ``register_tool_use_id``, and guarded by the delivered
+        # call's arguments so a NEW question (e.g. from a subagent) is never
+        # answered with the previous question's answer.
         self._last_delivered_text: str | None = None
+        self._last_delivered_arguments: dict[str, Any] | None = None
         self._has_new_auq_since_last_delivery: bool = False
-        self._expected_tool_use_id: str | None = None
+        self._expected_calls: list[ExpectedCall] = []
+        self._unmatched_calls: list[UnmatchedCall] = []
 
     def set_respond(self, respond: Callable[[str, dict[str, Any]], None]) -> None:
         """Rebind the stdin-write callback. Called from each new
         `ClaudeOutputProcessor.__init__` so the long-lived MCP server (owned by
         `ClaudeProcessManager`) always sends responses through the current CLI
         invocation's stdin.
+
+        Also drops queued expectations and unmatched calls: their
+        control_request_ids belong to the previous CLI invocation, so they can
+        never be answered through the new one. (Pending calls are kept — the
+        resume replay cache handles re-asked dangling questions.)
         """
         self._respond = respond
+        with self._lock:
+            self._expected_calls = []
+            self._unmatched_calls = []
 
-    def register_tool_use_id(self, tool_use_id: str, tool_fqn: str) -> None:
-        """Inform the server that a `tools/call` for `tool_use_id` is imminent.
+    def _args_match(self, tool_fqn: str, tool_input: dict[str, Any] | None, arguments: dict[str, Any]) -> bool:
+        """Whether a registered ToolUseBlock input pairs with `tools/call` arguments.
 
-        Called from the output processor when an `assistant` stream surfaces
-        a `ToolUseBlock` whose `name` is a Sculptor MCP FQN. The CLI sends
-        the matching `tools/call` immediately afterwards.
+        ``mcp__sculptor__exit_plan_mode`` has an open input schema (the model's
+        input and the CLI's forwarded arguments may legitimately differ), so it
+        pairs by tool name alone. ``None`` input is a wildcard.
+        """
+        if tool_input is None:
+            return True
+        if tool_fqn == self._harness.mcp_exit_plan_mode_tool_fqn:
+            return True
+        return tool_input == arguments
+
+    def register_tool_use_id(self, tool_use_id: str, tool_fqn: str, tool_input: dict[str, Any] | None = None) -> None:
+        """Inform the server of a ToolUseBlock surfaced by the assistant stream.
+
+        Called from the output processor when an `assistant` message carries a
+        ToolUseBlock whose `name` is a Sculptor MCP FQN. For main-agent calls
+        the matching `tools/call` arrives immediately afterwards; for subagent
+        calls it typically arrived FIRST and is waiting in the unmatched-call
+        queue, in which case it is paired (and held pending) here.
         """
         if tool_fqn not in (self._harness.mcp_ask_tool_fqn, self._harness.mcp_exit_plan_mode_tool_fqn):
             logger.debug("register_tool_use_id called with non-MCP tool_fqn={}", tool_fqn)
             return
         with self._lock:
-            self._expected_tool_use_id = tool_use_id
+            if tool_use_id in self._pending or any(e.tool_use_id == tool_use_id for e in self._expected_calls):
+                return
             if self._last_delivered_text is not None:
                 # A fresh AUQ panel is being shown — the cache from the
                 # previous Q&A no longer applies to this one.
                 self._has_new_auq_since_last_delivery = True
+            for i, unmatched in enumerate(self._unmatched_calls):
+                if unmatched.tool_fqn == tool_fqn and self._args_match(tool_fqn, tool_input, unmatched.arguments):
+                    del self._unmatched_calls[i]
+                    self._pending[tool_use_id] = PendingCall(
+                        control_request_id=unmatched.control_request_id,
+                        mcp_message_id=unmatched.mcp_message_id,
+                        tool_fqn=unmatched.tool_fqn,
+                        tool_use_id=tool_use_id,
+                        arguments=unmatched.arguments,
+                    )
+                    logger.debug(
+                        "Paired held tools/call for {} with tool_use_id={} from the assistant stream",
+                        tool_fqn,
+                        tool_use_id,
+                    )
+                    return
+            self._expected_calls.append(
+                ExpectedCall(tool_use_id=tool_use_id, tool_fqn=tool_fqn, tool_input=tool_input)
+            )
 
     def handle_message(self, control_request_id: str, message: dict[str, Any]) -> None:
         """Dispatch an MCP JSON-RPC message by method."""
@@ -186,6 +271,7 @@ class SculptorMcpServer:
         text = self._format_answer_text(pending.tool_fqn, answer)
         with self._lock:
             self._last_delivered_text = text
+            self._last_delivered_arguments = pending.arguments
             self._has_new_auq_since_last_delivery = False
         self._respond_with_text(pending.control_request_id, pending.mcp_message_id, text)
 
@@ -211,9 +297,9 @@ class SculptorMcpServer:
         # Without this, malformed arguments (e.g. ``multiSelect: 'false'`` as a
         # string, ``options`` JSON-encoded into a string, missing required
         # fields) would dangle: the output processor's UI-side validation
-        # rejects the call and skips ``register_tool_use_id``, leaving the
-        # tools/call here with no expected tool_use_id, which would otherwise
-        # be silently dropped a few lines below. Returning a JSON-RPC error
+        # rejects the call and skips ``register_tool_use_id``, so the
+        # tools/call would sit in the unmatched-call queue with no panel and
+        # no registration ever coming. Returning a JSON-RPC error
         # lets the agent see the failure and retry with corrected types.
         validation_error_message = _validate_arguments(tool_fqn, ask_tool_fqn, params.get("arguments", {}))
         if validation_error_message is not None:
@@ -225,41 +311,71 @@ class SculptorMcpServer:
             )
             return
 
+        arguments = params.get("arguments", {})
         with self._lock:
-            tool_use_id = self._expected_tool_use_id
-            self._expected_tool_use_id = None
+            # A queued registration from the assistant stream takes precedence
+            # over everything else — pair with it and hold for the answer.
+            expectation: ExpectedCall | None = None
+            for i, expected in enumerate(self._expected_calls):
+                if expected.tool_fqn == tool_fqn and self._args_match(tool_fqn, expected.tool_input, arguments):
+                    expectation = expected
+                    del self._expected_calls[i]
+                    break
+
+            if expectation is not None:
+                self._pending[expectation.tool_use_id] = PendingCall(
+                    control_request_id=control_request_id,
+                    mcp_message_id=message["id"],
+                    tool_fqn=tool_fqn,
+                    tool_use_id=expectation.tool_use_id,
+                    arguments=arguments,
+                )
+                return
+
             # Serve the cache for a duplicate tools/call against the just-
-            # answered AUQ — the resumed CLI re-emits the dangling call
+            # answered question — the resumed CLI re-emits the dangling call
             # with a fresh tool_use_id, so we match against
-            # ``_has_new_auq_since_last_delivery`` rather than tool_use_id
-            # equality. ``register_tool_use_id`` flips that flag whenever
-            # a fresh AUQ panel is shown, invalidating the cache. Checked
-            # before the registered-id requirement because a duplicate
-            # tools/call may arrive without a paired register.
+            # ``_has_new_auq_since_last_delivery`` plus argument matching
+            # rather than tool_use_id equality. ``register_tool_use_id``
+            # flips that flag whenever a fresh AUQ panel is shown,
+            # invalidating the cache; the argument guard keeps a NEW question
+            # (e.g. a subagent's, whose tools/call arrives before its
+            # registration) from being answered with the previous question's
+            # answer. Uses ``_args_match`` (not raw equality) so it honors
+            # ``exit_plan_mode``'s open schema — a replayed plan-approval call
+            # is served from cache even if its forwarded arguments differ,
+            # rather than being held forever with no registration coming.
             cached_text: str | None
-            if self._last_delivered_text is not None and not self._has_new_auq_since_last_delivery:
+            if (
+                self._last_delivered_text is not None
+                and not self._has_new_auq_since_last_delivery
+                and self._args_match(tool_fqn, self._last_delivered_arguments, arguments)
+            ):
                 cached_text = self._last_delivered_text
             else:
                 cached_text = None
 
-        if cached_text is not None:
-            self._respond_with_text(control_request_id, message["id"], cached_text)
-            return
+            if cached_text is None:
+                # No registration yet — the SUBAGENT ordering, where the
+                # tools/call reaches stdout before the sidechain assistant
+                # message. Hold the call; register_tool_use_id pairs it when
+                # the assistant stream catches up. Dropping it would leave
+                # the agent blocked forever on a response that never comes.
+                self._unmatched_calls.append(
+                    UnmatchedCall(
+                        control_request_id=control_request_id,
+                        mcp_message_id=message["id"],
+                        tool_fqn=tool_fqn,
+                        arguments=arguments,
+                    )
+                )
+                logger.debug(
+                    "tools/call for {} arrived before its tool_use registration; holding until the assistant stream catches up",
+                    tool_name_short,
+                )
+                return
 
-        if tool_use_id is None:
-            logger.debug(
-                "tools/call for {} arrived without a registered tool_use_id; dropping (this indicates an out-of-order assistant stream)",
-                tool_name_short,
-            )
-            return
-
-        with self._lock:
-            self._pending[tool_use_id] = PendingCall(
-                control_request_id=control_request_id,
-                mcp_message_id=message["id"],
-                tool_fqn=tool_fqn,
-                tool_use_id=tool_use_id,
-            )
+        self._respond_with_text(control_request_id, message["id"], cached_text)
 
     def _format_answer_text(self, tool_fqn: str, answer: UserQuestionAnswerMessage) -> str:
         if tool_fqn == self._harness.mcp_exit_plan_mode_tool_fqn:

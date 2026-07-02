@@ -146,13 +146,22 @@ Write out your understanding as a summary:
   testing config's **Test Strategy**. Be explicit — do not leave the test kind
   implicit in the file path.
 
+The summary MUST appear as a plain chat message **before** you call the
+question tool. Your internal reasoning is invisible to the user, and the
+question panel only shows short question text — so a diagnosis that lives
+only in your thinking or inside the question tool's input was never shown to
+the user, and asking "does the diagnosis match?" leaves them with nothing to
+confirm. Skipping the written summary and jumping straight to the question
+tool is a known failure mode for this phase — do not do it.
+
 **If you reproduced the bug visually:** include the screenshots inline with
 `<img>` tags. Walk the user through each screenshot, explaining what you did
 and what you observed.
 
-**You MUST ask with your question tool here** — `mcp__sculptor__ask_user_question` if it's available, otherwise the built-in `AskUserQuestion` — do NOT use a plain text
-message. The tool triggers a UI notification that grabs the user's attention.
-Ask:
+**You MUST ask with your question tool here** — `mcp__sculptor__ask_user_question` if it's available, otherwise the built-in `AskUserQuestion` — do NOT ask via a plain
+text message. (The written summary above is still a plain text message; only
+the ask itself goes through the tool, which triggers a UI notification that
+grabs the user's attention.) Ask:
 > "Does this match your understanding? Is the test location correct? Please
 > confirm so I can proceed."
 

@@ -1245,7 +1245,7 @@ class ClaudeOutputProcessor:
             )
         )
         if self._mcp_server is not None:
-            self._mcp_server.register_tool_use_id(tool_block.id, ask_tool_fqn)
+            self._mcp_server.register_tool_use_id(tool_block.id, ask_tool_fqn, tool_input=tool_block.input)
         return True
 
     def _maybe_record_plan_file_write(self, tool_block: ToolUseBlock) -> None:
@@ -1300,7 +1300,7 @@ class ClaudeOutputProcessor:
         # doesn't re-publish the stale path.
         self._recent_plan_file_path = None
         if self._mcp_server is not None:
-            self._mcp_server.register_tool_use_id(tool_block.id, exit_plan_mode_tool_fqn)
+            self._mcp_server.register_tool_use_id(tool_block.id, exit_plan_mode_tool_fqn, tool_input=tool_block.input)
         return True
 
     def _maybe_handle_enter_plan_mode(self, tool_block: ToolUseBlock) -> bool:

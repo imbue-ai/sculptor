@@ -919,7 +919,9 @@ class TestSculptorMcpToolDetection:
             {"questions": [{"question": "Q?", "header": "Header", "options": [], "multi_select": False}]},
         )
         assert processor._maybe_handle_ask_user_question(block) is True
-        mcp_server.register_tool_use_id.assert_called_once_with(block.id, "mcp__sculptor__ask_user_question")
+        mcp_server.register_tool_use_id.assert_called_once_with(
+            block.id, "mcp__sculptor__ask_user_question", tool_input=block.input
+        )
 
     def test_ask_user_question_handler_does_not_fire_on_builtin_name(self) -> None:
         mcp_server = MagicMock()
@@ -936,7 +938,9 @@ class TestSculptorMcpToolDetection:
         processor = _make_processor_with_mcp_server(mcp_server)
         block = self._make_tool_block("mcp__sculptor__exit_plan_mode", {"plan": "..."})
         assert processor._maybe_handle_exit_plan_mode(block) is True
-        mcp_server.register_tool_use_id.assert_called_once_with(block.id, "mcp__sculptor__exit_plan_mode")
+        mcp_server.register_tool_use_id.assert_called_once_with(
+            block.id, "mcp__sculptor__exit_plan_mode", tool_input=block.input
+        )
 
     def test_exit_plan_mode_handler_does_not_fire_on_builtin_name(self) -> None:
         mcp_server = MagicMock()
