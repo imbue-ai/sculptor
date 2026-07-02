@@ -671,6 +671,34 @@ def test_viewer_always_visible_with_empty_state(sculptor_instance_: SculptorInst
     expect(viewer.get_loading_bar()).to_have_count(0)
 
 
+@user_story("to keep the file I opened in the Files panel after maximizing and restoring its section")
+def test_open_file_survives_section_maximize_restore(sculptor_instance_: SculptorInstance) -> None:
+    """Maximize/restore remounts the panel; the open file must survive it.
+
+    The Files panel's clicked-file selection must be held per-workspace (like
+    the Changes panel's) rather than in component state, so the remount that a
+    section maximize/restore causes does not silently reset the viewer to its
+    empty state while the user is looking at a file.
+    """
+    page = sculptor_instance_.page
+    _, files_panel = _open_files_panel_with(page, WRITE_FILES_PROMPT)
+
+    viewer = files_panel.open_file("README.md")
+    viewer.assert_diff_shows("README.md")
+    expect(viewer.get_read_only_preview()).to_be_visible()
+
+    # The Files panel lives in the left section (seeded); maximize + restore it.
+    # While maximized the section-root testid is not rendered (the maximized
+    # branch mounts the PanelSection directly), so the viewer is re-asserted
+    # after restore — the remount round-trip is what loses component state.
+    left = PlaywrightWorkspaceSection(page, "left")
+    left.maximize()
+    left.restore()
+
+    viewer.assert_diff_shows("README.md")
+    expect(viewer.get_read_only_preview()).to_be_visible()
+
+
 # --------------------------------------------------------------------------- #
 # Migrated: test_path_tilde_display.py
 # --------------------------------------------------------------------------- #
