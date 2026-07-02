@@ -86,13 +86,13 @@ from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import ModelOption
 from sculptor.state.messages import ResponseBlockAgentMessage
 
-
 _PROMPT_ID = "prompt-1"
 
 
 def _make_agent(
     environment: AgentExecutionEnvironment | None = None,
     on_diff_needed: Callable[[], None] | None = None,
+    preselected_model: ModelOption | None = None,
 ) -> PiAgent:
     env = environment if environment is not None else MagicMock(spec=AgentExecutionEnvironment)
     return PiAgent(
@@ -103,6 +103,7 @@ def _make_agent(
         system_prompt="",
         git_hash="deadbeef",
         on_diff_needed=on_diff_needed,
+        preselected_model=preselected_model,
     )
 
 
@@ -2299,10 +2300,20 @@ class TestSetModel:
         assert any(isinstance(m, RequestSuccessAgentMessage) for m in emitted)
         assert not any(isinstance(m, RequestFailureAgentMessage) for m in emitted)
 
-    def test_set_model_failure_on_success_false_surfaces_error_without_mutation(self) -> None:
-        """set_model success:false → RequestFailure, no current-model carrier, handler does not raise."""
+    def test_set_model_failure_on_success_false_surfaces_error_and_rolls_back(self) -> None:
+        """set_model success:false → RequestFailure AND a corrective carrier restoring the
+        switcher to pi's actual current model, without the handler raising out.
+
+        The set-model endpoint writes the requested model onto task state before the
+        switch is confirmed (so the switcher responds immediately), so a rejected
+        switch must roll the switcher back to the model pi is really on rather than
+        leave it stranded on the model that did not take."""
         agent = _make_agent()
-        agent._available_models = (ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Opus"),)
+        agent._available_models = (
+            ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Opus"),
+            ModelOption(provider="anthropic", model_id="claude-haiku-4-5", display_name="Haiku"),
+        )
+        actual = {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"}
         agent._process = _make_process(
             [
                 _event(
@@ -2313,10 +2324,11 @@ class TestSetModel:
                         "id": "cmd-set",
                         "error": "Model not found: anthropic/claude-nope",
                     }
-                )
+                ),
+                _state_response_with_model(actual),
             ]
         )
-        with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-set"]):
+        with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-set", "cmd-state"]):
             # Must NOT raise out of the handler — the AgentClientError path reports and continues.
             agent._handle_set_model(
                 SetModelUserMessage(message_id=AgentMessageID(), provider="anthropic", model_id="claude-nope")
@@ -2326,8 +2338,11 @@ class TestSetModel:
         assert len(failures) == 1
         # The failure carries pi's error so the frontend can toast it.
         assert "Model not found" in str(failures[0].error.args[0])
-        # No current-model mutation on failure.
-        assert not any(isinstance(m, ModelsAvailableAgentMessage) for m in emitted)
+        # The switcher is rolled back to pi's real current model, undoing the optimistic write.
+        carriers = [m for m in emitted if isinstance(m, ModelsAvailableAgentMessage)]
+        assert len(carriers) == 1
+        assert carriers[0].current_model is not None
+        assert carriers[0].current_model.model_id == "claude-opus-4-8"
 
     def test_set_model_failure_on_no_response_surfaces_error(self) -> None:
         """No set_model ack (process exited / timeout) → failed request, no carrier, no crash."""
@@ -3327,6 +3342,87 @@ class TestModelCatalogFetch:
         with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]):
             agent._fetch_models_into_state()
         assert not [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+
+    def test_fetch_models_into_state_adopts_preselected_model_over_pi_default(self) -> None:
+        """A model the user selected before the agent went live (preselected_model)
+        is applied to pi at start and surfaced as current, instead of pi's own default.
+
+        Without this, a pre-message switch would flicker back to pi's default the
+        moment the first turn starts the agent, then re-apply on the queued switch.
+        """
+        preselected = ModelOption(provider="anthropic", model_id="claude-sonnet-4-6", display_name="Claude Sonnet 4.6")
+        agent = _make_agent(preselected_model=preselected)
+        pi_default = {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"}
+        adopted = {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6", "provider": "anthropic"}
+        process = _make_process(
+            [_models_response(_RAW_PI_MODELS), _state_response_with_model(pi_default), _set_model_response(adopted)]
+        )
+        agent._process = process
+        with (
+            patch(
+                "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+                side_effect=["cmd-models", "cmd-state", "cmd-setmodel"],
+            ),
+            patch(
+                "sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value={"anthropic"}
+            ),
+        ):
+            agent._fetch_models_into_state()
+
+        # A set_model RPC adopted the preselected model on pi's side.
+        writes = [call.args[0] for call in process.write_stdin.call_args_list]
+        assert any('"type":"set_model"' in w and '"claude-sonnet-4-6"' in w for w in writes)
+
+        emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+        assert len(emitted) == 1
+        assert emitted[0].current_model is not None
+        assert emitted[0].current_model.model_id == "claude-sonnet-4-6"
+
+    def test_fetch_models_into_state_ignores_preselected_model_absent_from_catalog(self) -> None:
+        """A preselected model pi no longer offers (e.g. its provider was deauthorized)
+        is not adopted — the switcher falls back to pi's default rather than a model
+        that cannot run. No set_model RPC is sent for the unavailable model."""
+        preselected = ModelOption(provider="openrouter", model_id="openai/gpt-4o", display_name="GPT-4o")
+        agent = _make_agent(preselected_model=preselected)
+        pi_default = {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"}
+        process = _make_process([_models_response(_RAW_PI_MODELS), _state_response_with_model(pi_default)])
+        agent._process = process
+        with (
+            patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]),
+            patch(
+                "sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value={"anthropic"}
+            ),
+        ):
+            agent._fetch_models_into_state()
+
+        writes = [call.args[0] for call in process.write_stdin.call_args_list]
+        assert not any('"type":"set_model"' in w for w in writes)
+        emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+        assert len(emitted) == 1
+        assert emitted[0].current_model is not None
+        assert emitted[0].current_model.model_id == "claude-opus-4-8"
+
+    def test_fetch_models_into_state_skips_set_model_when_preselected_is_pi_default(self) -> None:
+        """When the preselected model already matches pi's default, no redundant
+        set_model RPC is sent — the default is surfaced directly."""
+        preselected = ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Claude Opus 4.8")
+        agent = _make_agent(preselected_model=preselected)
+        pi_default = {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"}
+        process = _make_process([_models_response(_RAW_PI_MODELS), _state_response_with_model(pi_default)])
+        agent._process = process
+        with (
+            patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]),
+            patch(
+                "sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value={"anthropic"}
+            ),
+        ):
+            agent._fetch_models_into_state()
+
+        writes = [call.args[0] for call in process.write_stdin.call_args_list]
+        assert not any('"type":"set_model"' in w for w in writes)
+        emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+        assert emitted[0].current_model is not None
+        assert emitted[0].current_model.model_id == "claude-opus-4-8"
 
     def test_handle_refresh_models_re_fetches_and_re_emits_catalog(self) -> None:
         """A delivered refresh re-runs the fetch between turns and re-emits the catalog.

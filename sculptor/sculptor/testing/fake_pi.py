@@ -71,7 +71,9 @@ Model selection: ``get_available_models`` returns a fixed catalog (``_FAKE_PI_MO
 and ``get_state`` reports a current model, so PiAgent surfaces them onto task state
 and the chat switcher offers pi's own models. ``set_model`` echoes the chosen model
 back and updates the current model, so a switch persists for a following ``get_state``
-— the hook the model-selection integration test asserts on.
+— the hook the model-selection integration test asserts on. The ``fake_pi:report_model``
+directive echoes that current model into the turn text, so a test can assert a switch
+reached pi (the turn ran under it), not just that the switcher's display updated.
 
 Wire-protocol reference: the pi RPC protocol notes (pi 0.78.0).
 """
@@ -902,6 +904,19 @@ def _handle_report_inputs(args: dict, builder: _TurnBuilder, abort_event: Event,
     builder.emit(summary)
 
 
+def _handle_report_model(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
+    """Echo the model FakePi is running this turn (its session `current_model`).
+
+    Lets a test assert that a model switch actually reached pi — that the turn ran
+    under the selected model — not merely that the switcher's display updated.
+    """
+    model_id = state.current_model.get("id", "") if state.current_model else ""
+    summary = f"[FakePi] current_model={model_id}"
+    accumulated = builder.full_text + summary
+    _emit_text_delta(summary, accumulated)
+    builder.emit(summary)
+
+
 def _handle_wait_for_file(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
     timeout_seconds = float(args.get("timeout_seconds", 120))
     sentinel = Path(args["path"])
@@ -999,6 +1014,7 @@ _COMMAND_REGISTRY: dict[str, Callable[[dict, _TurnBuilder, Event, _SessionState]
     "wait_for_file": _handle_wait_for_file,
     "recall": _handle_recall,
     "report_inputs": _handle_report_inputs,
+    "report_model": _handle_report_model,
     "compaction": _handle_compaction,
     "ui_request": _handle_ui_request,
 }
