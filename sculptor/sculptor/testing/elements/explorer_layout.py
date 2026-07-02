@@ -7,18 +7,14 @@ from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 from sculptor.testing.elements.diff_viewer import PlaywrightDiffViewerElement
 from sculptor.testing.elements.diff_viewer import get_diff_viewer_in
 
-# The ExplorerLayout divider is labelled for accessibility ("Resize sidebar") and
-# is the only such handle inside a panel's body, so it is located by that label.
-_RESIZE_HANDLE_ARIA_LABEL = "Resize sidebar"
-
 
 class PlaywrightExplorerLayoutElement(PlaywrightIntegrationTestElement):
     """Page Object Model for the shared list-plus-viewer scaffold.
 
     The Files / Changes / Commits panels embed the same ``ExplorerLayout``: a
-    resizable list (file tree / changes browser / commit history) on the left
-    whose width is the GLOBAL, shared-across-panels ``explorerListWidthAtom``, and
-    an always-visible viewer on the right. The sidebar-visibility toggle is
+    fixed-width list (file tree / changes browser / commit history) on the
+    left — not user-resizable, so the pane stays the same size across panels —
+    and an always-visible viewer on the right. The sidebar-visibility toggle is
     rendered into the viewer's header; when nothing is selected the
     viewer shows its empty state.
 
@@ -38,8 +34,14 @@ class PlaywrightExplorerLayoutElement(PlaywrightIntegrationTestElement):
         return self.get_by_test_id(ElementIDs.FILE_BROWSER_PANEL)
 
     def get_resize_handle(self) -> Locator:
-        """Get the divider that resizes the list against the viewer."""
-        return self.get_by_role("separator", name=_RESIZE_HANDLE_ARIA_LABEL)
+        """The list-resize divider the fixed-width redesign REMOVED.
+
+        The layout intentionally renders no such separator anymore; this
+        locator exists so tests can assert the affordance stays gone
+        (``to_have_count(0)``). The workspace sidebar's identically named
+        handle lives outside the section scope, so it cannot match here.
+        """
+        return self.get_by_role("separator", name="Resize sidebar")
 
     def get_diff_viewer(self) -> PlaywrightDiffViewerElement:
         """Get the viewer (detail) embedded in this layout."""

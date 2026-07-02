@@ -608,62 +608,30 @@ def test_directory_replaced_by_symlink_no_duplicate_row(sculptor_instance_: Scul
 
 
 # --------------------------------------------------------------------------- #
-# FCC-04 / FCC-05 / FCC-06: shared sidebar resize + toggle + always-visible viewer
+# FCC-04 / FCC-05 / FCC-06: fixed-width sidebar + toggle + always-visible viewer
 # --------------------------------------------------------------------------- #
 
 
-@user_story("to resize the shared file-browser sidebar")
-def test_shared_sidebar_resizes_and_has_a_minimum_width(sculptor_instance_: SculptorInstance) -> None:
-    """The ExplorerLayout sidebar (the global shared list width, FCC-04) resizes
-    via its divider and clamps to a minimum width.
+@user_story("to rely on the file-browser sidebar keeping its size")
+def test_shared_sidebar_is_fixed_width_with_no_resize_handle(sculptor_instance_: SculptorInstance) -> None:
+    """The ExplorerLayout sidebar (FCC-04) is a fixed width: it offers no
+    resize divider, so the list cannot be dragged to a new size and stays
+    consistent across the Files / Changes / Commits panels.
 
-    The divider is a focusable ``role=separator`` handle, so the resize is
-    driven with the keyboard (arrow keys) to avoid mouse-coordinate math, and
-    the list's measured width is read from its bounding box.
+    The list and the always-visible viewer render side by side, and no
+    ``role=separator`` resize handle exists inside the layout for a user to
+    drag — a reintroduced divider fails the zero-count assertion.
     """
     page = sculptor_instance_.page
-    # Open Files into the narrow (~20%) left section, then maximize that section so
-    # the shared list has room to grow before the resize is measured.
     _open_files_panel_with(page, WRITE_FILES_PROMPT, sub_section="left")
 
     left = PlaywrightWorkspaceSection(page, "left")
-    left.maximize()
-
-    # A maximized section is rendered without its ``SECTION_LEFT`` grid wrapper — the
-    # grid swaps to a single full-bleed PanelSection — so the Files panel's list now
-    # lives under the surviving panel-section root (the active-ring host), not under
-    # ``SECTION_LEFT``. Re-scope the ExplorerLayout POM there before measuring.
-    layout = get_explorer_layout_in(left.get_active_ring(), page)
+    layout = get_explorer_layout_in(left.get_section(), page)
     expect(layout.get_list()).to_be_visible()
+    expect(layout.get_diff_viewer()).to_be_visible()
 
-    handle = layout.get_resize_handle()
-    expect(handle).to_be_visible()
-
-    list_root = layout.get_list()
-    start_box = list_root.bounding_box()
-    assert start_box is not None
-    start_width = start_box["width"]
-
-    # Grow the sidebar with ArrowRight; the list should get measurably wider.
-    # Poll the live width with wait_for_function so the resize has time to settle
-    # rather than asserting on a single bounding_box() snapshot.
-    handle.focus()
-    for _ in range(3):
-        handle.press("ArrowRight")
-    page.wait_for_function(
-        "([el, w]) => el.getBoundingClientRect().width > w",
-        arg=[list_root.element_handle(), start_width],
-    )
-
-    # Shrink it well past the minimum with repeated ArrowLeft; it must clamp to
-    # the 200px minimum rather than collapsing to zero. Poll the live width until
-    # it settles at the clamped minimum instead of reading a single snapshot.
-    for _ in range(40):
-        handle.press("ArrowLeft")
-    page.wait_for_function(
-        "(el) => el.getBoundingClientRect().width >= 190",
-        arg=list_root.element_handle(),
-    )
+    # No resize affordance inside the layout: the divider is gone by design.
+    expect(layout.get_resize_handle()).to_have_count(0)
 
 
 @user_story("to hide and show the file-browser sidebar from the viewer header")
