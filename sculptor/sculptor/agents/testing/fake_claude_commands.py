@@ -1380,9 +1380,8 @@ def _emit_subagent_launch_and_inverted_ask(
     For main-agent MCP calls the CLI emits the assistant message (carrying the
     tool_use block) BEFORE the ``tools/call`` control_request. For subagent
     calls the order is INVERTED: the control_request reaches stdout first and
-    the sidechain assistant line follows (observed on Claude Code 2.1.170,
-    see the SCU freeze trace from 2026-07-01). Sculptor must pair the two
-    regardless of order.
+    the sidechain assistant line follows (observed on Claude Code 2.1.170).
+    Sculptor must pair the two regardless of order.
 
     Emits (in order): the main-agent assistant message with the Agent
     tool_use; the MCP ``tools/call`` control_request; the sidechain assistant
