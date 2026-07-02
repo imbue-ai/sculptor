@@ -82,6 +82,36 @@ def _make_tool_assistant_message(
     return messages
 
 
+def _emit_mcp_tool_call(tool_fqn: str, arguments: dict, rpc_id: int = 1) -> str:
+    """Send a `tools/call` MCP control_request on stdout and return its
+    envelope ``request_id`` (used to match the eventual control_response)."""
+    if tool_fqn == SCULPTOR_MCP_ASK_TOOL_FQN:
+        short_name = SCULPTOR_MCP_ASK_TOOL_NAME
+    elif tool_fqn == SCULPTOR_MCP_EXIT_PLAN_MODE_TOOL_FQN:
+        short_name = SCULPTOR_MCP_EXIT_PLAN_MODE_TOOL_NAME
+    else:
+        raise ValueError(f"Unknown Sculptor MCP tool fqn: {tool_fqn}")
+
+    request_id = generate_id("mcp_req")
+    control_request = {
+        "type": "control_request",
+        "request_id": request_id,
+        "request": {
+            "subtype": "mcp_message",
+            "server_name": SCULPTOR_MCP_SERVER_NAME,
+            "message": {
+                "jsonrpc": "2.0",
+                "id": rpc_id,
+                "method": "tools/call",
+                "params": {"name": short_name, "arguments": arguments},
+            },
+        },
+    }
+    sys.stdout.write(json.dumps(control_request) + "\n")
+    sys.stdout.flush()
+    return request_id
+
+
 def _emit_mcp_tool_call_and_wait_for_response(
     tool_use_id: str,
     tool_fqn: str,
@@ -100,37 +130,20 @@ def _emit_mcp_tool_call_and_wait_for_response(
     Raises ``RuntimeError`` if the response does not arrive within
     ``timeout_seconds``.
     """
-    if tool_fqn == SCULPTOR_MCP_ASK_TOOL_FQN:
-        short_name = SCULPTOR_MCP_ASK_TOOL_NAME
-    elif tool_fqn == SCULPTOR_MCP_EXIT_PLAN_MODE_TOOL_FQN:
-        short_name = SCULPTOR_MCP_EXIT_PLAN_MODE_TOOL_NAME
-    else:
-        raise ValueError(f"Unknown Sculptor MCP tool fqn: {tool_fqn}")
-
-    request_id = generate_id("mcp_req")
-    control_request = {
-        "type": "control_request",
-        "request_id": request_id,
-        "request": {
-            "subtype": "mcp_message",
-            "server_name": SCULPTOR_MCP_SERVER_NAME,
-            "message": {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {"name": short_name, "arguments": arguments},
-            },
-        },
-    }
-    sys.stdout.write(json.dumps(control_request) + "\n")
-    sys.stdout.flush()
+    request_id = _emit_mcp_tool_call(tool_fqn=tool_fqn, arguments=arguments)
     return _read_mcp_control_response_text(request_id, tool_use_id, timeout_seconds, expect_error=expect_error)
 
 
-def _read_mcp_control_response_text(
-    expected_request_id: str, tool_use_id: str, timeout_seconds: float, expect_error: bool = False
-) -> str:
-    """Block reading stdin until a matching MCP ``control_response`` arrives.
+# Bytes pulled off stdin by a response reader after its final match. A single
+# os.read can swallow lines destined for a LATER reader in the same process
+# (the SCU-783 buffering flake); parking them here keeps sequential readers
+# (e.g. two AUQ waits in one handler) from losing responses.
+_STDIN_UNCONSUMED: bytes = b""
+
+
+def _read_mcp_control_responses(expected_request_ids: set[str], timeout_seconds: float) -> dict[str, dict]:
+    """Block reading stdin until an MCP ``control_response`` has arrived for
+    every id in ``expected_request_ids``. Returns ``{request_id: mcp_response}``.
 
     Reads from stdin's raw file descriptor rather than ``sys.stdin.readline``
     to avoid a flake (SCU-783) where Sculptor writes a non-matching control
@@ -141,51 +154,79 @@ def _read_mcp_control_response_text(
     ``select.select`` on stdin's fd cannot see it — the helper would spin
     until its 180s timeout while the agent's status pill stayed visible.
     """
+    global _STDIN_UNCONSUMED
     fd = sys.stdin.fileno()
-    pending = b""
+    results: dict[str, dict] = {}
+    remaining_ids = set(expected_request_ids)
+    pending = _STDIN_UNCONSUMED
+    _STDIN_UNCONSUMED = b""
     deadline = time.monotonic() + timeout_seconds
-    while True:
-        while b"\n" in pending:
-            raw_line, _, pending = pending.partition(b"\n")
-            line = raw_line.decode("utf-8", errors="replace").strip()
-            if not line:
-                continue
-            try:
-                data = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(data, dict) or data.get("type") != "control_response":
-                continue
-            response = data.get("response", {})
-            if response.get("request_id") != expected_request_id:
-                continue
-            mcp_response = response.get("response", {}).get("mcp_response", {})
-            if "error" in mcp_response:
-                if expect_error:
-                    err = mcp_response["error"]
-                    return f"MCP error {err.get('code')}: {err.get('message', '')}"
-                raise RuntimeError(f"MCP error response for tool_use_id={tool_use_id}: {mcp_response['error']}")
-            if expect_error:
-                raise RuntimeError(
-                    f"Expected MCP error response for tool_use_id={tool_use_id} but got success: {mcp_response}"
-                )
-            result = mcp_response.get("result", {})
-            content = result.get("content", [])
-            if not content:
-                return ""
-            return content[0].get("text", "")
+    try:
+        while True:
+            while b"\n" in pending:
+                raw_line, _, pending = pending.partition(b"\n")
+                line = raw_line.decode("utf-8", errors="replace").strip()
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(data, dict) or data.get("type") != "control_response":
+                    continue
+                response = data.get("response", {})
+                request_id = response.get("request_id")
+                if request_id not in remaining_ids:
+                    continue
+                results[request_id] = response.get("response", {}).get("mcp_response", {})
+                remaining_ids.discard(request_id)
+                if not remaining_ids:
+                    return results
 
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            break
-        ready, _, _ = select.select([fd], [], [], min(remaining, 0.1))
-        if not ready:
-            continue
-        chunk = os.read(fd, 8192)
-        if not chunk:
-            break
-        pending += chunk
-    raise RuntimeError(f"Timed out waiting for MCP control_response for tool_use_id={tool_use_id}")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            ready, _, _ = select.select([fd], [], [], min(remaining, 0.1))
+            if not ready:
+                continue
+            chunk = os.read(fd, 8192)
+            if not chunk:
+                break
+            pending += chunk
+        raise RuntimeError(f"Timed out waiting for MCP control_response(s) for request_ids={sorted(remaining_ids)}")
+    finally:
+        _STDIN_UNCONSUMED = pending
+
+
+def _extract_mcp_response_text(mcp_response: dict) -> str:
+    content = mcp_response.get("result", {}).get("content", [])
+    if not content:
+        return ""
+    return content[0].get("text", "")
+
+
+def _read_mcp_control_response_text(
+    expected_request_id: str, tool_use_id: str, timeout_seconds: float, expect_error: bool = False
+) -> str:
+    """Block reading stdin until a matching MCP ``control_response`` arrives.
+
+    See ``_read_mcp_control_responses`` for the raw-fd reading rationale.
+    """
+    try:
+        responses = _read_mcp_control_responses({expected_request_id}, timeout_seconds)
+    except RuntimeError:
+        raise RuntimeError(f"Timed out waiting for MCP control_response for tool_use_id={tool_use_id}")
+    mcp_response = responses[expected_request_id]
+    if "error" in mcp_response:
+        if expect_error:
+            err = mcp_response["error"]
+            return f"MCP error {err.get('code')}: {err.get('message', '')}"
+        raise RuntimeError(f"MCP error response for tool_use_id={tool_use_id}: {mcp_response['error']}")
+    if expect_error:
+        raise RuntimeError(
+            f"Expected MCP error response for tool_use_id={tool_use_id} but got success: {mcp_response}"
+        )
+    return _extract_mcp_response_text(mcp_response)
 
 
 def handle_default(emit_streaming: bool) -> list[dict]:
@@ -1328,6 +1369,221 @@ def handle_subagent(args: dict, emit_streaming: bool) -> list[dict]:
     return messages
 
 
+def _emit_subagent_launch_and_inverted_ask(
+    questions: list[dict],
+    description: str,
+    emit_streaming: bool,
+) -> tuple[str, str, str]:
+    """Launch an Agent tool call whose subagent asks a question via MCP,
+    replaying the real CLI's SUBAGENT event ordering.
+
+    For main-agent MCP calls the CLI emits the assistant message (carrying the
+    tool_use block) BEFORE the ``tools/call`` control_request. For subagent
+    calls the order is INVERTED: the control_request reaches stdout first and
+    the sidechain assistant line follows (observed on Claude Code 2.1.170,
+    see the SCU freeze trace from 2026-07-01). Sculptor must pair the two
+    regardless of order.
+
+    Emits (in order): the main-agent assistant message with the Agent
+    tool_use; the MCP ``tools/call`` control_request; the sidechain assistant
+    message with the AUQ tool_use. Subagent output reaches the parent stream
+    as full non-streamed assistant lines, so the sidechain message carries no
+    streaming events.
+
+    Returns ``(agent_tool_id, ask_tool_id, mcp_request_id)`` — the caller
+    blocks on the response and emits the post-answer messages.
+    """
+    main_msg_id = generate_id("msg")
+    agent_tool_id = generate_id("toolu")
+    ask_tool_id = generate_id("toolu")
+    subagent_msg_id = generate_id("msg")
+
+    # 1. Main agent: text + Agent tool_use
+    agent_tool_block = make_tool_use_block(
+        tool_id=agent_tool_id,
+        tool_name="Agent",
+        tool_input={"prompt": "Ask the user and report their answer", "description": description},
+    )
+    _emit_messages_to_stdout(
+        _make_tool_assistant_message(
+            message_id=main_msg_id,
+            tool_blocks=[agent_tool_block],
+            emit_streaming=emit_streaming,
+            text_prefix="I'll use a subagent to help with this.",
+        )
+    )
+
+    # 2. The subagent's MCP tools/call — BEFORE the sidechain assistant line.
+    mcp_request_id = _emit_mcp_tool_call(
+        tool_fqn=SCULPTOR_MCP_ASK_TOOL_FQN,
+        arguments={"questions": questions},
+    )
+
+    # 3. The sidechain assistant line carrying the AUQ tool_use block.
+    ask_tool_block = make_tool_use_block(
+        tool_id=ask_tool_id,
+        tool_name=SCULPTOR_MCP_ASK_TOOL_FQN,
+        tool_input={"questions": questions},
+    )
+    _emit_messages_to_stdout(
+        [
+            make_assistant_message(
+                message_id=subagent_msg_id,
+                content_blocks=[ask_tool_block],
+                parent_tool_use_id=agent_tool_id,
+            )
+        ]
+    )
+    return agent_tool_id, ask_tool_id, mcp_request_id
+
+
+def _make_subagent_answer_messages(
+    agent_tool_id: str,
+    ask_tool_id: str,
+    answer_text: str,
+    subagent_label: str,
+) -> list[dict]:
+    """Build the post-answer message tail for a subagent AUQ: the sidechain
+    tool_result, and the Agent tool_result echoing which answer the subagent
+    received (tests assert on the echo to verify answer routing)."""
+    subagent_reply = f"[FakeClaude {subagent_label}] Received answer: {answer_text}"
+    return [
+        make_tool_result_message(tool_use_id=ask_tool_id, content=answer_text, parent_tool_use_id=agent_tool_id),
+        make_tool_result_message(tool_use_id=agent_tool_id, content=str([{"type": "text", "text": subagent_reply}])),
+    ]
+
+
+def handle_subagent_ask_user_question(args: dict, emit_streaming: bool) -> list[dict]:
+    """Simulate a subagent (Agent tool) asking the user a question via MCP.
+
+    Replays the inverted subagent event ordering (see
+    ``_emit_subagent_launch_and_inverted_ask``), blocks until Sculptor's MCP
+    server delivers the user's answer, then emits the tool results and a main
+    agent summary echoing the received answer.
+
+    Args:
+        args: Must contain "questions" (AUQ questions list). Optional:
+              "description".
+    """
+    questions = args["questions"]
+    description = args.get("description", "Ask the user a question")
+
+    agent_tool_id, ask_tool_id, mcp_request_id = _emit_subagent_launch_and_inverted_ask(
+        questions=questions, description=description, emit_streaming=emit_streaming
+    )
+
+    answer_text = _read_mcp_control_response_text(mcp_request_id, ask_tool_id, timeout_seconds=180.0)
+
+    messages = _make_subagent_answer_messages(
+        agent_tool_id=agent_tool_id,
+        ask_tool_id=ask_tool_id,
+        answer_text=answer_text,
+        subagent_label="subagent",
+    )
+    summary_text = f"[FakeClaude] Subagent finished. Received answer: {answer_text}"
+    summary_msg_id = generate_id("msg")
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=summary_msg_id, text=summary_text))
+    messages.append(make_assistant_message(message_id=summary_msg_id, content_blocks=[make_text_block(summary_text)]))
+    return messages
+
+
+def handle_ask_user_question_then_subagent_ask(args: dict, emit_streaming: bool) -> list[dict]:
+    """A main-agent AUQ (normal ordering, answered first) followed by a
+    subagent AUQ with the inverted subagent event ordering — all in one turn.
+
+    Guards against the MCP server's answered-question replay cache serving the
+    already-delivered FIRST answer to the subagent's DIFFERENT second
+    question. The final summary echoes both answers so the test can assert the
+    subagent received the answer to ITS question, not the cached one.
+
+    Args:
+        args: Must contain "first_questions" and "second_questions".
+    """
+    first_questions = args["first_questions"]
+    second_questions = args["second_questions"]
+
+    # Main-agent AUQ with the normal (assistant line first) ordering.
+    first_msg_id = generate_id("msg")
+    first_tool_id = generate_id("toolu")
+    first_block = make_tool_use_block(
+        tool_id=first_tool_id,
+        tool_name=SCULPTOR_MCP_ASK_TOOL_FQN,
+        tool_input={"questions": first_questions},
+    )
+    _emit_messages_to_stdout(
+        _make_tool_assistant_message(message_id=first_msg_id, tool_blocks=[first_block], emit_streaming=emit_streaming)
+    )
+    first_answer = _emit_mcp_tool_call_and_wait_for_response(
+        tool_use_id=first_tool_id,
+        tool_fqn=SCULPTOR_MCP_ASK_TOOL_FQN,
+        arguments={"questions": first_questions},
+    )
+    _emit_messages_to_stdout([make_tool_result_message(tool_use_id=first_tool_id, content=first_answer)])
+
+    # Subagent AUQ with the inverted ordering.
+    agent_tool_id, ask_tool_id, mcp_request_id = _emit_subagent_launch_and_inverted_ask(
+        questions=second_questions, description="Ask a follow-up question", emit_streaming=emit_streaming
+    )
+    second_answer = _read_mcp_control_response_text(mcp_request_id, ask_tool_id, timeout_seconds=180.0)
+
+    messages = _make_subagent_answer_messages(
+        agent_tool_id=agent_tool_id,
+        ask_tool_id=ask_tool_id,
+        answer_text=second_answer,
+        subagent_label="subagent",
+    )
+    summary_text = f"[FakeClaude] Subagent finished. Subagent received answer: {second_answer}"
+    summary_msg_id = generate_id("msg")
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=summary_msg_id, text=summary_text))
+    messages.append(make_assistant_message(message_id=summary_msg_id, content_blocks=[make_text_block(summary_text)]))
+    return messages
+
+
+def handle_two_subagents_ask_user_question(args: dict, emit_streaming: bool) -> list[dict]:
+    """Two concurrent subagents each asking a DIFFERENT question via MCP, with
+    the inverted subagent event ordering, interleaved as observed in the real
+    freeze trace: tools/call A, sidechain line A, tools/call B, sidechain
+    line B.
+
+    Blocks until BOTH answers arrive, then emits per-subagent echoes so the
+    test can assert each subagent received the answer to its own question
+    (a single-slot pairing would cross the wires).
+
+    Args:
+        args: Must contain "first_questions" and "second_questions".
+    """
+    first_questions = args["first_questions"]
+    second_questions = args["second_questions"]
+
+    agent_a_id, ask_a_id, request_a_id = _emit_subagent_launch_and_inverted_ask(
+        questions=first_questions, description="Subagent A question", emit_streaming=emit_streaming
+    )
+    agent_b_id, ask_b_id, request_b_id = _emit_subagent_launch_and_inverted_ask(
+        questions=second_questions, description="Subagent B question", emit_streaming=emit_streaming
+    )
+
+    responses = _read_mcp_control_responses({request_a_id, request_b_id}, timeout_seconds=180.0)
+    answer_a = _extract_mcp_response_text(responses[request_a_id])
+    answer_b = _extract_mcp_response_text(responses[request_b_id])
+
+    messages = _make_subagent_answer_messages(
+        agent_tool_id=agent_a_id, ask_tool_id=ask_a_id, answer_text=answer_a, subagent_label="subagent A"
+    )
+    messages.extend(
+        _make_subagent_answer_messages(
+            agent_tool_id=agent_b_id, ask_tool_id=ask_b_id, answer_text=answer_b, subagent_label="subagent B"
+        )
+    )
+    summary_text = f"[FakeClaude] Subagent A received answer: {answer_a} | Subagent B received answer: {answer_b}"
+    summary_msg_id = generate_id("msg")
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=summary_msg_id, text=summary_text))
+    messages.append(make_assistant_message(message_id=summary_msg_id, content_blocks=[make_text_block(summary_text)]))
+    return messages
+
+
 def handle_background_subagent(args: dict, emit_streaming: bool) -> list[dict]:
     """Simulate a background subagent (Agent tool with run_in_background=true).
 
@@ -2262,6 +2518,9 @@ COMMAND_REGISTRY: dict[str, Callable[..., list[dict]]] = {
     "spawn_subprocess_and_hang": handle_spawn_subprocess_and_hang,
     "spawn_sigterm_immune_subprocess_and_hang": handle_spawn_sigterm_immune_subprocess_and_hang,
     "subagent": handle_subagent,
+    "subagent_ask_user_question": handle_subagent_ask_user_question,
+    "ask_user_question_then_subagent_ask": handle_ask_user_question_then_subagent_ask,
+    "two_subagents_ask_user_question": handle_two_subagents_ask_user_question,
     "background_subagent": handle_background_subagent,
     "read_file": handle_read_file,
     "glob": handle_glob,
