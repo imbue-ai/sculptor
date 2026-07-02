@@ -149,8 +149,10 @@ RUN NSS_WRAPPER_LIB="$(dpkg -L libnss-wrapper | grep -m1 '/libnss_wrapper\.so$')
 
 USER sculptor
 ENTRYPOINT ["/usr/local/bin/openhost-entrypoint.sh"]
-# Ensure the persistent dirs exist, then run the backend from the built venv.
-# The venv lives at the uv *workspace* root (/app/.venv), not /app/sculptor.
-# No --no-serve-static: the backend serves the web UI built above (resolved via
-# the 'sculptor' package's editable install at /app/sculptor/frontend/dist).
-CMD ["sh", "-c", "mkdir -p \"$SCULPTOR_FOLDER\" \"$CLAUDE_CONFIG_DIR\" \"$GH_CONFIG_DIR\" && exec /app/.venv/bin/python -m sculptor.cli.main --no-open-browser /workspace"]
+# Run via the boot script: it resolves the app-data dir, ensures the persistent
+# dirs exist, re-establishes git identity + the host-wide agent skill, then execs
+# the backend from the built venv (/app/.venv, the uv workspace root). No
+# --no-serve-static: the backend serves the web UI built above (resolved via the
+# 'sculptor' package's editable install at /app/sculptor/frontend/dist). See
+# openhost-run.sh.
+CMD ["sh", "/app/openhost-run.sh"]
