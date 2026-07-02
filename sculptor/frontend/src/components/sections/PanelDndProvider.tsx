@@ -22,8 +22,6 @@ import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 import { useCallback, useRef } from "react";
 
-import { AgentStatusDot } from "~/components/statusDot";
-
 import type { PanelDragData, PanelDropData } from "./panelDnd.ts";
 import { APPEND_INDEX, sectionBodyDroppableId } from "./panelDnd.ts";
 import {
@@ -32,10 +30,9 @@ import {
   resetKeyboardDropTarget,
   setKeyboardDropTarget,
 } from "./panelDndKeyboard.ts";
-import styles from "./PanelDndProvider.module.scss";
-import { panelDefinitionByIdAtom } from "./registry/panelRegistry.ts";
 import { jumpToSectionAtom, movePanelAtom } from "./sectionActions.ts";
 import type { PanelId, SubSectionId } from "./sectionTypes.ts";
+import { TabPill } from "./TabPill.tsx";
 import {
   draggedPanelIdAtom,
   dragPointerHalvesAtom,
@@ -84,23 +81,6 @@ function resolveDropTarget(event: DragMoveEvent | DragOverEvent | DragEndEvent):
   const pointerX = event.activatorEvent instanceof PointerEvent ? event.activatorEvent.clientX + event.delta.x : null;
   return { to: overData.subSection, index: computeDropIndex(overData.subSection, activeData.panelId, pointerX) };
 }
-
-const DragOverlayTab = ({ panelId }: { panelId: PanelId }): ReactElement | null => {
-  const definition = useAtomValue(panelDefinitionByIdAtom(panelId));
-  if (definition === undefined) {
-    return null;
-  }
-  return (
-    <div className={styles.overlayTab}>
-      {definition.dotStatus !== undefined && (
-        <div className={styles.overlayDot} data-panel-tab-dot={definition.dotStatus} aria-hidden="true">
-          <AgentStatusDot status={definition.dotStatus} size={8} />
-        </div>
-      )}
-      <span className={styles.overlayLabel}>{definition.displayName}</span>
-    </div>
-  );
-};
 
 export const PanelDndProvider = ({ children }: { children: ReactNode }): ReactElement => {
   const draggedPanelId = useAtomValue(draggedPanelIdAtom);
@@ -217,7 +197,7 @@ export const PanelDndProvider = ({ children }: { children: ReactNode }): ReactEl
     >
       {children}
       <DragOverlay dropAnimation={null}>
-        {draggedPanelId !== null ? <DragOverlayTab panelId={draggedPanelId} /> : null}
+        {draggedPanelId !== null ? <TabPill panelId={draggedPanelId} variant="overlay" /> : null}
       </DragOverlay>
     </DndContext>
   );

@@ -10,9 +10,9 @@
 // workspace-specific, so the same shell backs Home and Settings.
 
 import { Flex } from "@radix-ui/themes";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { Outlet } from "react-router-dom";
 
 import { useSyncActiveTabFromRoute } from "~/common/hooks/useSyncActiveTabFromRoute.ts";
@@ -28,6 +28,8 @@ import {
 } from "~/common/state/atoms/toasts.ts";
 import { useProject } from "~/common/state/hooks/useProjects.ts";
 import { useUnifiedStream } from "~/common/state/hooks/useUnifiedStream";
+import type { AtomToastAtom } from "~/components/AtomToast.tsx";
+import { AtomToast } from "~/components/AtomToast.tsx";
 import { CommandPalette } from "~/components/CommandPalette";
 import { CommandRegistrations } from "~/components/CommandPalette/CommandRegistrations.tsx";
 import { KeyboardShortcutsDialog } from "~/components/KeyboardShortcutsDialog.tsx";
@@ -37,7 +39,6 @@ import { WorkspaceSidebar } from "~/components/nav/WorkspaceSidebar.tsx";
 import { NewWorkspaceModal } from "~/components/newWorkspace/NewWorkspaceModal.tsx";
 import { NotificationToasts } from "~/components/NotificationToasts.tsx";
 import { RepoPathDialog } from "~/components/RepoPathDialog.tsx";
-import { Toast } from "~/components/Toast.tsx";
 import { WarningStatusBanner } from "~/components/WarningStatusBanner.tsx";
 import { usePageLayoutKeyboardShortcuts } from "~/layouts/hooks/usePageLayoutKeyboardShortcuts.ts";
 import { PluginLoader } from "~/plugins/PluginLoader.tsx";
@@ -47,22 +48,23 @@ import { PluginOverlays } from "~/plugins/PluginOverlays.tsx";
 // failure before it auto-dismisses.
 const ERROR_TOAST_DURATION_MS = 10_000;
 
+// The app-level toasts, one <AtomToast> per atom: setting an atom anywhere in the
+// app pops the toast here, and closing it clears the atom. Variant styling and
+// action buttons (e.g. the delete-error Retry) ride along in the atom payload, so
+// entries only differ by dismiss duration.
+const APP_TOASTS: ReadonlyArray<{ key: string; toastAtom: AtomToastAtom; duration?: number }> = [
+  { key: "delete-error", toastAtom: deleteErrorToastAtom, duration: ERROR_TOAST_DURATION_MS },
+  { key: "create-agent-error", toastAtom: createAgentErrorToastAtom, duration: ERROR_TOAST_DURATION_MS },
+  { key: "workspace-delete-error", toastAtom: workspaceDeleteErrorToastAtom, duration: ERROR_TOAST_DURATION_MS },
+  { key: "workspace-open-close-error", toastAtom: workspaceOpenCloseErrorToastAtom, duration: ERROR_TOAST_DURATION_MS },
+  { key: "mention-chip-unreachable", toastAtom: mentionChipUnreachableToastAtom },
+  { key: "terminal-prompt-rejected", toastAtom: terminalPromptRejectedToastAtom },
+];
+
 export const AppShell = (): ReactElement => {
   // External atoms
   const isSidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
   const backendStatus = useAtomValue(backendStatusAtom);
-  const deleteErrorToast = useAtomValue(deleteErrorToastAtom);
-  const setDeleteErrorToast = useSetAtom(deleteErrorToastAtom);
-  const workspaceDeleteErrorToast = useAtomValue(workspaceDeleteErrorToastAtom);
-  const setWorkspaceDeleteErrorToast = useSetAtom(workspaceDeleteErrorToastAtom);
-  const workspaceOpenCloseErrorToast = useAtomValue(workspaceOpenCloseErrorToastAtom);
-  const setWorkspaceOpenCloseErrorToast = useSetAtom(workspaceOpenCloseErrorToastAtom);
-  const mentionChipUnreachableToast = useAtomValue(mentionChipUnreachableToastAtom);
-  const setMentionChipUnreachableToast = useSetAtom(mentionChipUnreachableToastAtom);
-  const terminalPromptRejectedToast = useAtomValue(terminalPromptRejectedToastAtom);
-  const setTerminalPromptRejectedToast = useSetAtom(terminalPromptRejectedToastAtom);
-  const createAgentErrorToast = useAtomValue(createAgentErrorToastAtom);
-  const setCreateAgentErrorToast = useSetAtom(createAgentErrorToastAtom);
 
   // Internal state
   const [isRepoPathDialogOpen, setIsRepoPathDialogOpen] = useState<boolean>(false);
@@ -74,46 +76,6 @@ export const AppShell = (): ReactElement => {
   useUnifiedStream();
   usePageLayoutKeyboardShortcuts();
   useSyncActiveTabFromRoute();
-
-  // Functions and callbacks
-  // Stable callbacks so the memoized <Toast> instances bail out instead of
-  // re-rendering on every unrelated commit while they sit closed.
-  const handleDeleteErrorOpenChange = useCallback(
-    (open: boolean): void => {
-      if (!open) setDeleteErrorToast(null);
-    },
-    [setDeleteErrorToast],
-  );
-  const handleWorkspaceDeleteErrorOpenChange = useCallback(
-    (open: boolean): void => {
-      if (!open) setWorkspaceDeleteErrorToast(null);
-    },
-    [setWorkspaceDeleteErrorToast],
-  );
-  const handleWorkspaceOpenCloseErrorOpenChange = useCallback(
-    (open: boolean): void => {
-      if (!open) setWorkspaceOpenCloseErrorToast(null);
-    },
-    [setWorkspaceOpenCloseErrorToast],
-  );
-  const handleMentionChipUnreachableOpenChange = useCallback(
-    (open: boolean): void => {
-      if (!open) setMentionChipUnreachableToast(null);
-    },
-    [setMentionChipUnreachableToast],
-  );
-  const handleTerminalPromptRejectedOpenChange = useCallback(
-    (open: boolean): void => {
-      if (!open) setTerminalPromptRejectedToast(null);
-    },
-    [setTerminalPromptRejectedToast],
-  );
-  const handleCreateAgentErrorOpenChange = useCallback(
-    (open: boolean): void => {
-      if (!open) setCreateAgentErrorToast(null);
-    },
-    [setCreateAgentErrorToast],
-  );
 
   // JSX and rendering logic
   const hasBackendStopped = backendStatus.status === "unresponsive";
@@ -161,54 +123,9 @@ export const AppShell = (): ReactElement => {
         onClose={() => setIsRepoPathDialogOpen(false)}
       />
       <NotificationToasts />
-      <Toast
-        open={deleteErrorToast !== null}
-        onOpenChange={handleDeleteErrorOpenChange}
-        title={deleteErrorToast?.title}
-        description={deleteErrorToast?.description}
-        type={deleteErrorToast?.type}
-        action={deleteErrorToast?.action ?? undefined}
-        duration={ERROR_TOAST_DURATION_MS}
-      />
-      <Toast
-        open={createAgentErrorToast !== null}
-        onOpenChange={handleCreateAgentErrorOpenChange}
-        title={createAgentErrorToast?.title}
-        description={createAgentErrorToast?.description}
-        type={createAgentErrorToast?.type}
-        action={createAgentErrorToast?.action ?? undefined}
-        duration={ERROR_TOAST_DURATION_MS}
-      />
-      <Toast
-        open={workspaceDeleteErrorToast !== null}
-        onOpenChange={handleWorkspaceDeleteErrorOpenChange}
-        title={workspaceDeleteErrorToast?.title}
-        description={workspaceDeleteErrorToast?.description}
-        type={workspaceDeleteErrorToast?.type}
-        action={workspaceDeleteErrorToast?.action ?? undefined}
-        duration={ERROR_TOAST_DURATION_MS}
-      />
-      <Toast
-        open={workspaceOpenCloseErrorToast !== null}
-        onOpenChange={handleWorkspaceOpenCloseErrorOpenChange}
-        title={workspaceOpenCloseErrorToast?.title}
-        description={workspaceOpenCloseErrorToast?.description}
-        type={workspaceOpenCloseErrorToast?.type}
-        action={workspaceOpenCloseErrorToast?.action ?? undefined}
-        duration={ERROR_TOAST_DURATION_MS}
-      />
-      <Toast
-        open={mentionChipUnreachableToast !== null}
-        onOpenChange={handleMentionChipUnreachableOpenChange}
-        title={mentionChipUnreachableToast?.title}
-        description={mentionChipUnreachableToast?.description}
-      />
-      <Toast
-        open={terminalPromptRejectedToast !== null}
-        onOpenChange={handleTerminalPromptRejectedOpenChange}
-        title={terminalPromptRejectedToast?.title}
-        description={terminalPromptRejectedToast?.description}
-      />
+      {APP_TOASTS.map(({ key, toastAtom, duration }) => (
+        <AtomToast key={key} toastAtom={toastAtom} duration={duration} />
+      ))}
     </>
   );
 };

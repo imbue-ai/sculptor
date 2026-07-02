@@ -31,8 +31,8 @@ import { closePanelAtom, setActivePanelAtom, splitSectionAtom } from "./sectionA
 import { activePanelIdInSubSectionAtom, sectionSplitForSectionAtom } from "./sectionAtoms.ts";
 import styles from "./SectionHeader.module.scss";
 import type { PanelId, SubSectionId } from "./sectionTypes.ts";
-import { toSection } from "./sectionTypes.ts";
-import { splitDirectionOptionsForSection } from "./splitDirection.ts";
+import { splitDirectionOptionsForSection, toSection } from "./sectionTypes.ts";
+import { TabPill } from "./TabPill.tsx";
 import {
   displayedPanelIdsAtom,
   ghostPanelIdAtom,
@@ -259,30 +259,6 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
 
 const PanelTab = memo(PanelTabComponent);
 
-// The non-interactive ghost placeholder shown in the section a panel would land in
-// during a CROSS-section drag. It is deliberately NOT a draggable/droppable: the real
-// draggable (same panel id) is still mounted in the source section, and registering
-// the id twice would confuse dnd-kit. Mirrors the tab pill shape with the ghost
-// styling so the strip reserves the right footprint for the drop.
-const GhostTabComponent = ({ panelId }: { panelId: PanelId }): ReactElement | null => {
-  const definition = useAtomValue(panelDefinitionByIdAtom(panelId));
-  if (definition === undefined) {
-    return null;
-  }
-  return (
-    <div className={`${styles.tab} ${styles.tabGhost}`} data-section-tab-ghost="true" aria-hidden="true">
-      {definition.dotStatus !== undefined && (
-        <div className={styles.dot} data-panel-tab-dot={definition.dotStatus}>
-          <AgentStatusDot status={definition.dotStatus} size={8} />
-        </div>
-      )}
-      <span className={styles.label}>{definition.displayName}</span>
-    </div>
-  );
-};
-
-const GhostTab = memo(GhostTabComponent);
-
 type SectionHeaderProps = { subSection: SubSectionId };
 
 const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElement => {
@@ -329,7 +305,7 @@ const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElemen
           // draggable stays in the source section; a within-section reorder keeps the
           // single instance fully draggable at its preview slot.
           if (panelId === ghostPanelId && !isReorderWithin) {
-            return <GhostTab key={panelId} panelId={panelId} />;
+            return <TabPill key={panelId} panelId={panelId} variant="ghost" />;
           }
           return (
             <PanelTab

@@ -1,52 +1,32 @@
-import { ContextMenu, DropdownMenu, Flex, IconButton, Text, Tooltip } from "@radix-ui/themes";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import type { LucideIcon } from "lucide-react";
-import {
-  Bug,
-  ChevronDown,
-  ChevronRight,
-  FolderPlus,
-  Home,
-  MoreHorizontal,
-  PanelLeftClose,
-  Plus,
-  Search,
-  Settings,
-  Trash2,
-} from "lucide-react";
+import { IconButton, Tooltip } from "@radix-ui/themes";
+import { useAtomValue, useSetAtom } from "jotai";
+import { Bug, Home, PanelLeftClose, Plus, Search, Settings } from "lucide-react";
 import type { ReactElement } from "react";
 import { useCallback, useMemo, useState } from "react";
 
 import type { Workspace } from "~/api";
-import { ElementIds, updateWorkspace } from "~/api";
+import { ElementIds } from "~/api";
 import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { projectsArrayAtom } from "~/common/state/atoms/projects.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { agentIdsByWorkspaceAtom, ensurePseudoTabAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
-import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { useOptimisticWorkspaceDelete } from "~/common/state/hooks/useOptimisticWorkspaceDelete.ts";
-import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { AddRepoDialog } from "~/components/add-repo/AddRepoDialog.tsx";
 import { useCommandPalette } from "~/components/CommandPalette";
 import { renamingWorkspaceIdAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
-import {
-  type OpenInRuntime,
-  WorkspaceContextMenuContent,
-  WorkspaceDropdownMenuContent,
-} from "~/components/CommandPalette/contextActions/menu.tsx";
-import type { WorkspaceAction, WorkspaceActionRuntime } from "~/components/CommandPalette/contextActions/types.ts";
+import type { OpenInRuntime } from "~/components/CommandPalette/contextActions/menu.tsx";
+import type { WorkspaceActionRuntime } from "~/components/CommandPalette/contextActions/types.ts";
 import { useGitAndOpenInRuntime } from "~/components/CommandPalette/contextActions/useGitAndOpenInRuntime.ts";
 import { buildWorkspaceActions } from "~/components/CommandPalette/contextActions/workspaceActions.ts";
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
-import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { sidebarCollapsedAtom, sidebarWidthAtom } from "~/components/layout/sidebarAtoms.ts";
-import { collapsedRepoGroupsAtom } from "~/components/nav/navAtoms.ts";
-import { isWorkspaceListEmptyAtom, newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
+import { isWorkspaceListEmptyAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCreateWorkspaceFromSidebar.ts";
 import { ReportProblemPopover } from "~/components/ReportProblemPopover.tsx";
 import { layoutPersistenceAdapter } from "~/components/sections/persistence/LocalStorageLayoutAdapter.ts";
 import { ResizeHandle } from "~/components/sections/ResizeHandle.tsx";
-import { computeWorkspaceDotStatus, EMPTY_WORKSPACE_DOT_STATUS, WorkspaceStatusDots } from "~/components/statusDot";
+import type { WorkspaceDotStatus } from "~/components/statusDot";
+import { computeWorkspaceDotStatus } from "~/components/statusDot";
 import { Toast, type ToastContent } from "~/components/Toast.tsx";
 import { useWorkspaceTabActions } from "~/components/useWorkspaceTabActions.ts";
 import { VersionDisplay } from "~/components/VersionDisplay.tsx";
@@ -54,178 +34,15 @@ import { HOME_TAB_ID, SETTINGS_TAB_ID } from "~/components/workspaceTabIds.ts";
 import { getTitleBarLeftPadding } from "~/electron/utils.ts";
 import { WorkspacePeekOverlay } from "~/pages/workspace/components/WorkspacePeekOverlay.tsx";
 
+import navItemStyles from "./NavItem.module.scss";
+import { NavItem } from "./NavItem.tsx";
+import { SidebarFirstRunState } from "./SidebarFirstRunState.tsx";
+import type { RepoGroup } from "./SidebarRepoGroup.tsx";
+import { SidebarRepoGroup } from "./SidebarRepoGroup.tsx";
 import styles from "./WorkspaceSidebar.module.scss";
 
 /** Smallest sidebar width the resize handle allows, in pixels. */
 const MIN_SIDEBAR_WIDTH_PX = 180;
-
-type NavItemProps = {
-  icon: LucideIcon;
-  label: string;
-  isActive?: boolean;
-  disabled?: boolean;
-  /**
-   * Tooltip shown on hover while the item is disabled, explaining why it
-   * can't be used right now (e.g. no workspaces yet). Ignored when enabled.
-   */
-  disabledTooltip?: string;
-  onClick: () => void;
-  testId?: string;
-};
-
-const NavItem = ({
-  icon: Icon,
-  label,
-  isActive,
-  disabled,
-  disabledTooltip,
-  onClick,
-  testId,
-}: NavItemProps): ReactElement => {
-  const button = (
-    <button
-      type="button"
-      className={`${styles.navItem} ${isActive ? styles.navItemActive : ""}`}
-      onClick={onClick}
-      disabled={disabled}
-      data-testid={testId}
-    >
-      <Icon size={16} className={styles.navIcon} />
-      <span className={styles.navLabel}>{label}</span>
-    </button>
-  );
-  // Disabled buttons don't emit pointer events, so the tooltip anchors on a
-  // wrapper span that still receives hover — this keeps the affordance
-  // discoverable ("why can't I click this?") instead of a silent no-op.
-  if (disabled && disabledTooltip) {
-    return (
-      <Tooltip content={disabledTooltip} side="right">
-        <span className={styles.navItemTooltipAnchor}>{button}</span>
-      </Tooltip>
-    );
-  }
-  return button;
-};
-
-type RepoGroup = {
-  projectId: string;
-  name: string;
-  workspaces: ReadonlyArray<Workspace>;
-};
-
-/**
- * A single workspace row in the sidebar repo group: the status dot + name (or an
- * inline rename input while renaming), the hover-revealed actions dropdown and
- * delete button, and the wrapping right-click context menu. Purely presentational
- * — all behavior is delegated through the callback props.
- */
-const SidebarWorkspaceRow = ({
-  workspace,
-  status,
-  isRenaming,
-  isActive,
-  actions,
-  openInRuntime,
-  destructiveColor,
-  onClick,
-  onHover,
-  onRenameCommit,
-  onRenameCancel,
-  onBeginDelete,
-}: {
-  workspace: Workspace;
-  status: ReturnType<typeof computeWorkspaceDotStatus>;
-  isRenaming: boolean;
-  isActive: boolean;
-  actions: ReadonlyArray<WorkspaceAction>;
-  openInRuntime: OpenInRuntime;
-  destructiveColor: ReturnType<typeof useThemeDangerColor>;
-  onClick: () => void;
-  onHover: () => void;
-  onRenameCommit: (newName: string) => void;
-  onRenameCancel: () => void;
-  onBeginDelete: () => void;
-}): ReactElement => (
-  <ContextMenu.Root>
-    <ContextMenu.Trigger>
-      <div className={`${styles.workspaceRow} ${isActive ? styles.workspaceRowActive : ""}`}>
-        {isRenaming ? (
-          <span className={styles.workspaceRowButton}>
-            <span className={styles.workspaceDot}>
-              <WorkspaceStatusDots status={status} />
-            </span>
-            <InlineRenameInput
-              value={workspace.description ?? ""}
-              onCommit={onRenameCommit}
-              onCancel={onRenameCancel}
-              isEditing={true}
-            />
-          </span>
-        ) : (
-          <button
-            type="button"
-            className={styles.workspaceRowButton}
-            onClick={onClick}
-            onMouseEnter={onHover}
-            data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW}
-            data-workspace-id={workspace.objectId}
-            data-has-unread={String(status.hasUnread)}
-            data-workspace-tab
-            data-tab-id={workspace.objectId}
-          >
-            <span className={styles.workspaceDot}>
-              <WorkspaceStatusDots status={status} />
-            </span>
-            <span className={styles.workspaceName}>{workspace.description ?? "Untitled"}</span>
-          </button>
-        )}
-        <Flex className={`${styles.rowActions} ${styles.hoverReveal}`} gap="2">
-          <DropdownMenu.Root>
-            <Tooltip content="Workspace actions" side="bottom">
-              <DropdownMenu.Trigger>
-                <IconButton
-                  variant="ghost"
-                  size="1"
-                  color="gray"
-                  aria-label="Workspace actions"
-                  data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW_MENU}
-                  data-workspace-id={workspace.objectId}
-                >
-                  <MoreHorizontal size={13} />
-                </IconButton>
-              </DropdownMenu.Trigger>
-            </Tooltip>
-            <WorkspaceDropdownMenuContent
-              actions={actions}
-              workspace={workspace}
-              destructiveColor={destructiveColor}
-              openInRuntime={openInRuntime}
-            />
-          </DropdownMenu.Root>
-          <Tooltip content="Delete workspace" side="bottom">
-            <IconButton
-              variant="ghost"
-              size="1"
-              color="gray"
-              onClick={onBeginDelete}
-              aria-label="Delete workspace"
-              data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW_DELETE}
-              data-workspace-id={workspace.objectId}
-            >
-              <Trash2 size={13} />
-            </IconButton>
-          </Tooltip>
-        </Flex>
-      </div>
-    </ContextMenu.Trigger>
-    <WorkspaceContextMenuContent
-      actions={actions}
-      workspace={workspace}
-      destructiveColor={destructiveColor}
-      openInRuntime={openInRuntime}
-    />
-  </ContextMenu.Root>
-);
 
 /**
  * Vertical navigation sidebar — the global chrome rail that replaces the old
@@ -246,9 +63,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   const projects = useAtomValue(projectsArrayAtom);
   const tasks = useAtomValue(tasksArrayAtom);
   const agentIdsByWorkspace = useAtomValue(agentIdsByWorkspaceAtom);
-  const collapsedRepos = useAtomValue(collapsedRepoGroupsAtom);
-  const setCollapsedRepos = useSetAtom(collapsedRepoGroupsAtom);
-  const [renamingWorkspaceId, setRenamingWorkspaceId] = useAtom(renamingWorkspaceIdAtom);
+  const setRenamingWorkspaceId = useSetAtom(renamingWorkspaceIdAtom);
   // In the empty first-run state the repo area shows its own
   // "Add a repo" / "No workspaces yet" affordances; outside it the sidebar is
   // unchanged.
@@ -265,12 +80,9 @@ export const WorkspaceSidebar = (): ReactElement | null => {
 
   // External hooks
   const { navigateToWorkspace, navigateToAgent, navigateToHome, navigateToGlobalSettings } = useImbueNavigate();
-  const setNewWorkspaceModal = useSetAtom(newWorkspaceModalAtom);
   const { createFromSidebar, isCreating } = useCreateWorkspaceFromSidebar();
   const { toggle: toggleCommandPalette } = useCommandPalette();
-  const openSettings = useOpenSettings();
   const { workspaceId: activeWorkspaceId, isHomeRoute, isSettingsRoute } = useImbueLocation();
-  const dangerColor = useThemeDangerColor();
   const { navigateToNextTab } = useWorkspaceTabActions();
   const gitAndOpenIn = useGitAndOpenInRuntime();
   // Deleting a workspace updates the sidebar optimistically and rolls back with
@@ -285,21 +97,6 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   });
 
   // Functions and callbacks
-  const handleRenameCommit = useCallback(
-    async (workspaceId: string, newName: string): Promise<void> => {
-      setRenamingWorkspaceId(null);
-      try {
-        await updateWorkspace({
-          path: { workspace_id: workspaceId },
-          body: { description: newName },
-        });
-      } catch (error) {
-        console.error("Failed to rename workspace:", error);
-      }
-    },
-    [setRenamingWorkspaceId],
-  );
-
   const workspaceActionRuntime = useMemo<WorkspaceActionRuntime>(
     () => ({
       beginRename: (ws): void => setRenamingWorkspaceId(ws.objectId),
@@ -328,7 +125,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   );
 
   const workspaceStatuses = useMemo(() => {
-    const statusMap = new Map<string, ReturnType<typeof computeWorkspaceDotStatus>>();
+    const statusMap = new Map<string, WorkspaceDotStatus>();
     const activeTasks = tasks ?? [];
     for (const workspace of workspaces ?? []) {
       const workspaceTasks = activeTasks.filter((task) => task.workspaceId === workspace.objectId);
@@ -400,13 +197,6 @@ export const WorkspaceSidebar = (): ReactElement | null => {
     navigateToGlobalSettings();
   }, [ensurePseudoTab, navigateToGlobalSettings]);
 
-  const toggleRepo = useCallback(
-    (projectId: string): void => {
-      setCollapsedRepos((prev) => ({ ...prev, [projectId]: !(prev[projectId] ?? false) }));
-    },
-    [setCollapsedRepos],
-  );
-
   const handleResize = useCallback(
     (nextSizePx: number): void => {
       setWidth(Math.max(MIN_SIDEBAR_WIDTH_PX, nextSizePx));
@@ -474,105 +264,24 @@ export const WorkspaceSidebar = (): ReactElement | null => {
       </nav>
 
       <div className={styles.repoList}>
-        {/* Empty first-run repo area. With no repos, an "Add a repo"
-            button; with repos but no workspaces, each repo header followed by a
-            "No workspaces yet" hint. `repoGroups` is built from workspaces, so
-            it's empty here — render from `projects` instead. */}
+        {/* Empty first-run repo area. `repoGroups` is built from workspaces, so
+            it's empty here — SidebarFirstRunState renders from `projects`
+            instead. */}
         {isWorkspaceListEmpty ? (
-          projects.length === 0 ? (
-            <NavItem
-              icon={FolderPlus}
-              label="Add a repo"
-              onClick={() => setIsAddRepoDialogOpen(true)}
-              testId={ElementIds.SIDEBAR_ADD_REPO_BUTTON}
-            />
-          ) : (
-            projects.map((project) => (
-              <div key={project.objectId} className={styles.repoGroup}>
-                <div className={styles.repoHeader}>
-                  <span className={styles.repoHeaderButton}>
-                    <Text className={styles.repoName} truncate>
-                      {project.name}
-                    </Text>
-                  </span>
-                </div>
-                <Text className={styles.noWorkspacesHint} data-testid={ElementIds.SIDEBAR_NO_WORKSPACES_HINT}>
-                  No workspaces yet
-                </Text>
-              </div>
-            ))
-          )
+          <SidebarFirstRunState projects={projects} onAddRepo={() => setIsAddRepoDialogOpen(true)} />
         ) : null}
-        {repoGroups.map((group) => {
-          const isRepoCollapsed = collapsedRepos[group.projectId] ?? false;
-          const Chevron = isRepoCollapsed ? ChevronRight : ChevronDown;
-          return (
-            <div key={group.projectId} className={styles.repoGroup}>
-              <div className={styles.repoHeader}>
-                <button
-                  type="button"
-                  className={styles.repoHeaderButton}
-                  onClick={() => toggleRepo(group.projectId)}
-                  data-testid={ElementIds.SIDEBAR_REPO_GROUP}
-                  data-project-id={group.projectId}
-                >
-                  <Chevron size={16} className={styles.repoChevron} />
-                  <Text className={styles.repoName} truncate>
-                    {group.name}
-                  </Text>
-                </button>
-                <Flex className={styles.rowActions} gap="2">
-                  <Tooltip content="Repository settings" side="right">
-                    <IconButton
-                      variant="ghost"
-                      size="1"
-                      color="gray"
-                      className={styles.hoverReveal}
-                      onClick={() => openSettings("repositories", group.projectId)}
-                      aria-label="Repository settings"
-                      data-testid={ElementIds.SIDEBAR_REPO_SETTINGS}
-                      data-project-id={group.projectId}
-                    >
-                      <Settings size={13} />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip content="New workspace in this repo" side="right">
-                    {/* Open the dialog pre-selecting this repo. */}
-                    <IconButton
-                      variant="ghost"
-                      size="1"
-                      color="gray"
-                      onClick={() => setNewWorkspaceModal({ open: true, presetProjectId: group.projectId })}
-                      aria-label="New workspace in this repo"
-                      data-testid={ElementIds.SIDEBAR_REPO_ADD_WORKSPACE}
-                      data-project-id={group.projectId}
-                    >
-                      <Plus size={13} />
-                    </IconButton>
-                  </Tooltip>
-                </Flex>
-              </div>
-              {!isRepoCollapsed &&
-                group.workspaces.map((ws) => (
-                  <SidebarWorkspaceRow
-                    key={ws.objectId}
-                    workspace={ws}
-                    status={workspaceStatuses.get(ws.objectId) ?? EMPTY_WORKSPACE_DOT_STATUS}
-                    isRenaming={renamingWorkspaceId === ws.objectId}
-                    isActive={ws.objectId === activeWorkspaceId}
-                    actions={workspaceActions}
-                    openInRuntime={openInRuntime}
-                    destructiveColor={dangerColor}
-                    onClick={() => handleWorkspaceClick(ws.objectId)}
-                    onHover={() => handleWorkspaceHover(ws.objectId)}
-                    onRenameCommit={(newName) => void handleRenameCommit(ws.objectId, newName)}
-                    onRenameCancel={() => setRenamingWorkspaceId(null)}
-                    onBeginDelete={() => setDeleteTarget(ws)}
-                  />
-                ))}
-            </div>
-          );
-        })}
+        {repoGroups.map((group) => (
+          <SidebarRepoGroup
+            key={group.projectId}
+            group={group}
+            statuses={workspaceStatuses}
+            actions={workspaceActions}
+            openInRuntime={openInRuntime}
+            onWorkspaceClick={handleWorkspaceClick}
+            onWorkspaceHover={handleWorkspaceHover}
+            onBeginDelete={setDeleteTarget}
+          />
+        ))}
       </div>
 
       <div className={styles.spacer} />
@@ -588,12 +297,12 @@ export const WorkspaceSidebar = (): ReactElement | null => {
         <ReportProblemPopover>
           <button
             type="button"
-            className={styles.navItem}
+            className={navItemStyles.navItem}
             aria-label="Report a bug"
             data-testid={ElementIds.SIDEBAR_REPORT_BUG}
           >
-            <Bug size={16} className={styles.navIcon} />
-            <span className={styles.navLabel}>Report a bug</span>
+            <Bug size={16} className={navItemStyles.navIcon} />
+            <span className={navItemStyles.navLabel}>Report a bug</span>
           </button>
         </ReportProblemPopover>
         <div className={styles.versionRow} data-testid={ElementIds.SIDEBAR_VERSION}>
