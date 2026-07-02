@@ -23,7 +23,7 @@
   app-region: drag;
   display: flex;
   flex-shrink: 0;
-  height: 40px;
+  height: var(--titlebar-height);
   justify-content: flex-end;
   padding-right: var(--space-2);
 }
@@ -65,21 +65,4 @@
   display: flex;
   min-width: 0;
   padding: var(--space-1) var(--space-2);
-}
-
-// Drag gutter pinned to the sidebar's right border. ResizeHandle supplies the
-// pointer/keyboard behavior; this positions it over the border.
-//
-// Scoped under .sidebar so this wins the cascade over ResizeHandle's base
-// .horizontalResizeHandle (which sets `position: relative`). Without the higher
-// specificity the base's relative positioning could win depending on stylesheet
-// order, leaving the handle a 1px-wide, zero-height flow element (no top/bottom
-// stretch) — invisible and un-grabbable. The absolute top/bottom give it the
-// sidebar's full height; width (1px line + ±4px ::before hit area) comes from the base.
-.sidebar .resizeHandle {
-  bottom: 0;
-  position: absolute;
-  right: 0;
-  top: 0;
-  z-index: 1;
 }

@@ -5,7 +5,11 @@ import { useCallback, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { ResizeHandle } from "~/components/sections/ResizeHandle.tsx";
-import { explorerListWidthAtom } from "~/components/sections/sectionAtoms.ts";
+import {
+  EXPLORER_LIST_MAX_WIDTH_PX,
+  EXPLORER_LIST_MIN_WIDTH_PX,
+  explorerListWidthAtom,
+} from "~/components/sections/sectionAtoms.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 
 import styles from "./ExplorerLayout.module.scss";
@@ -68,6 +72,9 @@ export const ExplorerLayout = ({ list, detail }: ExplorerLayoutProps): ReactElem
             getSize={() => listWidthPx}
             onResize={setListWidthPx}
             ariaLabel="Resize file list"
+            ariaValueNow={Math.round(listWidthPx)}
+            ariaValueMin={EXPLORER_LIST_MIN_WIDTH_PX}
+            ariaValueMax={EXPLORER_LIST_MAX_WIDTH_PX}
           />
         </>
       )}

@@ -2,7 +2,7 @@ import { Badge, Flex, Skeleton, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import { GitBranchIcon, PanelBottom, PanelLeft, PanelRight } from "lucide-react";
 import type { ReactElement } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ElementIds, updateWorkspace, WorkspaceInitializationStrategy } from "~/api";
 import { useActiveProjectID, useWorkspacePageParams } from "~/common/NavigateUtils";
@@ -18,7 +18,7 @@ import type { SectionId } from "~/components/sections/sectionTypes.ts";
 import { primaryOf } from "~/components/sections/sectionTypes.ts";
 import { isDropTargetAtom } from "~/components/sections/transientAtoms.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
-import { getTitleBarLeftPadding } from "~/electron/utils.ts";
+import { getCollapsedSidebarToggleClearance } from "~/electron/utils.ts";
 import { getBranchName } from "~/pages/home/Utils";
 import { pluginWorkspaceWidgetsAtom } from "~/plugins/pluginRegistry.ts";
 
@@ -80,8 +80,11 @@ const SectionToggle = ({ section, icon, label, testId }: SectionToggleProps): Re
  * window be moved by the header. Right cluster: the re-homed diff summary + PR
  * button, then the bottom- and right-section toggles. Hidden by WorkspaceLayoutShell
  * when a section is maximized.
+ *
+ * Memoized (it takes no props) so parent re-renders never cascade into it — it
+ * re-renders only from its own atom/hook subscriptions.
  */
-export const WorkspaceHeader = (): ReactElement | null => {
+const WorkspaceHeaderComponent = (): ReactElement | null => {
   // External atoms
   const isSidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
   const workspaceWidgets = useAtomValue(pluginWorkspaceWidgetsAtom);
@@ -214,9 +217,7 @@ export const WorkspaceHeader = (): ReactElement | null => {
       // When the sidebar is collapsed the floating CollapsedSidebarToggle occupies the
       // top-left gutter (traffic-light padding + its button); pad the header past both
       // so the left-section toggle isn't hidden underneath it.
-      style={
-        isSidebarCollapsed ? { paddingLeft: `calc(${getTitleBarLeftPadding(false)} + var(--space-6))` } : undefined
-      }
+      style={isSidebarCollapsed ? { paddingLeft: getCollapsedSidebarToggleClearance() } : undefined}
       data-testid={ElementIds.WORKSPACE_HEADER}
     >
       {/* Left cluster: the left-section toggle. */}
@@ -229,17 +230,25 @@ export const WorkspaceHeader = (): ReactElement | null => {
         />
       </Flex>
 
-      {/* Branch pill */}
+      {/* Branch pill: a real button so it is focusable and Enter/Space-activatable
+          for free; the visible label is the branch name, so the aria-label spells
+          out what pressing it does. */}
       {branchName ? (
         <Tooltip
           content={isCopied ? "Copied!" : "Workspace branch — click to copy"}
           open={isCopied || undefined}
           side="bottom"
         >
-          <span className={styles.branchSection} onClick={handleCopyBranch} data-testid={ElementIds.BRANCH_NAME}>
+          <button
+            type="button"
+            className={styles.branchSection}
+            onClick={handleCopyBranch}
+            aria-label={`Copy branch name ${branchName}`}
+            data-testid={ElementIds.BRANCH_NAME}
+          >
             <GitBranchIcon size={12} className={styles.branchIcon} />
             <span className={styles.branchName}>{branchName}</span>
-          </span>
+          </button>
         </Tooltip>
       ) : (
         <Skeleton width="160px" height="16px" />
@@ -302,3 +311,5 @@ export const WorkspaceHeader = (): ReactElement | null => {
     </div>
   );
 };
+
+export const WorkspaceHeader = memo(WorkspaceHeaderComponent);

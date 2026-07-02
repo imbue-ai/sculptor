@@ -1,12 +1,12 @@
 // Expand-sidebar toggle anchored to the top-left titlebar gutter, shown only
 // when the sidebar is collapsed. paddingLeft is set inline so the button clears
-// the macOS traffic-light buttons. 40px matches the sidebar's own
+// the macOS traffic-light buttons. --titlebar-height matches the sidebar's own
 // window-controls gutter height.
 .collapsedSidebarToggle {
   align-items: center;
   app-region: no-drag;
   display: flex;
-  height: 40px;
+  height: var(--titlebar-height);
   left: 0;
   position: absolute;
   top: 0;

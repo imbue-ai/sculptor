@@ -1,4 +1,5 @@
-import { cleanup, screen } from "@testing-library/react";
+import { DndContext } from "@dnd-kit/core";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { createStore } from "jotai";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -7,7 +8,7 @@ import { ElementIds } from "~/api";
 import { renderWithProviders } from "~/common/testUtils.tsx";
 
 import { EMPTY_WORKSPACE_LAYOUT } from "./persistence/types.ts";
-import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "./sectionAtoms.ts";
+import { activePanelIdInSubSectionAtom, activeWorkspaceIdAtom, workspaceLayoutAtom } from "./sectionAtoms.ts";
 import { SectionHeader } from "./SectionHeader.tsx";
 import { maximizedSectionAtom } from "./transientAtoms.ts";
 
@@ -58,5 +59,80 @@ describe("SectionHeader chrome layout", () => {
 
     const header = screen.getByTestId(`${ElementIds.SECTION_HEADER}-center`);
     expect(header.getAttribute("data-maximized")).toBe("true");
+  });
+});
+
+// Two static panels (from the registry's default static definitions) in the center
+// strip, "files" active. Tabs are dnd-kit draggables, so they render inside a real
+// DndContext with its default sensors — Space must stay the keyboard sensor's
+// drag-pickup key while Enter activates the tab.
+function storeWithTwoTabs(): ReturnType<typeof createStore> {
+  const store = createStore();
+  store.set(activeWorkspaceIdAtom, "ws-test");
+  store.set(workspaceLayoutAtom, {
+    ...EMPTY_WORKSPACE_LAYOUT,
+    placement: { files: "center", changes: "center" },
+    order: { center: ["files", "changes"] },
+    activePanel: { center: "files" },
+  });
+  return store;
+}
+
+function renderTwoTabs(onDragStart?: () => void): ReturnType<typeof createStore> {
+  const store = storeWithTwoTabs();
+  renderWithProviders(
+    <DndContext onDragStart={onDragStart}>
+      <SectionHeader subSection="center" />
+    </DndContext>,
+    { store },
+  );
+  return store;
+}
+
+describe("SectionHeader keyboard activation", () => {
+  it("exposes the tab strip as a horizontal tablist of tabs", () => {
+    renderTwoTabs();
+
+    const tablist = screen.getByRole("tablist");
+    expect(tablist).toHaveAttribute("aria-orientation", "horizontal");
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+  });
+
+  it("activates a tab with Enter without starting a drag", () => {
+    const onDragStart = vi.fn();
+    const store = renderTwoTabs(onDragStart);
+
+    const changesTab = screen.getByTestId(`${ElementIds.PANEL_TAB}-changes`);
+    expect(changesTab).toHaveAttribute("aria-selected", "false");
+
+    fireEvent.keyDown(changesTab, { key: "Enter", code: "Enter" });
+
+    expect(store.get(activePanelIdInSubSectionAtom("center"))).toBe("changes");
+    expect(screen.getByTestId(`${ElementIds.PANEL_TAB}-changes`)).toHaveAttribute("aria-selected", "true");
+    expect(onDragStart).not.toHaveBeenCalled();
+  });
+
+  it("leaves Space to the drag sensor's pickup instead of activating the tab", () => {
+    const onDragStart = vi.fn();
+    const store = renderTwoTabs(onDragStart);
+
+    const changesTab = screen.getByTestId(`${ElementIds.PANEL_TAB}-changes`);
+    fireEvent.keyDown(changesTab, { key: " ", code: "Space" });
+
+    // Space is the documented drag-pickup key (focus → Space → arrows → Space);
+    // it must reach the keyboard sensor and must not double as activation.
+    expect(onDragStart).toHaveBeenCalledTimes(1);
+    expect(store.get(activePanelIdInSubSectionAtom("center"))).toBe("files");
+  });
+
+  it("does not hijack an Enter aimed at the tab's close button", () => {
+    const store = renderTwoTabs();
+
+    const closeButton = screen.getByTestId(`${ElementIds.PANEL_TAB_CLOSE}-changes`);
+    fireEvent.keyDown(closeButton, { key: "Enter", code: "Enter" });
+
+    // The keydown bubbles through the tab, but only keys targeted at the tab
+    // itself may activate it — the button's native Enter-to-click stays intact.
+    expect(store.get(activePanelIdInSubSectionAtom("center"))).toBe("files");
   });
 });

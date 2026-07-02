@@ -36,6 +36,21 @@ type ResizeHandleProps = {
   onResize: (nextSizePx: number) => void;
   /** 1 = moving the pointer positively on the axis grows the section; -1 = shrinks. */
   direction?: 1 | -1;
+  /**
+   * "edge-overlay" floats the handle over one edge of its nearest positioned
+   * ancestor instead of occupying flow space between two siblings (e.g. the
+   * workspace sidebar's right border). The overlaid edge is the one the
+   * controlled region grows toward, derived from axis + direction.
+   */
+  variant?: "default" | "edge-overlay";
+  /**
+   * Reported as aria-valuenow/-valuemin/-valuemax on the separator, in whatever
+   * unit the caller resizes with (a percentage or a pixel width) — assistive
+   * tech only needs now/min/max to be consistent with each other.
+   */
+  ariaValueNow?: number;
+  ariaValueMin?: number;
+  ariaValueMax?: number;
   className?: string;
   ariaLabel?: string;
   "data-testid"?: string;
@@ -46,6 +61,10 @@ export const ResizeHandle = ({
   getSize,
   onResize,
   direction = 1,
+  variant = "default",
+  ariaValueNow,
+  ariaValueMin,
+  ariaValueMax,
   className,
   ariaLabel,
   "data-testid": dataTestId,
@@ -114,13 +133,29 @@ export const ResizeHandle = ({
   );
 
   const baseClass = axis === "x" ? styles.horizontalResizeHandle : styles.verticalResizeHandle;
-  const combinedClassName = className ? `${baseClass} ${className}` : baseClass;
+  // The overlaid edge is the one the controlled region grows toward: with axis "x",
+  // direction 1 means dragging right grows the region, so the handle sits on its
+  // right edge (and mirrored for the other three combinations).
+  const edgeOverlayClass =
+    axis === "x"
+      ? direction === 1
+        ? styles.edgeOverlayRight
+        : styles.edgeOverlayLeft
+      : direction === 1
+        ? styles.edgeOverlayBottom
+        : styles.edgeOverlayTop;
+  const combinedClassName = [baseClass, variant === "edge-overlay" ? edgeOverlayClass : undefined, className]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div
       role="separator"
       aria-orientation={axis === "x" ? "vertical" : "horizontal"}
       aria-label={ariaLabel}
+      aria-valuenow={ariaValueNow}
+      aria-valuemin={ariaValueMin}
+      aria-valuemax={ariaValueMax}
       tabIndex={0}
       className={combinedClassName}
       onPointerDown={handlePointerDown}

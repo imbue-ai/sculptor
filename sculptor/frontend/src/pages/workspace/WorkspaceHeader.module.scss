@@ -10,13 +10,20 @@
   padding: var(--space-1) var(--space-4);
 }
 
+// A <button>, so neutralize the UA button chrome; the inner spans carry their
+// own colors and the mono font.
 .branchSection {
   align-items: center;
+  background: transparent;
+  border: none;
   border-radius: var(--radius-1);
+  color: inherit;
   cursor: pointer;
   display: inline-flex;
   flex-shrink: 0;
+  font: inherit;
   gap: var(--space-1);
+  margin: 0;
   padding: 2px 6px;
 
   &:hover {

@@ -80,6 +80,9 @@ const SplittableSectionComponent = ({ section }: SplittableSectionProps): ReactE
         getSize={getPrimarySize}
         onResize={handleResize}
         ariaLabel={`Resize ${section} split`}
+        ariaValueNow={Math.round(split.ratio * 100)}
+        ariaValueMin={Math.round(SPLIT_RATIO_MIN * 100)}
+        ariaValueMax={Math.round(SPLIT_RATIO_MAX * 100)}
         data-testid={`${ElementIds.SECTION_RESIZE_HANDLE}-${toSecondary(section)}`}
       />
       <div className={styles.splitPane}>

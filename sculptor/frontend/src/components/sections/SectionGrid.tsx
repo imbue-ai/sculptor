@@ -15,7 +15,13 @@ import { CollapsedSectionDropOverlay } from "./CollapsedSectionDropOverlay.tsx";
 import { PanelSection } from "./PanelSection.tsx";
 import { ResizeHandle } from "./ResizeHandle.tsx";
 import { isSectionExpandedAtom, sectionSizesAtom, setSectionSizeAtom } from "./sectionAtoms.ts";
-import { CENTER_MIN_WIDTH_PX, resolveSectionPixelSizes, sizeToPercent } from "./sectionGeometry.ts";
+import {
+  CENTER_MIN_WIDTH_PX,
+  resolveSectionPixelSizes,
+  SECTION_SIZE_MAX_PERCENT,
+  SECTION_SIZE_MIN_PERCENT,
+  sizeToPercent,
+} from "./sectionGeometry.ts";
 import styles from "./SectionGrid.module.scss";
 import { primaryOf } from "./sectionTypes.ts";
 import { SplittableSection } from "./SplittableSection.tsx";
@@ -91,6 +97,9 @@ export const SectionGrid = (): ReactElement => {
               getSize={() => leftPx}
               onResize={(px) => resizeSide("left", px, width)}
               ariaLabel="Resize left section"
+              ariaValueNow={Math.round(sizes.left)}
+              ariaValueMin={SECTION_SIZE_MIN_PERCENT}
+              ariaValueMax={SECTION_SIZE_MAX_PERCENT}
               data-testid={`${ElementIds.SECTION_RESIZE_HANDLE}-left`}
             />
           </>
@@ -114,6 +123,9 @@ export const SectionGrid = (): ReactElement => {
               onResize={(px) => resizeSide("right", px, width)}
               direction={-1}
               ariaLabel="Resize right section"
+              ariaValueNow={Math.round(sizes.right)}
+              ariaValueMin={SECTION_SIZE_MIN_PERCENT}
+              ariaValueMax={SECTION_SIZE_MAX_PERCENT}
               data-testid={`${ElementIds.SECTION_RESIZE_HANDLE}-right`}
             />
             <div className={styles.side} style={{ width: rightPx }} data-testid={ElementIds.SECTION_RIGHT}>
@@ -131,6 +143,9 @@ export const SectionGrid = (): ReactElement => {
             onResize={(px) => resizeSide("bottom", px, height)}
             direction={-1}
             ariaLabel="Resize bottom section"
+            ariaValueNow={Math.round(sizes.bottom)}
+            ariaValueMin={SECTION_SIZE_MIN_PERCENT}
+            ariaValueMax={SECTION_SIZE_MAX_PERCENT}
             data-testid={`${ElementIds.SECTION_RESIZE_HANDLE}-bottom`}
           />
           <div className={styles.bottom} style={{ height: bottomPx }} data-testid={ElementIds.SECTION_BOTTOM}>

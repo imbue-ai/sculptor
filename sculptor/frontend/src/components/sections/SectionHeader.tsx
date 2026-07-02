@@ -21,7 +21,7 @@ import { ElementIds } from "~/api";
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { sidebarCollapsedAtom } from "~/components/layout/sidebarAtoms.ts";
 import { AgentStatusDot } from "~/components/statusDot";
-import { getTitleBarLeftPadding } from "~/electron/utils.ts";
+import { getCollapsedSidebarToggleClearance } from "~/electron/utils.ts";
 
 import { AddPanelDropdown } from "./AddPanelDropdown.tsx";
 import type { PanelContextMenuItem, PanelDefinition } from "./registry/panelRegistry.ts";
@@ -36,6 +36,7 @@ import { TabPill } from "./TabPill.tsx";
 import {
   displayedPanelIdsAtom,
   ghostPanelIdAtom,
+  isMaximizedSectionAtom,
   isReorderWithinSubSectionAtom,
   maximizedSectionAtom,
   recentlyClosedPanelIdsAtom,
@@ -110,6 +111,23 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
     setActivePanel({ panelId, in: subSection });
   };
 
+  // Enter activates the panel from the keyboard, like a click. Space is
+  // deliberately NOT handled here: every other key falls through to the dnd-kit
+  // keyboard sensor's activator (listeners.onKeyDown), so the documented drag
+  // pipeline (focus tab → Space → arrows → Space) keeps working while Enter can
+  // never start a drag. Guards: only keys targeted at the tab itself count (an
+  // Enter on the close button or inside the rename input is theirs), and while
+  // THIS tab is mid-drag Enter is the sensor's drop-commit key, so it is left
+  // alone rather than activating the panel out from under the drag.
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>): void => {
+    if (event.key === "Enter" && event.target === event.currentTarget && !isDragging) {
+      event.preventDefault();
+      handleActivate();
+      return;
+    }
+    listeners?.onKeyDown?.(event);
+  };
+
   // Double-clicking a multi-instance tab starts an inline rename, matching
   // the old agent/terminal tab gesture; the context-menu Rename item is the other entry.
   const handleDoubleClick = (): void => {
@@ -159,6 +177,9 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
       className={tabClassName}
       {...attributes}
       {...(isRenaming ? {} : listeners)}
+      // After the listeners spread so this composed handler REPLACES the sensor's
+      // raw onKeyDown (it delegates every non-Enter key back to it).
+      onKeyDown={isRenaming ? undefined : handleKeyDown}
       role="tab"
       aria-selected={isActive}
       data-testid={`${ElementIds.PANEL_TAB}-${panelId}`}
@@ -266,12 +287,12 @@ const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElemen
   const activePanelId = useAtomValue(activePanelIdInSubSectionAtom(subSection));
   const ghostPanelId = useAtomValue(ghostPanelIdAtom(subSection));
   const isReorderWithin = useAtomValue(isReorderWithinSubSectionAtom(subSection));
-  const maximizedSection = useAtomValue(maximizedSectionAtom);
   const setMaximizedSection = useSetAtom(maximizedSectionAtom);
   const isSidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
 
   const section = toSection(subSection);
-  const isMaximized = maximizedSection === section;
+  // Per-section slice: a maximize flip re-renders only the affected headers.
+  const isMaximized = useAtomValue(isMaximizedSectionAtom(section));
 
   const handleToggleMaximize = (): void => {
     setMaximizedSection(isMaximized ? null : section);
@@ -287,7 +308,7 @@ const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElemen
   const headerStyle: React.CSSProperties | undefined = isMaximized
     ? {
         minHeight: "var(--space-7)",
-        ...(isSidebarCollapsed ? { paddingLeft: `calc(${getTitleBarLeftPadding(false)} + var(--space-6))` } : {}),
+        ...(isSidebarCollapsed ? { paddingLeft: getCollapsedSidebarToggleClearance() } : {}),
       }
     : undefined;
 
@@ -299,7 +320,9 @@ const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElemen
       data-maximized={isMaximized ? "true" : undefined}
       data-testid={`${ElementIds.SECTION_HEADER}-${subSection}`}
     >
-      <div className={styles.tabs} data-section-tabs={subSection}>
+      {/* The strip is a tablist for assistive tech; the drag ghost pill inside it is
+          aria-hidden, so tabs are its only exposed children. */}
+      <div className={styles.tabs} role="tablist" aria-orientation="horizontal" data-section-tabs={subSection}>
         {displayedPanelIds.map((panelId, index) => {
           // A cross-section drag shows a non-draggable ghost here while the real
           // draggable stays in the source section; a within-section reorder keeps the
