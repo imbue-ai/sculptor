@@ -247,7 +247,7 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
   // to a full poll interval to confirm the backend is still there.
   useEffect(() => {
     const handleVisibilityChange = (): void => {
-      if (!document.hidden) {
+      if (!document.hidden && backendStatus.status !== "shutting_down") {
         performHealthCheck();
       }
     };
@@ -255,7 +255,7 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
     return (): void => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [performHealthCheck]);
+  }, [performHealthCheck, backendStatus.status]);
 
   // Clear the stalled flag as soon as we leave ``shutting_down``. Adjusting
   // state during render (with a previous-value guard) keeps the reset on the
