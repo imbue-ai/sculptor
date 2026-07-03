@@ -17,6 +17,15 @@
   color: var(--red-1);
 }
 
+.warningTone {
+  color: var(--amber-12);
+
+  .alert {
+    background: var(--amber-9);
+    color: var(--amber-1);
+  }
+}
+
 .link {
   cursor: pointer;
 }

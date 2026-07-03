@@ -7,6 +7,11 @@ export type BackendStatusPayloads = {
   error: BaseBackendStatusPayload & { stack: string };
   exited: BaseBackendStatusPayload & { code: number | null; signal: NodeJS.Signals | null; stderr: string };
   unresponsive: BaseBackendStatusPayload;
+  // Renderer-only: recent health checks are failing but haven't crossed the
+  // threshold to declare the backend unresponsive (e.g. the network is still
+  // waking up right after the OS resumes a suspended app). The Electron main
+  // process never emits this status.
+  reconnecting: BaseBackendStatusPayload;
   shutting_down: BaseBackendStatusPayload;
 };
 

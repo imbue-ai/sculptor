@@ -106,6 +106,7 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
 
   const hasBackendStopped = backendStatus.status === "unresponsive";
   const hasHealthWarningOnBackend = backendStatus.status === "warning";
+  const isBackendReconnecting = backendStatus.status === "reconnecting";
 
   const isProjectPathInaccessible = currentProject && currentProject.isPathAccessible === false;
 
@@ -150,6 +151,7 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
             onLinkClick={() => setIsRepoPathDialogOpen(true)}
           />
         )}
+        {isBackendReconnecting && <WarningStatusBanner tone="warning" message={backendStatus.payload.message} />}
         {(hasBackendStopped || hasHealthWarningOnBackend) && (
           <WarningStatusBanner message={backendStatus.payload.message} />
         )}
