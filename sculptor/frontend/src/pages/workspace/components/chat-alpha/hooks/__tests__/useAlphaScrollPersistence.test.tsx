@@ -26,11 +26,14 @@ const createMockVirtualItem = (index: number, start: number, size: number): Virt
   lane: 0,
 });
 
-const createMockVirtualizer = (virtualItems: Array<VirtualItem>): Virtualizer<HTMLDivElement, Element> => {
+const createMockVirtualizer = (
+  virtualItems: Array<VirtualItem>,
+  paddingEnd = 0,
+): Virtualizer<HTMLDivElement, Element> => {
   return {
     getVirtualItems: vi.fn(() => virtualItems),
     scrollToIndex: vi.fn(),
-    options: { paddingEnd: 0 },
+    options: { paddingEnd },
   } as unknown as Virtualizer<HTMLDivElement, Element>;
 };
 
@@ -47,11 +50,14 @@ describe("useAlphaScrollPersistence", () => {
     vi.useRealTimers();
   });
 
-  it("scrolls to bottom on first visit (no saved position)", () => {
+  it("scrolls to the padded max scroll on first visit (no saved position)", () => {
     const el = createMockScrollContainer(0, 2000, 500);
     const ref = { current: el };
     const virtualItems = [createMockVirtualItem(0, 0, 200)];
-    const virtualizer = createMockVirtualizer(virtualItems);
+    // paddingEnd 400 distinguishes the max scroll (1500) from the content
+    // bottom (1100): a first visit lands at the very end of the padded range —
+    // the anchored-turn rest position when the last turn is short.
+    const virtualizer = createMockVirtualizer(virtualItems, 400);
     const messages = [{ id: "msg-1" }, { id: "msg-2" }, { id: "msg-3" }];
     const store = createStore();
 
@@ -64,7 +70,7 @@ describe("useAlphaScrollPersistence", () => {
       vi.advanceTimersByTime(16);
     });
 
-    // Restored to the content bottom (scrollHeight 2000 - paddingEnd 0 - clientHeight 500).
+    // Restored to the max scroll offset (scrollHeight 2000 - clientHeight 500).
     expect(el.scrollTop).toBe(1500);
   });
 
@@ -106,7 +112,7 @@ describe("useAlphaScrollPersistence", () => {
     expect(savedPosition?.distanceFromBottom).toBe(1200); // 2000 - 300 - 500
   });
 
-  it("restores to bottom when user was within 200px of bottom", () => {
+  it("restores to the saved distance from the content bottom when near the bottom", () => {
     const el = createMockScrollContainer(0, 2000, 500);
     const ref = { current: el };
     const virtualItems = [createMockVirtualItem(0, 0, 200)];
@@ -129,7 +135,65 @@ describe("useAlphaScrollPersistence", () => {
       vi.advanceTimersByTime(16);
     });
 
-    // Restored to the content bottom (scrollHeight 2000 - paddingEnd 0 - clientHeight 500).
+    // Restored 100px above the content bottom (2000 - paddingEnd 0 - 500 - 100),
+    // relative to the *current* content bottom so content that grew while away
+    // stays in view.
+    expect(el.scrollTop).toBe(1400);
+  });
+
+  it("round-trips a position inside the tail padding (negative distance)", () => {
+    const el = createMockScrollContainer(0, 2000, 500);
+    const ref = { current: el };
+    const virtualItems = [createMockVirtualItem(0, 0, 200)];
+    const virtualizer = createMockVirtualizer(virtualItems, 400);
+    const messages = [{ id: "msg-1" }, { id: "msg-2" }, { id: "msg-3" }];
+    const store = createStore();
+
+    // Saved while scrolled 300px past the content bottom, into the padding —
+    // e.g. the anchored-turn rest position or a manual max scroll.
+    store.set(alphaScrollPositionAtomFamily("task-1"), {
+      firstVisibleMessageId: "msg-3",
+      pixelOffset: 0,
+      distanceFromBottom: -300,
+    });
+
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, createScrollStateMachine()), {
+      wrapper: wrapperFor(store),
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(16);
+    });
+
+    // Content bottom (2000 - 400 - 500 = 1100) plus the 300px into the padding.
+    expect(el.scrollTop).toBe(1400);
+  });
+
+  it("clamps a padding-deep saved position to the current scroll range", () => {
+    const el = createMockScrollContainer(0, 2000, 500);
+    const ref = { current: el };
+    const virtualItems = [createMockVirtualItem(0, 0, 200)];
+    // paddingEnd shrank since the save (e.g. the tail grew while away): the
+    // saved 600px-into-the-padding position no longer exists.
+    const virtualizer = createMockVirtualizer(virtualItems, 400);
+    const messages = [{ id: "msg-1" }, { id: "msg-2" }, { id: "msg-3" }];
+    const store = createStore();
+
+    store.set(alphaScrollPositionAtomFamily("task-1"), {
+      firstVisibleMessageId: "msg-3",
+      pixelOffset: 0,
+      distanceFromBottom: -600,
+    });
+
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, createScrollStateMachine()), {
+      wrapper: wrapperFor(store),
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(16);
+    });
+
+    // Content bottom 1100 + 600 = 1700 exceeds the max scroll (1500) — clamped.
     expect(el.scrollTop).toBe(1500);
   });
 

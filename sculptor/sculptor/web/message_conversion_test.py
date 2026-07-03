@@ -964,6 +964,132 @@ def test_user_question_answer_sets_in_progress_user_message_id() -> None:
     assert state.in_progress_user_message_id == answer_message.message_id
 
 
+def _make_simple_question_data(question_text: str, tool_use_id: str) -> AskUserQuestionData:
+    return AskUserQuestionData(
+        questions=[
+            UserQuestion(
+                question=question_text,
+                header="Header",
+                options=[
+                    QuestionOption(label="A", description="first"),
+                    QuestionOption(label="B", description="second"),
+                ],
+                multi_select=False,
+            )
+        ],
+        tool_use_id=tool_use_id,
+    )
+
+
+def test_answering_one_of_two_pending_questions_surfaces_the_other() -> None:
+    """Two questions can pend concurrently (e.g. two subagents each asking
+    mid-turn). Answering the visible one must surface the other instead of
+    forgetting it — the frozen-question half of the subagent AUQ bug.
+    """
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    question_a = _make_simple_question_data("Question A?", "tool-use-ask-a")
+    question_b = _make_simple_question_data("Question B?", "tool-use-ask-b")
+
+    state = convert_agent_messages_to_task_update(
+        [
+            AskUserQuestionAgentMessage(message_id=AgentMessageID(), question_data=question_a),
+            AskUserQuestionAgentMessage(message_id=AgentMessageID(), question_data=question_b),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+    # The most recent question is the visible one; both are tracked.
+    assert state.pending_user_question is not None
+    assert state.pending_user_question.tool_use_id == "tool-use-ask-b"
+    assert [q.tool_use_id for q in state.pending_user_questions] == ["tool-use-ask-a", "tool-use-ask-b"]
+
+    answer_b = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"Question B?": "A"},
+        question_data=question_b,
+        tool_use_id="tool-use-ask-b",
+    )
+    state = convert_agent_messages_to_task_update(
+        [answer_b],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+    assert state.pending_user_question is not None
+    assert state.pending_user_question.tool_use_id == "tool-use-ask-a"
+
+    answer_a = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"Question A?": "B"},
+        question_data=question_a,
+        tool_use_id="tool-use-ask-a",
+    )
+    state = convert_agent_messages_to_task_update(
+        [answer_a],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+    assert state.pending_user_question is None
+    assert state.pending_user_questions == ()
+
+
+def test_subagent_question_reconstructed_from_persisted_child_block() -> None:
+    """On page reload the live AskUserQuestionAgentMessage (ephemeral) is gone;
+    a SUBAGENT's pending question must be reconstructed from the persisted
+    child ResponseBlockAgentMessage carrying its ToolUseBlock, just as
+    main-agent questions are reconstructed from theirs.
+    """
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    question_data = _make_simple_question_data("Subagent question?", "toolu_sub_ask")
+    ask_tool_block = ToolUseBlock(
+        id=ToolUseID("toolu_sub_ask"),
+        name="mcp__sculptor__ask_user_question",
+        input={"questions": [q.model_dump() for q in question_data.questions]},
+    )
+    child_message = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=AssistantMessageID("assistant-subagent-ask"),
+        message_id=AgentMessageID(),
+        content=(ask_tool_block,),
+        parent_tool_use_id="toolu_agent_launch",
+    )
+
+    # Fresh state (as after a reload) — only the persisted child message replays.
+    state = convert_agent_messages_to_task_update(
+        [child_message],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+    assert state.pending_user_question is not None
+    assert state.pending_user_question.tool_use_id == "toolu_sub_ask"
+
+    answer = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"Subagent question?": "A"},
+        question_data=question_data,
+        tool_use_id="toolu_sub_ask",
+    )
+    state = convert_agent_messages_to_task_update(
+        [answer],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+    assert state.pending_user_question is None
+
+
 def test_request_started_sets_current_request_id_without_queued_message() -> None:
     """RequestStartedAgentMessage should set current_request_id even when there is
     no matching queued message (e.g. for UserQuestionAnswerMessage which doesn't

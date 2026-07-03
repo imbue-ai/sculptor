@@ -170,6 +170,39 @@ def _attach_turn_metrics(in_progress: ChatMessage | None, turn_metrics: TurnMetr
     return in_progress.model_copy(update={"turn_metrics": turn_metrics})
 
 
+def _pend_question(pending_user_questions: list[AskUserQuestionData], question_data: AskUserQuestionData) -> None:
+    """Add a question to the pending queue, replacing any entry with the same
+    tool_use_id (the live ephemeral message and the persisted ToolUseBlock
+    reconstruction both surface the same question)."""
+    for i, existing in enumerate(pending_user_questions):
+        if existing.tool_use_id == question_data.tool_use_id:
+            pending_user_questions[i] = question_data
+            return
+    pending_user_questions.append(question_data)
+
+
+def _reconstruct_pending_questions_from_child_blocks(
+    content: Sequence[ContentBlockTypes],
+    pending_user_questions: list[AskUserQuestionData],
+    submitted_question_answers: dict[str, SubmittedQuestionAnswers],
+    harness: Harness,
+) -> None:
+    """Re-pend unanswered ask_user_question ToolUseBlocks from a SUBAGENT
+    (child) message, for page-reload support. Child messages skip the main
+    reconstruction loop (they `continue` out of the ResponseBlockAgentMessage
+    branch), so without this a subagent's pending question would vanish on
+    reload while its MCP call stays held.
+    """
+    for block in content:
+        if not isinstance(block, ToolUseBlock) or not harness.is_ask_user_question_tool(block.name):
+            continue
+        if block.id in submitted_question_answers:
+            continue
+        reconstructed = harness.reconstruct_pending_ask_user_question(block)
+        if reconstructed is not None:
+            _pend_question(pending_user_questions, reconstructed)
+
+
 def convert_agent_messages_to_task_update(
     new_messages: Sequence[Message | CompletedTransaction],
     task_id: TaskID,
@@ -190,7 +223,13 @@ def convert_agent_messages_to_task_update(
     in_progress_chat_message = current_state.in_progress_chat_message if current_state else None
     current_request_id = current_state.in_progress_user_message_id if current_state else None
     update_artifacts = set()
-    pending_user_question: AskUserQuestionData | None = current_state.pending_user_question if current_state else None
+    # All currently-unanswered questions, oldest first. The frontend shows the
+    # LAST entry (TaskUpdate.pending_user_question); answering it surfaces the
+    # previous one. Multiple questions pend concurrently when subagents call
+    # ask_user_question while another question is already waiting.
+    pending_user_questions: list[AskUserQuestionData] = (
+        list(current_state.pending_user_questions) if current_state else []
+    )
     submitted_question_answers: dict[str, SubmittedQuestionAnswers] = (
         dict(current_state.submitted_question_answers) if current_state else {}
     )
@@ -404,6 +443,9 @@ def convert_agent_messages_to_task_update(
                     )
                     completed_message_by_id[separate_msg.id] = separate_msg
                     completed_chat_messages.append(separate_msg)
+                    _reconstruct_pending_questions_from_child_blocks(
+                        msg.content, pending_user_questions, submitted_question_answers, harness
+                    )
                     continue
 
                 # During streaming, only process tool results - text/tool_use/FileBlocks
@@ -450,6 +492,9 @@ def convert_agent_messages_to_task_update(
                     )
                     completed_message_by_id[separate_msg.id] = separate_msg
                     completed_chat_messages.append(separate_msg)
+                    _reconstruct_pending_questions_from_child_blocks(
+                        msg.content, pending_user_questions, submitted_question_answers, harness
+                    )
                     continue
                 # A main-agent message (parent_tool_use_id None) arriving while a
                 # different-context message is in progress — flush so the main
@@ -552,7 +597,7 @@ def convert_agent_messages_to_task_update(
                     if block.id not in submitted_question_answers:
                         reconstructed_question = harness.reconstruct_pending_ask_user_question(block)
                         if reconstructed_question is not None:
-                            pending_user_question = reconstructed_question
+                            _pend_question(pending_user_questions, reconstructed_question)
                         else:
                             logger.debug(
                                 "Skipping AskUserQuestion pending state from persisted ToolUseBlock with invalid input: {}",
@@ -560,8 +605,9 @@ def convert_agent_messages_to_task_update(
                             )
                 elif isinstance(block, ToolUseBlock) and harness.is_exit_plan_mode_tool(block.name):
                     if block.id not in submitted_question_answers:
-                        pending_user_question = make_plan_approval_question(
-                            block.id, plan_file_path=recent_plan_file_path
+                        _pend_question(
+                            pending_user_questions,
+                            make_plan_approval_question(block.id, plan_file_path=recent_plan_file_path),
                         )
                     # One-shot: clear so a later ExitPlanMode without a fresh
                     # plan write doesn't reuse a stale path.
@@ -633,9 +679,9 @@ def convert_agent_messages_to_task_update(
                 )
             if msg.interrupted:
                 in_progress_chat_message = _mark_stopped(in_progress_chat_message)
-                # Clear any pending AUQ — the agent was interrupted so the question
-                # is no longer valid and the chat input should reappear.
-                pending_user_question = None
+                # Clear any pending AUQs — the agent was interrupted so the questions
+                # are no longer valid and the chat input should reappear.
+                pending_user_questions.clear()
             in_progress_chat_message = _attach_turn_metrics(in_progress_chat_message, pending_turn_metrics)
             pending_turn_metrics = None
             in_progress_chat_message, current_request_id = _finalize_request(
@@ -650,9 +696,9 @@ def convert_agent_messages_to_task_update(
 
         elif isinstance(msg, RequestFailureAgentMessage):
             in_progress_chat_message = _add_error_to_message(in_progress_chat_message, msg)
-            # Clear any pending AUQ — the agent failed so the question
-            # is no longer valid and the chat input should reappear.
-            pending_user_question = None
+            # Clear any pending AUQs — the agent failed so the questions
+            # are no longer valid and the chat input should reappear.
+            pending_user_questions.clear()
             in_progress_chat_message, current_request_id = _finalize_request(
                 current_request_id,
                 msg.request_id,
@@ -691,10 +737,10 @@ def convert_agent_messages_to_task_update(
                 in_progress_chat_message = _mark_stopped(in_progress_chat_message)
                 in_progress_chat_message = _attach_turn_metrics(in_progress_chat_message, pending_turn_metrics)
                 pending_turn_metrics = None
-                # Clear any pending AUQ — the turn was stopped so the
-                # question is no longer answerable and the chat input
+                # Clear any pending AUQs — the turn was stopped so the
+                # questions are no longer answerable and the chat input
                 # should reappear.
-                pending_user_question = None
+                pending_user_questions.clear()
             in_progress_chat_message, current_request_id = _finalize_request(
                 current_request_id,
                 msg.request_id,
@@ -872,7 +918,7 @@ def convert_agent_messages_to_task_update(
 
         elif isinstance(msg, AskUserQuestionAgentMessage):
             if msg.question_data.tool_use_id not in submitted_question_answers:
-                pending_user_question = msg.question_data
+                _pend_question(pending_user_questions, msg.question_data)
 
         elif isinstance(msg, PlanModeAgentMessage):
             is_in_plan_mode = msg.is_in_plan_mode
@@ -895,7 +941,10 @@ def convert_agent_messages_to_task_update(
                 in_progress_chat_message = None
                 streaming.message_was_streamed = False
 
-            pending_user_question = None
+            # Retire only the answered question; any other still-unanswered
+            # question (e.g. a second concurrent subagent question) surfaces
+            # next via the queue's new last entry.
+            pending_user_questions[:] = [q for q in pending_user_questions if q.tool_use_id != msg.tool_use_id]
             current_request_id = msg.message_id
             submitted_question_answers[msg.tool_use_id] = SubmittedQuestionAnswers(
                 question_data=msg.question_data,
@@ -916,7 +965,8 @@ def convert_agent_messages_to_task_update(
         in_progress_message_was_streamed=streaming.message_was_streamed,
         streamed_assistant_message_ids=frozenset(streaming.streamed_assistant_message_ids),
         streamed_segment_first_response_id=streaming.current_segment_first_response_id,
-        pending_user_question=pending_user_question,
+        pending_user_question=pending_user_questions[-1] if pending_user_questions else None,
+        pending_user_questions=tuple(pending_user_questions),
         submitted_question_answers=submitted_question_answers,
         is_in_plan_mode=is_in_plan_mode,
         pending_turn_metrics=pending_turn_metrics,

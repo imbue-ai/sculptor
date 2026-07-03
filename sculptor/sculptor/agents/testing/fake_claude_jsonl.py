@@ -149,7 +149,7 @@ def make_workflow_agent_entry(
 
 def make_task_notification_message(
     task_id: str,
-    tool_use_id: str,
+    tool_use_id: str | None,
     status: str = "completed",
     summary: str = "",
     duration_ms: int | None = None,
@@ -158,18 +158,44 @@ def make_task_notification_message(
 
     When ``duration_ms`` is provided it is emitted nested under ``usage`` to
     match the real Claude CLI shape (see SCU-1151).
+
+    Pass ``tool_use_id=None`` to omit the field entirely. The real CLI drops
+    ``tool_use_id`` when a background task is orphaned by a process exit (e.g. a
+    restart) and reported as failed on resume, because the launching tool call's
+    id was lost with the dead process — see SCU-1666.
     """
     msg: dict = {
         "type": "system",
         "subtype": "task_notification",
         "task_id": task_id,
-        "tool_use_id": tool_use_id,
         "status": status,
         "summary": summary,
     }
+    if tool_use_id is not None:
+        msg["tool_use_id"] = tool_use_id
     if duration_ms is not None:
         msg["usage"] = {"duration_ms": duration_ms}
     return msg
+
+
+def make_task_updated_message(
+    task_id: str,
+    status: str = "completed",
+) -> dict:
+    """Return a dict for a system/task_updated message.
+
+    The real Claude CLI emits task_updated as a background task moves through
+    its lifecycle; the status lives under ``patch``. A terminal ``patch.status``
+    (completed/failed/stopped) can arrive with NO accompanying task_notification
+    when the task finishes while the CLI is busy with another turn (see the
+    handling in ``output_processor._process_output``).
+    """
+    return {
+        "type": "system",
+        "subtype": "task_updated",
+        "task_id": task_id,
+        "patch": {"status": status},
+    }
 
 
 def make_text_block(text: str) -> dict:
@@ -301,9 +327,18 @@ def make_hook_callback_control_request(
     }
 
 
-def make_end_message(session_id: str | None, is_error: bool = False, result: str = "") -> dict:
-    """Return a dict for the end-of-stream message."""
-    return {
+def make_end_message(
+    session_id: str | None,
+    is_error: bool = False,
+    result: str = "",
+    api_error_status: int | None = None,
+) -> dict:
+    """Return a dict for the end-of-stream message.
+
+    ``api_error_status`` mirrors the real CLI: the HTTP status is included only when
+    the turn failed on an API error, and the key is omitted entirely otherwise.
+    """
+    message = {
         "type": "result",
         "subtype": "success",
         "is_error": is_error,
@@ -320,6 +355,9 @@ def make_end_message(session_id: str | None, is_error: bool = False, result: str
         },
         "total_cost_usd": 0,
     }
+    if api_error_status is not None:
+        message["api_error_status"] = api_error_status
+    return message
 
 
 def make_streaming_text_events(

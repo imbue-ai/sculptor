@@ -9,11 +9,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from sculptor.agents.default.claude_code_sdk.errors import ClaudeAPIError
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.default.claude_code_sdk.mcp_server import SculptorMcpServer
 from sculptor.agents.default.claude_code_sdk.output_processor import ClaudeOutputProcessor
+from sculptor.agents.default.claude_code_sdk.output_processor import _DEFERRED_CLEANUP_GRACE_SECONDS
 from sculptor.agents.default.claude_code_sdk.output_processor import _DEFERRED_COMPLETION_TOOLS
 from sculptor.agents.default.claude_code_sdk.output_processor import _RE_TRAILING_MEDIA_TAG
+from sculptor.agents.default.claude_code_sdk.output_processor import _SUBAGENT_COMPLETION_GRACE_SECONDS
+from sculptor.agents.default.claude_code_sdk.output_processor import _SUBAGENT_TASK_TYPES
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import parse_claude_code_json_lines
 from sculptor.agents.testing.fake_claude_jsonl import make_assistant_message
 from sculptor.agents.testing.fake_claude_jsonl import make_end_message
@@ -32,8 +36,10 @@ from sculptor.interfaces.agents.agent import BackgroundTaskNotificationAgentMess
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
+from sculptor.interfaces.agents.agent import WarningAgentMessage
 from sculptor.interfaces.agents.agent import WorkflowTaskProgressAgentMessage
 from sculptor.interfaces.agents.errors import AgentClientError
+from sculptor.interfaces.agents.errors import AgentTransientError
 from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import ToolUseID
@@ -348,10 +354,21 @@ def _feed_jsonl(processor: ClaudeOutputProcessor, jsonl_dicts: list[dict]) -> No
         elif isinstance(result, ParsedTaskUpdatedResponse):
             if result.status in ("completed", "failed", "stopped"):
                 tool_name = processor._task_id_to_tool_name.get(result.task_id, "")
+                task_type = processor._task_id_to_task_type.get(result.task_id, "")
+                deferral_grace: float | None = None
                 if tool_name in _DEFERRED_COMPLETION_TOOLS:
+                    deferral_grace = _DEFERRED_CLEANUP_GRACE_SECONDS
+                elif task_type in _SUBAGENT_TASK_TYPES:
+                    deferral_grace = _SUBAGENT_COMPLETION_GRACE_SECONDS
+                if deferral_grace is not None:
                     processor._completed_pending_deferred.add(result.task_id)
+                    deadline = time.monotonic() + deferral_grace
                     if processor._completed_pending_deferred_deadline is None:
-                        processor._completed_pending_deferred_deadline = time.monotonic() + 5.0
+                        processor._completed_pending_deferred_deadline = deadline
+                    else:
+                        processor._completed_pending_deferred_deadline = max(
+                            processor._completed_pending_deferred_deadline, deadline
+                        )
                 else:
                     processor._completed_via_task_updated.add(result.task_id)
         elif isinstance(result, ParsedTaskNotificationResponse):
@@ -359,7 +376,10 @@ def _feed_jsonl(processor: ClaudeOutputProcessor, jsonl_dicts: list[dict]) -> No
             processor._completed_pending_deferred.discard(result.task_id)
             if not processor._completed_pending_deferred:
                 processor._completed_pending_deferred_deadline = None
-            processor.found_final_message = False
+            if processor.found_final_message:
+                processor.found_final_message = False
+            else:
+                processor._awaiting_notification_turn_init = True
             is_workflow_task = processor._task_id_to_task_type.get(result.task_id) == "local_workflow"
             processor.output_message_queue.put(
                 BackgroundTaskNotificationAgentMessage(
@@ -1131,6 +1151,60 @@ class TestInterruptedErrorSuppression:
             _feed_jsonl(processor, [init, end])
 
 
+class TestApiErrorClassification:
+    """Transient-vs-permanent classification of error end responses.
+
+    These feed real JSONL frames through the parser and processor dispatch loop
+    (via _feed_jsonl), so they exercise both the api_error_status parse site and
+    _parse_stream_end_response's classification end-to-end. The exception type is
+    the only observable that reflects the classification — at the UI layer every
+    recoverable AgentClientError renders identically, so this is the level that
+    can distinguish them.
+    """
+
+    def test_structured_transient_status_raises_transient_error(self) -> None:
+        """A structured api_error_status in TRANSIENT_ERROR_CODES (429) is transient."""
+        processor = _make_processor_for_interrupt_test(interrupted_event=Event())
+        init = make_init_message(session_id="session_001")
+        # Reworded text that does NOT start with "API Error", proving the structured
+        # field drives classification rather than the string-prefix fallback.
+        end = make_end_message(session_id=None, is_error=True, result="Overloaded", api_error_status=429)
+
+        with pytest.raises(AgentTransientError):
+            _feed_jsonl(processor, [init, end])
+
+    def test_structured_permanent_status_raises_claude_api_error(self) -> None:
+        """A structured api_error_status outside TRANSIENT_ERROR_CODES (400) is permanent."""
+        processor = _make_processor_for_interrupt_test(interrupted_event=Event())
+        init = make_init_message(session_id="session_001")
+        end = make_end_message(session_id=None, is_error=True, result="Bad request", api_error_status=400)
+
+        with pytest.raises(ClaudeAPIError) as exc_info:
+            _feed_jsonl(processor, [init, end])
+        # A permanent API error must not be mistaken for a retryable transient one.
+        assert not isinstance(exc_info.value, AgentTransientError)
+
+    def test_string_prefix_fallback_still_classifies_transient(self) -> None:
+        """Without the structured field, "API Error: 429 ..." text still maps to transient."""
+        processor = _make_processor_for_interrupt_test(interrupted_event=Event())
+        init = make_init_message(session_id="session_001")
+        end = make_end_message(session_id=None, is_error=True, result="API Error: 429 Rate limited")
+
+        with pytest.raises(AgentTransientError):
+            _feed_jsonl(processor, [init, end])
+
+    def test_plain_error_text_raises_generic_client_error(self) -> None:
+        """A non-API error with neither the field nor the prefix stays a plain client error."""
+        processor = _make_processor_for_interrupt_test(interrupted_event=Event())
+        init = make_init_message(session_id="session_001")
+        end = make_end_message(session_id=None, is_error=True, result="Something else went wrong")
+
+        with pytest.raises(AgentClientError) as exc_info:
+            _feed_jsonl(processor, [init, end])
+        # Neither transient nor a Claude API error — the base client error, not a subclass.
+        assert type(exc_info.value) is AgentClientError
+
+
 def _make_processor_with_mcp_server(
     mcp_server: SculptorMcpServer | None,
 ) -> ClaudeOutputProcessor:
@@ -1219,7 +1293,9 @@ class TestSculptorMcpToolDetection:
             {"questions": [{"question": "Q?", "header": "Header", "options": [], "multi_select": False}]},
         )
         assert processor._maybe_handle_ask_user_question(block) is True
-        mcp_server.register_tool_use_id.assert_called_once_with(block.id, "mcp__sculptor__ask_user_question")
+        mcp_server.register_tool_use_id.assert_called_once_with(
+            block.id, "mcp__sculptor__ask_user_question", tool_input=block.input
+        )
 
     def test_ask_user_question_handler_does_not_fire_on_builtin_name(self) -> None:
         mcp_server = MagicMock()
@@ -1236,7 +1312,9 @@ class TestSculptorMcpToolDetection:
         processor = _make_processor_with_mcp_server(mcp_server)
         block = self._make_tool_block("mcp__sculptor__exit_plan_mode", {"plan": "..."})
         assert processor._maybe_handle_exit_plan_mode(block) is True
-        mcp_server.register_tool_use_id.assert_called_once_with(block.id, "mcp__sculptor__exit_plan_mode")
+        mcp_server.register_tool_use_id.assert_called_once_with(
+            block.id, "mcp__sculptor__exit_plan_mode", tool_input=block.input
+        )
 
     def test_exit_plan_mode_handler_does_not_fire_on_builtin_name(self) -> None:
         mcp_server = MagicMock()
@@ -1532,6 +1610,74 @@ def _collect_tool_ids(messages: Iterable) -> set[str]:
     return tool_ids
 
 
+class TestSubagentCompletionViaTaskUpdated:
+    """Regression tests for SCU-1669: a subagent (task_type ``local_agent``)
+    that reports completion via ``task_updated`` — with no accompanying
+    ``task_notification`` — must not end the turn before its follow-up
+    notification/synthesis turn is delivered.
+
+    The CLI emits a subagent's terminal ``task_updated`` (with the
+    ``task_notification`` and synthesis turn queued behind another turn) when
+    the task finishes while the CLI is busy. Treating that ``task_updated`` like
+    a Bash background task (terminal, nothing more coming) cleared it at the
+    next turn's result, emptied the pending set, and exited the output loop
+    while the subagent's synthesis turn was still queued — silently dropping it.
+    """
+
+    @staticmethod
+    def _two_subagent_sequence() -> list[dict]:
+        """Main turn launches two ``local_agent`` subagents and ends; subagent A
+        completes with a proper notification + synthesis; subagent B reports a
+        terminal ``task_updated`` (no notification) and only then delivers its
+        real notification + synthesis turn.
+
+        The second ``end`` (which closes subagent A's synthesis turn) is the turn
+        boundary at which subagent B was wrongly cleared before the fix.
+        """
+        session_id = "session_scu1669"
+        return [
+            make_task_started_message(
+                task_id="sub-a", tool_use_id="toolu-a", description="Explore A", task_type="local_agent"
+            ),
+            make_task_started_message(
+                task_id="sub-b", tool_use_id="toolu-b", description="Explore B", task_type="local_agent"
+            ),
+            make_assistant_message("msg-main", [make_text_block("Launched both subagents; awaiting results.")]),
+            make_end_message(session_id=session_id),
+            # Subagent A completes normally: notification + synthesis turn.
+            make_task_notification_message(
+                task_id="sub-a", tool_use_id="toolu-a", status="completed", summary="A done"
+            ),
+            make_init_message(session_id=session_id),
+            make_assistant_message("msg-a", [make_text_block("SUBAGENT-A-SYNTHESIS")]),
+            # Subagent B reports terminal status via task_updated ONLY.
+            _make_task_updated_message(task_id="sub-b", status="completed"),
+            # This end closes subagent A's synthesis turn — the boundary at which
+            # subagent B was wrongly cleared, ending the loop before B's synthesis.
+            make_end_message(session_id=session_id),
+            # Subagent B's real notification + synthesis turn.
+            make_task_notification_message(
+                task_id="sub-b", tool_use_id="toolu-b", status="completed", summary="B done"
+            ),
+            make_init_message(session_id=session_id),
+            make_assistant_message("msg-b", [make_text_block("SUBAGENT-B-SYNTHESIS")]),
+            make_end_message(session_id=session_id),
+        ]
+
+    def test_subagent_synthesis_delivered_after_task_updated(self) -> None:
+        """Both subagents' synthesis turns must be delivered.
+
+        Before the fix, subagent B's synthesis (``SUBAGENT-B-SYNTHESIS``) was
+        dropped: the output loop cleared subagent B via the Bash-style
+        task_updated fallback at the intervening ``end`` and exited while B's
+        synthesis turn was still queued.
+        """
+        emitted = _run_process_output(self._two_subagent_sequence())
+        text = _collect_text(emitted)
+        assert "SUBAGENT-A-SYNTHESIS" in text
+        assert "SUBAGENT-B-SYNTHESIS" in text
+
+
 class TestSubagentInterleavedTurnIds:
     """Regression tests for SCU-1421: chat dropping the majority of agent messages.
 
@@ -1655,3 +1801,171 @@ class TestSubagentInterleavedTurnIds:
 
         expected_tools = {agent_tool, sub_tool, sub_tool_2, main_tool_2, main_tool_3}
         assert expected_tools <= visible_tool_ids, "agent tool calls went missing from the chat"
+
+
+class TestParserExceptionContainment:
+    """A parser exception on one line must not kill the whole turn.
+
+    A line that is valid JSON but has a shape the parser cannot handle used to
+    raise (TypeError/KeyError/IndexError) straight out of the worker thread,
+    ending the whole turn. The output loop must instead contain it as a
+    WarningAgentMessage and keep processing subsequent lines, so an unexpected
+    message shape degrades to a visible warning rather than an aborted turn.
+    """
+
+    def test_parser_exception_becomes_warning_and_loop_continues(self) -> None:
+        input_queue: Queue = Queue()
+        # A valid-JSON assistant message missing its ``message`` key: the parser
+        # raises KeyError on ``data["message"]``. The parser deliberately does
+        # not normalize this shape, so it stands in for the next unknown shape.
+        malformed = {"type": "assistant"}
+        # A well-formed line AFTER the crash whose handling emits an
+        # identifiable message, proving the loop kept going.
+        recovery = make_task_notification_message(
+            task_id="bg_after_crash", tool_use_id="toolu_after_crash", status="completed"
+        )
+        for d in [make_init_message(session_id="s1"), malformed, recovery, _make_minimal_end_message("s1")]:
+            input_queue.put((json.dumps(d), True))
+
+        mock_process = MagicMock()
+        mock_process.get_queue.return_value = input_queue
+        mock_process.is_finished.return_value = True
+
+        processor = ClaudeOutputProcessor(
+            process=mock_process,
+            source_command="test",
+            output_message_queue=Queue(),
+            environment=MagicMock(),
+            diff_tracker=None,
+            task_id=TaskID(),
+            session_id_written_event=Event(),
+            harness=CLAUDE_CODE_HARNESS,
+            streaming_enabled=True,
+        )
+
+        # Before the fix the KeyError propagates out of the loop; after it, the
+        # loop finishes normally.
+        processor._process_output()
+
+        messages = _drain_queue(processor.output_message_queue)
+        warnings = [m for m in messages if isinstance(m, WarningAgentMessage)]
+        assert len(warnings) == 1, f"expected exactly one containment warning, got {messages!r}"
+
+        # The line after the crash was still processed → the loop did not die.
+        notifications = [m for m in messages if isinstance(m, BackgroundTaskNotificationAgentMessage)]
+        assert len(notifications) == 1
+        assert notifications[0].background_task_id == "bg_after_crash"
+        # And the turn still reached its terminating result frame.
+        assert processor.found_final_message
+
+
+def _collect_text(messages: Iterable) -> str:
+    """Concatenate all TextBlock text reachable across the given chat messages.
+
+    Tolerates messages without a ``content`` attribute (e.g.
+    ``BackgroundTaskStartedAgentMessage``) so a raw emitted-message list can be
+    passed directly.
+    """
+    texts: list[str] = []
+    for message in messages:
+        for block in getattr(message, "content", None) or []:
+            if isinstance(block, TextBlock):
+                texts.append(block.text)
+    return "\n".join(texts)
+
+
+class TestNotificationTurnBeforeUserTurn:
+    """Regression tests for SCU-1660: a task-notification turn delivered *before*
+    the user's own message turn must not end the CLI invocation early.
+
+    When a Monitor background task completes right as a new user prompt is
+    dispatched, the Claude CLI delivers the pending ``<task-notification>`` as
+    its own turn (init → assistant → result) *ahead* of the user's message
+    turn, all within the single CLI process Sculptor spawned for that prompt.
+
+    The turn-completion loop in ``_process_output`` keys on the first ``result``
+    it sees (``found_final_message``). Treating the notification turn's result
+    as terminal makes the loop exit and the process manager tears the CLI down
+    while the user's real request has run at most one tool call — silently
+    abandoning it. The loop must instead stay open until the user's own turn
+    produces its result.
+    """
+
+    @staticmethod
+    def _notification_then_user_turn_jsonl(user_tool_id: str, continuation_text: str) -> list[dict]:
+        """A notification turn (init → assistant → result) followed by the user's
+        own turn that issues one tool call and then continues afterwards.
+
+        The task-notification frame arrives before any ``result``, i.e. while
+        ``found_final_message`` is still False — this is what distinguishes the
+        notification-before-user ordering from the common notification-after
+        ordering that ``handle_background_task_notification`` models.
+        """
+        return [
+            # The CLI delivers the completed Monitor task's notification first.
+            make_task_notification_message(
+                task_id="task_monitor_1",
+                tool_use_id="toolu_monitor_1",
+                status="completed",
+                summary="test-unit watcher finished",
+            ),
+            # Notification turn: the agent briefly acknowledges the notification.
+            make_init_message(session_id="s1"),
+            make_assistant_message(
+                message_id="msg_notif",
+                content_blocks=[make_text_block("This is just the stale Monitor task being cleaned up.")],
+            ),
+            make_end_message(session_id="s1"),
+            # The user's real turn: fetch, then act on the result.
+            make_init_message(session_id="s1"),
+            make_assistant_message(
+                message_id="msg_user_a",
+                content_blocks=[make_text_block("I'll fetch the latest state of that branch.")],
+            ),
+            make_assistant_message(
+                message_id="msg_user_b",
+                content_blocks=[make_tool_use_block(user_tool_id, "Bash", {"command": "git fetch origin"})],
+            ),
+            make_tool_result_message(user_tool_id, "Fetched new commits."),
+            make_assistant_message(
+                message_id="msg_user_c",
+                content_blocks=[make_text_block(continuation_text)],
+            ),
+            make_end_message(session_id="s1"),
+        ]
+
+    def test_user_turn_after_notification_turn_is_not_abandoned(self) -> None:
+        """The user's turn (its tool call and its post-tool continuation) must
+        survive when a notification turn precedes it.
+
+        Before the fix the loop exits at the notification turn's ``result``, so
+        the user turn's frames are never processed and its tool call and
+        continuation text never reach the chat.
+        """
+        user_tool_id = "toolu_user_merge"
+        continuation_text = "MERGE COMPLETE — pushed."
+        jsonl = self._notification_then_user_turn_jsonl(user_tool_id, continuation_text)
+
+        emitted = _run_process_output(jsonl)
+
+        request_id = AgentMessageID()
+        stream = (
+            [
+                ChatInputUserMessage(message_id=request_id, text="merge and repush", files=[]),
+                RequestStartedAgentMessage(request_id=request_id),
+            ]
+            + emitted
+            + [RequestSuccessAgentMessage(request_id=request_id)]
+        )
+        update = convert_agent_messages_to_task_update(stream, TaskID(), {}, CLAUDE_CODE_HARNESS)
+        chat_messages = list(update.chat_messages)
+        if update.in_progress_chat_message is not None:
+            chat_messages.append(update.in_progress_chat_message)
+
+        visible_tool_ids = _collect_tool_ids(chat_messages)
+        assert user_tool_id in visible_tool_ids, (
+            "the user turn's tool call went missing: the loop exited at the notification turn's result and abandoned the user's request"
+        )
+        assert continuation_text in _collect_text(chat_messages), (
+            "the user turn's post-tool continuation never reached the chat: the turn was terminated after its first tool result"
+        )

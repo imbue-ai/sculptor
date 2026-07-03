@@ -72,6 +72,11 @@ class PlaywrightChatPanelElement(PlaywrightFilePreviewAndUploadMixin, Playwright
         return self._locator.locator(", ".join((alpha_pill, alpha_bash, alpha_file)))
 
     def get_bash_blocks(self) -> Locator:
+        """Bash tool calls (``ALPHA_CHAT_BASH_BLOCK``).
+
+        Bash renders as a dedicated bash block, not as a generic
+        ``get_tool_pills`` pill — assert on a Bash tool call through here.
+        """
         return self.get_by_test_id(ElementIDs.ALPHA_CHAT_BASH_BLOCK)
 
     def get_bash_output(self) -> Locator:
@@ -263,6 +268,13 @@ class PlaywrightChatPanelElement(PlaywrightFilePreviewAndUploadMixin, Playwright
         return self.get_by_test_id(ElementIDs.ALPHA_CHAT_TOOL_PILL_ROW)
 
     def get_tool_pills(self) -> Locator:
+        """Generic tool pills only (``ALPHA_CHAT_TOOL_PILL``).
+
+        This does NOT match every tool: Bash renders as a bash block (use
+        ``get_bash_blocks``) and Write / Edit / MultiEdit render as file chips
+        (use ``get_file_chips``). To match every tool surface regardless of
+        which tool ran, use ``get_completed_tool_calls``.
+        """
         return self.get_by_test_id(ElementIDs.ALPHA_CHAT_TOOL_PILL)
 
     def get_tool_pill_popover(self) -> Locator:

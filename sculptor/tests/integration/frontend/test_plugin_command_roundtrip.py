@@ -28,16 +28,11 @@ from sculptor.testing.resources import custom_sculptor_folder_populator
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 
-# A minimal valid plugin: a default-exported activate that contributes nothing.
-# Reaching "loaded" proves the served bundle was fetched, imported, and activated.
-_PROBE_MANIFEST: dict[str, object] = {
-    "id": "probe",
-    "name": "Probe",
-    "version": "0.1.0",
-    "entry": "main.js",
-    "sdkVersion": "^1.0.0",
-}
-_PROBE_JS = "export default function activate(api) {}\n"
+# The plugin under test is the build-sculptor-plugin skill's shipped example —
+# the exact directory the skill tells agents to load first. Loading it here
+# doc-tests the skill: reaching "loaded" proves the served bundle was fetched,
+# imported, and activated, so the skill's quick start cannot rot.
+_EXAMPLE_PLUGIN_DIR = Path(__file__).parents[3] / "sculptor-plugin" / "skills" / "build-sculptor-plugin" / "example"
 
 # How long to wait for the renderer's stream to connect and answer a command
 # before giving up — the page is still booting when the test starts.
@@ -98,11 +93,15 @@ def _wait_for_renderer(instance: SculptorInstance, workspace_id: str) -> None:
 def test_plugin_command_load_reaches_the_live_renderer(sculptor_instance_factory_: SculptorInstanceFactory) -> None:
     """`plugins/command` op=load fans out to the renderer, which loads a served plugin and replies.
 
-    Mirrors the `sculpt plugin load <dir>` flow: install a packaged plugin into
-    the dev tree, then load it by its served manifest URL. Asserts the endpoint
-    returns the renderer's reply (real renderer id, ok, the plugin loaded from
-    the dev origin) and that the renderer's own Settings -> Plugins list shows it.
+    Mirrors the `sculpt plugin load <dir>` flow — for the directory the
+    build-sculptor-plugin skill ships as its quick-start example: install the
+    packaged plugin into the dev tree, then load it by its served manifest URL.
+    Asserts the endpoint returns the renderer's reply (real renderer id, ok, the
+    plugin loaded from the dev origin) and that the renderer's own
+    Settings -> Plugins list shows it.
     """
+    manifest = json.loads((_EXAMPLE_PLUGIN_DIR / "manifest.json").read_text())
+    plugin_id = manifest["id"]
     with sculptor_instance_factory_.spawn_instance() as instance:
         # A synthetic workspace id: the desktop renderer streams all scopes, so it
         # receives the command regardless, and the install just nests dev files
@@ -114,15 +113,17 @@ def test_plugin_command_load_reaches_the_live_renderer(sculptor_instance_factory
             instance,
             f"/api/v1/workspaces/{workspace_id}/plugins/install",
             {
-                "pluginId": "probe",
+                "pluginId": plugin_id,
+                # Mirror the CLI's packaging filter: regular files only, no dotfiles.
                 "files": [
-                    {"path": "manifest.json", "contentBase64": _b64(json.dumps(_PROBE_MANIFEST))},
-                    {"path": "main.js", "contentBase64": _b64(_PROBE_JS)},
+                    {"path": path.name, "contentBase64": _b64(path.read_text())}
+                    for path in sorted(_EXAMPLE_PLUGIN_DIR.iterdir())
+                    if path.is_file() and not path.name.startswith(".")
                 ],
             },
         )
         manifest_url = install["manifestUrl"]
-        assert manifest_url == f"/plugins/local/dev/{workspace_id}/probe/manifest.json"
+        assert manifest_url == f"/plugins/local/dev/{workspace_id}/{plugin_id}/manifest.json"
 
         loaded = _post_json(
             instance,
@@ -137,7 +138,7 @@ def test_plugin_command_load_reaches_the_live_renderer(sculptor_instance_factory
         assert result["renderer"]["environment"] == "browser"
         assert result["plugins"], f"expected the loaded plugin in the reply, got {result}"
         plugin = result["plugins"][0]
-        assert plugin["pluginId"] == "probe", plugin
+        assert plugin["pluginId"] == plugin_id, plugin
         assert plugin["status"] == "loaded", plugin
         assert plugin["origin"] == "dev", plugin
 
@@ -145,4 +146,4 @@ def test_plugin_command_load_reaches_the_live_renderer(sculptor_instance_factory
         # (clicking the gear routes via React Router, keeping the WS alive).
         settings_page = navigate_to_settings_page(page=instance.page)
         plugins = settings_page.click_on_plugins()
-        plugins.expect_loaded(plugin["source"], name="Probe", version="0.1.0")
+        plugins.expect_loaded(plugin["source"], name=manifest["name"], version=manifest["version"])

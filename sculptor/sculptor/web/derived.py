@@ -816,6 +816,12 @@ class TaskUpdate(SerializableModel):
     # the chat "double printing" / staircase bug.
     streamed_segment_first_response_id: AgentMessageID | None = None
     pending_user_question: AskUserQuestionData | None = None
+    # Every currently-unanswered question, oldest first; pending_user_question
+    # (the one the frontend shows) is always the LAST entry. Multiple
+    # questions can pend concurrently — e.g. two subagents each calling
+    # ask_user_question mid-turn — and answering the visible one must
+    # surface the next, not forget it.
+    pending_user_questions: tuple[AskUserQuestionData, ...] = ()
     submitted_question_answers: dict[str, SubmittedQuestionAnswers] = {}
     is_in_plan_mode: bool = False
     # Buffered TurnMetrics waiting to be stamped onto the message at RequestSuccess/RequestStopped.
