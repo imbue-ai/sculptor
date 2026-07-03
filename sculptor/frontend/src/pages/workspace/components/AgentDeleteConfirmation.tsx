@@ -12,6 +12,7 @@ import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback } from "react";
 
+import type { CodingAgentTaskView } from "~/api";
 import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { useOptimisticTaskDelete } from "~/common/state/hooks/useOptimisticTaskDelete.ts";
@@ -38,19 +39,25 @@ export const AgentDeleteConfirmation = (): ReactElement | null => {
   // center is left empty, NOT refilled with an auto-created agent.
   // Deleting a non-viewed agent leaves the current view untouched.
   const handleNavigateAfterDelete = useCallback(
-    (taskId: string): void => {
+    (taskId: string, deletedTask: CodingAgentTaskView): void => {
       if (taskId !== activeAgentId || workspaceId === null) {
         return;
       }
-      const workspaceAgents = (store.get(tasksArrayAtom) ?? [])
-        .filter((task) => task.workspaceId === workspaceId)
+      // This runs after the optimistic removal, so the store's task list no longer
+      // contains the deleted agent — its former position must come from the snapshot,
+      // not a findIndex against the list.
+      const remaining = (store.get(tasksArrayAtom) ?? [])
+        .filter((task) => task.workspaceId === workspaceId && task.id !== taskId)
         .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-      const deletedIndex = workspaceAgents.findIndex((task) => task.id === taskId);
-      const remaining = workspaceAgents.filter((task) => task.id !== taskId);
       if (remaining.length === 0) {
         navigateToRoot();
         return;
       }
+      // The deleted agent's slot in createdAt order is the number of older siblings;
+      // the sibling that moved into that slot (or the new last agent when the deleted
+      // one was last) becomes the view.
+      const deletedCreatedAt = new Date(deletedTask.createdAt).getTime();
+      const deletedIndex = remaining.filter((task) => new Date(task.createdAt).getTime() < deletedCreatedAt).length;
       const nextAgent = remaining[Math.min(deletedIndex, remaining.length - 1)];
       navigateToAgent(workspaceId, nextAgent.id);
     },

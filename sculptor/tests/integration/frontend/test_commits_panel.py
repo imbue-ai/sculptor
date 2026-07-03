@@ -1058,9 +1058,9 @@ def test_commit_diff_shows_committed_content_not_uncommitted(sculptor_instance_:
 
 @user_story("to not see a useless splitter when viewing a newly added file inside a commit diff")
 def test_commit_diff_split_handle_hidden_for_added_file(sculptor_instance_: SculptorInstance) -> None:
-    """Opening an added file from the Commits panel in split view should not
-    render the split column handle — the "before" side is empty, so a draggable
-    splitter is meaningless."""
+    """An added file opened from the Commits panel never shows the split column
+    handle, even with the split preference on — added files render unified
+    because the "before" side is empty, so a draggable splitter is meaningless."""
     page = sculptor_instance_.page
     commits_panel, first_commit = _open_commits_and_expand_first_commit(page, _MULTI_FILE_COMMIT_PROMPT)
 
@@ -1073,13 +1073,19 @@ def test_commit_diff_split_handle_hidden_for_added_file(sculptor_instance_: Scul
     viewer.assert_diff_shows("alpha.py")
     expect(viewer).to_contain_text("a = 1")
 
-    # Switch to split view via the relocated header menu, and confirm the viewer
-    # actually entered split mode — the split view renders whenever the view type
-    # is split, independent of the handle — so the handle assertion below is not
-    # trivially satisfied by unified mode.
+    # Flip the view preference to split via the header menu. Added files always
+    # render unified — there is no "before" side to show — so the split body
+    # never mounts for alpha.py regardless of the preference. The flip is
+    # therefore confirmed through the menu itself: the toggle offers
+    # "Unified view" only while the split preference is active, which keeps the
+    # handle assertion below from being trivially satisfied by a no-op click.
     viewer.toggle_view_option_via_menu("split_view")
-    expect(viewer.get_split_view()).to_be_visible()
+    viewer.open_menu()
+    expect(viewer.get_menu_option("split_view")).to_have_text("Unified view")
+    page.keyboard.press("Escape")
+    expect(viewer.get_menu_trigger()).to_have_attribute("aria-expanded", "false")
 
-    # Even in split mode, the handle must not appear for an added file — there is
-    # no left side to split.
+    # Even with the split preference active, the added file renders unified and
+    # the handle must not appear — there is no left side to split.
+    expect(viewer.get_unified_diff_views()).to_be_visible()
     expect(viewer.get_split_column_handle()).to_have_count(0)

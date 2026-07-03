@@ -2,6 +2,7 @@ import { useSetAtom, useStore } from "jotai";
 import { posthog } from "posthog-js";
 import { useCallback } from "react";
 
+import type { CodingAgentTaskView } from "../../../api";
 import { deleteWorkspaceAgent } from "../../../api";
 import { ToastType } from "../../../components/Toast.tsx";
 import { useImbueLocation, useImbueNavigate, useImbueParams } from "../../NavigateUtils.ts";
@@ -11,8 +12,14 @@ import { agentIdForWorkspaceAtomFamily, setAgentForWorkspaceAtom } from "../atom
 
 type UseOptimisticTaskDeleteInputs = {
   workspaceId: string;
-  /** Custom navigation after optimistic removal. If omitted, navigates to root when the deleted agent is active. */
-  onNavigateAfterDelete?: (taskId: string) => void;
+  /**
+   * Custom navigation after optimistic removal. If omitted, navigates to root when the
+   * deleted agent is active. Receives the deleted task's pre-delete snapshot because the
+   * optimistic removal has already dropped the task from the store by the time this runs —
+   * callbacks that need the deleted task's data (e.g. its position among siblings) must
+   * read it from the snapshot, not the store.
+   */
+  onNavigateAfterDelete?: (taskId: string, deletedTask: CodingAgentTaskView) => void;
 };
 
 type UseOptimisticTaskDeleteResult = {
@@ -45,7 +52,7 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
       }
 
       if (onNavigateAfterDelete) {
-        onNavigateAfterDelete(taskId);
+        onNavigateAfterDelete(taskId, snapshot);
       } else if (isAgentRoute && taskID === taskId) {
         navigateToRoot();
       }
