@@ -631,6 +631,34 @@ def _wait_for_decorated_diff_line(page: Page, text: str) -> None:
     )
 
 
+def _wait_for_full_content_diff_render(page: Page, last_hunk_text: str) -> None:
+    """Block until Pierre's full-content render pass paints through ``last_hunk_text``.
+
+    Pierre paints the diff twice: first straight from the diff string (a
+    *partial* diff), then again once ``useFileLines`` resolves and the full
+    old/new file lines reach Pierre — the pass whose hunk rows are looked up
+    by index in those arrays. Only a non-partial diff marks its hunk
+    separators expandable, so a separator carrying ``data-expand-index`` is
+    the signature of that second pass. Its rows then stream in as Shiki
+    tokenises, so additionally wait for the ``div[data-line]`` carrying
+    ``last_hunk_text`` — pass text from the diff's LAST hunk so every hunk's
+    line-array lookups have run by the time this returns. The shadow root is
+    pierced manually because these are Pierre attributes with no Playwright
+    locator equivalent.
+    """
+    page.wait_for_function(
+        """({ testid, text }) => {
+            const view = document.querySelector(`[data-testid="${testid}"]`);
+            const shadow = view?.querySelector("diffs-container")?.shadowRoot;
+            if (!shadow?.querySelector("[data-separator][data-expand-index]")) return false;
+            return [...shadow.querySelectorAll("div[data-line]")].some(
+                (line) => line.textContent.includes(text)
+            );
+        }""",
+        arg={"testid": ElementIDs.DIFF_VIEW_UNIFIED, "text": last_hunk_text},
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Branch-change diff refresh
 # --------------------------------------------------------------------------- #
@@ -1330,16 +1358,20 @@ def test_all_scope_diff_renders_without_error_for_committed_file(sculptor_instan
         viewer = changes_panel.open_file("src/helpers.py")
         ensure_unified_view(viewer)
 
-        # The crash aborts the context-expansion loop that fills the 16-line gap
-        # between the two hunks. Anchor on a function that lives ONLY in that gap
-        # (count_vowels is unchanged context, absent from both hunks and from the
-        # diff string), so the read runs only after oldLines arrive and the gap
-        # paints — the exact path that raised "renderHunks: oldLine and newLine
-        # are null". The hunks' own lines paint from the diff string first and
-        # would let the read fire too early.
-        _wait_for_decorated_diff_line(page, "count_vowels")
+        # The crash fires during Pierre's full-content render pass — once
+        # oldLines/newLines arrive, its merge-base-aligned hunk indices can read
+        # past a too-short array. The hunks' own lines paint from the diff
+        # string alone (first pass) and would let the read fire too early, and
+        # the 16-line gap between the hunks stays a COLLAPSED separator
+        # (expandUnchanged is off), so gap-only text like count_vowels never
+        # paints at all. Anchor instead on the full-content pass's signature —
+        # an expandable separator — plus the last hunk's final deleted line, so
+        # the whole risky pass has run before the captured errors are read.
+        _wait_for_full_content_diff_render(page, "return text[:max_length - 3]")
 
-        render_hunks_errors = [e for e in js_errors if "renderHunks" in e]
+        # The crash message names Pierre's renderer: "renderHunks" in older
+        # @pierre/diffs releases, "DiffHunksRenderer" in 1.2.x.
+        render_hunks_errors = [e for e in js_errors if "renderHunks" in e or "DiffHunksRenderer" in e]
         assert not render_hunks_errors, f"Pierre renderHunks crash: {render_hunks_errors[0]}"
     finally:
         # The page is shared across the session; leave its listener set clean.

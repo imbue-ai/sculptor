@@ -153,10 +153,18 @@ def navigate_to_workspace(page: Page, name_or_index: str | int = 0) -> None:
     expect(row).to_be_visible()
     row.click()
     # Settle on the workspace shell before returning so a caller that follows
-    # with a non-retrying check doesn't race the route change. SECTION_CENTER
-    # renders on every workspace whatever the active panel is (and even for a
-    # zero-agent workspace's empty center), so it is the reliable landing signal.
-    expect(page.get_by_test_id(ElementIDs.SECTION_CENTER)).to_be_visible()
+    # with a non-retrying check doesn't race the route change. The landing signal
+    # must hold in BOTH shell modes: the normal grid mounts SECTION_CENTER, but a
+    # workspace restored to its per-workspace maximize renders ONLY the maximized
+    # section's PanelSection (no SECTION_CENTER container), so keying on
+    # SECTION_CENTER alone would time out there. Every rendered PanelSection —
+    # normal or maximized, even a zero-agent workspace's empty center — carries
+    # the sub-section-suffixed ring-host testid, so any match means the shell
+    # landed. The testid is suffixed per sub-section (no single id to match), so
+    # this uses a data-testid prefix selector, encapsulated here like the POMs'
+    # tab selectors to honour the integration-test css-locator ratchet.
+    ring_hosts = page.locator(f'[data-testid^="{ElementIDs.SECTION_ACTIVE_RING}-"]')
+    expect(ring_hosts.first).to_be_visible()
 
 
 def get_workspace_creation_button(page: Page) -> tuple[Locator, bool]:

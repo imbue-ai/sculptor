@@ -63,7 +63,14 @@ export const RecentWorkspaces = ({
   const fetchWorkspaces = useCallback(async (): Promise<void> => {
     setIsLoading(true);
     try {
-      const response = await listRecentWorkspaces();
+      // Read-only fetch consumed straight from the response body, so the
+      // unified-stream acknowledgment adds nothing here. Waiting for it would
+      // also fail this load spuriously: the Home page often mounts right as the
+      // stream reconnects (the first-run gate remounts AppShell when the
+      // workspace list transitions empty <-> non-empty), and an ack for a
+      // request in flight across a reconnect never arrives — the tracker would
+      // time out and leave the list empty even though the data landed.
+      const response = await listRecentWorkspaces({ meta: { skipWsAck: true } });
       if (response.data) {
         setWorkspaces(response.data.workspaces);
       }

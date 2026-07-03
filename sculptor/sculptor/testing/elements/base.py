@@ -403,20 +403,26 @@ def open_radix_toggle(page: Page, trigger: Locator) -> None:
     """Click a Radix toggle trigger and retry until it reports open.
 
     Idempotent and verified: a Radix trigger toggles, so clicking one that is
-    already open would close it. Gate on the trigger's ``data-state`` and wait
-    until it is actually open, so repeated open/read/close cycles (e.g. flipping
-    a checkbox menu item then re-reading) stay reliable. Radix can also swallow
-    the click in the brief settle window right after a previous close, so retry
-    until ``data-state`` flips to open.
+    already open would close it (and an open menu's dismiss layer swallows the
+    click anyway). Gate on the trigger's ``aria-expanded`` and wait until it is
+    actually open, so repeated open/read/close cycles (e.g. flipping a checkbox
+    menu item then re-reading) stay reliable. Radix can also swallow the click
+    in the brief settle window right after a previous close, so retry until
+    ``aria-expanded`` flips to true.
+
+    ``aria-expanded`` rather than ``data-state``: a trigger wrapped in a Radix
+    ``Tooltip`` gets the tooltip's own ``data-state`` stamped over the menu's,
+    so the menu can be open while ``data-state`` still reads "closed" —
+    ``aria-expanded`` is written only by the disclosure trigger itself.
     """
     expect(trigger).to_be_visible()
     for _attempt in range(_RADIX_OPEN_ATTEMPTS):
-        if trigger.get_attribute("data-state") == "open":
+        if trigger.get_attribute("aria-expanded") == "true":
             return
         trigger.click()
         try:
-            expect(trigger).to_have_attribute("data-state", "open", timeout=_RADIX_OPEN_TIMEOUT_MS)
+            expect(trigger).to_have_attribute("aria-expanded", "true", timeout=_RADIX_OPEN_TIMEOUT_MS)
             return
         except AssertionError:
             page.wait_for_timeout(_RADIX_OPEN_RETRY_INTERVAL_MS)
-    expect(trigger).to_have_attribute("data-state", "open")
+    expect(trigger).to_have_attribute("aria-expanded", "true")

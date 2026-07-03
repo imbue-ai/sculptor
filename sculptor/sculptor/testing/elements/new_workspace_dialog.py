@@ -153,7 +153,11 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
     # -- Plan-mode toggle (per-prompt agent setting; surfaces once a prompt is typed) --
 
     def get_plan_mode_toggle(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.PLAN_MODE_TOGGLE)
+        # Scoped to the form, unlike the page-wide field getters above: the chat
+        # panel's input renders its own PLAN_MODE_TOGGLE, and in keep-open flows a
+        # created workspace's chat panel is mounted under the still-open dialog,
+        # so a page-wide locator is ambiguous (Playwright strict-mode violation).
+        return self.get_form().get_by_test_id(ElementIDs.PLAN_MODE_TOGGLE)
 
     # -- Mode selector (ported from the /ws/new page POM) --
 
