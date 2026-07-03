@@ -1,18 +1,23 @@
+import { DropdownMenu } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
-import { ChevronDown, Folder, FolderPlus, House, Plus, Settings } from "lucide-react";
+import { ChevronDown, Folder, FolderPlus, House, Pencil, Plus, Settings, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
 import { useMemo, useState } from "react";
 
-import type { Workspace } from "~/api";
+import { updateWorkspace, type Workspace } from "~/api";
 import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { userEmailAtom } from "~/common/state/atoms/userConfig.ts";
 import { workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
+import { useOptimisticWorkspaceDelete } from "~/common/state/hooks/useOptimisticWorkspaceDelete.ts";
 import { useProject } from "~/common/state/hooks/useProjects.ts";
 import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch.ts";
+import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
+import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { WorkspaceStatusDots } from "~/components/statusDot/StatusDot.tsx";
 import { computeWorkspaceDotStatus } from "~/components/statusDot/statusUtils.ts";
 
+import { useLongPress } from "./useLongPress.ts";
 import styles from "./WorkspaceDrawer.module.scss";
 
 type WorkspaceDrawerProps = {
@@ -30,15 +35,18 @@ function getInitials(email: string | undefined): string {
   return local.slice(0, 2).toUpperCase() || "?";
 }
 
-/** One workspace row — owns its branch lookup + status dot, like the desktop row. */
+/** One workspace row — owns its branch lookup + status dot, like the desktop row.
+ * Long-press (or right-click) opens a context menu to rename or delete. */
 const DrawerWorkspaceRow = ({
   workspace,
   isCurrent,
   onSelect,
+  onRequestDelete,
 }: {
   workspace: Workspace;
   isCurrent: boolean;
   onSelect: () => void;
+  onRequestDelete: (workspace: Workspace) => void;
 }): ReactElement => {
   const tasks = useAtomValue(tasksArrayAtom);
   const branchInfo = useWorkspaceBranch(workspace.objectId);
@@ -47,22 +55,83 @@ const DrawerWorkspaceRow = ({
     [tasks, workspace.objectId],
   );
   const branch = branchInfo?.currentBranch ?? workspace.sourceBranch ?? "";
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { handlers: longPress, consumeClick } = useLongPress(() => setIsMenuOpen(true));
+
+  const handleRenameCommit = async (newName: string): Promise<void> => {
+    setIsRenaming(false);
+    try {
+      await updateWorkspace({ path: { workspace_id: workspace.objectId }, body: { description: newName } });
+    } catch (error) {
+      console.error("Failed to rename workspace:", error);
+    }
+  };
+
+  const handleClick = (): void => {
+    if (consumeClick()) return;
+    onSelect();
+  };
+
+  const dot = (
+    <span className={styles.workspaceDot}>
+      <WorkspaceStatusDots status={dotStatus} size={8} />
+    </span>
+  );
+
+  // While renaming, the row is a plain container (not a button) so the input
+  // owns its own tap/typing without the row's select handler interfering.
+  if (isRenaming) {
+    return (
+      <div className={`${styles.workspaceRow} ${isCurrent ? styles.current : ""}`}>
+        {dot}
+        <span className={styles.workspaceInfo}>
+          <InlineRenameInput
+            value={workspace.description ?? ""}
+            onCommit={(newName) => void handleRenameCommit(newName)}
+            onCancel={() => setIsRenaming(false)}
+            isEditing={true}
+            className={styles.renameInput}
+          />
+          {branch ? <span className={styles.workspaceBranch}>{branch}</span> : null}
+        </span>
+      </div>
+    );
+  }
 
   return (
-    <button
-      type="button"
-      className={`${styles.workspaceRow} ${isCurrent ? styles.current : ""}`}
-      onClick={onSelect}
-      aria-current={isCurrent}
-    >
-      <span className={styles.workspaceDot}>
-        <WorkspaceStatusDots status={dotStatus} size={8} />
-      </span>
-      <span className={styles.workspaceInfo}>
-        <span className={styles.workspaceName}>{workspace.description?.trim() || "Workspace"}</span>
-        {branch ? <span className={styles.workspaceBranch}>{branch}</span> : null}
-      </span>
-    </button>
+    <div className={styles.rowWrap}>
+      {/* Long-press opens this menu anchored to the row's start (not the finger).
+          The trigger is an invisible full-row anchor; opening is driven by the
+          long-press handler on the button below, never by tapping the anchor. */}
+      <DropdownMenu.Root open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+        <DropdownMenu.Trigger>
+          <span className={styles.menuAnchor} aria-hidden="true" />
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="start" side="bottom" variant="soft" className="mobileTheme">
+          <DropdownMenu.Item onSelect={() => setIsRenaming(true)}>
+            <Pencil size={16} /> Rename
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item color="red" onSelect={() => onRequestDelete(workspace)}>
+            <Trash2 size={16} /> Delete workspace
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+      <button
+        type="button"
+        className={`${styles.workspaceRow} ${isCurrent ? styles.current : ""}`}
+        onClick={handleClick}
+        aria-current={isCurrent}
+        {...longPress}
+      >
+        {dot}
+        <span className={styles.workspaceInfo}>
+          <span className={styles.workspaceName}>{workspace.description?.trim() || "Workspace"}</span>
+          {branch ? <span className={styles.workspaceBranch}>{branch}</span> : null}
+        </span>
+      </button>
+    </div>
   );
 };
 
@@ -72,12 +141,14 @@ const DrawerRepoGroup = ({
   workspaces,
   currentWorkspaceID,
   onSelect,
+  onRequestDelete,
   defaultExpanded,
 }: {
   projectId: string;
   workspaces: ReadonlyArray<Workspace>;
   currentWorkspaceID: string;
   onSelect: (id: string) => void;
+  onRequestDelete: (workspace: Workspace) => void;
   defaultExpanded: boolean;
 }): ReactElement => {
   const project = useProject(projectId);
@@ -103,6 +174,7 @@ const DrawerRepoGroup = ({
               workspace={ws}
               isCurrent={ws.objectId === currentWorkspaceID}
               onSelect={() => onSelect(ws.objectId)}
+              onRequestDelete={onRequestDelete}
             />
           ))
         : null}
@@ -140,6 +212,27 @@ export const WorkspaceDrawer = ({ isOpen, onClose, currentWorkspaceID }: Workspa
   const handleSelect = (id: string): void => {
     onClose();
     navigateToWorkspace(id);
+  };
+
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const { execute: executeDelete } = useOptimisticWorkspaceDelete({
+    onNavigateAfterDelete: (deletedId: string): void => {
+      // Only the currently-viewed workspace's deletion strands the view — send
+      // it home. Deleting any other workspace just drops it from the list.
+      if (deletedId === workspaceID) {
+        onClose();
+        navigateToHome();
+      }
+    },
+  });
+  const handleRequestDelete = (ws: Workspace): void => {
+    setDeleteTarget({ id: ws.objectId, name: ws.description?.trim() || "Workspace" });
+  };
+
+  const handleDeleteConfirm = (): void => {
+    if (!deleteTarget) return;
+    executeDelete(deleteTarget.id, deleteTarget.name);
+    setDeleteTarget(null);
   };
 
   return (
@@ -189,6 +282,7 @@ export const WorkspaceDrawer = ({ isOpen, onClose, currentWorkspaceID }: Workspa
               workspaces={wsList}
               currentWorkspaceID={workspaceID}
               onSelect={handleSelect}
+              onRequestDelete={handleRequestDelete}
               defaultExpanded={wsList.some((ws) => ws.objectId === workspaceID) || groups.length === 1}
             />
           ))
@@ -205,6 +299,16 @@ export const WorkspaceDrawer = ({ isOpen, onClose, currentWorkspaceID }: Workspa
       >
         <Plus size={18} /> New workspace
       </button>
+
+      <DeleteConfirmationDialog
+        isOpen={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        entityType="workspace"
+        entityName={deleteTarget?.name ?? ""}
+        onConfirm={handleDeleteConfirm}
+      />
     </aside>
   );
 };

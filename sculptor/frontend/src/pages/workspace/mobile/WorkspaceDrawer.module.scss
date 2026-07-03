@@ -151,7 +151,23 @@
   min-height: 44px;
   padding: var(--space-2) var(--space-3) var(--space-2) calc(var(--space-3) + var(--space-4));
   text-align: left;
+  // Long-press opens the context menu; without this the browser also starts a
+  // text selection on the row label. (The rename input is exempt — inputs stay
+  // editable regardless of an ancestor's user-select.)
+  user-select: none;
   width: 100%;
+}
+
+// Wraps a row + the invisible menu anchor so the long-press menu opens at the
+// row's start rather than tracking the finger.
+.rowWrap {
+  position: relative;
+}
+
+.menuAnchor {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
 }
 
 .workspaceRow:hover,
@@ -177,6 +193,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+// The inline rename input reuses InlineRenameInput's base look; match the row's
+// name typography so swapping in the field doesn't shift the row.
+.renameInput {
+  color: var(--mobile-ink);
+  font-size: var(--font-size-3);
 }
 
 .workspaceBranch {
