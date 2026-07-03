@@ -155,6 +155,8 @@ export interface FrontendConfigOptions {
    * origin root — the backend for web, the `sculptor://app` scheme (and the
    * Vite dev server in development) for the packaged renderer — never `file://`,
    * so assets resolve against the origin regardless of the document's path.
+   * (Under the OpenHost preview front — SCULPTOR_OPENHOST_PROXY set — the factory
+   * overrides this with `/proxy/<frontend-port>/`; see defineFrontendConfig.)
    */
   base?: string;
   /** Extra `build` options merged over the shared `{ sourcemap: true }`. */
@@ -166,9 +168,8 @@ export interface FrontendConfigOptions {
 }
 
 /** Dev-only proxy server forwarding `/api`, `/ws`, and `/plugins/local` to the backend. */
-function devServer(env: Record<string, string>, defaultFrontendPort: number): import("vite").ServerOptions {
+function devServer(env: Record<string, string>, fePort: number): import("vite").ServerOptions {
   const apiPort = Number(env.SCULPTOR_API_PORT || 5050);
-  const fePort = Number(env.SCULPTOR_FRONTEND_PORT || defaultFrontendPort);
   const apiTarget = env.SCULPTOR_CUSTOM_BACKEND_URL || `http://127.0.0.1:${apiPort}`;
 
   console.log(`Proxying frontend: target=${apiTarget} SCULPTOR_FRONTEND_PORT=${fePort}`);
@@ -213,9 +214,18 @@ export function defineFrontendConfig(opts: FrontendConfigOptions): UserConfigExp
 
     console.log(`Started vite with command: "${command}" and mode: "${mode}"`);
 
+    // OpenHost-only: behind the nginx /proxy/<port>/ front, the asset `base` and the
+    // HMR client must both point at that sub-path. Derive base from the SAME frontend
+    // port the dev server binds (see devServer below) so the two can never drift;
+    // gated on SCULPTOR_OPENHOST_PROXY so normal dev/build is unaffected. (base can't
+    // ride a `vite --base=…` CLI flag here: `pnpm run dev -- --base=…` forwards a stray
+    // `--` that Vite treats as an end-of-options marker, silently dropping the flag.)
+    const fePort = Number(env.SCULPTOR_FRONTEND_PORT || opts.defaultFrontendPort);
+    const openhostProxyBase = env.SCULPTOR_OPENHOST_PROXY ? `/proxy/${fePort}/` : undefined;
+
     const config: UserConfig = {
       root: opts.root,
-      base: opts.base ?? "/",
+      base: openhostProxyBase ?? opts.base ?? "/",
       optimizeDeps: sharedOptimizeDeps,
       define: sharedDefine(env, {
         apiUrlBaseExpr: opts.apiUrlBase(env),
@@ -230,10 +240,21 @@ export function defineFrontendConfig(opts: FrontendConfigOptions): UserConfigExp
     };
 
     if (command === "serve" || mode === "development") {
-      const server = devServer(env, opts.defaultFrontendPort);
-      // HMR can cause race conditions in integration tests, so disable it there.
-      if (opts.gateHmrUnderPytest) {
-        server.hmr = !env.PYTEST_CURRENT_TEST;
+      const server = devServer(env, fePort);
+      // OpenHost-only: when served behind the nginx /proxy/<port>/ front, accept the
+      // public Host (forwarded by nginx) and dial the HMR client back through the TLS
+      // edge (:443, wss) at the sub-path. The matching asset `base` is derived above;
+      // these HMR bits have no CLI/base equivalent and must live here. Gated on
+      // SCULPTOR_OPENHOST_PROXY so normal dev/build is unaffected.
+      if (env.SCULPTOR_OPENHOST_PROXY) {
+        server.allowedHosts = true;
+        server.hmr = { protocol: "wss", clientPort: 443 };
+      }
+      // HMR can race in integration tests, so disable it there — but only force
+      // the disable, leaving any other HMR config (e.g. the OpenHost override
+      // above) intact otherwise.
+      if (opts.gateHmrUnderPytest && env.PYTEST_CURRENT_TEST) {
+        server.hmr = false;
       }
       config.server = server;
     }
