@@ -17,8 +17,7 @@ import { createElement } from "react";
 
 import type { TaskStatus } from "~/api";
 import { ElementIds } from "~/api";
-import { clearUnreadOverride, isUnreadOverrideActive } from "~/common/state/atoms/unreadOverrides.ts";
-import { getAgentDotStatus } from "~/components/statusDot";
+import { clearUnreadOverride, getAgentDotStatusWithUnreadOverride } from "~/common/state/atoms/unreadOverrides.ts";
 
 import type { PanelId } from "../sectionTypes.ts";
 import type { PanelContextMenuItem, PanelDefinition } from "./panelRegistry.ts";
@@ -99,8 +98,9 @@ export type DynamicAgentInput = {
   // lowest-available-number reuse after deletions; the sync hook passes
   // agent.title through, so numbering stays in one place (the backend).
   displayName: string;
-  // Raw fields for the tab status dot; the dot is derived here via the
-  // shared getAgentDotStatus so the panel tab and the old agent tab can't drift.
+  // Raw fields for the tab status dot; the dot is derived here via the shared
+  // getAgentDotStatusWithUnreadOverride so the panel tab and the workspace
+  // sidebar row can't drift.
   status: TaskStatus;
   lastReadAt: string | null;
   updatedAt: string;
@@ -175,14 +175,7 @@ export function deriveDynamicPanels(
   for (const agent of agents) {
     const id = makeAgentPanelId(agent.taskId);
     liveIds.add(id);
-    const baseDotStatus = getAgentDotStatus(agent.status, agent.lastReadAt, agent.updatedAt);
-    // An explicit "Mark as unread" wins over "read": while the override is active
-    // a stale lastReadAt (e.g. a WebSocket frame that raced the mark-unread
-    // round-trip) must not show the tab as read. Activity dots
-    // (running/waiting/error) keep precedence — the override only affects the
-    // read/unread classification.
-    const dotStatus =
-      baseDotStatus === "read" && isUnreadOverrideActive(agent.taskId, agent.updatedAt) ? "unread" : baseDotStatus;
+    const dotStatus = getAgentDotStatusWithUnreadOverride(agent.taskId, agent);
     definitions.push({
       id,
       displayName: agent.displayName,

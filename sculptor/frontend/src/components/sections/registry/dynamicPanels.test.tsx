@@ -35,13 +35,13 @@ describe("deriveDynamicPanels dot status with the unread override", () => {
   });
 
   it("forces 'unread' while the override is active, even with a read-looking lastReadAt", () => {
-    setUnreadOverride("task-1", UPDATED_AT);
+    setUnreadOverride("task-1", { status: TaskStatus.READY, updatedAt: UPDATED_AT });
     const [definition] = deriveDynamicPanels([createAgentInput()], []);
     expect(definition.dotStatus).toBe("unread");
   });
 
   it("falls back to the base derivation once a new turn expires the override", () => {
-    setUnreadOverride("task-1", UPDATED_AT);
+    setUnreadOverride("task-1", { status: TaskStatus.READY, updatedAt: UPDATED_AT });
     // The new turn advances updatedAt past lastReadAt, so the base derivation
     // already reads as unread on its own.
     const [definition] = deriveDynamicPanels([createAgentInput({ updatedAt: LATER_UPDATED_AT })], []);
@@ -49,18 +49,18 @@ describe("deriveDynamicPanels dot status with the unread override", () => {
   });
 
   it("keeps activity dots (running) ahead of the override", () => {
-    setUnreadOverride("task-1", UPDATED_AT);
+    setUnreadOverride("task-1", { status: TaskStatus.READY, updatedAt: UPDATED_AT });
     const [definition] = deriveDynamicPanels([createAgentInput({ status: TaskStatus.RUNNING })], []);
     expect(definition.dotStatus).toBe("running");
   });
 
   it("clears a deleted agent's override when its panel is evicted", () => {
-    setUnreadOverride("task-1", UPDATED_AT);
+    setUnreadOverride("task-1", { status: TaskStatus.READY, updatedAt: UPDATED_AT });
     // Derive once so the agent's component is cached, then again without the
     // agent so the eviction path runs.
     deriveDynamicPanels([createAgentInput()], []);
     deriveDynamicPanels([], []);
-    expect(isUnreadOverrideActive("task-1", UPDATED_AT)).toBe(false);
+    expect(isUnreadOverrideActive("task-1", { status: TaskStatus.READY, updatedAt: UPDATED_AT })).toBe(false);
   });
 
   it("evicts the per-id definition slice when its agent disappears", () => {

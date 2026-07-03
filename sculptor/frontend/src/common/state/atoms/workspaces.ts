@@ -1,6 +1,7 @@
 import type { Atom, PrimitiveAtom } from "jotai";
 import { atom } from "jotai";
 import { atomFamily, atomWithStorage, createJSONStorage, selectAtom } from "jotai/utils";
+import { isEqual } from "lodash";
 
 import type { Workspace } from "../../../api";
 import { batchUpdateOpenState, updateWorkspace as updateWorkspaceApi } from "../../../api";
@@ -10,6 +11,7 @@ import { ToastType } from "../../../components/Toast.tsx";
 import { invalidateWorkspaceGitQueries, removeWorkspaceQueriesCache } from "../../queryClient.ts";
 import { tasksArrayAtom } from "./tasks.ts";
 import { workspaceOpenCloseErrorToastAtom } from "./toasts";
+import { getAgentDotStatusWithUnreadOverride } from "./unreadOverrides.ts";
 import type { SetupStatusSnapshot } from "./workspaceSetupStatus";
 import { workspaceSetupStatusAtomFamily } from "./workspaceSetupStatus";
 
@@ -68,7 +70,12 @@ export const workspaceDotStatusAtomFamily = atomFamily((workspaceId: string) =>
   selectAtom(
     tasksArrayAtom,
     (tasks): WorkspaceDotStatus =>
-      computeWorkspaceDotStatus((tasks ?? []).filter((task) => task.workspaceId === workspaceId)),
+      computeWorkspaceDotStatus(
+        (tasks ?? []).filter((task) => task.workspaceId === workspaceId),
+        // Override-aware per-task resolution so a manual "Mark as unread"
+        // lights the workspace row exactly like the agent's panel tab.
+        (task) => getAgentDotStatusWithUnreadOverride(task.id, task),
+      ),
     areWorkspaceDotStatusesEqual,
   ),
 );
@@ -537,7 +544,14 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
       invalidateWorkspaceGitQueries(workspace.objectId);
     }
 
-    set(workspaceAtomFamily(workspace.objectId), workspace);
+    // Skip the write when nothing changed: every stream frame carries fresh
+    // Workspace objects, and an unconditional write would re-render each
+    // workspace's subscribers (sidebar row, header, peek) per frame. Deep
+    // equality rather than a hand-picked field list, so a new backend field
+    // can never be silently dropped from the comparison.
+    if (previous === null || !isEqual(previous, workspace)) {
+      set(workspaceAtomFamily(workspace.objectId), workspace);
+    }
     const isNew = !currentWorkspaceIds.has(workspace.objectId);
     currentWorkspaceIds.add(workspace.objectId);
 
@@ -575,7 +589,15 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
     }
   });
 
-  set(workspaceIdsAtom, Array.from(currentWorkspaceIds));
+  // Same skip-unchanged rule as the per-workspace writes: the id LIST is
+  // subscribed by list-shaped consumers (sidebar grouping, the loaded gate),
+  // so only write when membership actually changed. First frame always writes
+  // (undefined → array marks the list loaded, even when empty).
+  const previousIds = get(workspaceIdsAtom);
+  const nextIds = Array.from(currentWorkspaceIds);
+  if (previousIds === undefined || !isEqual([...previousIds].sort(), [...nextIds].sort())) {
+    set(workspaceIdsAtom, nextIds);
+  }
 
   // Propagate stream-driven deletions to deletedWorkspaceIdsAtom so that
   // components with their own workspace lists (e.g. RecentWorkspaces) can

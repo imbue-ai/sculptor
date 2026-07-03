@@ -56,13 +56,15 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
     }
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
-      // Skip while the user's explicit "Mark as unread" is still active (they
-      // marked the agent unread after the update that scheduled this timer) —
-      // don't undo their action. An override recorded BEFORE this update has
-      // expired (updatedAt advanced), so a new agent turn resumes the normal
-      // auto mark-read for the agent being viewed.
+      // Skip while the user's explicit "Mark as unread" is still active — don't
+      // undo their action. The override holds through the update that scheduled
+      // this timer when the user marked the agent unread after it, and through
+      // every streaming tick (including the completion) of a run the agent was
+      // marked unread during. Once the override expires — the next agent turn
+      // after the mark, or after the marked run completes — the normal auto
+      // mark-read resumes for the agent being viewed.
       const latest = taskRef.current;
-      if (latest && isUnreadOverrideActive(agentID, latest.updatedAt)) {
+      if (latest && isUnreadOverrideActive(agentID, latest)) {
         return;
       }
       markRead();
