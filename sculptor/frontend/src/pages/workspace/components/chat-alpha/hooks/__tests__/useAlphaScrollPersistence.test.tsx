@@ -44,6 +44,9 @@ const wrapperFor = (store: ReturnType<typeof createStore>) => {
 describe("useAlphaScrollPersistence", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    // The scroll-position atom is sessionStorage-backed (survives page
+    // reloads); clear it so saves from one test don't leak into the next.
+    sessionStorage.clear();
   });
 
   afterEach(() => {
@@ -113,7 +116,9 @@ describe("useAlphaScrollPersistence", () => {
   });
 
   it("restores to the saved distance from the content bottom when near the bottom", () => {
-    const el = createMockScrollContainer(0, 2000, 500);
+    // Desktop-height container (>= 700px), where the at-bottom threshold is
+    // 200px — so the saved 100px distance takes the near-bottom restore path.
+    const el = createMockScrollContainer(0, 2000, 800);
     const ref = { current: el };
     const virtualItems = [createMockVirtualItem(0, 0, 200)];
     const virtualizer = createMockVirtualizer(virtualItems);
@@ -135,10 +140,10 @@ describe("useAlphaScrollPersistence", () => {
       vi.advanceTimersByTime(16);
     });
 
-    // Restored 100px above the content bottom (2000 - paddingEnd 0 - 500 - 100),
+    // Restored 100px above the content bottom (2000 - paddingEnd 0 - 800 - 100),
     // relative to the *current* content bottom so content that grew while away
     // stays in view.
-    expect(el.scrollTop).toBe(1400);
+    expect(el.scrollTop).toBe(1100);
   });
 
   it("round-trips a position inside the tail padding (negative distance)", () => {
