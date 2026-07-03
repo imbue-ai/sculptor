@@ -1,0 +1,78 @@
+// Terminal-style "background box" mirroring the bottom TerminalPanel surface:
+// a dark body, mono font, a slim neutral title bar, and a bounded scrolling
+// tail. Status color never appears in the chrome — the only color allowed is
+// authentic terminal log content inside the body.
+.box {
+  background: var(--terminal-bg);
+  border: 1px solid var(--terminal-border);
+  border-radius: var(--radius-3);
+  overflow: hidden;
+}
+
+// Slim title bar: command on the left, optional "open" affordance on the right.
+// Visually distinct from the body via a lighter surface + a bottom border.
+.titleBar {
+  align-items: center;
+  background: var(--gray-2);
+  border-bottom: 1px solid var(--terminal-border);
+  display: flex;
+  gap: var(--space-2);
+  height: 34px; // stylelint-disable-line sculptor/no-hardcoded-values
+  padding: 0 var(--space-3);
+}
+
+.command {
+  color: var(--gray-9);
+  flex: 1;
+  font-family: var(--code-font-family);
+  font-size: 10.5px; // stylelint-disable-line sculptor/no-hardcoded-values
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// The "open in terminal" affordance is a Radix ghost IconButton; just keep it
+// from stretching and nudge the resting color to match the dim title bar.
+.openButton {
+  color: var(--gray-9);
+  flex-shrink: 0;
+}
+
+// Body: a bounded vertical-scroll tail rendered as mono rows. Default log text
+// is the neutral terminal text color; authentic ANSI-style content is free to
+// override via inline spans the caller passes in (not done here).
+.body {
+  color: var(--terminal-text);
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  line-height: 1.65; // stylelint-disable-line sculptor/no-hardcoded-values
+  margin: 0;
+  max-height: 140px; // stylelint-disable-line sculptor/no-hardcoded-values
+  overflow: auto;
+  padding: var(--space-2) var(--space-3);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.line {
+  min-height: 1.65em; // stylelint-disable-line sculptor/no-hardcoded-values
+}
+
+// Blinking block cursor shown at the tail of a running process (neutral, not
+// colored). Mirrors the mock's step-end blink.
+@keyframes backgroundProcessCursorBlink {
+  50% {
+    opacity: 0%;
+  }
+}
+
+.cursor {
+  animation: backgroundProcessCursorBlink 1.1s step-end infinite;
+  background: var(--gray-11);
+  display: inline-block;
+  height: 11px; // stylelint-disable-line sculptor/no-hardcoded-values
+  margin-left: 2px; // stylelint-disable-line sculptor/no-hardcoded-values
+  vertical-align: text-bottom;
+  width: 6px; // stylelint-disable-line sculptor/no-hardcoded-values
+}
