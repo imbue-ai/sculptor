@@ -7,6 +7,7 @@ from typing import cast
 
 from loguru import logger
 from pydantic import Field
+from pydantic import ValidationError
 
 from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.interfaces.agents.tool_names import AgentToolName
@@ -297,7 +298,6 @@ class ParsedTaskProgressResponse(ParsedAgentResponse):
     object_type: str = Field(default="ParsedTaskProgressResponse")
     task_id: str = Field(description="Background task ID matching the task_started event")
     tool_use_id: str = Field(description="Tool use ID of the tool call that launched the background task")
-    description: str = Field(default="", description="Human-readable description of the current activity")
     usage: WorkflowUsage | None = Field(default=None, description="Aggregate usage so far")
     last_tool_name: str | None = Field(default=None, description="Most recent tool used by the task")
     summary: str = Field(default="", description="Latest progress summary")
@@ -429,12 +429,20 @@ def _handle_task_started_message(data: dict[str, Any]) -> ParsedTaskStartedRespo
 
 def _handle_task_progress_message(data: dict[str, Any]) -> ParsedTaskProgressResponse:
     """Handle system/task_progress message type."""
-    usage = data.get("usage")
+    raw_usage = data.get("usage")
+    usage: WorkflowUsage | None = None
+    if isinstance(raw_usage, dict):
+        # task_progress is the highest-frequency system message during a
+        # workflow — a malformed usage shape from a newer CLI must degrade to
+        # "no usage", not kill the output loop on every tick.
+        try:
+            usage = WorkflowUsage.model_validate(raw_usage)
+        except ValidationError:
+            logger.debug("Skipping malformed task_progress usage: {}", raw_usage)
     return ParsedTaskProgressResponse(
         task_id=data["task_id"],
         tool_use_id=data["tool_use_id"],
-        description=data.get("description", ""),
-        usage=WorkflowUsage.model_validate(usage) if isinstance(usage, dict) else None,
+        usage=usage,
         last_tool_name=data.get("last_tool_name"),
         summary=data.get("summary", ""),
         workflow_progress=parse_workflow_progress_entries(data.get("workflow_progress")),

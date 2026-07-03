@@ -6582,6 +6582,57 @@ def test_workflow_notification_skips_child_synthesis_when_tool_use_is_result_rep
     assert child_messages == []
 
 
+def test_workflow_notification_with_empty_tree_skips_child_synthesis_on_replay() -> None:
+    """A workflow that finished before reporting any tree replays with an
+    EMPTY final_workflow_entries tuple (the workflow marker). Even with no
+    ToolUseBlock in history (result-replaced) and no prior map entry, the
+    notification must rebuild a completed entry rather than synthesize a
+    subagent child."""
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    user_message = ChatInputUserMessage(text="Review this", model_name=LLMModel.CLAUDE_4_SONNET)
+    result_only_block = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=AssistantMessageID("assistant-workflow-streamed"),
+        message_id=AgentMessageID(),
+        content=(
+            ToolResultBlock(
+                tool_use_id="toolu-wf-1",
+                tool_name="Workflow",
+                invocation_string="review",
+                content=GenericToolContent(text="Workflow launched in background. Task ID: task-wf-1"),
+            ),
+        ),
+    )
+    state = convert_agent_messages_to_task_update(
+        [
+            user_message,
+            RequestStartedAgentMessage(request_id=user_message.message_id),
+            result_only_block,
+            BackgroundTaskNotificationAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                status="failed",
+                summary="Workflow script error",
+                workflow_name="review",
+                final_workflow_entries=(),
+            ),
+            _make_request_success(user_message.message_id),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+
+    entry = state.workflow_task_states["toolu-wf-1"]
+    assert entry.status == "failed"
+    assert entry.entries == ()
+    child_messages = [m for m in completed_by_id.values() if m.parent_tool_use_id == "toolu-wf-1"]
+    assert child_messages == []
+
+
 def test_workflow_notification_rebuilds_entry_on_replay() -> None:
     """On history replay (fresh connection, no ephemeral messages, no current
     state) the persisted notification alone rebuilds a completed entry."""

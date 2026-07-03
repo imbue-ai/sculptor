@@ -9,9 +9,9 @@ while tolerating unknown fields and entry types, since the CLI adds fields
 across releases.
 """
 
+from collections.abc import Sequence
 from typing import Annotated
 from typing import Any
-from typing import Sequence
 
 from loguru import logger
 from pydantic import Field
@@ -182,8 +182,15 @@ def merge_workflow_progress_entries(
         if isinstance(entry, WorkflowAgentProgress):
             previous = entry_by_kind_and_index.get(key)
             summaries = previous.recent_tool_summaries if isinstance(previous, WorkflowAgentProgress) else ()
-            if entry.last_tool_summary and (not summaries or summaries[-1] != entry.last_tool_summary):
-                summaries = (*summaries, entry.last_tool_summary)[-_RECENT_TOOL_SUMMARY_LIMIT:]
+            # A delta entry may carry its own window (built when the agent
+            # repeated within one payload); append those calls, else fall back
+            # to the single latest call.
+            incoming_summaries = entry.recent_tool_summaries or (
+                (entry.last_tool_summary,) if entry.last_tool_summary else ()
+            )
+            for summary in incoming_summaries:
+                if not summaries or summaries[-1] != summary:
+                    summaries = (*summaries, summary)[-_RECENT_TOOL_SUMMARY_LIMIT:]
             if summaries != entry.recent_tool_summaries:
                 entry = entry.model_copy(update={"recent_tool_summaries": summaries})
         entry_by_kind_and_index[key] = entry

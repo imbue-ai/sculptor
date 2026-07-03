@@ -360,6 +360,7 @@ def _feed_jsonl(processor: ClaudeOutputProcessor, jsonl_dicts: list[dict]) -> No
             if not processor._completed_pending_deferred:
                 processor._completed_pending_deferred_deadline = None
             processor.found_final_message = False
+            is_workflow_task = processor._task_id_to_task_type.get(result.task_id) == "local_workflow"
             processor.output_message_queue.put(
                 BackgroundTaskNotificationAgentMessage(
                     message_id=AgentMessageID(),
@@ -368,7 +369,9 @@ def _feed_jsonl(processor: ClaudeOutputProcessor, jsonl_dicts: list[dict]) -> No
                     status=result.status,
                     summary=result.summary,
                     workflow_name=processor._task_id_to_workflow_name.get(result.task_id, ""),
-                    final_workflow_entries=processor._last_workflow_entries.get(result.task_id),
+                    final_workflow_entries=processor._last_workflow_entries.get(result.task_id, ())
+                    if is_workflow_task
+                    else None,
                     workflow_usage=processor._last_workflow_usage.get(result.task_id),
                 )
             )
@@ -829,6 +832,57 @@ class TestWorkflowTaskProgress:
         assert isinstance(final_agent, WorkflowAgentProgress)
         assert final_agent.state == "done"
         assert final_agent.result_preview == "Found 2 bugs"
+
+    def test_log_only_delta_is_throttled_like_a_token_tick(self) -> None:
+        """A payload whose entries are all filtered out (e.g. only
+        workflow_log lines) parses to an empty tree and must not bypass the
+        emission throttle."""
+        processor = _make_processor_for_jsonl_test()
+        self._arm_workflow(processor)
+
+        _feed_jsonl(
+            processor,
+            [
+                make_task_progress_message(
+                    task_id="task_wf_1",
+                    tool_use_id="toolu_wf_1",
+                    workflow_progress=self._make_tree(),
+                ),
+                make_task_progress_message(
+                    task_id="task_wf_1",
+                    tool_use_id="toolu_wf_1",
+                    workflow_progress=[{"type": "workflow_log", "message": "3/10 found"}],
+                ),
+            ],
+        )
+
+        messages = _drain_queue(processor.output_message_queue)
+        progress = [m for m in messages if isinstance(m, WorkflowTaskProgressAgentMessage)]
+        assert len(progress) == 1
+
+    def test_notification_without_any_tree_still_marks_workflow(self) -> None:
+        """A workflow that finishes before reporting a tree must still be
+        identifiable as a workflow on the persisted notification (empty tuple,
+        not None), so history replay never falls into subagent-child synthesis."""
+        processor = _make_processor_for_jsonl_test()
+        self._arm_workflow(processor)
+
+        _feed_jsonl(
+            processor,
+            [
+                make_task_notification_message(
+                    task_id="task_wf_1",
+                    tool_use_id="toolu_wf_1",
+                    status="failed",
+                    summary="Workflow script error",
+                )
+            ],
+        )
+
+        messages = _drain_queue(processor.output_message_queue)
+        notifications = [m for m in messages if isinstance(m, BackgroundTaskNotificationAgentMessage)]
+        assert len(notifications) == 1
+        assert notifications[0].final_workflow_entries == ()
 
     def test_progress_with_tree_before_task_started_still_emits(self) -> None:
         """A tree-carrying progress event identifies its task as a workflow

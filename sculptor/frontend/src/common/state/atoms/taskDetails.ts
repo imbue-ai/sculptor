@@ -41,17 +41,19 @@ export const taskDetailAtomFamily = atomFamily<string, PrimitiveAtom<TaskDetailS
   atom<TaskDetailState | null>(null),
 );
 
-const EMPTY_WORKFLOW_TASK_STATES: Record<string, WorkflowTaskState> = {};
+type WorkflowTaskStateKey = {
+  taskId: string;
+  toolUseId: string;
+};
 
-// Selected with deep equality so pill rows subscribed to workflow state don't
-// re-render on every streaming partial — the backend ships the map as a fresh
-// object on each TaskUpdate even when its contents are unchanged.
-export const workflowTaskStatesAtomFamily = atomFamily<string, Atom<Record<string, WorkflowTaskState>>>((taskId) =>
-  selectAtom(
-    taskDetailAtomFamily(taskId),
-    (detail) => detail?.workflowTaskStates ?? EMPTY_WORKFLOW_TASK_STATES,
-    isEqual,
-  ),
+// One derived atom per workflow pill, selected with deep equality: the
+// backend ships workflowTaskStates as a fresh object on every TaskUpdate, so
+// subscribing to a single entry keeps a progress tick on one workflow from
+// re-rendering every other pill in the transcript.
+export const workflowTaskStateAtomFamily = atomFamily<WorkflowTaskStateKey, Atom<WorkflowTaskState | undefined>>(
+  (key) =>
+    selectAtom(taskDetailAtomFamily(key.taskId), (detail) => detail?.workflowTaskStates?.[key.toolUseId], isEqual),
+  (a, b) => a.taskId === b.taskId && a.toolUseId === b.toolUseId,
 );
 
 export const getEmptyTaskDetailState = (): TaskDetailState => {

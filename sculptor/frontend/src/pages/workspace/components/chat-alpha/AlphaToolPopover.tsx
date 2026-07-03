@@ -13,11 +13,40 @@ import styles from "./AlphaToolPopover.module.scss";
 import { OutsideWorkspaceIcon } from "./OutsideWorkspaceIcon.tsx";
 import headerStyles from "./PopoverHeader.module.scss";
 import { PopoverHeader } from "./PopoverHeader.tsx";
-import { defaultPopoverShell, type ToolEntryProps, type ToolEntryShell } from "./toolEntryShell.tsx";
 import type { PillData } from "./toolPill.types.ts";
 import { makeRelative } from "./toolPillUtils.ts";
 
-export type { ToolEntryShell, ToolEntryShellArgs } from "./toolEntryShell.tsx";
+export type ToolEntryShellArgs = {
+  title: ReactNode;
+  meta?: ReactNode;
+  actions?: ReactNode;
+  /** Body text. The popover shell renders this as <pre>; the row shell ignores it. */
+  bodyText: string;
+  /** Extra className for the body — e.g. terminal background or error tint. */
+  bodyClassName?: string;
+};
+
+/**
+ * Render-prop callback that decides how a per-tool entry is laid out.
+ * Used by the popover (default) to render header + body, and by the
+ * expanded row mode to inline header content next to the tool icon.
+ */
+export type ToolEntryShell = (args: ToolEntryShellArgs) => ReactElement;
+
+type ToolEntryProps = {
+  block: ToolUseBlock | null;
+  result: ToolResultBlock | null;
+  workspaceCodePath: string | null;
+  /** Defaults to the popover-entry layout (header + body). */
+  renderShell?: ToolEntryShell;
+};
+
+const defaultPopoverShell: ToolEntryShell = ({ title, meta, actions, bodyText, bodyClassName }) => (
+  <div className={styles.entry}>
+    <PopoverHeader title={title} meta={meta} actions={actions} />
+    {bodyText && <pre className={bodyClassName ?? styles.entryBody}>{bodyText}</pre>}
+  </div>
+);
 
 const getResultText = (result: ToolResultBlock | null): string => {
   if (!result) return "";

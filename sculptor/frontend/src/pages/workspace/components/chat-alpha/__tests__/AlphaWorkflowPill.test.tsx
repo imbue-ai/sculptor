@@ -15,7 +15,8 @@ vi.mock("~/common/state/hooks/useTaskDetail", async (importOriginal) => {
   const actual = await importOriginal<typeof UseTaskDetailModule>();
   return {
     ...actual,
-    useCurrentTaskWorkflowStates: (): Record<string, WorkflowTaskState> => mockWorkflowTaskStates,
+    useCurrentTaskWorkflowState: (toolUseId: string): WorkflowTaskState | undefined =>
+      mockWorkflowTaskStates[toolUseId],
   };
 });
 
@@ -100,5 +101,42 @@ describe("AlphaWorkflowPill", () => {
     fireEvent.click(screen.getByTestId(ElementIds.ALPHA_CHAT_WORKFLOW_PILL));
     expect(screen.getByTestId(ElementIds.ALPHA_CHAT_WORKFLOW_POPOVER)).toBeInTheDocument();
     expect(screen.getAllByTestId(ElementIds.ALPHA_CHAT_WORKFLOW_PHASE_TAB).length).toBeGreaterThan(0);
+  });
+
+  it("shows a starting description while running with no agents yet", () => {
+    mockWorkflowTaskStates = { [TOOL_USE_ID]: makeState({ entries: [] }) };
+    renderPill();
+    expect(screen.getByTestId(ElementIds.ALPHA_CHAT_WORKFLOW_PILL)).toHaveTextContent(
+      "Workflow review-changes — starting…",
+    );
+  });
+
+  it("describes failed and stopped workflows", () => {
+    mockWorkflowTaskStates = { [TOOL_USE_ID]: makeState({ status: "failed" }) };
+    const { unmount } = renderPill();
+    expect(screen.getByTestId(ElementIds.ALPHA_CHAT_WORKFLOW_PILL)).toHaveTextContent(
+      "Workflow review-changes — failed",
+    );
+    unmount();
+
+    mockWorkflowTaskStates = { [TOOL_USE_ID]: makeState({ status: "stopped" }) };
+    renderPill();
+    expect(screen.getByTestId(ElementIds.ALPHA_CHAT_WORKFLOW_PILL)).toHaveTextContent(
+      "Workflow review-changes — stopped",
+    );
+  });
+
+  it("toggles the popover with Enter and closes it with Escape", () => {
+    // The trigger is a div[role=button], so keyboard activation is bespoke —
+    // this pins the Enter/Escape paths a native button would give for free.
+    mockWorkflowTaskStates = { [TOOL_USE_ID]: makeState() };
+    renderPill();
+
+    const pill = screen.getByTestId(ElementIds.ALPHA_CHAT_WORKFLOW_PILL);
+    fireEvent.keyDown(pill, { key: "Enter" });
+    expect(screen.getByTestId(ElementIds.ALPHA_CHAT_WORKFLOW_POPOVER)).toBeInTheDocument();
+
+    fireEvent.keyDown(pill, { key: "Escape" });
+    expect(screen.queryByTestId(ElementIds.ALPHA_CHAT_WORKFLOW_POPOVER)).not.toBeInTheDocument();
   });
 });

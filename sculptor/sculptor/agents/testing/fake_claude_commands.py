@@ -1476,12 +1476,14 @@ def handle_background_subagent(args: dict, emit_streaming: bool) -> list[dict]:
 def handle_workflow_run(args: dict, emit_streaming: bool) -> list[dict]:
     """Simulate the Workflow tool's full background-task lifecycle.
 
-    Models the real CLI flow: the Workflow tool_result returns immediately
-    ("launched in background"), the run streams system/task_progress events
-    whose ``workflow_progress`` payloads are DELTAS — the first carries the
-    phase plus the initial agent entries, later ones carry only the entries
-    whose state changed — and completion arrives via task_notification
-    followed by a fresh request cycle where the agent summarizes the result.
+    Models the real CLI flow (verified against stream-json captured from
+    Claude Code 2.1.198 workflow sessions): the Workflow tool_result returns
+    immediately ("launched in background"), the run streams
+    system/task_progress events whose ``workflow_progress`` payloads are
+    DELTAS — the first carries the phase plus the initial agent entries,
+    later ones carry only the entries whose state changed — and completion
+    arrives via task_notification followed by a fresh request cycle where
+    the agent summarizes the result.
 
     Produces the JSONL sequence:
     1. Main agent assistant message with text + Workflow tool_use

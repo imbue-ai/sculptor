@@ -751,6 +751,9 @@ def convert_agent_messages_to_task_update(
                 )
 
         elif isinstance(msg, WorkflowTaskProgressAgentMessage):
+            # Sticky fields carry forward through ticks that omit them: a
+            # tree-only delta has no last_tool_name/summary and must not blank
+            # values a previous tick established.
             previous_state = workflow_task_states.get(msg.tool_use_id)
             workflow_task_states[msg.tool_use_id] = WorkflowTaskState(
                 task_id=msg.background_task_id,
@@ -758,9 +761,9 @@ def convert_agent_messages_to_task_update(
                 workflow_name=msg.workflow_name or (previous_state.workflow_name if previous_state else ""),
                 status="running",
                 entries=msg.entries,
-                usage=msg.usage,
-                last_tool_name=msg.last_tool_name,
-                summary=msg.summary,
+                usage=msg.usage or (previous_state.usage if previous_state else None),
+                last_tool_name=msg.last_tool_name or (previous_state.last_tool_name if previous_state else None),
+                summary=msg.summary or (previous_state.summary if previous_state else ""),
             )
 
         elif isinstance(msg, BackgroundTaskNotificationAgentMessage):
@@ -769,7 +772,8 @@ def convert_agent_messages_to_task_update(
             # ``final_workflow_entries is not None`` condition rebuilds the
             # entry from history replay (a fresh connection never sees the
             # ephemeral progress/started messages, only this persisted
-            # notification).
+            # notification) — workflow notifications always carry a tuple,
+            # empty when the run reported no tree before finishing.
             if msg.tool_use_id in workflow_task_states or msg.final_workflow_entries is not None:
                 previous_state = workflow_task_states.get(msg.tool_use_id)
                 workflow_task_states[msg.tool_use_id] = WorkflowTaskState(
@@ -789,9 +793,9 @@ def convert_agent_messages_to_task_update(
                 # in the finalized message, so _find_tool_use_by_id comes up
                 # empty and the fallback would attach a child — which makes
                 # AlphaToolGroup misclassify the Workflow call as a subagent
-                # and the pill vanish (same failure mode as SCU-1151's Bash
-                # case). The pill's completion signal is the status flip in
-                # workflow_task_states above, not a child message.
+                # (children.length > 0) and drop the pill. The pill's
+                # completion signal is the status flip in workflow_task_states
+                # above, not a child message.
                 continue
             # A background task completed. The notification is an out-of-band
             # signal that does not itself end the current request cycle, so we

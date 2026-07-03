@@ -16,7 +16,6 @@ import json
 
 from playwright.sync_api import expect
 
-from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_to_top
 from sculptor.testing.fake_claude_pause import FakeClaudePause
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -32,11 +31,15 @@ def test_workflow_pill_shows_live_progress_then_final_tree(sculptor_instance_: S
     page = sculptor_instance_.page
     pause = FakeClaudePause()
 
+    # Marker texts are set explicitly so their uniqueness is deliberate:
+    # the raw command (including summary_text) is echoed in the user message
+    # bubble, so completion must be asserted on assistant messages only.
     workflow_command = (
         "fake_claude:workflow_run `"
         + json.dumps(
             {
                 "workflow_name": "review-changes",
+                "launched_text": "[workflow-test] workflow launched",
                 "summary_text": "[workflow-test] workflow done",
                 "pause_path": str(pause.release_path),
             }
@@ -52,9 +55,10 @@ def test_workflow_pill_shows_live_progress_then_final_tree(sculptor_instance_: S
     chat_panel = task_page.get_chat_panel()
 
     # The "launched" text marks the wait window: FakeClaude has flushed the
-    # running tree + result/success and is blocked on the sentinel.
-    messages = chat_panel.get_messages()
-    expect(messages.filter(has_text="Workflow launched.").first).to_be_visible()
+    # running tree + result/success and is blocked on the sentinel. Assert on
+    # assistant messages so the prompt echo can't satisfy the wait.
+    assistant_messages = chat_panel.get_assistant_messages()
+    expect(assistant_messages.filter(has_text="[workflow-test] workflow launched").first).to_be_visible()
 
     # The pill renders subagent-style with a description of the run and stays
     # in the running state even though the tool_result has already arrived.
@@ -85,22 +89,33 @@ def test_workflow_pill_shows_live_progress_then_final_tree(sculptor_instance_: S
     expect(popover).to_contain_text("Grep: TODO in src/")
     expect(popover).to_contain_text("Still running…")
 
-    # Close the popover before releasing — the completion turn scrolls the
-    # chat, which auto-dismisses open popovers.
+    # Close the popover before releasing — once the completion turn streams
+    # in, the virtualizer can unmount the pill's row (unmounting Popover.Root
+    # and losing the open state), so an open popover here is not stable.
     workflow_pill.click()
     expect(popover).not_to_be_visible()
+
+    # Park the cursor away from the pill. The close-click leaves it inside
+    # the pill's hover zone, and the upcoming scroll shifts content under the
+    # stationary cursor — the browser re-fires mouseenter and the pill's
+    # hover-open would race the reopen click below into a toggle-close.
+    page.mouse.move(0, 0)
 
     # Release the workflow: the completion deltas, notification, and summary
     # turn stream through and the turn completes.
     pause.release()
-    expect(messages.filter(has_text="[workflow-test] workflow done").first).to_be_visible()
+    expect(assistant_messages.filter(has_text="[workflow-test] workflow done").first).to_be_visible()
 
-    # The summary turn scrolls the chat to the newest message and the
-    # virtualizer unmounts the earlier rows — scroll back up so the pill is
-    # mounted again before asserting on it.
-    scroll_alpha_chat_to_top(page)
+    # The summary turn follows the chat to the newest message, leaving the
+    # pill above the viewport. Scroll it back programmatically: unlike the
+    # wheel-based scroll helpers, Playwright's scroll-into-view never arms
+    # the chat's user-scroll window, so nothing can dismiss the popover the
+    # click below opens. (A bare click would auto-scroll too, but mid-scroll —
+    # inside whatever window is hot — which is exactly the flaky path.)
+    workflow_pill.scroll_into_view_if_needed()
+    expect(workflow_pill).to_be_in_viewport()
     expect(workflow_pill).to_have_attribute("data-workflow-status", "completed")
-    expect(workflow_pill).to_contain_text("2 agents")
+    expect(workflow_pill).to_contain_text("— 2 agents")
 
     # Reopen the popover: the final tree persists; an expanded agent row now
     # shows its result preview as the outcome.

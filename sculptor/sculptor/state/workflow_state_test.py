@@ -164,6 +164,28 @@ def test_merge_workflow_progress_entries_accumulates_recent_tool_summaries() -> 
     assert agent.last_tool_summary == "Read(x)"
 
 
+def test_merge_workflow_progress_entries_preserves_within_payload_tool_calls() -> None:
+    """When an agent repeats within one payload, its parsed entry carries an
+    accumulated window; merging onto an existing tree must append those calls
+    rather than only the latest one."""
+    initial = parse_workflow_progress_entries(
+        [{"type": "workflow_agent", "index": 1, "label": "a", "state": "progress", "lastToolSummary": "Read(x)"}]
+    )
+    delta = parse_workflow_progress_entries(
+        [
+            {"type": "workflow_agent", "index": 1, "label": "a", "state": "progress", "lastToolSummary": "Bash(y)"},
+            {"type": "workflow_agent", "index": 1, "label": "a", "state": "done", "lastToolSummary": "Grep(z)"},
+        ]
+    )
+    assert initial is not None and delta is not None
+
+    merged = merge_workflow_progress_entries(initial, delta)
+
+    (agent,) = merged
+    assert isinstance(agent, WorkflowAgentProgress)
+    assert agent.recent_tool_summaries == ("Read(x)", "Bash(y)", "Grep(z)")
+
+
 def test_merge_workflow_progress_entries_accumulates_deltas_across_payloads() -> None:
     """The CLI streams deltas: later payloads carry only the entries whose
     state changed. Merging must keep untouched entries and update changed

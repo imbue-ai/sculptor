@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ToolResultBlock, ToolUseBlock, WorkflowTaskState } from "~/api";
 import { ElementIds } from "~/api";
-import { useCurrentTaskWorkflowStates } from "~/common/state/hooks/useTaskDetail";
+import { useCurrentTaskWorkflowState } from "~/common/state/hooks/useTaskDetail";
 
 // Shares the subagent pill's stylesheet so workflows read as the same kind
 // of chat object — full-width accent pill with a gutter icon and duration.
@@ -35,6 +35,9 @@ const buildPillText = (state: WorkflowTaskState | undefined, displayName: string
   if (!state) return `Workflow ${displayName}`;
   const { doneCount, totalCount, activePhaseTitle } = countWorkflowAgents(state);
   if (state.status === "running") {
+    // Right after launch no agents have materialized yet — "0/0 agents"
+    // reads like an empty run, so mirror the popover's starting state.
+    if (totalCount === 0) return `Workflow ${displayName} — starting…`;
     const phasePart = activePhaseTitle ? `${activePhaseTitle} · ` : "";
     return `Workflow ${displayName} — ${phasePart}${doneCount}/${totalCount} agents`;
   }
@@ -103,10 +106,20 @@ export const AlphaWorkflowPill = ({ toolUseId, block, result, rowIndex }: AlphaW
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLDivElement>): void => {
       // The trigger is a div[role=button] (not a real button), so Enter/Space
-      // activation is handled here rather than natively.
+      // activation is handled here rather than natively. Escape also lives
+      // above the nav guard — closing must work for standalone pills too.
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
         setOpen(!isOpen);
+        return;
+      }
+
+      if (e.key === "Escape") {
+        if (isOpen) {
+          e.preventDefault();
+          setOpen(false);
+          triggerRef.current?.focus();
+        }
         return;
       }
       if (!nav) return;
@@ -128,15 +141,6 @@ export const AlphaWorkflowPill = ({ toolUseId, block, result, rowIndex }: AlphaW
           nav.navigate(e.key === "ArrowUp" ? "up" : "down", toolUseId);
           break;
         }
-
-        case "Escape": {
-          if (isOpen) {
-            e.preventDefault();
-            setOpen(false);
-            triggerRef.current?.focus();
-          }
-          break;
-        }
       }
     },
     [nav, isOpen, setOpen, toolUseId],
@@ -148,8 +152,7 @@ export const AlphaWorkflowPill = ({ toolUseId, block, result, rowIndex }: AlphaW
   // eslint-disable-next-line react/hook-use-state
   const [animationIndex] = useState(pickAnimationIndex);
 
-  const workflowStates = useCurrentTaskWorkflowStates();
-  const state = workflowStates[toolUseId];
+  const state = useCurrentTaskWorkflowState(toolUseId);
   const displayName = getWorkflowDisplayName({ state, input: block?.input });
   const isRunning = state?.status === "running";
 

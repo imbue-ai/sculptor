@@ -467,7 +467,9 @@ class BackgroundTaskNotificationAgentMessage(PersistentAgentMessage):
     # Workflow-task fields. The progress messages that stream a workflow's
     # state are ephemeral, so the final tree rides on this persistent
     # notification — after a restart it is the only record of what the
-    # workflow ran. None/empty for non-workflow background tasks.
+    # workflow ran. final_workflow_entries doubles as the workflow marker:
+    # always a tuple for workflow tasks (empty when the run reported no tree
+    # before finishing), None for other background tasks.
     workflow_name: str = ""
     final_workflow_entries: tuple[WorkflowProgressEntryTypes, ...] | None = None
     workflow_usage: WorkflowUsage | None = None

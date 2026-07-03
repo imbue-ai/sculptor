@@ -1,11 +1,11 @@
 import type { WorkflowAgentProgress, WorkflowPhaseProgress, WorkflowTaskState } from "~/api";
 
-export type WorkflowProgressEntry = WorkflowPhaseProgress | WorkflowAgentProgress;
+type WorkflowProgressEntry = WorkflowPhaseProgress | WorkflowAgentProgress;
 
-export const isPhaseEntry = (entry: WorkflowProgressEntry): entry is WorkflowPhaseProgress =>
+const isPhaseEntry = (entry: WorkflowProgressEntry): entry is WorkflowPhaseProgress =>
   entry.objectType === "WorkflowPhaseProgress";
 
-export const isAgentEntry = (entry: WorkflowProgressEntry): entry is WorkflowAgentProgress =>
+const isAgentEntry = (entry: WorkflowProgressEntry): entry is WorkflowAgentProgress =>
   entry.objectType === "WorkflowAgentProgress";
 
 export const isAgentDone = (agent: WorkflowAgentProgress): boolean => agent.state === "done" || agent.state === "error";

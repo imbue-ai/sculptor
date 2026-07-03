@@ -709,6 +709,12 @@ class ClaudeOutputProcessor:
                 # after the last pending task is cleared — before reading the
                 # post-notification assistant response.
                 self.found_final_message = False
+                # final_workflow_entries doubles as the workflow marker on the
+                # persisted notification: an empty tuple (not None) for a
+                # workflow that never reported a tree, so history replay can
+                # still tell workflow completions apart from other background
+                # tasks.
+                is_workflow_task = self._task_id_to_task_type.get(result.task_id) == WORKFLOW_TASK_TYPE
                 self.output_message_queue.put(
                     BackgroundTaskNotificationAgentMessage(
                         message_id=AgentMessageID(),
@@ -718,7 +724,9 @@ class ClaudeOutputProcessor:
                         summary=result.summary,
                         duration_seconds=(result.duration_ms / 1000.0) if result.duration_ms is not None else None,
                         workflow_name=self._task_id_to_workflow_name.get(result.task_id, ""),
-                        final_workflow_entries=self._last_workflow_entries.get(result.task_id),
+                        final_workflow_entries=self._last_workflow_entries.get(result.task_id, ())
+                        if is_workflow_task
+                        else None,
                         workflow_usage=self._last_workflow_usage.get(result.task_id),
                     )
                 )
@@ -866,13 +874,16 @@ class ClaudeOutputProcessor:
         if not is_workflow_task:
             self._task_id_to_task_type[result.task_id] = WORKFLOW_TASK_TYPE
 
-        tree_changed = result.workflow_progress is not None
-        if result.workflow_progress is not None:
+        # Truthiness matters: a payload whose entries were all filtered out
+        # (e.g. only workflow_log lines) parses to an empty tuple and must be
+        # throttled like a token tick, not treated as a tree change.
+        has_tree_delta = bool(result.workflow_progress)
+        if has_tree_delta:
             # The CLI emits deltas (only entries whose state changed), so
             # accumulate into the retained tree instead of replacing it.
             self._last_workflow_entries[result.task_id] = merge_workflow_progress_entries(
                 self._last_workflow_entries.get(result.task_id, ()),
-                result.workflow_progress,
+                result.workflow_progress or (),
             )
         if result.usage is not None:
             self._last_workflow_usage[result.task_id] = result.usage
@@ -880,7 +891,7 @@ class ClaudeOutputProcessor:
         now = time.monotonic()
         last_emit = self._last_workflow_progress_emit.get(result.task_id)
         is_tick_due = last_emit is None or now - last_emit >= _WORKFLOW_PROGRESS_MIN_EMIT_INTERVAL_SECONDS
-        if not tree_changed and not is_tick_due:
+        if not has_tree_delta and not is_tick_due:
             return
         self._last_workflow_progress_emit[result.task_id] = now
         self.output_message_queue.put(

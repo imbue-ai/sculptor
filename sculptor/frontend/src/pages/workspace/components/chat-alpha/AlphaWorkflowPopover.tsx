@@ -45,7 +45,7 @@ const AgentStatusIcon = ({ agent }: { agent: WorkflowAgentProgress }): ReactElem
   return <span className={styles.statusDotRunning} aria-label="running" />;
 };
 
-const PhaseStatusIcon = ({ agents }: { agents: Array<WorkflowAgentProgress> }): ReactElement => {
+const PhaseStatusIcon = ({ agents }: { agents: ReadonlyArray<WorkflowAgentProgress> }): ReactElement => {
   if (agents.some((agent) => agent.state === "error")) {
     return <CircleAlert className={styles.statusIconError} aria-label="error" />;
   }
@@ -60,7 +60,7 @@ const PhaseStatusIcon = ({ agents }: { agents: Array<WorkflowAgentProgress> }): 
   return <Circle className={styles.statusIconQueued} aria-label="pending" />;
 };
 
-const activateOnEnterOrSpace = (onActivate: () => void) => {
+const activateOnEnterOrSpace = (onActivate: () => void): ((e: KeyboardEvent<HTMLDivElement>) => void) => {
   return (e: KeyboardEvent<HTMLDivElement>): void => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -134,7 +134,10 @@ const AgentRow = ({ agent }: { agent: WorkflowAgentProgress }): ReactElement => 
             <div className={styles.detailSection}>
               <div className={styles.detailLabel}>{activityLabel}</div>
               {recentToolSummaries.map((summary, index) => (
-                <div key={index} className={styles.detailCode}>
+                // Key on the call's absolute position in the run, not its
+                // slot in the rolling window — entries shift positions as
+                // the window slides.
+                <div key={totalToolCalls - recentToolSummaries.length + index} className={styles.detailCode}>
                   {summary}
                 </div>
               ))}
@@ -152,10 +155,9 @@ const AgentRow = ({ agent }: { agent: WorkflowAgentProgress }): ReactElement => 
   );
 };
 
-const AgentList = ({ agents }: { agents: Array<WorkflowAgentProgress> }): ReactElement => {
+const AgentList = ({ agents }: { agents: ReadonlyArray<WorkflowAgentProgress> }): ReactElement => {
   const visibleAgents = agents.slice(0, MAX_AGENT_ROWS_PER_PHASE);
   const hiddenAgents = agents.slice(MAX_AGENT_ROWS_PER_PHASE);
-  const hiddenRunningCount = hiddenAgents.filter((agent) => !isAgentDone(agent)).length;
   const hiddenDoneCount = hiddenAgents.filter(isAgentDone).length;
 
   return (
@@ -165,7 +167,7 @@ const AgentList = ({ agents }: { agents: Array<WorkflowAgentProgress> }): ReactE
       ))}
       {hiddenAgents.length > 0 && (
         <div className={styles.moreRow}>
-          +{hiddenAgents.length} more ({hiddenRunningCount} running, {hiddenDoneCount} done)
+          +{hiddenAgents.length} more ({hiddenDoneCount} done)
         </div>
       )}
     </>
@@ -175,12 +177,12 @@ const AgentList = ({ agents }: { agents: Array<WorkflowAgentProgress> }): ReactE
 type SidebarItem = {
   key: number;
   title: string;
-  agents: Array<WorkflowAgentProgress>;
+  agents: ReadonlyArray<WorkflowAgentProgress>;
 };
 
 const buildSidebarItems = (
-  phases: Array<WorkflowPhaseProgress>,
-  agentsByPhaseIndex: Map<number | null, Array<WorkflowAgentProgress>>,
+  phases: ReadonlyArray<WorkflowPhaseProgress>,
+  agentsByPhaseIndex: ReadonlyMap<number | null, ReadonlyArray<WorkflowAgentProgress>>,
 ): Array<SidebarItem> => {
   const items: Array<SidebarItem> = phases.map((phase) => ({
     key: phase.index,

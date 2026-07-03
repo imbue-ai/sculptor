@@ -9,13 +9,15 @@ TASK_ID = "task-test-1"
 MESSAGE_ID = "msg-test-1"
 
 
-class TestAddRecentToolSummariesToWorkflowAgentProgress(MigrationTestFixture):
-    """Test that adding recent_tool_summaries to WorkflowAgentProgress preserves existing messages.
+class TestAddWorkflowFieldsToBackgroundTaskNotificationAgentMessage(MigrationTestFixture):
+    """Test that adding workflow fields to BackgroundTaskNotificationAgentMessage preserves existing messages.
 
-    This is a no-op migration (JSON schema change only — the field defaults
-    to an empty tuple). The test verifies that saved_agent_message rows
-    carrying a workflow notification with final_workflow_entries survive the
-    migration unchanged.
+    This is a no-op migration (JSON schema change only — workflow_name,
+    final_workflow_entries, workflow_usage, and the nested
+    WorkflowAgentProgress.recent_tool_summaries all have defaults). The test
+    verifies that saved_agent_message rows with
+    BackgroundTaskNotificationAgentMessage data survive the migration
+    unchanged.
     """
 
     @property
@@ -24,7 +26,7 @@ class TestAddRecentToolSummariesToWorkflowAgentProgress(MigrationTestFixture):
 
     @property
     def down_revision(self) -> str:
-        return "4a289e39dd87"
+        return "34fe61b617e6"
 
     def seed(self, connection: sa.engine.Connection) -> None:
         connection.execute(
@@ -70,8 +72,7 @@ class TestAddRecentToolSummariesToWorkflowAgentProgress(MigrationTestFixture):
             },
         )
 
-        # Insert a workflow notification whose agent entries predate
-        # recent_tool_summaries
+        # Insert a BackgroundTaskNotificationAgentMessage without the new workflow fields
         message = json.dumps(
             {
                 "object_type": "BackgroundTaskNotificationAgentMessage",
@@ -80,11 +81,6 @@ class TestAddRecentToolSummariesToWorkflowAgentProgress(MigrationTestFixture):
                 "tool_use_id": "toolu-bg-1",
                 "status": "completed",
                 "summary": "done",
-                "workflow_name": "review",
-                "final_workflow_entries": [
-                    {"object_type": "WorkflowPhaseProgress", "index": 0, "title": "Review"},
-                    {"object_type": "WorkflowAgentProgress", "index": 0, "label": "review:bugs", "state": "done"},
-                ],
             }
         )
         connection.execute(
@@ -114,4 +110,5 @@ class TestAddRecentToolSummariesToWorkflowAgentProgress(MigrationTestFixture):
 
         data = json.loads(row[0])
         assert data["object_type"] == "BackgroundTaskNotificationAgentMessage"
-        assert len(data["final_workflow_entries"]) == 2
+        assert data["background_task_id"] == "task-bg-1"
+        assert data["status"] == "completed"

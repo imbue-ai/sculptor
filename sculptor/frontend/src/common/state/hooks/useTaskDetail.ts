@@ -7,7 +7,7 @@ import {
   getEmptyTaskDetailState,
   taskDetailAtomFamily,
   type TaskDetailState,
-  workflowTaskStatesAtomFamily,
+  workflowTaskStateAtomFamily,
 } from "../atoms/taskDetails";
 
 export const useTaskDetail = (taskId: string): TaskDetailState | null => {
@@ -15,12 +15,13 @@ export const useTaskDetail = (taskId: string): TaskDetailState | null => {
 };
 
 /**
- * Workflow-tool background task states for the task in the current URL,
- * keyed by the launching tool_use_id. Empty when no workflow has run.
+ * The Workflow-tool background task state for one Workflow call (by its
+ * launching tool_use_id) on the task in the current URL; undefined when no
+ * state has arrived for it.
  */
-export const useCurrentTaskWorkflowStates = (): Record<string, WorkflowTaskState> => {
+export const useCurrentTaskWorkflowState = (toolUseId: string): WorkflowTaskState | undefined => {
   const { agentID } = useWorkspacePageParams();
-  return useAtomValue(workflowTaskStatesAtomFamily(agentID ?? ""));
+  return useAtomValue(workflowTaskStateAtomFamily({ taskId: agentID ?? "", toolUseId }));
 };
 
 export const useTaskDetailWithDefaults = (taskId: string): TaskDetailState => {

@@ -180,11 +180,16 @@ describe("AlphaWorkflowPopover", () => {
 
     expect(screen.getByText("agent-49")).toBeInTheDocument();
     expect(screen.queryByText("agent-50")).not.toBeInTheDocument();
-    expect(screen.getByText("+10 more (5 running, 5 done)")).toBeInTheDocument();
+    expect(screen.getByText("+10 more (5 done)")).toBeInTheDocument();
   });
 
   it("shows a starting message while running with an empty tree", () => {
     renderPopover(makeState({ entries: [] }));
     expect(screen.getByText("Starting workflow…")).toBeInTheDocument();
+  });
+
+  it("shows an empty-run message for a finished workflow with no agents", () => {
+    renderPopover(makeState({ status: "failed", entries: [] }));
+    expect(screen.getByText("No agents ran.")).toBeInTheDocument();
   });
 });
