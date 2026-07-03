@@ -45,6 +45,20 @@ if [ -d /app/openhost-agent/skills/openhost-environment ]; then
         "$CLAUDE_CONFIG_DIR/skills/openhost-environment" || true
 fi
 
+# Install/refresh the openhost-preview-switcher frontend plugin into the local
+# plugins dir the backend serves at /plugins/local (see
+# sculptor/frontend/plugins/README.md — it is deliberately not built-in, since it
+# is OpenHost-only). The built copy ships in the frontend dist; it's ours, so
+# overwrite on every boot to track the deployed build. The guard makes this a
+# no-op for images built from branches without the plugin. Best-effort; never
+# fail the boot.
+if [ -d /app/sculptor/frontend/dist/plugins/openhost-preview-switcher ]; then
+    mkdir -p "$SCULPTOR_FOLDER/plugins" || true
+    rm -rf "$SCULPTOR_FOLDER/plugins/openhost-preview-switcher" || true
+    cp -r /app/sculptor/frontend/dist/plugins/openhost-preview-switcher \
+        "$SCULPTOR_FOLDER/plugins/openhost-preview-switcher" || true
+fi
+
 # Seed the owner's standing-instructions file ONCE, never overwriting their edits.
 # AGENTS.md is the source of truth; CLAUDE.md is a symlink to it (Claude Code loads
 # CLAUDE.md). Both are meta only — the maintained env detail lives in the skill.
