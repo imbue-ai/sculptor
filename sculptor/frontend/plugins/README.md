@@ -43,6 +43,17 @@ reference: a `linear/` core (Linear client, source-merging, query hooks) kept
 separate from presentational `components/`, with `index.tsx` doing only
 `activate()` wiring.
 
+`openhost-preview-switcher` is a second compiled plugin, but deliberately NOT built-in:
+it only makes sense behind the OpenHost nginx `/proxy` front (see
+`openhost-nginx.conf` at the repo root), where it is installed as a *local*
+plugin by dropping its built output into the backend's
+`<sculptor-folder>/plugins/openhost-preview-switcher/`. It contributes an overlay
+(`registerOverlay`) — a pill in the footer strip's empty bottom-left corner —
+that lists the live Vite dev previews behind `/proxy/<port>/` and switches
+between them and the deployed app, preserving the `#/` route. On a preview it
+becomes an amber badge showing that preview's identity (the `sculptor-preview`
+meta injected by `vite.base.config.ts`).
+
 ## How a plugin is built and loaded
 
 A plugin is loaded from `public/plugins/<id>/` (a `manifest.json` next to a
@@ -55,8 +66,8 @@ A plugin is loaded from `public/plugins/<id>/` (a `manifest.json` next to a
   `vite-plugins/bundled-plugins.ts`), so `npm run build` and the dev server
   emit the bundle — there's no separate per-plugin build to run, and no second
   toolchain (the plugin reuses the host's Vite/React/TypeScript). `linear-issue`
-  is the only compiled plugin today; its `public/plugins/linear-issue/` output
-  is gitignored.
+  and `openhost-preview-switcher` are the compiled plugins today; their
+  `public/plugins/<id>/` output is gitignored.
 
 The build marks every shared dependency (`react`, `@radix-ui/themes`, `jotai`,
 `@tanstack/react-query`, `lucide-react`, `@sculptor/plugin-sdk`, …) external —
