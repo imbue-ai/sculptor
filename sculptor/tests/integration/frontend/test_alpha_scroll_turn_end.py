@@ -2,24 +2,25 @@
 
 The alpha-chat scroll system is an explicit state machine (see
 ``docs/development/scroll_state_unification.md``, SCU-1566). While ``following`` the
-live tail, the design pins the last message's *content* bottom flush with the
-viewport bottom, leaving the dynamic ``paddingEnd`` as empty slack *below*
-``scrollTop`` (``distanceFromContentBottom == 0``) — so a turn-end shrink has slack
-to absorb into and the view does not jump.
+live tail, the design pins the last message's *content* bottom ``PIN_BOTTOM_GAP``
+(64px) above the viewport bottom — visible breathing room below the newest line —
+leaving the rest of the dynamic ``paddingEnd`` as empty slack *below* ``scrollTop``,
+so a turn-end shrink has slack to absorb into and the view does not jump.
 
 These tests send follow-on streaming messages that overflow and pin to the bottom,
-and assert the turn-end behavior: the last message stays flush with the viewport
-bottom, a stale reading anchor is not restored, and the turn footer scrolls into view.
+and assert the turn-end behavior: the last message keeps the pin gap above the
+viewport bottom (neither hugging it flush nor parked deep in the padding), a stale
+reading anchor is not restored, and the turn footer scrolls into view.
 """
 
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.alpha_chat_view import get_last_turn_footer_viewport_gaps
-from sculptor.testing.elements.alpha_chat_view import get_max_following_tail_gap
 from sculptor.testing.elements.alpha_chat_view import read_scroll_top_sampler
 from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_to_top
 from sculptor.testing.elements.alpha_chat_view import start_scroll_top_sampler
+from sculptor.testing.elements.alpha_chat_view import wait_for_stable_following_tail_gap
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.panels import close_bottom_panel
@@ -35,10 +36,15 @@ _STREAM_TEXT = "The quick brown fox jumps over the lazy dog. " * 112
 # Enough Lorem Ipsum to force a scroll (overflow the viewport) while it streams.
 _LOREM_STREAM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor. " * 90
 
-# While following, the last message's bottom may sit a few px above the viewport
-# bottom (message margins, sub-pixel rounding), but never the full ~64px paddingEnd
-# gap of the bug. (Measured: ~64px before the fix, ~0px after.)
-_FLUSH_TOLERANCE_PX = 24
+# The visible gap the pin keeps between the last message's bottom and the viewport
+# bottom while following — mirrors PIN_BOTTOM_GAP in chat-alpha/scroll/geometry.ts.
+_PIN_BOTTOM_GAP_PX = 64
+# Slop around the pin gap for message margins and sub-pixel rounding. The band it
+# defines separates the two regressions this guards against: hugging the viewport
+# bottom flush (~0px, no breathing room under the newest line) and parking deep in
+# the paddingEnd gap (>= the 128px streaming padding floor, no slack for the
+# turn-end shrink).
+_PIN_GAP_TOLERANCE_PX = 24
 
 # The view must not scroll UP across the turn boundary. A tiny settle for the turn
 # footer is fine; a jump back to an earlier message is a whole-turn (hundreds of px)
@@ -47,13 +53,13 @@ _JUMP_BACK_TOLERANCE_PX = 60
 
 # Sub-pixel tolerance for "is this edge inside the viewport".
 _EDGE_TOLERANCE_PX = 6
-# "Close to the bottom" == the footer sits within one standard margin of the viewport
-# bottom (one design-token space above the input box). Generous so it stays rigid.
-_FOOTER_BOTTOM_MARGIN_PX = 72
+# "Close to the bottom" == the footer sits within the deliberate pin gap plus one
+# standard margin of the viewport bottom. Generous so it stays rigid.
+_FOOTER_BOTTOM_MARGIN_PX = _PIN_BOTTOM_GAP_PX + 72
 
 
 @user_story("to not have the chat jump when the agent finishes its turn (req: stable turn-end)")
-def test_following_pins_last_message_flush_to_viewport_bottom(sculptor_instance_: SculptorInstance) -> None:
+def test_following_keeps_pin_gap_below_last_message(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
 
     task_page = start_task_and_wait_for_ready(
@@ -78,21 +84,28 @@ def test_following_pins_last_message_flush_to_viewport_bottom(sculptor_instance_
         f'fake_claude:stream_text `{{"text": "{_STREAM_TEXT}", "chunk_size": 50, "delay_seconds": 0.1}}`',
     )
 
-    # Wait until we are following the live tail, then let it stream for a span so the
-    # measurement is taken mid-stream (well before the turn ends).
+    # Wait until we are following the live tail, then sample the gap once it has
+    # stabilized: entering `following` scrolls toward the pin, so the first sampling
+    # windows can catch that transit rather than the resting gap. The stream is long
+    # enough (~10s) that the stable sample lands mid-stream, well before the turn ends.
     expect(view).to_have_attribute("data-scroll-phase", "following", timeout=30_000)
-    page.wait_for_timeout(1500)
+    max_gap = wait_for_stable_following_tail_gap(page)
     expect(view).to_have_attribute("data-scroll-phase", "following")
 
-    max_gap = get_max_following_tail_gap(page)
-
-    # While following, the last message stays flush with the viewport bottom — it is
-    # not parked in the paddingEnd gap (the ~64px regression that produced the
-    # turn-end jump, because there was no slack for the last message to shrink into).
+    # While following, the last message keeps the pin gap above the viewport bottom:
+    # not hugging it flush (no breathing room under the newest line, and the bottom
+    # bar overlays it), and not parked at the full paddingEnd depth (no slack for the
+    # last message to shrink into at turn end — the turn-end jump).
     assert max_gap is not None, "alpha chat view or its messages not found while following"
-    assert max_gap <= _FLUSH_TOLERANCE_PX, (
+    assert max_gap >= _PIN_BOTTOM_GAP_PX - _PIN_GAP_TOLERANCE_PX, (
+        f"while following, the last message sat {max_gap}px above the viewport bottom "
+        + f"(expected >= {_PIN_BOTTOM_GAP_PX - _PIN_GAP_TOLERANCE_PX}px); the pin is hugging "
+        + "the viewport bottom instead of keeping the visible gap"
+    )
+    assert max_gap <= _PIN_BOTTOM_GAP_PX + _PIN_GAP_TOLERANCE_PX, (
         f"while following, the last message floated {max_gap}px above the viewport bottom "
-        + f"(expected <= {_FLUSH_TOLERANCE_PX}px); the pin is parking in the paddingEnd gap"
+        + f"(expected <= {_PIN_BOTTOM_GAP_PX + _PIN_GAP_TOLERANCE_PX}px); the pin is parking "
+        + "in the paddingEnd gap"
     )
 
     # Let the turn finish cleanly before the test ends.
@@ -166,8 +179,8 @@ def test_turn_end_scrolls_turn_footer_into_view_when_following(sculptor_instance
 
     UX contract (rigid, on purpose): after the turn ends, the last turn footer is
     (1) fully IN VIEW inside the chat viewport and (2) CLOSE TO THE BOTTOM — its
-    bottom edge within one standard margin of the viewport's bottom edge (one design
-    space above the input box).
+    bottom edge within the deliberate pin gap plus one standard margin of the
+    viewport's bottom edge.
     """
     page = sculptor_instance_.page
 

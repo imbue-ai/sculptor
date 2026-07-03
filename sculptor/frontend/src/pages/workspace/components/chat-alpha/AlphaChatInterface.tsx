@@ -188,6 +188,7 @@ export const AlphaChatInterface = ({
     scrollMachine,
     introHeight,
     isProgrammaticScrollRef,
+    isStreaming,
   );
 
   const density = useAtomValue(chatToolDensityAtom);
