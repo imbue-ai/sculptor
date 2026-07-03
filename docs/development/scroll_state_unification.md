@@ -340,22 +340,43 @@ as the one `distanceFromContentBottom` primitive.
 
 The same correction governs *pinning* to the bottom, not just *measuring* it. Every
 "scroll to the bottom" site (the `following` pin, the anchoring→following handoff,
-the jump-to-bottom button, the restore-to-bottom) sets `scrollTop` to the inverse of
-that primitive — `contentBottomOffset = scrollHeight − paddingEnd − clientHeight` —
-so the last message's content bottom sits flush with the viewport bottom
-(`distanceFromContentBottom == 0`), leaving `paddingEnd` as empty slack *below*
-`scrollTop`. It deliberately does **not** pin with `virtualizer.scrollToIndex(last,
+the jump-to-bottom button, the restore-to-bottom) sets `scrollTop` to
+`bottomPinOffset = contentBottomOffset + PIN_BOTTOM_GAP` (clamped to the scroll
+range), where `contentBottomOffset = scrollHeight − paddingEnd − clientHeight` is
+the inverse of the distance primitive. `PIN_BOTTOM_GAP` (64px) stays *visible*
+below the last message — breathing room so the newest line neither touches the
+viewport edge nor sits under the absolutely positioned bottom bar.
+
+The `paddingEnd` floor is **streaming-scoped**. While a stream is active (and for
+the settle window after it ends) the floor is `STREAMING_TAIL_PADDING` — gap plus
+`TURN_END_SHRINK_SLACK` — so the remainder below the pinned `scrollTop` is slack.
+At rest it is `IDLE_TAIL_PADDING` (== the gap), so the scroll range ends exactly at
+the pin position: scrolling below the content can reveal the gap and no more, and
+no extra slack is kept when no shrink is pending. The drop back to the idle floor
+happens with the pinned `scrollTop` sitting exactly at the post-drop range end, so
+it never moves the view.
+
+It deliberately does **not** pin with `virtualizer.scrollToIndex(last,
 { align: "end" })`: for the final item TanStack resolves that to
 `getMaxScrollOffset()` — the very bottom of the *padded* scroll range — which parks
-`scrollTop` inside the `paddingEnd` gap with **zero** slack. Two failures followed:
-the last line floated a `paddingEnd`-tall gap above the viewport bottom
-while following, and — the turn-end jump — when a turn ended and its streaming cursor
-was removed, the last message shrank with no slack to absorb it, so the browser
-clamped `scrollTop` down by the shrink and the whole conversation jumped up. Pinning
-to the content bottom leaves the `paddingEnd` slack the shrink is absorbed into. The
-pin is also **down-only**: it follows the live tail's growth toward the bottom but
-never scrolls *up*, so a turn-end shrink is left where it is rather than chased
-(authority has already handed back to `userControlled` by then anyway).
+`scrollTop` at the end of the range with **zero** slack. That caused the turn-end
+jump: when a turn ended and its streaming cursor was removed, the last message
+shrank with no slack to absorb it, so the browser clamped `scrollTop` down by the
+shrink and the whole conversation jumped up. Keeping `TURN_END_SHRINK_SLACK` below
+`scrollTop` is what the shrink is absorbed into. The pin is also **down-only**: it
+follows the live tail's growth toward the bottom but never scrolls *up*, so a
+turn-end shrink is left where it is rather than chased (authority has already
+handed back to `userControlled` by then anyway).
+
+The restore path is the one bottom-lander that does *not* use `bottomPinOffset`:
+a saved position within (or past) the at-bottom threshold re-lands at its **signed**
+saved `distanceFromBottom` relative to the *current* content bottom, clamped to the
+scroll range. Negative distances — the viewport sat inside the tail padding, e.g.
+the anchored-turn rest position or a deliberate max scroll — round-trip exactly
+instead of being clamped to the pin position, while an at-bottom save still follows
+content that grew while the task was in the background. A first visit with no saved
+position lands at `maxScrollOffset`, which for a short last turn *is* the
+anchored-turn rest position the task's owner last saw.
 
 ### 4. Search suppression is a top-level guard
 
@@ -651,7 +672,7 @@ Every painted frame must satisfy the invariant of the active phase:
 
 | Phase | Per-frame invariant |
 | --- | --- |
-| `following` / idle-at-bottom | the last message's bottom is flush with the viewport bottom |
+| `following` / idle-at-bottom | the last message's bottom sits `PIN_BOTTOM_GAP` above the viewport bottom |
 | `userControlled` scrolled-up | the reading-anchor message's top sits at its sampled offset |
 | `anchoringTurn` | the anchored user message's top sits at its sampled offset |
 | `restoring` | the saved-anchor framing |
@@ -707,7 +728,7 @@ Correct to the frame, for four independent reasons:
 - **Ground truth, not lagging arithmetic.** `desired` is anchored to the invariant
   element's measured `start`/`size`, never to `scrollHeight − paddingEnd`. A
   growing or shrinking `paddingEnd` only changes empty space *below* an
-  already-flush anchor — it can never move the anchor — so the `paddingEnd` lag
+  already-placed anchor — it can never move the anchor — so the `paddingEnd` lag
   leaves the correctness path entirely.
 - **Positions are final post-settle-render.** TanStack measures **synchronously**
   inside its `ResizeObserver` (it calls `shouldAdjustScrollPositionOnItemSizeChange`
@@ -725,7 +746,7 @@ Correct to the frame, for four independent reasons:
 unit-testable without a DOM:
 
 ```ts
-// pinBottom  → measuredEnd(last)  − clientHeight
+// pinBottom  → measuredEnd(last)  − clientHeight + PIN_BOTTOM_GAP
 // holdAnchor → measuredStart(i)   − anchor.viewportOffset
 // holdTurn   → measuredStart(idx) − sampledTopOffset
 // ignore     → leave scrollTop alone
@@ -744,8 +765,8 @@ T1  ResizeObserver delivery (after layout, before paint):
       • content RO: detect reflow → dispatch settling("reflow")              [enter settle]
 T1' React flushes the settle render (pre-paint):
       • virtualizer re-renders with final translateYs + final wrapper height
-      • no-deps layout effect → commitInvariant():  scrollTop := lastEnd − clientHeight   ← SOLE write
-T2  ══ PAINT ══   last message flush — invariant holds ✓
+      • no-deps layout effect → commitInvariant():  scrollTop := lastEnd − clientHeight + PIN_BOTTOM_GAP   ← SOLE write
+T2  ══ PAINT ══   pin gap below the last message — invariant holds ✓
 T3  any further pass (e.g. paddingEnd second render): T1'→T2 repeats, each corrected before its paint ✓
 T4  render sees tail sum stable → converged → stable; per-item compensation re-enabled
 ```

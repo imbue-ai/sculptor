@@ -1,3 +1,5 @@
+import time
+
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
 from playwright.sync_api import expect
@@ -225,11 +227,13 @@ def get_max_following_tail_gap(page: Page, frames: int = 18) -> float | None:
     """Over a short ``requestAnimationFrame`` burst, the max gap (px) from the last
     message's bottom edge UP to the viewport bottom.
 
-    A positive gap means the last line is floating above the viewport bottom over
-    empty tail padding; pinned flush to the content bottom is ~0. The max across
-    frames is returned so a transient mid-growth frame (where the streaming tail
-    briefly overflows below the fold, giving a negative gap) does not mask the
-    steady pinned gap. Returns ``None`` if the chat view or its messages are absent.
+    While following, the pin holds this gap at ~PIN_BOTTOM_GAP (64px, see
+    chat-alpha/scroll/geometry.ts): ~0 means the pin is hugging the viewport edge
+    flush, and a full-padding gap (>= the 128px streaming floor) means it is
+    parked at the end of the padded range. The max across frames is returned so a
+    transient mid-growth frame (where the streaming tail briefly overflows below
+    the fold, giving a negative gap) does not mask the steady pinned gap. Returns
+    ``None`` if the chat view or its messages are absent.
     """
     return page.evaluate(
         f"""(frames) => new Promise((resolve) => {{
@@ -258,6 +262,29 @@ def get_max_following_tail_gap(page: Page, frames: int = 18) -> float | None:
     }})""",
         frames,
     )
+
+
+def wait_for_stable_following_tail_gap(
+    page: Page, *, stability_tolerance_px: int = 8, timeout_ms: int = 8_000
+) -> float | None:
+    """The tail gap once the pin has settled at its steady state, while following.
+
+    Entering ``following`` scrolls toward the pin position, so a single
+    ``get_max_following_tail_gap`` window sampled right away can catch that transit
+    instead of the resting gap. This polls successive windows until two consecutive
+    ones agree within ``stability_tolerance_px`` — the pin has landed (at a correct
+    *or* buggy resting position; the caller's assertions judge which) — and returns
+    that stable gap. On timeout the last sample is returned rather than raising, so
+    the caller's assertions report the actual geometry.
+    """
+    deadline = time.monotonic() + timeout_ms / 1000
+    previous = get_max_following_tail_gap(page)
+    while time.monotonic() < deadline:
+        current = get_max_following_tail_gap(page)
+        if previous is not None and current is not None and abs(current - previous) <= stability_tolerance_px:
+            return current
+        previous = current
+    return previous
 
 
 def scroll_alpha_chat_to_top(page: Page) -> None:
