@@ -28,6 +28,7 @@ import {
   REGISTERED_AGENT_TYPE_PREFIX,
   type StoredAgentType,
 } from "~/common/state/atoms/agentTabs.ts";
+import { isPiAvailableAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { terminalNextIndexAtom, terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
 import { createAgentErrorToastAtom } from "~/common/state/atoms/toasts.ts";
@@ -155,9 +156,16 @@ export function recentAgentLabel(
 // The stored recent agent type, normalized (a bare "terminal" falls back to
 // Claude — see normalizeRecentAgentType). A string, so Jotai's Object.is guard
 // already dedupes recomputes that land on the same value.
-export const recentAgentTypeAtom: Atom<StoredAgentType> = atom((get) =>
-  normalizeRecentAgentType(get(lastUsedAgentTypeAtom)),
-);
+//
+// pi can be the recorded MRU while no usable pi binary is resolved; the pinned
+// "New {recent} agent" row (and its Cmd+K / empty-state / keybinding twins, which
+// all read this atom) then falls back to Claude rather than backing it with a pi
+// agent that cannot launch. The agent-type sub-menu still lists pi, as "Install
+// Pi" — see AddPanelDropdown.
+export const recentAgentTypeAtom: Atom<StoredAgentType> = atom((get) => {
+  const recent = normalizeRecentAgentType(get(lastUsedAgentTypeAtom));
+  return recent === "pi" && !get(isPiAvailableAtom) ? "claude" : recent;
+});
 
 function availableStaticPanelListsEqual(
   a: ReadonlyArray<AvailableStaticPanel>,

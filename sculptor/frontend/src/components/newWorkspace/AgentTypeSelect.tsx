@@ -9,6 +9,7 @@ import {
   parseStoredAgentType,
   type StoredAgentType,
 } from "~/common/state/atoms/agentTabs.ts";
+import { INSTALL_PI_LABEL, usePiAgentOption } from "~/common/state/hooks/usePiAgentOption.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 
 type AgentTypeSelectProps = {
@@ -20,12 +21,14 @@ type AgentTypeSelectProps = {
 
 /**
  * The first-agent type picker — the same per-agent choice as the tab bar's `+`
- * menu. Claude, Pi, Terminal, and any registered terminal agents are all
- * available to everyone.
+ * menu. Claude, Terminal, and any registered terminal agents are always
+ * available; pi is an optional harness, so while no usable pi binary is resolved
+ * its entry reads "Install Pi" and choosing it routes to Settings → Pi.
  */
 export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectProps): ReactElement => {
   // State and hooks
   const { registrations, refetch: refreshRegistrations } = useTerminalAgentRegistrations();
+  const { isPiAvailable, openPiSettings } = usePiAgentOption();
 
   // JSX and rendering logic
   const { agentType, registrationId } = parseStoredAgentType(value);
@@ -38,7 +41,16 @@ export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectP
     <Select.Root
       size="1"
       value={value}
-      onValueChange={(next) => onChange(next as StoredAgentType)}
+      onValueChange={(next) => {
+        // The pi item reads "Install Pi" while no usable pi is resolved; choosing
+        // it routes to Settings → Pi instead of selecting a harness that cannot
+        // launch.
+        if (next === "pi" && !isPiAvailable) {
+          openPiSettings();
+          return;
+        }
+        onChange(next as StoredAgentType);
+      }}
       onOpenChange={(open) => {
         // Re-read the registrations directory on every open so the options track
         // the filesystem without a restart.
@@ -61,7 +73,7 @@ export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectP
           {AGENT_TYPE_LABELS.claude}
         </Select.Item>
         <Select.Item value="pi" data-testid={ElementIds.AGENT_TYPE_OPTION_PI}>
-          {AGENT_TYPE_LABELS.pi}
+          {isPiAvailable ? AGENT_TYPE_LABELS.pi : INSTALL_PI_LABEL}
         </Select.Item>
         <Select.Item value="terminal" data-testid={ElementIds.AGENT_TYPE_OPTION_TERMINAL}>
           {AGENT_TYPE_LABELS.terminal}

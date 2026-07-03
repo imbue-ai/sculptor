@@ -1,7 +1,8 @@
 import { createStore } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { TerminalAgentRegistration, UserConfig } from "~/api";
+import type { DependenciesStatus, TerminalAgentRegistration, UserConfig } from "~/api";
+import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { createAgentErrorToastAtom } from "~/common/state/atoms/toasts.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import { diffScopeAtomFamily } from "~/pages/workspace/components/diffPanel/atoms.ts";
@@ -171,13 +172,30 @@ describe("recentAgentTypeAtom", () => {
     expect(store.get(recentAgentTypeAtom)).toBe("claude");
   });
 
-  it("keeps 'pi' (pi is always available), and registered types as-is", () => {
+  it("keeps 'pi' while a usable pi is resolved, and registered types as-is", () => {
     const store = createStore();
+    // No dependencies snapshot yet → isPiAvailableAtom fails open, so a stored
+    // 'pi' passes through rather than flashing a Claude fallback during startup.
     store.set(userConfigAtom, { lastUsedAgentType: "pi" } as unknown as UserConfig);
     expect(store.get(recentAgentTypeAtom)).toBe("pi");
 
     store.set(userConfigAtom, { lastUsedAgentType: "registered:my-agent" } as unknown as UserConfig);
     expect(store.get(recentAgentTypeAtom)).toBe("registered:my-agent");
+  });
+
+  it("falls back to Claude when the stored 'pi' has no usable binary resolved", () => {
+    const store = createStore();
+    store.set(userConfigAtom, { lastUsedAgentType: "pi" } as unknown as UserConfig);
+    // A snapshot where pi is not installed makes isPiAvailableAtom false, so the
+    // pinned recent-agent row — and its Cmd+K / empty-state / keybinding twins,
+    // which all read this atom — fall back to a Claude that can launch.
+    store.set(dependenciesStatusAtom, {
+      git: { installed: true },
+      claude: { installed: true },
+      pi: { installed: false },
+      gh: { installed: false },
+    } as unknown as DependenciesStatus);
+    expect(store.get(recentAgentTypeAtom)).toBe("claude");
   });
 });
 
