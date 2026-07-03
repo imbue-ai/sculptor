@@ -10,10 +10,11 @@ import { PreviewSwitcherOverlay } from "./overlay.tsx";
  *
  * Deliberately NOT in BUILTIN_SOURCES: on non-OpenHost deployments it would
  * only ever hide itself. On an OpenHost box it is installed as a local plugin
- * (drop the built `manifest.json` + `main.js` into the backend's
- * `<sculptor-folder>/plugins/openhost-preview-switcher/`), which also survives image
- * rebuilds there because the sculptor folder lives on the persistent volume.
+ * (openhost-run.sh copies the built `manifest.json` + `main.js` into the
+ * backend's `<sculptor-folder>/plugins/openhost-preview-switcher/` on every
+ * boot), which also survives image rebuilds there because the sculptor folder
+ * lives on the persistent volume.
  */
-/* eslint-disable-next-line import/no-default-export */
-export default (api: PluginHostApi): (() => void) =>
-  api.registerOverlay({ id: "openhost-preview-switcher", component: PreviewSwitcherOverlay });
+export default function activate(api: PluginHostApi): () => void {
+  return api.registerOverlay({ id: "openhost-preview-switcher", component: PreviewSwitcherOverlay });
+}

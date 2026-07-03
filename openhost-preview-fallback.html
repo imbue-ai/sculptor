@@ -80,6 +80,10 @@
         opacity: 0.6;
         font-size: 0.9rem;
       }
+      .btn[disabled] {
+        opacity: 0.5;
+        cursor: default;
+      }
       #status {
         font-size: 0.85rem;
         opacity: 0.6;
@@ -187,9 +191,17 @@
 
       var statusEl = document.getElementById("status");
       var scanning = false;
+      // Disable the scan buttons while a scan runs, rather than silently
+      // ignoring clicks — the quick scan auto-runs on load, so an early tap on
+      // "full band" would otherwise appear to do nothing.
+      function setScanning(value) {
+        scanning = value;
+        document.getElementById("rescan").disabled = value;
+        document.getElementById("fullscan").disabled = value;
+      }
       function scan(from, to) {
         if (scanning) return;
-        scanning = true;
+        setScanning(true);
         var total = to - from + 1;
         var ports = [];
         for (var p = from; p <= to; p++) ports.push(p);
@@ -216,7 +228,7 @@
         Promise.all(lanes).then(function () {
           statusEl.textContent =
             "scanned " + total + " ports · " + Object.keys(found).length + " live";
-          scanning = false;
+          setScanning(false);
         });
       }
 

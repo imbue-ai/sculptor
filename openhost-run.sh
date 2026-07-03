@@ -57,6 +57,12 @@ if [ -d /app/sculptor/frontend/dist/plugins/openhost-preview-switcher ]; then
     rm -rf "$SCULPTOR_FOLDER/plugins/openhost-preview-switcher" || true
     cp -r /app/sculptor/frontend/dist/plugins/openhost-preview-switcher \
         "$SCULPTOR_FOLDER/plugins/openhost-preview-switcher" || true
+else
+    # Rolled back to an image without the plugin: remove any previously
+    # installed copy rather than keep serving a stale bundle against a host
+    # whose import map / SDK may have moved on. Safe — the dir is ours and is
+    # rewritten on every boot anyway.
+    rm -rf "$SCULPTOR_FOLDER/plugins/openhost-preview-switcher" || true
 fi
 
 # Seed the owner's standing-instructions file ONCE, never overwriting their edits.

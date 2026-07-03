@@ -13,7 +13,7 @@
 //
 // Each entry config passes its own `root` (the frontend dir) so path resolution
 // here never depends on how Vite bundles this module.
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -194,19 +194,23 @@ export interface FrontendConfigOptions {
  * behind SCULPTOR_OPENHOST_PROXY.
  */
 function previewIdentity(root: string): Plugin {
-  const git = (args: string): string => {
+  const git = (...args: Array<string>): string => {
     try {
-      return execSync(`git ${args}`, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+      return execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
     } catch {
       return ""; // e.g. /app previews: the deploy image ships without .git
     }
   };
   return {
     name: "sculptor:preview-identity",
+    // Dev-server only: baking a serve-time identity into a `vite build`
+    // dist/index.html would freeze an immediately-stale label (e.g. an
+    // in-place prod rebuild from a shell where the preview env var leaked).
+    apply: "serve",
     transformIndexHtml(): Array<HtmlTagDescriptor> {
-      const branch = git("branch --show-current");
-      const sha = git("rev-parse --short HEAD");
-      const dirty = git("status --porcelain") === "" ? "" : "*";
+      const branch = git("branch", "--show-current");
+      const sha = git("rev-parse", "--short", "HEAD");
+      const dirty = git("status", "--porcelain") === "" ? "" : "*";
       // Without git (no branch AND no sha), fall back to the serving dir —
       // still enough to tell /app from a workspace checkout.
       const content = branch === "" && sha === "" ? root : `${branch}@${sha}${dirty}`;

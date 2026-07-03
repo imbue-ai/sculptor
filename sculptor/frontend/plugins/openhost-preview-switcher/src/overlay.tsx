@@ -1,6 +1,9 @@
+import { Button, Flex, IconButton, Text } from "@radix-ui/themes";
 import { FlaskConical, RefreshCw, X } from "lucide-react";
-import type { CSSProperties, ReactElement } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import type { CSSProperties, MouseEvent, ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { NGINX_DOWN_STATUSES, QUICK_BAND_END, QUICK_BAND_START, parsePreviewLabel, parsePreviewPort } from "./scan.ts";
 
 /**
  * The switcher overlay. Two modes, decided from the URL:
@@ -21,16 +24,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * Switching is a plain same-origin navigation (window.location / <a href>), NOT
  * openExternal: prod and previews share the origin and the PWA scope, so
  * navigating keeps the installed PWA in its standalone window — which is the
- * whole point. The current #/ route is carried across so the same screen
- * reopens on the other bundle.
+ * whole point. The current #/ route is read at click time and carried across so
+ * the same screen reopens on the other bundle.
  */
 
-const QUICK_BAND_START = 51000;
-const QUICK_BAND_END = 51099;
 const SCAN_CONCURRENCY = 16;
-
-/** nginx's own dead-upstream statuses; a live dev server never produces them. */
-const NGINX_DOWN_STATUSES = new Set([502, 503, 504]);
+/**
+ * Mirrors the fallback page's probe timeout. nginx proxies the band with a
+ * day-long read timeout, so a listener that accepts but never answers would
+ * otherwise hang its scan lane (and the "scanning" state) forever.
+ */
+const PROBE_TIMEOUT_MS = 5000;
 
 type Preview = {
   port: number;
@@ -38,14 +42,13 @@ type Preview = {
   label: string;
 };
 
-const getPreviewPort = (): number | null => {
-  const match = window.location.pathname.match(/^\/proxy\/(5[1-9][0-9][0-9][0-9])(\/|$)/);
-  return match ? Number(match[1]) : null;
-};
-
 const probeAlive = async (port: number): Promise<boolean> => {
   try {
-    const response = await fetch(`/proxy/${port}/`, { method: "HEAD", cache: "no-store" });
+    const response = await fetch(`/proxy/${port}/`, {
+      method: "HEAD",
+      cache: "no-store",
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+    });
     return !NGINX_DOWN_STATUSES.has(response.status);
   } catch {
     return false;
@@ -54,12 +57,11 @@ const probeAlive = async (port: number): Promise<boolean> => {
 
 const fetchLabel = async (port: number): Promise<string> => {
   try {
-    const response = await fetch(`/proxy/${port}/`, { cache: "no-store" });
-    const text = await response.text();
-    const meta = text.match(/<meta name="sculptor-preview" content="([^"]*)"/);
-    if (meta) return meta[1];
-    const title = text.match(/<title>([^<]*)<\/title>/i);
-    return title ? title[1] : "";
+    const response = await fetch(`/proxy/${port}/`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+    });
+    return parsePreviewLabel(await response.text());
   } catch {
     return "";
   }
@@ -73,7 +75,7 @@ const fetchLabel = async (port: number): Promise<string> => {
  */
 const probeOpenhostFront = async (): Promise<boolean> => {
   try {
-    const response = await fetch("/proxy/", { cache: "no-store" });
+    const response = await fetch("/proxy/", { cache: "no-store", signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
     return response.ok && (await response.text()).includes('name="sculptor-switchboard"');
   } catch {
     return false;
@@ -101,77 +103,36 @@ const containerStyle: CSSProperties = {
   // The bottom-left corner of PageLayout's dev/version footer strip, whose
   // left column is empty — visually part of the dev provisions, overlapping
   // nothing.
-  bottom: 4,
-  left: 8,
+  bottom: "var(--space-1)",
+  left: "var(--space-2)",
   pointerEvents: "auto",
-  fontSize: 11,
-  color: "var(--gray-11)",
-};
-
-const pillStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 4,
-  padding: "2px 8px",
-  borderRadius: 999,
-  border: "1px solid var(--gray-a6)",
-  background: "var(--color-panel-solid)",
-  color: "inherit",
-  font: "inherit",
-  cursor: "pointer",
-};
-
-const previewPillStyle: CSSProperties = {
-  ...pillStyle,
-  border: "1px solid var(--amber-a7)",
-  background: "var(--amber-a3)",
-  color: "var(--amber-11)",
 };
 
 const panelStyle: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 2,
   minWidth: 240,
   maxWidth: 340,
-  padding: 8,
+  padding: "var(--space-2)",
   borderRadius: "var(--radius-4)",
   border: "1px solid var(--gray-a6)",
   background: "var(--color-panel-solid)",
   boxShadow: "var(--shadow-4)",
 };
 
+/** Radix ghost buttons hug content; stretch list rows full-width instead. */
 const rowStyle: CSSProperties = {
-  display: "block",
   width: "100%",
-  boxSizing: "border-box",
-  padding: "4px 6px",
-  borderRadius: "var(--radius-2)",
-  border: "none",
-  background: "none",
-  color: "var(--gray-12)",
-  font: "inherit",
-  textAlign: "left",
-  textDecoration: "none",
-  cursor: "pointer",
-};
-
-const headerButtonStyle: CSSProperties = {
-  display: "inline-flex",
-  padding: 2,
-  border: "none",
-  background: "none",
-  color: "var(--gray-10)",
-  cursor: "pointer",
+  justifyContent: "flex-start",
 };
 
 export const PreviewSwitcherOverlay = (): ReactElement | null => {
-  const previewPort = useMemo(getPreviewPort, []);
+  const previewPort = useMemo((): number | null => parsePreviewPort(window.location.pathname), []);
   // On a preview the front is implied by the URL; on prod probe for it once.
-  const [onOpenhostFront, setOnOpenhostFront] = useState(previewPort !== null);
-  const [expanded, setExpanded] = useState(false);
+  const [isOnOpenhostFront, setIsOnOpenhostFront] = useState(previewPort !== null);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [previews, setPreviews] = useState<Array<Preview>>([]);
-  const [scanning, setScanning] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const isScanningRef = useRef(false);
+  const isDisposedRef = useRef(false);
 
   // This page's own identity: the meta reflects the last full load (HMR does
   // not refetch index.html), which is exactly what this page is running.
@@ -181,93 +142,153 @@ export const PreviewSwitcherOverlay = (): ReactElement | null => {
   );
 
   useEffect(() => {
-    if (previewPort === null) {
-      void probeOpenhostFront().then(setOnOpenhostFront);
-    }
-  }, [previewPort]);
-
-  const rescan = useCallback((): void => {
-    setPreviews([]);
-    setScanning(true);
-    void scanQuickBand((found) =>
-      setPreviews((current) =>
-        [...current.filter((preview) => preview.port !== found.port), found].sort((a, b) => a.port - b.port),
-      ),
-    ).finally(() => setScanning(false));
+    return (): void => {
+      isDisposedRef.current = true;
+    };
   }, []);
 
   useEffect(() => {
-    if (onOpenhostFront) rescan();
-  }, [onOpenhostFront, rescan]);
+    if (previewPort !== null) return undefined;
+    // The plugin can be unloaded mid-probe (sculpt plugin unload/reload) —
+    // don't set state on the unmounted overlay.
+    let isIgnored = false;
+    void probeOpenhostFront().then((isFront) => {
+      if (!isIgnored) setIsOnOpenhostFront(isFront);
+    });
+    return (): void => {
+      isIgnored = true;
+    };
+  }, [previewPort]);
 
-  if (!onOpenhostFront) return null;
+  const rescan = useCallback((): void => {
+    if (isScanningRef.current) return;
+    isScanningRef.current = true;
+    setIsScanning(true);
+    setPreviews([]);
+    void scanQuickBand((found) => {
+      if (isDisposedRef.current) return;
+      setPreviews((current) =>
+        [...current.filter((preview) => preview.port !== found.port), found].sort((a, b) => a.port - b.port),
+      );
+    }).finally(() => {
+      isScanningRef.current = false;
+      if (!isDisposedRef.current) setIsScanning(false);
+    });
+  }, []);
 
+  useEffect(() => {
+    if (isOnOpenhostFront) rescan();
+  }, [isOnOpenhostFront, rescan]);
+
+  const openSwitchboard = useCallback((event: MouseEvent<HTMLAnchorElement>): void => {
+    // Navigate at click time so the CURRENT #/ route is carried across (an
+    // href captured at render time would go stale — hash-route changes don't
+    // re-render this overlay). The href stays for middle-click/long-press.
+    event.preventDefault();
+    navigateKeepingRoute("/proxy/");
+  }, []);
+
+  if (!isOnOpenhostFront) return null;
+
+  const isPreview = previewPort !== null;
   const others = previews.filter((preview) => preview.port !== previewPort);
 
-  if (!expanded) {
-    const pillText =
-      previewPort === null
-        ? `previews${previews.length > 0 ? ` (${previews.length})` : ""}`
-        : `:${previewPort}${ownIdentity === "" ? "" : ` · ${ownIdentity}`}`;
+  if (!isExpanded) {
+    const pillText = isPreview
+      ? `:${previewPort}${ownIdentity === "" ? "" : ` · ${ownIdentity}`}`
+      : `previews${previews.length > 0 ? ` (${previews.length})` : ""}`;
     return (
       <div style={containerStyle}>
-        <button
-          type="button"
-          style={previewPort === null ? pillStyle : previewPillStyle}
-          title={previewPort === null ? "Live dev previews" : "This is a dev preview — tap to switch"}
-          onClick={(): void => setExpanded(true)}
+        <Button
+          size="1"
+          radius="full"
+          variant="surface"
+          color={isPreview ? "amber" : "gray"}
+          title={isPreview ? "This is a dev preview — tap to switch" : "Live dev previews"}
+          onClick={(): void => setIsExpanded(true)}
         >
           <FlaskConical size={11} />
           {pillText}
-        </button>
+        </Button>
       </div>
     );
   }
 
   return (
     <div style={containerStyle}>
-      <div style={panelStyle}>
-        <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "0 6px 4px" }}>
-          <span style={{ fontWeight: 600, flex: 1 }}>Dev previews</span>
-          {scanning ? <span style={{ color: "var(--gray-10)" }}>scanning…</span> : null}
-          <button type="button" style={headerButtonStyle} title="Rescan" onClick={rescan}>
+      <Flex direction="column" gap="1" style={panelStyle}>
+        <Flex align="center" gap="2" px="1">
+          <Text size="1" weight="bold" style={{ flex: 1 }}>
+            Dev previews
+          </Text>
+          {isScanning ? (
+            <Text size="1" color="gray">
+              scanning…
+            </Text>
+          ) : null}
+          <IconButton
+            size="1"
+            variant="ghost"
+            color="gray"
+            aria-label="Rescan"
+            title="Rescan"
+            disabled={isScanning}
+            onClick={rescan}
+          >
             <RefreshCw size={12} />
-          </button>
-          <button type="button" style={headerButtonStyle} title="Close" onClick={(): void => setExpanded(false)}>
+          </IconButton>
+          <IconButton
+            size="1"
+            variant="ghost"
+            color="gray"
+            aria-label="Close"
+            title="Close"
+            onClick={(): void => setIsExpanded(false)}
+          >
             <X size={12} />
-          </button>
-        </div>
-        {previewPort === null ? null : (
+          </IconButton>
+        </Flex>
+        {isPreview ? (
           <>
-            <div style={{ padding: "0 6px", color: "var(--amber-11)" }}>
+            <Text size="1" color="amber" style={{ padding: "0 var(--space-1)" }}>
               on :{previewPort}
               {ownIdentity === "" ? "" : ` · ${ownIdentity}`}
-            </div>
-            <button type="button" style={rowStyle} onClick={(): void => navigateKeepingRoute("/")}>
+            </Text>
+            <Button
+              size="1"
+              variant="ghost"
+              color="gray"
+              style={rowStyle}
+              onClick={(): void => navigateKeepingRoute("/")}
+            >
               ← Back to main app
-            </button>
+            </Button>
           </>
-        )}
+        ) : null}
         {others.map((preview) => (
-          <button
+          <Button
             key={preview.port}
-            type="button"
+            size="1"
+            variant="ghost"
+            color="gray"
             style={rowStyle}
             onClick={(): void => navigateKeepingRoute(`/proxy/${preview.port}/`)}
           >
             :{preview.port}
             {preview.label === "" ? "" : ` · ${preview.label}`}
-          </button>
+          </Button>
         ))}
-        {others.length === 0 && !scanning ? (
-          <div style={{ padding: "0 6px", color: "var(--gray-10)" }}>
+        {others.length === 0 && !isScanning ? (
+          <Text size="1" color="gray" style={{ padding: "0 var(--space-1)" }}>
             no other live previews in :{QUICK_BAND_START}–:{QUICK_BAND_END}
-          </div>
+          </Text>
         ) : null}
-        <a style={{ ...rowStyle, color: "var(--gray-10)" }} href={`/proxy/${window.location.hash}`}>
-          switchboard (full-band scan) →
-        </a>
-      </div>
+        <Button asChild size="1" variant="ghost" color="gray" style={rowStyle}>
+          <a href="/proxy/" onClick={openSwitchboard}>
+            switchboard (full-band scan) →
+          </a>
+        </Button>
+      </Flex>
     </div>
   );
 };
