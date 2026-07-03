@@ -5,6 +5,8 @@
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
     "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "isolatedModules": true,
@@ -12,9 +14,11 @@
     "allowSyntheticDefaultImports": true,
     "types": ["vite/client"],
     "paths": {
-      "@sculptor/plugin-sdk": ["../../src/plugins/sdk/index.ts"]
-    },
-    "baseUrl": "."
+      // The rolled-up public SDK contract (generated, freshness-checked in
+      // CI) — NOT the SDK source, whose ~-aliased host imports would drag the
+      // whole host module graph into this standalone project's typecheck.
+      "@sculptor/plugin-sdk": ["../../../sculptor-plugin/skills/build-sculptor-plugin/sdk.d.ts"]
+    }
   },
   "include": ["src"]
 }
