@@ -13,11 +13,19 @@
 //
 // Each entry config passes its own `root` (the frontend dir) so path resolution
 // here never depends on how Vite bundles this module.
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
 import react from "@vitejs/plugin-react-swc";
-import { defineConfig, loadEnv, type Plugin, type UserConfig, type UserConfigExport } from "vite";
+import {
+  defineConfig,
+  loadEnv,
+  type HtmlTagDescriptor,
+  type Plugin,
+  type UserConfig,
+  type UserConfigExport,
+} from "vite";
 
 import { bundledPlugins } from "./vite-plugins/bundled-plugins.ts";
 import { pluginRuntimeStubs } from "./vite-plugins/plugin-runtime-stubs.ts";
@@ -167,6 +175,37 @@ export interface FrontendConfigOptions {
   gateHmrUnderPytest?: boolean;
 }
 
+/**
+ * OpenHost preview identity: inject `<meta name="sculptor-preview">` into
+ * index.html so the /proxy/ switchboard (openhost-preview-fallback.html) and
+ * the preview-switcher plugin can label this preview. A dev server has no
+ * "build time" to report; instead branch/sha/dirty are read fresh from the
+ * working tree on each index.html request. HMR patches modules without
+ * refetching index.html, so a loaded page keeps the identity it loaded with —
+ * but scanners always GET index.html anew, so listings stay current.
+ */
+function previewIdentity(root: string): Plugin {
+  const git = (args: string): string => {
+    try {
+      return execSync(`git ${args}`, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    } catch {
+      return ""; // e.g. /app previews: the deploy image ships without .git
+    }
+  };
+  return {
+    name: "sculptor:preview-identity",
+    transformIndexHtml(): Array<HtmlTagDescriptor> {
+      const branch = git("branch --show-current");
+      const sha = git("rev-parse --short HEAD");
+      const dirty = git("status --porcelain") === "" ? "" : "*";
+      // Without git (no branch AND no sha), fall back to the serving dir —
+      // still enough to tell /app from a workspace checkout.
+      const content = branch === "" && sha === "" ? root : `${branch}@${sha}${dirty}`;
+      return [{ tag: "meta", attrs: { name: "sculptor-preview", content }, injectTo: "head" }];
+    },
+  };
+}
+
 /** Dev-only proxy server forwarding `/api`, `/ws`, and `/plugins/local` to the backend. */
 function devServer(env: Record<string, string>, fePort: number): import("vite").ServerOptions {
   const apiPort = Number(env.SCULPTOR_API_PORT || 5050);
@@ -236,7 +275,11 @@ export function defineFrontendConfig(opts: FrontendConfigOptions): UserConfigExp
       envPrefix: "SCULPTOR_",
       resolve: sharedResolve(opts.root),
       css: sharedCss(opts.root),
-      plugins: [...sharedPlugins(opts.root), ...(opts.extraPlugins ?? [])],
+      plugins: [
+        ...sharedPlugins(opts.root),
+        ...(opts.extraPlugins ?? []),
+        ...(openhostProxyBase ? [previewIdentity(opts.root)] : []),
+      ],
     };
 
     if (command === "serve" || mode === "development") {
