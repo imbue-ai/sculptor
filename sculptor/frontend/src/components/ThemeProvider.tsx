@@ -140,6 +140,16 @@ export const ImbueTheme = ({ children }: PropsWithChildren): ReactElement => {
   // Track whether this is the initial mount (no theme switch yet).
   const prevAppearanceRef = useRef(appearance);
 
+  // Mirror the appearance class onto <html>. The Radix token scales are keyed
+  // on .dark/.light, and index.css paints <html>'s background from them — the
+  // backdrop the browser exposes during window resizes and paint lag. Without
+  // this the tokens only exist inside the app root and <html> stays white.
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove(appearance === "light" ? "dark" : "light");
+    root.classList.add(appearance);
+  }, [appearance]);
+
   // Work around two issues that cause a visible flash on theme toggle:
   //
   // 1. Radix Theme's internal useEffect-based appearance sync — it copies
