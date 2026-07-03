@@ -39,7 +39,6 @@ export type PaletteRoute = {
   isHome: boolean;
   isWorkspace: boolean;
   isSettings: boolean;
-  isAddWorkspace: boolean;
   isAgent: boolean;
 };
 

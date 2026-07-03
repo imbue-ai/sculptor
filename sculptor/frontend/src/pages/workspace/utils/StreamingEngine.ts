@@ -281,21 +281,3 @@ export class StreamingEngine {
     return this.cursor.offset <= text.length;
   }
 }
-
-// The active streaming engines. Each agent chat owns its own engine (buffer + rAF loop)
-// and they run independently, so more than one can be active at a time — e.g. an agent
-// panel in the center section and another in the right section streaming concurrently
-// (see AgentPanel / ChatPanelContent). Tracked in a set only so the registration
-// lifecycle stays symmetric and inspectable; nothing enforces a single active engine.
-const activeEngines = new Set<StreamingEngine>();
-
-export const registerEngine = (engine: StreamingEngine): void => {
-  activeEngines.add(engine);
-};
-
-export const unregisterEngine = (engine: StreamingEngine): void => {
-  activeEngines.delete(engine);
-};
-
-/** The number of currently-registered engines (exposed for tests). */
-export const activeEngineCount = (): number => activeEngines.size;

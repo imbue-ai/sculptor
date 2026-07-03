@@ -10,7 +10,7 @@ rendered chip -> ``openFileViewTabAtom`` -> the ``read-file`` endpoint ->
 Sibling to ``test_at_mention_file_chip_click_opens_tab.py`` (the workspace-relative
 branch of the same chip-click flow) and ``test_at_mention_path_mode.py`` (the
 ``@~/`` path-mode picker).  The home-sentinel fixture mirrors
-``test_path_tilde_display.py``.
+``test_files_panel.py``.
 """
 
 import os
@@ -38,7 +38,7 @@ def _home_marker_file() -> Generator[str, None, None]:
     server inherits.  We need a real, readable file there to prove the fix reads
     the home file rather than ``<workspace>/~/<file>``.  The pid-suffixed name
     keeps parallel test workers from colliding; mirrors the home-sentinel
-    pattern in ``test_path_tilde_display.py``.
+    pattern in ``test_files_panel.py``.
     """
     marker = Path.home() / f"scu1528_home_marker_{os.getpid()}.txt"
     marker.write_text("SCU-1528 home file contents\n")

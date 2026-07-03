@@ -104,11 +104,26 @@ def test_resize_does_not_change_active_panel_or_collapse(sculptor_instance_: Scu
     active_before = center.get_active_tab().get_attribute("data-panel-id")
     assert active_before is not None
 
+    section_root = right.get_section()
+    start_box = section_root.bounding_box()
+    assert start_box is not None
+    start_width = start_box["width"]
+
     handle = right.get_resize_handle()
     expect(handle).to_be_visible()
     handle.focus()
     for _ in range(3):
         handle.press("ArrowLeft")
+
+    # Confirm the resize actually happened (ArrowLeft widens the right section) so the
+    # invariance assertions below can't pass vacuously on a dropped/ignored key press.
+    page.wait_for_function(
+        """({ testId, startWidth }) => {
+            const el = document.querySelector(`[data-testid="${testId}"]`);
+            return el && el.getBoundingClientRect().width > startWidth;
+        }""",
+        arg={"testId": str(ElementIDs.SECTION_RIGHT), "startWidth": start_width},
+    )
 
     # The center's active panel is unchanged and the right section is still expanded.
     expect(center.get_active_tab()).to_have_attribute("data-panel-id", active_before)

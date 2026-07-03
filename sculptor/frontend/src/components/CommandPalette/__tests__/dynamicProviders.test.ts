@@ -1,14 +1,18 @@
 import { getDefaultStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CodingAgentTaskView, Workspace } from "../../../api";
+import type { CodingAgentTaskView, UserConfig, Workspace } from "../../../api";
+import { encodeRegisteredAgentType } from "../../../common/state/atoms/agentTabs.ts";
 import { taskAtomFamily, taskIdsAtom } from "../../../common/state/atoms/tasks.ts";
+import { userConfigAtom } from "../../../common/state/atoms/userConfig.ts";
 import { workspaceAtomFamily, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
 import { EMPTY_WORKSPACE_LAYOUT } from "../../sections/persistence/types.ts";
 import type { PanelDefinition } from "../../sections/registry/panelRegistry.ts";
 import { panelRegistryAtom } from "../../sections/registry/panelRegistry.ts";
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "../../sections/sectionAtoms.ts";
 import type { PanelId, SubSectionId } from "../../sections/sectionTypes.ts";
+import { addPanelTargetSubSectionAtom } from "../contextActions/atoms.ts";
+import { buildAddPanelProvider } from "../dynamic/addPanel.ts";
 import { buildAgentProvider } from "../dynamic/agentCommands.ts";
 import { buildPanelTogglesProvider } from "../dynamic/panels.ts";
 import { buildWorkspaceProvider } from "../dynamic/workspaceCommands.tsx";
@@ -16,7 +20,7 @@ import type { CommandRuntime } from "../runtime.ts";
 import type { PaletteContext } from "../types.ts";
 
 const ROOT_CTX: PaletteContext = {
-  route: { isHome: true, isWorkspace: false, isSettings: false, isAddWorkspace: false, isAgent: false },
+  route: { isHome: true, isWorkspace: false, isSettings: false, isAgent: false },
   activeWorkspaceId: null,
   activeAgentId: null,
   hasChatPanel: false,
@@ -34,7 +38,6 @@ const makeRuntime = (): CommandRuntime => {
     navigate: {
       toHome: noop,
       toSettings: noop,
-      toAddWorkspace: noop,
       toWorkspace: vi.fn(),
       toAgent: vi.fn(),
     },
@@ -334,13 +337,11 @@ describe("buildPanelTogglesProvider", () => {
   // on lucide-react's full forwardRef shape.
   const TestIcon = (): null => null;
 
-  // Seed the registry AND mark every panel as actively placed in a section — the
-  // toggles provider only surfaces panels currently in the layout. Pass
-  // `{ place: false }` to seed the registry without placing (to exercise the filter).
-  const seedRegistry = (
-    panels: Array<Pick<PanelDefinition, "id" | "displayName">>,
-    opts: { place?: boolean } = {},
-  ): void => {
+  // Seed the registry AND, by default, mark every panel as actively placed in a
+  // section — the toggles provider only surfaces panels currently in the layout.
+  // A panel with `placed: false` is registered but left out of the layout, so
+  // the filter can be exercised.
+  const seedRegistry = (panels: Array<Pick<PanelDefinition, "id" | "displayName"> & { placed?: boolean }>): void => {
     const full = panels.map(
       (p) =>
         ({
@@ -354,7 +355,9 @@ describe("buildPanelTogglesProvider", () => {
     );
     const store = getDefaultStore();
     store.set(panelRegistryAtom, full);
-    const placement = opts.place === false ? {} : Object.fromEntries(panels.map((p) => [p.id as PanelId, "left"]));
+    const placement = Object.fromEntries(
+      panels.filter((p) => p.placed !== false).map((p) => [p.id as PanelId, "left"]),
+    );
     store.set(activeWorkspaceIdAtom, "ws-test");
     store.set(workspaceLayoutAtom, {
       ...EMPTY_WORKSPACE_LAYOUT,
@@ -397,30 +400,22 @@ describe("buildPanelTogglesProvider", () => {
 
   it("only surfaces panels actively placed in a section, not every registered panel", () => {
     // 'files' is registered but NOT placed; 'terminal' is registered and placed.
-    seedRegistry([{ id: "terminal", displayName: "Terminal" }]);
-    getDefaultStore().set(panelRegistryAtom, [
-      ...getDefaultStore().get(panelRegistryAtom),
-      {
-        id: "files",
-        displayName: "File browser",
-        icon: TestIcon as unknown,
-        kind: "static",
-        defaultSection: "left",
-        component: (() => null) as unknown,
-      } as unknown as PanelDefinition,
+    seedRegistry([
+      { id: "terminal", displayName: "Terminal", placed: true },
+      { id: "files", displayName: "File browser", placed: false },
     ]);
     const cmds = buildPanelTogglesProvider(makeRuntime()).produce(WORKSPACE_CTX);
     expect(cmds.map((c) => c.id)).toEqual(["view.toggle_panel.terminal"]);
   });
 
-  it("places every panel toggle in the View group and closes the palette after firing", () => {
+  it("places every panel toggle in the Panels & Sections group and closes the palette after firing", () => {
     // We previously kept the palette open after a panel toggle so users
     // could flip several in a row; that made heavier panels (file
     // browser) feel laggy because the palette and the panel re-rendered
     // concurrently. Closing first lets the panel mount alone.
     seedRegistry([{ id: "files", displayName: "File browser" }]);
     const cmd = buildPanelTogglesProvider(makeRuntime()).produce(WORKSPACE_CTX)[0]!;
-    expect(cmd.group).toBe("view");
+    expect(cmd.group).toBe("panels");
     expect(cmd.keepOpen).not.toBe(true);
   });
 
@@ -503,6 +498,10 @@ describe("buildPanelTogglesProvider", () => {
     const layout = runtime.store.get(workspaceLayoutAtom);
     expect(layout.placement["terminal" as PanelId]).toBe("left");
     expect(layout.activePanel.left).toBe("terminal");
+    // The reveal must leave the host section expanded and focused — a perform
+    // that kept the panel placed but collapsed its section would still hide it.
+    expect(layout.expanded.left).toBe(true);
+    expect(layout.activeSubSection).toBe("left");
   });
 
   it("picks up panels added to the registry without re-creating the provider", () => {
@@ -523,5 +522,107 @@ describe("buildPanelTogglesProvider", () => {
         .map((c) => c.id)
         .sort(),
     ).toEqual(["view.toggle_panel.files", "view.toggle_panel.notes"].sort());
+  });
+});
+
+describe("buildAddPanelProvider", () => {
+  const WORKSPACE_CTX: PaletteContext = {
+    ...ROOT_CTX,
+    route: { ...ROOT_CTX.route, isHome: false, isWorkspace: true },
+  };
+
+  const TestIcon = (): null => null;
+
+  // Seed an active workspace with one un-placed static panel in the registry, so the
+  // panel page has a re-add row to list. EMPTY_WORKSPACE_LAYOUT collapses every
+  // non-center section without splitting any, so listAvailableLocations yields exactly
+  // Left / Center / Right / Bottom in section order.
+  const seedLayout = (): void => {
+    const store = getDefaultStore();
+    store.set(activeWorkspaceIdAtom, "ws-test");
+    store.set(panelRegistryAtom, [
+      {
+        id: "files",
+        displayName: "File browser",
+        icon: TestIcon as unknown,
+        kind: "static",
+        defaultSection: "left",
+        component: (() => null) as unknown,
+      } as unknown as PanelDefinition,
+    ]);
+    store.set(workspaceLayoutAtom, { ...EMPTY_WORKSPACE_LAYOUT, placement: {} });
+  };
+
+  beforeEach(() => {
+    const store = getDefaultStore();
+    store.set(addPanelTargetSubSectionAtom, null);
+    store.set(userConfigAtom, null);
+    store.set(panelRegistryAtom, []);
+  });
+
+  it("emits no commands off a workspace route", () => {
+    seedLayout();
+    expect(buildAddPanelProvider(makeRuntime()).produce(ROOT_CTX)).toHaveLength(0);
+  });
+
+  it("emits the root entry-point plus one row per available location, and no panel rows, until a location is chosen", () => {
+    seedLayout();
+    const cmds = buildAddPanelProvider(makeRuntime()).produce(WORKSPACE_CTX);
+    expect(cmds.find((c) => c.id === "addpanel.open")?.pageId).toBe("addpanel.location");
+    // Location rows mirror availableLocationsAtom (section order), stamped with an
+    // ascending `order` so groupCommands preserves that spatial sequence.
+    const locationRows = cmds.filter((c) => c.id.startsWith("addpanel.location."));
+    expect(locationRows.map((c) => c.id)).toEqual([
+      "addpanel.location.left",
+      "addpanel.location.center",
+      "addpanel.location.right",
+      "addpanel.location.bottom",
+    ]);
+    expect(locationRows.map((c) => c.order)).toEqual([0, 1, 2, 3]);
+    // The panel page stays empty until the user picks a destination.
+    expect(cmds.filter((c) => c.id.startsWith("addpanel.panels."))).toHaveLength(0);
+  });
+
+  it("emits the agent / terminal / static-panel rows once a location is chosen", () => {
+    seedLayout();
+    getDefaultStore().set(addPanelTargetSubSectionAtom, "left");
+    const cmds = buildAddPanelProvider(makeRuntime()).produce(WORKSPACE_CTX);
+    expect(cmds.find((c) => c.id === "addpanel.panels.new_agent")?.onPage).toBe("addpanel.panels");
+    expect(cmds.find((c) => c.id === "addpanel.panels.new_terminal")).toBeDefined();
+    expect(cmds.find((c) => c.id === "addpanel.panels.files")?.title).toBe("File browser");
+  });
+
+  it('titles the new-agent row "New Claude agent" by default', () => {
+    seedLayout();
+    getDefaultStore().set(addPanelTargetSubSectionAtom, "left");
+    const cmd = buildAddPanelProvider(makeRuntime())
+      .produce(WORKSPACE_CTX)
+      .find((c) => c.id === "addpanel.panels.new_agent");
+    expect(cmd?.title).toBe("New Claude agent");
+  });
+
+  it('collapses the new-agent row to "New agent" (no doubled word) when the recent type is a registered terminal agent', () => {
+    // The provider runs outside React and can't resolve a registered program's
+    // display name, so the row must not read "New agent agent".
+    seedLayout();
+    getDefaultStore().set(addPanelTargetSubSectionAtom, "left");
+    getDefaultStore().set(userConfigAtom, {
+      lastUsedAgentType: encodeRegisteredAgentType("codex-1"),
+    } as unknown as UserConfig);
+    const cmd = buildAddPanelProvider(makeRuntime())
+      .produce(WORKSPACE_CTX)
+      .find((c) => c.id === "addpanel.panels.new_agent");
+    expect(cmd?.title).toBe("New agent");
+  });
+
+  it("root row perform clears a stale chosen location", () => {
+    seedLayout();
+    const runtime = makeRuntime();
+    runtime.store.set(addPanelTargetSubSectionAtom, "left");
+    const root = buildAddPanelProvider(runtime)
+      .produce(WORKSPACE_CTX)
+      .find((c) => c.id === "addpanel.open")!;
+    root.perform({ ctx: WORKSPACE_CTX, keepOpen: false, pushPage: vi.fn() });
+    expect(runtime.store.get(addPanelTargetSubSectionAtom)).toBeNull();
   });
 });

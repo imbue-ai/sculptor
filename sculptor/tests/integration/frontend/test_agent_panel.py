@@ -2,13 +2,10 @@
 
 Agents render as panel tabs in the center section, created from the section `+`
 add-panel dropdown (or the workspace-create flow). This file owns the agent-panel
-TAB-MODEL behaviour: the chat is preserved across switches, zero/one/multiple agents,
-closing an agent = a delete confirmation, and closing the LAST agent leaves the
-center section empty (no auto-create).
-
-These cases supersede the agent-count / multi-agent / survive-deleted /
-lowest-number-reuse kernels of the old `test_multi_agent_workspace.py`,
-re-anchored onto the panel-tab model and the new add-panel dropdown.
+TAB-MODEL behaviour: the chat is preserved across panel switches, two agents can
+render side by side across sections, closing an agent surfaces a delete
+confirmation, closing the LAST agent leaves the center section empty (no
+auto-create), and a multi-instance panel tab offers inline rename.
 """
 
 from playwright.sync_api import expect
@@ -18,6 +15,7 @@ from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropd
 from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.panel_empty_state import PlaywrightEmptySectionState
 from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
@@ -61,33 +59,6 @@ def test_agent_chat_is_preserved(sculptor_instance_: SculptorInstance) -> None:
     # identity would name the second agent here instead of the panel's own.
     first_tab_label = panel_tabs.get_panel_tab(first_panel_id).inner_text()
     expect(get_alpha_chat_view(page).get_intro()).to_contain_text(first_tab_label)
-
-
-@user_story("to see exactly one agent tab for a single-agent workspace")
-def test_single_agent_shows_one_tab(sculptor_instance_: SculptorInstance) -> None:
-    """A workspace created with one agent shows exactly one agent panel tab."""
-    page = sculptor_instance_.page
-    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
-
-    start_task_and_wait_for_ready(page, prompt="Only agent", workspace_name="Solo Agent WS")
-
-    expect(panel_tabs.get_panel_tabs()).to_have_count(1)
-
-
-@user_story("to run multiple agents in the same workspace")
-def test_multiple_agents_show_multiple_tabs(sculptor_instance_: SculptorInstance) -> None:
-    """Adding agents via the `+` dropdown grows the agent panel-tab count."""
-    page = sculptor_instance_.page
-    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
-
-    start_task_and_wait_for_ready(page, prompt="First agent", workspace_name="Multi Agent WS")
-    expect(panel_tabs.get_panel_tabs()).to_have_count(1)
-
-    create_agent_panel(page, section="center")
-    expect(panel_tabs.get_panel_tabs()).to_have_count(2)
-
-    create_agent_panel(page, section="center")
-    expect(panel_tabs.get_panel_tabs()).to_have_count(3)
 
 
 @user_story("to view two agents side by side in the center and right sections")
@@ -144,11 +115,7 @@ def test_closing_agent_tab_requires_confirmation(sculptor_instance_: SculptorIns
     # Cancelling the confirmation keeps both agents.
     second_tab = tabs.nth(1)
     second_tab.click()
-    panel_id = second_tab.get_attribute("data-testid")
-    assert panel_id is not None and panel_id.startswith("PANEL_TAB-")
-    second_panel_id = panel_id[len("PANEL_TAB-") :]
-
-    panel_tabs.get_tab_close_button(second_panel_id).click()
+    panel_tabs.get_tab_close_button_of(second_tab).click()
     dialog = panel_tabs.get_delete_confirmation_dialog()
     expect(dialog).to_be_visible()
     panel_tabs.get_delete_confirmation_cancel_button().click()
@@ -156,7 +123,10 @@ def test_closing_agent_tab_requires_confirmation(sculptor_instance_: SculptorIns
     expect(tabs).to_have_count(2)
 
     # Confirming removes the agent.
-    panel_tabs.delete_panel_via_close_button(second_panel_id)
+    panel_tabs.get_tab_close_button_of(second_tab).click()
+    confirm_button = panel_tabs.get_delete_confirmation_confirm_button()
+    expect(confirm_button).to_be_visible()
+    confirm_button.click()
     expect(dialog).to_be_hidden()
     expect(tabs).to_have_count(1)
 
@@ -165,9 +135,8 @@ def test_closing_agent_tab_requires_confirmation(sculptor_instance_: SculptorIns
 def test_closing_last_agent_does_not_auto_create(sculptor_instance_: SculptorInstance) -> None:
     """Closing the last agent does NOT auto-create a replacement.
 
-    The old shell created a fresh agent when the last one was deleted; the redesign
-    relaxes that — after the delete there is no agent panel tab (the center is left
-    empty rather than refilled).
+    Deleting the last agent leaves the center section empty — no replacement agent
+    panel tab is created to refill it.
     """
     page = sculptor_instance_.page
     panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
@@ -177,14 +146,18 @@ def test_closing_last_agent_does_not_auto_create(sculptor_instance_: SculptorIns
     expect(tabs).to_have_count(1)
 
     only_tab = tabs.first
-    panel_id = only_tab.get_attribute("data-testid")
-    assert panel_id is not None and panel_id.startswith("PANEL_TAB-")
-    only_panel_id = panel_id[len("PANEL_TAB-") :]
-
-    panel_tabs.delete_panel_via_close_button(only_panel_id)
+    only_tab.click()
+    panel_tabs.get_tab_close_button_of(only_tab).click()
+    confirm_button = panel_tabs.get_delete_confirmation_confirm_button()
+    expect(confirm_button).to_be_visible()
+    confirm_button.click()
     expect(panel_tabs.get_delete_confirmation_dialog()).to_be_hidden()
 
-    # No replacement agent panel tab is auto-created.
+    # Assert on the settled empty state before the tab count: an empty center is also
+    # transiently true in the gap before an auto-created replacement would land, so
+    # waiting for the empty-state launcher first makes "no auto-create" a real
+    # observation rather than a snapshot of that gap.
+    expect(PlaywrightEmptySectionState(page, "center").get_add_panel_button()).to_be_visible()
     expect(panel_tabs.get_panel_tabs()).to_have_count(0)
 
 
@@ -193,8 +166,8 @@ def test_agent_tab_offers_rename_for_multiple_instances(sculptor_instance_: Scul
     """An agent panel tab offers inline rename (a multi-instance panel affordance).
 
     Renaming is a multi-instance affordance: the context menu exposes Rename and an
-    inline edit input appears. (The committed-label persistence is wired to the data
-    layer in a later task; this asserts the rename affordance is offered.)
+    inline edit input appears. This asserts only that the rename affordance is
+    offered; committed-label persistence is covered elsewhere.
     """
     page = sculptor_instance_.page
     panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")

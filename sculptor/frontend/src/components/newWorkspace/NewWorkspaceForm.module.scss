@@ -8,14 +8,13 @@
   position: relative;
 }
 
-// ── Top breadcrumb bar ────────────────────────────────────────────────
+// Top breadcrumb bar.
 //
-// Small, quiet context row (repo crumb → agent → environment →
-// source-branch → new-branch field), rendered above the title/prompt so
-// the modal reads like a Linear "new issue". All chips share the same
-// 12px / tight-padding ramp so the row reads as one breadcrumb. The
-// new-branch field is given `flex-basis: 100%` so it always drops to its
-// own full-width line beneath the chips.
+// Small, quiet context row (repo crumb → agent → environment → source
+// branch, each falling back to a skeleton while cold data loads), rendered
+// above the title/prompt so the modal reads like a Linear "new issue". All
+// chips share the same 12px / tight-padding ramp so the row reads as one
+// breadcrumb.
 .context {
   align-items: flex-start;
   color: var(--gray-11);
@@ -45,7 +44,9 @@
   letter-spacing: 0.01em;
   margin: 0;
   padding: 3px var(--space-2);
-  transition: background var(--duration-fast) ease;
+  transition:
+    background var(--duration-fast) ease,
+    border-color var(--duration-fast) ease;
 
   &:hover {
     background: var(--gray-a2);
@@ -67,7 +68,6 @@
   max-width: 220px;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -147,7 +147,7 @@
   gap: var(--space-1);
 }
 
-// ── Body: workspace title + first-task prompt ────────────────────────
+// Body: workspace title + first-task prompt.
 //
 // Both inputs render border-less so the modal reads like a Linear "new
 // issue" — title-as-heading, plain prose below.
@@ -191,7 +191,6 @@
   font-family: var(--default-font-family);
   font-size: var(--font-size-3);
   line-height: var(--line-height-3);
-  max-height: 240px;
   min-height: 120px;
   outline: none;
   padding: 0;
@@ -223,7 +222,7 @@
   }
 }
 
-// ── Footer: "Keep open" toggle + Create button ───────────────────────
+// Footer: "Keep open" toggle + Create button.
 .footer {
   align-items: center;
   border-top: 1px solid var(--gray-a3);

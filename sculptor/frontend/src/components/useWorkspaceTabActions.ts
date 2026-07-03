@@ -1,50 +1,30 @@
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { useCallback } from "react";
-import { useParams } from "react-router-dom";
 
-import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
+import { useImbueNavigate } from "~/common/NavigateUtils.ts";
 import {
   agentIdsByWorkspaceAtom,
-  clearAllTabsAtom,
-  closeAllWorkspaceTabsAtom,
-  closeNewWorkspaceTabAtom,
-  closeOtherWorkspaceTabsAtom,
-  closeWorkspaceTabAtom,
   effectiveOpenTabIdsAtom,
-  keepOnlyTabAtom,
   parseDraftIdFromTabId,
 } from "~/common/state/atoms/workspaces.ts";
 
 import { HOME_TAB_ID, SETTINGS_TAB_ID } from "./workspaceTabIds.ts";
 
 /**
- * The three "close-tab" handlers used by the workspace sidebar
- * (WorkspaceSidebar.tsx) AND the Cmd+K command palette. Both surfaces
- * must close + navigate identically;
- * keeping the logic in one hook avoids drift between them.
- *
- * Returns three handlers and the `navigateToNextTab` helper so callers
- * that want to close-then-navigate (e.g. delete flows) can reuse the
- * same next-tab selection rules.
+ * `navigateToNextTab` — the shared "this tab is going away, move to a sensible
+ * neighbour" rule. Callers that close or delete a tab pass the departing tab id;
+ * this picks the next tab from the open order (falling back to Home when nothing
+ * remains) and navigates there, resolving pseudo-tabs (Home/Settings), draft
+ * tabs, and each workspace's last-viewed agent. The sidebar's delete flow and the
+ * palette's delete confirmation both reuse it so their post-delete navigation
+ * can't drift.
  */
 export const useWorkspaceTabActions = (): {
-  handleClose: (tabId: string) => void;
-  handleCloseOthers: (tabId: string) => void;
-  handleCloseAll: () => void;
   navigateToNextTab: (closedTabId: string) => void;
 } => {
-  const closeTab = useSetAtom(closeWorkspaceTabAtom);
-  const closeOtherTabs = useSetAtom(closeOtherWorkspaceTabsAtom);
-  const closeAllTabs = useSetAtom(closeAllWorkspaceTabsAtom);
-  const closeNewWorkspaceTab = useSetAtom(closeNewWorkspaceTabAtom);
-  const keepOnlyTab = useSetAtom(keepOnlyTabAtom);
-  const clearAllTabs = useSetAtom(clearAllTabsAtom);
   const effectiveOpenTabIds = useAtomValue(effectiveOpenTabIdsAtom);
   const agentIdsByWorkspace = useAtomValue(agentIdsByWorkspaceAtom);
-  const { navigateToWorkspace, navigateToAddWorkspace, navigateToAgent, navigateToHome, navigateToGlobalSettings } =
-    useImbueNavigate();
-  const { addWorkspaceDraftId, isHomeRoute, isSettingsRoute } = useImbueLocation();
-  const { workspaceID: activeWorkspaceID } = useParams<{ workspaceID?: string }>();
+  const { navigateToWorkspace, navigateToAgent, navigateToHome, navigateToGlobalSettings } = useImbueNavigate();
 
   const handleWorkspaceClick = useCallback(
     (workspaceId: string): void => {
@@ -62,7 +42,7 @@ export const useWorkspaceTabActions = (): {
     (closedTabId: string): void => {
       const remaining = effectiveOpenTabIds.filter((id) => id !== closedTabId);
       if (remaining.length === 0) {
-        navigateToAddWorkspace();
+        navigateToHome();
         return;
       }
       const closedIndex = effectiveOpenTabIds.indexOf(closedTabId);
@@ -74,90 +54,15 @@ export const useWorkspaceTabActions = (): {
       } else {
         const draftId = parseDraftIdFromTabId(nextTab);
         if (draftId !== null) {
-          navigateToAddWorkspace(draftId);
+          // Draft tabs have no route of their own; fall back to Home.
+          navigateToHome();
         } else {
           handleWorkspaceClick(nextTab);
         }
       }
     },
-    [effectiveOpenTabIds, handleWorkspaceClick, navigateToAddWorkspace, navigateToHome, navigateToGlobalSettings],
+    [effectiveOpenTabIds, handleWorkspaceClick, navigateToHome, navigateToGlobalSettings],
   );
 
-  const handleClose = useCallback(
-    (tabId: string): void => {
-      const draftId = parseDraftIdFromTabId(tabId);
-      if (draftId !== null) {
-        closeNewWorkspaceTab(draftId);
-        if (addWorkspaceDraftId === draftId) {
-          navigateToNextTab(tabId);
-        }
-        return;
-      }
-
-      if (tabId === HOME_TAB_ID) {
-        closeTab(HOME_TAB_ID);
-        if (isHomeRoute) {
-          navigateToNextTab(HOME_TAB_ID);
-        }
-        return;
-      }
-
-      if (tabId === SETTINGS_TAB_ID) {
-        closeTab(SETTINGS_TAB_ID);
-        if (isSettingsRoute) {
-          navigateToNextTab(SETTINGS_TAB_ID);
-        }
-        return;
-      }
-
-      // Real workspace tab: close it and navigate away if it was active.
-      closeTab(tabId);
-      if (tabId === activeWorkspaceID) {
-        navigateToNextTab(tabId);
-      }
-    },
-    [
-      activeWorkspaceID,
-      addWorkspaceDraftId,
-      isHomeRoute,
-      isSettingsRoute,
-      closeTab,
-      closeNewWorkspaceTab,
-      navigateToNextTab,
-    ],
-  );
-
-  const handleCloseOthers = useCallback(
-    (tabId: string): void => {
-      // Keep only the specified tab — close all other workspace tabs via
-      // the backend, and remove other pseudo-tabs from the local order.
-      keepOnlyTab(tabId);
-      closeOtherTabs(tabId);
-      if (tabId === HOME_TAB_ID) {
-        if (!isHomeRoute) navigateToHome();
-      } else if (tabId === SETTINGS_TAB_ID) {
-        if (!isSettingsRoute) navigateToGlobalSettings();
-      } else if (activeWorkspaceID !== tabId) {
-        handleWorkspaceClick(tabId);
-      }
-    },
-    [
-      activeWorkspaceID,
-      isHomeRoute,
-      isSettingsRoute,
-      keepOnlyTab,
-      closeOtherTabs,
-      handleWorkspaceClick,
-      navigateToHome,
-      navigateToGlobalSettings,
-    ],
-  );
-
-  const handleCloseAll = useCallback((): void => {
-    closeAllTabs();
-    clearAllTabs();
-    navigateToAddWorkspace();
-  }, [closeAllTabs, clearAllTabs, navigateToAddWorkspace]);
-
-  return { handleClose, handleCloseOthers, handleCloseAll, navigateToNextTab };
+  return { navigateToNextTab };
 };

@@ -128,8 +128,8 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
     listeners?.onKeyDown?.(event);
   };
 
-  // Double-clicking a multi-instance tab starts an inline rename, matching
-  // the old agent/terminal tab gesture; the context-menu Rename item is the other entry.
+  // Double-clicking a multi-instance tab starts an inline rename; the context-menu
+  // Rename item is the other entry.
   const handleDoubleClick = (): void => {
     if (canRename) {
       setIsRenaming(true);

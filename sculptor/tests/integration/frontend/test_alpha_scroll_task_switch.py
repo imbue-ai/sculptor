@@ -57,12 +57,16 @@ def test_scroll_position_restored_on_task_switch(sculptor_instance_: SculptorIns
 
     pos_a = get_alpha_scroll_position(page)
 
-    # Switch to task B via its sidebar row (no reload)
+    # Switch to task B via its sidebar row (no reload). Both workspaces share the
+    # ALPHA_CHAT_VIEW test id, so confirm task B's response text has mounted rather
+    # than relying on visibility (already true while task A's view is still up) —
+    # otherwise the switch may not have landed and the scroll-restore path is skipped.
     navigate_to_workspace(page, "Scroll Task B")
-    expect(alpha_chat_view).to_be_visible()
+    expect(alpha_chat_view).to_contain_text("Task B response")
 
-    # Navigate back to task A
+    # Navigate back to task A; confirm its chat remounted before checking scroll.
     navigate_to_workspace(page, "Scroll Task A")
+    expect(alpha_chat_view).to_contain_text("Task A response")
 
     # Verify scroll position is restored (within 200px tolerance to account for
     # the virtualizer's dynamic paddingStart plus settling adjustments).

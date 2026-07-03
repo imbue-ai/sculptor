@@ -20,13 +20,15 @@ import type { DragEndEvent, DragMoveEvent, DragOverEvent, DragStartEvent } from 
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement, ReactNode } from "react";
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import type { PanelDragData, PanelDropData } from "./panelDnd.ts";
 import { APPEND_INDEX, sectionBodyDroppableId } from "./panelDnd.ts";
 import {
+  getDragPointerCoordinates,
   panelCollisionDetection,
   panelKeyboardCoordinateGetter,
+  resetDragPointerCoordinates,
   resetKeyboardDropTarget,
   setKeyboardDropTarget,
 } from "./panelDndKeyboard.ts";
@@ -78,7 +80,10 @@ function resolveDropTarget(event: DragMoveEvent | DragOverEvent | DragEndEvent):
   if (activeData === undefined) {
     return null;
   }
-  const pointerX = event.activatorEvent instanceof PointerEvent ? event.activatorEvent.clientX + event.delta.x : null;
+  // Use the live viewport pointer (null for keyboard drags), not activatorEvent +
+  // event.delta: the latter drifts by the accumulated scroll once the overflowing tab
+  // strip auto-scrolls mid-drag, since event.delta folds in that scroll adjustment.
+  const pointerX = getDragPointerCoordinates()?.x ?? null;
   return { to: overData.subSection, index: computeDropIndex(overData.subSection, activeData.panelId, pointerX) };
 }
 
@@ -92,6 +97,22 @@ export const PanelDndProvider = ({ children }: { children: ReactNode }): ReactEl
   // The latest resolved drop target, so drag end can commit synchronously without a
   // state round-trip; null means "not over a drop zone" (release is a no-op).
   const dropTargetRef = useRef<DropTarget | null>(null);
+
+  // The dragged tab's origin slot, snapshotted at drag start. During a within-section
+  // reorder the tab renders at its live preview slot, so event.active.data.current.index
+  // follows the preview rather than the origin — snap-home must fall back to this instead.
+  const originRef = useRef<{ from: SubSectionId; index: number } | null>(null);
+
+  // Clear all transient drag state: the resolved-target ref, the keyboard target and
+  // captured pointer (module-level in panelDndKeyboard), the pointer-halves overlays,
+  // and the preview atom. Shared by drag end, cancel, and unmount.
+  const resetDragState = useCallback((): void => {
+    dropTargetRef.current = null;
+    resetKeyboardDropTarget();
+    resetDragPointerCoordinates();
+    setDragPointerHalves(NO_DRAG_POINTER_HALVES);
+    setPanelDragState(null);
+  }, [setDragPointerHalves, setPanelDragState]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -107,6 +128,7 @@ export const PanelDndProvider = ({ children }: { children: ReactNode }): ReactEl
         return;
       }
       dropTargetRef.current = { to: activeData.from, index: activeData.index };
+      originRef.current = { from: activeData.from, index: activeData.index };
       // Seed the keyboard target to the source section so the initial `over` is the
       // source; each arrow updates it via the coordinate getter.
       setKeyboardDropTarget(sectionBodyDroppableId(activeData.from));
@@ -136,21 +158,22 @@ export const PanelDndProvider = ({ children }: { children: ReactNode }): ReactEl
       // Track which window halves the pointer is in — this is what reveals the
       // collapsed-section drop overlays. Keyboard drags have no pointer and
       // leave every half false (the overlays reveal via the drop-target slice).
-      if (event.activatorEvent instanceof PointerEvent) {
-        const pointerX = event.activatorEvent.clientX + event.delta.x;
-        const pointerY = event.activatorEvent.clientY + event.delta.y;
+      const pointer = getDragPointerCoordinates();
+      if (pointer !== null) {
         setDragPointerHalves({
-          left: pointerX < window.innerWidth / 2,
-          right: pointerX >= window.innerWidth / 2,
-          bottom: pointerY >= window.innerHeight / 2,
+          left: pointer.x < window.innerWidth / 2,
+          right: pointer.x >= window.innerWidth / 2,
+          bottom: pointer.y >= window.innerHeight / 2,
         });
       }
-      // Over a drop zone → preview the panel there; otherwise snap the ghost home.
+      // Over a drop zone → preview the panel there; otherwise snap the ghost back to its
+      // origin slot (originRef, not the live index, which tracks the reorder preview).
+      const origin = originRef.current;
       setPanelDragState({
         panelId: activeData.panelId,
         from: activeData.from,
-        to: target?.to ?? activeData.from,
-        index: target?.index ?? activeData.index,
+        to: target?.to ?? origin?.from ?? activeData.from,
+        index: target?.index ?? origin?.index ?? activeData.index,
       });
     },
     [setPanelDragState, setDragPointerHalves],
@@ -160,10 +183,7 @@ export const PanelDndProvider = ({ children }: { children: ReactNode }): ReactEl
     (event: DragEndEvent): void => {
       const target = dropTargetRef.current;
       const activeData = event.active.data.current as PanelDragData | undefined;
-      dropTargetRef.current = null;
-      resetKeyboardDropTarget();
-      setDragPointerHalves(NO_DRAG_POINTER_HALVES);
-      setPanelDragState(null);
+      resetDragState();
       if (target === null || activeData === undefined) {
         return;
       }
@@ -175,15 +195,15 @@ export const PanelDndProvider = ({ children }: { children: ReactNode }): ReactEl
       // Dropping into a section makes it the active section and pulses its ring.
       jumpToSection({ subSection: target.to });
     },
-    [setPanelDragState, setDragPointerHalves, movePanel, jumpToSection],
+    [resetDragState, movePanel, jumpToSection],
   );
 
-  const handleDragCancel = useCallback((): void => {
-    dropTargetRef.current = null;
-    resetKeyboardDropTarget();
-    setDragPointerHalves(NO_DRAG_POINTER_HALVES);
-    setPanelDragState(null);
-  }, [setPanelDragState, setDragPointerHalves]);
+  // dnd-kit does not fire onDragCancel when the provider unmounts, and its
+  // KeyboardSensor only auto-cancels on window resize/visibilitychange — so a keyboard
+  // drag interrupted by navigation (clicking a sidebar link, a remote workspace
+  // deletion) would strand the preview atom and the module-level drop target, leaving a
+  // phantom ghost/highlight in every same-named sub-section. Clear on unmount too.
+  useEffect(() => resetDragState, [resetDragState]);
 
   return (
     <DndContext
@@ -193,7 +213,7 @@ export const PanelDndProvider = ({ children }: { children: ReactNode }): ReactEl
       onDragOver={handleDragUpdate}
       onDragMove={handleDragUpdate}
       onDragEnd={handleDragEnd}
-      onDragCancel={handleDragCancel}
+      onDragCancel={resetDragState}
     >
       {children}
       <DragOverlay dropAnimation={null}>

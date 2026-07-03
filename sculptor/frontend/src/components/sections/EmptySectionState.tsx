@@ -95,7 +95,7 @@ const EmptySectionStateComponent = ({ subSection }: EmptySectionStateProps): Rea
             color="gray"
             size="1"
             onClick={() => actions.createRecentAgent(subSection)}
-            data-testid={`${ElementIds.SECTION_EMPTY_QUICK_ACTION}-new-agent`}
+            data-testid={`${ElementIds.SECTION_EMPTY_QUICK_ACTION}-${subSection}-new-agent`}
           >
             New {recentAgentDisplayLabel} agent
           </Button>
@@ -104,7 +104,7 @@ const EmptySectionStateComponent = ({ subSection }: EmptySectionStateProps): Rea
             color="gray"
             size="1"
             onClick={() => actions.createTerminal(subSection)}
-            data-testid={`${ElementIds.SECTION_EMPTY_QUICK_ACTION}-new-terminal`}
+            data-testid={`${ElementIds.SECTION_EMPTY_QUICK_ACTION}-${subSection}-new-terminal`}
           >
             New terminal
           </Button>
@@ -115,7 +115,7 @@ const EmptySectionStateComponent = ({ subSection }: EmptySectionStateProps): Rea
               color="gray"
               size="1"
               onClick={() => actions.openStaticPanel(panel.id, subSection)}
-              data-testid={`${ElementIds.SECTION_EMPTY_QUICK_ACTION}-${panel.id}`}
+              data-testid={`${ElementIds.SECTION_EMPTY_QUICK_ACTION}-${subSection}-${panel.id}`}
             >
               {panel.displayName}
             </Button>
@@ -129,7 +129,7 @@ const EmptySectionStateComponent = ({ subSection }: EmptySectionStateProps): Rea
             size="1"
             className={styles.closeSplit}
             onClick={handleCloseSplit}
-            data-testid={ElementIds.SPLIT_CLOSE_OPTION}
+            data-testid={`${ElementIds.SPLIT_CLOSE_OPTION}-${subSection}`}
           >
             Close split
           </Button>

@@ -13,9 +13,8 @@ import re
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
+from sculptor.testing.elements.new_workspace_dialog import PlaywrightNewWorkspaceDialog
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
@@ -61,24 +60,29 @@ def test_restart_restores_active_workspace_and_agent(
         expect(task_page.get_chat_panel()).to_be_visible()
 
 
-@user_story("to land on Home after restart, with no leftover new-workspace surface")
+@user_story("to restore my workspace after restart, with no leftover new-workspace surface")
 def test_restart_does_not_restore_new_workspace_modal(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
-    """The new-workspace modal is transient: opening it leaves no MRU to restore on restart.
+    """The new-workspace modal is transient: opening it persists no draft tab to restore.
 
-    The legacy /ws/new draft route is gone — workspace creation now happens in a
-    modal over the app shell — so a session spent on the (modal) creation surface
-    has no persisted draft tab and a cold start falls back to /home.
+    Workspace creation happens in a modal over the app shell, not on a routed /ws/new
+    draft page, so opening it over a workspace keeps the MRU pointed at the workspace
+    underneath. A cold start restores that workspace's URL and the modal does not
+    reappear.
     """
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
-        navigate_to_add_workspace_page(page)
-        add_ws_page = PlaywrightAddWorkspacePage(page)
-        expect(add_ws_page.get_submit_button()).to_be_visible()
+        start_task_and_wait_for_ready(page, prompt="Hi", workspace_name="Modal MRU WS")
+        active_url_hash = _hash_of(page)
+        assert re.match(r"^#/ws/[^/]+/agent/[^/]+$", active_url_hash), active_url_hash
+        # Opening the modal over the workspace must not overwrite the MRU with a draft.
+        PlaywrightNewWorkspaceDialog(page).open_via_shortcut()
 
     with sculptor_instance_factory_.spawn_instance() as instance:
-        expect(instance.page).to_have_url(re.compile(r"#/home"))
+        page = instance.page
+        expect(page).to_have_url(re.compile(re.escape(active_url_hash) + "$"))
+        expect(PlaywrightNewWorkspaceDialog(page).get_dialog()).to_have_count(0)
 
 
 @user_story("to land on Home when my last workspace was deleted between sessions")

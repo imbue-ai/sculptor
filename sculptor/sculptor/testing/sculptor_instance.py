@@ -305,12 +305,12 @@ class SculptorInstance:
         self.page.goto("about:blank")
 
         # Reset persistent user-config flags only after the previous SPA
-        # has been unloaded.  If we PUT the reset while the old page is
-        # still alive, a debounced sync hook (e.g. usePanelLayoutSync)
-        # can fire afterwards and PUT the full stale config back —
-        # silently re-enabling flags like enableInPlaceWorkspaces and
-        # breaking the next test.  about:blank tears down the React
-        # tree, which cancels those pending timers.
+        # has been unloaded.  While the old page is still alive its React
+        # tree can still issue a config PUT (an in-flight or queued settings
+        # write); if one lands after our reset it silently re-writes a flag
+        # like enableInPlaceWorkspaces and breaks the next test.  about:blank
+        # tears down that tree first, so no write from the previous test can
+        # race the reset below.
         self._reset_user_config_defaults()
 
         self.page.goto(f"{self.frontend_url}#/ws/new")
@@ -387,11 +387,11 @@ class SculptorInstance:
         flag is better caught here than as a failure later.
 
         After a successful PUT we reload the page so the frontend's in-memory
-        userConfigAtom picks up the reset values.  Without the reload, the
-        frontend's debounced sync hooks (e.g. usePanelLayoutSync, which fires
-        ~2s after any panel change) can write the stale userConfigAtom — still
-        carrying the previous test's flags — back to the backend, undoing the
-        reset before the test body runs.  See SCU-541 for the original failure.
+        userConfigAtom picks up the reset values.  Without the reload, a later
+        config write from the still-live frontend — built from the stale
+        userConfigAtom, which still carries the previous test's flags — writes
+        those flags back to the backend, undoing the reset before the test body
+        runs.  See SCU-541 for the original failure.
         """
         base_url = self.backend_api_url.rstrip("/")
         timeout = self._default_timeout_ms
@@ -501,9 +501,8 @@ class SculptorInstance:
 
         # Note: _reset_user_config_defaults() runs inside _reset_browser_state
         # below, after about:blank has unloaded the previous page's JS.
-        # Resetting earlier races with debounced config syncs (e.g.
-        # usePanelLayoutSync) that PUT the full stale config and undo the
-        # reset.
+        # Resetting earlier races a config write from the still-live previous
+        # page, which could land after the reset and undo it.
 
         self._empty_fake_bin_dir()
         self._check_pre_test_timeout("empty_fake_bin_dir", start, test_id)

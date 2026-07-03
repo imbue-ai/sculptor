@@ -31,7 +31,7 @@ def test_workspace_selection_mode_persists_after_workspace_creation(sculptor_ins
     1. Enable the in-place workspaces experimental flag
     2. On the inline first-run create form, switch from Worktree (default) to In-place
     3. Create the workspace (promptless)
-    4. Reopen the new-workspace form via the sidebar repo group's "+"
+    4. Reopen the new-workspace form via the sidebar's New Workspace button
     5. Verify the mode selector still shows In-place (not Worktree)
     """
     page = sculptor_instance_.page

@@ -71,8 +71,19 @@ export class LocalStorageLayoutAdapter implements LayoutPersistenceAdapter {
   }
 
   read<TScope extends LayoutScope>(scope: TScope): LayoutSnapshotFor<TScope> | undefined {
+    const key = keyFor(scope);
+    // A debounced write parks the newest snapshot in `pending` until it flushes;
+    // return it (minus the storage-only version stamp) so a read inside the
+    // debounce window sees that snapshot rather than the previous flushed value.
+    const pending = this.pending.get(key);
+    if (pending !== undefined) {
+      const snapshot = { ...(pending as Record<string, unknown>) };
+      delete snapshot.version;
+      return snapshot as LayoutSnapshotFor<TScope>;
+    }
+
     try {
-      const raw = localStorage.getItem(keyFor(scope));
+      const raw = localStorage.getItem(key);
       if (raw === null) {
         return undefined;
       }

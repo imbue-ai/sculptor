@@ -8,6 +8,14 @@ import { EMPTY_WORKSPACE_LAYOUT } from "../persistence/types.ts";
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "../sectionAtoms.ts";
 import type { DynamicAgentInput } from "./dynamicPanels.tsx";
 import { deriveDynamicPanels } from "./dynamicPanels.tsx";
+import {
+  activePanelComponentInSubSectionAtom,
+  buildStaticPanelDefinitions,
+  isMultiInstanceKind,
+  panelRegistriesEqual,
+  panelRegistryAtom,
+  registerPanelComponent,
+} from "./panelRegistry.ts";
 
 // A minimal agent input with the fields the status dot + diagnostics derivation reads.
 const makeAgent = (overrides: Partial<DynamicAgentInput> & Pick<DynamicAgentInput, "taskId">): DynamicAgentInput => ({
@@ -17,14 +25,6 @@ const makeAgent = (overrides: Partial<DynamicAgentInput> & Pick<DynamicAgentInpu
   updatedAt: "2024-01-01T00:00:00Z",
   ...overrides,
 });
-import {
-  activePanelComponentInSubSectionAtom,
-  buildStaticPanelDefinitions,
-  isMultiInstanceKind,
-  panelRegistriesEqual,
-  panelRegistryAtom,
-  registerPanelComponent,
-} from "./panelRegistry.ts";
 
 beforeEach(() => {
   localStorage.clear();

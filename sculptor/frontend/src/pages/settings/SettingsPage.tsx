@@ -68,7 +68,14 @@ const getDisplayName = (section: SettingsSection): string => SECTION_DISPLAY_NAM
 const activeSectionAtom = atomWithStorage<SettingsSection>("sculptor-settings-active-section", SettingsSection.GENERAL);
 
 export const SettingsPage = (): ReactElement => {
-  const [activeSection, setActiveSection] = useAtom(activeSectionAtom);
+  const [storedSection, setActiveSection] = useAtom(activeSectionAtom);
+  // A persisted section id can outlive the section it names (e.g. a section that
+  // existed in an earlier build is gone here). An unknown value would leave the
+  // nav unhighlighted, the mobile Select trigger blank, and every content branch
+  // false — so fall back to General, mirroring the ?section= guard below.
+  const activeSection: SettingsSection = (Object.values(SettingsSection) as Array<string>).includes(storedSection)
+    ? storedSection
+    : SettingsSection.GENERAL;
   const [searchParams] = useSearchParams();
   const { install, isInstalling } = useInstallUpdate();
 

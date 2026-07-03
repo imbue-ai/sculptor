@@ -13,9 +13,9 @@
 // scroll-clamping can leave the dragged item short of its target — so closestCenter/
 // closestCorners pick the wrong section. Instead the getter records the section it
 // stepped to, and the collision detection returns exactly that during a keyboard drag
-// (identified by the absence of pointer coordinates); pointer drags fall back to
-// closestCenter. The recorded target is reset at the start of every drag so it never
-// leaks across drags or into a pointer drag.
+// (identified by the absence of pointer coordinates); pointer drags resolve via
+// pointerWithin, falling back to rectIntersection. The recorded target is reset at the
+// start of every drag so it never leaks across drags or into a pointer drag.
 
 import type { CollisionDetection, DroppableContainer, KeyboardCoordinateGetter, UniqueIdentifier } from "@dnd-kit/core";
 import { closestCorners, getFirstCollision, KeyboardCode, pointerWithin, rectIntersection } from "@dnd-kit/core";
@@ -40,6 +40,24 @@ export function resetKeyboardDropTarget(): void {
   keyboardDropTargetId = null;
 }
 
+// The pointer's live viewport position during a pointer drag, captured from the
+// collision detection below (dnd-kit passes it the raw activation-plus-translate
+// coordinates, which stay in viewport space even as scrollable ancestors scroll).
+// The provider reads this to compute the insertion slot: activatorEvent.clientX plus
+// event.delta.x drifts by the accumulated scroll once the overflowing tab strip
+// auto-scrolls mid-drag, because event.delta folds in that scroll adjustment. Null
+// during keyboard drags (no pointer) and between drags.
+type PointerPosition = { x: number; y: number };
+let dragPointerCoordinates: PointerPosition | null = null;
+
+export function getDragPointerCoordinates(): PointerPosition | null {
+  return dragPointerCoordinates;
+}
+
+export function resetDragPointerCoordinates(): void {
+  dragPointerCoordinates = null;
+}
+
 export const panelKeyboardCoordinateGetter: KeyboardCoordinateGetter = (
   event,
   { context: { active, droppableRects, droppableContainers, collisionRect } },
@@ -56,6 +74,16 @@ export const panelKeyboardCoordinateGetter: KeyboardCoordinateGetter = (
   const candidates: Array<DroppableContainer> = [];
   for (const container of droppableContainers.getEnabled()) {
     if (container === undefined || container.disabled) {
+      continue;
+    }
+
+    // Never step back into the droppable the drag currently occupies. The dragged item
+    // sits centered inside it, so the Up/Down filters (which compare tops only) would
+    // re-admit it, and closestCorners can then prefer it over the real neighbor — e.g.
+    // a full-width bottom strip beats the top-row sections at narrow content widths —
+    // turning the arrow press into a silent no-op. The drag-start seed makes this also
+    // exclude the source section on the first press.
+    if (container.id === keyboardDropTargetId) {
       continue;
     }
     const rect = droppableRects.get(container.id);
@@ -125,6 +153,9 @@ export const panelKeyboardCoordinateGetter: KeyboardCoordinateGetter = (
 // in a tall section could resolve to a different section. Fall back to rectIntersection
 // when the pointer sits in a gap between droppables so the drag still finds a target.
 export const panelCollisionDetection: CollisionDetection = (args) => {
+  // dnd-kit recomputes collisions in the same cycle it fires drag-move/over, so
+  // stashing the pointer here keeps it in lockstep with the resolved `over`.
+  dragPointerCoordinates = args.pointerCoordinates;
   if (args.pointerCoordinates === null && keyboardDropTargetId !== null) {
     return [{ id: keyboardDropTargetId }];
   }

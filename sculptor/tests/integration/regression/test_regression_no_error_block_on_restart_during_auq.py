@@ -21,6 +21,7 @@ from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -41,9 +42,9 @@ _AUQ_PROMPT = 'fake_claude:ask_user_question `{"questions": [{"question": "Pick 
 
 
 def _open_workspace_after_restart(page: Page) -> None:
-    workspace_tab = page.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW).first
-    expect(workspace_tab).to_be_visible(timeout=_RESTART_VISIBILITY_TIMEOUT_MS)
-    workspace_tab.click()
+    workspace_row = get_workspace_sidebar(page).get_workspace_rows().first
+    expect(workspace_row).to_be_visible(timeout=_RESTART_VISIBILITY_TIMEOUT_MS)
+    workspace_row.click()
 
 
 @user_story("not see a misleading 'Agent died' error after restarting Sculptor mid-question")

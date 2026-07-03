@@ -3,8 +3,8 @@
 // metadata here; their actual components are supplied through registerPanelComponent
 // at import time so this module never forward-imports components
 // that do not exist yet. Dynamic agent/terminal panels are derived in dynamicPanels.
-// There is NO enabled/defaultEnabled/isBuiltin flag — the Panels settings page is
-// gone.
+// Panels carry no enable/disable flags; a panel's visibility is purely its placement
+// in the layout.
 
 import { atom } from "jotai";
 import { atomFamily, selectAtom } from "jotai/utils";
@@ -123,10 +123,11 @@ export const panelRegistryAtom = atom<ReadonlyArray<PanelDefinition>>(buildStati
 // all of the stable, render-relevant fields match. A registry rebuild on a task tick
 // produces fresh PanelDefinition objects even when nothing a tab cares about changed,
 // so without this comparator selectAtom would re-emit (new object reference) and
-// re-render the tab every tick. `component` is identity-stable (registeredComponents
-// map / dynamicPanels componentCache) and `dotStatus` is a scalar, so comparing these
-// fields suppresses spurious re-emits while still re-rendering on a real change (e.g.
-// rename or dot-status change).
+// re-render the tab every tick. `component` and `icon` are identity-stable
+// (registeredComponents map / dynamicPanels componentCache; icons are module
+// constants) and `dotStatus` is a scalar, so comparing these fields suppresses
+// spurious re-emits while still re-rendering on a real change (e.g. rename or
+// dot-status change).
 //
 // The callback fields (contextMenuActions / onRequestClose / onRename) are deliberately
 // omitted: every registry derivation rebuilds them as fresh closures, so comparing them
@@ -141,6 +142,7 @@ function panelDefinitionEqual(a: PanelDefinition | undefined, b: PanelDefinition
       b !== undefined &&
       a.id === b.id &&
       a.displayName === b.displayName &&
+      a.icon === b.icon &&
       a.kind === b.kind &&
       a.defaultSection === b.defaultSection &&
       a.dotStatus === b.dotStatus &&

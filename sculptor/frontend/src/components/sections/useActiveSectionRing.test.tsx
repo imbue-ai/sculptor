@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { activeSectionRingNonceAtom, activeSectionRingVisibleAtom, RING_VISIBLE_MS } from "./transientAtoms.ts";
@@ -11,6 +12,14 @@ describe("useActiveSectionRing", () => {
 
   const wrapper = ({ children }: { children: ReactNode }): ReactElement => (
     <Provider store={store}>{children}</Provider>
+  );
+
+  // Production mounts under <React.StrictMode> (Main.tsx), which re-runs effects while
+  // preserving refs. The mount guard must stay idempotent under that double invocation.
+  const strictWrapper = ({ children }: { children: ReactNode }): ReactElement => (
+    <StrictMode>
+      <Provider store={store}>{children}</Provider>
+    </StrictMode>
   );
 
   beforeEach(() => {
@@ -24,6 +33,13 @@ describe("useActiveSectionRing", () => {
 
   it("does not flash the ring on initial mount", () => {
     renderHook(() => useActiveSectionRing(), { wrapper });
+    expect(store.get(activeSectionRingVisibleAtom)).toBe(false);
+    act(() => vi.advanceTimersByTime(RING_VISIBLE_MS + 1));
+    expect(store.get(activeSectionRingVisibleAtom)).toBe(false);
+  });
+
+  it("does not flash the ring on initial mount under StrictMode's double effect run", () => {
+    renderHook(() => useActiveSectionRing(), { wrapper: strictWrapper });
     expect(store.get(activeSectionRingVisibleAtom)).toBe(false);
     act(() => vi.advanceTimersByTime(RING_VISIBLE_MS + 1));
     expect(store.get(activeSectionRingVisibleAtom)).toBe(false);

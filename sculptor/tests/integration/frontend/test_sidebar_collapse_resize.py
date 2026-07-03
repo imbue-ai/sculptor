@@ -26,13 +26,12 @@ def test_collapse_hides_sidebar_and_shows_expand_icon(
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Collapse WS")
 
     sidebar = get_workspace_sidebar(page)
-    sidebar_root = page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
-    expect(sidebar_root).to_be_visible()
+    expect(sidebar).to_be_visible()
 
     sidebar.collapse()
 
     # The rail is gone and only the expand icon remains.
-    expect(sidebar_root).to_be_hidden()
+    expect(sidebar).to_be_hidden()
     expect(sidebar.get_expand_icon()).to_be_visible()
 
 
@@ -46,15 +45,14 @@ def test_expand_restores_sidebar(
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Expand WS")
 
     sidebar = get_workspace_sidebar(page)
-    sidebar_root = page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
 
     sidebar.collapse()
-    expect(sidebar_root).to_be_hidden()
+    expect(sidebar).to_be_hidden()
 
     sidebar.expand()
 
     # The rail is back and the expand icon is gone.
-    expect(sidebar_root).to_be_visible()
+    expect(sidebar).to_be_visible()
     expect(sidebar.get_expand_icon()).to_be_hidden()
 
 
@@ -72,10 +70,9 @@ def test_resize_handle_widens_sidebar(
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Sidebar Resize WS")
 
     sidebar = get_workspace_sidebar(page)
-    sidebar_root = page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
-    expect(sidebar_root).to_be_visible()
+    expect(sidebar).to_be_visible()
 
-    start_box = sidebar_root.bounding_box()
+    start_box = sidebar.bounding_box()
     assert start_box is not None
     start_width = start_box["width"]
 
@@ -85,10 +82,14 @@ def test_resize_handle_widens_sidebar(
     for _ in range(3):
         handle.press("ArrowRight")
 
-    grown_box = sidebar_root.bounding_box()
-    assert grown_box is not None
-    assert grown_box["width"] > start_width, (
-        f"Sidebar should widen after ArrowRight: start={start_width:.0f}, grown={grown_box['width']:.0f}"
+    # Poll the rendered width rather than reading a once-evaluated bounding box, so a
+    # slow relayout under CI load is tolerated. Only the direction of change is asserted.
+    page.wait_for_function(
+        """({ testId, startWidth }) => {
+            const el = document.querySelector(`[data-testid="${testId}"]`);
+            return el && el.getBoundingClientRect().width > startWidth;
+        }""",
+        arg={"testId": str(ElementIDs.WORKSPACE_SIDEBAR), "startWidth": start_width},
     )
 
 
@@ -106,7 +107,6 @@ def test_resize_clamps_to_a_minimum_width(
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Sidebar Clamp WS")
 
     sidebar = get_workspace_sidebar(page)
-    sidebar_root = page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
 
     handle = sidebar.get_resize_handle()
     expect(handle).to_be_visible()
@@ -115,7 +115,14 @@ def test_resize_clamps_to_a_minimum_width(
     for _ in range(40):
         handle.press("ArrowLeft")
 
-    clamped_box = sidebar_root.bounding_box()
-    assert clamped_box is not None
-    assert clamped_box["width"] > 100, f"Sidebar must clamp above zero, got {clamped_box['width']:.0f}"
-    expect(sidebar_root).to_be_visible()
+    # Poll the rendered width rather than reading a once-evaluated bounding box, so a
+    # slow relayout under CI load is tolerated: the sidebar must remain with a clamped
+    # (non-zero) width, not zero.
+    page.wait_for_function(
+        """(testId) => {
+            const el = document.querySelector(`[data-testid="${testId}"]`);
+            return el && el.getBoundingClientRect().width > 100;
+        }""",
+        arg=str(ElementIDs.WORKSPACE_SIDEBAR),
+    )
+    expect(sidebar).to_be_visible()

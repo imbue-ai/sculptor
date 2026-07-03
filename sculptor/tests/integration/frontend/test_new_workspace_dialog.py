@@ -16,6 +16,7 @@ the empty first-run page — is what opens; the empty-page first-create path is
 covered in test_empty_first_run.py.
 """
 
+from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
@@ -32,7 +33,7 @@ from sculptor.testing.user_stories import user_story
 from sculptor.testing.utils import get_playwright_modifier_key
 
 
-def _seed_one_workspace(page: object) -> None:
+def _seed_one_workspace(page: Page) -> None:
     """Create one workspace so the app is past the empty first-run state.
 
     The dialog's entry points (Cmd/Meta+T, Cmd+K, the repo "+") are only live
@@ -138,11 +139,10 @@ def test_cmd_enter_creates_workspace(sculptor_instance_: SculptorInstance) -> No
 
     dialog = PlaywrightNewWorkspaceDialog(page)
     dialog.open_via_shortcut()
-    dialog.create(workspace_name="Cmd Enter WS", via_keyboard=True)
-
-    chat_panel = page.get_by_test_id(ElementIDs.CHAT_PANEL)
-    expect(chat_panel).to_be_visible(timeout=60_000)
-    expect(dialog.get_dialog()).to_have_count(0)
+    # create_and_wait_for_chat_panel waits for the dialog to CLOSE (via onCreated,
+    # after the create navigates) before checking the chat panel, so it doesn't
+    # pass on the seed workspace's still-mounted chat panel under the overlay.
+    dialog.create_and_wait_for_chat_panel(workspace_name="Cmd Enter WS", via_keyboard=True)
 
 
 @user_story("to create a workspace without typing a prompt")
@@ -154,9 +154,9 @@ def test_create_without_prompt(sculptor_instance_: SculptorInstance) -> None:
     dialog = PlaywrightNewWorkspaceDialog(page)
     dialog.open_via_shortcut()
     expect(dialog.get_prompt_textarea()).to_have_value("")
+    # create_and_wait_for_chat_panel asserts the dialog closed and the chat panel
+    # is visible, which is the whole point here: create succeeds with no prompt.
     dialog.create_and_wait_for_chat_panel(workspace_name="Promptless WS")
-
-    expect(page.get_by_test_id(ElementIDs.CHAT_PANEL)).to_be_visible()
 
 
 @user_story("to keep the dialog open after create, with the repo retained but the title/prompt reset")
@@ -174,11 +174,17 @@ def test_keep_open_resets_but_retains(sculptor_instance_: SculptorInstance) -> N
     dialog = PlaywrightNewWorkspaceDialog(page)
     dialog.open_via_shortcut()
 
-    repo_before = dialog.get_project_selector().text_content()
+    project_selector = dialog.get_project_selector()
+    # The MRU repo seeds the selector asynchronously; wait for it to populate
+    # before snapshotting so the retention check below compares the real repo
+    # rather than an empty placeholder.
+    expect(project_selector).not_to_have_text("")
+    repo_before = project_selector.text_content()
+    assert repo_before, "project selector should display the seeded repo"
     dialog.get_prompt_textarea().fill("first task")
     # The per-prompt agent settings (incl. plan mode) surface once a prompt is
     # typed. Turn plan mode on for this create so the reset is observable.
-    plan_toggle = dialog.get_form().get_by_test_id(ElementIDs.PLAN_MODE_TOGGLE)
+    plan_toggle = dialog.get_plan_mode_toggle()
     plan_toggle.click()
     expect(plan_toggle).to_have_attribute("data-active", "true")
     # create() normalizes the (persisted) keep-open switch, so request it on here
@@ -190,7 +196,7 @@ def test_keep_open_resets_but_retains(sculptor_instance_: SculptorInstance) -> N
     expect(dialog.get_workspace_name_input()).to_have_value("")
     expect(dialog.get_prompt_textarea()).to_have_value("")
     # The repo selection is retained.
-    expect(dialog.get_project_selector()).to_have_text(repo_before or "")
+    expect(dialog.get_project_selector()).to_have_text(repo_before)
     # Plan mode does NOT carry over: type a second prompt to reveal the agent
     # settings again and confirm the toggle is back off.
     dialog.get_prompt_textarea().fill("second task")
@@ -230,7 +236,6 @@ def test_agent_type_picker_defaults_to_claude(sculptor_instance_: SculptorInstan
 def test_agent_type_picker_gates_pi(sculptor_instance_: SculptorInstance) -> None:
     """The pi option appears in the agent-type select only when pi-agent is enabled."""
     page = sculptor_instance_.page
-    disable_pi_agent(page)
     _seed_one_workspace(page)
 
     try:

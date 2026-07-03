@@ -1,16 +1,17 @@
-// The new-shell workspace keyboard shortcuts (the section/panel analog of the docking
-// shell's usePageLayoutKeyboardShortcuts, which is NOT extended). Every handler registers through the shared keybindings
-// registry (useKeybindingHandler), so each binding appears on and is configurable from
-// the keybindings settings page.
+// The workspace section/panel keyboard shortcuts: section collapse/cycle/maximize,
+// panel cycling, new-agent, and workspace delete. Every handler registers through the
+// shared keybindings registry (useKeybindingHandler), so each binding appears on and
+// is configurable from the keybindings settings page.
 //
 // Mounted once by WorkspaceLayoutShell, which only renders on a workspace page, so the
-// empty first-run state (no workspaces) never mounts these handlers, so global
-// shortcuts are disabled in the empty state for free.
+// empty first-run state (no workspaces) never mounts these handlers and their global
+// shortcuts are disabled there for free.
 //
-// new_workspace (Meta+T) and toggle_sidebar are intentionally NOT handled here: both
-// are served by the surviving page-layout hook (usePageLayoutKeyboardShortcuts), which
-// mounts on every sidebar-bearing route (workspace, Home, Settings). Registering either
-// here too would fire two handlers per press on workspace pages.
+// new_workspace (Meta+T) and toggle_sidebar are handled by useGlobalKeyboardShortcuts,
+// and workspace cycling (next_tab/previous_tab) by useWorkspaceCycleShortcuts — both
+// mounted on every sidebar-bearing route (workspace, Home, Settings). Registering any
+// of them here too would fire two handlers per press on workspace pages.
+//
 // Cycling reads live state through the Jotai store at press time to avoid stale
 // closures and per-keystroke re-subscription.
 
@@ -18,9 +19,7 @@ import { useSetAtom, useStore } from "jotai";
 import { useCallback } from "react";
 
 import { useKeybindingHandler } from "~/common/keybindings";
-import { useImbueNavigate } from "~/common/NavigateUtils.ts";
-import { openWorkspaceTabAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
-import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
+import { workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 import { workspaceDeleteTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
 
 import { listSubSections } from "./layoutQueries.ts";
@@ -33,12 +32,14 @@ import {
   workspaceLayoutAtom,
 } from "./sectionAtoms.ts";
 import type { PanelId } from "./sectionTypes.ts";
-import { toSection } from "./sectionTypes.ts";
+import { isSecondary, primaryOf, toSection } from "./sectionTypes.ts";
 import { maximizedSectionAtom } from "./transientAtoms.ts";
 import { useAddPanelActions } from "./useAddPanelActions.ts";
 
 type CycleDirection = 1 | -1;
 
+// A missing current (-1) anchors at index 0, so the step lands on the neighbour of the
+// first element (forward → second, backward → last).
 function stepIndex(length: number, current: number, direction: CycleDirection): number {
   const base = current === -1 ? 0 : current;
   return (base + direction + length) % length;
@@ -69,16 +70,30 @@ export const useWorkspaceShortcuts = (): void => {
   const jumpToSection = useSetAtom(jumpToSectionAtom);
   const setActivePanel = useSetAtom(setActivePanelAtom);
   const setMaximizedSection = useSetAtom(maximizedSectionAtom);
-  const openWorkspaceTab = useSetAtom(openWorkspaceTabAtom);
   const setWorkspaceDeleteTarget = useSetAtom(workspaceDeleteTargetAtom);
-  const { navigateToWorkspace } = useImbueNavigate();
   const { createRecentAgent } = useAddPanelActions();
 
   // Cycle the active section through the expanded sub-sections incl. split halves,
-  // pulsing the ring on each step.
+  // pulsing the ring on each step. While a section is maximized only one section is on
+  // screen, so the cycle moves the maximize (and the active section) across the
+  // expanded sections' primaries instead — keeping every step visible rather than
+  // stepping the ring, and later panel cycling, through hidden sections.
   const cycleSection = useCallback(
     (direction: CycleDirection): void => {
       const layout = store.get(workspaceLayoutAtom);
+      if (store.get(maximizedSectionAtom) !== null) {
+        // A split section's hidden half is never shown while maximized, so only
+        // primaries participate in the maximized cycle.
+        const primaries = listSubSections(layout, { includeCollapsed: false }).filter((sub) => !isSecondary(sub));
+        if (primaries.length === 0) {
+          return;
+        }
+        const currentSection = toSection(layout.activeSubSection ?? "center");
+        const next = primaries[stepIndex(primaries.length, primaries.indexOf(currentSection), direction)];
+        setMaximizedSection(toSection(next));
+        jumpToSection({ subSection: next });
+        return;
+      }
       // The active-able sub-sections: the section-cycle only steps through expanded
       // sections (and their split halves) — a collapsed section cannot be active.
       const order = listSubSections(layout, { includeCollapsed: false });
@@ -89,7 +104,7 @@ export const useWorkspaceShortcuts = (): void => {
       const next = order[stepIndex(order.length, order.indexOf(current), direction)];
       jumpToSection({ subSection: next });
     },
-    [store, jumpToSection],
+    [store, jumpToSection, setMaximizedSection],
   );
 
   // Cycle the active panel within the active sub-section; wraps at the ends, skips
@@ -98,7 +113,11 @@ export const useWorkspaceShortcuts = (): void => {
   const cyclePanel = useCallback(
     (direction: CycleDirection): void => {
       const layout = store.get(workspaceLayoutAtom);
-      const activeSub = layout.activeSubSection ?? "center";
+      // While maximized only the maximized section's primary is on screen; cycle the
+      // panels the user can actually see rather than a (possibly hidden) active
+      // sub-section.
+      const maximized = store.get(maximizedSectionAtom);
+      const activeSub = maximized !== null ? primaryOf(maximized) : (layout.activeSubSection ?? "center");
       const openPanels = store.get(panelsInSubSectionAtom(activeSub));
       const renderablePanelIds = new Set(store.get(panelRegistryAtom).map((definition) => definition.id));
       const active = store.get(activePanelIdInSubSectionAtom(activeSub));
@@ -119,25 +138,6 @@ export const useWorkspaceShortcuts = (): void => {
     const layout = store.get(workspaceLayoutAtom);
     setMaximizedSection(toSection(layout.activeSubSection ?? "center"));
   }, [store, setMaximizedSection]);
-
-  // Cycle to the adjacent workspace, wrapping at the ends. Reads the workspace list
-  // imperatively at press time (same rationale as cycleSection). Opening the tab
-  // before navigating gives keyboard cycling the same end state as clicking the
-  // workspace in the sidebar (the palette's navigate does the same).
-  const cycleWorkspace = useCallback(
-    (direction: CycleDirection): void => {
-      const workspaces = store.get(workspacesArrayAtom) ?? [];
-      if (workspaces.length < 2) {
-        return;
-      }
-      const currentId = store.get(activeWorkspaceIdAtom);
-      const currentIndex = workspaces.findIndex((workspace) => workspace.objectId === currentId);
-      const next = workspaces[stepIndex(workspaces.length, currentIndex, direction)];
-      openWorkspaceTab(next.objectId);
-      navigateToWorkspace(next.objectId);
-    },
-    [store, openWorkspaceTab, navigateToWorkspace],
-  );
 
   // Open the delete-confirmation dialog for the current workspace (the same dialog
   // the palette's workspace Delete action drives, via workspaceDeleteTargetAtom).
@@ -187,26 +187,5 @@ export const useWorkspaceShortcuts = (): void => {
   );
   // New agent always lands in center regardless of the active section.
   useKeybindingHandler("new_agent", createRecentAgent);
-  // Workspace navigation and deletion. next_tab/previous_tab keep their legacy ids
-  // (see definitions.ts) but cycle the sidebar's workspace list.
-  useKeybindingHandler(
-    "next_tab",
-    useCallback(() => cycleWorkspace(1), [cycleWorkspace]),
-  );
-  useKeybindingHandler(
-    "previous_tab",
-    useCallback(() => cycleWorkspace(-1), [cycleWorkspace]),
-  );
   useKeybindingHandler("delete_workspace", beginDeleteWorkspace);
-  // The palette's "Next/Previous workspace" rows dispatch through the command-action
-  // registry (runtime.ui.nextWorkspaceTab → "workspace.nextTab"), so register the
-  // same handlers there — one implementation for the keybinding and the palette.
-  useRegisterCommandAction(
-    "workspace.nextTab",
-    useCallback(() => cycleWorkspace(1), [cycleWorkspace]),
-  );
-  useRegisterCommandAction(
-    "workspace.previousTab",
-    useCallback(() => cycleWorkspace(-1), [cycleWorkspace]),
-  );
 };

@@ -1,4 +1,4 @@
-import { CircleDot, Pencil, Trash2 } from "lucide-react";
+import { CircleDot, Trash2 } from "lucide-react";
 
 import { ElementIds } from "../../../api";
 import type { AgentAction, AgentActionRuntime } from "./types.ts";
@@ -9,16 +9,14 @@ import type { AgentAction, AgentActionRuntime } from "./types.ts";
  * right-click menu builds its own item list (see `dynamicPanels.tsx`) because
  * its extra entries — the copy/diagnostics items — depend on per-agent
  * diagnostics fetched outside the palette; those are not surfaced here.
+ *
+ * Rename is intentionally absent: agent rename is the panel tab's inline edit
+ * (local state in `SectionHeader`), which the palette runtime has no way to
+ * trigger. Don't add a rename descriptor here without wiring a real rename
+ * flow behind it — a descriptor whose perform goes nowhere still renders as a
+ * selectable palette row.
  */
 export const buildAgentActions = (runtime: AgentActionRuntime): ReadonlyArray<AgentAction> => [
-  {
-    id: "rename",
-    title: "Rename",
-    icon: Pencil,
-    testId: ElementIds.TAB_CONTEXT_MENU_RENAME,
-    paletteTitleSuffix: "name",
-    perform: (agent): void => runtime.beginRename(agent),
-  },
   {
     id: "mark_unread",
     title: "Mark as unread",

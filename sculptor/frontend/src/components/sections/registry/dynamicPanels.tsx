@@ -108,8 +108,8 @@ export type DynamicAgentInput = {
   // sync hook has fetched them.
   diagnostics?: DynamicAgentDiagnostics;
   // Closing an agent tab deletes the agent with confirmation + optimistic rollback.
-  // Supplied by the sync hook; defaults to a no-op so this module
-  // type-checks before that wiring lands.
+  // Supplied by the sync hook; when unset, the tab close falls back to
+  // closePanelAtom (removes the panel from the layout without deleting the agent).
   onRequestClose?: () => void;
   // Committing an inline tab rename persists the new title on the agent;
   // supplied by the sync hook (renameWorkspaceAgent + optimistic title update).
@@ -156,7 +156,6 @@ export type DynamicTerminalInput = {
   workspaceId: string;
   index: number;
   displayName: string;
-  contextMenuActions?: ReadonlyArray<PanelContextMenuItem>;
   // Closing a terminal tab kills the backend shell with a confirmation.
   // Supplied by the sync hook; absent for callers that don't wire the close flow.
   onRequestClose?: () => void;
@@ -200,7 +199,6 @@ export function deriveDynamicPanels(
       kind: "terminal",
       defaultSection: "bottom",
       component: getTerminalComponent(terminal.workspaceId, terminal.index),
-      contextMenuActions: terminal.contextMenuActions,
       onRequestClose: terminal.onRequestClose,
       onRename: terminal.onRename,
     });

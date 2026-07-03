@@ -1,4 +1,4 @@
-import { useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { useEffect, useMemo } from "react";
 
 import type { AskUserQuestionData, ChatMessage, TaskStatus } from "~/api";
@@ -12,6 +12,7 @@ import {
   useSmoothStreamingOnTaskSwitch,
   useSmoothStreamingViewportObserver,
 } from "~/pages/workspace/hooks/useSmoothStreamingViewportObserver.ts";
+import { activeChatAgentIdAtomFamily } from "~/pages/workspace/panels/workspaceAgentActions.ts";
 
 type UseChatDataArgs = {
   taskID: string;
@@ -65,10 +66,20 @@ export const useChatData = ({ taskID, workspaceID, appendTextRef, insertSkillRef
   const bottomSentinelRef = useSmoothStreamingViewportObserver();
   useSmoothStreamingOnTaskSwitch(taskID, bottomSentinelRef);
 
-  // Bind the action closures whenever taskID/model/refs change. No cleanup
-  // here — a re-run just overwrites the previous closures, and the unmount
-  // teardown lives in its own effect below.
+  // `chatActionsAtom` is a single slot shared by workspace-scoped consumers
+  // (SkillsPanel, ActionsPanel, PrButton, the command palette), but several
+  // chat panels can be mounted at once — one per placed agent panel. Only the
+  // panel for the workspace's active chat agent registers its closures: that
+  // is the same resolution the consumers gate on, so actions reach the agent
+  // they display as their target instead of whichever panel bound last, and
+  // one panel unmounting cannot strand a surviving panel's registration.
+  const isChatActionsOwner = useAtomValue(activeChatAgentIdAtomFamily(workspaceID)) === taskID;
+
+  // Bind the action closures whenever ownership/taskID/model/refs change. No
+  // cleanup here — a re-run just overwrites the previous closures, and the
+  // teardown lives in its own ownership-scoped effect below.
   useEffect(() => {
+    if (!isChatActionsOwner) return;
     setChatActions((prev) => ({
       ...prev,
       appendText: (text: string): void => {
@@ -85,23 +96,29 @@ export const useChatData = ({ taskID, workspaceID, appendTextRef, insertSkillRef
         });
       },
     }));
-  }, [setChatActions, appendTextRef, insertSkillRef, workspaceID, taskID, taskModel]);
+  }, [setChatActions, isChatActionsOwner, appendTextRef, insertSkillRef, workspaceID, taskID, taskModel]);
 
   // Track `isDisabled` separately so a queue-length change doesn't tear down
   // and re-bind the action closures on every queued-message mutation.
   useEffect(() => {
+    if (!isChatActionsOwner) return;
     const isDisabled = queuedChatMessages.length > 0;
     setChatActions((prev) => ({ ...prev, isDisabled }));
-  }, [setChatActions, queuedChatMessages.length]);
+  }, [setChatActions, isChatActionsOwner, queuedChatMessages.length]);
 
-  // On unmount, null the closures so consumers like SkillsPanel don't hold
-  // stale references to a torn-down editor or task, and flip isDisabled back
-  // to true so they treat the chat as unavailable.
+  // When this panel stops owning the slot (its agent is no longer the active
+  // chat agent, or the panel unmounts while owning), null the closures so
+  // consumers don't hold stale references to a torn-down editor or task, and
+  // flip isDisabled back to true so they treat the chat as unavailable. The
+  // cleanup is registered only while owning, so a non-owner unmounting never
+  // wipes the owner's registration; on an ownership hand-off React runs this
+  // cleanup before the new owner's bind effect, which then re-registers.
   useEffect(() => {
+    if (!isChatActionsOwner) return undefined;
     return (): void => {
       setChatActions({ appendText: null, insertSkill: null, sendMessage: null, isDisabled: true });
     };
-  }, [setChatActions]);
+  }, [setChatActions, isChatActionsOwner]);
 
   return {
     chatMessages,

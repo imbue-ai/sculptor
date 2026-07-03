@@ -21,17 +21,11 @@ from sculptor.testing.utils import get_playwright_modifier_key
 class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
     """Page object for the workspace shell — the sidebar + section grid.
 
-    This is the UI-refresh shim: the old top-bar/tab API has been
-    replaced by a sidebar + section API while the cross-cutting survivors
-    (keyboard shortcuts, command palette, warning banner, the git-init /
-    add-repo / project-path / keyboard-shortcuts dialogs) keep their original
-    method signatures so the content-only majority of tests keep passing.
-
-    The old tab getters (``get_home_tab``, the ``get_tab_context_menu_*`` set,
-    ``get_topbar``, ``get_bottom_bar``, …) targeted surfaces that no longer
-    render on the workspace route; the tests that drove them are deleted.
-    Use ``get_workspace_sidebar()`` for navigation and ``get_section()``
-    for the panel grid.
+    Navigation lives in the sidebar (``get_workspace_sidebar()``) and content
+    in the section grid (``get_section()``). This page object also exposes the
+    cross-cutting surfaces layered over the shell: keyboard shortcuts, the
+    command palette, the warning banner, and the git-init / add-repo /
+    project-path / keyboard-shortcuts dialogs.
     """
 
     # -- Sidebar + sections (the new layout spine) --
@@ -43,8 +37,7 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
     def get_workspace_peek_popover(self) -> PlaywrightWorkspacePeekElement:
         """Get the workspace peek popover POM (visible only while hovering a sidebar row).
 
-        The peek follows the hovered workspace **row** in the sidebar (it used to
-        follow the workspace tab); the popover content + testids are unchanged.
+        The peek follows the hovered workspace **row** in the sidebar.
         """
         locator = self.get_by_test_id(ElementIDs.WORKSPACE_PEEK_POPOVER)
         return PlaywrightWorkspacePeekElement(locator=locator, page=self._page)
@@ -58,7 +51,7 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         """
         return PlaywrightWorkspaceSection(page=self._page, sub_section=sub_section)
 
-    # -- Settings (reachable from the sidebar; the page marker survives) --
+    # -- Settings (reachable from the sidebar) --
 
     def get_settings_page_locator(self) -> Locator:
         return self.get_by_test_id(ElementIDs.SETTINGS_PAGE)
@@ -77,18 +70,18 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
     def get_inline_rename_input(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.INLINE_RENAME_INPUT)
 
-    # -- Keyboard-shortcuts dialog (cross-cutting survivor) --
+    # -- Keyboard-shortcuts dialog (cross-cutting) --
 
     def get_keyboard_shortcuts_dialog(self) -> PlaywrightKeyboardShortcutsDialogElement:
         locator = self.get_by_test_id(ElementIDs.KEYBOARD_SHORTCUTS_DIALOG)
         return PlaywrightKeyboardShortcutsDialogElement(locator=locator, page=self._page)
 
-    # -- Report-a-bug popover (cross-cutting survivor; re-homed to the sidebar) --
+    # -- Report-a-bug popover (cross-cutting; opened from the sidebar) --
 
     def get_report_problem_popover(self) -> Locator:
         return self.get_by_test_id(ElementIDs.REPORT_PROBLEM_POPOVER)
 
-    # -- Command palette (cross-cutting survivor; open path moves to the sidebar) --
+    # -- Command palette (cross-cutting; opened from the sidebar) --
 
     def get_command_palette(self) -> PlaywrightCommandPaletteElement:
         """Get the command palette locator (visible only when open)."""
@@ -134,10 +127,8 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
     def open_command_palette(self) -> PlaywrightCommandPaletteElement:
         """Open the command palette by clicking the sidebar Cmd+K link.
 
-        The open path moved from the old top-bar search button to the sidebar
-        ``SIDEBAR_CMDK_LINK``; the method signature is unchanged so
-        existing callers keep working. A workspace is ensured first because the
-        open affordance is disabled in the empty first-run state.
+        Clicks the sidebar ``SIDEBAR_CMDK_LINK``. A workspace is ensured first
+        because the open affordance is disabled in the empty first-run state.
         """
         self.ensure_workspace_exists()
         cmdk_link = self.get_workspace_sidebar().get_cmdk_link()
@@ -160,7 +151,7 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         expect(palette).to_be_visible()
         return palette
 
-    # -- Keyboard helpers (cross-cutting survivor) --
+    # -- Keyboard helpers (cross-cutting) --
 
     def press_keyboard_shortcut(self, shortcut: str) -> None:
         self._page.keyboard.press(shortcut)
@@ -177,7 +168,7 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         mod_key = get_playwright_modifier_key()
         self.press_keyboard_shortcut(f"{mod_key}+Shift+d")
 
-    # -- Warning banner + dialogs (cross-cutting survivors) --
+    # -- Warning banner + dialogs (cross-cutting) --
 
     def get_warning_banner(self) -> PlaywrightWarningBannerElement:
         """Get the warning banner element. Only visible when a warning is active."""
@@ -197,7 +188,7 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         dialog_locator = self.get_by_test_id(ElementIDs.PROJECT_PATH_DIALOG)
         return PlaywrightProjectPathDialogElement(locator=dialog_locator, page=self._page)
 
-    # -- Skills panel (survives as a registered panel; content getter kept) --
+    # -- Skills panel (a registered panel) --
 
     def get_skills_panel(self) -> PlaywrightSkillsPanelElement:
         """Get the SkillsPanel element. Only visible when its panel is active."""

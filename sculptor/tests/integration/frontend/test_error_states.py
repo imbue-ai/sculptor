@@ -147,8 +147,7 @@ def test_api_error_shows_error_in_workspace_peek_and_clears_on_return(
     # Step 2: Navigate away before the error fires.
     navigate_to_home_page(page)
 
-    # Step 3: Hover the workspace tab to open the peek popover.  Use a
-    # timeout that accounts for the delay — the error hasn't fired yet.
+    # Step 3: Hover the sidebar workspace row to open the peek popover.
     get_workspace_sidebar(page).get_workspace_rows().first.hover()
 
     workspace_peek = task_page.get_workspace_peek_popover()
@@ -158,7 +157,7 @@ def test_api_error_shows_error_in_workspace_peek_and_clears_on_return(
     banner = workspace_peek.get_banner()
     expect(banner).to_contain_text("error")
 
-    # Step 4: Navigate back to the workspace by clicking the tab.
+    # Step 4: Navigate back to the workspace by clicking the sidebar row.
     page.mouse.move(0, 0)  # Dismiss the popover first.
     navigate_to_workspace(page)
 
@@ -195,7 +194,7 @@ def test_crash_shows_error_in_workspace_peek_and_persists_on_return(
     # Step 2: Navigate away before the crash fires.
     navigate_to_home_page(page)
 
-    # Step 3: Hover the workspace tab to open the peek popover.
+    # Step 3: Hover the sidebar workspace row to open the peek popover.
     get_workspace_sidebar(page).get_workspace_rows().first.hover()
 
     workspace_peek = task_page.get_workspace_peek_popover()
@@ -205,7 +204,7 @@ def test_crash_shows_error_in_workspace_peek_and_persists_on_return(
     banner = workspace_peek.get_banner()
     expect(banner).to_contain_text("error")
 
-    # Step 4: Navigate back to the workspace by clicking the tab.
+    # Step 4: Navigate back to the workspace by clicking the sidebar row.
     page.mouse.move(0, 0)  # Dismiss the popover first.
     navigate_to_workspace(page)
 

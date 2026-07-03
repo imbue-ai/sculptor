@@ -20,7 +20,6 @@ from sculptor.testing.playwright_utils import blur_active_element
 from sculptor.testing.playwright_utils import navigate_to_home_page
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
-from sculptor.testing.playwright_utils import wait_for_workspace_list_loaded
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 from sculptor.testing.utils import get_playwright_modifier_key
@@ -39,12 +38,7 @@ def _ensure_workspace(sculptor_instance_: SculptorInstance) -> None:
     workspace list is empty, which is exactly the state the shared instance's
     per-test cleanup leaves behind. Tests that press a global shortcut must first
     create a workspace; this is idempotent (a no-op once one exists).
-
-    Shortcuts are also suppressed while the list is still LOADING, and
-    ensure_workspace_exists's momentary first-run probe misreads that window
-    as "workspaces exist" — so wait for the list to load first.
     """
-    wait_for_workspace_list_loaded(sculptor_instance_.page)
     PlaywrightProjectLayoutPage(page=sculptor_instance_.page).ensure_workspace_exists()
 
 

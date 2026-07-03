@@ -7,6 +7,7 @@ import { ElementIds, WorkspaceInitializationStrategy as Strategy } from "~/api";
 
 import styles from "./BranchNameField.module.scss";
 import type { BranchNameCollisionState } from "./hooks/useBranchNamePreview.ts";
+import { sanitizeBranchName } from "./sanitizeBranchName.ts";
 
 type BranchNameFieldProps = {
   mode: WorkspaceInitializationStrategy;
@@ -30,20 +31,6 @@ type BranchNameFieldProps = {
    */
   variant?: "chip" | "plain";
 };
-
-/**
- * Strip characters git rejects in branch names as the user types, so the pill
- * only ever shows a name the create call can accept. Mirrors git's ref rules:
- * whitespace collapses to a hyphen; the reserved ref characters are dropped;
- * runs of dots collapse and a leading dot is removed (git forbids ".." and a
- * leading ".").
- */
-const sanitizeBranchName = (raw: string): string =>
-  raw
-    .replace(/\s+/g, "-")
-    .replace(/[~^:?*[\]\\@{} ]/g, "")
-    .replace(/\.{2,}/g, ".")
-    .replace(/^\.+/, "");
 
 /**
  * The branch-name field: a monospace pill with input sanitization, a shuffle
@@ -77,6 +64,14 @@ export const BranchNameField = ({
   // its place instead. Once a name exists (re-roll/edit), the field stays put and
   // the pulsing sparkle carries the loading state.
   const isColdLoading = isLoading && !isManuallyEdited && value.trim() === "";
+  // The plain variant hugs its content so the shuffle button trails the branch
+  // text instead of floating at the end of a full-width row. The input is
+  // monospace, so 1ch maps to one glyph: size it to the value (or the
+  // placeholder while empty) with a 4ch floor, plus 1ch for the caret. Done in
+  // JS rather than CSS `field-sizing`, which Chromium supports but Firefox and
+  // Safari (the web build) don't. The chip variant flexes to fill its row and
+  // takes no explicit width.
+  const plainInputWidth = isPlain ? `${Math.max(value.length || placeholder.length, 4) + 1}ch` : undefined;
 
   return (
     <div className={styles.container} data-testid={ElementIds.NEW_WORKSPACE_CONTEXT_PILL}>
@@ -92,6 +87,7 @@ export const BranchNameField = ({
           <input
             type="text"
             className={styles.input}
+            style={{ width: plainInputWidth }}
             value={value}
             onChange={(e): void => onUserEdit(sanitizeBranchName(e.target.value))}
             placeholder={placeholder}

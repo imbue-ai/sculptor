@@ -35,9 +35,9 @@ from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
 # A registered terminal agent whose launch command announces readiness then
-# falls through to an idle login shell. The bare "terminal" agent type was
-# removed from the product; a registered agent — the model the bundled Claude CLI
-# agent uses — exercises the same idle-terminal rename path.
+# falls through to an idle login shell. Registered agents are the only
+# terminal-agent type (the model the bundled Claude CLI agent uses), and one
+# exercises the idle-terminal rename path.
 _IDLE_TERM_LAUNCH = "echo idle-term-ready"
 
 
@@ -88,33 +88,35 @@ def test_terminal_agent_external_rename_updates_tab_live(
     (registrations_dir / "idle-term.toml").write_text(
         f'display_name = "Idle Term"\nlaunch_command = "{_IDLE_TERM_LAUNCH}"\n'
     )
+    try:
+        # Step 1: Add a registered terminal agent. It is created second, so it is the
+        # tab at index 1 and is labeled "Idle Term 1". Drive it to idle so its
+        # startup task message can't mask the rename broadcast.
+        _create_terminal_agent(page)
+        expect(tabs).to_have_count(2)
+        terminal_tab = tabs.nth(1)
+        expect(terminal_tab).to_have_text("Idle Term 1")
+        _drive_terminal_to_idle(page)
 
-    # Step 1: Add a registered terminal agent. It is created second, so it is the
-    # tab at index 1 and is labeled "Idle Term 1". Drive it to idle so its
-    # startup task message can't mask the rename broadcast.
-    _create_terminal_agent(page)
-    expect(tabs).to_have_count(2)
-    terminal_tab = tabs.nth(1)
-    expect(terminal_tab).to_have_text("Idle Term 1")
-    _drive_terminal_to_idle(page)
+        # Step 2: Resolve the workspace and terminal-agent IDs via the backend API,
+        # exactly as the sculpt CLI does (list workspaces, then list agents).
+        base_url = sculptor_instance_.backend_api_url.rstrip("/")
+        workspaces = page.request.get(f"{base_url}/api/v1/workspaces/recent").json()["workspaces"]
+        workspace_id = only(ws["objectId"] for ws in workspaces if not ws.get("isDeleted"))
+        agents = page.request.get(f"{base_url}/api/v1/workspaces/{workspace_id}/agents").json()
+        terminal_agent_id = only(agent["id"] for agent in agents if agent["title"] == "Idle Term 1")
 
-    # Step 2: Resolve the workspace and terminal-agent IDs via the backend API,
-    # exactly as the sculpt CLI does (list workspaces, then list agents).
-    base_url = sculptor_instance_.backend_api_url.rstrip("/")
-    workspaces = page.request.get(f"{base_url}/api/v1/workspaces/recent").json()["workspaces"]
-    workspace_id = only(ws["objectId"] for ws in workspaces if not ws.get("isDeleted"))
-    agents = page.request.get(f"{base_url}/api/v1/workspaces/{workspace_id}/agents").json()
-    terminal_agent_id = only(agent["id"] for agent in agents if agent["title"] == "Idle Term 1")
+        # Step 3: Rename the terminal agent with the same PATCH `sculpt agent
+        # rename` issues. We deliberately do NOT switch tabs afterward: the only way
+        # the UI can learn the new name is a live broadcast from the server.
+        response = page.request.patch(
+            f"{base_url}/api/v1/workspaces/{workspace_id}/agents/{terminal_agent_id}",
+            data={"title": "Renamed By Sculpt"},
+        )
+        assert response.ok, f"rename request failed: {response.status} {response.text()}"
 
-    # Step 3: Rename the terminal agent with the same PATCH `sculpt agent
-    # rename` issues. We deliberately do NOT switch tabs afterward: the only way
-    # the UI can learn the new name is a live broadcast from the server.
-    response = page.request.patch(
-        f"{base_url}/api/v1/workspaces/{workspace_id}/agents/{terminal_agent_id}",
-        data={"title": "Renamed By Sculpt"},
-    )
-    assert response.ok, f"rename request failed: {response.status} {response.text()}"
-
-    # Step 4: The tab label must update live, without a tab switch forcing a
-    # re-fetch.
-    expect(terminal_tab).to_have_text("Renamed By Sculpt")
+        # Step 4: The tab label must update live, without a tab switch forcing a
+        # re-fetch.
+        expect(terminal_tab).to_have_text("Renamed By Sculpt")
+    finally:
+        (registrations_dir / "idle-term.toml").unlink(missing_ok=True)

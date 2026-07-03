@@ -20,10 +20,12 @@
   color: inherit;
   cursor: pointer;
   display: inline-flex;
-  flex-shrink: 0;
   font: inherit;
   gap: var(--space-1);
   margin: 0;
+  // Allow the pill to shrink so a long branch name truncates rather than pushing
+  // the header's right-side controls out of the overflow-hidden bar.
+  min-width: 0;
   padding: 2px 6px;
 
   &:hover {
@@ -36,6 +38,9 @@
   font-family: var(--mono-font-family);
   font-size: var(--font-size-1);
   font-weight: var(--font-weight-medium);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

@@ -30,7 +30,7 @@ import styles from "./WorkspaceHeader.module.scss";
 
 // Per-mode badge label. Worktree is the product default and shows no badge; the
 // non-default modes are surfaced so the user knows a workspace edits files in place
-// (in-place) or in a clone. Mirrors the old RepoSegment rule (strategy !== WORKTREE).
+// (in-place) or in a clone.
 const MODE_BADGE_LABEL: Record<WorkspaceInitializationStrategy, string> = {
   [WorkspaceInitializationStrategy.IN_PLACE]: "in-place",
   [WorkspaceInitializationStrategy.CLONE]: "clone",

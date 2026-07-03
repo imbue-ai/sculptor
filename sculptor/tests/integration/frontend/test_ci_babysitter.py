@@ -371,29 +371,32 @@ def test_plain_terminal_mru_shows_disabled_reason(sculptor_instance_: SculptorIn
     start_task_and_wait_for_ready(page, "say hello")
 
     # Make the workspace's most-recent agent a non-driveable terminal agent
-    # (a registered agent without the automated-prompt opt-in; the bare terminal
-    # type no longer exists).
-    _write_registration(sculptor_instance_, "plain-term", "Plain Term", accepts_automated_prompts=False)
-    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
-    dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
-    dropdown.open()
-    dropdown.open_agent_type_submenu()
-    dropdown.get_agent_type_item_registered("plain-term").click()
-    terminal_tab = panel_tabs.get_panel_tab_by_name("Plain Term 1").first
-    expect(terminal_tab).to_be_visible()
+    # (a registered agent without the automated-prompt opt-in; there is no
+    # bare-terminal agent type).
+    registration = _write_registration(sculptor_instance_, "plain-term", "Plain Term", accepts_automated_prompts=False)
+    try:
+        panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+        dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
+        dropdown.open()
+        dropdown.open_agent_type_submenu()
+        dropdown.get_agent_type_item_registered("plain-term").click()
+        terminal_tab = panel_tabs.get_panel_tab_by_name("Plain Term 1").first
+        expect(terminal_tab).to_be_visible()
 
-    # Let the polling create per-workspace state so the proactive reason is
-    # computed before the popover fetches it.
-    page.wait_for_timeout(_BASELINE_POLL_SETTLE_MS)
+        # Let the polling create per-workspace state so the proactive reason is
+        # computed before the popover fetches it.
+        page.wait_for_timeout(_BASELINE_POLL_SETTLE_MS)
 
-    pr_popover = PlaywrightPrPopoverElement(page)
-    pr_chevron = pr_popover.get_chevron()
-    expect(pr_chevron).to_be_visible(timeout=60_000)
-    pr_chevron.click()
+        pr_popover = PlaywrightPrPopoverElement(page)
+        pr_chevron = pr_popover.get_chevron()
+        expect(pr_chevron).to_be_visible(timeout=60_000)
+        pr_chevron.click()
 
-    expect(pr_popover.get_babysitter_status()).to_contain_text(_NON_DRIVEABLE_REASON_FRAGMENT, timeout=30_000)
-    # A persistent reason makes the toggle inert (it won't act regardless of pause).
-    expect(pr_popover.get_babysitter_pause_toggle()).to_be_disabled()
+        expect(pr_popover.get_babysitter_status()).to_contain_text(_NON_DRIVEABLE_REASON_FRAGMENT, timeout=30_000)
+        # A persistent reason makes the toggle inert (it won't act regardless of pause).
+        expect(pr_popover.get_babysitter_pause_toggle()).to_be_disabled()
+    finally:
+        registration.unlink(missing_ok=True)
 
 
 @user_story("to pick which agent the CI Babysitter uses, limited to ones that accept automated prompts")

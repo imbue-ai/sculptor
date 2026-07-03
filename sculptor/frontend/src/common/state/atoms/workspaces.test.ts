@@ -253,6 +253,45 @@ describe("seedHydratedStore sanity", () => {
   });
 });
 
+describe("updateWorkspacesAtom skip-unchanged writes", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(updateWorkspace).mockResolvedValue({ data: {} } as Awaited<ReturnType<typeof updateWorkspace>>);
+  });
+
+  it("does not notify a workspace's subscribers when a byte-identical frame is re-sent", () => {
+    const store = seedHydratedStore([mockWorkspace({ objectId: "ws-1", isOpen: true })], ["ws-1"]);
+    const listener = vi.fn();
+    const unsubscribe = store.sub(workspaceAtomFamily("ws-1"), listener);
+
+    // A fresh Workspace object with identical fields — the deep-equality write
+    // skip must swallow it so the row/header/peek don't re-render every frame.
+    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-1", isOpen: true })]);
+    expect(listener).not.toHaveBeenCalled();
+
+    // A genuinely changed field still writes through.
+    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-1", isOpen: true, description: "changed" })]);
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+
+  it("does not notify workspaceIdsAtom subscribers when the id membership is unchanged", () => {
+    const store = seedHydratedStore([mockWorkspace({ objectId: "ws-1", isOpen: true })], ["ws-1"]);
+    const listener = vi.fn();
+    const unsubscribe = store.sub(workspaceIdsAtom, listener);
+
+    // Re-sending the same workspace rebuilds the ids array with identical
+    // membership; the membership-equality skip must not publish a fresh array.
+    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-1", isOpen: true })]);
+    expect(listener).not.toHaveBeenCalled();
+
+    // A new workspace changes membership and must notify.
+    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-2", isOpen: true })]);
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+});
+
 describe("activeIndex clamping on workspace deletion", () => {
   beforeEach(() => {
     vi.clearAllMocks();

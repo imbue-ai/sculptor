@@ -39,36 +39,6 @@
   overflow: hidden;
 }
 
-.emptyHeader {
-  border-bottom: 1px solid var(--gray-a5);
-  box-sizing: border-box;
-  flex-shrink: 0;
-  // stylelint-disable-next-line sculptor/no-hardcoded-values -- matches the viewer header height
-  height: 41px;
-  // Match the viewer header's `px="3"` so the toggle's left padding lines up
-  // between the file-open and empty states.
-  padding-inline: var(--space-3);
-}
-
-.emptyHeaderLabel {
-  // Muted placeholder sitting where the breadcrumb would be, so the header does
-  // not read as empty with nothing selected.
-  color: var(--gray-9);
-  user-select: none;
-}
-
-.emptyHeaderSpacer {
-  flex: 1;
-}
-
-.emptyDetail {
-  // Muted icon (inherits currentColor); the label sets its own gray.
-  color: var(--gray-8);
-  flex: 1;
-  text-align: center;
-  width: 100%;
-}
-
 // The sidebar toggle's two states: solid (high-contrast) while the sidebar is
 // visible, muted while collapsed. Set on the icon so it overrides the button's
 // inherited color.

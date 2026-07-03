@@ -39,8 +39,8 @@ describe("SectionHeader chrome layout", () => {
     const addButton = screen.getByTestId(`${ElementIds.SECTION_ADD_PANEL_BUTTON}-center`);
     const maximizeButton = screen.getByTestId(`${ElementIds.SECTION_MAXIMIZE_BUTTON}-center`);
 
-    // Before the fix the "+" lived inside the same right-pinned controls group as the
-    // maximize toggle; now it is a direct child of the header, ahead of that group.
+    // The "+" is a direct child of the header, ahead of the right-pinned controls group
+    // that holds the maximize toggle — it must not live inside that group.
     expect(addButton.parentElement).not.toBe(maximizeButton.parentElement);
     expect(addButton.compareDocumentPosition(maximizeButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });

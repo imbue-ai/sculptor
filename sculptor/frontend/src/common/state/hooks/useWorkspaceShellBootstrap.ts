@@ -1,5 +1,5 @@
 // Workspace shell bootstrap — the seamless workspace-switch sequence (default seeding;
-// first-visit terminal seed + entry ring pulse + prefetch seam).
+// first-visit terminal seed + entry ring pulse).
 //
 // Wires the new section shell for the active workspace + agent. On entry it runs, in a
 // single pre-paint (layout-effect) flush so the first committed frame already shows the
@@ -31,6 +31,7 @@ import {
   makeAgentPanelId,
   makeTerminalPanelId,
 } from "~/components/sections/registry/dynamicPanels.tsx";
+import { consumePendingPanelRevealAtom } from "~/components/sections/sectionActions.ts";
 import {
   activePanelIdInSubSectionAtom,
   activeSubSectionAtom,
@@ -72,6 +73,7 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
 
   const store = useStore();
   const switchActiveWorkspace = useSetAtom(switchActiveWorkspaceAtom);
+  const consumePendingPanelReveal = useSetAtom(consumePendingPanelRevealAtom);
   const bumpRingNonce = useSetAtom(activeSectionRingNonceAtom);
   const activateAgentPanel = useSetAtom(activateAgentPanelAtom);
   const ensureAgentPanelsPlaced = useSetAtom(ensureAgentPanelsPlacedAtom);
@@ -82,8 +84,7 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
 
   // Back the Cmd+K "New agent" command (nav.new_agent → runtime.ui.createAgent →
   // the agent.create action) with the same create-in-center flow as the add-panel
-  // "+" / the new_agent keybinding. The legacy AgentTabs registered this; that
-  // surface is gone in the section shell, so register it here — the bootstrap is the
+  // "+" / the new_agent keybinding. Register it here because the bootstrap is the
   // single per-workspace mount that always has the add-panel actions in scope.
   useRegisterCommandAction("agent.create", createRecentAgent);
 
@@ -103,11 +104,16 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
   // unsynced and wrongly marked unread when it receives an update. When the active
   // sub-section's panel isn't an agent (a terminal, Files, …) fall back to the
   // center's agent, then to the route's taskId (e.g. before the layout settles).
-  // Matches ChatInput's per-panel-agent isolation.
+  // A panel-derived id is only trusted when it belongs to THIS workspace: on the first
+  // commit of a workspace switch the layout atoms still describe the previous workspace
+  // (the scope flip lands in the layout effect below), so a panel-derived id that isn't
+  // one of this workspace's agents falls back to the route rather than pairing this
+  // workspace with a foreign agent. Matches ChatInput's per-panel-agent isolation.
   const activeSubSection = useAtomValue(activeSubSectionAtom) ?? "center";
   const activePanelId = useAtomValue(activePanelIdInSubSectionAtom(activeSubSection));
   const activeCenterPanelId = useAtomValue(activePanelIdInSubSectionAtom("center"));
-  const viewedAgentId = agentIdFromPanelId(activePanelId) ?? agentIdFromPanelId(activeCenterPanelId) ?? taskId;
+  const panelAgentId = agentIdFromPanelId(activePanelId) ?? agentIdFromPanelId(activeCenterPanelId);
+  const viewedAgentId = panelAgentId !== undefined && workspaceAgentIds.includes(panelAgentId) ? panelAgentId : taskId;
   // Both hooks take a required id; in an agentless workspace the empty id matches
   // no task, so each is a safe no-op (their task lookups miss).
   useArtifactSync(workspaceId, viewedAgentId ?? "");
@@ -131,7 +137,11 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
     } else {
       switchActiveWorkspace({ workspaceId });
     }
-  }, [workspaceId, taskId, store, switchActiveWorkspace]);
+    // A panel reveal recorded before navigating here (e.g. the workspace peek
+    // popover's diff click) can only land once the layout scope points at this
+    // workspace; apply it now that the scope has flipped and any seeding is done.
+    consumePendingPanelReveal({ workspaceId });
+  }, [workspaceId, taskId, store, switchActiveWorkspace, consumePendingPanelReveal]);
 
   // Activate the ROUTE's agent (placing it in center if it has never been placed).
   // Keyed strictly off the route — workspaceId/taskId — and NEVER off layout state:

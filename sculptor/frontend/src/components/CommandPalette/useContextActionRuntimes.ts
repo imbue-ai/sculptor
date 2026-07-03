@@ -2,12 +2,7 @@ import { useSetAtom } from "jotai";
 import { useMemo } from "react";
 
 import { markAgentUnreadAtom } from "../../common/state/atoms/unreadOverrides.ts";
-import {
-  agentDeleteTargetAtom,
-  renamingAgentIdAtom,
-  renamingWorkspaceIdAtom,
-  workspaceDeleteTargetAtom,
-} from "./contextActions/atoms.ts";
+import { agentDeleteTargetAtom, renamingWorkspaceIdAtom, workspaceDeleteTargetAtom } from "./contextActions/atoms.ts";
 import type { AgentActionRuntime, WorkspaceActionRuntime } from "./contextActions/types.ts";
 import { useGitAndOpenInRuntime } from "./contextActions/useGitAndOpenInRuntime.ts";
 
@@ -21,7 +16,6 @@ export const useContextActionRuntimes = (): {
 } => {
   const setRenamingWorkspaceId = useSetAtom(renamingWorkspaceIdAtom);
   const setWorkspaceDeleteTarget = useSetAtom(workspaceDeleteTargetAtom);
-  const setRenamingAgentId = useSetAtom(renamingAgentIdAtom);
   const setAgentDeleteTarget = useSetAtom(agentDeleteTargetAtom);
   const markAgentUnread = useSetAtom(markAgentUnreadAtom);
   const gitAndOpenIn = useGitAndOpenInRuntime();
@@ -39,7 +33,6 @@ export const useContextActionRuntimes = (): {
 
   const agentActionRuntime = useMemo<AgentActionRuntime>(
     () => ({
-      beginRename: (agent): void => setRenamingAgentId(agent.id),
       // Shares markAgentUnreadAtom with the panel-tab "Mark as unread" so both
       // paths record the unread override (which keeps useMarkRead's auto
       // mark-read from undoing the action) alongside the persisted update.
@@ -49,7 +42,7 @@ export const useContextActionRuntimes = (): {
       },
       beginDelete: (agent): void => setAgentDeleteTarget({ id: agent.id, name: agent.title ?? "" }),
     }),
-    [setRenamingAgentId, markAgentUnread, setAgentDeleteTarget],
+    [markAgentUnread, setAgentDeleteTarget],
   );
 
   return { workspaceActionRuntime, agentActionRuntime };

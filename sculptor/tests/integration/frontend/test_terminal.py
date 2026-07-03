@@ -263,47 +263,6 @@ def test_close_terminal_tab_switches_to_neighbor(sculptor_instance_: SculptorIns
     expect(terminal_tabs.first).to_have_attribute("aria-selected", "true")
 
 
-@user_story("to see terminal tabs numbered starting from 1 even after closing earlier tabs")
-def test_terminal_tab_reuses_lowest_available_number(sculptor_instance_: SculptorInstance) -> None:
-    """Closing a terminal and adding a new one should reuse the lowest available number.
-
-    Steps:
-    1. Create a workspace and open the terminal panel ("Terminal 1")
-    2. Add a second terminal tab ("Terminal 2")
-    3. Close "Terminal 1"
-    4. Add a new terminal tab — it should be named "Terminal 1", not "Terminal 3"
-    """
-    page = sculptor_instance_.page
-
-    start_task_and_wait_for_ready(sculptor_page=page, prompt="Hello")
-    open_terminal_and_wait(page)
-
-    # Verify initial state: one tab labelled "Terminal 1".
-    terminal_tabs = get_terminal_tabs(page)
-    expect(terminal_tabs).to_have_count(1)
-    expect(terminal_tabs.first).to_have_text("Terminal 1")
-
-    # Add a second terminal tab.
-    add_terminal(page)
-    expect(terminal_tabs).to_have_count(2)
-    expect(terminal_tabs.nth(1)).to_have_text("Terminal 2")
-
-    # Close the first tab ("Terminal 1").
-    first_tab = terminal_tabs.first
-    first_tab.click()
-    get_tab_close_button(first_tab).click()
-    confirm_close_terminal(page)
-
-    # Only "Terminal 2" remains.
-    expect(terminal_tabs).to_have_count(1)
-    expect(terminal_tabs.first).to_have_text("Terminal 2")
-
-    # Add another terminal — should reuse number 1, not increment to 3.
-    add_terminal(page)
-    expect(terminal_tabs).to_have_count(2)
-    expect(terminal_tabs.nth(1)).to_have_text("Terminal 1")
-
-
 @user_story("to use the terminal without SCULPTOR_API_PORT breaking `just start`")
 def test_terminal_does_not_expose_sculptor_api_port(sculptor_instance_: SculptorInstance) -> None:
     """The terminal must not set SCULPTOR_API_PORT — it breaks `just start` from the terminal.

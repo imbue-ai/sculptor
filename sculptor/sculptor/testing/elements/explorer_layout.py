@@ -7,6 +7,11 @@ from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 from sculptor.testing.elements.diff_viewer import PlaywrightDiffViewerElement
 from sculptor.testing.elements.diff_viewer import get_diff_viewer_in
 
+# Budget for wait_for_list_width_above's post-drag settle poll: a busy renderer
+# can commit the resized layout a beat after the pointer-up round-trip returns.
+_LIST_WIDTH_POLL_ATTEMPTS = 50
+_LIST_WIDTH_POLL_INTERVAL_MS = 100
+
 
 class PlaywrightExplorerLayoutElement(PlaywrightIntegrationTestElement):
     """Page Object Model for the shared list-plus-viewer scaffold.
@@ -70,12 +75,12 @@ class PlaywrightExplorerLayoutElement(PlaywrightIntegrationTestElement):
         measurement robust under load; a width that never crosses ``min_px``
         raises with both values so direction-of-change failures stay readable.
         """
-        width = self.get_list_width_px()
-        for _attempt in range(50):
+        width = 0.0
+        for _attempt in range(_LIST_WIDTH_POLL_ATTEMPTS):
             width = self.get_list_width_px()
             if width > min_px:
                 return width
-            self._page.wait_for_timeout(100)
+            self._page.wait_for_timeout(_LIST_WIDTH_POLL_INTERVAL_MS)
         raise AssertionError(f"List pane width never exceeded {min_px:.0f}px; last measured {width:.0f}px")
 
     def drag_resize_handle_by(self, delta_px: float) -> None:
@@ -99,11 +104,6 @@ class PlaywrightExplorerLayoutElement(PlaywrightIntegrationTestElement):
     def get_diff_viewer(self) -> PlaywrightDiffViewerElement:
         """Get the viewer (detail) embedded in this layout."""
         return get_diff_viewer_in(self, self._page)
-
-    def get_empty_detail(self) -> Locator:
-        """The always-rendered viewer body, which shows its empty placeholder
-        text when nothing is selected."""
-        return self.get_diff_viewer()
 
     def get_tree_rows(self) -> Locator:
         """Get the list's tree rows (file / changed-file / per-commit file rows).
@@ -142,13 +142,16 @@ def get_explorer_layout_in(section_root: Locator, page: Page) -> PlaywrightExplo
 def open_file_in_panel(section_root: Locator, page: Page, file_path: str) -> PlaywrightDiffViewerElement:
     """Click a file row in a panel's list and return the panel's diff viewer.
 
-    Selects the tree row whose text matches the basename of ``file_path`` (the
-    tree shows basenames) within the section, then returns the embedded viewer so
-    callers can assert the diff. Works for Files / Changes / Commits since they
-    all share the ExplorerLayout shape with a ``FILE_BROWSER_TREE_ROW`` list.
+    Selects the tree row whose name label is exactly the basename of ``file_path``
+    (the tree shows basenames) within the section, then returns the embedded viewer
+    so callers can assert the diff. Exact-matching the name label keeps a basename
+    that is a substring of another row's (e.g. ``foo.py`` vs ``test_foo.py``) from
+    resolving to the wrong row. Works for Files / Changes / Commits since they all
+    share the ExplorerLayout shape with a ``FILE_BROWSER_TREE_ROW`` list.
     """
     layout = get_explorer_layout_in(section_root, page)
-    row = layout.get_tree_rows().filter(has_text=file_path.split("/")[-1])
+    basename = file_path.split("/")[-1]
+    row = layout.get_tree_rows().filter(has=page.get_by_text(basename, exact=True))
     expect(row.first).to_be_visible()
     row.first.click()
     return layout.get_diff_viewer()

@@ -6,10 +6,10 @@ injected shell env and posts to the local HTTP event API. busy → spinner,
 waiting → attention dot, idle → calm neutral; files-changed refreshes the
 Changes panel.
 
-The bare "terminal" agent type was removed from the product; this exercises the
-same signal→dot mechanism on a registered terminal agent — the model the bundled
-Claude CLI agent uses — by registering a `.toml` whose launch command drops to a
-usable shell prompt so the test can drive `sculpt signal` directly.
+Registered agents are the only terminal-agent type (the model the bundled Claude
+CLI agent uses); this exercises the signal→dot mechanism by registering a `.toml`
+whose launch command drops to a usable shell prompt so the test can drive
+`sculpt signal` directly.
 """
 
 import re

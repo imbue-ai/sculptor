@@ -1,10 +1,8 @@
 """Integration tests for navigating to Settings from the sidebar.
 
-Settings is no longer a closeable pseudo-tab in a workspace tab strip; it is a
-route reached from the sidebar's Settings link, and navigating back to a
-workspace row leaves it. This rebuilds ``test_settings_tab`` against the sidebar:
-the tab-model specifics (closeable / singleton / no-rename context menu) are
-dropped along with the tab strip.
+Settings is a route reached from the sidebar's Settings link; navigating to a
+workspace row leaves it. Covers opening Settings from the sidebar and returning
+to a workspace.
 """
 
 from playwright.sync_api import expect

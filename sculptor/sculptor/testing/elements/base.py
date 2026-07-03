@@ -389,3 +389,34 @@ def dismiss_with_escape(dialog: Locator) -> None:
     """
     dialog.press("Escape")
     expect(dialog).not_to_be_visible(timeout=2_000)
+
+
+# Budget for open_radix_toggle. The 2 s per-attempt timeout combined with the
+# 5-attempt retry budget replaces a single 30 s ``expect`` wait rather than
+# tightening it (mirrors dismiss_with_escape).
+_RADIX_OPEN_ATTEMPTS = 5
+_RADIX_OPEN_TIMEOUT_MS = 2_000
+_RADIX_OPEN_RETRY_INTERVAL_MS = 250
+
+
+def open_radix_toggle(page: Page, trigger: Locator) -> None:
+    """Click a Radix toggle trigger and retry until it reports open.
+
+    Idempotent and verified: a Radix trigger toggles, so clicking one that is
+    already open would close it. Gate on the trigger's ``data-state`` and wait
+    until it is actually open, so repeated open/read/close cycles (e.g. flipping
+    a checkbox menu item then re-reading) stay reliable. Radix can also swallow
+    the click in the brief settle window right after a previous close, so retry
+    until ``data-state`` flips to open.
+    """
+    expect(trigger).to_be_visible()
+    for _attempt in range(_RADIX_OPEN_ATTEMPTS):
+        if trigger.get_attribute("data-state") == "open":
+            return
+        trigger.click()
+        try:
+            expect(trigger).to_have_attribute("data-state", "open", timeout=_RADIX_OPEN_TIMEOUT_MS)
+            return
+        except AssertionError:
+            page.wait_for_timeout(_RADIX_OPEN_RETRY_INTERVAL_MS)
+    expect(trigger).to_have_attribute("data-state", "open")

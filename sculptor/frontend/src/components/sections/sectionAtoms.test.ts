@@ -1,20 +1,26 @@
 import { createStore } from "jotai";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { sidebarCollapsedAtom, sidebarWidthAtom } from "../layout/sidebarAtoms.ts";
+import { layoutPersistenceAdapter } from "./persistence/LocalStorageLayoutAdapter.ts";
 import type { WorkspaceLayoutState } from "./persistence/types.ts";
 import { DEFAULT_GLOBAL_LAYOUT, EMPTY_WORKSPACE_LAYOUT } from "./persistence/types.ts";
 import {
   activePanelIdInSubSectionAtom,
   activeWorkspaceIdAtom,
+  EXPLORER_LIST_MAX_WIDTH_PX,
+  EXPLORER_LIST_MIN_WIDTH_PX,
+  explorerListWidthAtom,
   globalLayoutAtom,
   isSectionExpandedAtom,
   panelsInSubSectionAtom,
   removeWorkspaceLayoutAtom,
   sectionSizesAtom,
+  setSectionSizeAtom,
   switchActiveWorkspaceAtom,
   workspaceLayoutAtom,
 } from "./sectionAtoms.ts";
+import { SECTION_SIZE_MAX_PERCENT, SECTION_SIZE_MIN_PERCENT } from "./sectionGeometry.ts";
 
 function layoutWith(overrides: Partial<WorkspaceLayoutState>): WorkspaceLayoutState {
   return { ...EMPTY_WORKSPACE_LAYOUT, ...overrides };
@@ -50,6 +56,21 @@ describe("workspace layout scope + isolation", () => {
     const store = createStore();
     expect(store.get(panelsInSubSectionAtom("center"))).toEqual([]);
     expect(store.get(isSectionExpandedAtom("center"))).toBe(true);
+  });
+
+  it("routes writes to the in-memory sentinel (never persisted) when no workspace is active", () => {
+    const store = createStore();
+    const writeSpy = vi.spyOn(layoutPersistenceAdapter, "write");
+
+    // activeWorkspaceIdAtom defaults to null, so the proxy routes to the sentinel.
+    store.set(workspaceLayoutAtom, layoutWith({ placement: { files: "left" }, order: { left: ["files"] } }));
+
+    // The write lands in the sentinel and reads back...
+    expect(store.get(workspaceLayoutAtom).placement.files).toBe("left");
+    // ...but the sentinel is memory-only, so nothing is handed to the persistence adapter.
+    expect(writeSpy).not.toHaveBeenCalled();
+
+    writeSpy.mockRestore();
   });
 });
 
@@ -119,6 +140,24 @@ describe("global slices are shared across workspaces", () => {
     expect(store.get(sidebarWidthAtom)).toBe(333);
     expect(store.get(globalLayoutAtom).sidebarWidthPx).toBe(333);
     expect(store.get(globalLayoutAtom).sidebarCollapsed).toBe(true);
+  });
+});
+
+describe("global clamping write atoms", () => {
+  it("clamps section-size writes to the percentage bounds", () => {
+    const store = createStore();
+    store.set(setSectionSizeAtom, { side: "left", percent: -50 });
+    expect(store.get(sectionSizesAtom).left).toBe(SECTION_SIZE_MIN_PERCENT);
+    store.set(setSectionSizeAtom, { side: "right", percent: 500 });
+    expect(store.get(sectionSizesAtom).right).toBe(SECTION_SIZE_MAX_PERCENT);
+  });
+
+  it("clamps explorer list-width writes to the pixel bounds", () => {
+    const store = createStore();
+    store.set(explorerListWidthAtom, 10);
+    expect(store.get(explorerListWidthAtom)).toBe(EXPLORER_LIST_MIN_WIDTH_PX);
+    store.set(explorerListWidthAtom, 10_000);
+    expect(store.get(explorerListWidthAtom)).toBe(EXPLORER_LIST_MAX_WIDTH_PX);
   });
 });
 

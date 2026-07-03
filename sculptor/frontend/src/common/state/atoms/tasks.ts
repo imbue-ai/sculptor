@@ -98,6 +98,13 @@ export const taskModelAtomFamily = atomFamily<string, Atom<string | undefined>>(
   atom((get) => get(taskAtomFamily(taskId))?.model),
 );
 
+// The workspace that owns the task — immutable once the task view has loaded,
+// so subscribers re-render only on load/removal, never on task churn (status,
+// timestamps, artifacts, ...).
+export const taskWorkspaceIdAtomFamily = atomFamily<string, Atom<string | undefined>>((taskId) =>
+  atom((get) => get(taskAtomFamily(taskId))?.workspaceId ?? undefined),
+);
+
 // A stable reference for the "no backend list" case, so the derived atom below
 // keeps one identity across unrelated task updates instead of a fresh array each
 // recompute.

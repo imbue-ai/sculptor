@@ -28,7 +28,7 @@ export const SidebarFirstRunState = ({ projects, onAddRepo }: SidebarFirstRunSta
     <>
       {projects.map((project) => (
         <div key={project.objectId} className={styles.repoGroup}>
-          <div className={styles.repoHeader}>
+          <div className={`${styles.repoHeader} ${styles.repoHeaderStatic}`}>
             <span className={styles.repoHeaderButton}>
               <Text className={styles.repoName} truncate>
                 {project.name}

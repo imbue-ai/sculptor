@@ -62,7 +62,10 @@ const ESTIMATED_POPOVER_WIDTH_PX = 300;
 // narrow layout leaves no room on the left.
 type PopoverSide = "left" | "right";
 
-type PopoverPosition = { x: number; y: number };
+// Where the popover is anchored: its x/y translate and which side of the chip it
+// sits on. Bundled so the position and its matching side can never desync (a move
+// landing without its flip).
+type PopoverAnchor = { x: number; y: number; side: PopoverSide };
 
 // Anchor the popover to the side of the chip with room for it. `left` anchors
 // at the chip's left edge and the popover extends leftward; `right` anchors at
@@ -112,8 +115,7 @@ export const SkillsPanel = (): ReactElement => {
   // hovering schedules an open after OPEN_DELAY_MS (or instantly if a sibling
   // popover closed within the grace period).
   const [popoverSkill, setPopoverSkill] = useState<SkillEntry | null>(null);
-  const [popoverPosition, setPopoverPosition] = useState<PopoverPosition>({ x: 0, y: 0 });
-  const [popoverSide, setPopoverSide] = useState<PopoverSide>("left");
+  const [popoverAnchor, setPopoverAnchor] = useState<PopoverAnchor>({ x: 0, y: 0, side: "left" });
   const [isPopoverVisible, setIsPopoverVisible] = useState(false);
   const [hasAnimated, setHasAnimated] = useState(false);
 
@@ -224,22 +226,20 @@ export const SkillsPanel = (): ReactElement => {
       activeChipElementRef.current = chipElement;
       const rect = chipElement.getBoundingClientRect();
       const { x, side } = computePopoverAnchor(rect);
-      const nextPosition = { x, y: rect.top + rect.height / 2 };
+      const nextAnchor = { x, y: rect.top + rect.height / 2, side };
 
       if (isPopoverVisibleRef.current && activeSkillRef.current?.name !== skill.name) {
         // Already visible — instantly switch content, animate position to the new chip.
         activeSkillRef.current = skill;
         setPopoverSkill(skill);
-        setPopoverPosition(nextPosition);
-        setPopoverSide(side);
+        setPopoverAnchor(nextAnchor);
       } else if (!isPopoverVisibleRef.current) {
         // Retarget the pending open to this chip. If a timer is already running
         // from a previous chip, let it finish — it reads activeSkillRef when it
         // fires, so cumulative hover across rows opens for whichever chip the
         // mouse is on at that moment.
         activeSkillRef.current = skill;
-        setPopoverPosition(nextPosition);
-        setPopoverSide(side);
+        setPopoverAnchor(nextAnchor);
         scheduleOpenForActiveChip();
       }
     },
@@ -260,8 +260,7 @@ export const SkillsPanel = (): ReactElement => {
         dismissPopover();
       } else {
         const { x, side } = computePopoverAnchor(chipRect);
-        setPopoverPosition({ x, y: chipRect.top + chipRect.height / 2 });
-        setPopoverSide(side);
+        setPopoverAnchor({ x, y: chipRect.top + chipRect.height / 2, side });
       }
     }
 
@@ -288,8 +287,7 @@ export const SkillsPanel = (): ReactElement => {
       if (el !== null) {
         const r = el.getBoundingClientRect();
         const { x, side } = computePopoverAnchor(r);
-        setPopoverPosition({ x, y: r.top + r.height / 2 });
-        setPopoverSide(side);
+        setPopoverAnchor({ x, y: r.top + r.height / 2, side });
       }
 
       if (isPopoverVisibleRef.current) {
@@ -480,13 +478,13 @@ export const SkillsPanel = (): ReactElement => {
   // that the right reference frame.
   const clampedPopoverY =
     popoverHeight === 0
-      ? popoverPosition.y
+      ? popoverAnchor.y
       : ((): number => {
           const half = popoverHeight / 2;
           const minY = VIEWPORT_EDGE_MARGIN_PX + half;
           const maxY = window.innerHeight - VIEWPORT_EDGE_MARGIN_PX - half;
           if (minY > maxY) return minY;
-          return Math.max(minY, Math.min(popoverPosition.y, maxY));
+          return Math.max(minY, Math.min(popoverAnchor.y, maxY));
         })();
 
   const isDisabled = chatActions.isDisabled;
@@ -635,11 +633,11 @@ export const SkillsPanel = (): ReactElement => {
         <div
           className={classnames(styles.popoverHitArea, {
             [styles.popoverAnimated]: hasAnimated,
-            [styles.popoverRight]: popoverSide === "right",
+            [styles.popoverRight]: popoverAnchor.side === "right",
           })}
           data-skill-popover=""
-          data-side={popoverSide}
-          style={{ transform: `translate(${popoverPosition.x}px, ${clampedPopoverY}px)` }}
+          data-side={popoverAnchor.side}
+          style={{ transform: `translate(${popoverAnchor.x}px, ${clampedPopoverY}px)` }}
           onMouseEnter={handlePopoverMouseEnter}
           onMouseLeave={handlePopoverMouseLeave}
         >

@@ -1,15 +1,13 @@
-import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 
 import styles from "./WorkspacePeekOverlay.module.scss";
 import { WorkspacePeekPopover } from "./WorkspacePeekPopover";
 
-// The peek opens instantly on hover (no hover-intent delay), per QA.
+// The peek opens instantly on hover (no hover-intent delay).
 const OPEN_DELAY_MS = 0;
 const CLOSE_DELAY_MS = 80;
-// After closing, re-entering a tab within this window reopens immediately.
-const REOPEN_GRACE_PERIOD_MS = 300;
 // Gap in pixels between the sidebar's edge and the peek overlay.
 const PEEK_OFFSET_PX = 4;
 
@@ -43,7 +41,7 @@ export const WorkspacePeekOverlay = ({ onNavigate }: WorkspacePeekOverlayProps):
   // Track visibility in a ref so event listeners don't need to be re-registered
   // when visibility changes (which would cause missed mouseout events).
   const isVisibleRef = useRef(false);
-  const lastClosedAtRef = useRef(0);
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   const clearTimers = useCallback((): void => {
     if (openTimerRef.current) {
@@ -73,7 +71,6 @@ export const WorkspacePeekOverlay = ({ onNavigate }: WorkspacePeekOverlayProps):
   const dismiss = useCallback((): void => {
     clearTimers();
     isVisibleRef.current = false;
-    lastClosedAtRef.current = Date.now();
     setIsVisible(false);
     setHoveredWorkspaceId(null);
     setHasAnimated(false);
@@ -118,18 +115,16 @@ export const WorkspacePeekOverlay = ({ onNavigate }: WorkspacePeekOverlayProps):
         updatePosition(tab);
         activeTabIdRef.current = workspaceId;
       } else if (!isVisibleRef.current) {
-        // Not visible — open immediately if within grace period, otherwise delay
+        // Not visible — schedule the open.
         activeTabIdRef.current = workspaceId;
         updatePosition(tab);
-        const timeSinceClose = Date.now() - lastClosedAtRef.current;
-        const delay = timeSinceClose < REOPEN_GRACE_PERIOD_MS ? 0 : OPEN_DELAY_MS;
         openTimerRef.current = setTimeout(() => {
           setHoveredWorkspaceId(workspaceId);
           isVisibleRef.current = true;
           setIsVisible(true);
           // Enable transitions only after initial position is set
           requestAnimationFrame(() => setHasAnimated(true));
-        }, delay);
+        }, OPEN_DELAY_MS);
       }
     };
 
@@ -166,6 +161,23 @@ export const WorkspacePeekOverlay = ({ onNavigate }: WorkspacePeekOverlayProps):
   // Cleanup timers on unmount
   useEffect(() => clearTimers, [clearTimers]);
 
+  // Clamp the overlay so a row hovered low in the sidebar doesn't push the
+  // popover past the viewport bottom. `position.y` anchors to the hovered
+  // row's top; measuring the rendered height (which depends on the popover's
+  // content, up to its max-height) lets us shift a tall popover up just enough
+  // to keep it fully on screen. Runs in a layout effect so the correction lands
+  // before paint, and only writes back when clamping actually moves it so the
+  // measure/clamp loop settles after one adjustment.
+  useLayoutEffect(() => {
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+    const maxY = window.innerHeight - overlay.offsetHeight - PEEK_OFFSET_PX;
+    const clampedY = Math.max(PEEK_OFFSET_PX, Math.min(position.y, maxY));
+    if (clampedY !== position.y) {
+      setPosition((prev) => ({ ...prev, y: clampedY }));
+    }
+  }, [position.y]);
+
   const handlePopoverMouseEnter = useCallback((): void => {
     isOverPopoverRef.current = true;
     clearTimers();
@@ -180,6 +192,7 @@ export const WorkspacePeekOverlay = ({ onNavigate }: WorkspacePeekOverlayProps):
 
   return (
     <div
+      ref={overlayRef}
       className={`${styles.overlay} ${hasAnimated ? styles.animated : ""}`}
       style={{ transform: `translate(${position.x}px, ${position.y}px)` }}
       onMouseEnter={handlePopoverMouseEnter}

@@ -6,18 +6,19 @@ import { EMPTY_WORKSPACE_LAYOUT } from "./persistence/types.ts";
 import {
   closePanelAtom,
   closeSplitAtom,
+  consumePendingPanelRevealAtom,
   jumpToSectionAtom,
   movePanelAtom,
   openPanelAtom,
+  revealPanelInWorkspaceAtom,
   setActiveSectionAtom,
   setSplitRatioAtom,
   SPLIT_RATIO_MAX,
   SPLIT_RATIO_MIN,
   splitSectionAtom,
-  togglePanelAtom,
   toggleSectionAtom,
 } from "./sectionActions.ts";
-import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "./sectionAtoms.ts";
+import { activeWorkspaceIdAtom, workspaceLayoutAtom, workspaceLayoutFamily } from "./sectionAtoms.ts";
 import { activeSectionRingNonceAtom, maximizedSectionAtom } from "./transientAtoms.ts";
 
 function storeWith(layout: Partial<WorkspaceLayoutState>, workspaceId = "ws-test"): ReturnType<typeof createStore> {
@@ -91,6 +92,23 @@ describe("single-instance invariant", () => {
     store.set(openPanelAtom, { panelId: "agent:1", in: "center" });
     store.set(openPanelAtom, { panelId: "agent:2", in: "center" });
     expect(store.get(workspaceLayoutAtom).order.center).toEqual(["agent:1", "agent:2"]);
+  });
+
+  it("relocates an already-open multi-instance panel instead of leaving it stale in the source", () => {
+    const store = storeWith({
+      placement: { "agent:1": "center", "agent:2": "center" },
+      order: { center: ["agent:1", "agent:2"] },
+      activePanel: { center: "agent:2" },
+    });
+    store.set(openPanelAtom, { panelId: "agent:2", in: "right" });
+    const layout = store.get(workspaceLayoutAtom);
+    expect(layout.placement["agent:2"]).toBe("right");
+    // No stale id or active-panel entry is left behind in the source sub-section.
+    expect(layout.order.center).toEqual(["agent:1"]);
+    expect(layout.order.right).toEqual(["agent:2"]);
+    expect(layout.activePanel.center).toBe("agent:1");
+    expect(layout.activePanel.right).toBe("agent:2");
+    expect(layout.expanded.right).toBe(true);
   });
 });
 
@@ -231,6 +249,22 @@ describe("move + close", () => {
     expect(layout.expanded.right).toBe(true);
   });
 
+  it("reorders a panel within its sub-section without reassigning the active panel", () => {
+    const store = storeWith({
+      placement: { files: "left", changes: "left", commits: "left" },
+      order: { left: ["files", "changes", "commits"] },
+      activePanel: { left: "changes" },
+      expanded: { left: true },
+    });
+    // The index is interpreted against the array with the dragged panel removed
+    // ([changes, commits]), matching PanelDndProvider.computeDropIndex.
+    store.set(movePanelAtom, { panelId: "files", to: "left", index: 2 });
+    const layout = store.get(workspaceLayoutAtom);
+    expect(layout.order.left).toEqual(["changes", "commits", "files"]);
+    // A same-sub-section reorder must not steal the active panel.
+    expect(layout.activePanel.left).toBe("changes");
+  });
+
   it("closing the active panel selects another open panel in the same sub-section", () => {
     const store = storeWith({
       placement: { files: "left", changes: "left" },
@@ -254,57 +288,6 @@ describe("move + close", () => {
     const layout = store.get(workspaceLayoutAtom);
     expect(layout.placement["agent:1"]).toBeUndefined();
     expect(layout.order.center ?? []).toEqual([]);
-  });
-});
-
-describe("togglePanelAtom", () => {
-  it("closes the panel when it is active in an expanded section", () => {
-    const store = storeWith({
-      placement: { files: "left" },
-      order: { left: ["files"] },
-      activePanel: { left: "files" },
-      expanded: { left: true },
-    });
-    store.set(togglePanelAtom, { panelId: "files", fallbackSection: "left" });
-    expect(store.get(workspaceLayoutAtom).placement.files).toBeUndefined();
-  });
-
-  it("activates the panel and jumps to its section when it is open but inactive", () => {
-    const store = storeWith({
-      placement: { files: "left", changes: "left" },
-      order: { left: ["files", "changes"] },
-      activePanel: { left: "changes" },
-      expanded: { left: true },
-      activeSubSection: "center",
-    });
-    store.set(togglePanelAtom, { panelId: "files", fallbackSection: "left" });
-    const layout = store.get(workspaceLayoutAtom);
-    expect(layout.placement.files).toBe("left");
-    expect(layout.activePanel.left).toBe("files");
-    expect(layout.activeSubSection).toBe("left");
-  });
-
-  it("expands the section when the panel is active in a collapsed section", () => {
-    const store = storeWith({
-      placement: { files: "left" },
-      order: { left: ["files"] },
-      activePanel: { left: "files" },
-      expanded: { left: false },
-      activeSubSection: "center",
-    });
-    store.set(togglePanelAtom, { panelId: "files", fallbackSection: "left" });
-    const layout = store.get(workspaceLayoutAtom);
-    expect(layout.placement.files).toBe("left");
-    expect(layout.expanded.left).toBe(true);
-    expect(layout.activeSubSection).toBe("left");
-  });
-
-  it("is a no-op for a never-placed panel", () => {
-    const store = storeWith({ activeSubSection: "center" });
-    store.set(togglePanelAtom, { panelId: "files", fallbackSection: "left" });
-    const layout = store.get(workspaceLayoutAtom);
-    expect(layout.placement.files).toBeUndefined();
-    expect(layout.activeSubSection).toBe("center");
   });
 });
 
@@ -348,5 +331,49 @@ describe("active section: silent vs. pulsing", () => {
     store.set(jumpToSectionAtom, { subSection: "left:secondary" });
     expect(store.get(workspaceLayoutAtom).activeSubSection).toBe("center");
     expect(store.get(activeSectionRingNonceAtom)).toBe(nonceBefore);
+  });
+});
+
+describe("cross-workspace panel reveal", () => {
+  it("applies immediately when the target workspace is the active scope", () => {
+    const store = storeWith({}, "ws-reveal-active");
+    store.set(revealPanelInWorkspaceAtom, { workspaceId: "ws-reveal-active", panelId: "changes", in: "left" });
+    const layout = store.get(workspaceLayoutAtom);
+    expect(layout.placement.changes).toBe("left");
+    expect(layout.expanded.left).toBe(true);
+    expect(layout.activeSubSection).toBe("left");
+  });
+
+  it("defers a reveal for a non-active workspace, leaving the departed layout untouched", () => {
+    const store = storeWith({}, "ws-reveal-from");
+    store.set(revealPanelInWorkspaceAtom, { workspaceId: "ws-reveal-to", panelId: "changes", in: "left" });
+    // The workspace being left gains nothing.
+    const departedLayout = store.get(workspaceLayoutFamily("ws-reveal-from"));
+    expect(departedLayout.placement.changes).toBeUndefined();
+    expect(departedLayout.expanded.left).toBeUndefined();
+
+    // Once the scope flips to the destination (as the shell bootstrap does),
+    // consuming the pending reveal opens the panel there.
+    store.set(activeWorkspaceIdAtom, "ws-reveal-to");
+    store.set(consumePendingPanelRevealAtom, { workspaceId: "ws-reveal-to" });
+    const layout = store.get(workspaceLayoutFamily("ws-reveal-to"));
+    expect(layout.placement.changes).toBe("left");
+    expect(layout.expanded.left).toBe(true);
+    expect(layout.activeSubSection).toBe("left");
+  });
+
+  it("drops a stale reveal whose target workspace was never entered", () => {
+    const store = storeWith({}, "ws-reveal-from");
+    store.set(revealPanelInWorkspaceAtom, { workspaceId: "ws-reveal-missed", panelId: "changes", in: "left" });
+
+    // Entering a DIFFERENT workspace clears the pending reveal without applying it.
+    store.set(activeWorkspaceIdAtom, "ws-reveal-other");
+    store.set(consumePendingPanelRevealAtom, { workspaceId: "ws-reveal-other" });
+    expect(store.get(workspaceLayoutFamily("ws-reveal-other")).placement.changes).toBeUndefined();
+
+    // A later visit to the original target no longer fires the dropped reveal.
+    store.set(activeWorkspaceIdAtom, "ws-reveal-missed");
+    store.set(consumePendingPanelRevealAtom, { workspaceId: "ws-reveal-missed" });
+    expect(store.get(workspaceLayoutFamily("ws-reveal-missed")).placement.changes).toBeUndefined();
   });
 });

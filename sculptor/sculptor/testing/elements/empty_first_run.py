@@ -52,6 +52,16 @@ class PlaywrightEmptyFirstRun(PlaywrightIntegrationTestElement):
         """The "No workspaces yet" hint shown under each repo with no workspaces."""
         return self._page.get_by_test_id(ElementIDs.SIDEBAR_NO_WORKSPACES_HINT)
 
+    # -- Suppressed global surfaces --
+
+    def get_command_palette(self) -> Locator:
+        """The Cmd+K command palette, which stays closed while the empty state is up."""
+        return self._page.get_by_test_id(ElementIDs.COMMAND_PALETTE)
+
+    def get_new_workspace_dialog(self) -> Locator:
+        """The standalone new-workspace dialog, suppressed because the form is inline."""
+        return self._page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)
+
     # -- Create --
 
     def create_and_wait_for_chat_panel(self, timeout: int = 60_000) -> PlaywrightTaskPage:

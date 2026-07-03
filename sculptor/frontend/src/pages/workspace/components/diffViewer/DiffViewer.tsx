@@ -14,12 +14,13 @@ import {
   isRichMarkdownRenderingEnabledAtom,
 } from "~/common/state/atoms/userConfig.ts";
 import { useUserConfig } from "~/common/state/hooks/useUserConfig.ts";
-import { useWorkspaceCommitDiff } from "~/common/state/hooks/useWorkspaceCommitDiff.ts";
+import { invalidateWorkspaceCommitDiff, useWorkspaceCommitDiff } from "~/common/state/hooks/useWorkspaceCommitDiff.ts";
 import { useForceRefreshWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
 import { getLineCounts, parseDiff } from "~/components/DiffUtils.ts";
 import { IndeterminateProgress } from "~/components/IndeterminateProgress.tsx";
 import type { MarkdownRenderMode } from "~/pages/workspace/components/diffPanel/atoms.ts";
 import {
+  closeDiffTabAtom,
   isMarkdownPath,
   markdownRenderModeAtom,
   openFileViewTabAtom,
@@ -93,6 +94,10 @@ type DiffViewerProps = {
   treeOptions?: TreeViewOptions;
   /** The sidebar-visibility toggle rendered before the breadcrumb. */
   sidebarToggle?: ReactElement;
+  /** Clear the host panel's local click selection for `filePath`, invoked
+   *  alongside the shared-tab close when the deleted-file banner is dismissed.
+   *  Panels whose selection can't reach a deleted file (Files / Commits) omit it. */
+  onCloseFile?: (filePath: string) => void;
 };
 
 /**
@@ -104,8 +109,15 @@ type DiffViewerProps = {
  * menu. It carries no multi-file tab bar, no combined "review all" view, and no
  * expand/fullscreen control.
  */
-export const DiffViewer = ({ workspaceId, selection, treeOptions, sidebarToggle }: DiffViewerProps): ReactElement => {
+export const DiffViewer = ({
+  workspaceId,
+  selection,
+  treeOptions,
+  sidebarToggle,
+  onCloseFile,
+}: DiffViewerProps): ReactElement => {
   const content = useDiffViewerContent(workspaceId, selection);
+  const closeDiffTab = useSetAtom(closeDiffTabAtom);
   // Only surface the loading bar when a file is open: the bar means "the diff
   // you're looking at is loading," which is meaningless over the empty
   // placeholder. `isFetching` alone is a workspace-level signal that also fires
@@ -164,6 +176,7 @@ export const DiffViewer = ({ workspaceId, selection, treeOptions, sidebarToggle 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFocusRequest, setSearchFocusRequest] = useState(0);
+  const rootRef = useRef<HTMLDivElement>(null);
   const diffContentRef = useRef<HTMLDivElement>(null);
 
   const { currentMatch, totalMatches, goToNextMatch, goToPrevMatch, clearHighlights } = useInFileSearch({
@@ -266,21 +279,43 @@ export const DiffViewer = ({ workspaceId, selection, treeOptions, sidebarToggle 
     openFileViewTab({ workspaceId, filePath: content.filePath, markdownMode: "rendered" });
   }, [content.filePath, openFileViewTab, workspaceId]);
 
-  // Manual refresh from the triple-dot menu. File views and commit diffs are
-  // plain git-derived react-query entries, so an invalidation of the git
-  // subtree refetches them; the workspace diff additionally caches on the
-  // BACKEND, so diff selections go through the force_refresh fetch instead.
+  // Manual refresh from the triple-dot menu. File views resolve to git-derived
+  // react-query entries, so invalidating the git subtree refetches them. Commit
+  // diffs are keyed OUTSIDE that subtree (immutable by hash), so they need their
+  // own key invalidated — the only recovery path when the initial fetch failed.
+  // The workspace diff additionally caches on the BACKEND, so diff selections go
+  // through the force_refresh fetch instead.
   const refreshWorkspaceDiff = useForceRefreshWorkspaceDiff(workspaceId);
   const handleRefresh = useCallback((): void => {
     if (content.isFileView || content.isCommitDiff) {
       invalidateWorkspaceGitQueries(workspaceId);
+      if (content.isCommitDiff && content.commitHash !== null) {
+        invalidateWorkspaceCommitDiff(workspaceId, content.commitHash);
+      }
       return;
     }
     void refreshWorkspaceDiff();
-  }, [content.isFileView, content.isCommitDiff, workspaceId, refreshWorkspaceDiff]);
+  }, [content.isFileView, content.isCommitDiff, content.commitHash, workspaceId, refreshWorkspaceDiff]);
 
+  // Dismiss the deleted-file banner: clear the shared diff tab by its IDENTITY
+  // path (which carries a scope prefix for "All"-scope diffs, so the real path
+  // would never match) and the host panel's local click selection, so the close
+  // lands whichever of the two sources drove the view.
+  const handleCloseDeletedFile = useCallback((): void => {
+    const tabId = content.tabFilePath ?? content.filePath;
+    if (tabId !== null) closeDiffTab({ workspaceId, filePath: tabId });
+    if (content.filePath !== null) onCloseFile?.(content.filePath);
+  }, [closeDiffTab, workspaceId, content.tabFilePath, content.filePath, onCloseFile]);
+
+  // The find shortcut is a window-level listener, and several viewers can be
+  // mounted at once (one per Files / Changes / Commits panel in the section
+  // grid). Only the viewer inside the active section responds, so a single
+  // keypress opens one search bar rather than every mounted viewer's at once.
+  // `PanelSection` marks the active section with `data-active="true"`; a click
+  // anywhere in a section (a tree row, the diff) makes it the active one.
   useKeybindingHandler("find_in_file", () => {
     if (!content.filePath || isRenderedMarkdownActive) return;
+    if (rootRef.current?.closest('[data-active="true"]') == null) return;
     setIsSearchOpen(true);
     setSearchFocusRequest((n) => n + 1);
   });
@@ -337,7 +372,7 @@ export const DiffViewer = ({ workspaceId, selection, treeOptions, sidebarToggle 
     if (status === "D") {
       return (
         <>
-          <DeletedFileBanner workspaceId={workspaceId} filePath={filePath} />
+          <DeletedFileBanner onClose={handleCloseDeletedFile} />
           {renderDiffContent(diffProps)}
         </>
       );
@@ -355,7 +390,12 @@ export const DiffViewer = ({ workspaceId, selection, treeOptions, sidebarToggle 
   };
 
   return (
-    <Flex direction="column" height="100%" position="relative" data-testid={ElementIds.DIFF_PANEL}>
+    // DIFF_PANEL (and the DIFF_FILE_HEADER / DIFF_VIEWER_EMPTY testids below) are
+    // per-instance: every mounted viewer carries the same value, so more than one
+    // exists at once when Files / Changes / Commits panels are open together. Tests
+    // must scope these within the host panel's container (see the
+    // `get_diff_viewer_in` POM helper), never page-wide.
+    <Flex ref={rootRef} direction="column" height="100%" position="relative" data-testid={ElementIds.DIFF_PANEL}>
       {isProgressVisible && (
         <Box position="absolute" top="0" left="0" right="0" className={styles.progressOverlay}>
           <IndeterminateProgress size="1" />
@@ -381,7 +421,6 @@ export const DiffViewer = ({ workspaceId, selection, treeOptions, sidebarToggle 
             workspaceId={workspaceId}
             filePath={content.filePath}
             recentFilesScope={recentFilesScope}
-            tabFilePath={content.tabFilePath ?? undefined}
             addedLines={0}
             removedLines={0}
             fileStatus={null}
@@ -405,7 +444,6 @@ export const DiffViewer = ({ workspaceId, selection, treeOptions, sidebarToggle 
             workspaceId={workspaceId}
             filePath={content.filePath}
             recentFilesScope={recentFilesScope}
-            tabFilePath={content.tabFilePath ?? undefined}
             addedLines={commitFileLineCounts.added}
             removedLines={commitFileLineCounts.removed}
             fileStatus={null}
@@ -451,7 +489,6 @@ export const DiffViewer = ({ workspaceId, selection, treeOptions, sidebarToggle 
             workspaceId={workspaceId}
             filePath={content.filePath}
             recentFilesScope={recentFilesScope}
-            tabFilePath={content.tabFilePath ?? undefined}
             addedLines={content.addedLines}
             removedLines={content.removedLines}
             fileStatus={content.status}

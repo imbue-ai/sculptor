@@ -87,10 +87,15 @@
 
 // Borderless, iconless variant — sits under the workspace title as an editable
 // subtitle rather than a bordered chip. Drops the border/fill/side-padding and
-// hugs its content (via the input's `field-sizing`) so the shuffle button trails
-// the branch name instead of floating at the far end of a full-width row. A
-// slightly wider gap than the chip variant gives the trailing sparkles button
-// even breathing room next to the branch text.
+// hugs its content (the input width is set inline from its content in the
+// component) so the shuffle button trails the branch name instead of floating at
+// the far end of a full-width row. A slightly wider gap than the chip variant
+// gives the trailing sparkles button even breathing room next to the branch
+// text.
+//
+// The border stays transparent in every state, including under `.pillError`:
+// this subtitle-style field has no border to turn red, so a name collision is
+// signaled by the error text row below rather than a border color.
 .pillPlain {
   border-color: transparent;
   gap: var(--space-2);
@@ -106,8 +111,6 @@
 
   .input {
     color: var(--gray-11);
-    field-sizing: content;
-    min-width: 4ch;
   }
 }
 

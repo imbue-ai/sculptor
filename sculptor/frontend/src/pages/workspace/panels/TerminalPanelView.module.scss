@@ -1,10 +1,8 @@
 @use "scrollbar" as *;
 
-// Single-terminal panel container. Mirrors the relevant rules from the old
-// TerminalPanel.module.scss (--terminal-panel-bg, the xterm wrapper, and the
-// styled overlay scrollbar) so the panel-hosted terminal looks identical to the
-// old multi-tab one. Tab/add-button/unread styling lived in the old panel's
-// TabBar and is owned by the section header now, so it is intentionally dropped.
+// Single-terminal panel container: the xterm wrapper and an overlay scrollbar
+// styled to match Radix ScrollArea. Tab chrome is owned by the section header,
+// not this panel.
 
 .terminalPanel {
   --terminal-panel-bg: var(--gray-2);

@@ -61,8 +61,8 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
   const updateTasks = useSetAtom(updateTasksAtom);
   const store = useStore();
 
-  // This workspace's tasks, narrowed to the identity/title/status/read fields the
-  // registry derives panels from (so the memo below only refires when one changes).
+  // This workspace's tasks; rebuilt on every task tick — the downstream memos and the
+  // registry write guard absorb the churn.
   const workspaceTasks = useMemo(() => {
     return (tasks ?? []).filter((task) => task.workspaceId === workspaceId);
   }, [tasks, workspaceId]);
@@ -162,8 +162,8 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
   useLayoutEffect(() => {
     const staticDefinitions = buildStaticPanelDefinitions();
     const dynamicDefinitions = deriveDynamicPanels(agents, terminals);
-    // Merge plugin-contributed panels (PANEL-/plugin spec) into the rebuilt registry so
-    // they survive every task-tick rebuild. A plugin panel whose id collides with a
+    // Merge plugin-contributed panels into the rebuilt registry so they survive every
+    // task-tick rebuild. A plugin panel whose id collides with a
     // static or dynamic panel loses (the host panel wins) so a plugin can't shadow a
     // built-in surface.
     const reservedIds = new Set([...staticDefinitions.map((p) => p.id), ...dynamicDefinitions.map((p) => p.id)]);

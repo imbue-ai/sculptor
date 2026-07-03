@@ -1,7 +1,8 @@
 import { createStore } from "jotai";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CodingAgentTaskView } from "~/api";
+import { layoutPersistenceAdapter } from "~/components/sections/persistence/LocalStorageLayoutAdapter.ts";
 import type { WorkspaceLayoutState } from "~/components/sections/persistence/types.ts";
 import { EMPTY_WORKSPACE_LAYOUT } from "~/components/sections/persistence/types.ts";
 import { makeAgentPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
@@ -22,8 +23,15 @@ function storeWith(layout: Partial<WorkspaceLayoutState>, workspaceId = "ws-test
   return store;
 }
 
+const taskFor = (id: string, workspaceId: string, overrides: Partial<CodingAgentTaskView> = {}): CodingAgentTaskView =>
+  ({ id, workspaceId, isDeleted: false, ...overrides }) as CodingAgentTaskView;
+
 beforeEach(() => {
   localStorage.clear();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("ensureAgentPanelsPlacedAtom", () => {
@@ -52,10 +60,17 @@ describe("ensureAgentPanelsPlacedAtom", () => {
     const a1 = makeAgentPanelId("1");
     const store = storeWith({ placement: { [a1]: "center" }, order: { center: [a1] } });
     const before = store.get(workspaceLayoutAtom);
+    // Spy AFTER storeWith so the seeding write isn't counted; the reconcile must
+    // not touch persistence at all when nothing is missing.
+    const writeSpy = vi.spyOn(layoutPersistenceAdapter, "write");
 
     store.set(ensureAgentPanelsPlacedAtom, ["1"]);
 
+    // The pure reducer returns the same snapshot...
     expect(store.get(workspaceLayoutAtom)).toBe(before);
+    // ...and the write-skip guard keeps the persistence layer idle, so an
+    // every-tick reconcile can't churn localStorage.
+    expect(writeSpy).not.toHaveBeenCalled();
   });
 
   it("does not move an agent already placed in another section", () => {
@@ -173,12 +188,6 @@ describe("ensureAgentPanelsPlacedAtom", () => {
 });
 
 describe("workspaceAgentIdsAtomFamily", () => {
-  const taskFor = (
-    id: string,
-    workspaceId: string,
-    overrides: Partial<CodingAgentTaskView> = {},
-  ): CodingAgentTaskView => ({ id, workspaceId, isDeleted: false, ...overrides }) as CodingAgentTaskView;
-
   it("lists only the workspace's task ids", () => {
     const store = createStore();
     store.set(taskIdsAtom, ["t1", "t2", "t3"]);
@@ -205,12 +214,6 @@ describe("workspaceAgentIdsAtomFamily", () => {
 });
 
 describe("workspaceAgentIdsWhenLoadedAtomFamily", () => {
-  const taskFor = (
-    id: string,
-    workspaceId: string,
-    overrides: Partial<CodingAgentTaskView> = {},
-  ): CodingAgentTaskView => ({ id, workspaceId, isDeleted: false, ...overrides }) as CodingAgentTaskView;
-
   it("is undefined until the first task snapshot arrives", () => {
     const store = createStore();
     expect(store.get(workspaceAgentIdsWhenLoadedAtomFamily("ws-a"))).toBeUndefined();

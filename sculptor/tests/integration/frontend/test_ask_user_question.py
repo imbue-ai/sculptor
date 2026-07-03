@@ -1020,9 +1020,9 @@ fake_claude:ask_user_question `{
         page = instance.page
 
         # The workspace still exists after restart.
-        workspace_tab = get_workspace_sidebar(page).get_workspace_rows().first
-        expect(workspace_tab).to_be_visible()
-        workspace_tab.click()
+        workspace_row = get_workspace_sidebar(page).get_workspace_rows().first
+        expect(workspace_row).to_be_visible()
+        workspace_row.click()
 
         # Wait for messages to fully load from persistence before checking tool blocks:
         # a visible chat panel does not guarantee messages have finished loading from the

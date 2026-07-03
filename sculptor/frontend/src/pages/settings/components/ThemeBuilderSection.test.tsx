@@ -2,7 +2,6 @@ import { Theme } from "@radix-ui/themes";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
-import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ElementIds } from "~/api";
@@ -15,11 +14,9 @@ type Store = ReturnType<typeof createStore>;
 const createWrapper =
   (store: Store) =>
   ({ children }: { children: ReactNode }): ReactElement => (
-    <MemoryRouter>
-      <Provider store={store}>
-        <Theme>{children}</Theme>
-      </Provider>
-    </MemoryRouter>
+    <Provider store={store}>
+      <Theme>{children}</Theme>
+    </Provider>
   );
 
 beforeEach(() => localStorage.clear());

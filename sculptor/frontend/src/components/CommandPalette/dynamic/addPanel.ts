@@ -13,7 +13,7 @@
 
 import { MessageSquarePlus, PanelTopIcon, SquareTerminal } from "lucide-react";
 
-import { parseStoredAgentType } from "~/common/state/atoms/agentTabs.ts";
+import { parseStoredAgentType, REGISTERED_AGENT_TYPE_PREFIX } from "~/common/state/atoms/agentTabs.ts";
 import {
   availableLocationsAtom,
   availableStaticPanelsAtom,
@@ -28,12 +28,17 @@ import { addPanelTargetSubSectionAtom } from "../contextActions/atoms.ts";
 import type { CommandRuntime } from "../runtime.ts";
 import type { Command, DynamicProvider } from "../types.ts";
 
-// The recent-agent label for the Cmd+K row. The registrations directory isn't
-// available synchronously in the provider, so none is passed and registered
-// terminal-agent programs take the shared helper's generic "agent" fallback; the
-// built-in types label from the stored default.
-function recentAgentRowLabel(runtime: CommandRuntime): string {
-  return recentAgentLabel(runtime.store.get(recentAgentTypeAtom), []);
+// The "New {recent} agent" row title for the Cmd+K panel page. The registrations
+// directory isn't available synchronously in this provider (it runs outside React),
+// so a registered terminal-agent program can't resolve to its display name here — the
+// row collapses to a plain "New agent" instead of doubling the word. Built-in types
+// (Claude, pi) title from the stored default via the shared label helper.
+function recentAgentRowTitle(runtime: CommandRuntime): string {
+  const stored = runtime.store.get(recentAgentTypeAtom);
+  if (stored.startsWith(REGISTERED_AGENT_TYPE_PREFIX)) {
+    return "New agent";
+  }
+  return `New ${recentAgentLabel(stored, [])} agent`;
 }
 
 export const buildAddPanelProvider = (runtime: CommandRuntime): DynamicProvider => ({
@@ -61,8 +66,11 @@ export const buildAddPanelProvider = (runtime: CommandRuntime): DynamicProvider 
       },
     });
 
-    // Location page: one row per available section / sub-section.
-    for (const location of runtime.store.get(availableLocationsAtom)) {
+    // Location page: one row per available section / sub-section. `order: index`
+    // preserves listAvailableLocations' spatial ordering (left → center → right →
+    // bottom, split halves in place); without it groupCommands' alphabetical
+    // tiebreak would reshuffle the destinations.
+    for (const [index, location] of runtime.store.get(availableLocationsAtom).entries()) {
       out.push({
         id: `addpanel.location.${location.subSection}`,
         title: location.label,
@@ -72,6 +80,7 @@ export const buildAddPanelProvider = (runtime: CommandRuntime): DynamicProvider 
         icon: PanelTopIcon,
         onPage: "addpanel.location",
         pageId: "addpanel.panels",
+        order: index,
         perform: (): void => {
           runtime.store.set(addPanelTargetSubSectionAtom, location.subSection);
         },
@@ -83,7 +92,7 @@ export const buildAddPanelProvider = (runtime: CommandRuntime): DynamicProvider 
     if (target !== null) {
       out.push({
         id: "addpanel.panels.new_agent",
-        title: `New ${recentAgentRowLabel(runtime)} agent`,
+        title: recentAgentRowTitle(runtime),
         subtitle: "Create an agent in this section",
         keywords: ["agent", "new", "claude", "create"],
         group: "panels",

@@ -1,5 +1,5 @@
 import { IconButton, Tooltip } from "@radix-ui/themes";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { Bug, Command, Home, PanelLeftClose, Plus, Settings } from "lucide-react";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import type { ReactElement } from "react";
@@ -9,7 +9,7 @@ import type { Workspace } from "~/api";
 import { ElementIds } from "~/api";
 import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { projectsArrayAtom } from "~/common/state/atoms/projects.ts";
-import { agentIdsByWorkspaceAtom, ensurePseudoTabAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
+import { agentIdsByWorkspaceAtom, ensurePseudoTabAtom } from "~/common/state/atoms/workspaces.ts";
 import { useOptimisticWorkspaceDelete } from "~/common/state/hooks/useOptimisticWorkspaceDelete.ts";
 import { AddRepoDialog } from "~/components/add-repo/AddRepoDialog.tsx";
 import { useCommandPalette } from "~/components/CommandPalette";
@@ -19,6 +19,7 @@ import type { WorkspaceActionRuntime } from "~/components/CommandPalette/context
 import { useGitAndOpenInRuntime } from "~/components/CommandPalette/contextActions/useGitAndOpenInRuntime.ts";
 import { buildWorkspaceActions } from "~/components/CommandPalette/contextActions/workspaceActions.ts";
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
+import { DevModeIndicator } from "~/components/DevModeIndicator.tsx";
 import { sidebarCollapsedAtom, sidebarWidthAtom } from "~/components/layout/sidebarAtoms.ts";
 import { isWorkspaceListEmptyAtom, newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { ReportProblemPopover } from "~/components/ReportProblemPopover.tsx";
@@ -34,8 +35,8 @@ import { WorkspacePeekOverlay } from "~/pages/workspace/components/WorkspacePeek
 import navItemStyles from "./NavItem.module.scss";
 import { NavItem } from "./NavItem.tsx";
 import { SidebarFirstRunState } from "./SidebarFirstRunState.tsx";
-import type { RepoGroup } from "./SidebarRepoGroup.tsx";
 import { SidebarRepoGroup } from "./SidebarRepoGroup.tsx";
+import { sidebarWorkspaceGroupsAtom } from "./sidebarWorkspaceOrder.ts";
 import styles from "./WorkspaceSidebar.module.scss";
 
 /** Smallest sidebar width the resize handle allows, in pixels. */
@@ -56,10 +57,16 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   const width = useAtomValue(sidebarWidthAtom);
   const setWidth = useSetAtom(sidebarWidthAtom);
   const ensurePseudoTab = useSetAtom(ensurePseudoTabAtom);
-  const workspaces = useAtomValue(workspacesArrayAtom);
   const projects = useAtomValue(projectsArrayAtom);
-  const agentIdsByWorkspace = useAtomValue(agentIdsByWorkspaceAtom);
+  // Grouped + sorted workspace rows, shared with keyboard workspace cycling so the
+  // two can't drift (see sidebarWorkspaceOrder).
+  const repoGroups = useAtomValue(sidebarWorkspaceGroupsAtom);
   const setRenamingWorkspaceId = useSetAtom(renamingWorkspaceIdAtom);
+  // The workspace→last-agent map is only consulted inside the click handler, so
+  // read it lazily from the store rather than subscribing: the whole sidebar
+  // would otherwise re-render (and churn the click callbacks) on every agent-id
+  // change, with no visual effect.
+  const store = useStore();
   // In the empty first-run state the repo area shows its own
   // "Add a repo" / "No workspaces yet" affordances; outside it the sidebar is
   // unchanged.
@@ -120,37 +127,16 @@ export const WorkspaceSidebar = (): ReactElement | null => {
     [gitAndOpenIn],
   );
 
-  // Group workspaces by repo (project). Every workspace has a projectId, but the
-  // project record itself may not have loaded yet — those fall back to an "Other"
-  // group *name* (see the `?? "Other"` below) so nothing disappears.
-  const repoGroups = useMemo((): ReadonlyArray<RepoGroup> => {
-    const projectsById = new Map(projects.map((project) => [project.objectId, project]));
-    const byProject = new Map<string, Array<Workspace>>();
-    for (const ws of workspaces ?? []) {
-      const key = ws.projectId;
-      const list = byProject.get(key) ?? [];
-      list.push(ws);
-      byProject.set(key, list);
-    }
-    return [...byProject.entries()]
-      .map(([projectId, wsList]) => ({
-        projectId,
-        name: projectsById.get(projectId)?.name ?? "Other",
-        workspaces: wsList.sort((a, b) => (a.description ?? "").localeCompare(b.description ?? "")),
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [workspaces, projects]);
-
   const handleWorkspaceClick = useCallback(
     (workspaceId: string): void => {
-      const savedAgentId = agentIdsByWorkspace.get(workspaceId);
+      const savedAgentId = store.get(agentIdsByWorkspaceAtom).get(workspaceId);
       if (savedAgentId) {
         navigateToAgent(workspaceId, savedAgentId);
         return;
       }
       navigateToWorkspace(workspaceId);
     },
-    [agentIdsByWorkspace, navigateToAgent, navigateToWorkspace],
+    [store, navigateToAgent, navigateToWorkspace],
   );
 
   // Navigation-intent prefetch seam: warm the workspace's persisted layout
@@ -298,6 +284,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
               <span className={navItemStyles.navLabel}>Report a bug</span>
             </button>
           </ReportProblemPopover>
+          <DevModeIndicator />
           <div className={styles.versionRow} data-testid={ElementIds.SIDEBAR_VERSION}>
             <VersionDisplay />
           </div>

@@ -10,6 +10,9 @@
   background-color: var(--gray-a5);
   cursor: col-resize;
   flex-shrink: 0;
+  // Own the touch gesture so a touch drag isn't hijacked into browser panning (which
+  // would fire pointercancel and interrupt the resize).
+  touch-action: none;
   transition: background-color var(--duration-normal);
   width: 1px;
   z-index: 1;
@@ -35,6 +38,9 @@
   cursor: row-resize;
   flex-shrink: 0;
   height: 1px;
+  // Own the touch gesture so a touch drag isn't hijacked into browser panning (which
+  // would fire pointercancel and interrupt the resize).
+  touch-action: none;
   transition: background-color var(--duration-normal);
   z-index: 1;
 

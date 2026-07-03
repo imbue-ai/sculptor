@@ -44,7 +44,6 @@ const makeWorkspaceRuntime = (overrides: WorkspaceRuntimeOverrides = {}): Worksp
 });
 
 const makeAgentRuntime = (): AgentActionRuntime => ({
-  beginRename: vi.fn(),
   markUnread: vi.fn(),
   beginDelete: vi.fn(),
 });
@@ -140,7 +139,12 @@ describe("buildWorkspaceActions", () => {
 describe("buildAgentActions", () => {
   it("emits the canonical right-click menu set", () => {
     const actions = buildAgentActions(makeAgentRuntime());
-    expect(actions.map((a) => a.id)).toEqual(["rename", "mark_unread", "delete"]);
+    expect(actions.map((a) => a.id)).toEqual(["mark_unread", "delete"]);
+  });
+
+  it("omits rename — agent rename is the panel tab's inline edit, not a palette action", () => {
+    const actions = buildAgentActions(makeAgentRuntime());
+    expect(actions.map((a) => a.id)).not.toContain("rename");
   });
 
   it("delete is destructive and routes through the runtime", () => {

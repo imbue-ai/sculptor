@@ -1,12 +1,14 @@
 // One collapsible repo group in the workspace sidebar: the repo header row (collapse
-// chevron, hover-revealed repository settings, and an always-visible "+" that opens
-// the new-workspace dialog pre-scoped to this repo), followed by one row per
-// workspace while expanded. Cross-group concerns — building the groups, the shared
-// action list, and the delete confirmation — stay in WorkspaceSidebar and arrive as
-// props; per-group state (collapse, rename) is read from its atoms here.
+// chevron, hover-revealed repository settings, and an always-visible "+" that
+// direct-creates a workspace in this repo, falling back to the new-workspace dialog
+// pre-scoped to the repo when the branch can't be resolved or the create fails),
+// followed by one row per workspace while expanded. Cross-group concerns — building
+// the groups, the shared action list, and the delete confirmation — stay in
+// WorkspaceSidebar and arrive as props; per-group state (collapse, rename) is read
+// from its atoms here.
 
 import { ContextMenu, DropdownMenu, Flex, IconButton, Text, Tooltip } from "@radix-ui/themes";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { ChevronDown, ChevronRight, MoreHorizontal, Plus, Settings, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
 import { memo, useCallback } from "react";
@@ -14,7 +16,8 @@ import { memo, useCallback } from "react";
 import type { Workspace } from "~/api";
 import { ElementIds, updateWorkspace } from "~/api";
 import { useImbueLocation } from "~/common/NavigateUtils.ts";
-import { workspaceDotStatusAtomFamily } from "~/common/state/atoms/workspaces.ts";
+import { workspaceRenameErrorToastAtom } from "~/common/state/atoms/toasts.ts";
+import { workspaceAtomFamily, workspaceDotStatusAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { renamingWorkspaceIdAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
@@ -27,8 +30,9 @@ import type { WorkspaceAction } from "~/components/CommandPalette/contextActions
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCreateWorkspaceFromSidebar.ts";
 import { WorkspaceStatusDots } from "~/components/statusDot";
+import { ToastType } from "~/components/Toast.tsx";
 
-import { collapsedRepoGroupsAtom } from "./navAtoms.ts";
+import { collapsedRepoGroupsAtom, isRepoCollapsedAtomFamily } from "./navAtoms.ts";
 import styles from "./SidebarRepoGroup.module.scss";
 
 // A repo (project) and the workspaces that live in it, as grouped by
@@ -183,10 +187,12 @@ export const SidebarRepoGroup = ({
   onBeginDelete,
 }: SidebarRepoGroupProps): ReactElement => {
   // External atoms
-  const collapsedRepos = useAtomValue(collapsedRepoGroupsAtom);
+  const isRepoCollapsed = useAtomValue(isRepoCollapsedAtomFamily(group.projectId));
   const setCollapsedRepos = useSetAtom(collapsedRepoGroupsAtom);
+  const setRenameErrorToast = useSetAtom(workspaceRenameErrorToastAtom);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useAtom(renamingWorkspaceIdAtom);
   const { createFromSidebar, isCreating } = useCreateWorkspaceFromSidebar();
+  const store = useStore();
 
   // External hooks
   const openSettings = useOpenSettings();
@@ -199,18 +205,35 @@ export const SidebarRepoGroup = ({
   };
 
   // Reference-stable (the rows are memoized on their props): the rename
-  // callbacks depend only on the atom setter.
+  // callbacks depend only on reference-stable atom setters and the store.
   const handleRenameCommit = useCallback(
     (workspaceId: string, newName: string): void => {
       setRenamingWorkspaceId(null);
+      const workspaceAtom = workspaceAtomFamily(workspaceId);
+      const previous = store.get(workspaceAtom);
+      // Optimistically show the new name and let the WebSocket frame reconcile
+      // with the server-authoritative value; roll back and surface a toast if the
+      // write is rejected so the rename never fails silently.
+      if (previous !== null) {
+        store.set(workspaceAtom, { ...previous, description: newName });
+      }
       updateWorkspace({
         path: { workspace_id: workspaceId },
         body: { description: newName },
       }).catch((error: unknown) => {
         console.error("Failed to rename workspace:", error);
+        if (previous !== null) {
+          store.set(workspaceAtom, previous);
+        }
+        setRenameErrorToast({
+          title: `Failed to rename "${previous?.description ?? "workspace"}"`,
+          description: "The name has been restored. Try again or check your connection.",
+          type: ToastType.ERROR_PROMINENT,
+          action: null,
+        });
       });
     },
-    [setRenamingWorkspaceId],
+    [setRenamingWorkspaceId, setRenameErrorToast, store],
   );
 
   const handleRenameCancel = useCallback((): void => {
@@ -218,7 +241,6 @@ export const SidebarRepoGroup = ({
   }, [setRenamingWorkspaceId]);
 
   // JSX and rendering logic
-  const isRepoCollapsed = collapsedRepos[group.projectId] ?? false;
   const Chevron = isRepoCollapsed ? ChevronRight : ChevronDown;
 
   return (

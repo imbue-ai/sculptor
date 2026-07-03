@@ -1,14 +1,17 @@
 import type { LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 
+import type { SectionId } from "~/components/sections/sectionTypes.ts";
+
 /**
  * A panel a plugin contributes via `registerPanel`. The host renders the
- * `component` inside the new section shell (the manager adapts this into the
- * host's internal registry shape). `defaultSection` is an optional hint for
- * where the panel first lands; absent, it is not placed by default and the
- * user opens it from the section "+" / Cmd+K. The legacy `defaultZone` /
- * `defaultShortcut` / `description` fields are accepted but ignored — the
- * docking shell they targeted is gone.
+ * `component` inside the section shell (the manager adapts this into the
+ * host's internal registry shape). A plugin panel is not auto-placed on load:
+ * the user opens it from the section "+" / Cmd+K, which drops it into the
+ * sub-section they pick. `defaultSection` is recorded on the registry entry but
+ * no placement path reads it yet — it is reserved for a future default-placement
+ * pass. The legacy `defaultZone` / `defaultShortcut` / `description` fields are
+ * accepted but ignored — the docking shell they targeted is gone.
  */
 export type PluginPanelDefinition = {
   /** Stable id; registering twice with the same id replaces the previous one. */
@@ -16,8 +19,8 @@ export type PluginPanelDefinition = {
   displayName: string;
   icon: LucideIcon;
   component: ComponentType;
-  /** Where the panel first lands ("left" | "center" | "right" | "bottom"). */
-  defaultSection?: "left" | "center" | "right" | "bottom";
+  /** Reserved: recorded on the registry entry, but no placement path reads it yet. */
+  defaultSection?: SectionId;
   /** @deprecated Ignored — the zone/docking shell is gone. */
   defaultZone?: string;
   /** @deprecated Ignored — per-panel keybindings were removed. */

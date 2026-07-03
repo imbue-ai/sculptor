@@ -132,13 +132,16 @@ export const ReadOnlyPreview = ({ workspaceId, filePath, renderModeOverride }: R
 
   // Inject our override stylesheet into Pierre's shadow DOM (see
   // adoptPierreOverrideSheet for why this is a layout effect). The container
-  // only exists once content has loaded; re-run on overflow changes because
-  // Pierre re-creates its shadow DOM when the wrap mode flips.
+  // only exists once content has loaded AND the highlighter gate has opened
+  // (Pierre mounts at that point). Re-run on overflow changes because Pierre
+  // re-creates its shadow DOM when the wrap mode flips, and when
+  // `isHighlighterReady` flips (though it isn't read here) so the sheet is
+  // adopted the moment Pierre first mounts.
   const hasContent = content != null;
   useLayoutEffect(() => {
     if (!hasContent) return;
     adoptPierreOverrideSheet(pierreRef.current, bgOverrideSheet);
-  }, [hasContent, overflow]);
+  }, [hasContent, overflow, isHighlighterReady]);
 
   const fileName = useMemo(() => filePath.split("/").pop() ?? filePath, [filePath]);
   const lang = useMemo(() => getLanguageFromPath(filePath), [filePath]);

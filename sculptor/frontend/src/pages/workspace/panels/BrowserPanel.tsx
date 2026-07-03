@@ -92,12 +92,20 @@ const BrowserPanelElectron = (): ReactElement => {
   const addressInput = editedUrl ?? liveUrl;
 
   const urlInputRef = useRef<HTMLInputElement>(null);
-  // Focus the URL input every time the panel mounts (i.e. every time it
-  // opens), regardless of whether the workspace already has a persisted
-  // URL. The empty dependency array keeps this from re-firing on rerenders
-  // triggered by in-page navigation events.
+  // Focus the URL input when the panel mounts (i.e. when it opens), unless an
+  // editable element already holds focus. The panel remounts on every workspace
+  // switch (it is keyed by workspace id), and grabbing focus then would yank the
+  // caret out of whatever the user is typing — e.g. the chat composer — into the
+  // address bar. The empty dependency array keeps this from re-firing on
+  // rerenders triggered by in-page navigation events.
   useEffect(() => {
-    urlInputRef.current?.focus();
+    const active = document.activeElement;
+    const isEditableActive =
+      active instanceof HTMLElement &&
+      (active.isContentEditable || active.tagName === "INPUT" || active.tagName === "TEXTAREA");
+    if (!isEditableActive) {
+      urlInputRef.current?.focus();
+    }
   }, []);
 
   const [urlError, setUrlError] = useState<string | null>(null);

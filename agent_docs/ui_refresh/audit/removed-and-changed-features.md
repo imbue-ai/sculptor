@@ -1,6 +1,6 @@
 # UI refresh — removed features & changed functionality
 
-Audit of what the `bryden/ui-refresh-2` branch removes or changes, vs `main`.
+Audit of what the ui-refresh branch removes or changes, vs `main`.
 Evidence is the branch diff (deleted files, purged ElementIDs, panel registry).
 Items I'm not 100% sure of are marked **[verify]**.
 

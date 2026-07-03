@@ -457,49 +457,6 @@ export const openWorkspaceTabAtom = atom(null, (get, set, workspaceId: string): 
   });
 });
 
-/** Close all workspace tabs via batch endpoint. */
-export const closeAllWorkspaceTabsAtom = atom(null, (get, set): void => {
-  const openIds = get(openWorkspaceIdsAtom);
-  if (openIds.length === 0) return;
-  set(clearPendingOpenAtom, openIds);
-  set(markPendingCloseAtom, openIds);
-  for (const id of openIds) {
-    removeWorkspaceQueriesCache(id);
-    workspaceSetupStatusAtomFamily.remove(id);
-  }
-  batchUpdateOpenState({ body: { workspaceIds: [...openIds], isOpen: false } }).catch(() => {
-    set(clearPendingCloseAtom, openIds);
-    set(workspaceOpenCloseErrorToastAtom, {
-      title: "Failed to close workspaces",
-      description: "Try again or check your connection.",
-      type: ToastType.ERROR_PROMINENT,
-      action: null,
-    });
-  });
-});
-
-/** Close all workspace tabs except the specified one. */
-export const closeOtherWorkspaceTabsAtom = atom(null, (get, set, keepWorkspaceId: string): void => {
-  const openIds = get(openWorkspaceIdsAtom);
-  const toClose = openIds.filter((id) => id !== keepWorkspaceId);
-  if (toClose.length === 0) return;
-  set(clearPendingOpenAtom, toClose);
-  set(markPendingCloseAtom, toClose);
-  for (const id of toClose) {
-    removeWorkspaceQueriesCache(id);
-    workspaceSetupStatusAtomFamily.remove(id);
-  }
-  batchUpdateOpenState({ body: { workspaceIds: toClose, isOpen: false } }).catch(() => {
-    set(clearPendingCloseAtom, toClose);
-    set(workspaceOpenCloseErrorToastAtom, {
-      title: "Failed to close workspaces",
-      description: "Try again or check your connection.",
-      type: ToastType.ERROR_PROMINENT,
-      action: null,
-    });
-  });
-});
-
 export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyArray<Workspace>) => {
   const currentWorkspaceIds = new Set(get(workspaceIdsAtom) ?? []);
   const isHydrated = get(hasHydratedWorkspaceTabsAtom);
@@ -738,12 +695,6 @@ export const openNewWorkspaceTabAtom = atom(null, (get, set, draftId: string): v
   set(tabsAtom, applyOpen(get(tabsAtom), { tabId, agentId: null }, { setActive: false }));
 });
 
-/** Close a new-workspace tab (remove pseudo-tab ID from the unified tab list). */
-export const closeNewWorkspaceTabAtom = atom(null, (get, set, draftId: string): void => {
-  const tabId = newWorkspaceTabId(draftId);
-  set(tabsAtom, applyClose(get(tabsAtom), tabId));
-});
-
 /**
  * Replace the Home pseudo-tab with a real workspace tab in-place,
  * so clicking a workspace from the home page loads it where the Home tab was.
@@ -850,21 +801,6 @@ export const setAgentForWorkspaceAtom = atom(
 /** Append a pseudo-tab to the tab order if it isn't already present. */
 export const ensurePseudoTabAtom = atom(null, (get, set, tabId: string): void => {
   set(tabsAtom, applyOpen(get(tabsAtom), { tabId, agentId: null }, { setActive: false }));
-});
-
-/** Replace the entire tab list with a single entry, preserving its existing agentId. */
-export const keepOnlyTabAtom = atom(null, (get, set, tabId: string): void => {
-  const current = get(tabsAtom);
-  const existing = current.order.find((e) => e.tabId === tabId);
-  set(tabsAtom, {
-    order: [{ tabId, agentId: existing?.agentId ?? null }],
-    activeIndex: 0,
-  });
-});
-
-/** Clear all tabs and reset activeIndex to its sentinel. */
-export const clearAllTabsAtom = atom(null, (_get, set): void => {
-  set(tabsAtom, { order: [], activeIndex: INVALID_ACTIVE_INDEX });
 });
 
 /** Reorder tabs to match `newTabIds`, preserving each entry's agentId and active selection. */

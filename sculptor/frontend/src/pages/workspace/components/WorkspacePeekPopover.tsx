@@ -14,7 +14,7 @@ import { useThemeDangerColor, useThemeSuccessColor, useThemeWarningColor } from 
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
 import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch";
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff";
-import { jumpToSectionAtom, openPanelAtom } from "~/components/sections/sectionActions.ts";
+import { revealPanelInWorkspaceAtom } from "~/components/sections/sectionActions.ts";
 
 import { changesScopeAtomFamily } from "../panels/fileBrowser/atoms";
 import { parseDiffStats } from "../utils/parseDiffStats";
@@ -348,8 +348,7 @@ export const WorkspacePeekPopover = ({
   const { data: diff, isFetching } = useWorkspaceDiff(workspaceId);
   const isShimmering = useTimedLatch(isFetching, SHIMMER_MIN_HOLD_MS);
   const diffStats = useMemo(() => parseDiffStats(diff?.targetBranchDiff), [diff?.targetBranchDiff]);
-  const openPanel = useSetAtom(openPanelAtom);
-  const jumpToSection = useSetAtom(jumpToSectionAtom);
+  const revealPanelInWorkspace = useSetAtom(revealPanelInWorkspaceAtom);
   const setChangesScope = useSetAtom(changesScopeAtomFamily(workspaceId));
   const [isExpanded, setIsExpanded] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
@@ -447,13 +446,15 @@ export const WorkspacePeekPopover = ({
 
   const handleDiffClick = useCallback(() => {
     onNavigate(workspaceId);
-    // Surface the Changes panel in the left section (vs the target branch),
-    // mirroring DiffSummary's reveal in the new section shell.
-    openPanel({ panelId: "changes", in: "left" });
-    jumpToSection({ subSection: "left" });
+    // Surface the Changes panel in the left section and point it at the
+    // target-branch diff, matching DiffSummary's reveal. The reveal names the
+    // destination workspace explicitly: the peeked workspace is often not the
+    // active layout scope yet, and a write through the active-scope layout proxy
+    // would land in the workspace being left.
+    revealPanelInWorkspace({ workspaceId, panelId: "changes", in: "left" });
     setChangesScope("vs-target-branch");
     onDismiss?.();
-  }, [onNavigate, workspaceId, openPanel, jumpToSection, setChangesScope, onDismiss]);
+  }, [onNavigate, workspaceId, revealPanelInWorkspace, setChangesScope, onDismiss]);
 
   const hiddenCount = sortedAgents.length - VISIBLE_AGENT_COUNT;
   const canCollapse = hiddenCount >= MIN_HIDDEN_AGENTS_TO_COLLAPSE;

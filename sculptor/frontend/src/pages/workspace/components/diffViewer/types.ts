@@ -45,8 +45,7 @@ export type DiffSelection =
     };
 
 /**
- * The diff view controls that previously lived as toolbar icons above the
- * viewer. They now hang off the file header's triple-dot menu.
+ * The diff view controls exposed through the file header's triple-dot menu.
  */
 export type DiffViewOptions = {
   viewType: DiffViewType;

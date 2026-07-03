@@ -172,7 +172,7 @@ launch the review agent.
 
 ## Delivery
 
-This ships as **one pull request** off `bryden/tungsten-seriema`, not a stack of
+This ships as **one pull request** off the `tungsten-seriema` base branch, not a stack of
 per-phase PRs. The work is split into **semantic commits** — the build commits once
 per task (per `implement_task.md`), so each commit is a coherent, independently
 reviewable unit, and a per-commit review tool can walk them like a stack of small

@@ -6,7 +6,7 @@ import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { isSmoothStreamingEnabledAtom } from "~/common/state/atoms/smoothStreaming.ts";
 import { useTask } from "~/common/state/hooks/useTaskHelpers.ts";
 
-import { registerEngine, StreamingEngine, unregisterEngine } from "../utils/StreamingEngine.ts";
+import { StreamingEngine } from "../utils/StreamingEngine.ts";
 
 /** Hard flush when the buffer exceeds this many characters (~1.5s at high-speed streaming). */
 const MAX_BUFFER_CHARS = 500;
@@ -116,7 +116,6 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
   const ensureEngine = useCallback((): StreamingEngine => {
     if (!engineRef.current) {
       engineRef.current = new StreamingEngine();
-      registerEngine(engineRef.current);
     }
     return engineRef.current;
   }, []);
@@ -192,7 +191,6 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
     return (): void => {
       stopAnimationLoop();
       if (engineRef.current) {
-        unregisterEngine(engineRef.current);
         engineRef.current.updateLatestSnapshot(null);
       }
     };

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chatActionsAtom } from "~/common/state/atoms/chatActions";
 import type { SkillEntry } from "~/common/state/hooks/useSkills";
 import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
+import { panelDragStateAtom } from "~/components/sections/transientAtoms.ts";
 
 import { SkillsPanel } from "./SkillsPanel";
 
@@ -461,6 +462,36 @@ describe("SkillsPanel — popover collision-aware side", () => {
       advancePopoverOpen();
       expect(screen.getByText("POPOVER_DESCRIPTION_PROBE")).toBeInTheDocument();
       expect(popoverSide()).toBe("left");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("SkillsPanel — popover drag suppression", () => {
+  // A panel drag passing over the skills list fires chip mouseenter events; the
+  // hover handler gates on the active drag so a card can't pop mid-drag.
+  const advancePopoverOpen = (): void => {
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+  };
+
+  it("does not open the popover while a panel drag is in progress", () => {
+    vi.useFakeTimers();
+    try {
+      const { store } = renderSkillsPanel({
+        skills: [customSkill({ name: "fix-bug", description: "POPOVER_DESCRIPTION_PROBE" })],
+      });
+      // A live drag drives draggedPanelIdAtom non-null, gating the chip hover.
+      act(() => {
+        store.set(panelDragStateAtom, { panelId: "skills", from: "right", to: "left", index: 0 });
+      });
+      const chip = screen.getByText("fix-bug");
+      fireEvent.mouseEnter(chip);
+      advancePopoverOpen();
+      // The popover never mounts, so its description text stays out of the DOM.
+      expect(screen.queryByText("POPOVER_DESCRIPTION_PROBE")).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

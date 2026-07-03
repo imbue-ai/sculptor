@@ -22,7 +22,7 @@ import {
 } from "../../components/newWorkspace/newWorkspaceAtoms.ts";
 import { chatToolDensityAtom } from "../../pages/workspace/components/chat-alpha/atoms.ts";
 
-export const usePageLayoutKeyboardShortcuts = (): void => {
+export const useGlobalKeyboardShortcuts = (): void => {
   const store = useStore();
   const { toggleDevPanel } = useDevPanel();
   const {

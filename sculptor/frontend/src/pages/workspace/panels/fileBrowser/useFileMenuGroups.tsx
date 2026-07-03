@@ -43,7 +43,7 @@ export const useFileMenuGroups = ({
 
   const isDeleted = context.fileStatus === "D";
   const isFile = !context.isFolder;
-  const isDiffSource = context.source === "diff-header" || context.source === "diff-tab";
+  const isDiffSource = context.source === "diff-header";
   const isCombinedDiffSource = context.source === "combined-diff-header";
 
   const handleOpenDiffView = useCallback((): void => {
@@ -171,9 +171,8 @@ export const useFileMenuGroups = ({
       groups.push(group4);
     }
 
-    // The diff/file view shows a single file at a time (there is no visible tab
-    // strip), so the old close-tab / close-others / close-all actions had no
-    // meaning here and were removed.
+    // The diff/file view shows a single file at a time (no tab strip), so no tab
+    // actions are offered here.
 
     return groups;
   }, [

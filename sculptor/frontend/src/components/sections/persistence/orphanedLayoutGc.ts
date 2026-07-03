@@ -67,11 +67,6 @@ export function pruneOrphanedWorkspaceLayouts(liveWorkspaceIds: ReadonlySet<stri
 
 let hasSweptThisSession = false;
 
-/** Test hook: allow re-arming the once-per-session sweep between tests. */
-export function resetOrphanedLayoutGcForTests(): void {
-  hasSweptThisSession = false;
-}
-
 /**
  * Arms the once-per-session sweep. Waits (without subscribing the caller to
  * re-renders) for the workspace list to finish loading, then prunes during
@@ -85,15 +80,21 @@ export function useOrphanedLayoutGc(): void {
       return;
     }
 
-    // Sweep with the ids as of load time — later list changes go through the
-    // in-app delete path, which removes its own key.
+    // Arm once the list has loaded, but prune against the ids read at idle time,
+    // not a load-time snapshot: a workspace created (and its layout key seeded)
+    // between load and the idle callback must not have its key swept as orphaned.
     const trySweep = (): boolean => {
       const workspaceIds = store.get(workspaceIdsAtom);
       if (workspaceIds === undefined || hasSweptThisSession) {
         return false;
       }
       hasSweptThisSession = true;
-      scheduleWhenIdle(() => pruneOrphanedWorkspaceLayouts(new Set(workspaceIds)));
+      scheduleWhenIdle(() => {
+        const liveIds = store.get(workspaceIdsAtom);
+        if (liveIds !== undefined) {
+          pruneOrphanedWorkspaceLayouts(new Set(liveIds));
+        }
+      });
       return true;
     };
 

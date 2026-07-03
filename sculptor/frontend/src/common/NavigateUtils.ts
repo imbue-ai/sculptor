@@ -8,7 +8,6 @@ import { setActiveTabByIdAtom, setAgentForWorkspaceAtom, workspaceAtomFamily } f
 type ImbueNavigationFunctions = {
   navigateToWorkspace: (workspaceID: string) => void;
   navigateToAgent: (workspaceID: string, agentID: string) => void;
-  navigateToAddWorkspace: (draftId?: string) => void;
   navigateToHome: () => void;
   navigateToGlobalSettings: (section?: string) => void;
   navigateToRepoSetupCommand: (projectId: string) => void;
@@ -43,16 +42,6 @@ export const useImbueNavigate = (): ImbueNavigationFunctions => {
       },
       [navigate, setActiveTabById, setAgentForWorkspace],
     ),
-    navigateToAddWorkspace: useCallback(
-      // The legacy /ws/new page is gone; creation is the new-workspace modal. The
-      // remaining callers are fallback redirects (e.g. landing on a since-deleted
-      // workspace), so route them to Home — which shows the inline first-run form when
-      // there are no workspaces, or the home landing where the modal can be opened.
-      (_draftId?: string): void => {
-        navigate(`/home`);
-      },
-      [navigate],
-    ),
     navigateToHome: useCallback((): void => {
       navigate(`/home`);
     }, [navigate]),
@@ -77,8 +66,6 @@ export const useImbueNavigate = (): ImbueNavigationFunctions => {
 type ImbueLocationType = {
   isAgentRoute: boolean;
   isWorkspaceRoute: boolean;
-  isAddWorkspaceRoute: boolean;
-  addWorkspaceDraftId: string | null;
   isHomeRoute: boolean;
   isSettingsRoute: boolean;
   /** Parsed `workspaceId` from the current pathname, or null when not on a workspace/agent route. */
@@ -92,9 +79,6 @@ export const useImbueLocation = (): ImbueLocationType => {
   const pathname = location.pathname;
 
   const isAgentRoute = /^\/ws\/[^/]+\/agent\/[^/]+$/.test(pathname);
-  const addWorkspaceMatch = pathname.match(/^\/ws\/new\/([^/]+)$/);
-  const isAddWorkspaceRoute = /^\/ws\/new(\/[^/]+)?$/.test(pathname);
-  const addWorkspaceDraftId = addWorkspaceMatch ? addWorkspaceMatch[1] : null;
   const isHomeRoute = /^\/home$/.test(pathname);
   const isSettingsRoute = /^\/settings$/.test(pathname);
   // A "workspace route" means we're viewing a specific workspace (or one of
@@ -111,8 +95,6 @@ export const useImbueLocation = (): ImbueLocationType => {
   return {
     isAgentRoute,
     isWorkspaceRoute,
-    isAddWorkspaceRoute,
-    addWorkspaceDraftId,
     isHomeRoute,
     isSettingsRoute,
     workspaceId,

@@ -62,7 +62,7 @@ def test_sidebar_row_navigates_to_workspace(
     Steps:
     1. Create two workspaces so there are multiple rows to choose between.
     2. Click the first workspace's row via the shared nav helper.
-    3. Verify the URL routes to a workspace and the chat panel re-renders.
+    3. Verify the URL routes to the clicked workspace and its chat panel renders.
     """
     page = sculptor_instance_.page
 
@@ -70,14 +70,21 @@ def test_sidebar_row_navigates_to_workspace(
     start_task_and_wait_for_ready(page, prompt="First", workspace_name="Row Nav WS A")
     start_task_and_wait_for_ready(page, prompt="Second", workspace_name="Row Nav WS B")
 
-    # Step 2: Click the first workspace row in the sidebar.
+    # Step 2: Click the first workspace row in the sidebar. Capture WS A's id
+    # from the row first: creating WS B already left the page on WS B's /ws/
+    # route, so asserting a bare /ws/ URL would pass even if the click did
+    # nothing. The row stamps its workspace id as data-workspace-id, and the
+    # workspace route embeds that id, so asserting the URL carries WS A's id
+    # proves the row actually navigated.
     task_page = PlaywrightTaskPage(page)
     target_row = task_page.get_workspace_sidebar().get_workspace_row_by_name("Row Nav WS A")
     expect(target_row).to_be_visible()
+    workspace_a_id = target_row.get_attribute("data-workspace-id")
+    assert workspace_a_id, "Row Nav WS A row is missing its data-workspace-id"
     navigate_to_workspace(page, "Row Nav WS A")
 
-    # Step 3: We are on a workspace route and its chat panel renders.
-    expect(page).to_have_url(re.compile(r"/ws/"))
+    # Step 3: The URL routes to WS A specifically and its chat panel renders.
+    expect(page).to_have_url(re.compile(re.escape(workspace_a_id)))
     expect(task_page.get_chat_panel()).to_be_visible()
 
 

@@ -1,10 +1,9 @@
 """Integration tests for the Review All panel's open behavior and scope picker.
 
-Tests verify that Review All is a single-instance registered panel with no
-default section placement (a fresh workspace never seeds it), that it opens
-through a section's add-panel ``+`` dropdown, and that its combined-diff scope
-picker defaults to All. The diff-specific expand/fullscreen control was removed
-in the section shell (section maximize replaces it), so its tests are gone.
+Review All is a single-instance registered panel with no default section
+placement (a fresh workspace never seeds it). These tests verify that it opens
+through a section's add-panel ``+`` dropdown, that only one instance can be open
+at a time, and that its combined-diff scope picker defaults to All.
 """
 
 from playwright.sync_api import expect

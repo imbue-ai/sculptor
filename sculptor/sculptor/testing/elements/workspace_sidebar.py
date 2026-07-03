@@ -34,27 +34,12 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
     def get_repo_groups(self) -> Locator:
         return self.get_by_test_id(ElementIDs.SIDEBAR_REPO_GROUP)
 
-    def get_repo_group_by_project_id(self, project_id: str) -> Locator:
-        """Locate a repo group's header button by its project id.
-
-        The component stamps ``data-project-id`` on the group header, the
-        repo-settings icon, and the add-workspace icon. CSS-attribute scoping
-        stays inside the POM to honour the integration-test css-locator ratchet.
-        """
-        return self._page.locator(f'[data-testid="{ElementIDs.SIDEBAR_REPO_GROUP}"][data-project-id="{project_id}"]')
-
-    def collapse_repo_group(self, project_id: str) -> None:
-        """Toggle a repo group's collapsed state by clicking its header."""
-        self.get_repo_group_by_project_id(project_id).click()
-
     def get_repo_add_workspace(self, project_id: str) -> Locator:
+        # The add-workspace icon is stamped with ``data-project-id``; this raw
+        # CSS-attribute scope stays inside the POM so the integration-test
+        # css-locator ratchet is honoured at the call sites.
         return self._page.locator(
             f'[data-testid="{ElementIDs.SIDEBAR_REPO_ADD_WORKSPACE}"][data-project-id="{project_id}"]'
-        )
-
-    def get_repo_settings(self, project_id: str) -> Locator:
-        return self._page.locator(
-            f'[data-testid="{ElementIDs.SIDEBAR_REPO_SETTINGS}"][data-project-id="{project_id}"]'
         )
 
     # -- Workspace rows (mirrors PlaywrightHomePage.get_workspace_rows) --
@@ -64,12 +49,6 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
 
     def get_workspace_row_by_name(self, name: str) -> Locator:
         return self.get_workspace_rows().filter(has_text=name)
-
-    def get_workspace_row_by_id(self, workspace_id: str) -> Locator:
-        """Locate a workspace row by its workspace id (``data-workspace-id``)."""
-        return self._page.locator(
-            f'[data-testid="{ElementIDs.SIDEBAR_WORKSPACE_ROW}"][data-workspace-id="{workspace_id}"]'
-        )
 
     def get_row_delete_icon(self, workspace_row: Locator) -> Locator:
         """Get the hover-revealed delete icon scoped to a workspace row.
@@ -97,10 +76,11 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
 
     # -- Workspace-row context menu items + inline rename --
     #
-    # The sidebar workspace row reuses the shared workspace-action context menu
-    # (the same ``TAB_CONTEXT_MENU_*`` ids the old workspace tab used), reached by
-    # right-clicking the row or via the row's "..." dropdown. Rename commits through
-    # the shared InlineRenameInput; delete fires immediately (optimistic, no confirm).
+    # The sidebar workspace row shares the workspace-action context menu (the
+    # ``TAB_CONTEXT_MENU_*`` ids), reached by right-clicking the row or via the
+    # row's "..." dropdown. Rename commits through the shared InlineRenameInput;
+    # delete opens the shared DeleteConfirmationDialog, and confirming runs the
+    # optimistic removal (the row vanishes before the backend confirms).
 
     def get_context_menu_rename(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_RENAME)
@@ -184,9 +164,6 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
 
     def get_settings_link(self) -> Locator:
         return self.get_by_test_id(ElementIDs.SIDEBAR_SETTINGS_LINK)
-
-    def get_report_bug(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.SIDEBAR_REPORT_BUG)
 
     def get_version(self) -> Locator:
         return self.get_by_test_id(ElementIDs.SIDEBAR_VERSION)

@@ -504,19 +504,19 @@ management"):
 <img src="/path/to/screenshots/0001_get.png" alt="Home page - no workspaces">
 
 **Step 1: Home page (empty state)**
-The home page shows "No workspaces yet" with a folder icon. The top bar has
-the home icon (active), "+" button, and right-side icons (search, settings,
-help). Layout is centered and clean.
+The home page shows "No workspaces yet" with a folder icon. The left sidebar
+shows the repo group, a "New workspace" button, and the footer links
+(settings, help). Layout is centered and clean.
 
-**Next:** I'll locate and click the "+" button to create a new workspace.
+**Next:** I'll locate and click the "New workspace" button in the sidebar.
 ```
 
-**Step 2:** Locate the "+" button and click it.
+**Step 2:** Locate the "New workspace" button and click it.
 
 ```bash
 # Find the button's coordinates
 curl -s -X POST http://127.0.0.1:$PORT/execute \
-  -d '{"action": "locate", "selector": "[data-testid=ADD_WORKSPACE_BUTTON]"}'
+  -d '{"action": "locate", "selector": "[data-testid=SIDEBAR_NEW_WORKSPACE_BUTTON]"}'
 # Click at the returned coordinates
 curl -s -X POST http://127.0.0.1:$PORT/execute \
   -d '{"action": "click", "x": 72, "y": 52}'
@@ -587,18 +587,19 @@ Use `locate` to find coordinates, then `click` to interact:
 
 | Test ID | Element |
 |---------|---------|
-| `TASK_BUTTON` | Task item in the sidebar |
 | `TASK_INPUT` | New task prompt input on home page |
-| `START_TASK_BUTTON` | Create task button |
 | `WORKSPACE_NAME_INPUT` | Workspace name input field |
 | `CHAT_INPUT` | Message input in chat |
 | `SEND_BUTTON` | Send message button |
 | `CHAT_PANEL` | The chat message area |
-| `ADD_WORKSPACE_BUTTON` | "+" button to create new workspace |
-| `WORKSPACE_TAB` | Workspace tab in tab bar |
+| `WORKSPACE_SIDEBAR` | The workspace sidebar |
+| `SIDEBAR_NEW_WORKSPACE_BUTTON` | "New workspace" button in the sidebar |
+| `SIDEBAR_WORKSPACE_ROW` | Workspace row in the sidebar |
+| `SIDEBAR_HOME_LINK` | Home link in the sidebar |
+| `NEW_WORKSPACE_PROMPT_TEXTAREA` | Prompt input on the new-workspace form |
+| `NEW_WORKSPACE_CREATE_BUTTON` | Create button on the new-workspace form |
 | `WORKSPACE_ROW` | Workspace row in home list |
 | `MODEL_SELECTOR` | Model dropdown selector |
-| `HOME_BUTTON` | Home navigation button |
 | `SETTINGS_SIDEBAR` | Settings page sidebar |
 | `COMPACTION_BAR` | Context remaining bar at bottom |
 | `COMPACTION_PANEL` | The popover from the context bar |

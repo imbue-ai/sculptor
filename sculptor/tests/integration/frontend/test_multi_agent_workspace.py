@@ -1,9 +1,9 @@
-"""Integration tests for multi-agent workspace functionality with workspace tabs UI.
+"""Integration tests for multi-agent workspace functionality.
 
 These tests verify:
-- Adding a second agent to an existing workspace via the agent tab "+" button
+- Adding a second agent to an existing workspace via the section "+" add-panel dropdown
 - Agent tabs correctly reflecting the number of agents in a workspace
-- Workspace tabs isolating agents per workspace
+- Sidebar workspace rows isolating agents per workspace
 - Workspace cleanup when the last agent is deleted
 - Workspace survival when one agent is deleted from a multi-agent workspace
 """
@@ -49,7 +49,7 @@ def test_create_second_agent_in_existing_workspace(
     tabs = panel_tabs.get_panel_tabs()
     expect(tabs).to_have_count(1)
 
-    # Click the "+" button in the agent tabs bar to add a second agent
+    # Add a second agent via the section "+" add-panel dropdown
     create_agent_panel(page, section="center")
 
     # Wait for the second agent tab to appear

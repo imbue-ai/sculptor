@@ -28,7 +28,9 @@ export const PaletteDialog = ({ open, onOpenChange, title, testId, children }: P
         <Dialog.Title>{title}</Dialog.Title>
       </VisuallyHidden>
       <Dialog.Overlay className={styles.overlay} />
-      <Dialog.Content className={styles.content} data-testid={testId}>
+      {/* The visually-hidden title supplies the accessible name; opt out of
+          Radix's Description requirement rather than adding an empty one. */}
+      <Dialog.Content className={styles.content} data-testid={testId} aria-describedby={undefined}>
         {children}
       </Dialog.Content>
     </Dialog.Root>

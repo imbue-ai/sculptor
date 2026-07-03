@@ -1,6 +1,6 @@
 # Design extraction
 
-This document is a companion to `goals.md`. It catalogs the styling and components worth copying from the throwaway prototype branches — `bryden/scu-1474-compact-workspace-layout` and `bryden/scu-1494-rewrite-new-workspace-modal` — into the rewrite.
+This document is a companion to `goals.md`. It catalogs the styling and components worth copying from the throwaway prototype branches — `scu-1474` (the compact workspace layout) and `scu-1494` (the new workspace modal) — into the rewrite.
 
 It is a styling map only. `goals.md` is the source of truth for behavior, and the prototypes’ in-branch notes (their `agent_docs`, test plans, and similar markdown) should not be trusted — see “Relationship to the prototype” in `goals.md`.
 

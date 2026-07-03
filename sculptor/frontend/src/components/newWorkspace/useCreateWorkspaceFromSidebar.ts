@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 
 import { getCurrentBranch, previewBranchName, WorkspaceInitializationStrategy } from "~/api";
 import type { StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
+import { createWorkspaceErrorToastAtom } from "~/common/state/atoms/toasts.ts";
 import { defaultModelAtom, isPiAgentEnabledAtom } from "~/common/state/atoms/userConfig.ts";
 import { useCreateWorkspace } from "~/common/state/hooks/useCreateWorkspace.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
@@ -11,6 +12,7 @@ import {
   newWorkspaceModalAtom,
 } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { resolveStoredAgentType } from "~/components/sections/addPanelCore.ts";
+import { ToastType } from "~/components/Toast.tsx";
 
 type UseCreateWorkspaceFromSidebarReturn = {
   /** True while a direct-create is in flight. */
@@ -39,6 +41,7 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
   const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
   const defaultModel = useAtomValue(defaultModelAtom);
   const setModalState = useSetAtom(newWorkspaceModalAtom);
+  const setCreateWorkspaceErrorToast = useSetAtom(createWorkspaceErrorToastAtom);
   const { registrations } = useTerminalAgentRegistrations();
   const { isCreating, createWorkspace } = useCreateWorkspace();
   const [isPreparing, setIsPreparing] = useState<boolean>(false);
@@ -96,14 +99,28 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
         defaultModel,
       });
 
-      // Surface any failure in the dialog (pre-selecting the repo) so the user
-      // can see the error and retry from a full form rather than being left
-      // with a silent no-op.
+      // A direct-create failure has no form on screen to show the error inline,
+      // so raise a toast for the "why" and open the dialog (pre-selecting the
+      // repo) as a retry surface — rather than leaving a silent no-op.
       if (!createResult.ok) {
+        setCreateWorkspaceErrorToast({
+          title: "Failed to create workspace",
+          description: "The workspace could not be created. Adjust the details and try again.",
+          type: ToastType.ERROR,
+          action: null,
+        });
         setModalState({ open: true, presetProjectId: projectId });
       }
     },
-    [lastSettings, isPiAgentEnabled, defaultModel, registrations, createWorkspace, setModalState],
+    [
+      lastSettings,
+      isPiAgentEnabled,
+      defaultModel,
+      registrations,
+      createWorkspace,
+      setModalState,
+      setCreateWorkspaceErrorToast,
+    ],
   );
 
   return { isCreating: isCreating || isPreparing, createFromSidebar };

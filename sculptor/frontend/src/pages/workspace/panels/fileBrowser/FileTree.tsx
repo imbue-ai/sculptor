@@ -1,12 +1,11 @@
 import { Flex, Text } from "@radix-ui/themes";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useAtom, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { type ReactElement, useCallback, useEffect, useMemo, useRef } from "react";
 
 import { ElementIds } from "~/api";
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
-import { openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
 
+import { activeAgentIdAtomFamily } from "../workspaceAgentActions.ts";
 import { expandFoldersAtom, fileBrowserStateAtomFamily, toggleFolderAtom } from "./atoms.ts";
 import { FileContextMenu } from "./FileContextMenu.tsx";
 import styles from "./FileTree.module.scss";
@@ -37,11 +36,11 @@ type FileTreeProps = {
   viewMode: ViewMode;
   searchMatchingPaths?: Set<string> | null;
   /**
-   * When set, a file click calls this instead of opening a global file-view tab.
-   * The FilesPanel passes its own selection setter so the embedded viewer is
-   * driven by per-panel state rather than the shared diff-panel tab list.
+   * A file click calls this with the clicked path. The FilesPanel drives its
+   * embedded viewer from per-panel selection state rather than the shared
+   * diff-panel tab list.
    */
-  onSelectFile?: (path: string) => void;
+  onSelectFile: (path: string) => void;
   /** The currently selected file path, highlighted in the list. */
   selectedPath?: string | null;
 };
@@ -56,10 +55,12 @@ export const FileTree = ({
   const [fileBrowserState, setFileBrowserState] = useAtom(fileBrowserStateAtomFamily(workspaceId));
   const toggleFolder = useSetAtom(toggleFolderAtom);
   const expandFolders = useSetAtom(expandFoldersAtom);
-  const openFileViewTab = useSetAtom(openFileViewTabAtom);
 
-  const { agentID } = useWorkspacePageParams();
-  const activeOperation = useActiveFileOperation(agentID);
+  // Track file operations of the workspace's current agent, resolved from the
+  // section shell rather than the route: activating a different center tab
+  // doesn't navigate, so the route's agent id goes stale.
+  const agentId = useAtomValue(activeAgentIdAtomFamily(workspaceId));
+  const activeOperation = useActiveFileOperation(agentId);
 
   const { tree: rawTree, folderChangeCounts } = useFileTree(workspaceId, "vs-target-branch");
 
@@ -170,13 +171,9 @@ export const FileTree = ({
 
   const handleFileClick = useCallback(
     (path: string): void => {
-      if (onSelectFile) {
-        onSelectFile(path);
-        return;
-      }
-      openFileViewTab({ workspaceId, filePath: path });
+      onSelectFile(path);
     },
-    [onSelectFile, openFileViewTab, workspaceId],
+    [onSelectFile],
   );
 
   const handleCollapseChildren = useCollapseChildren({

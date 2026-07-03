@@ -5,9 +5,7 @@ delete-confirmation dialog. Once confirmed, the removal is optimistic: the row
 disappears before the backend confirms, and a failed delete rolls the row back
 with a prominent error toast offering Retry.
 
-This is the workspace half of the old `test_optimistic_deletion` (its agent half
-moved to `test_panel_optimistic_deletion`) plus the rollback-toast behaviour from
-`test_optimistic_close`, re-anchored onto the sidebar row.
+Agent-tab close/deletion coverage lives in ``test_panel_optimistic_deletion``.
 """
 
 import json
@@ -87,12 +85,31 @@ def test_optimistic_workspace_deletion_removes_row_immediately(
     rows = sidebar.get_workspace_rows()
     expect(rows).to_have_count(2)
 
-    # "Workspace Two" is active (most recently created); delete the non-active one.
-    # The helper opens the confirmation dialog and confirms.
-    sidebar.delete_workspace_via_row_icon(sidebar.get_workspace_row_by_name("Workspace One"))
+    # Hold the DELETE in flight (captured, not yet released) so the row's
+    # disappearance can only be the optimistic removal — a non-optimistic
+    # implementation that waited for the response would still show both rows
+    # until the held request is released.
+    held_routes: list[Route] = []
 
-    expect(sidebar.get_delete_confirmation_dialog()).to_be_hidden()
-    expect(rows).to_have_count(1)
+    def _hold_workspace_delete(route: Route) -> None:
+        if route.request.method == "DELETE":
+            held_routes.append(route)
+        else:
+            route.continue_()
+
+    page.route(_WORKSPACE_DELETE_PATTERN, _hold_workspace_delete)
+    try:
+        # "Workspace Two" is active (most recently created); delete the non-active
+        # one. The helper opens the confirmation dialog and confirms.
+        sidebar.delete_workspace_via_row_icon(sidebar.get_workspace_row_by_name("Workspace One"))
+
+        expect(sidebar.get_delete_confirmation_dialog()).to_be_hidden()
+        expect(rows).to_have_count(1)
+
+        # Release the held DELETE so it reaches the real backend and commits.
+        held_routes[0].continue_()
+    finally:
+        page.unroute(_WORKSPACE_DELETE_PATTERN, _hold_workspace_delete)
 
 
 @user_story("to see a workspace restored with an error toast when deletion fails")
@@ -113,12 +130,14 @@ def test_workspace_deletion_failure_rolls_back_and_shows_toast(
     try:
         sidebar.delete_workspace_via_row_icon(sidebar.get_workspace_row_by_name("Workspace One"))
 
-        # After the API failure, the row reappears (rollback) with a Retry toast.
-        expect(rows).to_have_count(2)
+        # The error toast is the unambiguous "delete failed" signal; assert it
+        # before the row count so the count check observes the rollback (the row
+        # reappearing) rather than the not-yet-removed pre-delete DOM.
         toast = PlaywrightToastElement(page)
         expect(toast).to_be_visible()
         expect(toast).to_contain_text("Failed to delete")
         expect(toast).to_contain_text("Retry")
+        expect(rows).to_have_count(2)
     finally:
         page.unroute(_WORKSPACE_DELETE_PATTERN, _fail_workspace_delete)
 
@@ -138,19 +157,24 @@ def test_workspace_deletion_failure_retry_succeeds(
     expect(rows).to_have_count(2)
 
     page.route(_WORKSPACE_DELETE_PATTERN, _fail_workspace_delete)
-    sidebar.delete_workspace_via_row_icon(sidebar.get_workspace_row_by_name("Workspace One"))
+    try:
+        sidebar.delete_workspace_via_row_icon(sidebar.get_workspace_row_by_name("Workspace One"))
 
-    # Rollback to 2 rows with a Retry toast.
-    expect(rows).to_have_count(2)
-    toast = PlaywrightToastElement(page)
-    expect(toast).to_be_visible()
-    expect(toast).to_contain_text("Retry")
+        # The Retry toast is the unambiguous "delete failed" signal; assert it
+        # before the row count so the count check observes the rollback rather
+        # than the not-yet-removed pre-delete DOM.
+        toast = PlaywrightToastElement(page)
+        expect(toast).to_be_visible()
+        expect(toast).to_contain_text("Retry")
+        expect(rows).to_have_count(2)
 
-    # Clear the intercept so the retry reaches the real server and succeeds.
-    page.unroute(_WORKSPACE_DELETE_PATTERN, _fail_workspace_delete)
-    toast.get_action_button().click()
+        # Clear the intercept so the retry reaches the real server and succeeds.
+        page.unroute(_WORKSPACE_DELETE_PATTERN, _fail_workspace_delete)
+        toast.get_action_button().click()
 
-    expect(rows).to_have_count(1)
+        expect(rows).to_have_count(1)
+    finally:
+        page.unroute(_WORKSPACE_DELETE_PATTERN, _fail_workspace_delete)
 
 
 def _read_tabs_state(page: Page) -> dict:
@@ -179,9 +203,17 @@ def test_deleting_active_workspace_clamps_active_index(
     rows = sidebar.get_workspace_rows()
     expect(rows).to_have_count(2)
 
+    # Capture the surviving workspace's id (stamped on its row) so we can assert
+    # the app actually navigates to it, not just that localStorage clamps.
+    surviving_id = sidebar.get_workspace_row_by_name("Workspace A").get_attribute("data-workspace-id")
+    assert surviving_id, "Workspace A row is missing its data-workspace-id"
+
     # The most recently created workspace (B) is active.
     sidebar.delete_workspace_via_row_icon(sidebar.get_workspace_row_by_name("Workspace B"))
     expect(rows).to_have_count(1)
+
+    # The user lands on the surviving workspace (A), not the deleted route.
+    expect(page).to_have_url(re.compile(re.escape(surviving_id)))
 
     # After deletion, activeIndex should point at a valid surviving entry.
     page.wait_for_function(
@@ -216,6 +248,21 @@ def test_deleting_non_active_workspace_preserves_active_index(
 
     rows = sidebar.get_workspace_rows()
     expect(rows).to_have_count(2)
+
+    # Wait for the persisted tabs state to reflect both workspaces with B active
+    # before reading it. The row count is driven by WebSocket workspace atoms,
+    # but sculptor-tabs is written by separate navigation/hydration setters, so
+    # the two can settle out of order and a one-shot read could land on A.
+    page.wait_for_function(
+        """
+        () => {
+          const r = window.localStorage.getItem('sculptor-tabs');
+          if (!r) return false;
+          const t = JSON.parse(r);
+          return t.order.length === 2 && t.activeIndex === 1;
+        }
+        """,
+    )
 
     # Capture B's tabId (the active workspace) before we delete A.
     active_tab_id_before = page.evaluate(

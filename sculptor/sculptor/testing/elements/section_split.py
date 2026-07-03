@@ -58,8 +58,9 @@ class PlaywrightSectionSplit:
     def create_split(self, panel_id: str, direction: str) -> None:
         """Split this section by moving ``panel_id`` into a new secondary half.
 
-        Right-clicks the panel's tab (in whichever half it currently lives) to open
-        the context menu, then clicks the "Create {direction} split" option.
+        Right-clicks the panel's tab (located in the section's base/primary
+        sub-section, since a split can only be created while the section has none) to
+        open the context menu, then clicks the "Create {direction} split" option.
         ``direction`` is the axis ("horizontal" → stacked / "vertical" →
         side-by-side). Verifies the panel lands in the secondary half.
         """
@@ -94,14 +95,21 @@ class PlaywrightSectionSplit:
     def assert_directions_available(self, expected_axes: tuple[str, ...]) -> None:
         """Assert which "Create split" options the panel context menu offers.
 
-        Opens the first panel tab's context menu, asserts each expected axis option
-        is visible and each unexpected axis option is absent, then dismisses the
-        menu. Use this BEFORE a split exists (the options vanish once one does).
+        Opens the first panel tab's context menu, confirms it actually rendered, asserts
+        each expected axis option is visible and each unexpected axis option is absent,
+        then dismisses the menu. Use this BEFORE a split exists (the options vanish once
+        one does).
         """
         primary_tabs = PlaywrightPanelTabElement(self._page, self._sub_section_for("primary"))
         tab = primary_tabs.get_panel_tabs().first
         expect(tab).to_be_visible()
         primary_tabs.open_context_menu(tab)
+        # Confirm the context menu opened before asserting any option is absent: a
+        # swallowed right-click would otherwise let an absence check pass vacuously
+        # against a menu that never rendered. The menu container is the always-present
+        # signal — Rename is only offered for multi-instance panels, so it can't serve
+        # here where a single-instance tab may be the one right-clicked.
+        expect(self._page.get_by_role("menu")).to_be_visible()
         for axis in _DIRECTION_AXES:
             option = self.get_create_option(axis)
             if axis in expected_axes:

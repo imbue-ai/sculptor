@@ -11,6 +11,7 @@ drag cannot. The provider's directional coordinate getter makes a single arrow
 press jump to the adjacent section.
 """
 
+from playwright.sync_api import Locator
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
@@ -36,7 +37,7 @@ _MAX_DRAG_STEPS = 4
 _PICKUP_ATTEMPTS = 3
 
 
-def _section_drop_target(page: Page, sub_section: str):  # noqa: ANN202 - playwright Locator
+def _section_drop_target(page: Page, sub_section: str) -> Locator:
     """The element carrying the live drop-target flag for a sub-section.
 
     Matches whichever is mounted: the expanded section body (PanelSection) or the

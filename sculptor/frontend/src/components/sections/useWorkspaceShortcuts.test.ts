@@ -24,6 +24,20 @@ describe("nextCyclablePanel", () => {
     expect(nextCyclablePanel(panels, renderable, "agent:b" as PanelId, 1)).toBe("agent:a");
   });
 
+  it("treats a missing or def-less active as index 0, stepping onto its neighbour", () => {
+    // With no active panel (or an active id that has no renderable definition, e.g. the
+    // active panel is the one mid-loading), the cycle anchors at index 0: forward lands
+    // on the second renderable panel, backward wraps to the last.
+    const panels = panelList("agent:a", "agent:b", "agent:c");
+    const renderable = ids("agent:a", "agent:b", "agent:c");
+    expect(nextCyclablePanel(panels, renderable, undefined, 1)).toBe("agent:b");
+    expect(nextCyclablePanel(panels, renderable, undefined, -1)).toBe("agent:c");
+
+    const withGhost = panelList("agent:a", "agent:b", "agent:c", "agent:ghost");
+    expect(nextCyclablePanel(withGhost, renderable, "agent:ghost" as PanelId, 1)).toBe("agent:b");
+    expect(nextCyclablePanel(withGhost, renderable, "agent:ghost" as PanelId, -1)).toBe("agent:c");
+  });
+
   it("is a no-op when fewer than two panels are renderable", () => {
     const panels = panelList("agent:a", "agent:c");
     const renderable = ids("agent:a"); // only a has a definition

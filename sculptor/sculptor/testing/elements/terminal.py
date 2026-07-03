@@ -228,6 +228,43 @@ def wait_for_xterm_buffer_nonempty(page: Page) -> None:
         raise AssertionError("xterm buffer never rendered any shell output (terminal failed to connect).") from e
 
 
+def wait_for_fresh_xterm_buffer(page: Page, absent_substring: str) -> None:
+    """Wait until ``window.__xterm`` points at a terminal that has rendered output
+    but does NOT contain ``absent_substring``.
+
+    Switching to a freshly mounted terminal tab unmounts the previous tab's xterm,
+    but ``window.__xterm`` is only cleared in the unmounting terminal's effect
+    cleanup, so it can still reference the old handle for a moment after the switch.
+    A bare non-empty check (``wait_for_xterm_buffer_nonempty``) can therefore pass
+    against the stale buffer. Passing a marker that only the previous terminal
+    printed pins the wait to the new terminal's own shell prompt — so callers can
+    trust the active xterm is the new one before typing into it.
+    """
+    try:
+        page.wait_for_function(
+            """absent => {
+                const xterm = window.__xterm;
+                if (!xterm) return false;
+                const buffer = xterm.buffer.active;
+                let hasOutput = false;
+                for (let i = 0; i <= buffer.baseY + buffer.cursorY; i++) {
+                    const line = buffer.getLine(i);
+                    if (!line) continue;
+                    const text = line.translateToString(true);
+                    if (text.includes(absent)) return false;
+                    if (text.trim().length > 0) hasOutput = true;
+                }
+                return hasOutput;
+            }""",
+            arg=absent_substring,
+        )
+    except PlaywrightTimeoutError as e:
+        buffer_text = get_xterm_buffer_text(page)
+        raise AssertionError(
+            f"Expected a fresh xterm buffer free of {absent_substring!r}, but timed out. Buffer:\n{buffer_text}"
+        ) from e
+
+
 def get_xterm_cursor_row(page: Page) -> int:
     """Return the absolute cursor row (cursorY + baseY) from the xterm buffer."""
     return page.evaluate(
@@ -256,7 +293,9 @@ def ensure_terminal_panel_open(page: Page) -> None:
     # At least one terminal panel tab must be present in the bottom section's strip.
     expect(get_terminal_tabs(page).first).to_be_visible(timeout=60_000)
     # The active terminal's xterm textarea (the mount signal) is rendered inside it.
-    expect(get_terminal_textarea(page).first).to_be_attached(timeout=60_000)
+    # Scope the attach check to the bottom section root so an unrelated xterm (e.g. a
+    # terminal agent's panel in the center) can't satisfy it before this terminal mounts.
+    expect(section.get_section().locator(".xterm-helper-textarea").first).to_be_attached(timeout=60_000)
 
 
 def open_terminal_and_wait(page: Page) -> None:
@@ -313,9 +352,9 @@ def get_terminal_tabs(page: Page) -> Locator:
 def add_terminal(page: Page, section: str = _TERMINAL_SECTION) -> None:
     """Create a new terminal panel in ``section`` via the section `+` add-panel dropdown.
 
-    Replaces the old single "+" add-terminal button: in the section shell a terminal
-    is created from the section header `+` dropdown's "New terminal" item (the section
-    is expanded first when collapsed). Delegates to the shared ``create_terminal_panel``.
+    A terminal is created from the section header `+` dropdown's "New terminal" item
+    (the section is expanded first when collapsed). Delegates to the shared
+    ``create_terminal_panel``.
     """
     create_terminal_panel(page, section)
 
@@ -340,14 +379,6 @@ def confirm_close_terminal(page: Page) -> None:
     confirm_button = page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CONFIRM)
     expect(confirm_button).to_be_visible()
     confirm_button.click()
-
-
-def get_tab_context_menu_rename(page: Page) -> Locator:
-    return page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_RENAME)
-
-
-def get_inline_rename_input(page: Page) -> Locator:
-    return page.get_by_test_id(ElementIDs.INLINE_RENAME_INPUT)
 
 
 def get_xterm_theme_foreground(page: Page) -> str:

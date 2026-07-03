@@ -80,14 +80,14 @@ def test_slash_backspace_at_trigger_closes_picker(sculptor_instance_: SculptorIn
 
 
 def _click_outside_chat_input(task_page: PlaywrightTaskPage) -> None:
-    """Click a stable element at the top of the task page that lives outside
-    the chat input's DOM. The picker's document-level pointerdown listener
-    (capture phase) will see the event and tear the popover down.
+    """Click a stable element that lives outside the chat input's DOM. The
+    picker's document-level pointerdown listener (capture phase) will see the
+    event and tear the popover down.
 
-    Uses the active workspace row as the click target — it sits at the top of
-    the window and is reliably present in any task-page test. Clicking the
-    already-active row is a navigation no-op, so the only side effect is the
-    pointerdown the picker is listening for."""
+    Uses the active workspace's sidebar row as the click target — it lives in
+    the left sidebar, outside the chat input's DOM, and is reliably present in
+    any task-page test. Clicking the already-active row is a navigation no-op,
+    so the only side effect is the pointerdown the picker is listening for."""
     navigate_to_workspace(task_page)
 
 

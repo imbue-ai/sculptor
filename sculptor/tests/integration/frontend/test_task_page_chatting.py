@@ -10,9 +10,8 @@ from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_2_MODEL_NAME
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.playwright_utils import navigate_to_home_page
 from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import soft_reload_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -36,7 +35,7 @@ def test_prompt_draft_persists_from_task_page(sculptor_instance_: SculptorInstan
 
 @user_story("the contents of the prompt to survive page reloads and navigation")
 def test_prompt_drafts_persist_on_multiple_tasks_and_home_page(sculptor_instance_: SculptorInstance) -> None:
-    """Test that prompt drafts persist when navigating between workspace tabs."""
+    """Test that a prompt draft survives navigating away from the task page and back."""
     page = sculptor_instance_.page
     follow_up_text = "This is a follow-up message draft."
 
@@ -46,14 +45,10 @@ def test_prompt_drafts_persist_on_multiple_tasks_and_home_page(sculptor_instance
     # Type a follow-up message draft in chat input (don't send it)
     chat_panel.get_chat_input().fill(follow_up_text)
 
-    # The sidebar's new-workspace button direct-creates from the last-used
-    # settings; use the add-workspace surface opener, which deterministically
-    # brings up the create form (and its create button) for this navigate-away
-    # step. The point of this step is to leave workspace 1 and come back to it.
-    navigate_to_add_workspace_page(page)
-    add_workspace_page = PlaywrightAddWorkspacePage(page=page)
-    expect(add_workspace_page.get_submit_button()).to_be_visible()
-
+    # Route to Home so the task page (and its chat input) actually unmounts, then
+    # return to the workspace: the draft must be restored from persistence, not
+    # merely retained by a still-mounted input.
+    navigate_to_home_page(page)
     navigate_to_workspace(page)
     expect(task_page.get_chat_panel()).to_be_visible()
 
@@ -222,35 +217,42 @@ def test_model_selection(sculptor_instance_: SculptorInstance) -> None:
 
 @user_story("to preserve the correct model when switching between tasks")
 def test_model_selector_updates_when_switching_tasks(sculptor_instance_: SculptorInstance) -> None:
-    """Test that the model selector displays the correct model when navigating between workspace tabs."""
+    """Test that the model selector displays the correct model when navigating between workspaces."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(
         page,
         prompt='fake_claude:text `{"text": "Task 1 response"}`',
         model_name=FAKE_CLAUDE_MODEL_NAME,
+        workspace_name="Model Task One",
     )
 
     start_task_and_wait_for_ready(
         page,
         prompt='fake_claude:text `{"text": "Task 2 response"}`',
         model_name=FAKE_CLAUDE_2_MODEL_NAME,
+        workspace_name="Model Task Two",
     )
 
-    # We should now be on the second workspace tab; verify its model
+    # We should now be on the second workspace; verify its model.
     second_task_page = PlaywrightTaskPage(page=page)
     second_chat_panel = second_task_page.get_chat_panel()
     model_selector = second_chat_panel.get_model_selector()
     expect(model_selector).to_be_visible()
     expect(model_selector).to_contain_text("Fake Claude 2", ignore_case=True)
 
-    navigate_to_workspace(page)
+    # The sidebar sorts rows by name, so a positional index would not reliably land
+    # on the first-created workspace; switch back by name.
+    navigate_to_workspace(page, "Model Task One")
     first_task_page = PlaywrightTaskPage(page=page)
     first_chat_panel = first_task_page.get_chat_panel()
     expect(first_chat_panel).to_be_visible()
     model_selector = first_chat_panel.get_model_selector()
     expect(model_selector).to_be_visible()
     expect(model_selector).to_contain_text("Fake Claude", ignore_case=True)
+    # "Fake Claude" is a substring of "Fake Claude 2", so assert the second model
+    # is not shown — proving the switch back to the first workspace happened.
+    expect(model_selector).not_to_contain_text("Fake Claude 2", ignore_case=True)
 
 
 @pytest.mark.skip(reason="Skipped: context indicator redesigned from progress bar to SVG arc")

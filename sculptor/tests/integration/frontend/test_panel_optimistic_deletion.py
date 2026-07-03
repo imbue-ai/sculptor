@@ -5,10 +5,7 @@ disappears instantly, and a failed backend delete rolls back (the tab reappears)
 a prominent error toast that offers Retry. Closing the LAST agent leaves the center
 section empty — no auto-created replacement.
 
-These cases are the agent portion of the old `test_optimistic_deletion.py`,
-re-anchored onto the panel-tab close flow; they replace its old "last agent →
-auto-create a new one" assertion with the empty-center behaviour. The
-workspace-deletion portion lives with the sidebar tests.
+Workspace deletion is covered by the sidebar tests.
 """
 
 import re
@@ -18,6 +15,7 @@ from playwright.sync_api import Route
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
+from sculptor.testing.elements.panel_empty_state import PlaywrightEmptySectionState
 from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.toast import PlaywrightToastElement
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -64,20 +62,34 @@ def test_optimistic_agent_deletion_removes_tab_immediately(sculptor_instance_: S
 def test_optimistic_deletion_last_agent_does_not_auto_create(sculptor_instance_: SculptorInstance) -> None:
     """Closing the last agent does NOT auto-create a replacement.
 
-    Replaces the old "last agent → creates a new one" assertion: after the delete the
-    center is left empty (no agent panel tab), rather than refilled.
+    After the delete round-trips, the center settles into its empty state with no
+    agent panel tab, rather than being refilled with a fresh agent.
     """
     page = sculptor_instance_.page
     panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    center_empty_state = PlaywrightEmptySectionState(page, sub_section="center")
 
     start_task_and_wait_for_ready(page, prompt="Only agent", workspace_name="Empty Center Optimistic WS")
     tabs = panel_tabs.get_panel_tabs()
     expect(tabs).to_have_count(1)
 
-    panel_tabs.delete_panel_via_close_button(_panel_id_of(tabs.first))
+    # Wait for the backend DELETE to commit (2xx) before the negative assertion. A bare
+    # to_have_count(0) succeeds the instant the count is transiently 0 — the same
+    # transient window a "delete last agent → auto-create a replacement" backend
+    # round-trip would also produce — so it must be anchored on the delete completing
+    # and the center's durable empty state showing, not on the momentary emptiness.
+    with page.expect_response(
+        lambda response: (
+            _AGENT_DELETE_PATTERN.search(response.url) is not None
+            and response.request.method == "DELETE"
+            and response.ok
+        )
+    ):
+        panel_tabs.delete_panel_via_close_button(_panel_id_of(tabs.first))
     expect(panel_tabs.get_delete_confirmation_dialog()).to_be_hidden()
 
-    # No replacement agent panel tab is auto-created.
+    # The center settles into its empty state and no replacement agent tab is created.
+    expect(center_empty_state.get_add_panel_button()).to_be_visible()
     expect(panel_tabs.get_panel_tabs()).to_have_count(0)
 
 

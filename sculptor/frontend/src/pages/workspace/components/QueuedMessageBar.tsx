@@ -67,7 +67,6 @@ export const QueuedMessageBar = ({ message, onEditConflict }: QueuedMessageBarPr
   const fileSources = fileBlocks.map((block) => block.source);
 
   const handleDelete = async (): Promise<void> => {
-    if (!taskID) return;
     try {
       await deleteWorkspaceAgentMessage({
         path: { workspace_id: workspaceID, agent_id: taskID, message_id: message.id },

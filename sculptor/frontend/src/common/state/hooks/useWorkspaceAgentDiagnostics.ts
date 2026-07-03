@@ -100,19 +100,18 @@ export const useWorkspaceAgentDiagnostics = (
         fetchAgentDiagnostics(workspaceId, taskId, signal).then((diagnostics) => ({ taskId, diagnostics })),
       staleTime: AGENT_DIAGNOSTICS_STALE_TIME_MS,
     })),
-    // Surface a failing diagnostics endpoint instead of silently presenting it as
-    // "no diagnostics yet" — `useQuery`'s native error makes a hand-rolled signal
-    // unnecessary, we just have to log it.
+    // A query that succeeded once keeps its last-good `data` even while a later
+    // refetch is erroring, so prefer the cached diagnostics — dropping the entry
+    // on a transient failure would disable the tab's copy items until the next
+    // run. Only an agent that has never fetched successfully is omitted, and its
+    // failure logged rather than silently presented as "no diagnostics yet".
     combine: useCallback((results: Array<{ data?: AgentDiagnosticsQueryResult; error: unknown }>) => {
       const next: Record<string, DynamicAgentDiagnostics> = {};
       for (const { data, error } of results) {
-        if (error !== null) {
-          console.warn("Failed to fetch workspace agent diagnostics", error);
-          continue;
-        }
-
         if (data?.diagnostics !== undefined) {
           next[data.taskId] = data.diagnostics;
+        } else if (error !== null) {
+          console.warn("Failed to fetch workspace agent diagnostics", error);
         }
       }
       return next;

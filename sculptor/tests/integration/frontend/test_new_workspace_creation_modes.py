@@ -90,6 +90,25 @@ def _git_branch(repo_path: Path) -> str:
     ).stdout.strip()
 
 
+def _git_rev_parse(repo_path: Path, rev: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(repo_path), "rev-parse", rev],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
+def _git_merge_base(repo_path: Path, other_ref: str) -> str:
+    """The merge-base (fork point) between ``repo_path``'s HEAD and ``other_ref``."""
+    return subprocess.run(
+        ["git", "-C", str(repo_path), "merge-base", "HEAD", other_ref],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
 def _branch_exists(repo_path: Path, branch: str) -> bool:
     result = subprocess.run(
         ["git", "-C", str(repo_path), "branch", "--list", branch],
@@ -284,13 +303,31 @@ def test_create_from_non_default_source_branch(sculptor_instance_: SculptorInsta
 
     dialog = _open_dialog(page)
     dialog.get_workspace_name_input().fill("from-main")
-    expect(dialog.get_branch_name_input()).to_have_value(re.compile(r".+"))
+    branch_input = dialog.get_branch_name_input()
+    expect(branch_input).to_have_value(re.compile(r".+"))
 
     dialog.select_branch("main")
     expect(dialog.get_branch_selector()).to_contain_text("main")
+    branch_name = branch_input.input_value()
 
     dialog.create_and_wait_for_chat_panel()
-    expect(page.get_by_test_id(ElementIDs.CHAT_PANEL)).to_be_visible()
+
+    # Verify the worktree actually branched off `main`, not the default `testing`
+    # checkout. The fixture's `testing` branch itself forks from `main`, so a
+    # worktree cut from `main` forks from `testing` at `main`'s tip and carries none
+    # of testing's extra commits; branching off `testing` would instead fork at
+    # testing's own tip.
+    project_path = sculptor_instance_.project_path
+    matching = [p for p in _worktree_paths(project_path) if _git_branch(p) == branch_name]
+    assert matching, f"no worktree on branch {branch_name!r}"
+    new_worktree = matching[0]
+
+    main_tip = _git_rev_parse(project_path, "main")
+    testing_tip = _git_rev_parse(project_path, "testing")
+    fork_point = _git_merge_base(new_worktree, "testing")
+    assert fork_point == main_tip != testing_tip, (
+        f"expected the worktree to branch off main ({main_tip[:8]}), but it forked from testing at {fork_point[:8]}"
+    )
 
 
 # -- Mode selector (worktree default; clone/in-place behind flags) --

@@ -6,12 +6,13 @@
 // action merges one back; an emptied half shows the empty-section state), and
 // single-instance panels activate in place instead of duplicating.
 
+import type { Setter } from "jotai";
 import { atom } from "jotai";
 
 import { isSectionExpanded, openPanelsInSubSection } from "./layoutQueries.ts";
 import type { WorkspaceLayoutState } from "./persistence/types.ts";
 import { isMultiInstancePanelId } from "./registry/dynamicPanels.tsx";
-import { workspaceLayoutAtom } from "./sectionAtoms.ts";
+import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "./sectionAtoms.ts";
 import type { PanelId, SectionId, SplitAxis, SubSectionId } from "./sectionTypes.ts";
 import { canSplitAxis, toSecondary, toSection } from "./sectionTypes.ts";
 import { activeSectionRingNonceAtom, maximizedSectionAtom } from "./transientAtoms.ts";
@@ -117,8 +118,8 @@ function withMovePanel(layout: WorkspaceLayoutState, { panelId, to, index }: Mov
 }
 
 function withOpenPanel(layout: WorkspaceLayoutState, { panelId, in: target }: OpenPanelParams): WorkspaceLayoutState {
+  const existing = layout.placement[panelId];
   if (!isMultiInstancePanelId(panelId)) {
-    const existing = layout.placement[panelId];
     if (existing !== undefined) {
       // Single-instance already open: activate it in place (do not duplicate) and
       // expand its host section so re-opening a panel that lives in a collapsed
@@ -127,6 +128,11 @@ function withOpenPanel(layout: WorkspaceLayoutState, { panelId, in: target }: Op
       const activated = { ...layout, activePanel: { ...layout.activePanel, [existing]: panelId } };
       return withExpandedSection(activated, toSection(existing));
     }
+  } else if (existing !== undefined && existing !== target) {
+    // A multi-instance panel already placed in another sub-section is relocated, not
+    // duplicated: route through the move reducer so the source sub-section's order and
+    // active-panel entries are cleaned up on the same path as an explicit move.
+    return withMovePanel(layout, { panelId, to: target });
   }
   const order = {
     ...layout.order,
@@ -274,27 +280,44 @@ export const jumpToSectionAtom = atom(null, (get, set, { subSection }: SetActive
   set(activeSectionRingNonceAtom, (nonce) => nonce + 1);
 });
 
-// Smart panel visibility toggle for the Cmd+K "Toggle <panel>" commands: closes the
-// panel when it is already open, active in its sub-section, and that section is
-// expanded; otherwise activates it in its existing placement and jumps there.
-// Callers only offer the toggle for placed panels, so a never-placed panel is a
-// no-op. Mirrors the docking shell's togglePanel in the new section model.
-type TogglePanelParams = { panelId: PanelId; fallbackSection: SubSectionId };
+// ── Cross-workspace panel reveal ──────────────────────────────────────────────
 
-export const togglePanelAtom = atom(null, (get, set, { panelId }: TogglePanelParams) => {
-  const layout = get(workspaceLayoutAtom);
-  const placement = layout.placement[panelId];
-  if (placement === undefined) {
+type RevealPanelParams = { workspaceId: string; panelId: PanelId; in: SubSectionId };
+
+// A reveal recorded for a workspace that is not the active layout scope yet. The
+// workspace shell bootstrap consumes it right after flipping the scope (and after
+// any first-visit seeding), so the reveal lands in the destination workspace's
+// snapshot. Holds at most one reveal; recording a new one replaces the old.
+const pendingPanelRevealAtom = atom<RevealPanelParams | null>(null);
+
+function applyPanelReveal(set: Setter, params: RevealPanelParams): void {
+  set(openPanelAtom, { panelId: params.panelId, in: params.in });
+  set(jumpToSectionAtom, { subSection: params.in });
+}
+
+// Open a panel in a SPECIFIC workspace's layout and jump to its section. When that
+// workspace is already the active scope the reveal applies immediately; otherwise
+// it is deferred until the bootstrap flips the scope. The scope only flips after
+// navigation mounts the destination workspace, so writing through the layout proxy
+// before then would mutate — and persist — the layout of the workspace being left.
+export const revealPanelInWorkspaceAtom = atom(null, (get, set, params: RevealPanelParams) => {
+  if (get(activeWorkspaceIdAtom) === params.workspaceId) {
+    applyPanelReveal(set, params);
     return;
   }
+  set(pendingPanelRevealAtom, params);
+});
 
-  const section = toSection(placement);
-  const isExpanded = isSectionExpanded(layout, section);
-  const isActive = layout.activePanel[placement] === panelId;
-  if (isExpanded && isActive) {
-    set(closePanelAtom, { panelId });
+// Apply any reveal recorded for `workspaceId` and clear the pending slot. A stale
+// reveal targeting a different workspace (its navigation never landed) is dropped
+// so it cannot fire on a later, unrelated visit to its target.
+export const consumePendingPanelRevealAtom = atom(null, (get, set, params: { workspaceId: string }) => {
+  const pending = get(pendingPanelRevealAtom);
+  if (pending === null) {
     return;
   }
-  set(openPanelAtom, { panelId, in: placement });
-  set(jumpToSectionAtom, { subSection: placement });
+  set(pendingPanelRevealAtom, null);
+  if (pending.workspaceId === params.workspaceId) {
+    applyPanelReveal(set, pending);
+  }
 });

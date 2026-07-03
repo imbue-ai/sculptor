@@ -39,6 +39,23 @@ def section_of(sub_section: str) -> str:
     return sub_section.split(":", 1)[0]
 
 
+def section_root_hosting(page: Page, content_test_id: ElementIDs) -> Locator:
+    """Return the section root that currently hosts a panel-content node.
+
+    A single-instance panel's content testid (e.g. ``CHANGES_PANEL``) lives inside
+    exactly one section root. Panel POMs that pair a list with a sibling DiffViewer
+    must be scoped to that SECTION root — the viewer is a sibling of the list, not a
+    descendant — so this intersects the four section roots with the one that contains
+    ``content_test_id``.
+    """
+    section_roots: Locator | None = None
+    for test_id in _SECTION_ROOT_TEST_IDS.values():
+        candidate = page.get_by_test_id(test_id)
+        section_roots = candidate if section_roots is None else section_roots.or_(candidate)
+    assert section_roots is not None, "section root registry is empty"
+    return section_roots.filter(has=page.get_by_test_id(content_test_id))
+
+
 class PlaywrightWorkspaceSection:
     """Page Object Model for a single workspace section / sub-section.
 
@@ -50,8 +67,9 @@ class PlaywrightWorkspaceSection:
     the header, panel tabs, add-panel "+", and maximize toggle are suffixed with
     the sub-section id (e.g. ``f"{SECTION_HEADER}-left:secondary"``).
 
-    This is the basic accessor POM. Splits, the empty state, and the full
-    ``PanelTab`` POM land in later tasks.
+    This is the basic accessor POM. Splits are driven via ``PlaywrightSectionSplit``,
+    empty states via ``PlaywrightEmptySectionState``, and panel tabs via
+    ``PlaywrightPanelTabElement``.
     """
 
     def __init__(self, page: Page, sub_section: str) -> None:
@@ -81,6 +99,18 @@ class PlaywrightWorkspaceSection:
     def get_panel_tab(self, panel_id: str) -> Locator:
         """Get the panel tab for a specific panel id (e.g. ``agent:<taskId>``)."""
         return self.get_header().get_by_test_id(f"{ElementIDs.PANEL_TAB}-{panel_id}")
+
+    def get_agent_tabs(self) -> Locator:
+        """Get every agent panel tab in this sub-section's header.
+
+        Agent tabs suffix their panel id as ``agent:<taskId>`` (e.g.
+        ``PANEL_TAB-agent:<taskId>``), so this narrows get_panel_tabs to that prefix —
+        useful when only agents matter and terminal/static tabs must be excluded. The
+        ``data-testid`` prefix selector is encapsulated here (like get_panel_tabs) so
+        the integration tests (which the css-locator ratchet covers) query agent tabs
+        through this POM rather than writing their own attribute selector.
+        """
+        return self.get_header().locator(f'[data-testid^="{ElementIDs.PANEL_TAB}-agent:"]')
 
     def get_active_tab(self) -> Locator:
         """Get the active (selected) panel tab in this sub-section.
@@ -250,9 +280,10 @@ class PlaywrightWorkspaceSection:
                 last_error = error
         if header.is_visible():
             return
+        # Reaching here means no click ever landed and the forced fallback also failed,
+        # so a click error is always recorded by this point; surface it.
         if last_error is not None:
             raise last_error
-        expect(header).to_be_visible()
 
     def collapse_section(self) -> None:
         """Ensure this section is collapsed so it no longer renders a header.
@@ -263,10 +294,15 @@ class PlaywrightWorkspaceSection:
         """
         if section_of(self._sub_section) == "center":
             return
+        # The expand/collapse toggle lives in the workspace header, which only mounts
+        # once the workspace has loaded; wait for the toggle to be visible BEFORE reading
+        # the section's (non-auto-waiting) ``is_hidden`` state, so a check that races a
+        # still-loading shell doesn't read the not-yet-mounted header as "already
+        # collapsed" and no-op while the section is actually expanded.
+        toggle = self.get_section_toggle()
+        expect(toggle).to_be_visible()
         header = self.get_header()
         if header.is_hidden():
             return
-        toggle = self.get_section_toggle()
-        expect(toggle).to_be_visible()
         toggle.click()
         expect(header).to_have_count(0)

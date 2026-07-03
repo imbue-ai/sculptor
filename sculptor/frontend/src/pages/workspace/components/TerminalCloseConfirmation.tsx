@@ -60,7 +60,6 @@ export const TerminalCloseConfirmation = (): ReactElement => {
       }}
       entityType="terminal"
       entityName={target?.name ?? ""}
-      confirmLabel="Close"
       onConfirm={handleConfirm}
     />
   );

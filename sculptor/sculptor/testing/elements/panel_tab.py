@@ -1,21 +1,17 @@
-"""Page Object Model for a panel tab and its affordances (the agent/terminal analog
-of FCC's shared viewer POMs).
+"""Page Object Model for a panel tab and its affordances.
 
 Agents and terminals render as panel tabs in a section header
 (``PANEL_TAB-agent:<taskId>`` / ``PANEL_TAB-terminal:<wsId>:<n>``), created from the
-same section ``+`` add-panel dropdown. This POM consolidates the tab-model affordances
-shared by agent and terminal tabs:
-rename (double-click or context menu), close (→ delete/close confirmation),
-diagnostics copy actions, the ``data-dot-status`` reader, and the close button.
+same section ``+`` add-panel dropdown. This POM consolidates the affordances shared by
+agent and terminal tabs: rename (double-click or context menu), close (→ delete/close
+confirmation), and the agent's diagnostics copy actions. The tabs use the shared
+affordance ids ``TAB_CONTEXT_MENU_*``, ``INLINE_RENAME_INPUT``, and
+``DELETE_CONFIRMATION_*``.
 
-Only the **host** testid moved (``AGENT_TAB`` / ``TERMINAL_TAB`` → ``PANEL_TAB``);
-the shared affordance ids (``TAB_CONTEXT_MENU_*``, ``INLINE_RENAME_INPUT``,
-``DELETE_CONFIRMATION_*``) are reused unchanged.
-
-The panel-tab context menu in the redesigned shell offers Rename (for multi-instance
-panels only) plus the agent's flat diagnostics copy items (rendered by label, with
-Radix ``data-disabled`` on items that have nothing to copy). Constructed with the
-``sub_section`` whose header hosts the tabs.
+The panel-tab context menu offers Rename (for multi-instance panels only) plus the
+agent's flat diagnostics copy items (rendered by label, with Radix ``data-disabled``
+on items that have nothing to copy). Constructed with the ``sub_section`` whose header
+hosts the tabs.
 """
 
 from playwright.sync_api import Locator
@@ -34,34 +30,44 @@ class PlaywrightPanelTabElement:
         self._sub_section = sub_section
         self._section = PlaywrightWorkspaceSection(page, sub_section)
 
-    # ── Tab getters ────────────────────────────────────────────────────────────
+    # Tab getters
 
     def get_panel_tabs(self) -> Locator:
         """Get every panel tab in this sub-section's header."""
         return self._section.get_panel_tabs()
 
     def get_panel_tab(self, panel_id: str) -> Locator:
-        """Get the panel tab for a specific panel id (e.g. ``agent:<taskId>``)."""
+        """Get the panel tab for a specific panel id (e.g. ``agent:<taskId>``).
+
+        Agent (and terminal-agent) panel tabs stamp ``data-dot-status`` on the tab
+        element itself (read/unread/running/waiting/error), so callers can assert
+        ``to_have_attribute("data-dot-status", …)`` directly on the returned locator.
+        """
         return self._section.get_panel_tab(panel_id)
 
     def get_panel_tab_by_name(self, name: str) -> Locator:
         """Get the panel tab(s) whose label contains ``name``."""
         return self.get_panel_tabs().filter(has_text=name)
 
+    def get_agent_tabs(self) -> Locator:
+        """Get every agent panel tab in this sub-section's header (excludes terminals/static)."""
+        return self._section.get_agent_tabs()
+
     def get_active_tab(self) -> Locator:
         """Get the active (selected) panel tab in this sub-section."""
         return self._section.get_active_tab()
 
-    def get_tab_dot_status(self, tab: Locator) -> Locator:
-        """Return the tab locator carrying the ``data-dot-status`` attribute.
+    def get_tab_status_dot(self, tab: Locator) -> Locator:
+        """Get the rendered status-dot element inside a panel tab.
 
-        Agent (and terminal-agent) panel tabs stamp ``data-dot-status`` on the tab
-        element itself (read/unread/running/waiting/error), so callers assert
-        ``to_have_attribute("data-dot-status", …)`` on the returned locator.
+        Agent tabs render a visible dot whose ``data-panel-tab-dot`` attribute carries
+        the same status as the tab's ``data-dot-status``, so tests can assert the dot is
+        actually rendered (visible) with the expected status — not just that the tab
+        carries the data attribute.
         """
-        return tab
+        return tab.get_by_test_id(ElementIDs.PANEL_TAB_STATUS_DOT)
 
-    # ── Close (→ delete/close confirmation) ─────────────────────────────────────
+    # Close (→ delete/close confirmation)
 
     def get_tab_close_button(self, panel_id: str) -> Locator:
         """Get a panel tab's always-visible close (X) button by panel id."""
@@ -99,7 +105,7 @@ class PlaywrightPanelTabElement:
         expect(confirm_button).to_be_visible()
         confirm_button.click()
 
-    # ── Context menu ────────────────────────────────────────────────────────────
+    # Context menu
 
     def open_context_menu(self, tab: Locator) -> None:
         """Right-click a tab to open its context menu."""
@@ -121,7 +127,7 @@ class PlaywrightPanelTabElement:
         """
         return self._page.get_by_role("menuitem", name=text)
 
-    # ── Rename ──────────────────────────────────────────────────────────────────
+    # Rename
 
     def get_inline_rename_input(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.INLINE_RENAME_INPUT)

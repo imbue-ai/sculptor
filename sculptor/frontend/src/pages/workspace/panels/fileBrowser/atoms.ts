@@ -1,19 +1,16 @@
 import { atom } from "jotai";
-import { atomFamily, atomWithStorage } from "jotai/utils";
+import { atomFamily, atomWithStorage, selectAtom } from "jotai/utils";
 
 import { getCachedWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
 import { parseDiff } from "~/components/DiffUtils.ts";
 import { jumpToSectionAtom, openPanelAtom } from "~/components/sections/sectionActions.ts";
+import { activeWorkspaceIdAtom, workspaceLayoutFamily } from "~/components/sections/sectionAtoms.ts";
 import type { DiffScope } from "~/pages/workspace/components/diffPanel/types.ts";
 
-import type { FileBrowserState, FileBrowserTab, FileStatus, ViewMode } from "./types.ts";
+import type { FileBrowserState, FileStatus, ViewMode } from "./types.ts";
 import { determineFileStatus } from "./utils.ts";
 
 const FILE_BROWSER_PANEL_ID = "files";
-
-export const activeFileBrowserTabAtomFamily = atomFamily((workspaceId: string) =>
-  atomWithStorage<FileBrowserTab>(`sculptor-fb-tab-${workspaceId}`, "all"),
-);
 
 type FolderStateKey = "expandedFolders" | "changesExpandedFolders";
 
@@ -28,6 +25,14 @@ const DEFAULT_FILE_BROWSER_STATE: FileBrowserState = {
 
 export const fileBrowserStateAtomFamily = atomFamily((workspaceId: string) =>
   atomWithStorage<FileBrowserState>(`fileBrowser-state-${workspaceId}`, DEFAULT_FILE_BROWSER_STATE),
+);
+
+/** Read-only per-workspace slice of the file-browser view mode (tree vs flat).
+ *  Panels that only need the view mode subscribe here so the far more frequent
+ *  folder-expand, scroll-position, and search writes to the full state atom don't
+ *  re-render them (and their embedded viewers). */
+export const fileBrowserViewModeAtomFamily = atomFamily((workspaceId: string) =>
+  selectAtom(fileBrowserStateAtomFamily(workspaceId), (state) => state.viewMode),
 );
 
 /**
@@ -147,29 +152,34 @@ const computeAncestorFolderPaths = (folderPath: string): Array<string> => {
   return ancestors;
 };
 
-export const revealFolderAtom = atom(
-  null,
-  (_get, set, { workspaceId, path }: { workspaceId: string; path: string }) => {
-    // Path-mode mentions (e.g. selected after drilling into a folder with Tab)
-    // carry a "./" prefix in their chip id — the file tree's node paths are
-    // workspace-relative without that prefix, so strip it before matching.
-    // Absolute ("/...") and home-relative ("~/...") paths point outside the
-    // workspace; they'll fail the row lookup and surface the "not viewable"
-    // toast, which is the correct outcome.
-    const withoutDotSlash = path.startsWith("./") ? path.slice(2) : path;
-    const normalised = withoutDotSlash.replace(/\/+$/, "");
-    if (normalised.length === 0) return;
+export const revealFolderAtom = atom(null, (get, set, { workspaceId, path }: { workspaceId: string; path: string }) => {
+  // Path-mode mentions (e.g. selected after drilling into a folder with Tab)
+  // carry a "./" prefix in their chip id — the file tree's node paths are
+  // workspace-relative without that prefix, so strip it before matching.
+  // Absolute ("/...") and home-relative ("~/...") paths point outside the
+  // workspace; they'll fail the row lookup and surface the "not viewable"
+  // toast, which is the correct outcome.
+  const withoutDotSlash = path.startsWith("./") ? path.slice(2) : path;
+  const normalised = withoutDotSlash.replace(/\/+$/, "");
+  if (normalised.length === 0) return;
 
-    set(expandFoldersAtom, { workspaceId, paths: computeAncestorFolderPaths(normalised) });
+  set(expandFoldersAtom, { workspaceId, paths: computeAncestorFolderPaths(normalised) });
 
-    // Surface the Files panel (opening/expanding its section and pulsing the ring) so the
-    // revealed folder is visible.
+  // Surface the Files panel (opening/expanding its section and pulsing the ring) so the
+  // revealed folder is visible. openPanelAtom/jumpToSectionAtom write through the
+  // active-workspace layout proxy, so only touch the layout when this workspace is the
+  // active scope — otherwise the reveal would mutate the layout of the workspace being viewed.
+  if (workspaceId === get(activeWorkspaceIdAtom)) {
     set(openPanelAtom, { panelId: FILE_BROWSER_PANEL_ID, in: "left" });
-    set(jumpToSectionAtom, { subSection: "left" });
+    // Follow the panel's actual placement: openPanelAtom activates an already-open Files
+    // panel wherever it lives, so jumping to "left" would pulse the wrong section when the
+    // user has moved it elsewhere. "left" is the fallback for a newly placed panel.
+    const subSection = get(workspaceLayoutFamily(workspaceId)).placement[FILE_BROWSER_PANEL_ID] ?? "left";
+    set(jumpToSectionAtom, { subSection });
+  }
 
-    set(focusFolderAtom, { workspaceId, path: normalised, nonce: Date.now() });
-  },
-);
+  set(focusFolderAtom, { workspaceId, path: normalised, nonce: Date.now() });
+});
 
 export const setSearchAtom = atom(
   null,

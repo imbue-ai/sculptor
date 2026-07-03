@@ -82,16 +82,12 @@ def _open_linear_panel(page: Page) -> None:
     """Open (or reveal) the Linear plugin panel in the right section.
 
     The Linear panel is a registered single-instance plugin panel (id
-    ``linear-issue``) with no default section, so it is opened via the section
-    add-panel dropdown. Each workspace has its own layout, so it is opened per
-    workspace; on return to a workspace it is already open and is just revealed.
+    ``linear-issue``) with no default section, so ``open_panel`` brings it into the
+    right section (or reveals it if already open there). Each workspace has its own
+    layout, so this runs per workspace; on return to a workspace the panel is
+    already open and is just revealed.
     """
-    section = PlaywrightWorkspaceSection(page, "right")
-    section.expand_section()
-    if section.get_panel_tab("linear-issue").count() == 0:
-        open_panel(page, "linear-issue", "right")
-    else:
-        section.get_panel_tab("linear-issue").click()
+    open_panel(page, "linear-issue", "right")
 
 
 @custom_sculptor_folder_populator.with_args(_enable_frontend_plugins_populator)

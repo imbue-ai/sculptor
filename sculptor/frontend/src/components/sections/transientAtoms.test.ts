@@ -7,6 +7,7 @@ import {
   activeSectionRingVisibleAtom,
   displayedPanelIdsAtom,
   draggedPanelIdAtom,
+  dragPointerHalvesAtom,
   ghostPanelIdAtom,
   isAnySectionMaximizedAtom,
   isDropTargetAtom,
@@ -14,6 +15,7 @@ import {
   isRingVisibleAtom,
   maximizedSectionAtom,
   panelDragStateAtom,
+  recentlyClosedPanelIdsAtom,
 } from "./transientAtoms.ts";
 
 beforeEach(() => {
@@ -126,6 +128,50 @@ describe("drag preview", () => {
     // Dragging an existing panel further right (it is removed before re-insertion).
     store.set(panelDragStateAtom, { panelId: "a", from: "center", to: "center", index: 2 });
     expect(store.get(displayedPanelIdsAtom("center"))).toEqual(["b", "a"]);
+  });
+});
+
+describe("drag pointer halves", () => {
+  it("does not notify subscribers while the pointer stays in the same halves", () => {
+    const store = createStore();
+    store.set(dragPointerHalvesAtom, { left: true, right: false, bottom: false });
+
+    let notifications = 0;
+    const unsub = store.sub(dragPointerHalvesAtom, () => {
+      notifications += 1;
+    });
+
+    // Re-writing an equal halves value is swallowed by the equality guard.
+    store.set(dragPointerHalvesAtom, { left: true, right: false, bottom: false });
+    expect(notifications).toBe(0);
+
+    // Crossing a midline changes the halves and does notify.
+    store.set(dragPointerHalvesAtom, { left: false, right: true, bottom: false });
+    expect(notifications).toBe(1);
+    expect(store.get(dragPointerHalvesAtom)).toEqual({ left: false, right: true, bottom: false });
+    unsub();
+  });
+});
+
+describe("recently closed panels", () => {
+  it("dedupes a re-closed panel to the front, keeping the list newest-first", () => {
+    const store = createStore();
+    store.set(recentlyClosedPanelIdsAtom, "a");
+    store.set(recentlyClosedPanelIdsAtom, "b");
+    expect(store.get(recentlyClosedPanelIdsAtom)).toEqual(["b", "a"]);
+
+    // Re-closing an already-listed panel moves it to the front without duplicating.
+    store.set(recentlyClosedPanelIdsAtom, "a");
+    expect(store.get(recentlyClosedPanelIdsAtom)).toEqual(["a", "b"]);
+  });
+
+  it("caps the list at eight, evicting the oldest ids", () => {
+    const store = createStore();
+    for (let i = 0; i < 10; i += 1) {
+      store.set(recentlyClosedPanelIdsAtom, `p${i}`);
+    }
+    // Newest first; the two oldest (p0, p1) fall off the cap.
+    expect(store.get(recentlyClosedPanelIdsAtom)).toEqual(["p9", "p8", "p7", "p6", "p5", "p4", "p3", "p2"]);
   });
 });
 

@@ -38,6 +38,11 @@ type AgentSettingsControlsProps = {
  * toggle is gated on `getModelCapabilities(model).supportsFastMode`
  * here (rather than at every callsite) so consumers only have to pass
  * the selected model.
+ *
+ * ChatInput renders a parallel copy of this toolbar block that adds
+ * capability-gated disabled states and a backend-model selector it needs in
+ * the live chat. Keep the shared tooltip strings, aria-labels, testids, and
+ * styling here in sync with that copy.
  */
 export const AgentSettingsControls = ({
   model,

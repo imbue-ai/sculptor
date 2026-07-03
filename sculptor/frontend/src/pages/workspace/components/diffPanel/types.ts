@@ -41,8 +41,6 @@ export type CommitFileDiffTab = {
 
 export type DiffTab = SingleFileDiffTab | FileViewTab | CommitFileDiffTab;
 
-export type SplitPosition = "left" | "right";
-
 /**
  * Per-workspace diff-panel state persisted to localStorage. Only the active
  * tab is stored: there is no tab bar to display a list, so keeping more than

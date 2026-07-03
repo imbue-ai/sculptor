@@ -17,7 +17,6 @@ vi.mock("./WorkspacePeekOverlay.module.scss", () => ({
 // The peek opens instantly (0ms) — kept as a named constant for the advance-timers calls.
 const OPEN_DELAY_MS = 0;
 const CLOSE_DELAY_MS = 80;
-const REOPEN_GRACE_PERIOD_MS = 300;
 const PEEK_OFFSET_PX = 4;
 
 // The sidebar container the peek should anchor to. Its right edge is the stable
@@ -102,7 +101,7 @@ describe("WorkspacePeekOverlay", () => {
     expect(screen.getByTestId("workspace-peek-overlay")).toBeDefined();
   });
 
-  it("reopens immediately when re-entering within the grace period", () => {
+  it("reopens instantly after closing", () => {
     render(<WorkspacePeekOverlay onNavigate={vi.fn()} />);
     const tab = createSidebarTab("ws-1");
 
@@ -116,29 +115,7 @@ describe("WorkspacePeekOverlay", () => {
     act(() => vi.advanceTimersByTime(CLOSE_DELAY_MS));
     expect(screen.queryByTestId("workspace-peek-overlay")).toBeNull();
 
-    // Re-enter within grace period — should open immediately (0ms delay)
-    hoverTab(tab);
-    act(() => vi.advanceTimersByTime(0));
-    expect(screen.getByTestId("workspace-peek-overlay")).toBeDefined();
-  });
-
-  it("still opens instantly when re-entering after the grace period expires", () => {
-    render(<WorkspacePeekOverlay onNavigate={vi.fn()} />);
-    const tab = createSidebarTab("ws-1");
-
-    // Open the popover
-    hoverTab(tab);
-    act(() => vi.advanceTimersByTime(OPEN_DELAY_MS));
-    expect(screen.getByTestId("workspace-peek-overlay")).toBeDefined();
-
-    // Leave tab and let it close
-    leaveTab(tab);
-    act(() => vi.advanceTimersByTime(CLOSE_DELAY_MS));
-    expect(screen.queryByTestId("workspace-peek-overlay")).toBeNull();
-
-    // Wait past the grace period, then re-enter — the peek has no open delay, so it
-    // still appears instantly rather than waiting.
-    act(() => vi.advanceTimersByTime(REOPEN_GRACE_PERIOD_MS + 100));
+    // Re-enter — the peek has no open delay, so it appears instantly again.
     hoverTab(tab);
     act(() => vi.advanceTimersByTime(OPEN_DELAY_MS));
     expect(screen.getByTestId("workspace-peek-overlay")).toBeDefined();

@@ -4,7 +4,7 @@ import { type ReactElement, useEffect, useRef } from "react";
 
 import { closeBtwPopupIfNotForAgentAtom, isBtwPopupOpenAtom } from "~/common/state/atoms/btwPopup.ts";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
-import { taskAtomFamily } from "~/common/state/atoms/tasks.ts";
+import { taskWorkspaceIdAtomFamily } from "~/common/state/atoms/tasks.ts";
 import { useTaskSupportsChatInterface } from "~/common/state/hooks/useTaskHelpers.ts";
 import { chatPanelMountedAtom } from "~/pages/workspace/atoms.ts";
 import { lastFocusedChatAgentAtomFamily } from "~/pages/workspace/panels/workspaceAgentActions.ts";
@@ -21,9 +21,6 @@ type ChatPanelContentProps = {
   // agent panel renders its OWN agent — one in center and another in right at once,
   // two streaming concurrently.
   taskId: string;
-  appendTextRef?: React.MutableRefObject<((text: string) => void) | null>;
-  insertSkillRef?: React.MutableRefObject<((skill: InsertSkillArg) => void) | null>;
-  editorRef?: React.MutableRefObject<TipTapEditor | null>;
 };
 
 /**
@@ -36,12 +33,7 @@ type ChatPanelContentProps = {
  * is exactly what keeps Commit / Create PR / custom actions disabled for
  * them (the load-bearing gate).
  */
-export const ChatPanelContent = ({
-  taskId,
-  appendTextRef,
-  insertSkillRef,
-  editorRef,
-}: ChatPanelContentProps): ReactElement | null => {
+export const ChatPanelContent = ({ taskId }: ChatPanelContentProps): ReactElement | null => {
   const isChatInterfaceSupported = useTaskSupportsChatInterface(taskId);
 
   if (isChatInterfaceSupported === false) {
@@ -60,38 +52,24 @@ export const ChatPanelContent = ({
   if (isChatInterfaceSupported === undefined) {
     return null;
   }
-  return (
-    <ChatPanelInner
-      taskId={taskId}
-      appendTextRef={appendTextRef}
-      insertSkillRef={insertSkillRef}
-      editorRef={editorRef}
-    />
-  );
+  return <ChatPanelInner taskId={taskId} />;
 };
 
-const ChatPanelInner = ({
-  taskId,
-  appendTextRef: appendTextRefProp,
-  insertSkillRef: insertSkillRefProp,
-  editorRef: editorRefProp,
-}: ChatPanelContentProps): ReactElement => {
-  // The chat data hook needs the task's workspace id; derive it from the task atom
-  // rather than the route so the panel stays shell-agnostic (principle 2).
-  const workspaceID = useAtomValue(taskAtomFamily(taskId))?.workspaceId ?? "";
+const ChatPanelInner = ({ taskId }: ChatPanelContentProps): ReactElement => {
+  // The chat data hook needs the task's workspace id; derive it from the task
+  // atom rather than the route — the panel's agent can differ from the routed
+  // one (any placed agent panel renders this component). The narrow derived
+  // atom keeps unrelated task churn (status, timestamps) from re-rendering
+  // the whole chat surface.
+  const workspaceID = useAtomValue(taskWorkspaceIdAtomFamily(taskId)) ?? "";
 
-  // The append-text / insert-skill / editor refs used to be created by the route
-  // page; in the section shell the panel wrapper (AgentPanel) renders this with no
-  // refs, so create them here when not supplied. They MUST be real (not undefined):
-  // useChatData registers the chatActions append/insert closures against them and
-  // ChatInput registers its editor into them, so a missing ref makes SkillsPanel /
-  // ActionsPanel inserts no-op.
-  const fallbackAppendTextRef = useRef<((text: string) => void) | null>(null);
-  const fallbackInsertSkillRef = useRef<((skill: InsertSkillArg) => void) | null>(null);
-  const fallbackEditorRef = useRef<TipTapEditor | null>(null);
-  const appendTextRef = appendTextRefProp ?? fallbackAppendTextRef;
-  const insertSkillRef = insertSkillRefProp ?? fallbackInsertSkillRef;
-  const editorRef = editorRefProp ?? fallbackEditorRef;
+  // Registration seams tying this panel's composer to the workspace-scoped
+  // consumers: useChatData registers the chatActions append/insert closures
+  // against these refs and ChatInput registers its TipTap editor, so
+  // SkillsPanel / ActionsPanel inserts land in this panel's editor.
+  const appendTextRef = useRef<((text: string) => void) | null>(null);
+  const insertSkillRef = useRef<((skill: InsertSkillArg) => void) | null>(null);
+  const editorRef = useRef<TipTapEditor | null>(null);
   const closeBtwPopupIfNotForAgent = useSetAtom(closeBtwPopupIfNotForAgentAtom);
   const isBtwPopupOpen = useAtomValue(isBtwPopupOpenAtom);
   const setChatPanelMounted = useSetAtom(chatPanelMountedAtom);

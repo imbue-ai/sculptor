@@ -12,7 +12,6 @@ import playwright
 from loguru import logger
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect
 from tenacity import RetryError
 from tenacity import retry
@@ -102,7 +101,7 @@ def ensure_sidebar_expanded(page: Page) -> None:
     """
     sidebar = page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
     expand_icon = page.get_by_test_id(ElementIDs.SIDEBAR_EXPAND_ICON)
-    expect(sidebar.or_(expand_icon)).to_be_visible(timeout=10_000)
+    expect(sidebar.or_(expand_icon)).to_be_visible()
     if expand_icon.is_visible():
         expand_icon.click()
     expect(sidebar).to_be_visible()
@@ -153,6 +152,11 @@ def navigate_to_workspace(page: Page, name_or_index: str | int = 0) -> None:
         row = rows.filter(has_text=name_or_index)
     expect(row).to_be_visible()
     row.click()
+    # Settle on the workspace shell before returning so a caller that follows
+    # with a non-retrying check doesn't race the route change. SECTION_CENTER
+    # renders on every workspace whatever the active panel is (and even for a
+    # zero-agent workspace's empty center), so it is the reliable landing signal.
+    expect(page.get_by_test_id(ElementIDs.SECTION_CENTER)).to_be_visible()
 
 
 def get_workspace_creation_button(page: Page) -> tuple[Locator, bool]:
@@ -173,7 +177,7 @@ def get_workspace_creation_button(page: Page) -> tuple[Locator, bool]:
     return create_button, is_inline_form
 
 
-def _open_new_workspace_modal(page: Page) -> None:
+def open_new_workspace_modal(page: Page) -> None:
     """Press the new-workspace keybinding until the modal's create button appears.
 
     The ``new_workspace`` shortcut (Cmd/Meta+T) is a ``window`` keydown handler,
@@ -277,7 +281,7 @@ def navigate_to_add_workspace_page(page: Page) -> None:
     # No create surface yet — a workspace (chat panel) or the Home list. Open the
     # modal via the new_workspace keybinding (Cmd/Meta+T), which is mounted on every
     # route. The empty-first-run case already returned above via the inline button.
-    _open_new_workspace_modal(page)
+    open_new_workspace_modal(page)
 
 
 def reset_active_panel_to_files(page: Page) -> None:
@@ -309,7 +313,7 @@ def reset_active_panel_to_files(page: Page) -> None:
         files_tab = left.get_panel_tab("files")
         if files_tab.count() > 0:
             files_tab.click()
-    except (PlaywrightTimeoutError, AssertionError) as error:
+    except (playwright.sync_api.Error, AssertionError) as error:
         logger.debug("reset_active_panel_to_files skipped (workspace shell unstable): {}", error)
 
 
@@ -377,8 +381,11 @@ def start_task_and_wait_for_ready(
     The new-workspace form has no model selector, so the model is switched on the
     chat panel once the workspace is ready.
 
-    When *prompt* is provided, it is sent as the first chat message after the
-    workspace is created (the modal form has no prompt-as-first-message input).
+    When *prompt* is provided, this helper leaves the creation form's own prompt
+    field empty and sends *prompt* through the chat input after the workspace is
+    created, so both creation surfaces (the new-workspace modal and the inline
+    empty-first-run form, which share the same prompt-as-first-message field)
+    behave identically.
 
     When *prompt* is empty the agent is created in a waiting state and
     ``wait_for_agent_to_finish`` is ignored.
@@ -653,8 +660,9 @@ def delete_project_via_settings(
     repos_section = settings_page.click_on_repositories()
     repos_section.remove_repo(project_name, path_contains=path_contains)
 
-    # Navigate back to the Add Workspace page after deletion
-    navigate_to_add_workspace_page(page)
+    # Land on a neutral Home surface after deletion — rather than leaving the
+    # Settings page (or a lingering create surface) up for the caller.
+    navigate_to_home_page(page)
 
 
 def upload_file_via_api(page: Page, *, name: str, mime_type: str, content: bytes) -> str:
@@ -728,9 +736,7 @@ def navigate_away_and_back(page: Page) -> None:
     current_url = page.url
     base_url = current_url.split("#")[0].rstrip("/")
     page.goto(f"{base_url}#/home")
-    workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
-    empty_state = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
-    expect(workspace_rows.first.or_(empty_state)).to_be_visible()
+    _expect_home_landed(page)
     page.goto(current_url)
 
 

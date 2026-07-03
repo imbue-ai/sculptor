@@ -25,15 +25,13 @@ export type CommandRuntime = {
   navigate: {
     toHome: () => void;
     toSettings: (section?: string) => void;
-    toAddWorkspace: () => void;
     toWorkspace: (workspaceId: string) => void;
     toAgent: (workspaceId: string, agentId: string) => void;
   };
   /**
-   * Open the global new-workspace dialog. Distinct from `navigate.toAddWorkspace`
-   * (the legacy `/ws/new` page): the dialog is mounted globally and is the
-   * sanctioned create surface, so palette/keyboard entry points open it rather
-   * than navigating away.
+   * Open the global new-workspace dialog. Mounted globally and the sanctioned
+   * create surface, so palette/keyboard entry points open it rather than
+   * navigating away to a standalone page.
    */
   openNewWorkspaceModal: () => void;
   ui: {

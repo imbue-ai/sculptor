@@ -18,6 +18,7 @@ from sculptor.testing.elements.ask_user_question import get_ask_user_question_pa
 from sculptor.testing.elements.chat_panel import select_model_by_name
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
@@ -176,6 +177,12 @@ def test_workspace_peek_waiting_overrides_running_in_banner(
 
     # Add a second agent to the same workspace (lands in the center section).
     create_agent_panel(page, section="center")
+
+    # Confirm the second agent's panel mounted before targeting the chat panel:
+    # until the new tab lands, get_chat_panel() resolves the first (sleeping)
+    # agent's panel and the AUQ prompt would queue behind its sleep.
+    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
+    expect(tabs).to_have_count(2)
 
     # The new blank agent needs a model selected before it can receive messages
     chat_panel = task_page.get_chat_panel()

@@ -4,7 +4,9 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
+from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.playwright_utils import open_new_workspace_modal
 from sculptor.testing.utils import get_playwright_modifier_key
 
 
@@ -12,14 +14,15 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
     """Page Object Model for the new-workspace modal.
 
     The modal hosts the ``NewWorkspaceForm`` inside a ``PaletteDialog``
-    (``NEW_WORKSPACE_DIALOG``). It is opened by several entry points — the
-    Cmd/Meta+T shortcut (``new_workspace`` keybinding), the Cmd+K
-    ``nav.new_workspace`` command, and the sidebar repo group's "+"
-    The plain sidebar new-workspace button
-    direct-creates and only falls back to opening this when there is no MRU yet.
+    (``NEW_WORKSPACE_DIALOG``). It is opened by several entry points — the sidebar's
+    "New Workspace" nav button (``SIDEBAR_NEW_WORKSPACE_BUTTON``), the Cmd/Meta+T
+    shortcut (``new_workspace`` keybinding), and the Cmd+K ``nav.new_workspace``
+    command. The per-repo "+" in the sidebar repo groups instead direct-creates a
+    workspace in that repo, only falling back to this dialog when the branch can't be
+    resolved or the create fails.
 
     The form's field ids are shared with the (still-present) ``/ws/new`` page and
-    with the inline empty-first-run form, so the getters here are reused by
+    with the inline empty-first-run form, so the getters here are mirrored by
     ``PlaywrightEmptyFirstRun``. Only one form renders at a time, so the field
     getters resolve page-wide; the create button is re-pointed to the modal's
     ``NEW_WORKSPACE_CREATE_BUTTON`` (not the legacy ``START_TASK_BUTTON``).
@@ -31,10 +34,15 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
     # -- Openers (entry points) --
 
     def open_via_shortcut(self) -> None:
-        """Open the modal with the ``new_workspace`` keybinding (Cmd/Meta+T)."""
-        mod_key = get_playwright_modifier_key()
-        self._page.keyboard.press(f"{mod_key}+t")
-        self._page.keyboard.up(mod_key)
+        """Open the modal with the ``new_workspace`` keybinding (Cmd/Meta+T).
+
+        Delegates to the hardened opener: the shortcut is a window keydown handler
+        whose single press can be swallowed when focus sits in the chat input (a prior
+        ``start_task_and_wait_for_ready`` leaves it focused) or in a Radix overlay, so
+        the opener dismisses any intercepting overlay and blurs the active element
+        before each press and retries until the modal mounts.
+        """
+        open_new_workspace_modal(self._page)
         expect(self.get_dialog()).to_be_visible()
 
     def open_via_command_palette(self) -> None:
@@ -43,10 +51,6 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
         Drives the command palette POM to run the ``nav.new_workspace`` command,
         whose ``perform`` opens this modal rather than navigating to ``/ws/new``.
         """
-        # Late import to avoid a cycle: project_layout imports command_palette,
-        # and the page object below pulls in project_layout.
-        from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
-
         project_layout = PlaywrightProjectLayoutPage(page=self._page)
         palette = project_layout.open_command_palette_with_keyboard()
         palette.select_by_command_id("nav.new_workspace")
@@ -146,6 +150,11 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
         option.click()
         expect(option).not_to_be_visible()
 
+    # -- Plan-mode toggle (per-prompt agent setting; surfaces once a prompt is typed) --
+
+    def get_plan_mode_toggle(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.PLAN_MODE_TOGGLE)
+
     # -- Mode selector (ported from the /ws/new page POM) --
 
     def get_mode_selector(self) -> Locator:
@@ -196,10 +205,6 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
 
     def get_create_button(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.NEW_WORKSPACE_CREATE_BUTTON)
-
-    def get_submit_button(self) -> Locator:
-        """Alias of ``get_create_button`` (matches the /ws/new page POM's name)."""
-        return self.get_create_button()
 
     def create(self, workspace_name: str | None = None, via_keyboard: bool = False, keep_open: bool = False) -> None:
         """Fill the title (optional) and create, by button click or Cmd+Enter.

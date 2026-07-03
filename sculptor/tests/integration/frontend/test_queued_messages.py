@@ -148,9 +148,13 @@ def test_queued_message_actions_target_the_panels_agent(sculptor_instance_: Scul
     they would 404 and leave the bar in place.
     """
     page = sculptor_instance_.page
+    # Keep the first agent busy on a sentinel file (no wall-clock, per the
+    # integration-test review rules) so the queued message survives the whole
+    # create-second-agent / switch-tabs / delete / re-queue / edit sequence.
+    pause = FakeClaudePause()
     task_page = start_task_and_wait_for_ready(
         sculptor_page=page,
-        prompt='fake_claude:sleep `{"seconds": 120}`',
+        prompt=pause.prompt,
         wait_for_agent_to_finish=False,
     )
     first_agent_id = task_page.get_task_id()
@@ -192,6 +196,9 @@ def test_queued_message_actions_target_the_panels_agent(sculptor_instance_: Scul
     chat_panel.get_queued_message_edit_button().click(force=True)
     expect(chat_panel.get_queued_message_bar()).to_have_count(0)
     expect(chat_panel.get_chat_input()).to_have_text("edit me on the first agent")
+
+    # Let the first agent finish its turn now that the assertions are done.
+    pause.release()
 
 
 @user_story("to interrupt the agent and send a queued message immediately")

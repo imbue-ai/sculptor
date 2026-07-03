@@ -149,4 +149,4 @@ def test_deleting_project_also_deletes_its_workspaces(
 # NOTE: there are no Review All tests here because Review All has no settings gate:
 # it is a no-default-section registered panel, always available from a section's
 # add-panel ``+`` dropdown (see ``task_page.click_review_all``). Its open behavior
-# is covered in ``test_diff_scope_and_fullscreen.py``.
+# is covered in ``test_review_all_panel.py``.

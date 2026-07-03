@@ -30,15 +30,12 @@ vi.mock("~/common/NavigateUtils.ts", () => ({
   useImbueNavigate: (): Record<string, unknown> => ({
     navigateToAgent: mockNavigateToAgent,
     navigateToWorkspace: mockNavigateToWorkspace,
-    navigateToAddWorkspace: vi.fn(),
     navigateToHome: vi.fn(),
     navigateToGlobalSettings: vi.fn(),
     navigateToRoot: vi.fn(),
   }),
   useImbueLocation: (): Record<string, unknown> => ({
     isAgentRoute: false,
-    isAddWorkspaceRoute: false,
-    addWorkspaceDraftId: null,
     isHomeRoute: false,
     isSettingsRoute: false,
   }),

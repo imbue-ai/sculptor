@@ -850,8 +850,8 @@ export class PluginManager {
           );
         };
         Wrapped.displayName = `PluginWorkspaceWidget(${widget.id})`;
-        // Default to the lowest priority (hidden first) when unspecified, so an
-        // unprioritised widget never crowds out the host's own banner items.
+        // Default to 0 when unspecified so an unprioritised widget sorts ahead of
+        // (renders before) widgets that set a value.
         const entry = { id: widget.id, component: Wrapped, collapsePriority: widget.collapsePriority ?? 0 };
 
         // Replace-by-id; undo by instance (see the panel undo above).

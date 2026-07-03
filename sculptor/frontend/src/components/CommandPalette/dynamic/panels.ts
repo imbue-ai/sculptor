@@ -59,7 +59,7 @@ export const buildPanelTogglesProvider = (runtime: CommandRuntime): DynamicProvi
           title: `Show ${panel.displayName}`,
           subtitle: "Focus this panel",
           keywords: ["panel", "show", "focus", "reveal", panel.id, panel.displayName.toLowerCase(), ...aliases],
-          group: "view",
+          group: "panels",
           icon: panel.icon,
           onPage: "view.panels",
           boost: PANEL_TOGGLE_BOOST,

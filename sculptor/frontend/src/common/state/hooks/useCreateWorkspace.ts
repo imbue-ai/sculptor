@@ -15,7 +15,10 @@ type CreateWorkspaceArgs = {
   projectId: string;
   /** Workspace title; falls back to "Untitled workspace" when blank. */
   workspaceName: string;
-  /** First-agent prompt; empty seeds an agent with no prompt. */
+  /**
+   * First-agent prompt; empty seeds an agent with no prompt. Only sent for
+   * Claude agents — other agent types always start in the waiting state.
+   */
   prompt: string;
   mode: WorkspaceInitializationStrategy;
   /** Source branch to base the workspace on (ignored for in-place). */
@@ -58,11 +61,9 @@ type UseCreateWorkspaceReturn = {
 };
 
 /**
- * The two-step create flow (create-workspace → create-first-agent with the
- * prompt) factored out of the add-workspace page submit handler. Decoupled from
- * the draft pseudo-tab model (which is removed with the page) — it owns only the
- * API calls, navigation, and the MRU write, so the new-workspace modal and the
- * empty first-run can share it.
+ * The two-step create flow: create the workspace, then its first agent (with
+ * the prompt). Owns only the API calls, navigation, and the MRU write, so the
+ * new-workspace modal and the empty first-run page can share it.
  */
 export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
   // State and hooks
@@ -110,21 +111,26 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
         const effectiveRegistrationId = isMissingRegistration ? undefined : registrationId;
         const effectiveAgentTypeValue: StoredAgentType = isMissingRegistration ? "claude" : args.agentTypeValue;
 
-        // Only Claude consumes a creation-time model and the per-prompt agent
-        // settings (effort / fast / plan): terminal/registered agents have no
-        // model concept, and pi selects from its own catalog in-task, so it
+        // Only Claude consumes a creation-time prompt, model, and the per-prompt
+        // agent settings (effort / fast / plan): terminal/registered agents have
+        // no model concept, and pi selects from its own catalog in-task, so it
         // starts on pi's defaults rather than Claude settings it would ignore.
-        const shouldSendCreationModel = effectiveAgentType === "claude";
+        // The prompt gate mirrors the backend, which rejects a prompt for
+        // terminal/registered agents and requires a model alongside any prompt —
+        // sending one would fail the agent create after the workspace already
+        // exists, orphaning an agentless workspace. Non-Claude agents start in
+        // the waiting state instead.
+        const isClaudeAgent = effectiveAgentType === "claude";
         const agentResponse = await createWorkspaceAgent({
           path: { workspace_id: workspaceId },
           body: {
-            model: shouldSendCreationModel ? (args.defaultModel as LlmModel) : undefined,
-            effort: shouldSendCreationModel ? args.effort : undefined,
-            fastMode: shouldSendCreationModel ? args.fastMode : undefined,
-            enterPlanMode: shouldSendCreationModel ? args.enterPlanMode : undefined,
+            model: isClaudeAgent ? (args.defaultModel as LlmModel) : undefined,
+            effort: isClaudeAgent ? args.effort : undefined,
+            fastMode: isClaudeAgent ? args.fastMode : undefined,
+            enterPlanMode: isClaudeAgent ? args.enterPlanMode : undefined,
             agentType: effectiveAgentType,
             registrationId: effectiveRegistrationId,
-            prompt: args.prompt.trim() || undefined,
+            prompt: isClaudeAgent ? args.prompt.trim() || undefined : undefined,
           },
         });
 

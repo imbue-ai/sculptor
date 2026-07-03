@@ -1,6 +1,6 @@
 This document outlines a redesign of the Sculptor workspace page around a uniform panel/section model. The goal is to update Sculptor’s UI to support a vertical sidebar, revamp the panel system and reduce some of the chrome. As a part of this change, we’ve converted existing components to be panels, including chat.
 
-We’ve already built two throwaway prototype branches — `bryden/scu-1474-compact-workspace-layout` (the layout redesign) and `bryden/scu-1494-rewrite-new-workspace-modal` (the new workspace modal). Use them primarily to extract the proper styling for the different states described below; they are not a behavioral source of truth. This document is authoritative on behavior. See “Relationship to the prototype” below and the companion `design_extraction.md`.
+We’ve already built two throwaway prototype branches — `scu-1474` (the layout redesign) and `scu-1494` (the new workspace modal). Use them primarily to extract the proper styling for the different states described below; they are not a behavioral source of truth. This document is authoritative on behavior. See “Relationship to the prototype” below and the companion `design_extraction.md`.
 
 This document is written from the perspective of updating the existing Sculptor to this new design. We are not concerned with backwards compatibility: layouts and settings created before this work do not need to be migrated, and “persisted” always refers to state created on this branch.
 
@@ -245,8 +245,8 @@ This redesign reuses the existing styling and components where possible and focu
 ## Relationship to the prototype
 
 Two throwaway prototype branches back this work:
-- `bryden/scu-1474-compact-workspace-layout` — the layout redesign (sidebar, sections, panels).
-- `bryden/scu-1494-rewrite-new-workspace-modal` — the new workspace modal.
+- the `scu-1474` prototype branch — the layout redesign (sidebar, sections, panels).
+- the `scu-1494` prototype branch — the new workspace modal.
 
 Use them primarily to extract the proper styling for the states described in this document; they are not a production base.
 

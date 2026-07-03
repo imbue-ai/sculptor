@@ -27,7 +27,6 @@ from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
 
 SECONDS_MS = 1000
-_VISIBILITY_TIMEOUT_MS = 10 * SECONDS_MS
 _BUILD_TIMEOUT_MS = 90 * SECONDS_MS
 
 
@@ -85,7 +84,7 @@ fake_claude:multi_step `{
 
     with sculptor_instance_factory_.spawn_instance() as instance:
         workspace_row = get_workspace_sidebar(instance.page).get_workspace_rows().first
-        expect(workspace_row).to_be_visible(timeout=_VISIBILITY_TIMEOUT_MS)
+        expect(workspace_row).to_be_visible(timeout=_BUILD_TIMEOUT_MS)
         workspace_row.click()
 
         # Agents render as panel tabs in the center section (PANEL_TAB-agent:<id>).

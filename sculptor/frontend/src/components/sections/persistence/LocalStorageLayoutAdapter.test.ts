@@ -117,11 +117,18 @@ describe("LocalStorageLayoutAdapter", () => {
   });
 
   it("remove clears a persisted scope and drops a pending write", () => {
+    vi.useFakeTimers();
+    // Persist a scope, then queue a debounced write and remove before it flushes.
     adapter.write(WS_SCOPE, makeWorkspaceLayout("files"));
     adapter.flush();
     expect(adapter.read(WS_SCOPE)).toBeDefined();
+
+    adapter.write(WS_SCOPE, makeWorkspaceLayout("files-2"));
     adapter.remove(WS_SCOPE);
+    // Draining the debounce must not resurrect the removed scope from the dropped write.
+    vi.advanceTimersByTime(1000);
     expect(adapter.read(WS_SCOPE)).toBeUndefined();
+    expect(localStorage.getItem("sculptor-layout-ws-ws-1")).toBeNull();
   });
 
   it("coalesces rapid writes to the same key into one setItem with the last value", () => {
@@ -204,9 +211,12 @@ describe("LocalStorageLayoutAdapter", () => {
       sidebarCollapsed: true,
       explorerListWidthPx: 260,
     });
-    // Before the debounce window elapses, nothing is committed yet.
-    expect(adapter.read(WS_SCOPE)).toBeUndefined();
+    // Before the debounce window elapses nothing is committed to storage, but
+    // read() already sees the pending snapshot (read-your-writes).
+    expect(localStorage.getItem("sculptor-layout-ws-ws-1")).toBeNull();
+    expect(adapter.read(WS_SCOPE)).toEqual(makeWorkspaceLayout("x"));
     adapter.flush();
+    expect(localStorage.getItem("sculptor-layout-ws-ws-1")).not.toBeNull();
     expect(adapter.read(WS_SCOPE)).toEqual(makeWorkspaceLayout("x"));
     expect(adapter.read(GLOBAL_SCOPE)).toEqual({
       sectionSizes: { left: 25, right: 25, bottom: 25 },
@@ -214,5 +224,25 @@ describe("LocalStorageLayoutAdapter", () => {
       sidebarCollapsed: true,
       explorerListWidthPx: 260,
     });
+  });
+
+  it("flushes pending writes when the window fires beforeunload, and stops after dispose", () => {
+    vi.useFakeTimers();
+    adapter.write(WS_SCOPE, makeWorkspaceLayout("x"));
+    // Nothing is committed to storage before the debounce window elapses.
+    expect(localStorage.getItem("sculptor-layout-ws-ws-1")).toBeNull();
+
+    // The constructor wires flush to beforeunload, so quitting persists the pending write.
+    window.dispatchEvent(new Event("beforeunload"));
+    expect(localStorage.getItem("sculptor-layout-ws-ws-1")).not.toBeNull();
+    expect(adapter.read(WS_SCOPE)).toEqual(makeWorkspaceLayout("x"));
+
+    // After dispose the listener is gone, so a later beforeunload no longer flushes: the
+    // second write stays pending and the persisted snapshot is still the first one.
+    adapter.write(WS_SCOPE, makeWorkspaceLayout("y"));
+    adapter.dispose();
+    window.dispatchEvent(new Event("beforeunload"));
+    const persisted = JSON.parse(localStorage.getItem("sculptor-layout-ws-ws-1") ?? "null");
+    expect(persisted).toMatchObject(makeWorkspaceLayout("x"));
   });
 });

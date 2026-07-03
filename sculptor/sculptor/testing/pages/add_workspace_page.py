@@ -7,13 +7,11 @@ from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 
 
 class PlaywrightAddWorkspacePage(PlaywrightProjectLayoutPage):
-    """Page object for the new-workspace MODAL (formerly the /ws/new page).
+    """Page object for the new-workspace modal and the inline empty-first-run form.
 
-    The legacy ``/ws/new`` page is gone; this now drives the new-workspace modal
-    (and the inline empty-first-run form, which shares the same field testids).
-    The create button and prompt input are re-pointed at the modal's
-    ``NEW_WORKSPACE_CREATE_BUTTON`` / ``NEW_WORKSPACE_PROMPT_TEXTAREA``; the
-    remaining getters already use testids shared across both surfaces.
+    Both surfaces share the same field testids, so the getters here drive
+    either one. The create button and prompt input are keyed by
+    ``NEW_WORKSPACE_CREATE_BUTTON`` / ``NEW_WORKSPACE_PROMPT_TEXTAREA``.
     """
 
     def get_project_selector(self) -> Locator:

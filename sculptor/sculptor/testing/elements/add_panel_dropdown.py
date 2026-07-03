@@ -3,8 +3,21 @@ from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.elements.base import open_radix_toggle
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.elements.workspace_section import section_of
+
+# open_agent_type_submenu retries the sub-menu hover: a hover landing while Radix tears
+# down a just-dismissed menu is swallowed and never opens the sub-content. Each attempt
+# waits this long for the sub-menu before re-hovering.
+_AGENT_TYPE_SUBMENU_HOVER_ATTEMPTS = 3
+_AGENT_TYPE_SUBMENU_HOVER_TIMEOUT_MS = 3_000
+
+# A seeded panel's tab can render a beat after its section expands, so the idempotent
+# "is this panel already open here" checks wait this long for the tab before concluding
+# it is closed. A bare snapshot count races the slow tab and falls through to a dropdown
+# that won't offer a still-open single-instance panel.
+_PANEL_TAB_RENDER_TIMEOUT_MS = 2_000
 
 
 class PlaywrightAddPanelDropdownElement:
@@ -37,13 +50,13 @@ class PlaywrightAddPanelDropdownElement:
         """Get this sub-section's header `+` button (the dropdown trigger)."""
         return PlaywrightWorkspaceSection(self._page, self._sub_section).get_add_panel_button()
 
-    # ── New agent (recent type) ─────────────────────────────────────────────────
+    # New agent (recently-used type)
 
     def get_new_agent_item(self) -> Locator:
         """The pinned "New {recent} agent" row (creates the recently-used type)."""
         return self._page.get_by_test_id(ElementIDs.ADD_PANEL_NEW_AGENT)
 
-    # ── Agent-type sub-menu ─────────────────────────────────────────────────────
+    # Agent-type sub-menu
 
     def get_agent_type_submenu_trigger(self) -> Locator:
         """The "New agent of type…" sub-menu trigger."""
@@ -76,51 +89,39 @@ class PlaywrightAddPanelDropdownElement:
         """
         submenu = self.get_agent_type_submenu()
         trigger = self.get_agent_type_submenu_trigger()
-        for _attempt in range(3):
+        for _attempt in range(_AGENT_TYPE_SUBMENU_HOVER_ATTEMPTS):
             expect(trigger).to_be_visible()
             trigger.hover()
             try:
-                expect(submenu).to_be_visible(timeout=3_000)
+                expect(submenu).to_be_visible(timeout=_AGENT_TYPE_SUBMENU_HOVER_TIMEOUT_MS)
                 return submenu
             except AssertionError:
                 continue
         expect(submenu).to_be_visible()
         return submenu
 
-    # ── New terminal ────────────────────────────────────────────────────────────
+    # New terminal
 
     def get_new_terminal_item(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.ADD_PANEL_NEW_TERMINAL)
 
-    # ── Single-instance panel options ───────────────────────────────────────────
+    # Single-instance panel options
 
     def get_panel_option(self, panel_id: str) -> Locator:
         """Get a single-instance panel option row by its registry id (e.g. ``files``)."""
         return self._page.get_by_test_id(f"{ElementIDs.ADD_PANEL_PANEL_OPTION}-{panel_id}")
 
-    # ── Open / select ───────────────────────────────────────────────────────────
+    # Open / select
 
     def open(self) -> None:
         """Open the dropdown by clicking this sub-section's header `+`.
 
-        Idempotent and retried: a Radix trigger toggles, and a click landing in the
-        brief settle window right after a previous close can be swallowed, so gate on
-        the trigger's ``data-state`` and retry until the dropdown content is visible.
+        The trigger is a Radix dropdown, so opening is idempotent and retried
+        (see ``open_radix_toggle``); the content renders in a portal, so success
+        is confirmed on the content's visibility rather than the trigger state.
         """
-        add_button = self.get_add_panel_button()
-        expect(add_button).to_be_visible()
-        content = self.get_content()
-        for _attempt in range(5):
-            if add_button.get_attribute("data-state") == "open":
-                expect(content).to_be_visible()
-                return
-            add_button.click()
-            try:
-                expect(content).to_be_visible(timeout=2_000)
-                return
-            except AssertionError:
-                self._page.wait_for_timeout(250)
-        expect(content).to_be_visible()
+        open_radix_toggle(self._page, self.get_add_panel_button())
+        expect(self.get_content()).to_be_visible()
 
     def select_panel(self, panel_id: str) -> None:
         """Click a single-instance panel option, opening it into this sub-section."""
@@ -135,9 +136,25 @@ class PlaywrightAddPanelDropdownElement:
 # dropdown only offers panels not already open anywhere, so to land a seeded panel in
 # a DIFFERENT section the helper first closes it from its seeded section (which a
 # single-instance close does silently, no confirmation) so the dropdown offers it
-# again. Panels NOT seeded (actions/skills/notes/browser/review-all) start closed and
-# always open straight through the dropdown.
+# again. Panels NOT seeded start closed and always open straight through the dropdown.
 _DEFAULT_SEEDED_SECTION: dict[str, str] = {"files": "left", "changes": "left", "commits": "left"}
+
+
+def _panel_tab_is_open(tab: Locator) -> bool:
+    """Whether a panel tab is open in its section, tolerating a slow-rendering tab.
+
+    A seeded panel's tab can render a beat after its section expands, so a bare
+    snapshot count right after ``expand_section`` reads zero for a tab that is about
+    to appear. Waits a bounded window for the tab and treats one that never renders as
+    not open, keeping the "is it already here" checks idempotent without racing the
+    render — a false "not open" falls through to a dropdown that won't offer a
+    still-open single-instance panel and then times out.
+    """
+    try:
+        expect(tab).to_be_visible(timeout=_PANEL_TAB_RENDER_TIMEOUT_MS)
+        return True
+    except AssertionError:
+        return False
 
 
 def open_panel(page: Page, panel_id: str, sub_section: str = "center") -> Locator:
@@ -173,7 +190,7 @@ def open_panel(page: Page, panel_id: str, sub_section: str = "center") -> Locato
     section = PlaywrightWorkspaceSection(page, sub_section)
     section.expand_section()
     existing_tab = section.get_panel_tab(panel_id)
-    if existing_tab.count() > 0:
+    if _panel_tab_is_open(existing_tab):
         existing_tab.click()
         section_root = section.get_section()
         expect(section_root).to_be_visible()
@@ -209,7 +226,7 @@ def close_seeded_panel(page: Page, panel_id: str) -> None:
     origin = PlaywrightWorkspaceSection(page, seeded_section)
     origin.expand_section()
     origin_tab = origin.get_panel_tab(panel_id)
-    if origin_tab.count() == 0:
+    if not _panel_tab_is_open(origin_tab):
         return
     close_button = page.get_by_test_id(f"{ElementIDs.PANEL_TAB_CLOSE}-{panel_id}")
     expect(close_button).to_be_visible()
@@ -224,7 +241,11 @@ def create_agent_panel(page: Page, section: str = "center", agent_type: str | No
     ``section`` the dropdown was opened from. ``agent_type`` picks a specific type
     from the agent-type sub-menu (``"claude"`` / ``"pi"``); ``None`` uses the pinned
     "New {recent} agent" row.
+
+    A collapsed section renders no header `+`, so the section is expanded first
+    (idempotent) even though the new agent still lands in center.
     """
+    PlaywrightWorkspaceSection(page, section).expand_section()
     dropdown = PlaywrightAddPanelDropdownElement(page, section)
     dropdown.open()
     if agent_type is None:

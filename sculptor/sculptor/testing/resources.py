@@ -39,7 +39,6 @@ from sculptor.testing.frontend_utils import configure_page
 from sculptor.testing.mock_repo import MockRepoState
 from sculptor.testing.packaged_backend_frontend import PackagedBackendFrontend
 from sculptor.testing.packaged_electron_frontend import PackagedElectronFrontend
-from sculptor.testing.playwright_utils import create_zero_agent_workspace
 from sculptor.testing.playwright_utils import expect_app_not_onboarding
 from sculptor.testing.playwright_utils import navigate_to_frontend
 from sculptor.testing.port_manager import PortManager
@@ -112,22 +111,6 @@ def sculptor_instance_(
         artifacts_recorder.on_will_close_browser_context(instance._browser_context)
 
     instance._post_test(request)
-
-
-@pytest.fixture
-def sculptor_instance_zero_agent_(
-    sculptor_instance_: SculptorInstance,
-) -> SculptorInstance:
-    """Shared instance positioned on a workspace with zero agents.
-
-    Rides the shared ``sculptor_instance_`` fixture (same per-test cleanup), then
-    creates a workspace with no agent and navigates to it so the center section
-    renders its empty state. Use this for the empty-center tests; the default
-    layout is center-agent-expanded with the sides collapsed, so a workspace
-    that never gets an agent leaves the center empty.
-    """
-    create_zero_agent_workspace(sculptor_instance_.page)
-    return sculptor_instance_
 
 
 @pytest.fixture

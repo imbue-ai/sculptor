@@ -8,8 +8,8 @@ The work is a **rewrite of the workspace shell** (not a refactor) that reuses th
 existing content surfaces (chat, terminal, diff viewer) and deletes the deprecated
 chrome (docking layout, top bar, tabs, zones, Zen/Focus, the `/btw` popup, the
 Panels settings page, the `/ws/new` page). Two throwaway prototype branches back
-it — `bryden/scu-1474-compact-workspace-layout` (layout) and
-`bryden/scu-1494-rewrite-new-workspace-modal` (the modal) — used as a source of
+it — the SCU-1474 compact-workspace-layout prototype and the SCU-1494
+new-workspace-modal prototype — used as a source of
 *styling and shape only*, never behavior.
 
 ## Reading order

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSyncExtern
 import { useImbueLocation } from "~/common/NavigateUtils.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { effectiveOpenTabIdsAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
+import { recentAgentTypeAtom } from "~/components/sections/addPanelCore.ts";
 import { panelRegistryAtom } from "~/components/sections/registry/panelRegistry.ts";
 import { workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
 import { maximizedSectionAtom } from "~/components/sections/transientAtoms.ts";
@@ -66,7 +67,6 @@ export const usePaletteContext = (): PaletteContext => {
         isHome: loc.isHomeRoute,
         isWorkspace,
         isSettings: loc.isSettingsRoute,
-        isAddWorkspace: loc.isAddWorkspaceRoute,
         isAgent: loc.isAgentRoute,
       },
       activeWorkspaceId,
@@ -79,7 +79,6 @@ export const usePaletteContext = (): PaletteContext => {
     [
       loc.isHomeRoute,
       loc.isSettingsRoute,
-      loc.isAddWorkspaceRoute,
       loc.isAgentRoute,
       isWorkspace,
       activeWorkspaceId,
@@ -249,6 +248,10 @@ const dynamicProviderInputsAtom = atom((get) => {
     // chosen section; without it, picking a section wouldn't recompute the
     // list and the panel page would show "No commands here".
     addPanelTarget: get(addPanelTargetSubSectionAtom),
+    // The add-panel provider builds the "New {recent} agent" row title from the
+    // normalized last-used agent type; tracking it keeps that title in sync when a
+    // userConfig frame or the pi flag lands while the palette is open.
+    recentAgentType: get(recentAgentTypeAtom),
   };
 });
 

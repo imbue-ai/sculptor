@@ -3,6 +3,7 @@ import { posthog } from "posthog-js";
 import { useCallback } from "react";
 
 import { removeWorkspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
+import { removeWorkspaceAgentActionState } from "~/pages/workspace/panels/workspaceAgentActions.ts";
 
 import { deleteWorkspace } from "../../../api";
 import { ToastType } from "../../../components/Toast.tsx";
@@ -48,6 +49,8 @@ export const useOptimisticWorkspaceDelete = (
           // so a failed delete (rolled back below) keeps the user's arrangement;
           // the layout is re-seeded to default on next visit.
           removeWorkspaceLayout({ workspaceId });
+          // Free the workspace-keyed agent-resolution/action atoms alongside the layout.
+          removeWorkspaceAgentActionState(workspaceId);
         })
         .catch(() => {
           setRollbackDelete({ workspaceId, snapshot });

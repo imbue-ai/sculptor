@@ -179,7 +179,7 @@ def test_effort_level_persists_across_workspace_switches(sculptor_instance_: Scu
     expect(chat_panel_2.get_effort_selector()).to_have_attribute("data-value", "xhigh")
 
     # -- Step 3: Switch back to workspace 1 — effort should show High --
-    navigate_to_workspace(page)
+    navigate_to_workspace(page, "Effort WS 1")
 
     # Wait for the chat panel of workspace 1 to appear
     chat_panel_ws1 = task_page.get_chat_panel()

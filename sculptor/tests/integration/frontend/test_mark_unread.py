@@ -13,7 +13,6 @@ These tests verify:
 """
 
 from playwright.sync_api import Locator
-from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
@@ -30,7 +29,7 @@ from sculptor.testing.user_stories import user_story
 SECONDS_MS = 1000
 
 
-def _mark_tab_unread(page: Page, panel_tabs: PlaywrightPanelTabElement, tab: Locator) -> None:
+def _mark_tab_unread(panel_tabs: PlaywrightPanelTabElement, tab: Locator) -> None:
     """Open a tab's context menu and click its "Mark as unread" item."""
     panel_tabs.open_context_menu(tab)
     mark_unread_item = panel_tabs.get_context_menu_mark_unread_item()
@@ -78,7 +77,7 @@ def test_mark_active_tab_unread_stays_unread(
     expect(tabs.first).to_have_attribute("data-dot-status", "read")
 
     # Step 3: Mark the active agent tab as unread.
-    _mark_tab_unread(page, panel_tabs, tabs.first)
+    _mark_tab_unread(panel_tabs, tabs.first)
 
     # Step 4: The tab carries the unread state and renders a visible unread dot.
     expect(tabs.first).to_have_attribute("data-dot-status", "unread")
@@ -132,7 +131,7 @@ def test_mark_adjacent_tab_unread(
     expect(tabs.last).to_have_attribute("data-dot-status", "read")
 
     # Step 3: Right-click agent 1 (not active) and mark unread.
-    _mark_tab_unread(page, panel_tabs, tabs.first)
+    _mark_tab_unread(panel_tabs, tabs.first)
 
     # Step 4: Agent 1 should be unread, agent 2 should still be read.
     expect(tabs.first).to_have_attribute("data-dot-status", "unread")
@@ -179,7 +178,7 @@ def test_mark_unread_then_leave_and_return_marks_read(
     expect(tabs.first).to_have_attribute("data-dot-status", "read")
 
     # Step 4: Mark agent in workspace A as unread.
-    _mark_tab_unread(page, panel_tabs, tabs.first)
+    _mark_tab_unread(panel_tabs, tabs.first)
     expect(tabs.first).to_have_attribute("data-dot-status", "unread")
 
     # Step 5: Navigate to workspace B.
@@ -247,7 +246,7 @@ def test_unread_persists_on_unfocused_agent_across_workspace_switches(
     expect(tabs.last).to_have_attribute("data-dot-status", "read")
 
     # Step 4: Mark agent 1 unread (while viewing agent 2).
-    _mark_tab_unread(page, panel_tabs, tabs.first)
+    _mark_tab_unread(panel_tabs, tabs.first)
     expect(tabs.first).to_have_attribute("data-dot-status", "unread")
 
     # Step 5: Create workspace B (navigates away from workspace A).

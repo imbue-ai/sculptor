@@ -24,7 +24,7 @@ import {
   taskStatusAtomFamily,
   taskSupportsChatInterfaceAtomFamily,
 } from "~/common/state/atoms/tasks.ts";
-import { terminalPromptRejectedToastAtom } from "~/common/state/atoms/toasts.ts";
+import { commitPromptSendFailedToastAtom, terminalPromptRejectedToastAtom } from "~/common/state/atoms/toasts.ts";
 import type { WorkspaceLayoutState } from "~/components/sections/persistence/types.ts";
 import { AGENT_PANEL_ID_PREFIX, makeAgentPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
 import { workspaceLayoutFamily } from "~/components/sections/sectionAtoms.ts";
@@ -251,9 +251,35 @@ export const commitActionAtomFamily = atomFamily((workspaceId: string) =>
       return;
     }
     const model = get(taskModelAtomFamily(taskId));
-    await sendWorkspaceAgentMessages({
-      path: { workspace_id: workspaceId, agent_id: taskId },
-      body: { message, model: (model as LlmModel) || LlmModel.CLAUDE_4_OPUS_200K },
-    });
+    try {
+      await sendWorkspaceAgentMessages({
+        path: { workspace_id: workspaceId, agent_id: taskId },
+        body: { message, model: (model as LlmModel) || LlmModel.CLAUDE_4_OPUS_200K },
+      });
+    } catch {
+      // The send failed (network/HTTP). The button fires its onCommit callback
+      // without awaiting, so surface the failure here or it is silently dropped
+      // as an unhandled rejection with no user feedback.
+      set(commitPromptSendFailedToastAtom, {
+        title: "Couldn't send commit request",
+        description: "Check your connection and try again.",
+      });
+    }
   }),
 );
+
+/**
+ * Drop a workspace's cached agent-resolution/action atoms when it is deleted.
+ * The atomFamily entries are keyed by workspace id and memoized for the session,
+ * so without this they linger for every deleted workspace. The derived families
+ * recompute on next access; this only frees their memoized entries plus the
+ * transient last-focused-chat state. Called alongside the layout cleanup.
+ */
+export const removeWorkspaceAgentActionState = (workspaceId: string): void => {
+  lastFocusedChatAgentBaseAtomFamily.remove(workspaceId);
+  lastFocusedChatAgentAtomFamily.remove(workspaceId);
+  activeChatAgentIdAtomFamily.remove(workspaceId);
+  activeAgentIdAtomFamily.remove(workspaceId);
+  canCommitAtomFamily.remove(workspaceId);
+  commitActionAtomFamily.remove(workspaceId);
+};

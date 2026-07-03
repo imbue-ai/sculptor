@@ -37,8 +37,12 @@ describe("WorkspaceSidebar empty-state nav buttons", () => {
 
   // vitest runs with `globals: false`, so RTL's automatic post-test cleanup
   // isn't registered — do it explicitly so each render starts from a fresh DOM.
+  // The shared TanStack client is a process-wide singleton, so wipe its cache too
+  // (a rendered SidebarRepoGroup mounts query-backed hooks) or cached state leaks
+  // into later tests and makes their order matter.
   afterEach(() => {
     cleanup();
+    queryClient.clear();
   });
 
   it("disables Search and New Workspace when the workspace list is empty", () => {

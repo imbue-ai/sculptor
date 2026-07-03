@@ -49,7 +49,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Idle: Story = {
   args: {
-    value: "bryden/bold-armadillo",
+    value: "dev/bold-armadillo",
     isLoading: false,
     isManuallyEdited: false,
   },
@@ -69,7 +69,7 @@ export const ColdLoading: Story = {
 // sparkle pulses to signal the fetch (no skeleton).
 export const Generating: Story = {
   args: {
-    value: "bryden/bold-armadillo",
+    value: "dev/bold-armadillo",
     isLoading: true,
     isManuallyEdited: false,
   },

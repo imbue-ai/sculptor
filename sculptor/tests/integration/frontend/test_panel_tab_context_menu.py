@@ -9,11 +9,6 @@ confirmation dialog. Close-others is not part of the
 panel-tab context menu (only Rename, Mark as unread, and the diagnostics copy
 items render).
 
-These cases consolidate the retired `test_agent_tab_context_menu.py`,
-`test_agent_diagnostics_context_menu.py`, and the rename/context halves of
-`test_terminal_tab_enhancements.py` / `test_tab_context_menus.py` onto the
-panel-tab model.
-
 Diagnostics is a FLAT set of copy items (no "Diagnostics" sub-menu), so items —
 like "Mark as unread" — are asserted by their visible label rather than a
 per-item testid.
@@ -47,9 +42,7 @@ def test_agent_tab_offers_rename(sculptor_instance_: SculptorInstance) -> None:
     expect(tabs).to_have_count(2)
 
     panel_tabs.rename_tab_via_context_menu(tabs.nth(1), "Renamed Agent")
-    # The inline rename input is dismissed on commit (the persisted label change is
-    # wired to the data layer in a later task; here we assert the affordance works).
-    expect(panel_tabs.get_inline_rename_input()).not_to_be_visible()
+    expect(tabs.nth(1)).to_contain_text("Renamed Agent")
 
 
 @user_story("to rename a terminal panel tab via double-click")
@@ -63,6 +56,7 @@ def test_terminal_tab_double_click_rename(sculptor_instance_: SculptorInstance) 
     # the active tab). Renaming the active tab keeps this independent of terminal label
     # numbering — the default layout already seeds a terminal in the bottom section.
     create_terminal_panel(page, section="bottom")
+    expect(bottom_tabs.get_panel_tabs()).to_have_count(2)
 
     terminal_tab = bottom_tabs.get_active_tab()
     expect(terminal_tab).to_be_visible()
@@ -147,7 +141,7 @@ def test_agent_tab_diagnostics_copy_contents(sculptor_instance_: SculptorInstanc
     assert session_id, "Expected a non-empty claude session id"
 
     transcript_path = _copy_via_context_menu(page, panel_tabs, tabs.first, "Copy claude transcript file path")
-    assert transcript_path.endswith(".jsonl"), f"Expected a.jsonl transcript path, got {transcript_path!r}"
+    assert transcript_path.endswith(".jsonl"), f"Expected a .jsonl transcript path, got {transcript_path!r}"
     assert session_id in transcript_path, (
         f"Expected the transcript path to be the session's jsonl; got {transcript_path!r} for session {session_id!r}"
     )
@@ -194,12 +188,8 @@ def test_agent_tab_close_requires_confirmation(sculptor_instance_: SculptorInsta
     expect(tabs).to_have_count(2)
 
     second_tab = tabs.nth(1)
-    testid = second_tab.get_attribute("data-testid")
-    assert testid is not None and testid.startswith("PANEL_TAB-")
-    panel_id = testid[len("PANEL_TAB-") :]
-
     second_tab.click()
-    panel_tabs.get_tab_close_button(panel_id).click()
+    panel_tabs.get_tab_close_button_of(second_tab).click()
     expect(panel_tabs.get_delete_confirmation_dialog()).to_be_visible()
     panel_tabs.get_delete_confirmation_confirm_button().click()
     expect(panel_tabs.get_delete_confirmation_dialog()).to_be_hidden()

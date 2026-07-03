@@ -3,13 +3,13 @@
 Terminals render as panel tabs created from the same section `+` add-panel dropdown
 as agents. This file owns the terminal TAB-MODEL behaviour: create a terminal panel,
 create multiple, switch between them, lowest-available-number reuse after close,
-close = a confirmation dialog (terminal close had no confirmation in the old
-shell; the redesign adds one), and per-tab content isolation with
-scrollback surviving tab switches.
+close = a confirmation dialog (closing a terminal tab requires confirmation), and
+per-tab content isolation with scrollback surviving tab switches.
 
-These cases supersede the add / switch / close / numbering TAB-MODEL half of
-`test_terminal.py`, re-anchored onto the panel-tab model and the new add-panel
-dropdown. The xterm I/O (CONTENT) tests stay in `test_terminal.py`.
+The lowest-available-number reuse scenario lives here on the panel-tab model.
+`test_terminal.py` keeps the complementary tab-model cases that also assert
+xterm/WebSocket wiring — one WebSocket per added tab, and the active tab switching
+to its neighbour on close — alongside its xterm I/O (CONTENT) tests.
 
 A terminal lands in the bottom section, which is collapsed by default — the
 ``create_terminal_panel`` helper expands it first via the workspace header toggle.
@@ -22,6 +22,7 @@ from sculptor.testing.elements.add_panel_dropdown import create_terminal_panel
 from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.terminal import get_xterm_buffer_text
 from sculptor.testing.elements.terminal import run_command_in_active_terminal
+from sculptor.testing.elements.terminal import wait_for_fresh_xterm_buffer
 from sculptor.testing.elements.terminal import wait_for_xterm_buffer_nonempty
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
@@ -39,7 +40,13 @@ def _panel_id_of(tab: Locator) -> str:
 
 @user_story("to open a terminal as a panel from the section + dropdown")
 def test_create_terminal_panel(sculptor_instance_: SculptorInstance) -> None:
-    """Creating a terminal via the bottom section `+` adds a "Terminal 1" panel tab."""
+    """Creating a terminal via the bottom section `+` adds a "Terminal 2" panel tab.
+
+    The default layout seeds Terminal 1 into the bottom section, so the first
+    created terminal is Terminal 2. Asserting the seed and the created tab now
+    coexist (two tabs total) proves the create actually added a tab rather than
+    the assertion passing off the seeded Terminal 1.
+    """
     page = sculptor_instance_.page
     bottom_tabs = PlaywrightPanelTabElement(page, sub_section="bottom")
 
@@ -47,13 +54,16 @@ def test_create_terminal_panel(sculptor_instance_: SculptorInstance) -> None:
 
     create_terminal_panel(page, section="bottom")
 
-    terminal_tab = bottom_tabs.get_panel_tab_by_name("Terminal 1")
-    expect(terminal_tab).to_have_count(1)
+    expect(bottom_tabs.get_panel_tab_by_name("Terminal 2")).to_have_count(1)
+    expect(bottom_tabs.get_panel_tabs()).to_have_count(2)
 
 
 @user_story("to run multiple terminals and switch between them")
 def test_multiple_terminal_panels_and_switch(sculptor_instance_: SculptorInstance) -> None:
-    """Two terminal panels can coexist; clicking a tab makes it the active one."""
+    """Multiple terminal panels can coexist; clicking a tab makes it the active one.
+
+    Terminal 1 is seeded, so the two creates add Terminal 2 and Terminal 3.
+    """
     page = sculptor_instance_.page
     bottom_tabs = PlaywrightPanelTabElement(page, sub_section="bottom")
 
@@ -62,17 +72,16 @@ def test_multiple_terminal_panels_and_switch(sculptor_instance_: SculptorInstanc
     create_terminal_panel(page, section="bottom")
     create_terminal_panel(page, section="bottom")
 
-    expect(bottom_tabs.get_panel_tab_by_name("Terminal 1")).to_have_count(1)
     expect(bottom_tabs.get_panel_tab_by_name("Terminal 2")).to_have_count(1)
+    expect(bottom_tabs.get_panel_tab_by_name("Terminal 3")).to_have_count(1)
 
-    # Terminal 2 was created last, so it is active; switch to Terminal 1.
-    first_terminal = bottom_tabs.get_panel_tab_by_name("Terminal 1")
-    first_terminal.click()
-    expect(bottom_tabs.get_active_tab()).to_contain_text("Terminal 1")
-
-    # Switch back to Terminal 2.
+    # Terminal 3 was created last, so it is active; switch to Terminal 2.
     bottom_tabs.get_panel_tab_by_name("Terminal 2").click()
     expect(bottom_tabs.get_active_tab()).to_contain_text("Terminal 2")
+
+    # Switch back to Terminal 3.
+    bottom_tabs.get_panel_tab_by_name("Terminal 3").click()
+    expect(bottom_tabs.get_active_tab()).to_contain_text("Terminal 3")
 
 
 @user_story("to be asked to confirm before closing a terminal")
@@ -170,7 +179,11 @@ def test_terminal_content_isolated_and_scrollback_survives_switch(sculptor_insta
     create_terminal_panel(page, section="bottom")
     second_tab = bottom_tabs.get_panel_tab_by_name("Terminal 2")
     expect(second_tab).to_have_count(1)
-    wait_for_xterm_buffer_nonempty(page)
+    # window.__xterm can still reference Terminal 1's handle (whose buffer holds
+    # ISOLATION-ALPHA) until its unmount cleanup runs, so wait for a rendered buffer
+    # free of ISOLATION-ALPHA — that pins the active xterm to Terminal 2's fresh
+    # prompt before the echo runs, rather than typing into an unconnected terminal.
+    wait_for_fresh_xterm_buffer(page, "ISOLATION-ALPHA")
     run_command_in_active_terminal(page, "echo ISOLATION-BRAVO")
     wait_for_xterm_substring(page, "ISOLATION-BRAVO")
     assert "ISOLATION-ALPHA" not in get_xterm_buffer_text(page), (

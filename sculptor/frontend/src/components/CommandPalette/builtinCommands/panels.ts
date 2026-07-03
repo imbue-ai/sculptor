@@ -1,12 +1,12 @@
 import {
   LayoutPanelLeftIcon,
   Maximize2,
+  Menu,
   Minimize2,
   PanelBottomIcon,
   PanelLeftIcon,
   PanelRightIcon,
   PuzzleIcon,
-  Sidebar,
 } from "lucide-react";
 
 import type { CommandRuntime } from "../runtime.ts";
@@ -77,7 +77,10 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
     id: "view.toggle_left_panel",
     title: "Toggle left section",
     subtitle: "Show or hide the left section",
-    keywords: ["sidebar", "panel"],
+    // "sidebar" is deliberately absent: the product vocabulary reserves it for
+    // the nav rail toggle (view.toggle_sidebar), so a "sidebar" search lands
+    // there rather than on the workspace sections.
+    keywords: ["left", "panel"],
     group: "panels",
     icon: PanelLeftIcon,
     shortcut: "toggle_left_panel",
@@ -91,7 +94,7 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
     id: "view.toggle_right_panel",
     title: "Toggle right section",
     subtitle: "Show or hide the right section",
-    keywords: ["sidebar", "panel"],
+    keywords: ["right", "panel"],
     group: "panels",
     icon: PanelRightIcon,
     shortcut: "toggle_right_panel",
@@ -111,7 +114,10 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
     subtitle: "Collapse or expand the workspace sidebar",
     keywords: ["sidebar", "nav", "navigation", "workspaces", "rail", "collapse", "expand"],
     group: "navigation",
-    icon: Sidebar,
+    // The nav rail is navigation chrome, not a section, so it gets the menu
+    // glyph rather than a panel icon — lucide's `Sidebar` is an alias of
+    // `PanelLeft`, which would render identically to the left-section toggle.
+    icon: Menu,
     shortcut: "toggle_sidebar",
     order: 100,
     perform: () => runtime.ui.toggleSidebar(),

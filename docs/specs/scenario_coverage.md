@@ -144,7 +144,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | ADDREPO-003 | Partial | test_path_autocomplete_keyboard.py::test_cmd_enter_submits_path | While validation is in progress, attempt to close; assert the dialog stays open. |
 | ADDREPO-004 | Partial | test_multi_repo.py::test_create_new_project_from_add_workspace_page (adds via Settings UI) | Focused dialog test: enter a valid path, click "Add Repository"; assert it closes and the new repo is selected in the dropdown. |
 | ADDREPO-005 | Missing | — | Type a path, close the dialog, reopen it; assert the path input is empty. |
-| ADDREPO-006 | Partial | test_path_autocomplete_keyboard.py::test_autocomplete_shows_submit_hint; test_path_tilde_display.py::test_path_autocomplete_shows_tilde_for_home_directory | Assert the debounce spinner before results and the "No matching directories" message when empty. |
+| ADDREPO-006 | Partial | test_path_autocomplete_keyboard.py::test_autocomplete_shows_submit_hint; test_files_panel.py::test_path_autocomplete_shows_tilde_for_home_directory | Assert the debounce spinner before results and the "No matching directories" message when empty. |
 | ADDREPO-008 | Partial | test_path_autocomplete_keyboard.py::test_autocomplete_shows_submit_hint; ::test_cmd_enter_submits_path | Assert all three footer hints verbatim ("Esc: close", "↵: open", "{Meta}↵: add") and the Enter-with-dropdown-closed submit path. |
 
 ### ONB / MENT / SKILL / ACT
@@ -204,7 +204,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | WS-030 | Missing | — | Hover pipeline/review dots; assert tooltip text ("Pipeline running/passed/failed/No pipeline", "Approved/Review pending/No reviewers"). |
 | WS-031 | Missing | — | PR with different target shows "Assign PR"/"Assign MR"; opening offers "Create PR → {target}" and "switch target to {target}". |
 | WS-032 | Partial | test_pr_button_errors.py::test_github_cli_error_variants; ::test_gitlab_cli_error_variants | Assert warning-triangle vs info icon distinction and the remediation-command copy icon turning to a checkmark briefly. |
-| WS-033 | Partial | test_target_branch.py::test_switching_to_all_scope_shows_target_branch_diff; test_pr_management.py::test_banner_shows_target_branch_selector_for_non_github_gitlab_origin | Click the selector; assert the dropdown lists branches; select one; assert target updates. |
+| WS-033 | Partial | test_changes_panel.py::test_switching_to_all_scope_shows_target_branch_diff; test_pr_management.py::test_banner_shows_target_branch_selector_for_non_github_gitlab_origin | Click the selector; assert the dropdown lists branches; select one; assert target updates. |
 | WS-034 | Missing | — | Target differs from PR target → warning color; hover "PR #N targets {branch}"; selecting matching branch updates target. |
 | WS-035 | Missing | — | Click repo segment; assert menu (Open folder, Copy path, Copy relative path, Open in installed apps); each action fires; chosen app remembered. |
 | WS-038 | Partial | test_workspace_banner_overflow.py::test_collapsed_banner_has_no_inert_overflow_menu | Assert collapse priority order at successive widths: PR button → diff summary → repo segment. |
@@ -292,18 +292,18 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | PANEL-003 | Missing | — | Click the tree/list toggle; assert the same file list renders nested vs flat. |
 | PANEL-005 | Partial | test_file_browser.py::test_refresh_button_reflects_file_operations; ::test_refresh_button_updates_uncommitted_tab_for_external_changes | Assert the refresh icon shows the animated/spinning state while re-fetching. |
 | PANEL-009 | Missing | — | Focus tree; Up/Down moves selection, Right/Left expand/collapse, Enter opens the focused file. |
-| PANEL-010 | Partial | test_file_browser.py::test_file_tree_shows_status_indicators (A); ::test_moved_file_shows_r_status_without_rename_label (R); test_file_browser_uncommitted.py::test_diff_header_line_stats_reflect_uncommitted_only (M) | Assert D status + strike-through, per-row +/− stats, folder change-count badge, processing-error badge. |
+| PANEL-010 | Partial | test_file_browser.py::test_file_tree_shows_status_indicators (A); ::test_moved_file_shows_r_status_without_rename_label (R); test_changes_panel.py::test_diff_header_line_stats_reflect_uncommitted_only (M) | Assert D status + strike-through, per-row +/− stats, folder change-count badge, processing-error badge. |
 | PANEL-011 | Missing | — | Agent edits a nested file; assert tree auto-scrolls, expands ancestors, applies highlight/focus styling. |
 | PANEL-012 | Partial | test_file_browser.py::test_copy_file_path_for_absolute_path_file; test_regression_copy_file_path.py::test_copy_file_path_uses_workspace_code_path; test_diff_tab_close_others.py::test_diff_tab_close_others | Assert each menu item acts: Open diff view, View file, Copy relative path, Open in OS, folder Expand all/Collapse all. |
 | PANEL-013 | Partial | test_file_browser.py::test_file_browser_populates_after_workspace_created_without_prompt | Assert the "No files yet" empty state and the animated skeleton/loading rows. |
-| PANEL-016 | Partial | test_commit_from_changes_tab.py::test_commit_button_sends_commit_message (enabled) | Assert the button is disabled (label reflects 0) when no changes exist. |
+| PANEL-016 | Partial | test_changes_panel.py::test_commit_button_sends_commit_message (enabled) | Assert the button is disabled (label reflects 0) when no changes exist. |
 | PANEL-018 | Missing | — | Right-click commit button → "Edit prompt…", edit, Save; assert prompt persists and dialog closes. |
-| PANEL-019 | Partial | test_history_panel.py::test_history_panel_shows_commits; ::test_terminus_visible_with_no_commits | Assert the "Loading history…" and error-message states. |
-| PANEL-022 | Partial | test_history_panel.py::test_commit_hover_popover_shows_details; ::test_click_dismisses_popover | Click the copy-hash button; assert the hash is copied and the "Copied" indicator shows. |
+| PANEL-019 | Partial | test_commits_panel.py::test_history_panel_shows_commits; ::test_terminus_visible_with_no_commits | Assert the "Loading history…" and error-message states. |
+| PANEL-022 | Partial | test_commits_panel.py::test_commit_hover_popover_shows_details; ::test_click_dismisses_popover | Click the copy-hash button; assert the hash is copied and the "Copied" indicator shows. |
 | PANEL-025 | Partial | test_file_browser.py::test_multiple_tabs_and_close; ::test_clicking_tab_switches_displayed_file; ::test_cmd_w_closes_active_diff_tab; test_diff_tab_close_others.py::test_diff_tab_close_others | Assert tab drag-reorder, MRU-vs-adjacent close per setting, "Close all" menu item, full-path tooltip on hover. |
 | PANEL-026 | Partial | test_file_browser.py::test_split_view_toggle; ::test_line_wrap_toggle; ::test_in_file_search_bar; ::test_close_diff_panel_button; test_diff_scope_and_fullscreen.py::test_expand_toggle_expands_and_collapses; test_expand_escape.py::test_escape_exits_expand_mode | Assert expand/fullscreen hides the file browser (current tests assert chat-panel hide). |
-| PANEL-027 | Partial | test_file_browser.py::test_diff_file_header_shows_line_stats; test_file_browser_uncommitted.py::test_diff_header_line_stats_reflect_uncommitted_only; test_history_panel_diffs.py::test_commit_diff_file_header_shows_line_counts | Assert the breadcrumb path and the three-dot file-operations menu in the diff header. |
-| PANEL-028 | Partial | test_history_panel.py::test_clicking_renamed_file_in_commits_shows_rename_banner | Assert the "Deleted" banner and the "Binary file (cannot display)" message. |
+| PANEL-027 | Partial | test_file_browser.py::test_diff_file_header_shows_line_stats; test_changes_panel.py::test_diff_header_line_stats_reflect_uncommitted_only; test_commits_panel.py::test_commit_diff_file_header_shows_line_counts | Assert the breadcrumb path and the three-dot file-operations menu in the diff header. |
+| PANEL-028 | Partial | test_commits_panel.py::test_clicking_renamed_file_in_commits_shows_rename_banner | Assert the "Deleted" banner and the "Binary file (cannot display)" message. |
 | PANEL-029 | Missing | — (test_regression_large_diff_crash.py checks no-crash only) | Open a diff over the threshold; assert truncated diff + "Show full diff" button; click → full diff renders. |
 | PANEL-030 | Partial | test_file_browser.py::test_in_file_search_bar; ::test_in_file_search_works_in_file_view | Assert the "X of Y" counter, Enter/Shift+Enter (or arrows) navigation, Escape closing. |
 | PANEL-036 | Partial | test_terminal_agent_basic.py::test_terminal_agent_basic; test_registered_terminal_agent.py (tab data-dot-status read/unread) | Produce output in a non-active tab; assert a pulsing unread dot appears, then clears after switching to it. |
@@ -461,7 +461,7 @@ Every scenario an integration test fully covers — it performs the user action 
 | MENT-006 | test_at_mention_completion.py; test_at_mention_keyboard_navigation.py; test_at_mention_tab_drill_and_shift_tab.py; test_at_mention_path_mode.py |
 | MENT-007 | test_skill_autocomplete.py; test_pseudo_skills.py; test_slash_command_enter_accepts_suggestion.py; test_mention_picker_completion.py::test_plus_drill_into_skills_via_enter |
 | MENT-008 | test_entity_picker_workspace_drill.py::test_tab_on_workspace_drills_into_agent_list; ::test_click_on_workspace_drills_into_agent_list; ::test_shift_tab_steps_back_from_workspace_drill; ::test_enter_on_agent_after_drill_commits_agent_chip |
-| MENT-010 | test_path_autocomplete_keyboard.py::test_enter_on_directory_highlights_first_subentry; ::test_cmd_enter_submits_path; ::test_selected_folder_submit_shows_correct_repo_name; ::test_autocomplete_shows_submit_hint; test_path_tilde_display.py::test_path_autocomplete_shows_tilde_for_home_directory |
+| MENT-010 | test_path_autocomplete_keyboard.py::test_enter_on_directory_highlights_first_subentry; ::test_cmd_enter_submits_path; ::test_selected_folder_submit_shows_correct_repo_name; ::test_autocomplete_shows_submit_hint; test_files_panel.py::test_path_autocomplete_shows_tilde_for_home_directory |
 | SKILL-001 | test_skills_panel.py::test_skills_panel_click_inserts_mention_chip; ::test_skills_panel_lists_workspace_skill; ::test_skills_panel_keyboard_navigation_inserts_chip; test_skill_without_frontmatter.py |
 | SKILL-003 | test_skills_panel.py::test_skills_panel_search_filters_list; ::test_skills_panel_keyboard_navigation_inserts_chip; test_skill_autocomplete.py; test_pseudo_skills.py::test_autocomplete_filters_pseudo_skills |
 | ACT-001 | test_custom_actions.py::test_draft_action_populates_and_focuses_chat_input; ::test_builtin_chips; ::test_create_action_from_panel; test_terminal_agent_automated_prompts.py (terminal-agent draft types into the PTY without submitting) |
@@ -568,16 +568,16 @@ Every scenario an integration test fully covers — it performs the user action 
 | PANEL-006 | test_file_browser.py::test_file_search; ::test_file_search_filters_visible_rows; ::test_file_search_escape_closes; ::test_file_search_no_matches_shows_empty_state; ::test_file_search_folders_are_collapsible |
 | PANEL-007 | test_file_browser.py::test_folder_expand_and_collapse; ::test_collapse_all_folders_button |
 | PANEL-008 | test_file_browser.py::test_click_file_opens_diff_panel; ::test_changes_tab_click_opens_diff; test_file_open_diff_modes.py::test_browse_tab_opens_file_view |
-| PANEL-014 | test_diff_scope_switching.py::test_scope_switch_toggles_active_scope; test_file_open_diff_modes.py::test_committed_file_visible_in_all_scope_only; test_file_browser_tabs.py::test_tab_switching_shows_correct_content |
-| PANEL-015 | test_discard_file.py::test_discard_file_removes_from_changes; ::test_discard_cancel_preserves_file; test_discard_preserves_all_tab.py::test_discard_last_uncommitted_keeps_all_tab_populated |
-| PANEL-017 | test_commit_from_changes_tab.py::test_commit_button_sends_commit_message |
-| PANEL-020 | test_history_panel.py::test_commit_entry_shows_metadata_line; ::test_merge_commit_shows_spur |
-| PANEL-021 | test_file_browser.py::test_collapse_all_commits_button; test_history_panel_diffs.py::test_click_file_in_multi_file_commit; ::test_switch_files_within_same_commit |
-| PANEL-023 | test_history_panel_diffs.py::test_commit_diff_shows_committed_content_not_uncommitted; ::test_commit_diff_file_header_shows_line_counts; ::test_same_file_two_commits_shows_correct_content |
-| PANEL-024 | test_history_panel.py::test_merge_commit_shows_spur; ::test_terminus_shows_fork_point_hash; ::test_terminus_visible_with_no_commits |
-| PANEL-031 | test_file_open_diff_modes.py::test_browse_tab_opens_file_view; test_sculpt_ui_open_file.py::test_mode_file_opens_file_view_tab; test_open_in_viewer.py::test_open_created_file_in_diff_viewer |
+| PANEL-014 | test_changes_panel.py::test_scope_switch_toggles_active_scope; test_file_open_diff_modes.py::test_committed_file_visible_in_all_scope_only; test_file_browser_tabs.py::test_tab_switching_shows_correct_content |
+| PANEL-015 | test_changes_panel.py::test_discard_file_removes_from_changes; ::test_discard_cancel_preserves_file; test_discard_preserves_all_tab.py::test_discard_last_uncommitted_keeps_all_tab_populated |
+| PANEL-017 | test_changes_panel.py::test_commit_button_sends_commit_message |
+| PANEL-020 | test_commits_panel.py::test_commit_entry_shows_metadata_line; ::test_merge_commit_shows_spur |
+| PANEL-021 | test_file_browser.py::test_collapse_all_commits_button; test_commits_panel.py::test_click_file_in_multi_file_commit; ::test_switch_files_within_same_commit |
+| PANEL-023 | test_commits_panel.py::test_commit_diff_shows_committed_content_not_uncommitted; ::test_commit_diff_file_header_shows_line_counts; ::test_same_file_two_commits_shows_correct_content |
+| PANEL-024 | test_commits_panel.py::test_merge_commit_shows_spur; ::test_terminus_shows_fork_point_hash; ::test_terminus_visible_with_no_commits |
+| PANEL-031 | test_file_open_diff_modes.py::test_browse_tab_opens_file_view; test_sculpt_ui_open_file.py::test_mode_file_opens_file_view_tab; test_diff_viewer.py::test_open_created_file_in_diff_viewer |
 | PANEL-032 | test_auto_collapse_combined_diff.py::test_many_files_start_collapsed_in_review_all; ::test_few_files_start_expanded_in_review_all; test_file_browser.py::test_review_all_button_opens_combined_diff |
-| PANEL-033 | test_markdown_render_toggle.py::test_markdown_toggle_switches_views; ::test_markdown_toggle_hidden_for_non_markdown_files; ::test_markdown_toggle_disabled_when_flag_off |
+| PANEL-033 | test_diff_viewer.py::test_markdown_toggle_switches_views; ::test_markdown_toggle_hidden_for_non_markdown_files; ::test_markdown_toggle_disabled_when_flag_off |
 | PANEL-034 | test_terminal.py::test_add_terminal_tab_creates_new_session; ::test_close_terminal_tab_switches_to_neighbor; ::test_terminal_tab_reuses_lowest_available_number; test_terminal_tab_enhancements.py::test_terminal_tab_double_click_rename; ::test_terminal_context_menu_has_close_all_and_rename |
 | PANEL-035 | test_terminal.py::test_opt_left_moves_cursor_back_by_word; ::test_ctrl_c_cancels_input; ::test_ctrl_d_shows_process_exited_message; test_terminal_agent_basic.py::test_terminal_agent_basic |
 | PANEL-043 | test_skills_panel.py::test_skills_panel_click_inserts_mention_chip |
@@ -610,9 +610,9 @@ Every scenario an integration test fully covers — it performs the user action 
 | SET-017 | test_pi_managed_install.py::test_pi_settings_section_visible_with_pi_agent_disabled |
 | SET-028 | test_telemetry_opt_out.py::test_privacy_settings_telemetry_switch; ::test_onboarding_email_with_telemetry_opt_out; ::test_onboarding_skip_account_setup |
 | SET-037 | test_theme_builder.py::test_theme_builder_component_gallery_button; ::test_theme_builder_reset_to_defaults; test_component_gallery_tab.py::test_component_gallery_opens_as_tab |
-| DEV-002 | test_markdown_gfm.py::test_gfm_features_render_in_read_only_preview (external anchors target=_blank + rel) |
-| DEV-003 | test_markdown_gfm.py::test_gfm_features_render_in_read_only_preview (fragment anchors inert + "not supported" title) |
-| DEV-004 | test_markdown_gfm.py::test_gfm_features_render_in_read_only_preview (relative anchors inert + "not supported" title) |
+| DEV-002 | test_diff_viewer.py::test_gfm_features_render_in_read_only_preview (external anchors target=_blank + rel) |
+| DEV-003 | test_diff_viewer.py::test_gfm_features_render_in_read_only_preview (fragment anchors inert + "not supported" title) |
+| DEV-004 | test_diff_viewer.py::test_gfm_features_render_in_read_only_preview (relative anchors inert + "not supported" title) |
 
 ---
 

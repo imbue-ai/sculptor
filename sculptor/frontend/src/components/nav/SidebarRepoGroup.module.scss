@@ -40,6 +40,21 @@
   padding: 0;
 }
 
+// First-run repo headers are inert: no collapse toggle, no actions. Drop the
+// interactive affordances the populated header carries so the row doesn't invite
+// a click that does nothing — no hover highlight and no pointer cursor.
+.repoHeaderStatic {
+  cursor: default;
+
+  &:hover {
+    background: transparent;
+  }
+
+  .repoHeaderButton {
+    cursor: default;
+  }
+}
+
 .repoChevron {
   color: var(--gray-10);
   flex-shrink: 0;

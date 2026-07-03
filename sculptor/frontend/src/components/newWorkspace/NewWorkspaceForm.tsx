@@ -3,8 +3,8 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import type { EffortLevel } from "~/api";
 import {
-  EffortLevel,
   ElementIds,
   getActiveProjects,
   getMostRecentlyUsedProject,
@@ -86,7 +86,7 @@ export const NewWorkspaceForm = ({
   // on create). The form remounts per open (keyed on the preset repo), so these
   // re-seed from the current defaults each time rather than staying sticky.
   const [agentModel, setAgentModel] = useState<LlmModel>(defaultModel as LlmModel);
-  const [agentEffort, setAgentEffort] = useState<EffortLevel>((defaultEffortLevel as EffortLevel) ?? EffortLevel.XHIGH);
+  const [agentEffort, setAgentEffort] = useState<EffortLevel>(defaultEffortLevel as EffortLevel);
   const [isAgentFastMode, setIsAgentFastMode] = useState<boolean>(isDefaultFastMode);
   const [isAgentPlanMode, setIsAgentPlanMode] = useState<boolean>(false);
 
@@ -119,7 +119,7 @@ export const NewWorkspaceForm = ({
 
   // State and hooks — external
   const { registrations } = useTerminalAgentRegistrations();
-  const { repoInfo, fetchRepoInfo, fetchCurrentBranch } = useRepoInfo(selectedProjectId ?? "");
+  const { repoInfo, fetchRepoInfo, fetchCurrentBranch } = useRepoInfo(selectedProjectId);
   const { isCreating, createWorkspace } = useCreateWorkspace();
   const nameInputRef = useRef<HTMLInputElement>(null);
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -182,6 +182,22 @@ export const NewWorkspaceForm = ({
     };
   }, [updateProjects]);
 
+  // Effects — auto-select a repo the moment it's added through the RepoSelector's
+  // Add Repository dialog, so the user lands on the repo they just added instead
+  // of having to pick it from the dropdown. Tracks the previously-seen project
+  // ids and selects whichever id appears that wasn't there before.
+  const prevProjectIdsRef = useRef<Set<string>>(new Set(projects.map((p) => p.objectId)));
+  useEffect(() => {
+    const addedProjects = projects.filter((p) => !prevProjectIdsRef.current.has(p.objectId));
+    prevProjectIdsRef.current = new Set(projects.map((p) => p.objectId));
+    if (addedProjects.length === 0) return;
+    // A freshly added repo replaces the selection, so branch choices made
+    // against the previous repo no longer apply.
+    setSelectedProjectId(addedProjects[addedProjects.length - 1].objectId);
+    setBranchNameOverride(null);
+    setUserSelectedBranch(undefined);
+  }, [projects]);
+
   // Effects — refresh branch info when the selected project changes.
   useEffect(() => {
     if (!selectedProjectId) return;
@@ -228,12 +244,6 @@ export const NewWorkspaceForm = ({
 
   const handleSubmit = useCallback(async (): Promise<void> => {
     if (isSubmitDisabled || selectedProjectId === null) return;
-
-    const trimmedBranch = effectiveBranchName.trim();
-    if (mode === WorkspaceInitializationStrategy.WORKTREE && !trimmedBranch) {
-      setToast({ title: "Branch name is required for worktree workspaces", type: ToastType.ERROR });
-      return;
-    }
 
     const result = await createWorkspace({
       projectId: selectedProjectId,
@@ -340,7 +350,8 @@ export const NewWorkspaceForm = ({
 
   // Skeleton the crumb only on a cold first open (no cached project resolved yet
   // while the initial project fetch is in flight); otherwise the real selector
-  // renders, including the "no repos → Select repo / add one" empty case.
+  // renders. With zero repos the selector is a disabled "Select repo" chip (its
+  // trigger can't open, so there is no add-repo affordance in that state).
   const isRepoCrumbLoading = isLoadingProjects && !currentProject;
 
   return (

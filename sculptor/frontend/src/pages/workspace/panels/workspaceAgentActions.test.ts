@@ -1,11 +1,11 @@
 import { createStore } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { ChatMessage, CodingAgentTaskView } from "~/api";
+import type { ChatMessage, CodingAgentTaskView, HarnessCapabilities } from "~/api";
 import { LlmModel, TaskStatus } from "~/api";
 import { getEmptyTaskDetailState, taskDetailAtomFamily } from "~/common/state/atoms/taskDetails.ts";
 import { taskAtomFamily, taskIdsAtom } from "~/common/state/atoms/tasks.ts";
-import { terminalPromptRejectedToastAtom } from "~/common/state/atoms/toasts.ts";
+import { commitPromptSendFailedToastAtom, terminalPromptRejectedToastAtom } from "~/common/state/atoms/toasts.ts";
 import type { WorkspaceLayoutState } from "~/components/sections/persistence/types.ts";
 import { EMPTY_WORKSPACE_LAYOUT } from "~/components/sections/persistence/types.ts";
 import { makeAgentPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
@@ -34,7 +34,33 @@ vi.mock("~/api", async (importOriginal) => {
 const WS = "ws-test";
 const WS_OTHER = "ws-test-other";
 
-const createMockTask = (overrides: Partial<CodingAgentTaskView> = {}): CodingAgentTaskView =>
+const DEFAULT_HARNESS_CAPABILITIES: HarnessCapabilities = {
+  supportsChatInterface: true,
+  supportsInteractiveBackchannel: true,
+  supportsSkills: true,
+  supportsSubAgents: true,
+  supportsImageInput: true,
+  supportsFastMode: true,
+  supportsContextReset: true,
+  supportsCompaction: true,
+  supportsBackgroundTasks: true,
+  supportsSessionResume: true,
+  supportsToolUseRendering: true,
+  supportsFileAttachments: true,
+  supportsInterruption: true,
+  supportsFileReferences: true,
+  supportsModelSelection: true,
+};
+
+// A partial harnessCapabilities override is merged over the all-true default, so a
+// terminal task can flip one capability (e.g. supportsChatInterface) without
+// restating the whole shape. Typing the default as HarnessCapabilities also forces
+// this fixture to be updated when a new capability field is added.
+type MockTaskOverrides = Partial<Omit<CodingAgentTaskView, "harnessCapabilities">> & {
+  harnessCapabilities?: Partial<HarnessCapabilities>;
+};
+
+const createMockTask = ({ harnessCapabilities, ...overrides }: MockTaskOverrides = {}): CodingAgentTaskView =>
   ({
     id: "task-1",
     projectId: "proj-1",
@@ -47,11 +73,11 @@ const createMockTask = (overrides: Partial<CodingAgentTaskView> = {}): CodingAge
     titleOrSomethingLikeIt: "Test task",
     interface: "API",
     model: LlmModel.CLAUDE_4_SONNET,
-    harnessCapabilities: { supportsChatInterface: true },
+    harnessCapabilities: { ...DEFAULT_HARNESS_CAPABILITIES, ...harnessCapabilities },
     isDeleted: false,
     workspaceId: WS,
     ...overrides,
-  }) as CodingAgentTaskView;
+  }) as unknown as CodingAgentTaskView;
 
 type StoreType = ReturnType<typeof createStore>;
 
@@ -67,10 +93,12 @@ const seedLayout = (store: StoreType, layout: Partial<WorkspaceLayoutState>, wor
 afterEach(() => {
   sendMessagesMock.mockReset();
   terminalInputMock.mockReset();
-  // atomFamily entries are module-level; drop per-test keys so state doesn't
-  // leak across tests (the jotai store itself is fresh per test).
+  // Each test runs against a fresh jotai store, so atom values never leak; these
+  // removals only drop the module-level memoized atom instances. workspaceLayoutFamily
+  // is deliberately left in place: its initial value is read from the persistence
+  // adapter, whose writes flush on a debounce that can land after this hook, so
+  // re-creating the atom would re-hydrate a later test from that stale snapshot.
   for (const workspaceId of [WS, WS_OTHER]) {
-    workspaceLayoutFamily.remove(workspaceId);
     activeAgentIdAtomFamily.remove(workspaceId);
     activeChatAgentIdAtomFamily.remove(workspaceId);
     canCommitAtomFamily.remove(workspaceId);
@@ -115,7 +143,7 @@ describe("activeChatAgentIdAtomFamily", () => {
       createMockTask({
         id: "terminal-agent",
         harnessCapabilities: { supportsChatInterface: false },
-      } as Partial<CodingAgentTaskView>),
+      }),
     );
     seedTask(store, createMockTask({ id: "chat-agent" }));
     seedLayout(store, {
@@ -141,7 +169,7 @@ describe("activeChatAgentIdAtomFamily", () => {
 
   it("does not resolve tasks from a different workspace", () => {
     const store = createStore();
-    seedTask(store, createMockTask({ id: "other-ws-agent", workspaceId: "ws-other" }));
+    seedTask(store, createMockTask({ id: "other-ws-agent", workspaceId: WS_OTHER }));
     seedLayout(store, {});
 
     expect(store.get(activeChatAgentIdAtomFamily(WS))).toBeUndefined();
@@ -238,7 +266,6 @@ describe("canCommitAtomFamily", () => {
     });
 
     expect(store.get(canCommitAtomFamily(WS))).toBe(false);
-    taskDetailAtomFamily.remove("agent-a");
   });
 
   it("is true when a target agent resolves and nothing is queued", () => {
@@ -293,13 +320,29 @@ describe("commitActionAtomFamily", () => {
       body: { message: "Please commit my changes", model: LlmModel.CLAUDE_4_SONNET },
     });
   });
+
+  it("surfaces a toast when the chat-route send fails", async () => {
+    const store = createStore();
+    seedTask(store, createMockTask({ id: "agent-a" }));
+    seedLayout(store, {
+      placement: { [makeAgentPanelId("agent-a")]: "center" },
+      activePanel: { center: makeAgentPanelId("agent-a") },
+    });
+    sendMessagesMock.mockRejectedValueOnce(new Error("network down"));
+
+    await store.set(commitActionAtomFamily(WS), "Please commit my changes");
+
+    expect(store.get(commitPromptSendFailedToastAtom)).toMatchObject({
+      title: "Couldn't send commit request",
+    });
+  });
 });
 
 // The terminal-routing premise: a registered terminal agent is the visible
 // center tab with a chat agent open (but hidden) behind it. Whether the
 // terminal can take automated prompts is per-registration
 // (`accepts_automated_prompts`), so each test picks its own capability/status.
-const seedVisibleTerminalWithHiddenChat = (store: StoreType, terminalOverrides: Partial<CodingAgentTaskView>): void => {
+const seedVisibleTerminalWithHiddenChat = (store: StoreType, terminalOverrides: MockTaskOverrides): void => {
   seedTask(store, createMockTask({ id: "chat-agent" }));
   seedTask(
     store,
@@ -308,7 +351,7 @@ const seedVisibleTerminalWithHiddenChat = (store: StoreType, terminalOverrides: 
       harnessCapabilities: { supportsChatInterface: false },
       status: TaskStatus.READY,
       ...terminalOverrides,
-    } as Partial<CodingAgentTaskView>),
+    }),
   );
   seedLayout(store, {
     placement: { [makeAgentPanelId("chat-agent")]: "center", [makeAgentPanelId("terminal-agent")]: "center" },

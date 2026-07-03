@@ -7,7 +7,7 @@ import { ElementIds, type ExternalApp, type Workspace } from "../../../api";
 import { getOpenWithItems } from "../../../common/openInApp/items.tsx";
 import type { AccentColor } from "../../../common/state/atoms/themeBuilder";
 import { useWorkspaceBranch } from "../../../common/state/hooks/useWorkspaceBranch.ts";
-import type { ContextActionShared, WorkspaceAction } from "./types.ts";
+import type { WorkspaceAction } from "./types.ts";
 
 /** Pixel size shared by every icon rendered in these context menus. */
 const ICON_SIZE = 14;
@@ -49,32 +49,14 @@ const DROPDOWN_MENU_COMPONENTS: WorkspaceMenuComponents = {
   SubContent: DropdownMenu.SubContent as WorkspaceMenuComponents["SubContent"],
 };
 
-/**
- * The slice of an action descriptor the right-click menu reads, narrowed to
- * the menu's target entity. `WorkspaceAction` satisfies this for `Workspace`,
- * letting `renderMenuItems` stay generic over the target without per-field
- * type assertions.
- */
-type TargetedAction<TTarget> = ContextActionShared & {
-  visible?: (target: TTarget) => boolean;
-  disabled?: (target: TTarget) => boolean;
-  getTitle?: (target: TTarget) => string;
-  perform: (target: TTarget) => void | Promise<void>;
-};
-
-type RenderMenuProps<TTarget> = {
-  actions: ReadonlyArray<TargetedAction<TTarget>>;
-  target: TTarget;
+type RenderMenuProps = {
+  actions: ReadonlyArray<WorkspaceAction>;
+  target: Workspace;
   /**
    * Radix accent color for destructive actions. Workspace tabs derive
    * this from the active theme builder; agent tabs use the literal "red".
    */
   destructiveColor: AccentColor;
-  /**
-   * Returns the perform handler for a given action. Kept narrow so the
-   * underlying action.perform signature stays typed against its target.
-   */
-  performFor: (action: TargetedAction<TTarget>) => () => void | Promise<void>;
   /**
    * Optional content to splice into the rendered menu immediately after
    * the action with the given id. Used by `WorkspaceContextMenuContent`
@@ -86,15 +68,15 @@ type RenderMenuProps<TTarget> = {
    */
   injectAfter?: ReadonlyArray<{ actionId: string; content: ReactElement }>;
   /**
-   * Radix menu primitives to render through. Defaults to the right-click
-   * context menu; the sidebar row's "..." dropdown passes the dropdown set
-   * so both surfaces render the identical action list.
+   * Radix menu primitives to render through — either the right-click
+   * context menu set or the sidebar row's "..." dropdown set, so both
+   * surfaces render an identical action list.
    */
-  menu?: WorkspaceMenuComponents;
+  menu: WorkspaceMenuComponents;
 };
 
-const renderMenuItems = <TTarget,>(props: RenderMenuProps<TTarget>): Array<ReactElement> => {
-  const menu = props.menu ?? CONTEXT_MENU_COMPONENTS;
+const renderMenuItems = (props: RenderMenuProps): Array<ReactElement> => {
+  const menu = props.menu;
   const visible = props.actions.filter((action) => (action.visible ? action.visible(props.target) : true));
 
   const out: Array<ReactElement> = [];
@@ -111,10 +93,7 @@ const renderMenuItems = <TTarget,>(props: RenderMenuProps<TTarget>): Array<React
           color={action.destructive ? props.destructiveColor : undefined}
           disabled={isDisabled}
           onSelect={(): void => {
-            // performFor is curried — it returns the actual handler.
-            // Forgetting the trailing () silently builds the function and
-            // throws it away, leaving every menu item a no-op.
-            void props.performFor(action)();
+            void action.perform(props.target);
           }}
         >
           {action.icon ? <action.icon size={ICON_SIZE} /> : null} {title}
@@ -230,12 +209,11 @@ const useWorkspaceMenuItems = (
       </menu.Sub>
     </>
   );
-  return renderMenuItems<Workspace>({
+  return renderMenuItems({
     actions,
     target: workspace,
     destructiveColor,
     menu,
-    performFor: (action) => (): void | Promise<void> => action.perform(workspace),
     injectAfter: [
       ...(openInSub != null ? [{ actionId: "open_pr", content: openInSub }] : []),
       { actionId: "rename", content: copyGroup },

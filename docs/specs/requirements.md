@@ -95,7 +95,7 @@ and flags the targets it does not currently define.
   - agent status: **500 ms** (`.../chat-alpha/useAgentStatus.ts`)
   - auto-scroll / jump-to-bottom / in-file search: **150 ms** (`.../chat-alpha/hooks/`, `diffPanel/useInFileSearch.ts`)
   - active-prompt scroll throttle: **100 ms**; mark-read: **1000 ms**; panel-layout sync: **2000 ms**
-  - branch-name preview: **250 ms**; branch-name collision check: **300 ms** (`add-workspace/hooks/useBranchNamePreview.ts`)
+  - branch-name preview: **250 ms**; branch-name collision check: **300 ms** (`components/newWorkspace/hooks/useBranchNamePreview.ts`)
 - **REQ-NFR-004 [Unspecified].** The product defines no explicit end-to-end **streaming latency**
   budget (model token emitted → rendered) or **interaction latency** (click → visible response) target.
   → OPEN-1 (§7).

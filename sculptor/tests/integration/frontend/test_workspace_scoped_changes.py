@@ -15,7 +15,6 @@ for BOTH agents.
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
@@ -131,7 +130,7 @@ fake_claude:write_file `{
     task_page_2.activate_changes_panel()
     task_page_2.click_review_all()
 
-    review_all_panel = page.get_by_test_id(ElementIDs.REVIEW_ALL_PANEL)
+    review_all_panel = task_page_2.get_review_all_panel()
     expect(review_all_panel).to_be_visible()
     expect(review_all_panel).to_contain_text("review_file1.py")
     expect(review_all_panel).to_contain_text("review_file2.py")

@@ -189,8 +189,8 @@ hyphens separate the story title from the variant name.
 | `Custom/AskUserQuestion` | `MultiSelect` | `custom-askuserquestion--multi-select` |
 | `Custom/AskUserQuestion` | `MultipleQuestions` | `custom-askuserquestion--multiple-questions` |
 | `Custom/AskUserQuestion` | `NoDismiss` | `custom-askuserquestion--no-dismiss` |
-| `Custom/Panels/DockingLayout` | `Default` | `custom-panels-dockinglayout--default` |
-| `Custom/Tabs/TabBar` | `Default` | `custom-tabs-tabbar--default` |
+| `Custom/BranchNameField` | `Idle` | `custom-branchnamefield--idle` |
+| `Custom/Onboarding/DependencyCard` | `NotInstalled` | `custom-onboarding-dependencycard--not-installed` |
 | `Radix/Button` | `Default` | `radix-button--default` |
 | `Radix/Dialog` | `Default` | `radix-dialog--default` |
 

@@ -14,20 +14,15 @@ and lands on the first-run state, so ``sculptor_instance_empty_first_run_`` only
 waits for the gate to settle on the empty page before each test.
 """
 
-import pytest
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.empty_first_run import PlaywrightEmptyFirstRun
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
-from sculptor.testing.playwright_utils import delete_project_via_settings
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 from sculptor.testing.utils import get_playwright_modifier_key
 
 HELP_PROMPT_PREFILL = "/sculptor:help I just set up Sculptor for the first time. What should I know to get started?"
-
-_ADD_REPO_SKIP_REASON = "The no-repos 'Add a repo' state needs the only repo removed via Settings, but reaching Settings from the empty-first-run page is a harness-nav interaction (navigate_to_settings_page can't find the gear when the empty page's sidebar is collapsed); the no-workspaces hint half of the empty-sidebar behaviour is covered by test_sidebar_shows_no_workspaces_hint."
 
 
 @user_story("to land on the inline new-workspace form when I have no workspaces yet")
@@ -59,25 +54,6 @@ def test_sidebar_shows_no_workspaces_hint(sculptor_instance_empty_first_run_: Sc
     expect(empty.get_no_workspaces_hint()).to_be_visible()
 
 
-@pytest.mark.skip(reason=_ADD_REPO_SKIP_REASON)
-@user_story("to be offered an 'Add a repo' button when no repositories are registered")
-def test_sidebar_shows_add_repo_when_no_projects(sculptor_instance_empty_first_run_: SculptorInstance) -> None:
-    """With zero repos, the sidebar shows the "Add a repo" button.
-
-    Settings stays reachable in the empty state, so the test removes the lone
-    fixture repo through Settings > Repositories to reach the no-projects state.
-    """
-    page = sculptor_instance_empty_first_run_.page
-    empty = PlaywrightEmptyFirstRun(page)
-    expect(empty.get_no_workspaces_hint()).to_be_visible()
-
-    # Remove the only project; the empty page's repo area falls back to "Add a repo".
-    delete_project_via_settings(page, "initial_repo")
-
-    expect(empty.get_page()).to_be_visible(timeout=45_000)
-    expect(empty.get_add_repo_button()).to_be_visible()
-
-
 @user_story("to be unable to escape the first-run form with global shortcuts")
 def test_global_shortcuts_disabled_in_empty_state(sculptor_instance_empty_first_run_: SculptorInstance) -> None:
     """Cmd+K and the new-workspace shortcut are off in the empty state.
@@ -95,12 +71,12 @@ def test_global_shortcuts_disabled_in_empty_state(sculptor_instance_empty_first_
     # Cmd+K does not open the command palette.
     page.keyboard.press(f"{mod_key}+k")
     page.keyboard.up(mod_key)
-    expect(page.get_by_test_id(ElementIDs.COMMAND_PALETTE)).to_have_count(0)
+    expect(empty.get_command_palette()).to_have_count(0)
 
     # Cmd/Meta+T does not open a separate new-workspace dialog.
     page.keyboard.press(f"{mod_key}+t")
     page.keyboard.up(mod_key)
-    expect(page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)).to_have_count(0)
+    expect(empty.get_new_workspace_dialog()).to_have_count(0)
 
     # The inline form is still the only create surface present.
     expect(empty.get_form()).to_be_visible()

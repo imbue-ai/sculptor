@@ -1,47 +1,28 @@
 """Integration tests for the Files panel — the workspace file tree paired with
 its own embedded DiffViewer.
 
-The Files panel is one of the three separate panels that replaced the old
-single File-Browser panel with its All/Changes/History tabs. It pairs the
-workspace file tree (the list) with an always-visible embedded viewer (the
-detail) via the shared ``ExplorerLayout``. There is no tab model: the Changes
-and Commits panels are their own panels, so the old ``FILE_BROWSER_TAB_*``
-surface (and everything that hung off it) is gone.
+The Files panel is one of three separate panels (Files, Changes, Commits) that
+each pair a list with an always-visible embedded viewer via the shared
+``ExplorerLayout``. There is no tab model within a panel: Changes and Commits
+are their own panels, so there is no ``FILE_BROWSER_TAB_*`` surface.
 
-These cases are MIGRATED, not rewritten, from the pre-rewrite file-browser
-tests. The proven file-tree content assertions
-carry over unchanged; only the *surface* moved:
+The panel is opened through the section ``+`` add-panel dropdown (the shared
+``open_panel`` helper) rather than being a default docked panel, and the file
+tree, search box, status indicators, and embedded viewer are driven through the
+``PlaywrightFilesPanelElement`` / ``ExplorerLayout`` / ``DiffViewer`` POMs
+scoped to the opened section. The list view controls (flat/tree, collapse-all)
+live under the viewer header's single triple-dot menu, reached via
+``toggle_view_option_via_menu``; the sidebar-visibility toggle also lives in the
+viewer header, and the viewer is always visible with an empty body when nothing
+is selected.
 
-* a panel is opened through the section ``+`` add-panel dropdown (the shared
-  ``open_panel`` helper) instead of being the default docked panel;
-* the file tree, search box, status indicators, and embedded viewer are driven
-  through the ``PlaywrightFilesPanelElement`` / ``ExplorerLayout`` /
-  ``DiffViewer`` POMs scoped to the opened section;
-* the list view controls (flat/tree, collapse-all) re-anchored under the
-  viewer header's single triple-dot menu, reached via
-  ``toggle_view_option_via_menu``;
-* the sidebar-visibility toggle lives in the viewer header, and the
-  viewer is always visible with an empty body when nothing is selected.
-
-This file also folds in the harness smoke test (open Files + render
-list/viewer), so ``test_fcc_harness_smoke.py`` can be deleted.
-
-The old All/Changes/History tab-switching, the multi-tab diff surface, the
-scope picker (All/Uncommitted), Review All, copy-path, Cmd+W tab close, and the
-list header's search/refresh buttons are NOT part of the Files panel surface:
-those moved to the Changes / Commits panels or the viewer menu and are covered
-by ``test_changes_panel.py`` / ``test_diff_viewer.py``. The diff-mode
-assertions that depend on the scope picker (and the symlink-replaces-directory
-repro, which needs the uncommitted Changes scope) live in
-``test_changes_panel.py``, since the Files panel does not own that surface.
-
-Migrated from:
-* ``test_file_browser.py`` (file-tree content only)
-* ``test_file_browser_tabs.py`` (residual file-tree content only; the
-  All/Changes/History tab-switching is dropped — that tab model is gone)
-* ``test_file_open_diff_modes.py``
-* ``test_path_tilde_display.py``
-* ``test_fcc_harness_smoke.py`` (folded in)
+The scope picker (All/Uncommitted), Review All, copy-path, Cmd+W tab close, and
+the committed-vs-uncommitted diff modes are not part of the Files panel surface:
+they belong to the Changes / Commits panels and are covered by
+``test_changes_panel.py`` / ``test_diff_viewer.py``. The diff-mode assertions
+that depend on the scope picker (and the symlink-replaces-directory repro, which
+needs the uncommitted Changes scope) live in ``test_changes_panel.py``, since
+the Files panel does not own that surface.
 """
 
 import os
@@ -69,7 +50,7 @@ from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
 # --------------------------------------------------------------------------- #
-# FakeClaude prompts (migrated verbatim from the source tests).
+# FakeClaude prompts.
 # --------------------------------------------------------------------------- #
 
 # Writes a nested tree: src/App.tsx, src/components/Header.tsx, README.md.
@@ -210,7 +191,7 @@ def _ensure_folder_expanded(files_panel: PlaywrightFilesPanelElement, folder_tex
 
 
 # --------------------------------------------------------------------------- #
-# Folded-in: harness smoke test.
+# Harness smoke test.
 # --------------------------------------------------------------------------- #
 
 
@@ -218,10 +199,9 @@ def _ensure_folder_expanded(files_panel: PlaywrightFilesPanelElement, folder_tex
 def test_open_files_panel_renders_list_and_viewer(sculptor_instance_: SculptorInstance) -> None:
     """The open-a-panel helper opens Files; its list + embedded viewer render.
 
-    Folds in the old harness smoke test: open Files through the section ``+``
-    add-panel dropdown (no layout / localStorage seeding), then verify the
-    ExplorerLayout list and the embedded viewer's always-visible empty body
-    render.
+    Opens Files through the section ``+`` add-panel dropdown (no layout /
+    localStorage seeding), then verifies the ExplorerLayout list and the
+    embedded viewer's always-visible empty body render.
     """
     page = sculptor_instance_.page
 
@@ -238,7 +218,7 @@ def test_open_files_panel_renders_list_and_viewer(sculptor_instance_: SculptorIn
 
 
 # --------------------------------------------------------------------------- #
-# Migrated: test_file_browser.py (file-tree content) + test_file_browser_tabs.py
+# File-tree content
 # --------------------------------------------------------------------------- #
 
 
@@ -301,12 +281,7 @@ def test_file_browser_populates_after_workspace_created_without_prompt(sculptor_
 
 @user_story("to see committed and uncommitted files together in the file tree")
 def test_file_tree_shows_committed_and_uncommitted_files(sculptor_instance_: SculptorInstance) -> None:
-    """The file tree shows both committed and uncommitted files.
-
-    Migrated from the residual file-tree content of the old All-tab assertion
-    in ``test_file_browser_tabs.py`` (the All/Changes/History tab-switching is
-    dropped — that tab model is gone).
-    """
+    """The file tree shows both committed and uncommitted files."""
     page = sculptor_instance_.page
     _, files_panel = _open_files_panel_with(page, _COMMITTED_AND_UNCOMMITTED_PROMPT)
 
@@ -344,8 +319,8 @@ def test_folder_expand_and_collapse(sculptor_instance_: SculptorInstance) -> Non
 
 @user_story("to collapse all folders at once")
 def test_collapse_all_folders(sculptor_instance_: SculptorInstance) -> None:
-    """The collapse-all option (now in the viewer's triple-dot menu)
-    collapses expanded folders in the tree."""
+    """The collapse-all option in the viewer's triple-dot menu collapses
+    expanded folders in the tree."""
     page = sculptor_instance_.page
     _, files_panel = _open_files_panel_with(page, WRITE_FILES_PROMPT)
 
@@ -365,8 +340,8 @@ def test_collapse_all_folders(sculptor_instance_: SculptorInstance) -> None:
 
 @user_story("to see the file tree as a flat list of files")
 def test_flat_list_view_shows_files_without_folders(sculptor_instance_: SculptorInstance) -> None:
-    """The flat/tree toggle (now in the viewer's triple-dot menu)
-    switches the tree to a flat list that shows files directly."""
+    """The flat/tree toggle in the viewer's triple-dot menu switches the tree
+    to a flat list that shows files directly."""
     page = sculptor_instance_.page
     _, files_panel = _open_files_panel_with(page, WRITE_FILES_PROMPT)
 
@@ -418,14 +393,12 @@ fake_claude:write_file `{
 
 
 # --------------------------------------------------------------------------- #
-# Migrated: test_file_browser.py — file search
+# File search
 #
-# The new Files panel list header (``ExplorerTreeHeader``) is an always-visible
-# search input — there is no search button to reveal it, no close button, and no
-# "0 found" / Escape-to-close affordance (those belonged to the old
-# tabbed File-Browser header). The proven filtering content assertions carry
-# over against the always-present input; the dropped affordances are part of the
-# retired surface.
+# The Files panel list header (``ExplorerTreeHeader``) is an always-visible
+# search input: there is no search button to reveal it, no close button, and no
+# "0 found" / Escape-to-close affordance. The filtering assertions run against
+# that always-present input.
 # --------------------------------------------------------------------------- #
 
 
@@ -483,11 +456,15 @@ def test_file_search_uses_exact_substring_matching(sculptor_instance_: SculptorI
     expect(files_panel.get_file_tree()).to_be_visible()
 
     search_input = files_panel.get_search_input()
-    # "Headr" is close to "Header" but should NOT fuzzy-match.
-    search_input.fill("Headr")
-
-    # Header.tsx should not appear.
     header_row = files_panel.get_tree_rows().filter(has_text="Header")
+
+    # An exact substring ("Header") matches and auto-expands its parent folders,
+    # so the row surfaces — proving the filter engaged before the near-miss check.
+    search_input.fill("Header")
+    expect(header_row.first).to_be_visible()
+
+    # "Headr" is a near-miss typo and must NOT fuzzy-match, so the row drops out.
+    search_input.fill("Headr")
     expect(header_row).to_have_count(0)
 
 
@@ -526,13 +503,13 @@ def test_file_search_folders_are_collapsible(sculptor_instance_: SculptorInstanc
 
 
 # --------------------------------------------------------------------------- #
-# Migrated: test_file_open_diff_modes.py
+# Opening a file into the embedded viewer
 #
-# The Files panel opens a file from the tree into its OWN embedded viewer as a
-# read-only file view of the working tree (the old "Browse tab" behavior). The
-# committed-vs-uncommitted and All/Uncommitted-scope diff modes from the source
-# file are driven by the Changes panel's scope picker, which the Files panel does
-# not own; those cases live in ``test_changes_panel.py``.
+# The Files panel opens a file from the tree into its own embedded viewer as a
+# read-only file view of the working tree. The committed-vs-uncommitted and
+# All/Uncommitted-scope diff modes are driven by the Changes panel's scope
+# picker, which the Files panel does not own; those cases live in
+# ``test_changes_panel.py``.
 # --------------------------------------------------------------------------- #
 
 
@@ -618,8 +595,11 @@ def test_list_divider_drag_resizes_and_width_is_shared_across_panels(sculptor_in
     changes_panel = get_changes_panel_in(changes_root, page)
     expect(changes_panel.get_list()).to_be_visible()
     expect(layout.get_resize_handle()).to_be_visible()
-    changes_width = layout.get_list_width_px()
-    assert abs(changes_width - grown_width) <= 2, (
+
+    # Poll for the shared width to land rather than measuring once: the Changes
+    # list can mount a beat before it reads back the persisted width under load.
+    changes_width = layout.wait_for_list_width_above(grown_width - 2)
+    assert changes_width <= grown_width + 2, (
         f"Changes list must reuse the shared width: files={grown_width:.0f}, changes={changes_width:.0f}"
     )
 
@@ -750,7 +730,7 @@ def test_open_file_is_kept_per_workspace_across_workspace_switch(sculptor_instan
 
 
 # --------------------------------------------------------------------------- #
-# Migrated: test_path_tilde_display.py
+# Path autocomplete tilde display
 # --------------------------------------------------------------------------- #
 
 
@@ -776,11 +756,12 @@ def test_path_autocomplete_shows_tilde_for_home_directory(
     sculptor_instance_: SculptorInstance,
     _home_sentinel_dir: Path,
 ) -> None:
-    """The path autocomplete dropdown displays ~/... instead of /Users/.../... .
+    """The path autocomplete dropdown displays ``~/…`` instead of the expanded
+    home directory.
 
-    Verifies that typing ``~/`` in the add-repo dialog triggers autocomplete and
-    that the autocomplete items appear (the tilde-display path surface is
-    unchanged by the panel rewrite — it lives in Settings, not the Files panel).
+    Typing ``~/`` in the add-repo dialog (in Settings) triggers autocomplete;
+    the listed entries render with a leading ``~/`` rather than the absolute
+    home path.
     """
     page = sculptor_instance_.page
 
@@ -793,4 +774,8 @@ def test_path_autocomplete_shows_tilde_for_home_directory(
 
     items = dialog.get_path_autocomplete_items()
     expect(items.first).to_be_visible()
-    expect(items).not_to_have_count(0)
+
+    # Home-directory entries render with a leading ``~/`` rather than the
+    # expanded absolute home path.
+    expect(items.first).to_contain_text("~/")
+    expect(items.filter(has_text=str(Path.home()))).to_have_count(0)

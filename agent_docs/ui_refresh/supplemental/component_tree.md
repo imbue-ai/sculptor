@@ -52,14 +52,14 @@ pages/
     WorkspaceLayoutShell.tsx        header + SectionGrid, inside PanelDndProvider
     WorkspaceHeader.tsx             ← prototype WorkspaceBanner
     mobile/
-      MobileWorkspaceShell.tsx      single-column shell (from bryden/mobile-frontend)
+      MobileWorkspaceShell.tsx      single-column shell (from the mobile-frontend branch)
     panels/
       AgentPanel.tsx · TerminalPanel.tsx
       FilesPanel.tsx · ChangesPanel.tsx · CommitsPanel.tsx · ReviewAllPanel.tsx
       ActionsPanel.tsx · SkillsPanel.tsx · BrowserPanel.tsx · NotesPanel.tsx
       ExplorerLayout.tsx            ← prototype MasterDetailPanel; shared file-list + diff viewer scaffold
 common/
-  hooks/useLayoutMode.ts            useIsMobile / useLayoutMode (from bryden/mobile-frontend)
+  hooks/useLayoutMode.ts            useIsMobile / useLayoutMode (from the mobile-frontend branch)
   state/hooks/usePerWorkspacePanelLayout.ts   keeps active scope in sync with the route
   state/hooks/useCreateWorkspace.ts           create-workspace → create-first-agent; no draft-tab coupling
 ```

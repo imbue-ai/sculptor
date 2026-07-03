@@ -226,7 +226,6 @@ export const StatusPill = ({
   // clickable Stop button below. Cleared on unmount so the keybinding
   // doesn't fire when the pill isn't on screen.
   useEffect(() => {
-    if (!taskID) return;
     const a = isCancellableAtomFamily(taskID);
     store.set(a, canStop);
     return (): void => {

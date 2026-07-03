@@ -4,8 +4,10 @@ The dropdown is the single creation surface for agents, terminals, and single-in
 panels (co-owned with Sections). Its rows, in order: the pinned "New {recent} agent"
 (with the new-agent keybinding shown), an agent-type sub-menu (Claude / pi-gated /
 registered — NO bare "Terminal" type), "New terminal", then a separator
-and every single-instance panel not currently open. New agents always land in CENTER
-regardless of which section's `+` was used. Cmd+K offers the same flow.
+and every single-instance panel not currently open. A new agent lands in the
+sub-section whose `+` opened the dropdown; only the non-scoped surfaces (the new-agent
+keybinding and the Cmd+K "New agent" command) fall back to center. Cmd+K offers the
+same flow.
 
 These cases absorb the retired `test_agent_type_menu.py` (sub-menu + pi gating +
 registered-without-restart).
@@ -15,6 +17,7 @@ import re
 
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropdownElement
 from sculptor.testing.elements.add_panel_dropdown import close_seeded_panel
 from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
@@ -201,25 +204,21 @@ def test_new_agent_from_left_lands_in_left(sculptor_instance_: SculptorInstance)
     # Files/Changes/Commits), not center.
     left_dropdown.open()
     left_dropdown.get_new_agent_item().click()
-    # The new agent tab appears in the left section... (agent panel ids are dynamic,
-    # so match the PANEL_TAB-agent:<id> testid by prefix via a get_by_test_id regex).
-    expect(page.get_by_test_id("SECTION_HEADER-left").get_by_test_id(re.compile(r"^PANEL_TAB-agent:"))).to_have_count(
-        1
-    )
+    # The new agent tab appears in the left section...
+    expect(left_tabs.get_agent_tabs()).to_have_count(1)
     # ...and NOT in center, which still shows only its original agent.
-    expect(
-        page.get_by_test_id("SECTION_HEADER-center").get_by_test_id(re.compile(r"^PANEL_TAB-agent:"))
-    ).to_have_count(1)
+    expect(center_tabs.get_agent_tabs()).to_have_count(1)
 
 
 @user_story("to add an agent to the right section without breaking the chat")
 def test_add_agent_to_right_section_renders_both_chats(sculptor_instance_: SculptorInstance) -> None:
     """Adding an agent to the RIGHT section leaves a second agent chat mounted alongside
-    the center one; both must render (regression for the single-StreamingEngine crash).
+    the center one; both must render.
 
-    Before the fix, mounting a second agent chat threw "StreamingEngine already
-    registered. Only one stream may be active at a time." — so a right-section agent
-    could never render while the center agent was open.
+    Each mounted chat panel must run its own StreamingEngine; a single shared
+    registration throws "StreamingEngine already registered. Only one stream may be
+    active at a time." when a second chat mounts, so a right-section agent could not
+    render while the center agent is open.
     """
     page = sculptor_instance_.page
     right_dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="right")
@@ -240,7 +239,7 @@ def test_add_agent_to_right_section_renders_both_chats(sculptor_instance_: Sculp
 
     # Both agent panels are mounted at once (one per section) and each runs its own
     # streaming engine, so both chat panels render rather than one crashing the engine.
-    expect(page.get_by_test_id("CHAT_PANEL")).to_have_count(2)
+    expect(page.get_by_test_id(ElementIDs.CHAT_PANEL)).to_have_count(2)
 
 
 @user_story("to add a panel through Cmd+K targeting the center section")

@@ -10,9 +10,8 @@ import type { DiffSelection } from "./types.ts";
 
 /**
  * The resolved content the {@link DiffViewer} renders for the current
- * selection. Mirrors the shape the old in-panel viewer derived from the global
- * diff-tab atom, but is driven entirely by the per-instance `selection` prop so
- * each embedded viewer is independent (no shared "active diff" singleton).
+ * selection. Driven entirely by the per-instance `selection` prop so each
+ * embedded viewer is independent (no shared "active diff" singleton).
  */
 export type DiffViewerContent = {
   filePath: string | null;
@@ -58,11 +57,10 @@ const EMPTY_CONTENT: Omit<DiffViewerContent, "isFetching" | "targetBranchMergeBa
 };
 
 /**
- * Resolve a {@link DiffSelection} into the content the viewer renders. Reuses
- * the same workspace-diff parsing the in-panel viewer relied on, so the diff
- * content behavior (status derivation, rename detection, target-branch scope,
- * error surfacing) is preserved — only the source of the selection changes from
- * a global atom to a prop.
+ * Resolve a {@link DiffSelection} into the content the viewer renders. Parses
+ * the workspace diff to derive file status, detect renames, apply the
+ * target-branch scope, and surface file errors, all keyed off the per-instance
+ * `selection` prop so each embedded viewer stays independent.
  */
 export const useDiffViewerContent = (workspaceId: string, selection: DiffSelection | null): DiffViewerContent => {
   const { data: diff, isFetching } = useWorkspaceDiff(workspaceId);

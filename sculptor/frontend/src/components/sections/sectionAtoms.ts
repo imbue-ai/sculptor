@@ -28,11 +28,11 @@ function applyUpdater<T>(prev: T, updater: T | ((prev: T) => T)): T {
   return typeof updater === "function" ? (updater as (p: T) => T)(prev) : updater;
 }
 
-// ── Scope atoms ──────────────────────────────────────────────────────────────
+// Scope atoms
 
 export const activeWorkspaceIdAtom = atom<string | null>(null);
 
-// ── Consolidated per-workspace layout ─────────────────────────────────────────
+// Consolidated per-workspace layout
 
 // One writable, self-persisting atom per workspace. Initial value comes straight
 // from the adapter so the first render restores the persisted layout; every write
@@ -71,7 +71,7 @@ export const workspaceLayoutAtom: WritableAtom<WorkspaceLayoutState, [WorkspaceL
   },
 );
 
-// ── Consolidated global layout ────────────────────────────────────────────────
+// Consolidated global layout
 
 const globalBaseAtom = atom<GlobalLayoutState>(
   layoutPersistenceAdapter.read({ kind: "global" }) ?? DEFAULT_GLOBAL_LAYOUT,
@@ -86,7 +86,7 @@ export const globalLayoutAtom: WritableAtom<GlobalLayoutState, [GlobalLayoutUpda
   },
 );
 
-// ── Narrow read slices (per-key atom families) ────────────────────────────────
+// Narrow read slices (per-key atom families)
 
 export const panelsInSubSectionAtom = atomFamily((subSection: SubSectionId) =>
   selectAtom(workspaceLayoutAtom, (layout) => openPanelsInSubSection(layout, subSection), shallowArrayEqual),
@@ -124,7 +124,7 @@ export const isActiveSubSectionAtom = atomFamily((subSection: SubSectionId) =>
   selectAtom(workspaceLayoutAtom, (layout) => layout.activeSubSection === subSection),
 );
 
-// ── Global slices ─────────────────────────────────────────────────────────────
+// Global slices
 
 function sectionSizesEqual(a: GlobalLayoutState["sectionSizes"], b: GlobalLayoutState["sectionSizes"]): boolean {
   return a.left === b.left && a.right === b.right && a.bottom === b.bottom;
@@ -167,7 +167,7 @@ export const explorerListWidthAtom: WritableAtom<number, [number], void> = atom(
   },
 );
 
-// ── Scope switching / removal ─────────────────────────────────────────────────
+// Scope switching / removal
 
 // A workspace's snapshot is "empty" (never visited / nothing seeded) when no panel is
 // placed and no sub-section is active. The bootstrap uses this as the first-visit

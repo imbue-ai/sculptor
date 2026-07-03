@@ -65,8 +65,7 @@ def test_add_repo_cmd_enter_stays_on_add_workspace_page(
     expect(add_ws_page.get_submit_button()).to_be_enabled(timeout=30_000)
     expect(add_ws_page.get_chat_panel()).not_to_be_visible()
 
-    # The repo really was added — it now appears as an option in the selector.
-    # (Adding a repo via the dialog does not auto-select it in the modal, so we
-    # confirm the add by opening the selector rather than reading its label.)
+    # The repo really was added (and is auto-selected once it appears) — opening
+    # the selector confirms it is now one of the listed options.
     add_ws_page.get_project_selector().click()
     expect(add_ws_page.get_project_options().filter(has_text=target_repo_name)).to_be_visible()

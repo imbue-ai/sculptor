@@ -32,6 +32,13 @@
 .navItemActive {
   background: var(--accent-a3);
   color: var(--accent-11);
+
+  // Hold the accent pill while hovering. The base `.navItem:hover` rule sets the
+  // plain gray hover background at equal specificity, so re-assert the accent here
+  // (later in source order) to keep the active state from dimming under the cursor.
+  &:hover:not(:disabled) {
+    background: var(--accent-a3);
+  }
 }
 
 .navIcon {

@@ -4,11 +4,11 @@
 // agent delete (useOptimisticTaskDelete): the tab disappears instantly, a failed
 // backend delete rolls back with an error toast + Retry. Deleting the
 // currently-viewed agent navigates to a sibling agent so the user stays in the
-// workspace; closing the LAST agent leaves the center empty — no auto-create (Decision
-// B1). Mirrors the terminal close-confirmation wiring; rendered once by the workspace
+// workspace; closing the LAST agent leaves the center empty — no auto-create.
+// Mirrors the terminal close-confirmation wiring; rendered once by the workspace
 // shell next to TerminalCloseConfirmation.
 
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback } from "react";
 
@@ -24,7 +24,12 @@ import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 export const AgentDeleteConfirmation = (): ReactElement | null => {
   const [target, setTarget] = useAtom(agentDeleteTargetAtom);
   const workspaceId = useAtomValue(activeWorkspaceIdAtom);
-  const tasks = useAtomValue(tasksArrayAtom);
+  // Read the task list lazily inside the delete callback via the store, never as a
+  // subscription: tasksArrayAtom rebuilds on every per-task streaming tick, and this
+  // shell-level dialog stays mounted for the whole workspace, so subscribing would
+  // re-render it (and rebuild its callback chain) on every tick for data only needed
+  // the moment a delete is confirmed.
+  const store = useStore();
   const { navigateToAgent, navigateToRoot } = useImbueNavigate();
   const { agentId: activeAgentId } = useImbueLocation();
 
@@ -37,7 +42,7 @@ export const AgentDeleteConfirmation = (): ReactElement | null => {
       if (taskId !== activeAgentId || workspaceId === null) {
         return;
       }
-      const workspaceAgents = (tasks ?? [])
+      const workspaceAgents = (store.get(tasksArrayAtom) ?? [])
         .filter((task) => task.workspaceId === workspaceId)
         .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
       const deletedIndex = workspaceAgents.findIndex((task) => task.id === taskId);
@@ -49,7 +54,7 @@ export const AgentDeleteConfirmation = (): ReactElement | null => {
       const nextAgent = remaining[Math.min(deletedIndex, remaining.length - 1)];
       navigateToAgent(workspaceId, nextAgent.id);
     },
-    [activeAgentId, workspaceId, tasks, navigateToAgent, navigateToRoot],
+    [activeAgentId, workspaceId, store, navigateToAgent, navigateToRoot],
   );
 
   const { execute } = useOptimisticTaskDelete({

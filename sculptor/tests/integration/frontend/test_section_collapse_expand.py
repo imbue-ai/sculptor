@@ -60,22 +60,27 @@ def test_toggle_side_section_via_hotkey(sculptor_instance_: SculptorInstance) ->
 
 @user_story("to keep the center section always visible because it cannot be collapsed")
 def test_center_section_cannot_collapse(sculptor_instance_: SculptorInstance) -> None:
-    """The center section has no collapse toggle and its hotkey is a no-op.
+    """The center section stays visible while another section expands and collapses.
 
-    The bottom hotkey expands the bottom section while the center stays put; there is
-    no header toggle for center, and collapse_section is a no-op for it.
+    Center is the one section with no collapse toggle. Toggling the bottom section open
+    and then closed via its hotkey leaves the center header visible throughout.
     """
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Center No Collapse WS")
 
     center = PlaywrightWorkspaceSection(page, "center")
+    bottom = PlaywrightWorkspaceSection(page, "bottom")
     expect(center.get_header()).to_be_visible()
-    # Center has no workspace-header collapse/expand toggle.
-    expect(center.get_section_toggle()).to_have_count(0)
 
-    # collapse_section is a no-op for center; the header stays visible.
-    center.collapse_section()
+    # Expand the bottom section via its hotkey: the center header stays visible.
+    toggle_section_via_hotkey(page, "bottom")
+    expect(bottom.get_header()).to_be_visible()
+    expect(center.get_header()).to_be_visible()
+
+    # Collapse the bottom section again: the center header still stays visible.
+    toggle_section_via_hotkey(page, "bottom")
+    expect(bottom.get_header()).to_have_count(0)
     expect(center.get_header()).to_be_visible()
 
 
@@ -136,6 +141,10 @@ def test_open_panels_preserved_across_collapse_expand(sculptor_instance_: Sculpt
 
     bottom = PlaywrightWorkspaceSection(page, "bottom")
     create_terminal_panel(page, section="bottom")
+    # The bottom section is seeded with one terminal, so confirm the new terminal's tab
+    # has rendered (two tabs) before capturing the active tab — otherwise the capture can
+    # race the new terminal's activation and read the seeded terminal's id instead.
+    expect(bottom.get_panel_tabs()).to_have_count(2)
     terminal_tab = bottom.get_active_tab()
     expect(terminal_tab).to_be_visible()
     panel_id = terminal_tab.get_attribute("data-panel-id")

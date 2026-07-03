@@ -7,9 +7,9 @@
  *
  * Every milestone is a real `performance.mark()` with a `ws-switch.` prefix,
  * so when tracing is enabled (see common/tracing.ts) the marks flow into the
- * Perfetto trace with no extra wiring. The frame-capture tooling
- * (sculptor/testing/frame_capture.py) correlates these marks with compositor
- * frames via `performance.timeOrigin`.
+ * Perfetto trace with no extra wiring. Because mark timestamps are relative to
+ * `performance.timeOrigin`, external frame-capture tooling can add that origin
+ * to line the marks up with compositor frames on a shared wall clock.
  *
  * Enabled when any of:
  *   - `window.__WS_SWITCH_PROFILER__ === true` (set by test/capture harnesses
@@ -165,8 +165,16 @@ export const markSwitchMilestone = (milestone: WsSwitchMilestone): void => {
   record.milestoneDeltasMs[milestone] = performance.now() - record.startedAtMs;
 
   if (milestone === "layout-restored") {
+    // Bind the scheduled callback to this record. If a new switch starts within
+    // the two-frame window, `pendingSwitch` points at that switch's record, and
+    // stamping first-paint onto it would cross-attribute the paint to the wrong
+    // switch — so bail when the pending record is no longer the one we scheduled.
+    const scheduledRecord = record;
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => markSwitchMilestone("first-paint-after-restore"));
+      requestAnimationFrame(() => {
+        if (pendingSwitch?.record !== scheduledRecord) return;
+        markSwitchMilestone("first-paint-after-restore");
+      });
     });
   }
 

@@ -8,12 +8,14 @@ from sculptor.constants import ElementIDs
 from sculptor.testing.elements.actions_panel import PlaywrightActionsPanelElement
 from sculptor.testing.elements.add_panel_dropdown import open_panel
 from sculptor.testing.elements.changes_panel import PlaywrightChangesPanelElement
+from sculptor.testing.elements.changes_panel import get_changes_panel_in
 from sculptor.testing.elements.chat_panel import PlaywrightChatPanelElement
 from sculptor.testing.elements.compaction_header import PlaywrightCompactionBarElement
 from sculptor.testing.elements.compaction_panel import PlaywrightCompactionPanelElement
 from sculptor.testing.elements.diff_panel import PlaywrightDiffPanelElement
 from sculptor.testing.elements.file_browser import PlaywrightFileBrowserElement
 from sculptor.testing.elements.review_all_panel import PlaywrightReviewAllPanelElement
+from sculptor.testing.elements.workspace_section import section_root_hosting
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 
 
@@ -32,12 +34,9 @@ class PlaywrightTaskPage(PlaywrightProjectLayoutPage):
         return self.get_branch_name_element().text_content() or ""
 
     def get_workspace_header(self) -> Locator:
-        """Get the workspace header (the branch/target strip above the section grid).
-
-        This is the successor to the old ``WORKSPACE_BANNER`` strip; the
-        progressive-collapse banner is gone, replaced by the simpler
-        ``WorkspaceHeader`` (section toggles + branch pill + target-branch
-        selector + the re-homed diff summary / PR button).
+        """Get the workspace header — the strip above the section grid with
+        section toggles, branch pill, target-branch selector, diff summary,
+        and the PR button.
         """
         return self.get_by_test_id(ElementIDs.WORKSPACE_HEADER)
 
@@ -133,8 +132,14 @@ class PlaywrightTaskPage(PlaywrightProjectLayoutPage):
         return PlaywrightFileBrowserElement(locator=file_browser, page=self._page)
 
     def get_changes_panel(self) -> PlaywrightChangesPanelElement:
-        changes_panel = self._page.get_by_test_id(ElementIDs.CHANGES_PANEL)
-        return PlaywrightChangesPanelElement(locator=changes_panel, page=self._page)
+        """Get the Changes panel POM scoped to the section root that hosts it.
+
+        The changes-browser list and its sibling DiffViewer live under the panel's
+        ExplorerLayout row, so the POM must be scoped to the owning SECTION root (not
+        the ``CHANGES_PANEL`` list node) for its list/viewer accessors to resolve.
+        """
+        section_root = section_root_hosting(self._page, ElementIDs.CHANGES_PANEL)
+        return get_changes_panel_in(section_root, self._page)
 
     def get_review_all_panel(self) -> PlaywrightReviewAllPanelElement:
         """Get the Review All panel POM, scoped to ``REVIEW_ALL_PANEL``.

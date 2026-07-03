@@ -48,7 +48,7 @@ export const buildAgentActionsProvider = (
       // prompt), so this matters in practice. Descriptor stays generic
       // because the action set will grow.
       subtitle: `${display} — actions for this agent`,
-      keywords: ["rename", "delete", "unread", "manage", "edit", "task"],
+      keywords: ["delete", "unread", "manage", "edit", "task"],
       group: "workspaces",
       icon: SettingsIcon,
       pageId: "agent.actions",

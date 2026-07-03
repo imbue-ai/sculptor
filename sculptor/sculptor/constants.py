@@ -26,10 +26,10 @@ class ElementIDs(StrEnum):
     BRANCH_NAME_COLLISION_ERROR = "BRANCH_NAME_COLLISION_ERROR"
     BRANCH_NAME_SHUFFLE_BUTTON = "BRANCH_NAME_SHUFFLE_BUTTON"
 
-    # New-workspace modal. The dialog reuses the existing field ids
-    # above (WORKSPACE_NAME_INPUT / BRANCH_NAME_INPUT / BRANCH_SELECTOR /
-    # PROJECT_SELECTOR / the agent-type + mode ids); these are the modal-only
-    # surfaces.
+    # New-workspace modal. The dialog reuses existing field ids defined
+    # elsewhere in this enum (WORKSPACE_NAME_INPUT / BRANCH_NAME_INPUT /
+    # BRANCH_SELECTOR / PROJECT_SELECTOR / the agent-type + mode ids); these
+    # are the modal-only surfaces.
     NEW_WORKSPACE_DIALOG = "NEW_WORKSPACE_DIALOG"
     NEW_WORKSPACE_FORM = "NEW_WORKSPACE_FORM"
     NEW_WORKSPACE_PROMPT_TEXTAREA = "NEW_WORKSPACE_PROMPT_TEXTAREA"
@@ -57,7 +57,7 @@ class ElementIDs(StrEnum):
     SETTINGS_CHECK_FOR_UPDATES_BUTTON = "SETTINGS_CHECK_FOR_UPDATES_BUTTON"
     SETTINGS_INSTALL_UPDATE_BUTTON = "SETTINGS_INSTALL_UPDATE_BUTTON"
 
-    # Top Bar Elements
+    # Keyboard shortcuts dialog
     KEYBOARD_SHORTCUTS_DIALOG = "KEYBOARD_SHORTCUTS_DIALOG"
 
     # Project Selector
@@ -528,7 +528,7 @@ class ElementIDs(StrEnum):
     PROJECT_PATH_DIALOG = "PROJECT_PATH_DIALOG"
     PROJECT_PATH_DIALOG_CLOSE_BUTTON = "PROJECT_PATH_DIALOG_CLOSE_BUTTON"
 
-    # Workspace tabs
+    # Workspace rows / add-workspace page
     WORKSPACE_NAME_INPUT = "WORKSPACE_NAME_INPUT"
     WORKSPACE_ROW = "WORKSPACE_ROW"
     WORKSPACE_ROW_BRANCH = "WORKSPACE_ROW_BRANCH"
@@ -598,12 +598,15 @@ class ElementIDs(StrEnum):
     SECTION_DROP_OVERLAY = "SECTION_DROP_OVERLAY"
     # Split affordances: the panel context-menu "Create {direction} split" items
     # (one per allowed axis, suffixed with the axis — e.g.
-    # f"{SPLIT_CREATE_OPTION}-horizontal") and the empty-state "Close split" button.
+    # f"{SPLIT_CREATE_OPTION}-horizontal") and the empty-state "Close split" button,
+    # suffixed with the sub-section (e.g. f"{SPLIT_CLOSE_OPTION}-center:secondary") so
+    # both halves of an emptied split stay individually targetable.
     SPLIT_CREATE_OPTION = "SPLIT_CREATE_OPTION"
     SPLIT_CLOSE_OPTION = "SPLIT_CLOSE_OPTION"
-    # Empty-state quick actions: the recent-agent / terminal / recently-closed
-    # rows share one testid, disambiguated by suffixing the action key (e.g.
-    # f"{SECTION_EMPTY_QUICK_ACTION}-new-agent", "...-files").
+    # Empty-state quick actions: the recent-agent / terminal / recently-closed rows
+    # share one testid, disambiguated by suffixing the sub-section and then the action
+    # key (e.g. f"{SECTION_EMPTY_QUICK_ACTION}-center-new-agent", "...-center-files"),
+    # so simultaneously-empty panes don't render duplicate ids.
     SECTION_EMPTY_QUICK_ACTION = "SECTION_EMPTY_QUICK_ACTION"
 
     # Add-panel dropdown opened by the section header `+` (and the empty-state
@@ -673,8 +676,6 @@ class ElementIDs(StrEnum):
 
     # In-place workspaces (experimental)
     SETTINGS_ENABLE_IN_PLACE_WORKSPACES_TOGGLE = "SETTINGS_ENABLE_IN_PLACE_WORKSPACES_TOGGLE"
-
-    # Review All (experimental)
 
     # Entity Mentions (experimental)
     SETTINGS_ENABLE_ENTITY_MENTIONS_TOGGLE = "SETTINGS_ENABLE_ENTITY_MENTIONS_TOGGLE"

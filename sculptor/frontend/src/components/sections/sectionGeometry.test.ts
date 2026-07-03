@@ -35,7 +35,7 @@ describe("resolveSectionPixelSizes", () => {
       isRightExpanded: true,
       isBottomExpanded: false,
     });
-    // 30% of 900 = 270 each; center needs 400 + 2 handles = 402 → deficit 138.
+    // 30% of 900 = 270 each; center needs 400 + 2 handles = 402 → deficit 42.
     // Right gives way first, down toward its 150 floor, before the left moves.
     expect(rightPx).toBeLessThan(leftPx);
     expect(rightPx).toBeGreaterThanOrEqual(SIDE_MIN_WIDTH_PX);

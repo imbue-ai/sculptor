@@ -16,13 +16,6 @@ class PlaywrightFileBrowserElement(PlaywrightIntegrationTestElement):
     def get_tree_rows(self) -> Locator:
         return self.get_by_test_id(ElementIDs.FILE_BROWSER_TREE_ROW)
 
-    def get_changes_tree(self) -> PlaywrightFileTreeElement:
-        locator = self.get_by_test_id(ElementIDs.FILE_BROWSER_CHANGES_TREE)
-        return PlaywrightFileTreeElement(locator=locator, page=self._page)
-
-    def get_history_panel(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.HISTORY_PANEL)
-
 
 def get_file_browser_panel(page: Page) -> PlaywrightFileBrowserElement:
     locator = page.get_by_test_id(ElementIDs.FILE_BROWSER_PANEL)

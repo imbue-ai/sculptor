@@ -96,7 +96,6 @@ export const useCommandRuntime = (): CommandRuntime => {
   // useOpenSettings adds SETTINGS_TAB to tabOrderAtom in addition to
   // navigating, so the user gets a closeable Settings tab.
   const toSettings = useEvent((section?: string): void => openSettings(section));
-  const toAddWorkspace = useEvent((): void => navigate.navigateToAddWorkspace());
   // The palette previously only updated the URL — the tab strip never
   // learned about the navigation, so the user landed on a workspace
   // that wasn't represented as a tab. Open the tab first (idempotent:
@@ -110,8 +109,8 @@ export const useCommandRuntime = (): CommandRuntime => {
     openWorkspaceTab(workspaceId);
     navigate.navigateToAgent(workspaceId, agentId);
   });
-  // Set the modal atom directly (rather than via useSetAtom) so this stays a
-  // useEvent-stable callback and the runtime object never churns.
+  // Write through the already-captured `store` rather than pulling in another
+  // useSetAtom hook for this single write.
   const openNewWorkspaceModal = useEvent((): void => store.set(newWorkspaceModalAtom, { open: true }));
 
   const uiToggleHelpDialog = useEvent((): void => toggleHelpDialog());
@@ -169,7 +168,7 @@ export const useCommandRuntime = (): CommandRuntime => {
       // renders, so capturing it here is fine — commands that need it
       // call `runtime.store.get(atom)`.
       store,
-      navigate: { toHome, toSettings, toAddWorkspace, toWorkspace, toAgent },
+      navigate: { toHome, toSettings, toWorkspace, toAgent },
       openNewWorkspaceModal,
       ui: {
         toggleHelpDialog: uiToggleHelpDialog,
@@ -198,7 +197,6 @@ export const useCommandRuntime = (): CommandRuntime => {
       store,
       toHome,
       toSettings,
-      toAddWorkspace,
       toWorkspace,
       toAgent,
       openNewWorkspaceModal,

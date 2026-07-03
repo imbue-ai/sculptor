@@ -1,7 +1,7 @@
 # Supplemental: prototype → rewrite naming map
 
 Companion to `../state_design.md` and `../component_hierarchy.md`. The
-`bryden/scu-1474-compact-workspace-layout` prototype is the reference for *shape*,
+`scu-1474` prototype branch is the reference for *shape*,
 but it uses pre-`goals.md` vocabulary ("zone", "focus", "expand") and carries
 deprecated/experimental state. The rewrite renames everything to `goals.md`
 vocabulary and deletes the cruft (no dead code, no stale files).

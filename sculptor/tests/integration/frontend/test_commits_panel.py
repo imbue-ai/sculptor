@@ -19,11 +19,11 @@ the *surface* moved:
   opened section, and clicking a commit's file opens its commit-scoped diff into
   the panel's OWN embedded viewer rather than a page-wide active diff.
 
-Opening a panel into the CENTER section makes it the active center tab and
-UNMOUNTS the agent chat (SectionBody renders only the active panel). These
-history tests are read-only and do not need the chat; the one test that sends a
-follow-up commit re-activates the agent tab to remount the chat before sending,
-then re-activates the Commits tab to read the refreshed history.
+The Commits panel is seeded into the (collapsed-by-default) LEFT section, so
+``_open_commits_panel_with`` reveals it there while the agent chat stays mounted
+in the CENTER section. These history assertions are read-only; the one test that
+sends a follow-up commit types into the still-mounted chat, then re-activates the
+Commits tab to read the refreshed history.
 
 The old page-wide multi-tab diff surface (commit-diff tabs coexisting with
 Changes-panel "regular" diff tabs in a shared tab bar, tab re-selection, and
@@ -49,7 +49,6 @@ from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.add_panel_dropdown import open_panel
-from sculptor.testing.elements.chat_panel import PlaywrightChatPanelElement
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.commits_panel import PlaywrightCommitsPanelElement
@@ -59,6 +58,12 @@ from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
+
+# Number of leading hash characters the terminus indicator renders for the
+# fork-point commit. Must match ``SHORT_HASH_LENGTH`` in
+# ``frontend/src/pages/workspace/panels/historyPanel/commitGraph.ts``; the
+# terminus assertion abbreviates the fork-point hash with this same width.
+_TERMINUS_SHORT_HASH_LENGTH = 11
 
 # --------------------------------------------------------------------------- #
 # FakeClaude prompts (migrated verbatim from the source tests).
@@ -478,33 +483,20 @@ def _open_commits_panel_with(
 ) -> tuple[PlaywrightTaskPage, PlaywrightCommitsPanelElement]:
     """Run a FakeClaude prompt, wait for it, then open the Commits panel.
 
-    Returns the task page and the Commits panel POM scoped to the opened (center)
-    section. Opening into the center makes Commits the active tab, which unmounts
-    the agent chat — fine for these read-only history assertions. The message
-    count is awaited BEFORE opening the panel, while the chat is still mounted.
+    Returns the task page and the Commits panel POM scoped to the LEFT section,
+    where the Commits panel is seeded. Revealing it there leaves the agent chat
+    mounted in the center, so read-only history assertions and follow-up chat
+    messages both work without remounting anything. The message count is awaited
+    BEFORE opening the panel.
     """
     task_page = start_task_and_wait_for_ready(page, prompt=prompt, wait_for_agent_to_finish=False, mode=mode)
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2, timeout=60_000)
-    section_root = open_panel(page, "commits", sub_section="center")
+    section_root = open_panel(page, "commits", sub_section="left")
     return task_page, get_commits_panel_in(section_root, page)
 
 
-def _reactivate_agent_chat(task_page: PlaywrightTaskPage) -> PlaywrightChatPanelElement:
-    """Re-activate the agent tab so the chat remounts after opening a panel.
-
-    Opening the Commits panel in the center unmounts the agent chat. Clicking the
-    agent panel tab makes the chat the active center panel again, so a follow-up
-    message can be sent and its completion awaited.
-    """
-    agent_panel_id = f"agent:{task_page.get_task_id()}"
-    tab = task_page.get_section().get_panel_tab(agent_panel_id)
-    expect(tab).to_be_visible()
-    tab.click()
-    return task_page.get_chat_panel()
-
-
-def _reactivate_commits_panel(task_page: PlaywrightTaskPage, page: Page) -> PlaywrightCommitsPanelElement:
+def _reactivate_commits_panel(page: Page) -> PlaywrightCommitsPanelElement:
     """Re-activate the Commits tab so the panel remounts after switching to chat.
 
     A single-instance panel that is already open is dropped from the add-panel
@@ -546,9 +538,9 @@ def test_history_panel_shows_commits(sculptor_instance_: SculptorInstance) -> No
 def test_history_panel_updates_after_commit(sculptor_instance_: SculptorInstance) -> None:
     """The Commits panel should show new commits without a page refresh.
 
-    The follow-up commit is sent via the chat, so the agent tab is re-activated to
-    remount the chat first; the Commits panel is then re-activated to read the
-    refreshed history.
+    The follow-up commit is sent via the chat — still mounted in the center while
+    Commits is revealed in the left — then the Commits panel is re-activated to
+    read the refreshed history.
     """
     page = sculptor_instance_.page
 
@@ -560,14 +552,14 @@ def test_history_panel_updates_after_commit(sculptor_instance_: SculptorInstance
     expect(commits_list).to_be_visible()
     expect(commits_list).to_contain_text("start of branch")
 
-    # Tell the agent to make a commit via a follow-up message (re-activate the
-    # agent tab so the chat is mounted to receive it).
-    chat_panel = _reactivate_agent_chat(task_page)
+    # Tell the agent to make a commit via a follow-up message. The chat stays
+    # mounted in the center, so it can receive the message directly.
+    chat_panel = task_page.get_chat_panel()
     send_chat_message(chat_panel, _COMMIT_PROMPT)
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=4, timeout=60_000)
 
     # Re-activate the Commits panel — it should show the new commit.
-    commits_panel = _reactivate_commits_panel(task_page, page)
+    commits_panel = _reactivate_commits_panel(page)
     expect(commits_panel.get_list()).to_contain_text("Add new feature")
 
 
@@ -597,7 +589,7 @@ def test_history_panel_refreshes_on_target_branch_change(sculptor_instance_: Scu
     base_url = sculptor_instance_.backend_api_url.rstrip("/")
     pre_patch = page.request.get(f"{base_url}/api/v1/workspaces/{workspace_id}/commits")
     assert pre_patch.ok, f"Failed to read commits: {pre_patch.status}"
-    head_short_hash = pre_patch.json()["commits"][0]["hash"][:11]
+    head_short_hash = pre_patch.json()["commits"][0]["hash"][:_TERMINUS_SHORT_HASH_LENGTH]
 
     # Change the target branch to the branch we just pushed. Since we pushed the
     # same commits as HEAD, merge-base(HEAD, origin/feature-tb-test) = HEAD, so
@@ -765,6 +757,11 @@ def test_folder_rename_shows_correct_paths(sculptor_instance_: SculptorInstance)
     rename_entry = commits_panel.get_commit_entry_by_text("Rename src to lib")
     expect(rename_entry).to_be_visible()
     rename_entry.click()
+
+    # Wait for the expanded file rows to render before asserting on their text —
+    # otherwise the negative "=>" assertions pass vacuously against the
+    # not-yet-expanded commit entry.
+    expect(commits_panel.get_tree_rows(rename_entry).first).to_be_visible()
 
     # The expanded file list should show files under "lib", not "{src => lib}".
     expect(rename_entry).to_contain_text("lib")
@@ -1076,8 +1073,12 @@ def test_commit_diff_split_handle_hidden_for_added_file(sculptor_instance_: Scul
     viewer.assert_diff_shows("alpha.py")
     expect(viewer).to_contain_text("a = 1")
 
-    # Switch to split view via the relocated header menu.
+    # Switch to split view via the relocated header menu, and confirm the viewer
+    # actually entered split mode — the split view renders whenever the view type
+    # is split, independent of the handle — so the handle assertion below is not
+    # trivially satisfied by unified mode.
     viewer.toggle_view_option_via_menu("split_view")
+    expect(viewer.get_split_view()).to_be_visible()
 
     # Even in split mode, the handle must not appear for an added file — there is
     # no left side to split.

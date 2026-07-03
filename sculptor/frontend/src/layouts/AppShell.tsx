@@ -4,10 +4,9 @@
 // and Settings — so the sidebar + cross-cutting chrome stay continuously mounted as
 // the user moves between them (no tear-down, no top-bar/tab-strip).
 //
-// It mounts the cross-cutting survivors the old PageLayout provided — the unified data
-// stream, command palette, keyboard shortcuts, plugins, dialogs, and toasts. This is
-// the strangler replacement for PageLayout (now removed): nothing here is
-// workspace-specific, so the same shell backs Home and Settings.
+// It mounts the app's cross-cutting chrome — the unified data stream, command palette,
+// keyboard shortcuts, plugins, dialogs, and toasts. Nothing here is workspace-specific,
+// so the same shell backs Home and Settings.
 
 import { Flex } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
@@ -19,12 +18,15 @@ import { useSyncActiveTabFromRoute } from "~/common/hooks/useSyncActiveTabFromRo
 import { useActiveProjectID } from "~/common/NavigateUtils.ts";
 import { backendStatusAtom } from "~/common/state/atoms/backend.ts";
 import {
+  commitPromptSendFailedToastAtom,
   createAgentErrorToastAtom,
+  createWorkspaceErrorToastAtom,
   deleteErrorToastAtom,
   mentionChipUnreachableToastAtom,
   terminalPromptRejectedToastAtom,
   workspaceDeleteErrorToastAtom,
   workspaceOpenCloseErrorToastAtom,
+  workspaceRenameErrorToastAtom,
 } from "~/common/state/atoms/toasts.ts";
 import { useProject } from "~/common/state/hooks/useProjects.ts";
 import { useUnifiedStream } from "~/common/state/hooks/useUnifiedStream";
@@ -40,7 +42,8 @@ import { NewWorkspaceModal } from "~/components/newWorkspace/NewWorkspaceModal.t
 import { NotificationToasts } from "~/components/NotificationToasts.tsx";
 import { RepoPathDialog } from "~/components/RepoPathDialog.tsx";
 import { WarningStatusBanner } from "~/components/WarningStatusBanner.tsx";
-import { usePageLayoutKeyboardShortcuts } from "~/layouts/hooks/usePageLayoutKeyboardShortcuts.ts";
+import { useGlobalKeyboardShortcuts } from "~/layouts/hooks/useGlobalKeyboardShortcuts.ts";
+import { useWorkspaceCycleShortcuts } from "~/layouts/hooks/useWorkspaceCycleShortcuts.ts";
 import { PluginLoader } from "~/plugins/PluginLoader.tsx";
 import { PluginOverlays } from "~/plugins/PluginOverlays.tsx";
 
@@ -55,10 +58,13 @@ const ERROR_TOAST_DURATION_MS = 10_000;
 const APP_TOASTS: ReadonlyArray<{ key: string; toastAtom: AtomToastAtom; duration?: number }> = [
   { key: "delete-error", toastAtom: deleteErrorToastAtom, duration: ERROR_TOAST_DURATION_MS },
   { key: "create-agent-error", toastAtom: createAgentErrorToastAtom, duration: ERROR_TOAST_DURATION_MS },
+  { key: "create-workspace-error", toastAtom: createWorkspaceErrorToastAtom, duration: ERROR_TOAST_DURATION_MS },
   { key: "workspace-delete-error", toastAtom: workspaceDeleteErrorToastAtom, duration: ERROR_TOAST_DURATION_MS },
   { key: "workspace-open-close-error", toastAtom: workspaceOpenCloseErrorToastAtom, duration: ERROR_TOAST_DURATION_MS },
+  { key: "workspace-rename-error", toastAtom: workspaceRenameErrorToastAtom, duration: ERROR_TOAST_DURATION_MS },
   { key: "mention-chip-unreachable", toastAtom: mentionChipUnreachableToastAtom },
   { key: "terminal-prompt-rejected", toastAtom: terminalPromptRejectedToastAtom },
+  { key: "commit-prompt-send-failed", toastAtom: commitPromptSendFailedToastAtom },
 ];
 
 export const AppShell = (): ReactElement => {
@@ -74,7 +80,11 @@ export const AppShell = (): ReactElement => {
   const currentProject = useProject(projectID ?? "");
 
   useUnifiedStream();
-  usePageLayoutKeyboardShortcuts();
+  useGlobalKeyboardShortcuts();
+  // Workspace cycling lives at the shell level (not the workspace-only shortcut set) so
+  // Meta+] / Meta+[ and the palette's Next/Previous workspace rows work from Home and
+  // Settings too.
+  useWorkspaceCycleShortcuts();
   useSyncActiveTabFromRoute();
 
   // JSX and rendering logic

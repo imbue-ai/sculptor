@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 
 import type { WorkspaceInitializationStrategy } from "~/api";
 import { branchExists, previewBranchName, WorkspaceInitializationStrategy as Strategy } from "~/api";
+import type { BackendQueryKeyResult } from "~/common/queryClient.ts";
+import { SCULPTOR_QUERY_KEY_PREFIX } from "~/common/queryClient.ts";
 
 export type BranchNameCollisionState = "unknown" | "exists" | "available";
 
@@ -10,7 +13,7 @@ type BranchNamePreviewState = {
   preview: string;
   /** The value the user actually sees: `override` if set, otherwise `preview`. */
   displayedValue: string;
-  /** True while the preview fetch is in flight in auto mode. */
+  /** True while the auto preview isn't settled yet (debounce gap or fetch in flight). */
   isLoading: boolean;
   /** Result of the debounced `branch-exists` check on `displayedValue`. */
   collision: BranchNameCollisionState;
@@ -33,6 +36,68 @@ type UseBranchNamePreviewArgs = {
 const PREVIEW_DEBOUNCE_MS = 250;
 const COLLISION_DEBOUNCE_MS = 300;
 
+// Both endpoints are project-scoped and have no WebSocket push signal, so they
+// key under the project namespace. The blank-workspace-name preview returns a
+// random slug, so `shuffleNonce` is part of the key — an explicit shuffle lands
+// on a fresh cache entry (and thus a fresh slug) rather than the cached one.
+const branchNamePreviewQueryKey = (
+  projectId: string | null,
+  workspaceName: string,
+  mode: WorkspaceInitializationStrategy,
+  shuffleNonce: number,
+): BackendQueryKeyResult => ({
+  key: [
+    SCULPTOR_QUERY_KEY_PREFIX,
+    "project",
+    projectId,
+    "branchNamePreview",
+    mode,
+    workspaceName,
+    shuffleNonce,
+  ] as const,
+  isValid: projectId !== null,
+});
+
+const branchExistsQueryKey = (projectId: string | null, name: string): BackendQueryKeyResult => ({
+  key: [SCULPTOR_QUERY_KEY_PREFIX, "project", projectId, "branchExists", name] as const,
+  isValid: projectId !== null,
+});
+
+const fetchBranchNamePreview = async (
+  projectId: string,
+  workspaceName: string,
+  mode: WorkspaceInitializationStrategy,
+  signal: AbortSignal,
+): Promise<string> => {
+  const { data } = await previewBranchName({
+    query: { project_id: projectId, workspace_name: workspaceName, mode },
+    meta: { signal },
+  });
+  return data?.branchName ?? "";
+};
+
+// Returns null (rather than false) when the backend gave no answer, so the
+// caller can distinguish "not checked" from a real "does not exist".
+const fetchBranchExists = async (projectId: string, name: string, signal: AbortSignal): Promise<boolean | null> => {
+  const { data } = await branchExists({
+    path: { project_id: projectId },
+    query: { name },
+    meta: { signal },
+  });
+  return data ? data.exists : null;
+};
+
+// Delay a rapidly-changing value so it only settles after `delayMs` of quiet,
+// keeping intermediate keystrokes out of a query key until the user pauses.
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState<T>(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delayMs);
+    return (): void => window.clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
+}
+
 export function useBranchNamePreview({
   projectId,
   workspaceName,
@@ -40,78 +105,46 @@ export function useBranchNamePreview({
   override,
   shuffleNonce = 0,
 }: UseBranchNamePreviewArgs): BranchNamePreviewState {
-  const [preview, setPreview] = useState<string>("");
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [collision, setCollision] = useState<BranchNameCollisionState>("unknown");
-
-  const previewRequestId = useRef<number>(0);
-  const collisionRequestId = useRef<number>(0);
-
   const isManuallyEdited = override !== null;
+
+  // Debounce the typed workspace name so each keystroke doesn't spawn a preview
+  // request; discrete inputs (mode, shuffle) change the key immediately.
+  const debouncedWorkspaceName = useDebouncedValue(workspaceName, PREVIEW_DEBOUNCE_MS);
+  const previewKey = branchNamePreviewQueryKey(projectId, debouncedWorkspaceName, mode, shuffleNonce);
+  const isPreviewEnabled = previewKey.isValid && mode !== Strategy.IN_PLACE && !isManuallyEdited;
+  const previewQuery = useQuery({
+    queryKey: previewKey.key,
+    queryFn: ({ signal }) => fetchBranchNamePreview(projectId!, debouncedWorkspaceName, mode, signal),
+    enabled: isPreviewEnabled,
+    // Keep the last slug on screen while a fresh one loads instead of flashing empty.
+    placeholderData: keepPreviousData,
+    retry: false,
+  });
+
+  const preview = previewQuery.data ?? "";
   const displayedValue = override ?? preview;
 
-  useEffect(() => {
-    if (mode === Strategy.IN_PLACE || !projectId || isManuallyEdited) {
-      setIsLoading(false);
-      return;
-    }
-    const myId = ++previewRequestId.current;
-    setIsLoading(true);
-    const timer = window.setTimeout(() => {
-      void (async (): Promise<void> => {
-        try {
-          const result = await previewBranchName({
-            query: { project_id: projectId, workspace_name: workspaceName, mode },
-          });
-          if (myId === previewRequestId.current && result.data) {
-            setPreview(result.data.branchName);
-          }
-        } catch {
-          // keep previous preview
-        } finally {
-          if (myId === previewRequestId.current) {
-            setIsLoading(false);
-          }
-        }
-      })();
-    }, PREVIEW_DEBOUNCE_MS);
-    return (): void => {
-      window.clearTimeout(timer);
-    };
-  }, [projectId, workspaceName, mode, isManuallyEdited, shuffleNonce]);
+  // `isLoading` covers the whole "auto value isn't settled" window: the debounce
+  // gap before the request starts, plus the request itself.
+  const isLoading = isPreviewEnabled && (previewQuery.isFetching || debouncedWorkspaceName !== workspaceName);
 
-  useEffect(() => {
-    if (mode === Strategy.IN_PLACE || !projectId) {
-      setCollision("unknown");
-      return;
-    }
-    const trimmed = displayedValue.trim();
-    if (!trimmed) {
-      setCollision("unknown");
-      return;
-    }
-    const myId = ++collisionRequestId.current;
-    const timer = window.setTimeout(() => {
-      void (async (): Promise<void> => {
-        try {
-          const result = await branchExists({
-            path: { project_id: projectId },
-            query: { name: trimmed },
-          });
-          if (myId === collisionRequestId.current && result.data) {
-            setCollision(result.data.exists ? "exists" : "available");
-          }
-        } catch {
-          if (myId === collisionRequestId.current) {
-            setCollision("unknown");
-          }
-        }
-      })();
-    }, COLLISION_DEBOUNCE_MS);
-    return (): void => {
-      window.clearTimeout(timer);
-    };
-  }, [projectId, displayedValue, mode]);
+  // Debounce the displayed value before the existence check so it fires on the
+  // settled name, not on every intermediate keystroke or preview update.
+  const debouncedBranchName = useDebouncedValue(displayedValue.trim(), COLLISION_DEBOUNCE_MS);
+  const collisionKey = branchExistsQueryKey(projectId, debouncedBranchName);
+  const isCollisionEnabled = collisionKey.isValid && mode !== Strategy.IN_PLACE && debouncedBranchName !== "";
+  const collisionQuery = useQuery({
+    queryKey: collisionKey.key,
+    queryFn: ({ signal }) => fetchBranchExists(projectId!, debouncedBranchName, signal),
+    enabled: isCollisionEnabled,
+    placeholderData: keepPreviousData,
+    retry: false,
+  });
+
+  let collision: BranchNameCollisionState = "unknown";
+  if (isCollisionEnabled && !collisionQuery.isError && collisionQuery.data != null) {
+    collision = collisionQuery.data ? "exists" : "available";
+  }
 
   return { preview, displayedValue, isLoading, collision };
 }

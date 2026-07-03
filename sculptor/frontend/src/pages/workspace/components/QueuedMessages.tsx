@@ -52,7 +52,7 @@ export const QueuedMessages = ({ messages }: QueuedMessagesProps): ReactElement 
   }, [undoDialogData]);
 
   const handleUndoCancel = useCallback((): void => {
-    if (!undoDialogData || !taskID) return;
+    if (!undoDialogData) return;
     void sendWorkspaceAgentMessages({
       path: { workspace_id: workspaceID, agent_id: taskID },
       body: {

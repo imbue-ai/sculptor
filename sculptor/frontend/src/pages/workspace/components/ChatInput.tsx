@@ -691,6 +691,10 @@ export const ChatInput = ({
                 <Plus size={16} />
               </TooltipIconButton>
             </Flex>
+            {/* Parallel copy of AgentSettingsControls' toolbar block, extended with
+                capability-gated disabled states and a backend-model selector this live
+                chat needs. Keep the shared tooltip strings, aria-labels, testids, and
+                styling in sync with AgentSettingsControls. */}
             <Flex align="center" flexShrink="0">
               <CapabilityGate
                 capabilityValue={canEnterPlanMode}

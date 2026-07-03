@@ -18,7 +18,6 @@ type DiffViewerHeaderProps = {
   filePath: string;
   /** Which panel's recents the path dropdown feeds and re-opens into. */
   recentFilesScope: RecentFilesScope;
-  tabFilePath?: string;
   addedLines: number;
   removedLines: number;
   fileStatus: FileStatus | null;
@@ -45,7 +44,6 @@ export const DiffViewerHeader = ({
   workspaceId,
   filePath,
   recentFilesScope,
-  tabFilePath,
   addedLines,
   removedLines,
   fileStatus,
@@ -65,9 +63,8 @@ export const DiffViewerHeader = ({
       fileStatus: fileStatus ?? undefined,
       isBinary,
       source: "diff-header" as const,
-      tabFilePath,
     }),
-    [filePath, fileStatus, isBinary, tabFilePath],
+    [filePath, fileStatus, isBinary],
   );
 
   return (

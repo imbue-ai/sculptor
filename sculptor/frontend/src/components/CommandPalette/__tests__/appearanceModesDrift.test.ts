@@ -26,7 +26,7 @@ const noop = (): void => {};
 const makeRuntime = (): CommandRuntime =>
   ({
     store: getDefaultStore(),
-    navigate: { toHome: noop, toSettings: vi.fn(), toAddWorkspace: noop, toWorkspace: vi.fn(), toAgent: vi.fn() },
+    navigate: { toHome: noop, toSettings: vi.fn(), toWorkspace: vi.fn(), toAgent: vi.fn() },
     openNewWorkspaceModal: noop,
     ui: {
       toggleHelpDialog: noop,
@@ -80,7 +80,7 @@ describe("Appearance modes drift", () => {
       expect(cmd).toBeDefined();
       cmd!.perform({
         ctx: {
-          route: { isHome: true, isWorkspace: false, isSettings: false, isAddWorkspace: false, isAgent: false },
+          route: { isHome: true, isWorkspace: false, isSettings: false, isAgent: false },
           activeWorkspaceId: null,
           activeAgentId: null,
           hasChatPanel: false,

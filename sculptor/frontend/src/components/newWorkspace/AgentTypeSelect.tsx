@@ -22,9 +22,8 @@ type AgentTypeSelectProps = {
 
 /**
  * The first-agent type picker — the same per-agent choice as the tab bar's `+`
- * menu. Extracted from the add-workspace page's inline JSX. Only the pi option
- * is gated behind the experimental pi-agent flag; Claude, Terminal, and any
- * registered terminal agents are available to everyone.
+ * menu. Only the pi option is gated behind the experimental pi-agent flag;
+ * Claude, Terminal, and any registered terminal agents are available to everyone.
  */
 export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectProps): ReactElement => {
   // State and hooks

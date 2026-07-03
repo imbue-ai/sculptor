@@ -1,4 +1,4 @@
-import { DropdownMenu, IconButton } from "@radix-ui/themes";
+import { DropdownMenu, IconButton, Tooltip } from "@radix-ui/themes";
 import {
   BookOpen,
   ChevronsDownUp,
@@ -42,14 +42,13 @@ const TreeOptionItems = ({ options }: { options: TreeViewOptions }): ReactElemen
   </>
 );
 
-/** The diff view controls relocated from the old toolbar: find,
- *  split/unified, wrap, and (for markdown) render. */
+/** The diff view controls: find, split/unified, wrap, and (for markdown) render. */
 const DiffViewOptionItems = ({ isBinary, options }: { isBinary: boolean; options: DiffViewOptions }): ReactElement => (
   <>
     {!isBinary && (
       <>
         {/* Find-in-file walks the source DOM, so it is unavailable while markdown
-            is rendered (preserves the old toolbar's behavior). */}
+            is rendered. */}
         {!(options.showRenderToggle && options.isRendered) && (
           <DropdownMenu.Item onSelect={() => options.onToggleSearch()} data-testid={ElementIds.DIFF_FIND_IN_FILE_BTN}>
             <Search size={14} /> Find in file
@@ -82,7 +81,7 @@ type DiffViewerMenuProps = {
   /** File-actions context (open/copy/close-tab); when absent only view/tree
    *  options are shown (e.g. the empty state has no file). */
   fileContext: FileContextMenuContext | null;
-  /** The relocated diff view controls; absent for non-diff selections. */
+  /** The diff view controls; absent for non-diff selections. */
   viewOptions?: DiffViewOptions;
   /** The list view controls merged in from the tree side. */
   treeOptions?: TreeViewOptions;
@@ -93,11 +92,9 @@ type DiffViewerMenuProps = {
 
 /**
  * The single triple-dot menu in the viewer header. It assembles, in order:
- * the manual refresh, the tree (list) view options, the diff view options
- * that used to sit as toolbar icons, and the per-file actions (open / copy /
- * close tab). The trigger carries
- * {@link ElementIds.DIFF_FILE_HEADER_MENU_TRIGGER}; the relocated toggles
- * re-anchor under it.
+ * the manual refresh, the tree (list) view options, the diff view options,
+ * and the per-file actions (open / copy / close tab). The trigger carries
+ * {@link ElementIds.DIFF_FILE_HEADER_MENU_TRIGGER}; the toggles anchor under it.
  */
 export const DiffViewerMenu = ({
   workspaceId,
@@ -115,11 +112,19 @@ export const DiffViewerMenu = ({
 
   return (
     <DropdownMenu.Root>
-      <DropdownMenu.Trigger>
-        <IconButton variant="ghost" size="1" color="gray" data-testid={ElementIds.DIFF_FILE_HEADER_MENU_TRIGGER}>
-          <MoreHorizontal size={14} />
-        </IconButton>
-      </DropdownMenu.Trigger>
+      <Tooltip content="View options">
+        <DropdownMenu.Trigger>
+          <IconButton
+            variant="ghost"
+            size="1"
+            color="gray"
+            aria-label="View options"
+            data-testid={ElementIds.DIFF_FILE_HEADER_MENU_TRIGGER}
+          >
+            <MoreHorizontal size={14} />
+          </IconButton>
+        </DropdownMenu.Trigger>
+      </Tooltip>
       <DropdownMenu.Content size="1">
         {hasRefresh && (
           <DropdownMenu.Item onSelect={() => onRefresh()}>

@@ -26,20 +26,26 @@ def test_switch_keeps_the_shell_present(sculptor_instance_: SculptorInstance) ->
     """
     page = sculptor_instance_.page
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Seamless A WS")
-    # Settle workspace A with a real UI interaction before creating the second workspace
-    # — a back-to-back create with nothing in between can race the harness create flow.
-    PlaywrightWorkspaceSection(page, "right").expand_section()
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Seamless B WS")
 
     sidebar = get_workspace_sidebar(page)
     expect(sidebar).to_be_visible()
+    # Hold the exact sidebar DOM node. The sidebar is part of the persistent shell,
+    # so a seamless switch keeps this same node mounted; a spinner/blank-frame
+    # regression would unmount the shell and mount a fresh sidebar, which a plain
+    # to_be_visible() re-query would still accept. Asserting the original node stays
+    # connected is what actually catches a teardown/remount.
+    sidebar_node = sidebar.element_handle()
 
     navigate_to_workspace(page, "Seamless A WS")
 
-    # The shell never tears down (no spinner-gated blank): the sidebar stays visible and
-    # the destination workspace's chat panel renders.
+    # The shell never tears down (no spinner-gated blank): the sidebar stays visible
+    # and the destination workspace's chat panel renders.
     expect(sidebar).to_be_visible()
     expect(PlaywrightTaskPage(page=page).get_chat_panel()).to_be_visible(timeout=60_000)
+    # The very same sidebar node is still in the document — no full-page loader
+    # replaced the shell mid-switch.
+    assert sidebar_node.evaluate("el => el.isConnected"), "workspace sidebar was remounted during the switch"
 
 
 @user_story("to return to a workspace and find the view I left")

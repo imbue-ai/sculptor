@@ -30,8 +30,8 @@ def test_default_center_holds_the_active_agent(sculptor_instance_: SculptorInsta
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Default Center WS")
 
     center = PlaywrightWorkspaceSection(page, "center")
-    # Center is always expanded (it has no collapse toggle) and shows the agent.
-    expect(center.get_section_toggle()).to_have_count(0)
+    # Center is always expanded: its header renders with no expand interaction.
+    expect(center.get_header()).to_be_visible()
     # The active panel is an agent; the prefix matcher auto-retries through render settle.
     expect(center.get_active_tab()).to_have_attribute("data-panel-id", re.compile(r"^agent:"))
 

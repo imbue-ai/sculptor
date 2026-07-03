@@ -2,8 +2,7 @@
 // browser (the list — scope picker, commit button, changed-file tree, discard) with
 // an embedded DiffViewer (the detail). It owns its own selection — a scoped diff of
 // the clicked file — and feeds it to its own viewer instance, so there is no shared
-// "active diff" singleton. The proven changes-browser behavior
-// (All/Uncommitted scope, discard, commit-from-changes) is migrated, not redesigned.
+// "active diff" singleton.
 
 import { Flex } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
@@ -14,7 +13,11 @@ import { ElementIds } from "~/api";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 import { registerPanelComponent } from "~/components/sections/registry/panelRegistry.ts";
 import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
-import { activeDiffTabAtomFamily, changesSelectionFromTab } from "~/pages/workspace/components/diffPanel/atoms.ts";
+import {
+  activeDiffTabAtomFamily,
+  changesSelectionFromTab,
+  closeDiffTabAtom,
+} from "~/pages/workspace/components/diffPanel/atoms.ts";
 import { DiffScopePicker } from "~/pages/workspace/components/diffPanel/DiffScopePicker.tsx";
 import type { DiffSelection, TreeViewOptions } from "~/pages/workspace/components/diffViewer/index.ts";
 import { DiffViewer } from "~/pages/workspace/components/diffViewer/index.ts";
@@ -27,7 +30,7 @@ import {
   changesPanelSelectionAtomFamily,
   changesScopeAtomFamily,
   collapseAllChangesFoldersAtom,
-  fileBrowserStateAtomFamily,
+  fileBrowserViewModeAtomFamily,
   toggleViewModeAtom,
 } from "./fileBrowser/atoms.ts";
 import { ChangesTreeView } from "./fileBrowser/ChangesTreeView.tsx";
@@ -41,7 +44,7 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
   const hasTargetBranch = workspace?.targetBranch != null;
 
   const [scope, setScope] = useAtom(changesScopeAtomFamily(workspaceId));
-  const fileBrowserState = useAtomValue(fileBrowserStateAtomFamily(workspaceId));
+  const viewMode = useAtomValue(fileBrowserViewModeAtomFamily(workspaceId));
   const toggleViewMode = useSetAtom(toggleViewModeAtom);
   const collapseAllChangesFolders = useSetAtom(collapseAllChangesFoldersAtom);
 
@@ -58,8 +61,8 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
   // sculpt open-file --mode diff). Reading it here makes those opens render in this
   // panel's single embedded viewer, not just reveal the panel.
   const activeTab = useAtomValue(activeDiffTabAtomFamily(workspaceId));
+  const closeDiffTab = useSetAtom(closeDiffTabAtom);
 
-  const { viewMode } = fileBrowserState;
   const isUncommitted = scope === "uncommitted";
 
   const handleSelectFile = useCallback(
@@ -76,16 +79,38 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
   const handleDiscardConfirm = useCallback((): void => {
     if (discardTarget) {
       void discardFile(discardTarget);
-      // Clear the viewer if the discarded file was the one being shown.
+      // Clear the viewer if the discarded file is the one being shown, whether it
+      // is driven by the local click or by a shared single-kind diff tab (an agent
+      // open / chat file-chip). Clearing only the local half would leave the tab
+      // still resolving to the just-discarded file.
       setSelected((prev) => (prev?.filePath === discardTarget ? null : prev));
+      if (activeTab?.kind === "single" && changesSelectionFromTab(activeTab)?.filePath === discardTarget) {
+        closeDiffTab({ workspaceId, filePath: activeTab.filePath });
+      }
       setDiscardTarget(null);
     }
-  }, [discardTarget, discardFile, setSelected]);
+  }, [discardTarget, discardFile, setSelected, activeTab, closeDiffTab, workspaceId]);
 
-  // After committing, the uncommitted changes clear, so reset the viewer.
+  // After committing, the uncommitted changes clear, so reset the viewer. Drop
+  // the local click and close the shared single-kind tab as well; otherwise the
+  // tab wins the recency reconcile and a stale agent-opened diff resurfaces.
   const handleCommit = useCallback((): void => {
     setSelected(null);
-  }, [setSelected]);
+    if (activeTab?.kind === "single") {
+      closeDiffTab({ workspaceId, filePath: activeTab.filePath });
+    }
+  }, [setSelected, activeTab, closeDiffTab, workspaceId]);
+
+  // Dismiss a deleted file from the viewer's banner: drop the local click
+  // selection only when it points at that file, so an unrelated clicked file
+  // (the deleted view came from an agent open) survives the close. The viewer
+  // closes the shared diff tab itself.
+  const handleCloseFile = useCallback(
+    (filePath: string): void => {
+      setSelected((prev) => (prev?.filePath === filePath ? null : prev));
+    },
+    [setSelected],
+  );
 
   const handleToggleViewMode = useCallback((): void => {
     toggleViewMode({ workspaceId });
@@ -170,6 +195,7 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
           selection={selection}
           treeOptions={treeOptions}
           sidebarToggle={sidebarToggle}
+          onCloseFile={handleCloseFile}
         />
       )}
     />

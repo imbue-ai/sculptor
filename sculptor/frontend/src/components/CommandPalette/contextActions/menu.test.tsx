@@ -4,14 +4,14 @@ import { createStore, Provider } from "jotai";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-afterEach(() => {
-  cleanup();
-});
-
 import { ElementIds, type Workspace } from "../../../api";
 import type { OpenInRuntime } from "./menu.tsx";
 import { WorkspaceContextMenuContent, WorkspaceDropdownMenuContent } from "./menu.tsx";
 import type { WorkspaceAction } from "./types.ts";
+
+afterEach(() => {
+  cleanup();
+});
 
 const fakeWorkspace = (id: string): Workspace =>
   ({ objectId: id, description: `ws-${id}`, sourceBranch: "main" }) as unknown as Workspace;
@@ -77,9 +77,8 @@ describe("WorkspaceDropdownMenuContent", () => {
         openInRuntime={openInRuntime}
       />,
     );
-    // The "..." dropdown previously rendered only the flat descriptor list;
-    // it must now surface the same copy-name / copy-branch / diagnostics
-    // entries the right-click context menu injects.
+    // The "..." dropdown must surface the same copy-name / copy-branch /
+    // diagnostics entries the right-click context menu injects.
     expectPresent(ElementIds.TAB_CONTEXT_MENU_COPY_WORKSPACE_NAME);
     expectPresent(ElementIds.TAB_CONTEXT_MENU_COPY_BRANCH);
     expectPresent(ElementIds.TAB_CONTEXT_MENU_DIAGNOSTICS);

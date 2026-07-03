@@ -9,10 +9,8 @@ These tests verify:
 - Read/unread status persists across server restarts
 """
 
-from playwright.sync_api import Locator
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
@@ -23,17 +21,6 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
-
-
-def _get_tab_status_dot(tab: Locator) -> Locator:
-    """The rendered status-dot element inside an agent panel tab.
-
-    Agent tabs render a visible dot whose ``data-panel-tab-dot`` attribute carries the
-    same status as the tab's ``data-dot-status``, so tests can assert the dot is
-    actually rendered (visible) with the expected status — not just that the tab
-    carries the data attribute.
-    """
-    return tab.get_by_test_id(ElementIDs.PANEL_TAB_STATUS_DOT)
 
 
 @user_story("to see which agents have unseen updates within a workspace")
@@ -54,12 +41,13 @@ def test_unread_indicator_when_switching_agents_within_workspace(
     task_page = start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Read Test WS")
 
     # Agent 1 should be read (we're viewing it and it finished)
-    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    tabs = panel_tabs.get_panel_tabs()
     expect(tabs).to_have_count(1)
     expect(tabs.first).to_have_attribute("data-dot-status", "read")
 
     # The tab renders a visible status dot, not just the data attribute.
-    status_dot = _get_tab_status_dot(tabs.first)
+    status_dot = panel_tabs.get_tab_status_dot(tabs.first)
     expect(status_dot).to_be_visible()
     expect(status_dot).to_have_attribute("data-panel-tab-dot", "read")
 
@@ -90,7 +78,7 @@ def test_unread_indicator_when_switching_agents_within_workspace(
 
     # Agent 2 should still be read — no new updates happened after we left
     expect(tabs.last).to_have_attribute("data-dot-status", "read")
-    expect(_get_tab_status_dot(tabs.last)).to_be_visible()
+    expect(panel_tabs.get_tab_status_dot(tabs.last)).to_be_visible()
 
     # Now send a follow-up to agent 1 (which will make agent 1's updatedAt change,
     # but we're viewing it so it stays read)
@@ -180,12 +168,13 @@ def test_focused_agent_stays_read_while_receiving_updates(
     # Create a workspace with an agent
     task_page = start_task_and_wait_for_ready(page, prompt="Initial prompt", workspace_name="Focused WS")
 
-    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    tabs = panel_tabs.get_panel_tabs()
     expect(tabs).to_have_count(1)
 
     # Agent should be read (we just viewed the initial response), with a visible dot.
     expect(tabs.first).to_have_attribute("data-dot-status", "read")
-    status_dot = _get_tab_status_dot(tabs.first)
+    status_dot = panel_tabs.get_tab_status_dot(tabs.first)
     expect(status_dot).to_be_visible()
     expect(status_dot).to_have_attribute("data-panel-tab-dot", "read")
 

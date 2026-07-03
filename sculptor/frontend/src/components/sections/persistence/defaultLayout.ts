@@ -13,7 +13,7 @@
 // No splits. `center` is intentionally omitted from `expanded` — it is always
 // expanded (see types.ts / isSectionExpandedAtom).
 
-import type { PanelId } from "../sectionTypes.ts";
+import type { PanelId, SubSectionId } from "../sectionTypes.ts";
 import type { WorkspaceLayoutState } from "./types.ts";
 
 // The left explorer panels, in tab order, with Files active.
@@ -36,9 +36,9 @@ export function buildDefaultWorkspaceLayout({
   return {
     placement: {
       [agentPanelId]: "center",
-      files: "left",
-      changes: "left",
-      commits: "left",
+      // Derived from DEFAULT_LEFT_PANEL_IDS so the constant stays the single source
+      // of truth: a panel added there gets a matching placement entry (open) here.
+      ...Object.fromEntries(DEFAULT_LEFT_PANEL_IDS.map((id): [PanelId, SubSectionId] => [id, "left"])),
       [terminalPanelId]: "bottom",
     },
     order: {

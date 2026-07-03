@@ -6,11 +6,14 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
+from sculptor.testing.elements.base import open_radix_toggle
+
+MenuOption = Literal["find_in_file", "split_view", "line_wrap", "render", "tree_view_mode", "collapse_all"]
 
 # The view options that live in the viewer's triple-dot menu. Each maps
 # to the testid of its menu item so ``toggle_view_option_via_menu`` can open the
 # menu once and click the right row regardless of which option a test wants.
-_MENU_OPTION_TEST_IDS: dict[str, ElementIDs] = {
+_MENU_OPTION_TEST_IDS: dict[MenuOption, ElementIDs] = {
     "find_in_file": ElementIDs.DIFF_FIND_IN_FILE_BTN,
     "split_view": ElementIDs.DIFF_SPLIT_VIEW_TOGGLE,
     "line_wrap": ElementIDs.DIFF_LINE_WRAP_TOGGLE,
@@ -19,8 +22,6 @@ _MENU_OPTION_TEST_IDS: dict[str, ElementIDs] = {
     "collapse_all": ElementIDs.FILE_BROWSER_COLLAPSE_FOLDERS_BTN,
 }
 
-MenuOption = Literal["find_in_file", "split_view", "line_wrap", "render", "tree_view_mode", "collapse_all"]
-
 
 class PlaywrightDiffViewerElement(PlaywrightIntegrationTestElement):
     """Page Object Model for an embeddable per-panel diff/file viewer.
@@ -28,12 +29,12 @@ class PlaywrightDiffViewerElement(PlaywrightIntegrationTestElement):
     Each Files / Changes / Commits panel embeds its OWN viewer instance with its
     own selection — there is no shared "active diff" singleton — so this POM is
     constructed scoped to a single panel's viewer rather than reaching for a
-    page-wide diff panel. The view toggles that used to be toolbar icons
-    (split/unified, line wrap, find-in-file, render markdown) and the list
-    flat/tree + collapse-all controls now hang off the header's single triple-dot
-    menu (``DIFF_FILE_HEADER_MENU_TRIGGER``); reach them through
-    ``toggle_view_option_via_menu``. There is no expand/fullscreen control — the
-    diff-specific fullscreen is deprecated in favour of section maximize.
+    page-wide diff panel. All view toggles (split/unified, line wrap,
+    find-in-file, render markdown) and the list flat/tree + collapse-all controls
+    live in the header's single triple-dot menu
+    (``DIFF_FILE_HEADER_MENU_TRIGGER``); reach them through
+    ``toggle_view_option_via_menu``. There is no expand/fullscreen control;
+    section maximize handles full-screening instead.
     """
 
     def get_file_header(self) -> Locator:
@@ -91,25 +92,10 @@ class PlaywrightDiffViewerElement(PlaywrightIntegrationTestElement):
     def open_menu(self) -> None:
         """Open the header's triple-dot options menu.
 
-        Idempotent and verified: a Radix trigger toggles, so clicking one that is
-        already open would close it. Gate on the trigger's ``data-state`` and wait
-        until it is actually open, so repeated open/read/close cycles (e.g. flipping
-        a checkbox item then re-reading) are reliable.
+        The trigger is a Radix menu, so opening is idempotent and retried (see
+        ``open_radix_toggle``).
         """
-        trigger = self.get_menu_trigger()
-        expect(trigger).to_be_visible()
-        # Radix can swallow the trigger click in the brief settle window right after
-        # a previous close, so retry until the menu actually opens.
-        for _ in range(5):
-            if trigger.get_attribute("data-state") == "open":
-                return
-            trigger.click()
-            try:
-                expect(trigger).to_have_attribute("data-state", "open", timeout=2_000)
-                return
-            except AssertionError:
-                self._page.wait_for_timeout(250)
-        expect(trigger).to_have_attribute("data-state", "open")
+        open_radix_toggle(self._page, self.get_menu_trigger())
 
     def get_menu_option(self, option: MenuOption) -> Locator:
         """Get a menu item by its logical option name.
@@ -120,11 +106,11 @@ class PlaywrightDiffViewerElement(PlaywrightIntegrationTestElement):
         return self._page.get_by_test_id(_MENU_OPTION_TEST_IDS[option])
 
     def toggle_view_option_via_menu(self, option: MenuOption) -> None:
-        """Open the triple-dot menu and click the relocated ``option`` toggle.
+        """Open the triple-dot menu and click the ``option`` toggle.
 
         Covers the diff view toggles (find-in-file, split/unified, line wrap,
-        render markdown) and the list controls (flat/tree, collapse-all) that all
-        re-anchored under ``DIFF_FILE_HEADER_MENU_TRIGGER``.
+        render markdown) and the list controls (flat/tree, collapse-all), which
+        all live under ``DIFF_FILE_HEADER_MENU_TRIGGER``.
         """
         self.open_menu()
         item = self.get_menu_option(option)
@@ -141,22 +127,10 @@ class PlaywrightDiffViewerElement(PlaywrightIntegrationTestElement):
     def open_recent_files_dropdown(self) -> None:
         """Open the header path's recently-viewed-files dropdown.
 
-        Idempotent and retried like ``open_menu``: the Radix Select trigger
-        toggles, and a click landing while Radix is still tearing down a
-        just-dismissed popover can be swallowed.
+        The trigger is a Radix Select, so opening is idempotent and retried (see
+        ``open_radix_toggle``).
         """
-        trigger = self.get_file_path_select()
-        expect(trigger).to_be_visible()
-        for _ in range(5):
-            if trigger.get_attribute("data-state") == "open":
-                return
-            trigger.click()
-            try:
-                expect(trigger).to_have_attribute("data-state", "open", timeout=2_000)
-                return
-            except AssertionError:
-                self._page.wait_for_timeout(250)
-        expect(trigger).to_have_attribute("data-state", "open")
+        open_radix_toggle(self._page, self.get_file_path_select())
 
     def get_recent_file_options(self) -> Locator:
         """All options in the open recent-files dropdown.
@@ -172,9 +146,14 @@ class PlaywrightDiffViewerElement(PlaywrightIntegrationTestElement):
         expect(self.get_file_path_select()).not_to_have_attribute("data-state", "open")
 
     def select_recent_file(self, file_name: str) -> None:
-        """Open the recent-files dropdown and pick the option for ``file_name``."""
+        """Open the recent-files dropdown and pick the option for ``file_name``.
+
+        Matches the option whose file-name label is exactly ``file_name`` so a
+        recent whose name is a substring of another's (e.g. ``util.py`` vs
+        ``test_util.py``) never resolves to two options.
+        """
         self.open_recent_files_dropdown()
-        option = self.get_recent_file_options().filter(has_text=file_name)
+        option = self.get_recent_file_options().filter(has=self._page.get_by_text(file_name, exact=True))
         expect(option).to_be_visible()
         option.click()
 
@@ -212,3 +191,21 @@ def get_diff_viewer_in(panel: Locator, page: Page) -> PlaywrightDiffViewerElemen
     """
     locator = panel.get_by_test_id(ElementIDs.DIFF_PANEL)
     return PlaywrightDiffViewerElement(locator=locator, page=page)
+
+
+def ensure_unified_view(viewer: PlaywrightDiffViewerElement) -> None:
+    """Drive the viewer into unified mode so the unified diff body can be asserted.
+
+    The split/unified preference is a server-persisted config, so a prior test in
+    the same browser context can leave it on either view. The split/unified toggle
+    is a plain menu Item (not a checkbox), so the effective view is read from
+    CONTENT — which of ``DIFF_VIEW_UNIFIED`` / ``DIFF_VIEW_SPLIT`` is mounted — and
+    the toggle is clicked only when the split view is the one showing. Idempotent.
+    (Added/deleted files always render unified regardless.)
+    """
+    unified = viewer.get_unified_diff_views()
+    split = viewer.get_split_view()
+    expect(unified.or_(split)).to_be_visible()
+    if split.count() > 0:
+        viewer.toggle_view_option_via_menu("split_view")
+    expect(viewer.get_unified_diff_views()).to_be_visible()

@@ -1,9 +1,8 @@
 // The Files panel: a single-instance left-section panel that pairs the workspace
 // file tree (the list) with an embedded DiffViewer (the detail). It owns its own
 // selection — a file-view of the clicked file — and feeds it to its own viewer
-// instance, so there is no shared "active diff" singleton. The
-// proven file-tree behavior (flat + tree variants, path/tilde display, symlink
-// handling, search) is migrated, not redesigned.
+// instance, so there is no shared "active diff" singleton. The file tree supports
+// flat + tree variants, path/tilde display, symlink handling, and search.
 
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
@@ -20,7 +19,7 @@ import { ExplorerLayout } from "./ExplorerLayout.tsx";
 import { ExplorerTreeHeader } from "./ExplorerTreeHeader.tsx";
 import {
   collapseAllFoldersAtom,
-  fileBrowserStateAtomFamily,
+  fileBrowserViewModeAtomFamily,
   filesPanelSelectionAtomFamily,
   toggleViewModeAtom,
 } from "./fileBrowser/atoms.ts";
@@ -32,7 +31,7 @@ import { reconcileSelectionByRecency } from "./selectionRecency.ts";
 
 /** Renders the file tree list, an empty/loading placeholder, or the tree. */
 const FilesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactElement => {
-  const fileBrowserState = useAtomValue(fileBrowserStateAtomFamily(workspaceId));
+  const viewMode = useAtomValue(fileBrowserViewModeAtomFamily(workspaceId));
   const toggleViewMode = useSetAtom(toggleViewModeAtom);
   const collapseAllFolders = useSetAtom(collapseAllFoldersAtom);
 
@@ -51,8 +50,6 @@ const FilesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEleme
 
   const { tree, isPending } = useFileTree(workspaceId, "vs-target-branch");
   const { matchingPaths } = useFileSearch(workspaceId, searchQuery);
-
-  const { viewMode } = fileBrowserState;
 
   const searchMatchingPaths = useMemo(() => {
     if (searchQuery.length === 0) return null;

@@ -24,6 +24,10 @@ def test_open_notes_panel_renders_editor(sculptor_instance_: SculptorInstance) -
     notes = get_notes_panel(page)
     notes.open()
     expect(notes).to_be_visible()
+    editor = notes.get_editor()
+    expect(editor).to_be_visible()
+    type_into_tiptap(page, editor, "a quick note")
+    expect(editor).to_contain_text("a quick note")
 
 
 @user_story("to jot notes in one workspace and have them stay scoped to that workspace")

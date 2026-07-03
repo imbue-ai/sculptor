@@ -15,6 +15,7 @@ from playwright.sync_api import expect
 
 from sculptor.testing.elements.add_panel_dropdown import open_panel
 from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
+from sculptor.testing.elements.section_split import PlaywrightSectionSplit
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -37,6 +38,11 @@ def test_static_panel_tab_has_no_rename_in_context_menu(sculptor_instance_: Scul
 
     panel_tabs = PlaywrightPanelTabElement(page, sub_section="left")
     panel_tabs.open_context_menu(files_tab)
+    # Anchor on an item the menu DOES offer before asserting Rename's absence: the
+    # unsplit left section always offers "Create split and move panel", so waiting on it
+    # confirms the menu actually opened (otherwise a swallowed right-click would make
+    # the negative assertion pass vacuously).
+    expect(PlaywrightSectionSplit(page, "left").get_create_option("horizontal")).to_be_visible()
     # No Rename item is offered for a single-instance panel.
     expect(panel_tabs.get_context_menu_rename_item()).to_have_count(0)
     # Dismiss the context menu.

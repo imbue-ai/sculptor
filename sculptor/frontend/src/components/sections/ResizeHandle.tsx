@@ -94,15 +94,21 @@ export const ResizeHandle = ({
         onResize(startSize + direction * (current - startCoord));
       };
 
+      // A drag ends on pointerup OR pointercancel — the latter fires when a browser/OS
+      // gesture (e.g. touch panning) hijacks the pointer. Without it the listeners stay
+      // attached, the body class keeps webview pointer events suppressed, and any pointer
+      // movement keeps resizing with no button held.
       const endDrag = (): void => {
         window.removeEventListener("pointermove", handlePointerMove);
         window.removeEventListener("pointerup", endDrag);
+        window.removeEventListener("pointercancel", endDrag);
         activeDragCleanupRef.current = null;
         setIsDragging(false);
         endGlobalDrag();
       };
       window.addEventListener("pointermove", handlePointerMove);
       window.addEventListener("pointerup", endDrag);
+      window.addEventListener("pointercancel", endDrag);
       activeDragCleanupRef.current = endDrag;
     },
     [axis, direction, getSize, onResize],

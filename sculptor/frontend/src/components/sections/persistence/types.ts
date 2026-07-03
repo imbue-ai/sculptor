@@ -1,6 +1,6 @@
 // Consolidated layout snapshot shapes persisted by the LayoutPersistenceAdapter.
-// One object per scope (per-workspace or global) — never the prototype's many
-// scattered keys.
+// One consolidated object per scope (per-workspace or global) — not one
+// localStorage key per field.
 
 import type { PanelId, SectionId, SectionSplit, SubSectionId } from "../sectionTypes.ts";
 

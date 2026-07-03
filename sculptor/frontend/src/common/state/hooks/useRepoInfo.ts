@@ -18,12 +18,17 @@ type RepoInfoHookReturn = {
   fetchCurrentBranch: () => Promise<void>;
 };
 
-export const useRepoInfo = (projectId: ProjectID): RepoInfoHookReturn => {
+export const useRepoInfo = (projectId: ProjectID | null): RepoInfoHookReturn => {
   const store = useStore();
-  const repoInfo = useAtomValue(repoInfoAtomFamily(projectId));
+  // A null projectId means "no repo selected yet" (e.g. the new-workspace form's
+  // zero-repo state). Key the atom read off a stable empty string so hook order
+  // stays unconditional, but every fetch and the retry loop below bail out — a
+  // getRepoInfo call with no project_id is a guaranteed backend failure.
+  const repoInfo = useAtomValue(repoInfoAtomFamily(projectId ?? ""));
   const [retryAttempt, setRetryAttempt] = useState(0);
 
   const fetchRepoInfo = useCallback(async (): Promise<RepoInfo | undefined> => {
+    if (!projectId) return undefined;
     try {
       const { data: repoInfo } = await getRepoInfo({
         path: { project_id: projectId },
@@ -45,6 +50,7 @@ export const useRepoInfo = (projectId: ProjectID): RepoInfoHookReturn => {
   }, [projectId, store]);
 
   const fetchCurrentBranch = useCallback(async (): Promise<void> => {
+    if (!projectId) return;
     try {
       const { data: currentBranchInfo } = await getCurrentBranch({
         path: { project_id: projectId },
@@ -92,6 +98,7 @@ export const useRepoInfo = (projectId: ProjectID): RepoInfoHookReturn => {
   // short-circuits the no-op write — no re-render, no effect re-run, and
   // retries silently stop after the first attempt.
   useEffect(() => {
+    if (!projectId) return;
     if (repoInfo !== null) {
       if (retryAttempt !== 0) {
         setRetryAttempt(0);
@@ -109,7 +116,7 @@ export const useRepoInfo = (projectId: ProjectID): RepoInfoHookReturn => {
     }, RETRY_INTERVAL_MS);
 
     return (): void => clearTimeout(timer);
-  }, [repoInfo, fetchRepoInfo, retryAttempt]);
+  }, [projectId, repoInfo, fetchRepoInfo, retryAttempt]);
 
   return {
     repoInfo,

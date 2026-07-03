@@ -59,10 +59,11 @@ export function openStaticPanelInLocation(store: AppStore, panelId: PanelId, sub
   store.set(jumpToSectionAtom, { subSection });
 }
 
-// Append a fresh tab to the workspace's persisted terminal state (the same state
-// TerminalPanel reads), mirroring TerminalPanel's handleAddTerminal so index/label
-// numbering stays consistent. Returns the new tab's index (which keys the terminal's
-// panel id); placement is the caller's concern.
+// Append a fresh tab to the workspace's persisted terminal state. The index comes from
+// terminalNextIndexAtom (monotonic) and the label reuses the lowest free number via
+// getNextTerminalLabel, so the numbering matches what useWorkspaceDynamicPanels renders.
+// Returns the new tab's index (which keys the terminal's panel id); placement is the
+// caller's concern.
 function appendTerminalTab(store: AppStore, workspaceId: string): number {
   const index = store.get(terminalNextIndexAtom)[workspaceId] ?? 1;
   const existingTabs = store.get(terminalTabStateAtom)[workspaceId] ?? [];

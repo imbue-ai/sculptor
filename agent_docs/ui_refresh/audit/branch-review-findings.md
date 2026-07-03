@@ -1,4 +1,4 @@
-# Branch deep-review findings — `bryden/ui-refresh-2`
+# Branch deep-review findings — the ui-refresh branch
 
 Deep review of the whole branch (merge-base `f20f0758`, ~118 commits, 562 files)
 against the `agent_docs/ui_refresh/` docs, performed 2026-07-01. Method: six

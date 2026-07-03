@@ -12,8 +12,8 @@ this state, and `design_extraction.md` covers styling. Concrete type and atom
 signatures live in the companion documents under `supplemental/` (referenced
 throughout); this document stays at the level of model and rationale.
 
-> **On the prototype.** The `bryden/scu-1474-compact-workspace-layout` branch
-> already implements most of this model. We treat the redesign as a **rewrite**:
+> **On the prototype.** The `scu-1474` prototype branch already implements most
+> of this model. We treat the redesign as a **rewrite**:
 > the model below renames everything to `goals.md` vocabulary and removes the
 > deprecated/experimental state the prototype still carries. See
 > `supplemental/naming_map.md` for the old→new rename table. Do not anchor to the
@@ -33,11 +33,10 @@ Every decision below traces back to one of them:
    subscriptions** and explicit memoization boundaries (the boundaries themselves
    are documented in `component_hierarchy.md`).
 3. **Consolidated, swappable persistence.** UI state is consolidated and
-   persisted, with the per-workspace vs. global split from `goals.md`. We are
-   moving toward a hosted web Sculptor that may persist layouts in a backend, so
-   the **storage backend must be swappable** (localStorage today → backend API
+   persisted, with the per-workspace vs. global split from `goals.md`. The
+   **storage backend must be swappable** (localStorage today → backend API
    later) without reworking the state model.
-4. **Mobile-ready.** A mobile variant (branch `bryden/mobile-frontend`) reuses the
+4. **Mobile-ready.** A mobile variant (the `mobile-frontend` branch) reuses the
    same content and data, with a different layout shell. The model must keep
    **layout state separate from content/data state** so the mobile shell can
    simply not consume the layout state.
@@ -310,7 +309,7 @@ keys/rows; old keys are ignored (and the rewrite stops writing them).
 
 ## Mobile
 
-The mobile variant (branch `bryden/mobile-frontend`) is achieved with **one
+The mobile variant (the `mobile-frontend` branch) is achieved with **one
 detection hook + a per-page shell branch + reuse of shared content/data atoms** —
 *not* a second state model. The state model supports this because **layout state
 is separate from content/data state**:

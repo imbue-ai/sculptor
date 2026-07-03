@@ -142,6 +142,10 @@ def test_commits_dropdown_reopens_commit_diff_in_panel(sculptor_instance_: Sculp
     viewer.assert_diff_shows("util.py")
     expect(viewer.get_unified_diff_views().first).to_be_visible()
     expect(viewer).to_contain_text("return 1")
+    # The commit-scoped diff carries only the committed content, so the
+    # uncommitted working-tree edit must be absent — a working-tree diff would
+    # also render "return 1", so its presence alone can't distinguish the two.
+    expect(viewer).not_to_contain_text("return 2")
 
 
 @user_story("to re-open a file's diff from the Changes panel's recent-files dropdown")

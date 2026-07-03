@@ -22,10 +22,10 @@ from pathlib import Path
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_panel_dropdown import open_panel
 from sculptor.testing.elements.diff_panel import get_diff_panel_from_page
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
+from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import request_with_retry
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -260,6 +260,6 @@ def test_open_file_for_inactive_workspace_leaves_viewed_workspace_alone(
         # Back to B: nothing was opened or persisted for it — the left section
         # is still collapsed and no viewer is mounted.
         navigate_to_workspace(page, "Open File Viewer WS")
-        expect(page.get_by_test_id(ElementIDs.CHAT_PANEL)).to_be_visible(timeout=60_000)
+        expect(PlaywrightTaskPage(page=page).get_chat_panel()).to_be_visible(timeout=60_000)
         expect(PlaywrightWorkspaceSection(page, "left").get_header()).to_have_count(0)
         expect(get_diff_panel_from_page(page)).to_have_count(0)

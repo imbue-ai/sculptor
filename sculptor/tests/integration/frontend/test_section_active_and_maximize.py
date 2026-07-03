@@ -4,13 +4,13 @@ The logical active section persists; the transient active-section RING flashes o
 a deliberate jump (a keyboard cycle / add / drop), never on a plain click. Maximizing a
 section makes it cover the content: the workspace header is hidden while the section's
 own header (with its maximize/restore toggle) stays. A maximized split shows only one
-sub-section. Maximize is not persisted across a reload.
+sub-section. (Maximize is transient — a reload clears it — a structural guarantee
+covered by the transientAtoms unit tests, not exercised here.)
 
 Layouts are arranged by clicking the real UI (expand sections via the controls, add
 panels via the ``+`` dropdown, split via the panel context menu).
 """
 
-import pytest
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.add_panel_dropdown import open_panel
@@ -24,8 +24,6 @@ from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
-
-_RELOAD_TRANSIENT_SKIP_REASON = "The reload-clears-maximize guarantee can't be exercised here: a hard browser reload is ratchet-blocked, and soft_reload_page is a same-document hash navigation that keeps the JS context so the non-persisted maximize atom never resets; the transient guarantee is structural (a plain non-persisted atom) and covered by unit tests."
 
 
 @user_story("to set a section active by clicking it, without a ring flash")
@@ -42,6 +40,11 @@ def test_plain_click_sets_active_without_ring(sculptor_instance_: SculptorInstan
     open_panel(page, "files", "right")
     center = PlaywrightWorkspaceSection(page, "center")
 
+    # open_panel jumps to the right section, pulsing its active-section ring. Wait out
+    # that pulse (the ring-visible flag clears after RING_VISIBLE_MS) before exercising
+    # the plain-click path, so a lingering pulse can't be read as one a click raised.
+    expect(right.get_active_ring()).not_to_have_attribute("data-ring-visible", "true")
+
     # Make the center the active section first (a panel-tab click bubbles a plain
     # pointer-down that sets its section active without a ring flash).
     center.get_active_tab().click()
@@ -50,8 +53,10 @@ def test_plain_click_sets_active_without_ring(sculptor_instance_: SculptorInstan
     # Plain-click the right section's tab -> the right section becomes active silently.
     right.get_panel_tab("files").click()
     expect(right.get_active_ring()).to_have_attribute("data-active", "true")
-    # A plain click must not set the transient ring-visible hook.
-    expect(right.get_active_ring()).not_to_have_attribute("data-ring-visible", "true")
+    # A plain click must not pulse the transient ring. With data-active confirmed as the
+    # sync point, take a one-shot snapshot: a retrying expect would just outlast the ~1s
+    # ring fade and pass even if the click DID pulse the ring.
+    assert not right.is_ring_visible()
     expect(center.get_active_ring()).not_to_have_attribute("data-active", "true")
 
 
@@ -77,10 +82,12 @@ def test_cycle_sections_pulses_ring(sculptor_instance_: SculptorInstance) -> Non
     # Cycle to the next section -> it becomes active and its ring pulses visible.
     cycle_sections(page, "next")
     right_ring = right.get_active_ring()
-    expect(right_ring).to_have_attribute("data-active", "true")
-    # The ring fades after ~2s; assert it pulsed visible shortly after the jump (do not
-    # assert the fade timing precisely).
+    # Assert the ring pulse FIRST: data-ring-visible is only set while the section is
+    # active, so it doubles as the jump-landed signal, and it must be caught before the
+    # pulse clears after RING_VISIBLE_MS (1s). Checking data-active first would spend part
+    # of that 1s window on a round-trip and could miss the pulse under load.
     expect(right_ring).to_have_attribute("data-ring-visible", "true")
+    expect(right_ring).to_have_attribute("data-active", "true")
 
 
 @user_story("to maximize a section so it covers the workspace content")
@@ -217,17 +224,3 @@ def test_maximized_split_shows_one_subsection(sculptor_instance_: SculptorInstan
     primary.maximize()
     expect(primary.get_header()).to_be_visible()
     expect(secondary.get_header()).to_have_count(0)
-
-
-@pytest.mark.skip(reason=_RELOAD_TRANSIENT_SKIP_REASON)
-@user_story("to have a maximized section reset to normal after a reload")
-def test_maximize_not_persisted_across_reload(sculptor_instance_: SculptorInstance) -> None:
-    """Placeholder: maximize is transient — a reload clears it.
-
-    Can't be exercised in this harness: a hard browser reload is ratchet-blocked, and
-    ``soft_reload_page`` is a same-document hash navigation (the app is hash-routed) that
-    keeps the JS context alive, so the non-persisted ``maximizedSectionAtom`` never
-    resets. The transient guarantee is structural — maximize is a plain atom that is
-    never routed through the persistence adapter — and is covered by the
-    transient-atom unit tests.
-    """

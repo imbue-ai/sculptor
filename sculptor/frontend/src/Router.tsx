@@ -70,6 +70,11 @@ const router = createHashRouter([
   // The has-workspaces flow is unaffected: the gate falls through to <Outlet/>.
   {
     element: <EmptyFirstRunGate />,
+    // The gate route is top-level, so its own subtree (EmptyFirstRunPage,
+    // AutoUpdateToasts, the gate hooks) has no error boundary above it — give
+    // it one here so a render error shows the styled RouteErrorPage instead of
+    // React Router's default screen.
+    errorElement: <RouteErrorPage />,
     children: [
       // The app-wide sidebar shell hosts Home, Settings, and the workspace route, so
       // the sidebar + chrome stay mounted as the user moves between them.

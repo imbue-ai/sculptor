@@ -35,10 +35,10 @@ const TabPillComponent = ({ panelId, variant }: TabPillProps): ReactElement | nu
   return (
     <div
       className={`${styles.pill} ${isGhost ? styles.ghost : styles.overlay}`}
-      // The ghost sits inside the real tab strip: it is hidden from the
-      // accessibility tree wholesale, and it carries its own marker attribute so the
-      // drop-index math (which counts only real `data-section-tab` tabs) skips it.
-      {...(isGhost ? { "data-section-tab-ghost": "true", "aria-hidden": true } : {})}
+      // The ghost sits inside the real tab strip but is hidden from the accessibility
+      // tree wholesale. It deliberately omits `data-section-tab`, so the drop-index math
+      // (which counts only real `data-section-tab` tabs) skips it without needing a marker.
+      {...(isGhost ? { "aria-hidden": true } : {})}
     >
       {definition.dotStatus !== undefined && (
         // The overlay is visible to assistive tech, so its decorative dot is hidden

@@ -95,19 +95,20 @@ fake_claude:ask_user_question `{
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible()
 
-    # Delete the agent via the close button on the agent tab
+    # Delete the agent via the close button on the agent tab. The tab removal is
+    # optimistic (it vanishes before the backend confirms), so the DELETE
+    # response is the real sync point: waiting on it proves the backend has
+    # committed is_deleting before we read any counts.
     panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
     tabs = panel_tabs.get_panel_tabs()
     expect(tabs).to_have_count(1)
-    panel_tabs.delete_panel_via_close_button(f"agent:{task_page.get_task_id()}")
+    with page.expect_response(lambda response: response.request.method == "DELETE" and "/agents/" in response.url):
+        panel_tabs.delete_panel_via_close_button(f"agent:{task_page.get_task_id()}")
 
-    # Wait for the deletion dialog to close
+    # Confirm the delete dialog closed and the (optimistically removed) tab is
+    # gone. Closing the last agent leaves the center section empty — no
+    # replacement is auto-created — so the tab count settles at zero.
     expect(panel_tabs.get_delete_confirmation_dialog()).to_be_hidden()
-
-    # Closing the last agent no longer auto-creates a replacement:
-    # the center section is left empty. Wait for the agent tab to disappear,
-    # which is the sync point that the optimistic delete (and the underlying
-    # is_deleting state this regression guards) has been applied.
     expect(tabs).to_have_count(0)
 
     # Now compare: the health check API count should match the settings page count.

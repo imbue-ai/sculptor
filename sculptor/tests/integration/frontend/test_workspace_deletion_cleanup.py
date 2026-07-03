@@ -167,7 +167,7 @@ def test_delete_workspace_with_open_terminal_kills_pty_and_removes_worktree(
 
     sidebar.delete_workspace_via_context_menu(workspace_rows.first)
 
-    # UI: the tab is removed (optimistically, before the backend confirms).
+    # UI: the row is removed (optimistically, before the backend confirms).
     expect(sidebar.get_delete_confirmation_dialog()).to_be_hidden()
     expect(workspace_rows).to_have_count(0)
 
@@ -220,7 +220,7 @@ def test_delete_workspace_with_running_agent_finalizes_and_removes_worktree(
 
     sidebar.delete_workspace_via_context_menu(workspace_rows.first)
 
-    # UI: the tab is removed even though the agent was running.
+    # UI: the row is removed even though the agent was running.
     expect(sidebar.get_delete_confirmation_dialog()).to_be_hidden()
     expect(workspace_rows).to_have_count(0)
 
