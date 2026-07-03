@@ -39,7 +39,23 @@ export const getToolUseId = (block: ChatMessage["content"][number]): string | un
  *
  * Supports multi-level nesting (subagents spawning sub-subagents).
  */
+// Memoize the derived tree by its input-array reference. AlphaChatInterface
+// rebuilds this on every mount; when an agent is switched away and back, the
+// message array keeps its reference (for an idle agent with no queued messages
+// it comes straight from the task-detail atom), so a remount reuses the prior
+// tree instead of rebuilding it O(history). WeakMap entries are GC'd with their
+// input array, so nothing leaks and stale data can never be returned.
+const subagentTreeCache = new WeakMap<ReadonlyArray<ChatMessage>, Array<SubagentTreeNode>>();
+
 export const buildSubagentTree = (messages: ReadonlyArray<ChatMessage>): Array<SubagentTreeNode> => {
+  const cached = subagentTreeCache.get(messages);
+  if (cached) return cached;
+  const result = buildSubagentTreeUncached(messages);
+  subagentTreeCache.set(messages, result);
+  return result;
+};
+
+const buildSubagentTreeUncached = (messages: ReadonlyArray<ChatMessage>): Array<SubagentTreeNode> => {
   const topLevel: Array<SubagentTreeNode> = [];
 
   // Group child messages by their parentToolUseId
@@ -162,7 +178,18 @@ type MetadataBuilderMessage = {
  * it and instead derive responseText + durationSeconds from the subagent's own child
  * messages (parentToolUseId === the Agent's tool_use id).
  */
+// Memoized by input-array reference for the same reason as buildSubagentTree.
+const subagentMetadataCache = new WeakMap<Array<MetadataBuilderMessage>, Map<string, SubagentMetadata>>();
+
 export const buildSubagentMetadataMap = (messages: Array<MetadataBuilderMessage>): Map<string, SubagentMetadata> => {
+  const cached = subagentMetadataCache.get(messages);
+  if (cached) return cached;
+  const result = buildSubagentMetadataMapUncached(messages);
+  subagentMetadataCache.set(messages, result);
+  return result;
+};
+
+const buildSubagentMetadataMapUncached = (messages: Array<MetadataBuilderMessage>): Map<string, SubagentMetadata> => {
   const map = new Map<string, SubagentMetadata>();
   // toolUseId → creation time of the message that contained the Agent tool_use.
   // Used to compute background subagent run time from the subagent's reply time.

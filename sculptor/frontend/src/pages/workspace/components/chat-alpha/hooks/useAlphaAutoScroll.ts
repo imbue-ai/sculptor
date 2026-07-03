@@ -20,6 +20,12 @@ import {
 } from "../scroll/scrollStateMachine.ts";
 
 const BOTTOM_THRESHOLD = 200;
+// On short (mobile) viewports, 200px is ~1/4 of the screen, so pin-to-bottom
+// re-engages "too early" when scrolling down — require getting closer to the
+// actual bottom there. Keyed off the scroll container's own height so it's
+// driven by the layout, not a separate mobile flag.
+const MOBILE_BOTTOM_THRESHOLD = 80;
+const SHORT_VIEWPORT_PX = 700;
 // Tighter threshold for re-engaging auto-scroll. The user must scroll to
 // essentially the very bottom — not just "near" it — to opt back in.
 const REENGAGE_THRESHOLD = 5;
@@ -277,7 +283,12 @@ export const useAlphaAutoScroll = (
       const distance = distanceFromContentBottom(el, virtualizer);
       // Sample at-bottness for the projection. projectAtBottom applies the
       // anchoring/following phase override, so no special-case guard is needed.
-      machine.setGeometryAtBottom(distance <= BOTTOM_THRESHOLD);
+      // BE2: on a short (mobile) viewport the 200px BOTTOM_THRESHOLD is ~1/4 of
+      // the screen, so pin-to-bottom re-engages well before the actual bottom.
+      // Use a tighter threshold when the scroll container is short; desktop
+      // (clientHeight >= SHORT_VIEWPORT_PX) is unchanged at BOTTOM_THRESHOLD.
+      const bottomThreshold = el.clientHeight < SHORT_VIEWPORT_PX ? MOBILE_BOTTOM_THRESHOLD : BOTTOM_THRESHOLD;
+      machine.setGeometryAtBottom(distance <= bottomThreshold);
 
       if (isProgrammaticScroll.current) {
         isProgrammaticScroll.current = false;

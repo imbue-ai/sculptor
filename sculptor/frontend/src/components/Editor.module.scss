@@ -48,6 +48,19 @@
   padding-block: var(--space-3) var(--space-1);
   padding-inline: var(--space-4);
 
+  // iOS Safari auto-zooms the page when a focused editable's font-size is < 16px,
+  // and in standalone (home-screen) mode the user can't pinch back out, leaving
+  // the composer stuck zoomed with the send button clipped. Force >= 16px on the
+  // mobile surface for the editable input; the read-only `.viewer` variant is
+  // exempt. Gate matches the app's mobile breakpoint and also the iOS Simulator
+  // (see index.css for the full rationale).
+  @media (pointer: coarse), (width <= 767px) {
+    &:not(.viewer) {
+      // stylelint-disable-next-line sculptor/no-hardcoded-values -- iOS auto-zoom threshold is an absolute 16px; --font-size-3 scales with --scaling and isn't guaranteed >= 16px
+      font-size: 16px;
+    }
+  }
+
   &:focus {
     outline: none;
   }

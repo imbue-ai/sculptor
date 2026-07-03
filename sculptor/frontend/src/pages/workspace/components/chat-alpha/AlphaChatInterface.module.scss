@@ -77,6 +77,17 @@
   z-index: var(--z-sticky);
 }
 
+/* Mobile: the StatusPill should hug the chat input instead of floating in the
+   86%-centered desktop column. Span full width with the input's side inset so
+   the pill's right edge lines up with the input box below, and sit lower so the
+   gap to the input is tight (the user reported too much right/bottom padding). */
+:global(.mobileTheme) .bottomBar {
+  bottom: var(--space-1);
+  margin: 0;
+  max-width: none;
+  padding-inline: var(--space-3);
+}
+
 .empty {
   color: var(--gray-9);
   text-align: center;

@@ -39,7 +39,7 @@ type TerminalInstanceProps = {
   onConnectionStatusChange?: (status: TerminalConnectionStatus) => void;
 };
 
-const TerminalInstance = ({
+export const TerminalInstance = ({
   workspaceID,
   terminalIndex,
   isVisible,

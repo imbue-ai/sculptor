@@ -4,6 +4,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useEffect, useMemo, useRef } from "react";
 
+import { useIsMobile } from "../../common/hooks/useLayoutMode.ts";
 import { useImbueNavigate, useWorkspacePageParams } from "../../common/NavigateUtils.ts";
 import type { InsertSkillArg } from "../../common/state/atoms/chatActions.ts";
 import { tasksArrayAtom } from "../../common/state/atoms/tasks.ts";
@@ -25,6 +26,7 @@ import { ChatPanelContent } from "./components/ChatPanelContent.tsx";
 import { DiffSplitContainer } from "./components/DiffSplitContainer.tsx";
 import { WorkspaceBanner } from "./components/WorkspaceBanner.tsx";
 import { useArtifactSync } from "./hooks/useArtifactSync";
+import { MobileWorkspaceShell } from "./mobile/MobileWorkspaceShell.tsx";
 import styles from "./WorkspacePage.module.scss";
 
 const WorkspacePageContent = ({ taskID }: { taskID: string }): ReactElement => {
@@ -75,6 +77,7 @@ const WorkspacePageContent = ({ taskID }: { taskID: string }): ReactElement => {
 
 export const WorkspacePage = (): ReactElement | null => {
   const { workspaceID, agentID: agentIDFromUrl } = useWorkspacePageParams();
+  const isMobile = useIsMobile();
   const { navigateToAgent } = useImbueNavigate();
   const { navigateToNextTab } = useWorkspaceTabActions();
   const tasks = useAtomValue(tasksArrayAtom);
@@ -129,5 +132,11 @@ export const WorkspacePage = (): ReactElement | null => {
   ]);
 
   if (!agentIDFromUrl) return null;
+  // The single mobile/desktop branch point (F2). Mobile renders the
+  // single-column shell; it deliberately does NOT render WorkspacePageContent,
+  // so the desktop panel-layout persistence hooks (usePanelLayoutSync /
+  // usePerWorkspacePanelLayout) never run and desktop preferences survive a
+  // mobile session untouched (F3).
+  if (isMobile) return <MobileWorkspaceShell taskID={agentIDFromUrl} />;
   return <WorkspacePageContent taskID={agentIDFromUrl} />;
 };

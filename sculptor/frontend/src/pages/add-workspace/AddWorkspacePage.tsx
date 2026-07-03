@@ -16,6 +16,7 @@ import {
   WorkspaceInitializationStrategy,
 } from "../../api";
 import { HTTPException } from "../../common/Errors.ts";
+import { useIsMobile } from "../../common/hooks/useLayoutMode.ts";
 import { useImbueNavigate } from "../../common/NavigateUtils.ts";
 import {
   AGENT_TYPE_LABELS,
@@ -52,6 +53,7 @@ import styles from "./AddWorkspacePage.module.scss";
 import { BranchNameField } from "./components/BranchNameField.tsx";
 import { NewWorkspaceForm } from "./components/NewWorkspaceForm.tsx";
 import { useBranchNamePreview } from "./hooks/useBranchNamePreview.ts";
+import { MobileNewWorkspace } from "./MobileNewWorkspace.tsx";
 
 export const AddWorkspacePage = (): ReactElement => {
   const { draftId } = useParams<{ draftId: string }>();
@@ -59,6 +61,7 @@ export const AddWorkspacePage = (): ReactElement => {
     throw new Error("AddWorkspacePage requires a draftId route parameter");
   }
   const { navigateToAgent } = useImbueNavigate();
+  const isMobile = useIsMobile();
   const isInPlaceWorkspacesEnabled = useAtomValue(isInPlaceWorkspacesEnabledAtom);
   const isCloneWorkspacesEnabled = useAtomValue(isCloneWorkspacesEnabledAtom);
   const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
@@ -125,6 +128,12 @@ export const AddWorkspacePage = (): ReactElement => {
   // collapse into one piece of state so they can never disagree.
   const [branchNameOverride, setBranchNameOverride] = useDraftBranchNameOverride(draftId);
   const isBranchNameManuallyEdited = branchNameOverride !== null;
+  // Bumped to pull a fresh auto-generated branch name (mobile "regenerate" ⇄).
+  const [regenerationNonce, setRegenerationNonce] = useState(0);
+  // `null` means "branch from the derived default" (origin/main). A string is
+  // the user's explicit source-branch pick (mobile Source pill). Desktop has no
+  // source picker, so this stays null there.
+  const [userSelectedSourceBranch, setUserSelectedSourceBranch] = useState<string | null>(null);
 
   const handleModeChange = useCallback(
     (nextMode: WorkspaceInitializationStrategy): void => {
@@ -144,6 +153,12 @@ export const AddWorkspacePage = (): ReactElement => {
     [setSelectedProjectId, setBranchNameOverride, setUserSelectedBranch],
   );
 
+  // Drop any manual edit and pull a fresh auto-generated name from the backend.
+  const handleRegenerateBranchName = useCallback((): void => {
+    setBranchNameOverride(null);
+    setRegenerationNonce((n) => n + 1);
+  }, [setBranchNameOverride]);
+
   // Single source of truth for the branch-name field. The hook owns preview
   // fetching and the debounced collision check; the parent owns the override.
   const {
@@ -156,6 +171,7 @@ export const AddWorkspacePage = (): ReactElement => {
     workspaceName,
     mode,
     override: branchNameOverride,
+    regenerationNonce,
   });
 
   // Repo info for the selected project
@@ -167,6 +183,11 @@ export const AddWorkspacePage = (): ReactElement => {
     }
     return repoInfo?.currentBranch;
   }, [userSelectedBranch, repoInfo]);
+
+  // The branch new work forks from: the user's explicit pick (mobile Source
+  // pill) if any, otherwise the derived default. Desktop never sets an override
+  // so it keeps branching from origin/main exactly as before.
+  const effectiveSourceBranch = userSelectedSourceBranch ?? sourceBranch;
 
   // Load projects on mount into global atom
   useEffect(() => {
@@ -272,7 +293,7 @@ export const AddWorkspacePage = (): ReactElement => {
         body: {
           projectId: selectedProjectId,
           initializationStrategy: mode,
-          sourceBranch: mode === WorkspaceInitializationStrategy.IN_PLACE ? undefined : sourceBranch,
+          sourceBranch: mode === WorkspaceInitializationStrategy.IN_PLACE ? undefined : effectiveSourceBranch,
           description: workspaceName.trim() || "Untitled workspace",
           requestedBranchName,
         },
@@ -337,7 +358,7 @@ export const AddWorkspacePage = (): ReactElement => {
         has_workspace_name: workspaceName.trim().length > 0,
         // Branch names are user-entered text (they can encode feature/ticket/
         // customer names), so record only whether one was chosen.
-        has_source_branch: sourceBranch != null,
+        has_source_branch: effectiveSourceBranch != null,
       });
 
       navigateToAgent(workspaceId, agentResponse.data.id);
@@ -376,7 +397,7 @@ export const AddWorkspacePage = (): ReactElement => {
     registrations,
     agentTypeValue,
     setLastUsedAgentType,
-    sourceBranch,
+    effectiveSourceBranch,
     workspaceName,
     effectiveBranchName,
     defaultModelPreference,
@@ -414,6 +435,34 @@ export const AddWorkspacePage = (): ReactElement => {
       <Flex align="center" justify="center" height="var(--app-height)">
         <Spinner size="3" />
       </Flex>
+    );
+  }
+
+  // The single mobile branch point for the landing (L1-L4). MobileNewWorkspace
+  // is pure presentation over the same create-workspace core wired above —
+  // name draft, project selection, sourceBranch default, and handleSubmit are
+  // passed straight in, so nothing is duplicated.
+  if (isMobile) {
+    return (
+      <MobileNewWorkspace
+        workspaceName={workspaceName}
+        onWorkspaceNameChange={setWorkspaceName}
+        nameInputRef={nameInputRef}
+        isPending={isPending}
+        onSubmit={handleSubmit}
+        projects={projects}
+        selectedProjectId={selectedProjectId}
+        onProjectChange={handleProjectChange}
+        repoInfo={repoInfo}
+        fetchRepoInfo={fetchRepoInfo}
+        branchName={effectiveBranchName}
+        isBranchNameLoading={isBranchNamePreviewLoading}
+        branchNameCollision={branchNameStatus}
+        onBranchNameChange={setBranchNameOverride}
+        onRegenerateBranchName={handleRegenerateBranchName}
+        sourceBranch={effectiveSourceBranch}
+        onSourceBranchChange={setUserSelectedSourceBranch}
+      />
     );
   }
 

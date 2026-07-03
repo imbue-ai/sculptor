@@ -29,6 +29,11 @@ type UseBranchNamePreviewArgs = {
   mode: WorkspaceInitializationStrategy;
   /** The user's manual override; null means "use the auto-filled preview". */
   override: string | null;
+  /**
+   * Bumping this re-runs the preview fetch even when nothing else changed, so a
+   * "regenerate" control can pull a fresh auto-generated name. Defaults to 0.
+   */
+  regenerationNonce?: number;
 };
 
 const PREVIEW_DEBOUNCE_MS = 250;
@@ -39,6 +44,7 @@ export function useBranchNamePreview({
   workspaceName,
   mode,
   override,
+  regenerationNonce = 0,
 }: UseBranchNamePreviewArgs): BranchNamePreviewState {
   const [preview, setPreview] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -89,7 +95,7 @@ export function useBranchNamePreview({
     return (): void => {
       window.clearTimeout(timer);
     };
-  }, [projectId, workspaceName, mode, shouldFetchPreview]);
+  }, [projectId, workspaceName, mode, shouldFetchPreview, regenerationNonce]);
 
   // A validation check only runs for a non-in-place strategy with a project and a
   // non-empty branch name; otherwise there is no result to report, so status is
