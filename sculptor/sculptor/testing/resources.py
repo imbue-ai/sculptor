@@ -265,7 +265,10 @@ def _get_or_create_shared_instance(
         browser = None
     else:
         electron_frontend = None
-        browser = playwright.chromium.launch()
+        # /dev/shm is tiny in containers (podman defaults to 64MB) and Chromium
+        # uses it for renderer shared memory — without this flag the renderer
+        # crashes on non-trivial pages. Same flag manual_test_harness passes.
+        browser = playwright.chromium.launch(args=["--disable-dev-shm-usage"])
         browser_context = browser.new_context(viewport=DEFAULT_TEST_VIEWPORT, locale=DEFAULT_TEST_LOCALE)
         page = browser_context.new_page()
         configure_page(page, timeout_ms=default_timeout_ms)

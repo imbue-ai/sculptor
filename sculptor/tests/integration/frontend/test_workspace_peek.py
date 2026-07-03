@@ -166,9 +166,11 @@ def test_workspace_peek_popover_on_scrolled_tab(
     navigate_to_add_workspace_page(page)
 
     # Shrink viewport to force tab overflow (3 workspace tabs + "Open Workspace"
-    # tab at 200px each = 800px, which won't fit in a 500px-wide viewport).
+    # tab at 200px each = 800px, which won't fit in a 780px-wide viewport).
+    # Must stay ABOVE the 768px mobile breakpoint: below it the mobile shell
+    # replaces the workspace tab strip entirely and there is no tab to hover.
     original_size = page.viewport_size
-    page.set_viewport_size({"width": 500, "height": original_size["height"]})
+    page.set_viewport_size({"width": 780, "height": original_size["height"]})
 
     # "WS 1" is the leftmost tab, which may be scrolled out of view.
     # Scroll it into view and hover to trigger the peek popover.

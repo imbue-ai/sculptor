@@ -43,8 +43,10 @@ from sculptor.testing.user_stories import user_story
 _INITIAL_WIDTH = 1200
 # "Narrow" and "widen" stay in the desktop range so no responsive / mobile /
 # panel-collapse layout kicks in, while clearly reflowing the long paragraph
-# text (narrower => taller content, wider => shorter).
-_NARROW_WIDTH = 560
+# text (narrower => taller content, wider => shorter). "Desktop range" means
+# ABOVE the 768px mobile breakpoint — at or below 767px the mobile shell
+# remounts the whole chat, which resets the scroll state these tests assert on.
+_NARROW_WIDTH = 800
 _WIDE_WIDTH = 1400
 # The height is held constant across every before/after, so only width changes.
 _VIEWPORT_HEIGHT = 800
