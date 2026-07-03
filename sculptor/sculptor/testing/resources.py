@@ -750,7 +750,7 @@ def _make_test_user_config(claude_path: str = "claude") -> UserConfig:
         is_session_recording_enabled=True,
         is_privacy_policy_consented=True,
         is_telemetry_level_set=True,
-        # Managed pi has no fake-on-PATH path, so integration tests pin pi=CUSTOM (bare "pi") to resolve the FakePi stub on PATH.
+        # Pin pi to CUSTOM (bare "pi") so it resolves the FakePi stub on PATH without touching the managed-copy directory.
         dependency_paths=DependencyPaths(claude=claude_path, pi="pi"),
     )
 

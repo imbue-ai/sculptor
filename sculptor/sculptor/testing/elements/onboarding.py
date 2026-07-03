@@ -150,6 +150,13 @@ class PlaywrightInstallationStepElement(PlaywrightIntegrationTestElement):
     def get_git_card(self) -> PlaywrightDependencyCardElement:
         return self.get_dependency_card("git")
 
+    def get_pi_card(self) -> PlaywrightDependencyCardElement:
+        return self.get_dependency_card("pi")
+
+    def get_optional_header(self) -> Locator:
+        """Get the 'Optional' header above the gh + pi dependency cards."""
+        return self.get_by_test_id(ElementIDs.ONBOARDING_OPTIONAL_DEPENDENCIES_HEADER)
+
     def get_complete_button(self) -> Locator:
         """Get the onboarding complete button."""
         return self.get_by_test_id(ElementIDs.ONBOARDING_COMPLETE_BUTTON)
