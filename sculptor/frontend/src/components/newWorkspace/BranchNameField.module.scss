@@ -56,6 +56,15 @@
   gap: var(--space-1);
 }
 
+// Stands in for the input on a cold open while the first auto-filled branch name
+// is fetched, so the field never flashes its placeholder. Sized to a typical
+// `<user>/<slug>` name at the input's font-size-1 line height.
+.fieldSkeleton {
+  border-radius: var(--radius-1);
+  height: var(--font-size-1);
+  width: 160px;
+}
+
 .input {
   background: transparent;
   border: none;
@@ -79,9 +88,12 @@
 // Borderless, iconless variant — sits under the workspace title as an editable
 // subtitle rather than a bordered chip. Drops the border/fill/side-padding and
 // hugs its content (via the input's `field-sizing`) so the shuffle button trails
-// the branch name instead of floating at the far end of a full-width row.
+// the branch name instead of floating at the far end of a full-width row. A
+// slightly wider gap than the chip variant gives the trailing sparkles button
+// even breathing room next to the branch text.
 .pillPlain {
   border-color: transparent;
+  gap: var(--space-2);
   padding-left: 0;
   padding-right: 0;
   width: fit-content;
@@ -134,10 +146,29 @@
   }
 }
 
-.spinner {
-  color: var(--gray-9);
-  flex-shrink: 0;
-  font-size: var(--font-size-1);
+// The sparkles glyph pulses while a fresh auto-filled name is being generated,
+// doubling as the field's loading indicator (there is no separate spinner).
+// Respects reduced-motion by holding the icon at a steady dimmed state.
+.sparkleLoading {
+  animation: sparklePulse 1.2s ease-in-out infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    opacity: 60%;
+  }
+}
+
+@keyframes sparklePulse {
+  0%,
+  100% {
+    opacity: 45%;
+    transform: scale(0.85);
+  }
+
+  50% {
+    opacity: 100%;
+    transform: scale(1.1);
+  }
 }
 
 // Rendered only when there's an error, so the error-free field stays chip-height.

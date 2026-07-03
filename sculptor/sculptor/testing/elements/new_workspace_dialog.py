@@ -192,9 +192,6 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
     def get_branch_shuffle_button(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.BRANCH_NAME_SHUFFLE_BUTTON)
 
-    def get_branch_reset_button(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.BRANCH_NAME_RESET_BUTTON)
-
     # -- Create --
 
     def get_create_button(self) -> Locator:

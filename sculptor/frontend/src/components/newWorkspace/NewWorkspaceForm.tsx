@@ -1,4 +1,4 @@
-import { Button, Flex, Spinner, Switch, Text, Tooltip } from "@radix-ui/themes";
+import { Button, Skeleton, Switch, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -127,7 +127,6 @@ export const NewWorkspaceForm = ({
 
   const isBranchNameManuallyEdited = branchNameOverride !== null;
   const {
-    preview: branchNamePreview,
     displayedValue: effectiveBranchName,
     isLoading: isBranchNamePreviewLoading,
     collision: branchNameCollision,
@@ -323,13 +322,13 @@ export const NewWorkspaceForm = ({
   }, [handleSubmit]);
 
   // JSX and rendering logic
-  if (isLoadingProjects) {
-    return (
-      <Flex align="center" justify="center" className={styles.loading}>
-        <Spinner size="3" />
-      </Flex>
-    );
-  }
+  //
+  // The form renders immediately from cached state rather than blocking behind a
+  // spinner: `projects` and the per-project `repoInfo` are session atoms, so a
+  // repeat open paints instantly. Only genuinely-cold pieces fall back to a
+  // skeleton — the repo crumb until a project resolves, and the source-branch
+  // chip until its `repoInfo` arrives (a fresh fetch on every open, since the
+  // source branch is the one field we always re-source from git).
 
   // Breadcrumb repo crumb — an avatar initial + repo name, in place of the
   // default `📁 repo <name>` trigger, so the top context row reads like a
@@ -339,25 +338,34 @@ export const NewWorkspaceForm = ({
   const crumbInitial = (currentProject?.name?.trim()?.[0] ?? "?").toUpperCase();
   const isPromptEmpty = prompt.trim() === "";
 
+  // Skeleton the crumb only on a cold first open (no cached project resolved yet
+  // while the initial project fetch is in flight); otherwise the real selector
+  // renders, including the "no repos → Select repo / add one" empty case.
+  const isRepoCrumbLoading = isLoadingProjects && !currentProject;
+
   return (
     <>
       <div ref={formRef} className={styles.shell} data-testid={ElementIds.NEW_WORKSPACE_FORM}>
         {/* ── Top breadcrumb: repo crumb → agent → environment → source → new branch ── */}
         <div className={styles.context}>
-          <RepoSelector
-            projects={projects}
-            selectedProjectId={selectedProjectId}
-            onProjectChange={handleProjectChange}
-            className={styles.crumbTrigger}
-            triggerContent={
-              <span className={styles.crumb}>
-                <span className={styles.crumbIco} aria-hidden>
-                  {crumbInitial}
+          {isRepoCrumbLoading ? (
+            <Skeleton className={styles.crumbSkeleton} />
+          ) : (
+            <RepoSelector
+              projects={projects}
+              selectedProjectId={selectedProjectId}
+              onProjectChange={handleProjectChange}
+              className={styles.crumbTrigger}
+              triggerContent={
+                <span className={styles.crumb}>
+                  <span className={styles.crumbIco} aria-hidden>
+                    {crumbInitial}
+                  </span>
+                  <span className={styles.crumbName}>{crumbName}</span>
                 </span>
-                <span className={styles.crumbName}>{crumbName}</span>
-              </span>
-            }
-          />
+              }
+            />
+          )}
 
           <AgentTypeSelect value={agentTypeValue} onChange={setAgentTypeValue} className={styles.toolbarPill} />
 
@@ -388,13 +396,8 @@ export const NewWorkspaceForm = ({
                 className={styles.toolbarPill}
               />
             )
-          ) : selectedProjectId ? (
-            <span className={styles.pillsLoading}>
-              <Spinner size="1" />
-              <Text size="1" color="gray">
-                Loading branches…
-              </Text>
-            </span>
+          ) : selectedProjectId || isLoadingProjects ? (
+            <Skeleton className={styles.branchSkeleton} />
           ) : null}
         </div>
 
@@ -421,9 +424,7 @@ export const NewWorkspaceForm = ({
                 isManuallyEdited={isBranchNameManuallyEdited}
                 isLoading={isBranchNamePreviewLoading}
                 collision={branchNameCollision}
-                preview={branchNamePreview}
                 onUserEdit={(value): void => setBranchNameOverride(value)}
-                onReset={(): void => setBranchNameOverride(null)}
                 onShuffle={handleShuffle}
                 disabled={isCreating}
                 variant="plain"

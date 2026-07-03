@@ -1,10 +1,5 @@
 @use "scrollbar" as *;
 
-.loading {
-  min-height: 200px;
-  width: 100%;
-}
-
 .shell {
   display: flex;
   flex: 1 1 auto;
@@ -55,6 +50,13 @@
   &:hover {
     background: var(--gray-a2);
     border-color: var(--gray-a5);
+  }
+
+  // Dim the Radix caret to gray-10 so it matches the agent/environment/source
+  // carets (which pick up `.toolbarPill svg`); without this the crumb caret
+  // inherits the crumb's gray-12 text and reads brighter/heavier than the rest.
+  svg {
+    color: var(--gray-10);
   }
 }
 
@@ -120,12 +122,20 @@
   }
 }
 
-.pillsLoading {
-  align-items: center;
-  color: var(--gray-10);
-  display: inline-flex;
-  font-size: var(--font-size-1);
-  gap: var(--space-1);
+// Skeleton placeholders sized to the breadcrumb chips they stand in for, so the
+// context row keeps its height and layout while cold data loads. Height matches
+// the chips' 3px padding + font-size-1 line; widths approximate a repo name and
+// a "source <branch>" label.
+.crumbSkeleton {
+  border-radius: var(--radius-3);
+  height: 24px;
+  width: 96px;
+}
+
+.branchSkeleton {
+  border-radius: var(--radius-3);
+  height: 24px;
+  width: 116px;
 }
 
 // Title + branch subtitle as one unit: a tight internal gap so the branch reads
@@ -148,7 +158,7 @@
   gap: var(--space-3);
   min-height: 0;
   overflow: hidden auto;
-  padding: var(--space-3) var(--space-5) var(--space-4);
+  padding: var(--space-4) var(--space-5) var(--space-4);
 
   @include thin-scrollbar($autohide: false);
 }

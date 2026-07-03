@@ -1,5 +1,5 @@
-import { IconButton, Link, Tooltip } from "@radix-ui/themes";
-import { GitBranchIcon, ShuffleIcon } from "lucide-react";
+import { IconButton, Skeleton, Tooltip } from "@radix-ui/themes";
+import { GitBranchIcon, SparklesIcon } from "lucide-react";
 import type { ReactElement } from "react";
 
 import type { WorkspaceInitializationStrategy } from "~/api";
@@ -12,18 +12,14 @@ type BranchNameFieldProps = {
   mode: WorkspaceInitializationStrategy;
   /** The displayed value (override-or-preview). */
   value: string;
-  /** Whether the user has typed into the field; controls the reset link. */
+  /** Whether the user has typed into the field; distinguishes auto-fill from manual entry. */
   isManuallyEdited: boolean;
   /** True while the preview fetch is in flight. */
   isLoading: boolean;
   /** Result of the debounced collision check on `value`. */
   collision: BranchNameCollisionState;
-  /** Latest auto-filled preview, used to decide whether to offer reset. */
-  preview: string;
   /** Called whenever the user types into the input (already sanitized). */
   onUserEdit: (value: string) => void;
-  /** Called when the user clicks "reset" to return to auto-fill mode. */
-  onReset: () => void;
   /** Called when the user clicks the shuffle button to re-roll the name. */
   onShuffle: () => void;
   disabled?: boolean;
@@ -51,9 +47,8 @@ const sanitizeBranchName = (raw: string): string =>
 
 /**
  * The branch-name field: a monospace pill with input sanitization, a shuffle
- * button to re-roll the auto-filled name, and a STABLE error slot that is always
- * rendered (an empty fixed-height row when there is nothing to show) so the
- * dialog never jumps as the collision state changes.
+ * button to re-roll the auto-filled name, a skeleton that stands in for the input
+ * on a cold open, and a collision-error row rendered only when a name clashes.
  */
 export const BranchNameField = ({
   mode,
@@ -61,9 +56,7 @@ export const BranchNameField = ({
   isManuallyEdited,
   isLoading,
   collision,
-  preview,
   onUserEdit,
-  onReset,
   onShuffle,
   disabled,
   variant = "chip",
@@ -75,8 +68,15 @@ export const BranchNameField = ({
 
   const placeholder = mode === Strategy.WORKTREE ? "Branch name (required)" : "Branch name (optional)";
   const hasCollision = collision === "exists";
-  const canReset = isManuallyEdited && preview !== value;
   const isPlain = variant === "plain";
+  // The sparkles glyph doubles as the loading affordance: it pulses while a
+  // fresh auto-filled name is being generated (there is no separate spinner).
+  const isGenerating = isLoading && !isManuallyEdited;
+  // On a cold open there is no name yet, so the empty input would flash its
+  // placeholder while the first auto-filled name is fetched. Show a skeleton in
+  // its place instead. Once a name exists (re-roll/edit), the field stays put and
+  // the pulsing sparkle carries the loading state.
+  const isColdLoading = isLoading && !isManuallyEdited && value.trim() === "";
 
   return (
     <div className={styles.container} data-testid={ElementIds.NEW_WORKSPACE_CONTEXT_PILL}>
@@ -86,31 +86,21 @@ export const BranchNameField = ({
             <GitBranchIcon size={12} />
           </span>
         )}
-        <input
-          type="text"
-          className={styles.input}
-          value={value}
-          onChange={(e): void => onUserEdit(sanitizeBranchName(e.target.value))}
-          placeholder={placeholder}
-          data-testid={ElementIds.BRANCH_NAME_INPUT}
-          disabled={disabled}
-          spellCheck={false}
-          autoComplete="off"
-        />
-        {isLoading && !isManuallyEdited ? <span className={styles.spinner}>…</span> : null}
-        {canReset ? (
-          <Link
-            href="#"
-            size="1"
-            data-testid={ElementIds.BRANCH_NAME_RESET_BUTTON}
-            onClick={(e): void => {
-              e.preventDefault();
-              onReset();
-            }}
-          >
-            reset
-          </Link>
-        ) : null}
+        {isColdLoading ? (
+          <Skeleton className={styles.fieldSkeleton} />
+        ) : (
+          <input
+            type="text"
+            className={styles.input}
+            value={value}
+            onChange={(e): void => onUserEdit(sanitizeBranchName(e.target.value))}
+            placeholder={placeholder}
+            data-testid={ElementIds.BRANCH_NAME_INPUT}
+            disabled={disabled}
+            spellCheck={false}
+            autoComplete="off"
+          />
+        )}
         <Tooltip content="Shuffle branch name">
           <IconButton
             type="button"
@@ -122,7 +112,7 @@ export const BranchNameField = ({
             disabled={disabled}
             onClick={onShuffle}
           >
-            <ShuffleIcon size={12} />
+            <SparklesIcon size={12} className={isGenerating ? styles.sparkleLoading : undefined} />
           </IconButton>
         </Tooltip>
       </div>
