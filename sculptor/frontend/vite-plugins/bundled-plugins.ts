@@ -132,9 +132,16 @@ export const bundledPlugins = (): Plugin => {
       server.watcher.on("change", (file: string): void => {
         if (!file.startsWith(sourceRoot) || isRebuilding) return;
         isRebuilding = true;
-        void buildAll().finally(() => {
-          isRebuilding = false;
-        });
+        void buildAll()
+          // A failed rebuild (a broken edit, a file missing mid-rename) must
+          // not crash the dev server as an unhandled rejection — log it and
+          // keep serving; the next change retries.
+          .catch((error: unknown) => {
+            server.config.logger.error(`bundled-plugins: plugin rebuild failed: ${String(error)}`);
+          })
+          .finally(() => {
+            isRebuilding = false;
+          });
       });
     },
   };
