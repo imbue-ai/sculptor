@@ -1,3 +1,5 @@
+import time
+
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
 from playwright.sync_api import expect
@@ -260,6 +262,29 @@ def get_max_following_tail_gap(page: Page, frames: int = 18) -> float | None:
     }})""",
         frames,
     )
+
+
+def wait_for_stable_following_tail_gap(
+    page: Page, *, stability_tolerance_px: int = 8, timeout_ms: int = 8_000
+) -> float | None:
+    """The tail gap once the pin has settled at its steady state, while following.
+
+    Entering ``following`` scrolls toward the pin position, so a single
+    ``get_max_following_tail_gap`` window sampled right away can catch that transit
+    instead of the resting gap. This polls successive windows until two consecutive
+    ones agree within ``stability_tolerance_px`` — the pin has landed (at a correct
+    *or* buggy resting position; the caller's assertions judge which) — and returns
+    that stable gap. On timeout the last sample is returned rather than raising, so
+    the caller's assertions report the actual geometry.
+    """
+    deadline = time.monotonic() + timeout_ms / 1000
+    previous = get_max_following_tail_gap(page)
+    while time.monotonic() < deadline:
+        current = get_max_following_tail_gap(page)
+        if previous is not None and current is not None and abs(current - previous) <= stability_tolerance_px:
+            return current
+        previous = current
+    return previous
 
 
 def scroll_alpha_chat_to_top(page: Page) -> None:

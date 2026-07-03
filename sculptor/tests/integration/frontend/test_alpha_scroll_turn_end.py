@@ -17,10 +17,10 @@ from playwright.sync_api import expect
 
 from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.alpha_chat_view import get_last_turn_footer_viewport_gaps
-from sculptor.testing.elements.alpha_chat_view import get_max_following_tail_gap
 from sculptor.testing.elements.alpha_chat_view import read_scroll_top_sampler
 from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_to_top
 from sculptor.testing.elements.alpha_chat_view import start_scroll_top_sampler
+from sculptor.testing.elements.alpha_chat_view import wait_for_stable_following_tail_gap
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.panels import close_bottom_panel
@@ -84,13 +84,13 @@ def test_following_keeps_pin_gap_below_last_message(sculptor_instance_: Sculptor
         f'fake_claude:stream_text `{{"text": "{_STREAM_TEXT}", "chunk_size": 50, "delay_seconds": 0.1}}`',
     )
 
-    # Wait until we are following the live tail, then let it stream for a span so the
-    # measurement is taken mid-stream (well before the turn ends).
+    # Wait until we are following the live tail, then sample the gap once it has
+    # stabilized: entering `following` scrolls toward the pin, so the first sampling
+    # windows can catch that transit rather than the resting gap. The stream is long
+    # enough (~10s) that the stable sample lands mid-stream, well before the turn ends.
     expect(view).to_have_attribute("data-scroll-phase", "following", timeout=30_000)
-    page.wait_for_timeout(1500)
+    max_gap = wait_for_stable_following_tail_gap(page)
     expect(view).to_have_attribute("data-scroll-phase", "following")
-
-    max_gap = get_max_following_tail_gap(page)
 
     # While following, the last message keeps the pin gap above the viewport bottom:
     # not hugging it flush (no breathing room under the newest line, and the bottom
