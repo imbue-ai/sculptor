@@ -24,7 +24,7 @@ import { RUNTIME_MODULE_SPECIFIERS } from "./plugin-runtime-stubs.ts";
  */
 
 /** Plugins built from TS/TSX source at `plugins/<id>/src/index.tsx`. */
-const COMPILED_PLUGIN_IDS: ReadonlyArray<string> = ["linear-issue", "preview-switcher"];
+const COMPILED_PLUGIN_IDS: ReadonlyArray<string> = ["linear-issue", "openhost-preview-switcher"];
 
 const buildCompiledPlugin = async (frontendRoot: string, id: string): Promise<void> => {
   const sourceDir = path.join(frontendRoot, "plugins", id);

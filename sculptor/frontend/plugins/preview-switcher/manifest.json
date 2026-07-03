@@ -1,7 +1,0 @@
-{
-  "id": "preview-switcher",
-  "name": "Preview Switcher",
-  "version": "0.1.0",
-  "entry": "main.js",
-  "sdkVersion": "^1.0.0"
-}

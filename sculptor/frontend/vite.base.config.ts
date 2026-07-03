@@ -178,11 +178,20 @@ export interface FrontendConfigOptions {
 /**
  * OpenHost preview identity: inject `<meta name="sculptor-preview">` into
  * index.html so the /proxy/ switchboard (openhost-preview-fallback.html) and
- * the preview-switcher plugin can label this preview. A dev server has no
- * "build time" to report; instead branch/sha/dirty are read fresh from the
+ * the openhost-preview-switcher plugin can label this preview. A dev server has
+ * no "build time" to report; instead branch/sha/dirty are read fresh from the
  * working tree on each index.html request. HMR patches modules without
  * refetching index.html, so a loaded page keeps the identity it loaded with —
  * but scanners always GET index.html anew, so listings stay current.
+ *
+ * Deliberately calls git per request rather than reusing an existing config
+ * value: Vite carries no VCS context of its own, and the one git-derived value
+ * we do have (the web build's sentry release sha, read once in
+ * vite.web.config.ts) is frozen at config load. A preview session is
+ * long-lived — commits land mid-session while HMR keeps serving — so a
+ * boot-time identity would go stale exactly when the label matters. The cost
+ * is a few ~10ms subprocess calls per index.html request, dev-only and gated
+ * behind SCULPTOR_OPENHOST_PROXY.
  */
 function previewIdentity(root: string): Plugin {
   const git = (args: string): string => {
