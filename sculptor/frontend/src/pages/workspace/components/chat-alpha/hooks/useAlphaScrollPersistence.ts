@@ -135,7 +135,7 @@ export const useAlphaScrollPersistence = (
   const [, setSettleRender] = useState(0);
   // Set while a restore has swept fresh measurements and the final pre-paint
   // apply is still owed; consumed by the settle layout effect below.
-  const pendingPrePaintApplyRef = useRef(false);
+  const isPrePaintApplyPendingRef = useRef(false);
 
   // Synchronously measure every mounted row and hand the virtualizer the
   // restored offset, inside the switch commit (pre-paint).
@@ -145,7 +145,11 @@ export const useAlphaScrollPersistence = (
   // pre-setting virtualizer.scrollOffset lets the settle render compute the
   // window at the *restored* offset instead of the outgoing task's. Per-item
   // scroll compensation is gated off for the whole `measuring` layout phase,
-  // so none of these measurements can move scrollTop on their own.
+  // so none of these measurements can move scrollTop on their own. While
+  // virtual-core still believes a scroll is in flight (~150ms after any scroll
+  // event) measureElement declines to resize, so a switch right after a scroll
+  // sweeps nothing — the settle then re-applies the estimate value and the
+  // deferred safety net below carries the correction.
   const sweepMountedMeasurements = useCallback((): void => {
     const el = scrollContainerRef.current;
     if (!el) return;
@@ -162,8 +166,8 @@ export const useAlphaScrollPersistence = (
   // effect below so it consumes the flag in that forced render, not in the
   // same commit that set it.
   useLayoutEffect(() => {
-    if (!pendingPrePaintApplyRef.current) return;
-    pendingPrePaintApplyRef.current = false;
+    if (!isPrePaintApplyPendingRef.current) return;
+    isPrePaintApplyPendingRef.current = false;
     const el = scrollContainerRef.current;
     if (!el) return;
     // Rebuild positions from the swept sizes and reflect the corrected total
@@ -200,6 +204,15 @@ export const useAlphaScrollPersistence = (
       return;
     }
 
+    // Force the measurements memo to rebuild before reading. The task-switch
+    // wipe (useAlphaVirtualizer's layout effect, earlier in this commit) only
+    // invalidates the size cache; the measurementsCache *field* still holds
+    // the array computed during the render — the outgoing task's geometry.
+    // Rebuilding here makes the first apply resolve against the incoming
+    // task's cached estimates, and gives the sweep's partial rebuilds the
+    // right baseline for every row below the mounted window.
+    virtualizer.getVirtualItems();
+
     // First apply: resolves the anchor against the virtualizer's *estimated*
     // heights — the wipe on task switch means the items have not re-measured
     // to their real sizes yet. This lands close enough that the settle render
@@ -216,7 +229,7 @@ export const useAlphaScrollPersistence = (
     // re-assert below rather than writing a mid-settle guess.
     if (resolution === "anchor") {
       sweepMountedMeasurements();
-      pendingPrePaintApplyRef.current = true;
+      isPrePaintApplyPendingRef.current = true;
       setSettleRender((count) => count + 1);
     }
 
@@ -243,21 +256,28 @@ export const useAlphaScrollPersistence = (
       pendingRafsRef.current.add(id2);
     });
     pendingRafsRef.current.add(id1);
-  }, [scrollContainerRef, filteredMessages, applyScrollPosition, sweepMountedMeasurements, machine, taskId]);
+  }, [
+    scrollContainerRef,
+    virtualizer,
+    filteredMessages,
+    applyScrollPosition,
+    sweepMountedMeasurements,
+    machine,
+    taskId,
+  ]);
 
   // Restore scroll position synchronously before paint so the user never
   // sees the old scroll position flash before jumping to the saved one.
   useLayoutEffect(() => {
     if (prevTaskIdRef.current !== taskId) {
       prevTaskIdRef.current = taskId;
-
       restore();
     }
   }, [taskId, restore]);
 
   // Initial restore on mount; cancel pending rAFs on unmount
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- see the task-switch effect above
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- restore() forces the pre-paint settle render (see the settle layout effect above); the cascade is the mechanism, not an accident
     restore();
     const rafs = pendingRafsRef.current;
     return (): void => cancelPendingRafs(rafs);

@@ -192,7 +192,9 @@ def read_scroll_top_sampler(page: Page) -> dict:
     """Stop the sampler; return the sampled scrollTop range.
 
     Keys: ``first`` (at sampler start), ``min``/``max`` (extremes while
-    sampling), ``final`` (current). All ``None`` when the chat view is absent.
+    sampling), ``final`` (current). ``first``/``min``/``max`` are ``None`` when
+    the sampler was never started; ``final`` is ``None`` when the chat view is
+    absent at read time.
     """
     return page.evaluate(
         f"""() => {{
@@ -321,6 +323,21 @@ def scroll_alpha_chat_to_top(page: Page) -> None:
         requestAnimationFrame(enforce);
     }})"""
     )
+
+
+def wait_for_scroll_save_debounce(page: Page) -> None:
+    """Wait for the chat's rAF-debounced scroll-position save to record.
+
+    The save fires one animation frame after the last scroll event and there is
+    nothing user-visible to await; two frames of frame-clock cover it and hold
+    under CI load where a fixed sleep would not.
+    """
+    page.evaluate("() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+
+
+def get_chat_task_id(page: Page) -> str | None:
+    """Read the task id the chat panel is currently showing (``data-taskid``)."""
+    return page.get_by_test_id(ElementIDs.CHAT_PANEL).get_attribute("data-taskid")
 
 
 def wait_for_chat_task_changed(page: Page, outgoing_task_id: str | None) -> None:

@@ -5,12 +5,14 @@ from playwright.sync_api import expect
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.alpha_chat_view import get_alpha_scroll_position
+from sculptor.testing.elements.alpha_chat_view import get_chat_task_id
 from sculptor.testing.elements.alpha_chat_view import read_scroll_top_sampler
 from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_by
 from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_to_top
 from sculptor.testing.elements.alpha_chat_view import start_scroll_top_sampler
 from sculptor.testing.elements.alpha_chat_view import wait_for_alpha_scroll_settled
 from sculptor.testing.elements.alpha_chat_view import wait_for_chat_task_changed
+from sculptor.testing.elements.alpha_chat_view import wait_for_scroll_save_debounce
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -48,7 +50,7 @@ def test_scroll_position_restored_on_task_switch(sculptor_instance_: SculptorIns
     # We're on task B.  Navigate to task A first.
     workspace_tabs = task_page_b.get_workspace_tabs()
     expect(workspace_tabs).to_have_count(2)
-    outgoing_task_id = page.get_by_test_id(ElementIDs.CHAT_PANEL).get_attribute("data-taskid")
+    outgoing_task_id = get_chat_task_id(page)
     workspace_tabs.first.click()
 
     alpha_chat_view = get_alpha_chat_view(page)
@@ -99,8 +101,8 @@ def test_revisit_settles_without_post_switch_scroll_movement(sculptor_instance_:
     (SCU-1686). Any later movement (a deferred correction scroll, an item-reflow
     drift, TanStack's scroll-reconcile clobbering the saved pixel offset) is what
     this guards against. The window is resized while the task is in the
-    background so its cached row heights are genuinely stale — the case where the
-    pre-settle restore used to correct itself visibly, frames after paint.
+    background so its cached row heights are genuinely stale — the case where an
+    unsettled restore corrects itself visibly, frames after paint.
     """
     page = sculptor_instance_.page
 
@@ -124,7 +126,7 @@ def test_revisit_settles_without_post_switch_scroll_movement(sculptor_instance_:
     # On task A: park at a mid-history reading position with a non-trivial pixel
     # offset into the anchor message (the offset is what a reconcile regression
     # clobbers), and let the rAF-debounced save record it.
-    outgoing_task_id = page.get_by_test_id(ElementIDs.CHAT_PANEL).get_attribute("data-taskid")
+    outgoing_task_id = get_chat_task_id(page)
     workspace_tabs.first.click()
     wait_for_chat_task_changed(page, outgoing_task_id)
     wait_for_alpha_scroll_settled(page)
@@ -136,13 +138,11 @@ def test_revisit_settles_without_post_switch_scroll_movement(sculptor_instance_:
         }}"""
     )
     scroll_alpha_chat_by(page, 600)
-    # Not a readiness wait: the save is rAF-debounced off the scroll event, and
-    # there is nothing user-visible to await — give it a couple of frames.
-    page.wait_for_timeout(150)
+    wait_for_scroll_save_debounce(page)
 
     # Away on task B, resize the window so task A's cached row heights go stale
     # (text re-wraps to different heights at the new width).
-    outgoing_task_id = page.get_by_test_id(ElementIDs.CHAT_PANEL).get_attribute("data-taskid")
+    outgoing_task_id = get_chat_task_id(page)
     workspace_tabs.last.click()
     wait_for_chat_task_changed(page, outgoing_task_id)
     wait_for_alpha_scroll_settled(page)
@@ -153,7 +153,7 @@ def test_revisit_settles_without_post_switch_scroll_movement(sculptor_instance_:
     # Back to task A. Arm the sampler as soon as the chat is showing task A's
     # content, then let the settle window (including the deferred safety-net
     # re-assert frames) elapse while sampling.
-    task_id_b = page.get_by_test_id(ElementIDs.CHAT_PANEL).get_attribute("data-taskid")
+    task_id_b = get_chat_task_id(page)
     workspace_tabs.first.click()
     wait_for_chat_task_changed(page, task_id_b)
     start_scroll_top_sampler(page)
