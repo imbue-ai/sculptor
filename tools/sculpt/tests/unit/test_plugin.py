@@ -5,12 +5,14 @@ import json
 import pytest
 import typer
 
+from sculpt.client.models.plugin_command_response import PluginCommandResponse
 from sculpt.client.models.plugin_command_result import PluginCommandResult
 from sculpt.client.models.renderer_identity import RendererIdentity
 from sculpt.client.models.renderer_identity_environment import RendererIdentityEnvironment
 from sculpt.client.types import UNSET
 from sculpt.commands.plugin import _parse_structured_error
 from sculpt.commands.plugin import _renderer_label
+from sculpt.commands.plugin import _results_or_exit
 from sculpt.formatting import json_error
 
 
@@ -74,9 +76,6 @@ class TestJsonErrorCode:
 
 class TestResultsOrExit:
     def test_empty_results_error_carries_the_condition_code(self, capsys: pytest.CaptureFixture[str]) -> None:
-        from sculpt.client.models.plugin_command_response import PluginCommandResponse
-        from sculpt.commands.plugin import _results_or_exit
-
         response = PluginCommandResponse(correlation_id="c", results=[])
         with pytest.raises(typer.Exit):
             _results_or_exit(response, json_output=True)
