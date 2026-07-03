@@ -83,7 +83,10 @@ export const PiSettingsSection = ({ onSettingChange }: PiSettingsSectionProps): 
 
   return (
     <SettingsSectionLayout>
-      <SettingRow title="Binary Source" description="Choose how Sculptor locates the pi binary.">
+      <SettingRow
+        title="Binary Source"
+        description="How Sculptor locates the pi binary. Managed prefers Sculptor's downloaded, version-pinned copy, falling back to a pi on your PATH until one is installed."
+      >
         <Flex align="center" gap="2">
           <Select.Root value={displayMode} onValueChange={handleModeChange}>
             <Select.Trigger variant="soft" data-testid={ElementIds.PI_MODE_SELECTOR} />
@@ -109,7 +112,9 @@ export const PiSettingsSection = ({ onSettingChange }: PiSettingsSectionProps): 
               <Flex align="center" gap="2">
                 <CheckCircledIcon color="var(--green-9)" />
                 <Text size="2" color="green" data-testid={ElementIds.PI_UP_TO_DATE}>
-                  v{pi.version} — Pinned
+                  {pi.source === "EXTERNAL"
+                    ? `v${pi.version} — External binary, matches pin`
+                    : `v${pi.version} — Pinned`}
                 </Text>
               </Flex>
             </Tooltip>
