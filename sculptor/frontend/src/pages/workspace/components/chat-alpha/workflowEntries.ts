@@ -8,7 +8,13 @@ const isPhaseEntry = (entry: WorkflowProgressEntry): entry is WorkflowPhaseProgr
 const isAgentEntry = (entry: WorkflowProgressEntry): entry is WorkflowAgentProgress =>
   entry.objectType === "WorkflowAgentProgress";
 
-export const isAgentDone = (agent: WorkflowAgentProgress): boolean => agent.state === "done" || agent.state === "error";
+// The CLI may introduce new agent states. Enumerate the known in-flight
+// states and treat everything else as terminal — an unknown future terminal
+// state (e.g. cancelled) must not leave phase counts stuck as unfinished.
+const IN_FLIGHT_AGENT_STATES: ReadonlySet<string> = new Set(["start", "progress"]);
+
+export const isAgentDone = (agent: WorkflowAgentProgress): boolean =>
+  !IN_FLIGHT_AGENT_STATES.has(agent.state ?? "start");
 
 export type WorkflowEntryGroups = {
   /** Phases sorted by index. */

@@ -28,12 +28,14 @@ const STATUS_WORDS: Record<string, string> = {
 };
 
 const AgentStatusIcon = ({ agent }: { agent: WorkflowAgentProgress }): ReactElement => {
-  if (agent.state === "done") {
-    return <Check className={styles.statusIconDone} aria-label="done" />;
-  }
-
   if (agent.state === "error") {
     return <CircleAlert className={styles.statusIconError} aria-label="error" />;
+  }
+
+  // "done" plus any unknown future terminal state — mirrors isAgentDone so
+  // the icon can't claim an agent is running while the counts say finished.
+  if (isAgentDone(agent)) {
+    return <Check className={styles.statusIconDone} aria-label="done" />;
   }
   // "start" means the agent was created but may still be waiting for a
   // concurrency slot; it counts as queued until a start time appears. Any
@@ -89,6 +91,9 @@ const AgentRow = ({ agent }: { agent: WorkflowAgentProgress }): ReactElement => 
 
   const recentToolSummaries = agent.recentToolSummaries ?? [];
   const totalToolCalls = agent.toolCalls ?? 0;
+  // Clamped so the per-call key base stays non-negative when toolCalls is
+  // absent or lags behind the accumulated window.
+  const activityBaseIndex = Math.max(totalToolCalls, recentToolSummaries.length);
   const activityLabel =
     totalToolCalls > recentToolSummaries.length
       ? `Activity — last ${recentToolSummaries.length} of ${totalToolCalls} tool calls`
@@ -137,7 +142,7 @@ const AgentRow = ({ agent }: { agent: WorkflowAgentProgress }): ReactElement => 
                 // Key on the call's absolute position in the run, not its
                 // slot in the rolling window — entries shift positions as
                 // the window slides.
-                <div key={totalToolCalls - recentToolSummaries.length + index} className={styles.detailCode}>
+                <div key={activityBaseIndex - recentToolSummaries.length + index} className={styles.detailCode}>
                   {summary}
                 </div>
               ))}
