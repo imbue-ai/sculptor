@@ -1,7 +1,9 @@
-import { DropdownMenu, IconButton } from "@radix-ui/themes";
-import { Ellipsis, Layers, Plus, Settings, SquareMenu, Terminal } from "lucide-react";
+import { Button, Dialog, DropdownMenu, Flex, IconButton, TextField } from "@radix-ui/themes";
+import { Ellipsis, Layers, Pencil, Plus, Settings, SquareMenu, Terminal } from "lucide-react";
 import type { ReactElement } from "react";
+import { useState } from "react";
 
+import { updateWorkspace } from "~/api";
 import { useImbueNavigate, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 
@@ -31,8 +33,26 @@ export const MobileWorkspaceHeader = ({
   const workspace = useWorkspace(workspaceID);
   const { filesChanged } = useMobileChangeSummary(workspaceID);
   const { createAgent } = useCreateAgent();
+  const [isRenameOpen, setIsRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
 
   const workspaceName = workspace?.description?.trim() || "Workspace";
+
+  const openRename = (): void => {
+    setRenameValue(workspace?.description ?? "");
+    setIsRenameOpen(true);
+  };
+
+  const handleRenameSave = async (): Promise<void> => {
+    const trimmed = renameValue.trim();
+    setIsRenameOpen(false);
+    if (!workspaceID || !trimmed || trimmed === workspace?.description) return;
+    try {
+      await updateWorkspace({ path: { workspace_id: workspaceID }, body: { description: trimmed } });
+    } catch (error) {
+      console.error("Failed to rename workspace:", error);
+    }
+  };
 
   return (
     <header className={styles.header}>
@@ -71,11 +91,43 @@ export const MobileWorkspaceHeader = ({
             <Terminal size={16} /> Open terminal
           </DropdownMenu.Item>
           <DropdownMenu.Separator />
+          <DropdownMenu.Item onSelect={openRename}>
+            <Pencil size={16} /> Rename workspace
+          </DropdownMenu.Item>
           <DropdownMenu.Item onSelect={() => navigateToGlobalSettings()}>
             <Settings size={16} /> Workspace settings
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Root>
+
+      {/* A dialog (not an inline field) because the header sits next to the chat
+          editor, which would otherwise reclaim the soft keyboard on mobile; a
+          modal traps focus so the rename field keeps it. */}
+      <Dialog.Root open={isRenameOpen} onOpenChange={setIsRenameOpen}>
+        <Dialog.Content maxWidth="400px" className="mobileTheme">
+          <Dialog.Title>Rename workspace</Dialog.Title>
+          <TextField.Root
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void handleRenameSave();
+              }
+            }}
+            placeholder="Workspace name"
+            aria-label="Workspace name"
+          />
+          <Flex gap="3" mt="4" justify="end">
+            <Dialog.Close>
+              <Button variant="soft" color="gray">
+                Cancel
+              </Button>
+            </Dialog.Close>
+            <Button onClick={() => void handleRenameSave()}>Save</Button>
+          </Flex>
+        </Dialog.Content>
+      </Dialog.Root>
     </header>
   );
 };

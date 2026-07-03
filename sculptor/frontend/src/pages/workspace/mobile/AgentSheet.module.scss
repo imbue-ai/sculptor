@@ -64,7 +64,27 @@
   min-height: 48px;
   padding: var(--space-2) var(--space-3);
   text-align: left;
+  // Long-press opens the row menu; suppress the browser's text selection.
+  user-select: none;
   width: 100%;
+}
+
+// Wraps a row + the invisible menu anchor so the long-press menu opens at the
+// row's start rather than tracking the finger.
+.rowWrap {
+  position: relative;
+}
+
+.menuAnchor {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+// Inline rename field — match the row name's size so the row doesn't shift.
+.renameInput {
+  color: var(--mobile-ink);
+  font-size: var(--font-size-2);
 }
 
 .row:hover,
