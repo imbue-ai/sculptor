@@ -172,14 +172,15 @@ def get_alpha_scroll_height(page: Page) -> float:
 
 
 def start_scroll_top_sampler(page: Page) -> None:
-    """Start an rAF loop recording the max scrollTop seen (the peak we followed to)."""
+    """Start an rAF loop recording the range of scrollTop values seen."""
     page.evaluate(
         f"""() => {{
         const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
         if (!el) return;
-        window.__st = {{ max: el.scrollTop }};
+        window.__st = {{ first: el.scrollTop, min: el.scrollTop, max: el.scrollTop }};
         const tick = () => {{
             if (el.scrollTop > window.__st.max) window.__st.max = el.scrollTop;
+            if (el.scrollTop < window.__st.min) window.__st.min = el.scrollTop;
             window.__st.raf = requestAnimationFrame(tick);
         }};
         window.__st.raf = requestAnimationFrame(tick);
@@ -188,12 +189,18 @@ def start_scroll_top_sampler(page: Page) -> None:
 
 
 def read_scroll_top_sampler(page: Page) -> dict:
-    """Stop the sampler; return {"max": peak scrollTop while sampling, "final": current}."""
+    """Stop the sampler; return the sampled scrollTop range.
+
+    Keys: ``first`` (at sampler start), ``min``/``max`` (extremes while
+    sampling), ``final`` (current). All ``None`` when the chat view is absent.
+    """
     return page.evaluate(
         f"""() => {{
         if (window.__st && window.__st.raf) cancelAnimationFrame(window.__st.raf);
         const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
         return {{
+            first: window.__st ? Math.round(window.__st.first) : null,
+            min: window.__st ? Math.round(window.__st.min) : null,
             max: window.__st ? Math.round(window.__st.max) : null,
             final: el ? Math.round(el.scrollTop) : null,
         }};
@@ -313,6 +320,25 @@ def scroll_alpha_chat_to_top(page: Page) -> None:
         }};
         requestAnimationFrame(enforce);
     }})"""
+    )
+
+
+def wait_for_chat_task_changed(page: Page, outgoing_task_id: str | None) -> None:
+    """Wait until the chat panel is showing a different task than ``outgoing_task_id``.
+
+    The chat element persists across a task/agent switch, so the outgoing
+    task's ``data-scroll-settled="true"`` remains on it until the incoming
+    restore dispatches. Call this after triggering a switch and before
+    ``wait_for_alpha_scroll_settled`` — a settled-wait sampled in that window
+    would race ahead of the restore, whose late frames then clobber whatever
+    the test scrolls to next.
+    """
+    page.wait_for_function(
+        f"""(outgoingTaskId) => {{
+            const el = document.querySelector('[data-testid="{ElementIDs.CHAT_PANEL}"]');
+            return el && el.getAttribute("data-taskid") !== outgoingTaskId;
+        }}""",
+        arg=outgoing_task_id,
     )
 
 

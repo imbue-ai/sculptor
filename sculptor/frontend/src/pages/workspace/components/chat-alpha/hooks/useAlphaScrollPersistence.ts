@@ -1,7 +1,13 @@
+/* eslint-disable react-hooks/immutability -- This hook imperatively restores
+   scrolling: it deliberately writes the TanStack virtualizer's internals
+   (scrollOffset, measureElement's caches via the settle sweep) so the restored
+   position and window are coherent before the switch commit paints. These
+   mutations are intentional and cannot be expressed within the compiler's
+   immutability model — same pattern as useAlphaAutoScroll. */
 import type { Virtualizer } from "@tanstack/react-virtual";
 import { useAtom } from "jotai";
 import type { RefObject } from "react";
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { alphaScrollPositionAtomFamily } from "~/common/state/atoms/alphaScroll.ts";
 
@@ -77,9 +83,9 @@ export const useAlphaScrollPersistence = (
   // (message index + pixel offset, or distance-from-bottom) against the
   // virtualizer's *current* item measurements, so calling it again after the
   // measurements change re-lands at the same logical position.
-  const applyScrollPosition = useCallback(() => {
+  const applyScrollPosition = useCallback((): "anchor" | "bottom" | "none" => {
     const el = scrollContainerRef.current;
-    if (!el || filteredMessages.length === 0) return;
+    if (!el || filteredMessages.length === 0) return "none";
 
     if (!scrollPosition) {
       // First visit: land at the very end of the padded scroll range. For a
@@ -87,7 +93,7 @@ export const useAlphaScrollPersistence = (
       // anchored-turn rest position (last user message at the viewport top) —
       // the view the task's owner last saw.
       el.scrollTop = maxScrollOffset(el);
-      return;
+      return "bottom";
     }
 
     if (scrollPosition.distanceFromBottom <= BOTTOM_THRESHOLD) {
@@ -101,49 +107,124 @@ export const useAlphaScrollPersistence = (
       // have converged differently than when the distance was recorded.
       const target = contentBottomOffset(el, virtualizer) - scrollPosition.distanceFromBottom;
       el.scrollTop = Math.min(Math.max(0, target), maxScrollOffset(el));
-      return;
+      return "bottom";
     }
 
     const messageIndex = filteredMessages.findIndex((m) => m.id === scrollPosition.firstVisibleMessageId);
-    if (messageIndex >= 0) {
-      virtualizer.scrollToIndex(messageIndex, { align: "start" });
-      // Apply pixel offset synchronously — scrollToIndex already set scrollTop
-      // so the DOM measurement is available. A rAF here would cause a one-frame
-      // flash at the message-top position before the offset is applied.
-      el.scrollTop += scrollPosition.pixelOffset;
+    const anchorItem = messageIndex >= 0 ? virtualizer.measurementsCache[messageIndex] : undefined;
+    if (anchorItem) {
+      // Resolve the anchor to an absolute scrollTop from the measurements
+      // directly — NOT virtualizer.scrollToIndex. scrollToIndex arms TanStack's
+      // scroll-reconcile loop, which keeps re-driving scrollTop toward the bare
+      // item start for seconds afterwards, clobbering the pixel offset the
+      // moment a measurement shifts. One absolute write has a single owner.
+      const target = anchorItem.start + scrollPosition.pixelOffset;
+      el.scrollTop = Math.min(Math.max(0, target), maxScrollOffset(el));
+      return "anchor";
     } else {
-      // Fallback: use distance from the content bottom (synchronous for the same
-      // reason). contentBottomOffset excludes paddingEnd, matching how the
-      // distance was recorded above.
+      // Fallback: use distance from the content bottom. contentBottomOffset
+      // excludes paddingEnd, matching how the distance was recorded above.
       el.scrollTop = contentBottomOffset(el, virtualizer) - scrollPosition.distanceFromBottom;
+      return "bottom";
     }
   }, [scrollContainerRef, virtualizer, filteredMessages, scrollPosition]);
+
+  // Forces the settle render from inside restore() so the pre-paint settle
+  // effect below has a commit to run in.
+  // eslint-disable-next-line react/hook-use-state -- value unused; only the setter triggers renders
+  const [, setSettleRender] = useState(0);
+  // Set while a restore has swept fresh measurements and the final pre-paint
+  // apply is still owed; consumed by the settle layout effect below.
+  const pendingPrePaintApplyRef = useRef(false);
+
+  // Synchronously measure every mounted row and hand the virtualizer the
+  // restored offset, inside the switch commit (pre-paint).
+  //
+  // virtual-core's measureElement() resizes its item cache immediately, and
+  // TanStack only learns a new scrollTop from the async scroll event —
+  // pre-setting virtualizer.scrollOffset lets the settle render compute the
+  // window at the *restored* offset instead of the outgoing task's. Per-item
+  // scroll compensation is gated off for the whole `measuring` layout phase,
+  // so none of these measurements can move scrollTop on their own.
+  const sweepMountedMeasurements = useCallback((): void => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    virtualizer.scrollOffset = el.scrollTop;
+    el.querySelectorAll<HTMLElement>("[data-index]").forEach((node) => virtualizer.measureElement(node));
+  }, [scrollContainerRef, virtualizer]);
+
+  // The pre-paint settle: runs in the render restore() forces (a setState in a
+  // layout effect commits synchronously before paint), after the target window
+  // has mounted at the restored offset and its rows have self-measured via
+  // their refs. The final apply therefore resolves against real geometry, and
+  // the first painted frame of the incoming task is already the settled one —
+  // no visible correction scroll afterwards. Declared before the task-switch
+  // effect below so it consumes the flag in that forced render, not in the
+  // same commit that set it.
+  useLayoutEffect(() => {
+    if (!pendingPrePaintApplyRef.current) return;
+    pendingPrePaintApplyRef.current = false;
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    // Rebuild positions from the swept sizes and reflect the corrected total
+    // height now — React re-applies the same value on its own next render.
+    virtualizer.getVirtualItems();
+    const content = el.firstElementChild as HTMLElement | null;
+    if (content) {
+      content.style.height = `${virtualizer.getTotalSize()}px`;
+    }
+
+    // Respect a user takeover during the restore window, mirroring the
+    // deferred re-assert in restore().
+    if (machine.getState().authority.kind === "restoring") {
+      applyScrollPosition();
+      virtualizer.scrollOffset = el.scrollTop;
+    }
+  });
 
   // Restore scroll position on task switch
   const restore = useCallback(() => {
     const el = scrollContainerRef.current;
-    if (!el || filteredMessages.length === 0) return;
 
     // Cancel any in-flight rAFs from a previous restore call
     cancelPendingRafs(pendingRafsRef.current);
-    // Enter `restoring`: the machine now owns "a restore is in flight", which
-    // suppresses position saves and is reflected to the DOM as data-scroll-phase.
+    // Enter `restoring` before any early return: a switch must never leave the
+    // outgoing task's settled state visible on the container (a settled-wait
+    // sampling that stale "true" races ahead of the incoming restore). The
+    // machine owns "a restore is in flight", which suppresses position saves
+    // and is reflected to the DOM as data-scroll-phase.
     machine.dispatch({ kind: "taskSwitched", taskId });
+    if (!el || filteredMessages.length === 0) {
+      // Nothing to restore — settle right back.
+      machine.dispatch({ kind: "restoreSettled" });
+      return;
+    }
 
     // First apply: resolves the anchor against the virtualizer's *estimated*
-    // heights — on a task switch the virtualizer is mid-settle and the items
-    // have not re-measured to their real sizes yet. This prevents a flash of
-    // the outgoing scroll position.
-    applyScrollPosition();
+    // heights — the wipe on task switch means the items have not re-measured
+    // to their real sizes yet. This lands close enough that the settle render
+    // below computes the right window, and prevents a flash of the outgoing
+    // scroll position.
+    const resolution = applyScrollPosition();
 
-    // Re-assert after the virtualizer has settled. useAlphaVirtualizer's layout
-    // effect runs before this hook's (by call order) and schedules its settle
-    // double-rAF first, so this double-rAF's inner frame fires after it: by then
-    // the visible items have re-measured to their real heights. Re-applying
-    // re-resolves the anchor against those measurements, so the target message
-    // lands where intended instead of being left at a stale estimate-based pixel
-    // — which, in a virtualized list, can scroll the target out of the rendered
-    // window entirely.
+    // Pre-paint settle, only for message-anchored restores: sweep real sizes
+    // for the mounted rows, then force the render the settle effect above
+    // consumes — it re-applies against the swept geometry before this commit
+    // ever paints. Bottom-relative restores gain nothing from the sweep (their
+    // target depends on the converged paddingEnd, which only the virtualizer's
+    // own settle window produces), so they skip straight to the deferred
+    // re-assert below rather than writing a mid-settle guess.
+    if (resolution === "anchor") {
+      sweepMountedMeasurements();
+      pendingPrePaintApplyRef.current = true;
+      setSettleRender((count) => count + 1);
+    }
+
+    // Safety-net re-assert after the virtualizer's settle window. The pre-paint
+    // settle already applied against swept measurements, so this is normally a
+    // no-op (writing an equal scrollTop fires no scroll event). It catches what
+    // the sweep cannot: rows whose async re-measurement (images, fonts, late
+    // reflows) lands after the settle render.
     const id1 = requestAnimationFrame(() => {
       pendingRafsRef.current.delete(id1);
       const id2 = requestAnimationFrame(() => {
@@ -162,19 +243,21 @@ export const useAlphaScrollPersistence = (
       pendingRafsRef.current.add(id2);
     });
     pendingRafsRef.current.add(id1);
-  }, [scrollContainerRef, filteredMessages, applyScrollPosition, machine, taskId]);
+  }, [scrollContainerRef, filteredMessages, applyScrollPosition, sweepMountedMeasurements, machine, taskId]);
 
   // Restore scroll position synchronously before paint so the user never
   // sees the old scroll position flash before jumping to the saved one.
   useLayoutEffect(() => {
     if (prevTaskIdRef.current !== taskId) {
       prevTaskIdRef.current = taskId;
+
       restore();
     }
   }, [taskId, restore]);
 
   // Initial restore on mount; cancel pending rAFs on unmount
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see the task-switch effect above
     restore();
     const rafs = pendingRafsRef.current;
     return (): void => cancelPendingRafs(rafs);
