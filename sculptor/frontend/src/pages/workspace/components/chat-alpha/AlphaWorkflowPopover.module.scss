@@ -153,14 +153,18 @@
   border-bottom: none;
 }
 
+// Horizontal padding paired with a matching negative margin: the row's text
+// stays aligned with the pane header and expanded details while the hover
+// background extends past the content on both sides.
 .agentRow {
   align-items: center;
   border-radius: var(--radius-1);
   cursor: pointer;
   display: flex;
   gap: var(--space-2);
+  margin: 0 calc(-1 * var(--space-2));
   outline: none;
-  padding: var(--space-1) 0;
+  padding: var(--space-1) var(--space-2);
 }
 
 .agentRow:hover,
