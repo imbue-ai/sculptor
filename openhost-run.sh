@@ -39,8 +39,8 @@ fi
 # load for agents in ANY workspace/repo, so this reaches them regardless of what
 # the workspace holds. Best-effort; never fail the boot.
 if [ -d /app/openhost-agent/skills/openhost-environment ]; then
-    mkdir -p "$CLAUDE_CONFIG_DIR/skills"
-    rm -rf "$CLAUDE_CONFIG_DIR/skills/openhost-environment"
+    mkdir -p "$CLAUDE_CONFIG_DIR/skills" || true
+    rm -rf "$CLAUDE_CONFIG_DIR/skills/openhost-environment" || true
     cp -r /app/openhost-agent/skills/openhost-environment \
         "$CLAUDE_CONFIG_DIR/skills/openhost-environment" || true
 fi
