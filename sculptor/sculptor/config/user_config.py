@@ -53,7 +53,10 @@ class DependencyPaths(SerializableModel):
     the binary is resolved from the system PATH.
 
     The ``pi`` field is a unified mode + path value mirroring ``claude``:
-      - ``"MANAGED"`` (default): Sculptor downloads and version-pins the pi CLI.
+      - ``"MANAGED"`` (default): prefer Sculptor's downloaded, version-pinned pi
+        when present; with no downloaded copy, fall back to a ``pi`` on the
+        system PATH. pi is optional, so the managed copy is only downloaded on
+        an explicit user action (onboarding or Settings), never automatically.
       - ``"CUSTOM"``, an absolute path, or a bare command name: a user-provided
         binary, resolved via the system PATH.
 
