@@ -28,6 +28,13 @@ const SHUTDOWN_STALL_TIMEOUT_MS = 30_000;
 // How often we poll the backend health check endpoint while the app is up.
 const HEALTH_CHECK_INTERVAL_MS = 3_000;
 
+// A single failed health check is usually a transient blip — e.g. the network
+// is still waking up right after the OS resumes a suspended tab or PWA — so
+// the first few consecutive failures surface as a soft "reconnecting" state.
+// Only after this many consecutive failures do we declare the backend
+// unresponsive and ask the user to restart.
+const HEALTH_CHECK_FAILURES_BEFORE_UNRESPONSIVE = 5;
+
 const getShutdownStallTimeoutMs = (): number => {
   // Integration tests inject a shorter timeout via localStorage so they
   // don't have to wait the full production duration.
@@ -60,6 +67,7 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
   const [hasStartedSuccessfully, setHasStartedSuccessfully] = useAtom(hasBackendStartedSuccessfullyAtom);
   const setHealthCheckData = useSetAtom(healthCheckDataAtom);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const consecutiveHealthCheckFailuresRef = useRef<number>(0);
 
   const [isCustomCommandMode, setIsCustomCommandMode] = useState<boolean>(false);
   const [isShutdownStalled, setIsShutdownStalled] = useState<boolean>(false);
@@ -143,6 +151,8 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
 
       if (signal.aborted) return;
 
+      consecutiveHealthCheckFailuresRef.current = 0;
+
       // mark a successful start if we haven't yet
       if (!hasStartedSuccessfully) {
         setHasStartedSuccessfully(true);
@@ -187,6 +197,22 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
       // if we've never started, exit and stay in the loading state
       if (!hasStartedSuccessfully) return;
 
+      // Checks that fail while the app is hidden say nothing about the
+      // backend — backgrounded tabs and suspended PWAs lose network access.
+      // The visibilitychange handler re-checks once we're visible again.
+      if (document.hidden) return;
+
+      consecutiveHealthCheckFailuresRef.current += 1;
+      if (consecutiveHealthCheckFailuresRef.current < HEALTH_CHECK_FAILURES_BEFORE_UNRESPONSIVE) {
+        maybeSetBackendStatus({
+          status: "reconnecting",
+          payload: {
+            message: "Connection to the backend lost. Reconnecting…",
+          },
+        });
+        return;
+      }
+
       maybeSetBackendStatus({
         status: "unresponsive",
         payload: {
@@ -209,10 +235,27 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
   }, [backendStatus.status, performHealthCheck]);
 
   useInterval(() => {
-    if (backendStatus.status !== "shutting_down") {
+    // Skip polling while hidden — backgrounded tabs and suspended PWAs lose
+    // network access, so failures there would be false alarms.
+    if (backendStatus.status !== "shutting_down" && !document.hidden) {
       performHealthCheck();
     }
   }, HEALTH_CHECK_INTERVAL_MS);
+
+  // Browsers throttle timers in hidden tabs, so on becoming visible again
+  // (e.g. resuming a suspended PWA) check immediately instead of waiting up
+  // to a full poll interval to confirm the backend is still there.
+  useEffect(() => {
+    const handleVisibilityChange = (): void => {
+      if (!document.hidden && backendStatus.status !== "shutting_down") {
+        performHealthCheck();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return (): void => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [performHealthCheck, backendStatus.status]);
 
   // Clear the stalled flag as soon as we leave ``shutting_down``. Adjusting
   // state during render (with a previous-value guard) keeps the reset on the

@@ -8,6 +8,9 @@ import styles from "./WarningStatusBanner.module.scss";
 
 type WarningStatusBannerProps = {
   message: string;
+  // "error" (default) is the red alert style for states needing user action;
+  // "warning" is a softer amber style for degraded-but-recovering states.
+  tone?: "error" | "warning";
   linkText?: string;
   onLinkClick?: () => void;
 };
@@ -16,7 +19,7 @@ export const WarningStatusBanner = (props: WarningStatusBannerProps): ReactEleme
   return (
     <Flex
       direction="row"
-      className={styles.banner}
+      className={`${styles.banner} ${props.tone === "warning" ? styles.warningTone : ""}`}
       justify="center"
       p="3"
       gapX="2"
