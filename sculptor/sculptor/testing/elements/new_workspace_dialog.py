@@ -15,7 +15,7 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
     (``NEW_WORKSPACE_DIALOG``). It is opened by several entry points — the
     Cmd/Meta+T shortcut (``new_workspace`` keybinding), the Cmd+K
     ``nav.new_workspace`` command, and the sidebar repo group's "+"
-    (``SIDEBAR_REPO_ADD_WORKSPACE``). The plain sidebar new-workspace button
+    The plain sidebar new-workspace button
     direct-creates and only falls back to opening this when there is no MRU yet.
 
     The form's field ids are shared with the (still-present) ``/ws/new`` page and
@@ -52,13 +52,16 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
         palette.select_by_command_id("nav.new_workspace")
         expect(self.get_dialog()).to_be_visible()
 
-    def open_via_repo_plus(self, project_id: str) -> None:
-        """Open the modal preselecting a repo via that repo group's "+"."""
-        repo_add = self._page.locator(
-            f'[data-testid="{ElementIDs.SIDEBAR_REPO_ADD_WORKSPACE}"][data-project-id="{project_id}"]'
-        )
-        expect(repo_add).to_be_visible()
-        repo_add.click()
+    def open_via_sidebar_button(self) -> None:
+        """Open the modal via the sidebar's "New Workspace" nav button.
+
+        The per-repo "+" direct-creates (no dialog); this nav button is the
+        sidebar's open-the-dialog affordance. The form seeds its repo from the
+        most recently used project.
+        """
+        button = self._page.get_by_test_id(ElementIDs.SIDEBAR_NEW_WORKSPACE_BUTTON)
+        expect(button).to_be_visible()
+        button.click()
         expect(self.get_dialog()).to_be_visible()
 
     # -- Dialog shell --

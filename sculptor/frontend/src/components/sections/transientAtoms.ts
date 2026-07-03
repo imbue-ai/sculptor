@@ -158,7 +158,7 @@ export const recentlyClosedPanelIdsAtom = atom(
 
 // ── Active-section ring ───────────────────────────────────────────────────────
 
-export const RING_VISIBLE_MS = 2000;
+export const RING_VISIBLE_MS = 1000;
 
 // Transient visibility layer over the persisted active sub-section. A fade
 // timer/effect flips this to false after RING_VISIBLE_MS.

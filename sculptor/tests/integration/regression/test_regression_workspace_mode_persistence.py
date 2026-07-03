@@ -18,7 +18,6 @@ from playwright.sync_api import expect
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.new_workspace_dialog import PlaywrightNewWorkspaceDialog
 from sculptor.testing.elements.user_config import enable_in_place_workspaces
-from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -62,15 +61,10 @@ def test_workspace_selection_mode_persists_after_workspace_creation(sculptor_ins
     add_ws_page.get_task_input().fill("")
     add_ws_page.submit_and_wait_for_chat_panel()
 
-    # Reopen the new-workspace form via the sidebar repo group's "+" — the
-    # affordance that opens the modal preselecting that repo.
-    sidebar = get_workspace_sidebar(page)
-    repo_group = sidebar.get_repo_groups().first
-    expect(repo_group).to_be_visible()
-    project_id = repo_group.get_attribute("data-project-id")
-    assert project_id is not None, "repo group is missing its data-project-id"
+    # Reopen the new-workspace form via the sidebar's New Workspace button (the
+    # repo "+" direct-creates and never shows the form).
     dialog = PlaywrightNewWorkspaceDialog(page)
-    dialog.open_via_repo_plus(project_id)
+    dialog.open_via_sidebar_button()
 
     # The reopened form seeds its mode from the last-used creation settings, so
     # it must still show In-place rather than resetting to the Worktree default.

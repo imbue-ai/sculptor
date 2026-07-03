@@ -1,7 +1,7 @@
 import { useAtom } from "jotai";
 import { FolderTree } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { ResizeHandle } from "~/components/sections/ResizeHandle.tsx";
@@ -42,6 +42,17 @@ export const ExplorerLayout = ({ list, detail }: ExplorerLayoutProps): ReactElem
   const [isSidebarHidden, setIsSidebarHidden] = useState(false);
 
   const [listWidthPx, setListWidthPx] = useAtom(explorerListWidthAtom);
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  // Drags start from the RENDERED width, not the stored one: in a narrow host
+  // section the stylesheet caps the pane below the shared width, and starting
+  // the drag math from the (larger) stored value would make the divider feel
+  // dead until the pointer traveled the phantom difference. Falls back to the
+  // stored width where layout isn't measured (jsdom reports offsetWidth 0).
+  const getRenderedListWidth = useCallback((): number => {
+    const measured = listRef.current?.offsetWidth;
+    return measured ? measured : listWidthPx;
+  }, [listWidthPx]);
 
   const toggleSidebar = useCallback((): void => setIsSidebarHidden((hidden) => !hidden), []);
 
@@ -63,13 +74,13 @@ export const ExplorerLayout = ({ list, detail }: ExplorerLayoutProps): ReactElem
     <div className={styles.row}>
       {!isSidebarHidden && (
         <>
-          <div className={styles.list} style={{ width: listWidthPx }}>
+          <div ref={listRef} className={styles.list} style={{ width: listWidthPx }}>
             {list}
           </div>
           <ResizeHandle
             axis="x"
             direction={1}
-            getSize={() => listWidthPx}
+            getSize={getRenderedListWidth}
             onResize={setListWidthPx}
             ariaLabel="Resize file list"
             ariaValueNow={Math.round(listWidthPx)}

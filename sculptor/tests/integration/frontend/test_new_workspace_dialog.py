@@ -73,42 +73,40 @@ def test_modal_opens_via_command_palette(sculptor_instance_: SculptorInstance) -
     expect(dialog.get_form()).to_be_visible()
 
 
-@user_story("to open the new-workspace dialog from a repo group's + in the sidebar")
-def test_modal_opens_via_repo_plus(sculptor_instance_: SculptorInstance) -> None:
-    """A repo group's "+" opens the dialog preselecting that repo."""
+@user_story("to open the new-workspace dialog from the sidebar's New Workspace button")
+def test_modal_opens_via_sidebar_button(sculptor_instance_: SculptorInstance) -> None:
+    """The sidebar's New Workspace nav button opens the dialog."""
     page = sculptor_instance_.page
     _seed_one_workspace(page)
 
-    sidebar = get_workspace_sidebar(page)
-    repo_group = sidebar.get_repo_groups().first
-    expect(repo_group).to_be_visible()
-    project_id = repo_group.get_attribute("data-project-id")
-    assert project_id is not None, "repo group is missing its data-project-id"
-
     dialog = PlaywrightNewWorkspaceDialog(page)
-    dialog.open_via_repo_plus(project_id)
+    dialog.open_via_sidebar_button()
 
     expect(dialog.get_dialog()).to_be_visible()
-    # The preselected repo seeds the form's source-branch selector, so the branch
+    # The MRU repo seeds the form's source-branch selector, so the branch
     # preview is populated and the form is ready to create.
     expect(dialog.get_branch_name_input()).to_be_visible()
 
 
-@user_story("to direct-create a workspace from the sidebar button once I have created one before")
-def test_sidebar_button_direct_creates_when_mru_exists(sculptor_instance_: SculptorInstance) -> None:
-    """The sidebar new-workspace button direct-creates (no dialog) when an MRU exists.
+@user_story("to create a workspace in a repo with one click on its +")
+def test_repo_plus_direct_creates(sculptor_instance_: SculptorInstance) -> None:
+    """A repo group's "+" direct-creates a workspace in that repo (no dialog).
 
-    After a first create, the last-creation settings are remembered, so clicking
-    the plain sidebar button reuses them with a fresh auto branch and navigates
-    straight to the new agent — the dialog never opens.
+    After a first create, the last-creation settings are remembered, so the
+    repo "+" reuses them with a fresh auto branch and navigates straight to the
+    new agent — the dialog never opens.
     """
     page = sculptor_instance_.page
     _seed_one_workspace(page)
 
     sidebar = get_workspace_sidebar(page)
     expect(sidebar.get_workspace_rows()).to_have_count(1)
+    repo_group = sidebar.get_repo_groups().first
+    expect(repo_group).to_be_visible()
+    project_id = repo_group.get_attribute("data-project-id")
+    assert project_id is not None, "repo group is missing its data-project-id"
 
-    sidebar.get_new_workspace_button().click()
+    sidebar.get_repo_add_workspace(project_id).click()
 
     # Direct-create: a second workspace row appears and the dialog stays closed.
     dialog = PlaywrightNewWorkspaceDialog(page)

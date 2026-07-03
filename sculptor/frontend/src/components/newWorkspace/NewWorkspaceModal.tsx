@@ -10,8 +10,8 @@ import { PaletteDialog } from "~/components/PaletteDialog/PaletteDialog.tsx";
 /**
  * Global host for the new-workspace dialog. Opened/closed via
  * `newWorkspaceModalAtom`, set by the creation entry points — the Cmd+K command,
- * the Cmd/Meta+T shortcut, and the sidebar repo "+" (the plain sidebar button
- * direct-creates and only falls back to opening this). Mounted in AppShell, the
+ * the Cmd/Meta+T shortcut, and the sidebar's New Workspace button (the per-repo
+ * "+" direct-creates and only falls back to opening this). Mounted in AppShell, the
  * layout hosting every page route, so it is reachable everywhere except the
  * empty first-run page (which replaces AppShell and renders the form inline
  * instead). Renders the PaletteDialog shell around the

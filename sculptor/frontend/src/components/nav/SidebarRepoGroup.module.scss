@@ -104,7 +104,11 @@
 // out-specifies the Radix IconButton base display.
 .repoHeader .hoverReveal,
 .workspaceRow .hoverReveal {
-  display: none;
+  // visibility (not display): a hover-out can hide the trigger while its
+  // tooltip is still open, and a display:none anchor collapses to a zero rect
+  // that flings the floating tooltip to the viewport corner. Keeping the
+  // geometry also stops the row from re-flowing on hover.
+  visibility: hidden;
 }
 
 // The dropdown trigger's open state is read via [aria-expanded] — its
@@ -117,7 +121,7 @@
 .workspaceRow:focus-within .hoverReveal,
 .workspaceRow[data-state="open"] .hoverReveal,
 .workspaceRow:has([aria-expanded="true"]) .hoverReveal {
-  display: flex;
+  visibility: visible;
 }
 
 .workspaceRowActive {

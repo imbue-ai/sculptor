@@ -1,6 +1,7 @@
 import { IconButton, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
-import { Bug, Home, PanelLeftClose, Plus, Search, Settings } from "lucide-react";
+import { Bug, Command, Home, PanelLeftClose, Plus, Settings } from "lucide-react";
+import { Tooltip as TooltipPrimitive } from "radix-ui";
 import type { ReactElement } from "react";
 import { useCallback, useMemo, useState } from "react";
 
@@ -19,8 +20,7 @@ import { useGitAndOpenInRuntime } from "~/components/CommandPalette/contextActio
 import { buildWorkspaceActions } from "~/components/CommandPalette/contextActions/workspaceActions.ts";
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
 import { sidebarCollapsedAtom, sidebarWidthAtom } from "~/components/layout/sidebarAtoms.ts";
-import { isWorkspaceListEmptyAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
-import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCreateWorkspaceFromSidebar.ts";
+import { isWorkspaceListEmptyAtom, newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { ReportProblemPopover } from "~/components/ReportProblemPopover.tsx";
 import { layoutPersistenceAdapter } from "~/components/sections/persistence/LocalStorageLayoutAdapter.ts";
 import { ResizeHandle } from "~/components/sections/ResizeHandle.tsx";
@@ -76,7 +76,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
 
   // External hooks
   const { navigateToWorkspace, navigateToAgent, navigateToHome, navigateToGlobalSettings } = useImbueNavigate();
-  const { createFromSidebar, isCreating } = useCreateWorkspaceFromSidebar();
+  const setNewWorkspaceModal = useSetAtom(newWorkspaceModalAtom);
   const { toggle: toggleCommandPalette } = useCommandPalette();
   const { workspaceId: activeWorkspaceId, isHomeRoute, isSettingsRoute } = useImbueLocation();
   const { navigateToNextTab } = useWorkspaceTabActions();
@@ -196,139 +196,148 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   }
 
   return (
-    <aside className={styles.sidebar} style={{ width: `${width}px` }} data-testid={ElementIds.WORKSPACE_SIDEBAR}>
-      {/* Window-controls gutter clears the macOS traffic lights, then the
+    // The sidebar is dense with tooltip triggers, and the tooltip primitive's
+    // default skip-delay shows every SUBSEQUENT tooltip instantly while the
+    // pointer roams — a hover across the nav lights up a trail of tooltips.
+    // Scope a provider over the sidebar: a longer initial delay and no
+    // skip-delay chaining, so tooltips only appear on a deliberate hover.
+    // (Themes' <Tooltip> reads this provider — `radix-ui` is pinned to the
+    // same instance @radix-ui/themes resolves.)
+    <TooltipPrimitive.Provider delayDuration={1000} skipDelayDuration={0}>
+      <aside className={styles.sidebar} style={{ width: `${width}px` }} data-testid={ElementIds.WORKSPACE_SIDEBAR}>
+        {/* Window-controls gutter clears the macOS traffic lights, then the
           collapse toggle. */}
-      <div className={styles.windowControls} style={{ paddingLeft: getTitleBarLeftPadding(true) }}>
-        <Tooltip content="Collapse sidebar" side="right">
-          <IconButton
-            variant="ghost"
-            size="1"
-            color="gray"
-            className={styles.noDrag}
-            onClick={() => setCollapsed(true)}
-            aria-label="Collapse sidebar"
-            data-testid={ElementIds.SIDEBAR_COLLAPSE_TOGGLE}
-          >
-            <PanelLeftClose size={16} />
-          </IconButton>
-        </Tooltip>
-      </div>
+        <div className={styles.windowControls} style={{ paddingLeft: getTitleBarLeftPadding(true) }}>
+          <Tooltip content="Collapse sidebar" side="right">
+            <IconButton
+              variant="ghost"
+              size="1"
+              color="gray"
+              className={styles.noDrag}
+              onClick={() => setCollapsed(true)}
+              aria-label="Collapse sidebar"
+              data-testid={ElementIds.SIDEBAR_COLLAPSE_TOGGLE}
+            >
+              <PanelLeftClose size={16} />
+            </IconButton>
+          </Tooltip>
+        </div>
 
-      <nav className={styles.topActions}>
-        <NavItem
-          icon={Home}
-          label="Home"
-          isActive={isHomeRoute}
-          onClick={handleOpenHome}
-          testId={ElementIds.SIDEBAR_HOME_LINK}
-        />
-        {/* Search (Cmd+K) and New Workspace are inert until the first
+        <nav className={styles.topActions}>
+          <NavItem
+            icon={Home}
+            label="Home"
+            isActive={isHomeRoute}
+            onClick={handleOpenHome}
+            testId={ElementIds.SIDEBAR_HOME_LINK}
+          />
+          {/* Commands (Cmd+K) and New Workspace are inert until the first
             workspace exists: the palette open-path is gated by
             `areGlobalShortcutsDisabledAtom` and the new-workspace modal isn't
             mounted on the first-run page. Reflect that with a real disabled
             state + tooltip rather than a silent no-op — the inline first-run
             form is the create affordance while the list is empty. */}
-        <NavItem
-          icon={Search}
-          label="Search"
-          disabled={isWorkspaceListEmpty}
-          disabledTooltip="Create a workspace to enable search"
-          onClick={toggleCommandPalette}
-          testId={ElementIds.SIDEBAR_CMDK_LINK}
-        />
-        {/* Direct-create reusing the last settings + a fresh auto branch;
-            falls back to the dialog when there are no last settings yet. */}
-        <NavItem
-          icon={Plus}
-          label="New Workspace"
-          disabled={isCreating || isWorkspaceListEmpty}
-          disabledTooltip="Use the form to create your first workspace"
-          onClick={() => void createFromSidebar()}
-          testId={ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON}
-        />
-      </nav>
+          <NavItem
+            icon={Command}
+            label="Commands"
+            disabled={isWorkspaceListEmpty}
+            disabledTooltip="Create a workspace to enable commands"
+            onClick={toggleCommandPalette}
+            testId={ElementIds.SIDEBAR_CMDK_LINK}
+          />
+          {/* Opens the new-workspace dialog; the per-repo "+" in the repo groups
+            below is the direct-create affordance. */}
+          <NavItem
+            icon={Plus}
+            label="New Workspace"
+            disabled={isWorkspaceListEmpty}
+            disabledTooltip="Use the form to create your first workspace"
+            onClick={() => setNewWorkspaceModal({ open: true })}
+            testId={ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON}
+          />
+        </nav>
 
-      <div className={styles.repoList}>
-        {/* Empty first-run repo area. `repoGroups` is built from workspaces, so
+        <div className={styles.repoList}>
+          {/* Empty first-run repo area. `repoGroups` is built from workspaces, so
             it's empty here — SidebarFirstRunState renders from `projects`
             instead. */}
-        {isWorkspaceListEmpty ? (
-          <SidebarFirstRunState projects={projects} onAddRepo={() => setIsAddRepoDialogOpen(true)} />
-        ) : null}
-        {repoGroups.map((group) => (
-          <SidebarRepoGroup
-            key={group.projectId}
-            group={group}
-            actions={workspaceActions}
-            openInRuntime={openInRuntime}
-            onWorkspaceClick={handleWorkspaceClick}
-            onWorkspaceHover={handleWorkspaceHover}
-            onBeginDelete={setDeleteTarget}
-          />
-        ))}
-      </div>
-
-      <div className={styles.spacer} />
-
-      <nav className={styles.bottomActions}>
-        <NavItem
-          icon={Settings}
-          label="Settings"
-          isActive={isSettingsRoute}
-          onClick={handleOpenSettings}
-          testId={ElementIds.SIDEBAR_SETTINGS_LINK}
-        />
-        <ReportProblemPopover>
-          <button
-            type="button"
-            className={navItemStyles.navItem}
-            aria-label="Report a bug"
-            data-testid={ElementIds.SIDEBAR_REPORT_BUG}
-          >
-            <Bug size={16} className={navItemStyles.navIcon} />
-            <span className={navItemStyles.navLabel}>Report a bug</span>
-          </button>
-        </ReportProblemPopover>
-        <div className={styles.versionRow} data-testid={ElementIds.SIDEBAR_VERSION}>
-          <VersionDisplay />
+          {isWorkspaceListEmpty ? (
+            <SidebarFirstRunState projects={projects} onAddRepo={() => setIsAddRepoDialogOpen(true)} />
+          ) : null}
+          {repoGroups.map((group) => (
+            <SidebarRepoGroup
+              key={group.projectId}
+              group={group}
+              actions={workspaceActions}
+              openInRuntime={openInRuntime}
+              onWorkspaceClick={handleWorkspaceClick}
+              onWorkspaceHover={handleWorkspaceHover}
+              onBeginDelete={setDeleteTarget}
+            />
+          ))}
         </div>
-      </nav>
 
-      <ResizeHandle
-        axis="x"
-        direction={1}
-        variant="edge-overlay"
-        getSize={() => width}
-        onResize={handleResize}
-        ariaLabel="Resize sidebar"
-        ariaValueNow={Math.round(width)}
-        ariaValueMin={MIN_SIDEBAR_WIDTH_PX}
-        data-testid={ElementIds.SIDEBAR_RESIZE_HANDLE}
-      />
+        <div className={styles.spacer} />
 
-      {/* Hover peek popover shared across rows (anchored beside the hovered row). */}
-      <WorkspacePeekOverlay onNavigate={handlePeekNavigate} />
+        <nav className={styles.bottomActions}>
+          <NavItem
+            icon={Settings}
+            label="Settings"
+            isActive={isSettingsRoute}
+            onClick={handleOpenSettings}
+            testId={ElementIds.SIDEBAR_SETTINGS_LINK}
+          />
+          <ReportProblemPopover>
+            <button
+              type="button"
+              className={navItemStyles.navItem}
+              aria-label="Report a bug"
+              data-testid={ElementIds.SIDEBAR_REPORT_BUG}
+            >
+              <Bug size={16} className={navItemStyles.navIcon} />
+              <span className={navItemStyles.navLabel}>Report a bug</span>
+            </button>
+          </ReportProblemPopover>
+          <div className={styles.versionRow} data-testid={ElementIds.SIDEBAR_VERSION}>
+            <VersionDisplay />
+          </div>
+        </nav>
 
-      {/* Destructive workspace delete is confirmed before the optimistic removal. */}
-      <DeleteConfirmationDialog
-        isOpen={deleteTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
-        }}
-        entityType="workspace"
-        entityName={deleteTarget?.description ?? ""}
-        onConfirm={handleDeleteConfirm}
-      />
+        <ResizeHandle
+          axis="x"
+          direction={1}
+          variant="edge-overlay"
+          getSize={() => width}
+          onResize={handleResize}
+          ariaLabel="Resize sidebar"
+          ariaValueNow={Math.round(width)}
+          ariaValueMin={MIN_SIDEBAR_WIDTH_PX}
+          data-testid={ElementIds.SIDEBAR_RESIZE_HANDLE}
+        />
 
-      {/* Empty first-run "Add a repo" flow reuses the standard add-repo dialog. */}
-      <AddRepoDialog open={isAddRepoDialogOpen} onOpenChange={setIsAddRepoDialogOpen} setToast={setAddRepoToast} />
-      <Toast
-        open={addRepoToast !== null}
-        onOpenChange={(open) => !open && setAddRepoToast(null)}
-        title={addRepoToast?.title}
-        type={addRepoToast?.type}
-      />
-    </aside>
+        {/* Hover peek popover shared across rows (anchored beside the hovered row). */}
+        <WorkspacePeekOverlay onNavigate={handlePeekNavigate} />
+
+        {/* Destructive workspace delete is confirmed before the optimistic removal. */}
+        <DeleteConfirmationDialog
+          isOpen={deleteTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) setDeleteTarget(null);
+          }}
+          entityType="workspace"
+          entityName={deleteTarget?.description ?? ""}
+          onConfirm={handleDeleteConfirm}
+        />
+
+        {/* Empty first-run "Add a repo" flow reuses the standard add-repo dialog. */}
+        <AddRepoDialog open={isAddRepoDialogOpen} onOpenChange={setIsAddRepoDialogOpen} setToast={setAddRepoToast} />
+        <Toast
+          open={addRepoToast !== null}
+          onOpenChange={(open) => !open && setAddRepoToast(null)}
+          title={addRepoToast?.title}
+          type={addRepoToast?.type}
+        />
+      </aside>
+    </TooltipPrimitive.Provider>
   );
 };

@@ -1,7 +1,6 @@
-// Add-panel dropdown row styling (adapted from the prototype AddPanelPalette):
-// icon + title, with an optional trailing keybinding hint. Rendered inside Radix
-// DropdownMenu items, so the row itself only lays out its contents — hover/active
-// backgrounds come from the Radix item.
+// Add-panel dropdown row styling: a text-only title with an optional trailing
+// keybinding hint. Rendered inside Radix DropdownMenu items, so the row itself
+// only lays out its contents — hover/active backgrounds come from the Radix item.
 
 .item {
   align-items: center;
@@ -9,15 +8,6 @@
   flex: 1 1 auto;
   gap: var(--space-3);
   min-width: 0;
-}
-
-.itemIcon {
-  align-items: center;
-  color: var(--gray-11);
-  display: flex;
-  flex-shrink: 0;
-  justify-content: center;
-  width: var(--space-4);
 }
 
 .itemTitle {

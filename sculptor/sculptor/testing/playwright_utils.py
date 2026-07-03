@@ -155,20 +155,6 @@ def navigate_to_workspace(page: Page, name_or_index: str | int = 0) -> None:
     row.click()
 
 
-def new_workspace(page: Page) -> None:
-    """Click the sidebar's new-workspace button.
-
-    Opens the new-workspace flow. The full create-and-fill flow is Workspace
-    creation's ``create_workspace()`` (a refactor of
-    ``start_task_and_wait_for_ready``); this helper only triggers the entry
-    point from the sidebar.
-    """
-    ensure_sidebar_expanded(page)
-    button = page.get_by_test_id(ElementIDs.SIDEBAR_NEW_WORKSPACE_BUTTON)
-    expect(button).to_be_visible()
-    button.click()
-
-
 def get_workspace_creation_button(page: Page) -> tuple[Locator, bool]:
     """Resolve the workspace-creation surface and its create button.
 

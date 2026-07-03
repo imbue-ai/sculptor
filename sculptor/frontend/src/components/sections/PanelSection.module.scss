@@ -31,7 +31,7 @@
 // guard keeps the drop-target edge solid for the whole drag, even on the active one.
 .active:not(.dropTarget)::after {
   opacity: 0%;
-  transition: opacity var(--duration-slow) var(--ease-out);
+  transition: opacity var(--duration-normal) var(--ease-out);
 }
 
 .active.ringVisible:not(.dropTarget)::after {

@@ -128,7 +128,7 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
       className={styles.list}
       data-testid={ElementIds.CHANGES_PANEL}
     >
-      <Flex flexShrink="0" px="3" py="2" direction="column" gap="2">
+      <Flex flexShrink="0" px="3" py="2" direction="column">
         <DiffScopePicker
           scope={scope}
           onScopeChange={setScope}
@@ -136,9 +136,6 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
           uncommittedCount={uncommittedStatusMap.size}
           allCount={allStatusMap.size}
         />
-        <Flex justify="center">
-          <CommitButton changesCount={uncommittedStatusMap.size} onCommit={handleCommit} />
-        </Flex>
       </Flex>
       <ChangesTreeView
         workspaceId={workspaceId}
@@ -148,6 +145,11 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
         selectedPath={selectedPath}
         onDiscardFile={isUncommitted ? handleDiscardRequest : undefined}
       />
+      {/* The commit action is a footer pinned under the tree (which flexes to
+          fill), separated from the rows by its own top border. */}
+      <Flex flexShrink="0" px="3" py="2" className={styles.commitFooter}>
+        <CommitButton changesCount={uncommittedStatusMap.size} onCommit={handleCommit} />
+      </Flex>
       <DiscardDialog
         open={discardTarget !== null}
         onOpenChange={(open) => {

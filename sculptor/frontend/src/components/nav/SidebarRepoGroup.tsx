@@ -25,7 +25,7 @@ import {
 } from "~/components/CommandPalette/contextActions/menu.tsx";
 import type { WorkspaceAction } from "~/components/CommandPalette/contextActions/types.ts";
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
-import { newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
+import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCreateWorkspaceFromSidebar.ts";
 import { WorkspaceStatusDots } from "~/components/statusDot";
 
 import { collapsedRepoGroupsAtom } from "./navAtoms.ts";
@@ -186,7 +186,7 @@ export const SidebarRepoGroup = ({
   const collapsedRepos = useAtomValue(collapsedRepoGroupsAtom);
   const setCollapsedRepos = useSetAtom(collapsedRepoGroupsAtom);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useAtom(renamingWorkspaceIdAtom);
-  const setNewWorkspaceModal = useSetAtom(newWorkspaceModalAtom);
+  const { createFromSidebar, isCreating } = useCreateWorkspaceFromSidebar();
 
   // External hooks
   const openSettings = useOpenSettings();
@@ -252,12 +252,16 @@ export const SidebarRepoGroup = ({
             </IconButton>
           </Tooltip>
           <Tooltip content="New workspace in this repo" side="right">
-            {/* Open the dialog pre-selecting this repo. */}
+            {/* Direct-create in THIS repo (fresh auto branch, last-used or
+                default settings); failures fall back to the dialog
+                pre-selecting the repo. The nav "New Workspace" above is the
+                open-the-dialog affordance. */}
             <IconButton
               variant="ghost"
               size="1"
               color="gray"
-              onClick={() => setNewWorkspaceModal({ open: true, presetProjectId: group.projectId })}
+              disabled={isCreating}
+              onClick={() => void createFromSidebar(group.projectId)}
               aria-label="New workspace in this repo"
               data-testid={ElementIds.SIDEBAR_REPO_ADD_WORKSPACE}
               data-project-id={group.projectId}

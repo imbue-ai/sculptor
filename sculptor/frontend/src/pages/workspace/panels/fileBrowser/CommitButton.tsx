@@ -10,7 +10,9 @@ import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 import { canCommitAtomFamily, commitActionAtomFamily } from "../workspaceAgentActions.ts";
 import { CommitPromptDialog } from "./CommitPromptDialog.tsx";
 
-const COMMIT_BUTTON_STYLE: CSSProperties = { minWidth: 180 };
+// Fills the footer row; the row's own padding (shared with the scope picker
+// above the tree) sets the inset.
+const COMMIT_BUTTON_STYLE: CSSProperties = { width: "100%" };
 
 type CommitButtonProps = {
   changesCount: number;
