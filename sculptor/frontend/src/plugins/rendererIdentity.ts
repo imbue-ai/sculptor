@@ -39,9 +39,16 @@ export const getRendererId = (): string => {
  * the WebSocket), and `origin` is the page origin — which determines the
  * localStorage domain, so two renderers on different origins can legitimately
  * hold different plugin state.
+ *
+ * `base` is the bundle's compiled base path ("/" normally; "/proxy/<port>/"
+ * when served by an OpenHost preview dev server). Origin alone cannot tell
+ * those windows apart — previews share the deployed app's origin by design —
+ * so the base is what lets `sculpt plugin list` name which bundle a window
+ * is actually running.
  */
 export const getRendererIdentity = (): RendererIdentity => ({
   rendererId: getRendererId(),
   environment: isElectron() ? "electron" : "browser",
   origin: window.location.origin,
+  base: import.meta.env.BASE_URL || "/",
 });

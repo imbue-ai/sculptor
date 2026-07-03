@@ -895,11 +895,19 @@ class RendererIdentity(SerializableModel):
     from sniffing the WebSocket handshake. ``origin`` is ``window.location``'s
     origin, which determines the localStorage domain — two renderers on
     different origins can legitimately hold different plugin state.
+
+    ``base`` is the bundle's base path within that origin ("/" for the deployed
+    app; the OpenHost preview front serves dev bundles under "/proxy/<port>/").
+    Origin alone cannot distinguish those windows — sharing an origin is exactly
+    what makes the preview setup work — so tooling needs the base to tell a
+    preview window from the deployed app. Optional: bundles built before this
+    field simply don't report it.
     """
 
     renderer_id: str
     environment: Literal["electron", "browser"]
     origin: str
+    base: str | None = None
 
 
 class PluginRegistrations(SerializableModel):
