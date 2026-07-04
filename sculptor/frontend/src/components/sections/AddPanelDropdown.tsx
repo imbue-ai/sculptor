@@ -15,6 +15,7 @@
 import { DropdownMenu, Tooltip } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
+import { useRef } from "react";
 
 import { type AgentTypeName, ElementIds } from "~/api";
 import { useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
@@ -74,7 +75,15 @@ const agentTypeTestId = (agentType: AgentTypeName): string => {
 // close, so a closed dropdown costs its host section header nothing. Do not lift
 // these reads into AddPanelDropdown/useAddPanelActions, which stay mounted in every
 // section header and would re-render the shell on every layout write.
-const AddPanelMenuItems = ({ subSection }: { subSection: SubSectionId }): ReactElement => {
+const AddPanelMenuItems = ({
+  subSection,
+  onOpenPanel,
+}: {
+  subSection: SubSectionId;
+  // Called synchronously when an item is selected, before the menu closes, so the
+  // dropdown can suppress Radix's focus-restore-to-trigger (see AddPanelDropdown).
+  onOpenPanel: () => void;
+}): ReactElement => {
   // state and hooks
   const actions = useAddPanelActions();
   const newAgentShortcut = useKeybindingDisplayText("new_agent");
@@ -93,7 +102,10 @@ const AddPanelMenuItems = ({ subSection }: { subSection: SubSectionId }): ReactE
     <>
       <DropdownMenu.Item
         data-testid={ElementIds.ADD_PANEL_NEW_AGENT}
-        onSelect={() => actions.createRecentAgent(subSection)}
+        onSelect={() => {
+          onOpenPanel();
+          actions.createRecentAgent(subSection);
+        }}
       >
         <MenuRow label={`New ${recentAgentLabel(recentAgentType, registrations)} agent`} shortcut={newAgentShortcut} />
       </DropdownMenu.Item>
@@ -108,7 +120,10 @@ const AddPanelMenuItems = ({ subSection }: { subSection: SubSectionId }): ReactE
               key={option.key}
               data-testid={agentTypeTestId(option.agentType)}
               data-registration-id={option.registrationId}
-              onSelect={() => actions.createAgent(option.agentType, option.registrationId, subSection)}
+              onSelect={() => {
+                onOpenPanel();
+                actions.createAgent(option.agentType, option.registrationId, subSection);
+              }}
             >
               <MenuRow label={option.label} />
             </DropdownMenu.Item>
@@ -118,7 +133,10 @@ const AddPanelMenuItems = ({ subSection }: { subSection: SubSectionId }): ReactE
 
       <DropdownMenu.Item
         data-testid={ElementIds.ADD_PANEL_NEW_TERMINAL}
-        onSelect={() => actions.createTerminal(subSection)}
+        onSelect={() => {
+          onOpenPanel();
+          actions.createTerminal(subSection);
+        }}
       >
         <MenuRow label="New terminal" />
       </DropdownMenu.Item>
@@ -130,7 +148,10 @@ const AddPanelMenuItems = ({ subSection }: { subSection: SubSectionId }): ReactE
             <DropdownMenu.Item
               key={panel.id}
               data-testid={`${ElementIds.ADD_PANEL_PANEL_OPTION}-${panel.id}`}
-              onSelect={() => actions.openStaticPanel(panel.id, subSection)}
+              onSelect={() => {
+                onOpenPanel();
+                actions.openStaticPanel(panel.id, subSection);
+              }}
             >
               <MenuRow label={panel.displayName} />
             </DropdownMenu.Item>
@@ -141,17 +162,40 @@ const AddPanelMenuItems = ({ subSection }: { subSection: SubSectionId }): ReactE
   );
 };
 
-export const AddPanelDropdown = ({ subSection, trigger, tooltip }: AddPanelDropdownProps): ReactElement => (
-  <DropdownMenu.Root>
-    {tooltip !== undefined ? (
-      <Tooltip content={tooltip}>
+export const AddPanelDropdown = ({ subSection, trigger, tooltip }: AddPanelDropdownProps): ReactElement => {
+  // Selecting an item opens a panel/agent/terminal that manages its own focus
+  // (e.g. the Browser panel focuses its URL bar, an agent focuses its composer).
+  // Radix's default close behaviour restores focus to the trigger `+`, which lands
+  // AFTER the opened panel's mount-focus and steals it back. Suppress that restore
+  // only when the close was caused by an item selection; Escape / click-outside
+  // (no selection) still return focus to the trigger for keyboard users.
+  const openedPanelRef = useRef(false);
+  return (
+    <DropdownMenu.Root>
+      {tooltip !== undefined ? (
+        <Tooltip content={tooltip}>
+          <DropdownMenu.Trigger>{trigger}</DropdownMenu.Trigger>
+        </Tooltip>
+      ) : (
         <DropdownMenu.Trigger>{trigger}</DropdownMenu.Trigger>
-      </Tooltip>
-    ) : (
-      <DropdownMenu.Trigger>{trigger}</DropdownMenu.Trigger>
-    )}
-    <DropdownMenu.Content size="1" data-testid={`${ElementIds.ADD_PANEL_DROPDOWN}-${subSection}`}>
-      <AddPanelMenuItems subSection={subSection} />
-    </DropdownMenu.Content>
-  </DropdownMenu.Root>
-);
+      )}
+      <DropdownMenu.Content
+        size="1"
+        data-testid={`${ElementIds.ADD_PANEL_DROPDOWN}-${subSection}`}
+        onCloseAutoFocus={(event) => {
+          if (openedPanelRef.current) {
+            openedPanelRef.current = false;
+            event.preventDefault();
+          }
+        }}
+      >
+        <AddPanelMenuItems
+          subSection={subSection}
+          onOpenPanel={() => {
+            openedPanelRef.current = true;
+          }}
+        />
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
+  );
+};
