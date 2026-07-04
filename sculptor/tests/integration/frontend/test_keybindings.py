@@ -17,6 +17,7 @@ from sculptor.testing.elements.base import dismiss_with_escape
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import blur_active_element
+from sculptor.testing.playwright_utils import dispatch_modified_shortcuts_in_one_task
 from sculptor.testing.playwright_utils import navigate_to_home_page
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -525,6 +526,18 @@ def _workspace_id_from_url(page: Page) -> str:
     return match.group(1)
 
 
+def _workspace_id_from_hash(hash_fragment: str) -> str:
+    """Extract the workspace id from a ``#/ws/<id>[/agent/<id>]`` hash fragment.
+
+    Cycling navigates to ``/ws/<id>`` while an agent page sits at
+    ``/ws/<id>/agent/<id>``, so tests must compare workspace ids rather than raw
+    hashes.
+    """
+    match = re.search(r"/ws/([^/?]+)", hash_fragment)
+    assert match is not None, f"expected a workspace hash, got {hash_fragment!r}"
+    return match.group(1)
+
+
 @user_story("to open the delete-workspace confirmation with its keybinding")
 def test_delete_workspace_keybinding_opens_confirmation(sculptor_instance_: SculptorInstance) -> None:
     """Meta+Shift+W on a workspace page opens the delete confirmation; cancel aborts.
@@ -580,6 +593,55 @@ def test_workspace_cycle_keybindings(sculptor_instance_: SculptorInstance) -> No
     blur_active_element(page)
     page.keyboard.press(f"{mod}+[")
     expect(page).to_have_url(re.compile(re.escape(f"/ws/{ws_b}")))
+
+
+@user_story("to rapidly cycle workspaces without landing back on an already-visited one")
+def test_rapid_workspace_cycle_reads_live_route(sculptor_instance_: SculptorInstance) -> None:
+    """Two next-workspace presses fired back-to-back land two workspaces away, not one.
+
+    Regression test for the cycle anchor going stale under rapid input:
+    ``navigateToWorkspace`` updates ``window.location.hash`` synchronously, while
+    ``activeWorkspaceIdAtom`` is only written by a layout effect after React
+    commits. A second press arriving in the same task therefore must not anchor
+    on the atom — it still names the workspace the first press just left, so
+    both presses would land on that workspace's neighbour. The handler anchors
+    on the live hash instead.
+
+    ``dispatch_modified_shortcuts_in_one_task`` makes the timing deterministic:
+    both keydowns run in one task, so React cannot commit (and update the atom)
+    between them. With three workspaces, two forward presses from a live anchor
+    visit two distinct workspaces; from a stale anchor the second press re-lands
+    on the first press's destination.
+
+    Not @release-marked: start_task_and_wait_for_ready selects the Fake Claude
+    model, which is gated off in packaged-release runs.
+    """
+    page = sculptor_instance_.page
+
+    start_task_and_wait_for_ready(page, prompt="WS A agent", workspace_name="Rapid Cycle WS A")
+    ws_a = _workspace_id_from_url(page)
+    start_task_and_wait_for_ready(page, prompt="WS B agent", workspace_name="Rapid Cycle WS B")
+    ws_b = _workspace_id_from_url(page)
+    start_task_and_wait_for_ready(page, prompt="WS C agent", workspace_name="Rapid Cycle WS C")
+    ws_c = _workspace_id_from_url(page)
+    workspace_ids = {ws_a, ws_b, ws_c}
+    assert len(workspace_ids) == 3
+    blur_active_element(page)
+
+    # Fire Cmd+] twice back-to-back, before React can commit in between.
+    hashes = dispatch_modified_shortcuts_in_one_task(page, [("]", "BracketRight"), ("]", "BracketRight")])
+    before, after_first, after_second = (_workspace_id_from_hash(hash_fragment) for hash_fragment in hashes)
+
+    # The first press must have navigated; otherwise the synthetic events were
+    # not handled and the stale-anchor assertion below would pass vacuously.
+    assert after_first != before, f"first Cmd+] did not change the workspace: {hashes}"
+    # The regression: a stale anchor makes the second press cycle from `before`
+    # again and re-land on the first press's destination.
+    assert after_second != after_first, f"second Cmd+] cycled from a stale anchor: {hashes}"
+    # With three workspaces, two forward presses land two away — on the remaining
+    # workspace, not back at the start.
+    assert after_second != before, f"two Cmd+] presses wrapped back to the start: {hashes}"
+    assert after_second in workspace_ids, f"cycling left the created workspaces: {hashes}"
 
 
 @pytest.mark.release
