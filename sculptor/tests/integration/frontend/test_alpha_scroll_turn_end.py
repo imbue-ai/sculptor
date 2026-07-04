@@ -39,12 +39,17 @@ _LOREM_STREAM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
 # The visible gap the pin keeps between the last message's bottom and the viewport
 # bottom while following — mirrors PIN_BOTTOM_GAP in chat-alpha/scroll/geometry.ts.
 _PIN_BOTTOM_GAP_PX = 64
-# Slop around the pin gap for message margins and sub-pixel rounding. The band it
-# defines separates the two regressions this guards against: hugging the viewport
-# bottom flush (~0px, no breathing room under the newest line) and parking deep in
-# the paddingEnd gap (>= the 128px streaming padding floor, no slack for the
-# turn-end shrink).
-_PIN_GAP_TOLERANCE_PX = 24
+# Slop around the pin gap. At rest the pin lands the tail EXACTLY PIN_BOTTOM_GAP
+# above the viewport bottom (see bottomPinOffset), but this gap is sampled mid-stream
+# while the tail is still growing: the down-only follow pin trails each content reflow
+# by a frame or two, and the virtualizer's measureElement lags the DOM asynchronously,
+# so a mid-growth sample reads a few px off the resting gap. That transient spread is
+# platform-timing-dependent (larger under slower CI rendering), so the band is sized to
+# absorb it while still cleanly separating the two regressions it guards against: hugging
+# the viewport bottom flush (~0px, no breathing room under the newest line) and parking
+# deep in the paddingEnd gap (>= the 128px streaming padding floor, no slack for the
+# turn-end shrink). 64 +/- 40 == [24, 104] stays clear of both (0 and 128).
+_PIN_GAP_TOLERANCE_PX = 40
 
 # The view must not scroll UP across the turn boundary. A tiny settle for the turn
 # footer is fine; a jump back to an earlier message is a whole-turn (hundreds of px)

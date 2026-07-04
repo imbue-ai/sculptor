@@ -182,9 +182,15 @@ def test_file_tree_overlay_thumb_drag_scrolls_tree(sculptor_instance_: SculptorI
     tree overflows, its thumb appears and dragging it scrolls the tree."""
     page = sculptor_instance_.page
 
-    task_page = start_task_and_wait_for_ready(sculptor_page=page, prompt=_write_tree_files_prompt(_TREE_FILE_COUNT))
+    # Writing _TREE_FILE_COUNT files is one multi_step turn of ~2x that many tool
+    # messages (a Write tool_use + tool_result per file), which routinely takes longer
+    # than start_task_and_wait_for_ready's default 30s finish-wait to stream and render.
+    # Skip that inline wait and give the completion wait a budget sized for the turn.
+    task_page = start_task_and_wait_for_ready(
+        sculptor_page=page, prompt=_write_tree_files_prompt(_TREE_FILE_COUNT), wait_for_agent_to_finish=False
+    )
     chat_panel = task_page.get_chat_panel()
-    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
+    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2, timeout=60_000)
 
     # Reveal the Files panel; the freshly written files land in its tree.
     section_root = open_panel(page, "files", sub_section="center")
