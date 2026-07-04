@@ -246,8 +246,10 @@ def convert_agent_messages_to_task_update(
     # Workflow-task state keyed by tool_use_id. Carried across batches and
     # NOT cleared at request boundaries: completed entries must stay around so
     # the workflow popover keeps rendering the final tree after the run ends.
+    # current_state is always a stored (never wire-suppressed) update, so its
+    # map is a real snapshot; the `or {}` only satisfies the Optional type.
     workflow_task_states: dict[str, WorkflowTaskState] = (
-        dict(current_state.workflow_task_states) if current_state else {}
+        dict(current_state.workflow_task_states or {}) if current_state else {}
     )
 
     # Streaming state — groups the variables that control how partial responses

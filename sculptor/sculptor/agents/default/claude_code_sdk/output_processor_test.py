@@ -400,6 +400,7 @@ def _feed_jsonl(processor: ClaudeOutputProcessor, jsonl_dicts: list[dict]) -> No
             processor._last_workflow_entries.pop(result.task_id, None)
             processor._last_workflow_usage.pop(result.task_id, None)
             processor._last_workflow_progress_emit.pop(result.task_id, None)
+            processor._pending_workflow_progress.pop(result.task_id, None)
         elif isinstance(result, ParsedEndResponse):
             processor._parse_stream_end_response(result)
 
@@ -785,7 +786,10 @@ class TestWorkflowTaskProgress:
         assert progress[0].usage is not None
         assert progress[0].usage.total_tokens == 4000
 
-    def test_tree_change_bypasses_throttle(self) -> None:
+    def test_tree_change_burst_coalesces_then_flushes(self) -> None:
+        """Tree changes inside the coalescing window are deferred, not dropped:
+        the burst yields one immediate emission, and the flush emits the
+        accumulated tree once the window elapses."""
         processor = _make_processor_for_jsonl_test()
         self._arm_workflow(processor)
 
@@ -807,10 +811,56 @@ class TestWorkflowTaskProgress:
 
         messages = _drain_queue(processor.output_message_queue)
         progress = [m for m in messages if isinstance(m, WorkflowTaskProgressAgentMessage)]
-        assert len(progress) == 2
-        final_agent = progress[1].entries[1]
+        assert len(progress) == 1
+        assert "task_wf_1" in processor._pending_workflow_progress
+
+        # Flushing within the window emits nothing; after the window elapses
+        # the deferred emission carries the accumulated (done) tree.
+        processor._flush_due_workflow_progress()
+        assert _drain_queue(processor.output_message_queue) == []
+        processor._last_workflow_progress_emit["task_wf_1"] = time.monotonic() - 10.0
+        processor._flush_due_workflow_progress()
+
+        messages = _drain_queue(processor.output_message_queue)
+        progress = [m for m in messages if isinstance(m, WorkflowTaskProgressAgentMessage)]
+        assert len(progress) == 1
+        assert "task_wf_1" not in processor._pending_workflow_progress
+        final_agent = progress[0].entries[1]
         assert isinstance(final_agent, WorkflowAgentProgress)
         assert final_agent.state == "done"
+
+    def test_notification_drops_deferred_progress_flush(self) -> None:
+        """A deferred tree change pending when the final notification arrives
+        must not flush afterwards — it would resurrect the task as running."""
+        processor = _make_processor_for_jsonl_test()
+        self._arm_workflow(processor)
+
+        _feed_jsonl(
+            processor,
+            [
+                make_task_progress_message(
+                    task_id="task_wf_1",
+                    tool_use_id="toolu_wf_1",
+                    workflow_progress=self._make_tree(agent_state="progress"),
+                ),
+                make_task_progress_message(
+                    task_id="task_wf_1",
+                    tool_use_id="toolu_wf_1",
+                    workflow_progress=self._make_tree(agent_state="done"),
+                ),
+                make_task_notification_message(
+                    task_id="task_wf_1",
+                    tool_use_id="toolu_wf_1",
+                    status="completed",
+                    summary="done",
+                ),
+            ],
+        )
+        _drain_queue(processor.output_message_queue)
+
+        assert "task_wf_1" not in processor._pending_workflow_progress
+        processor._flush_due_workflow_progress()
+        assert _drain_queue(processor.output_message_queue) == []
 
     def test_delta_payloads_accumulate_into_tree(self) -> None:
         """The CLI's workflow_progress payloads are deltas — a later payload
@@ -825,7 +875,14 @@ class TestWorkflowTaskProgress:
                     task_id="task_wf_1",
                     tool_use_id="toolu_wf_1",
                     workflow_progress=self._make_tree(),
-                ),
+                )
+            ],
+        )
+        # Step past the coalescing window so the second delta emits immediately.
+        processor._last_workflow_progress_emit["task_wf_1"] = time.monotonic() - 10.0
+        _feed_jsonl(
+            processor,
+            [
                 make_task_progress_message(
                     task_id="task_wf_1",
                     tool_use_id="toolu_wf_1",

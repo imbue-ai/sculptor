@@ -40,6 +40,7 @@ from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
 from sculptor.state.workflow_state import WorkflowAgentProgress
 from sculptor.state.workflow_state import WorkflowPhaseProgress
+from sculptor.state.workflow_state import WorkflowTaskState
 from sculptor.state.workflow_state import WorkflowUsage
 from sculptor.web.derived import TaskUpdate
 from sculptor.web.message_conversion import convert_agent_messages_to_task_update
@@ -6494,6 +6495,13 @@ def _make_workflow_entries(agent_state: str = "progress") -> tuple[WorkflowPhase
     )
 
 
+def _workflow_states_of(state: TaskUpdate) -> dict[str, WorkflowTaskState]:
+    """Narrow the Optional: the fold always populates the map — None exists
+    only on wire copies where the stream layer suppressed an unchanged map."""
+    assert state.workflow_task_states is not None
+    return state.workflow_task_states
+
+
 def test_workflow_task_started_seeds_running_entry() -> None:
     """A local_workflow task_started seeds a running entry keyed by tool_use_id;
     other task types leave the map untouched."""
@@ -6521,8 +6529,8 @@ def test_workflow_task_started_seeds_running_entry() -> None:
         current_state=None,
     )
 
-    assert set(state.workflow_task_states) == {"toolu-wf-1"}
-    entry = state.workflow_task_states["toolu-wf-1"]
+    assert set(_workflow_states_of(state)) == {"toolu-wf-1"}
+    entry = _workflow_states_of(state)["toolu-wf-1"]
     assert entry.status == "running"
     assert entry.workflow_name == "review"
     assert entry.entries == ()
@@ -6555,7 +6563,7 @@ def test_workflow_progress_upserts_entry_and_carries_across_batches() -> None:
         current_state=None,
     )
 
-    entry = state.workflow_task_states["toolu-wf-1"]
+    entry = _workflow_states_of(state)["toolu-wf-1"]
     assert entry.status == "running"
     assert len(entry.entries) == 2
     assert entry.usage is not None and entry.usage.total_tokens == 3100
@@ -6569,7 +6577,7 @@ def test_workflow_progress_upserts_entry_and_carries_across_batches() -> None:
         completed_message_by_id={},
         current_state=state,
     )
-    assert "toolu-wf-1" in state.workflow_task_states
+    assert "toolu-wf-1" in _workflow_states_of(state)
 
 
 def test_workflow_progress_preserves_workflow_name_when_incoming_is_empty() -> None:
@@ -6595,7 +6603,7 @@ def test_workflow_progress_preserves_workflow_name_when_incoming_is_empty() -> N
         current_state=None,
     )
 
-    assert state.workflow_task_states["toolu-wf-1"].workflow_name == "review"
+    assert _workflow_states_of(state)["toolu-wf-1"].workflow_name == "review"
 
 
 def test_workflow_notification_flips_status_without_synthesizing_child() -> None:
@@ -6638,7 +6646,7 @@ def test_workflow_notification_flips_status_without_synthesizing_child() -> None
         current_state=None,
     )
 
-    entry = state.workflow_task_states["toolu-wf-1"]
+    entry = _workflow_states_of(state)["toolu-wf-1"]
     assert entry.status == "completed"
     assert entry.summary == "Reviewed 4 files"
     agent_entry = entry.entries[1]
@@ -6703,7 +6711,7 @@ def test_workflow_notification_skips_child_synthesis_when_tool_use_is_result_rep
         current_state=None,
     )
 
-    assert state.workflow_task_states["toolu-wf-1"].status == "completed"
+    assert _workflow_states_of(state)["toolu-wf-1"].status == "completed"
     child_messages = [m for m in completed_by_id.values() if m.parent_tool_use_id == "toolu-wf-1"]
     assert child_messages == []
 
@@ -6752,7 +6760,7 @@ def test_workflow_notification_with_empty_tree_skips_child_synthesis_on_replay()
         current_state=None,
     )
 
-    entry = state.workflow_task_states["toolu-wf-1"]
+    entry = _workflow_states_of(state)["toolu-wf-1"]
     assert entry.status == "failed"
     assert entry.entries == ()
     child_messages = [m for m in completed_by_id.values() if m.parent_tool_use_id == "toolu-wf-1"]
@@ -6787,7 +6795,7 @@ def test_workflow_notification_rebuilds_entry_on_replay() -> None:
         current_state=None,
     )
 
-    entry = state.workflow_task_states["toolu-wf-1"]
+    entry = _workflow_states_of(state)["toolu-wf-1"]
     assert entry.status == "completed"
     assert entry.workflow_name == "review"
     assert len(entry.entries) == 2
@@ -6816,7 +6824,7 @@ def test_workflow_states_survive_request_success() -> None:
         completed_message_by_id={},
         current_state=None,
     )
-    assert "toolu-wf-1" in state.workflow_task_states
+    assert "toolu-wf-1" in _workflow_states_of(state)
     assert "task-wf-1" in state.pending_background_task_ids
 
     state = convert_agent_messages_to_task_update(
@@ -6827,5 +6835,5 @@ def test_workflow_states_survive_request_success() -> None:
         current_state=state,
     )
 
-    assert "toolu-wf-1" in state.workflow_task_states
+    assert "toolu-wf-1" in _workflow_states_of(state)
     assert state.pending_background_task_ids == frozenset()

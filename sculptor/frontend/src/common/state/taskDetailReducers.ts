@@ -46,12 +46,10 @@ export const chatMessagesReducer = (currentState: ChatMessagesState, taskUpdate:
       taskUpdate.pendingBackgroundTaskIds !== undefined
         ? taskUpdate.pendingBackgroundTaskIds
         : (currentState.pendingBackgroundTaskIds ?? []),
-    // Full snapshot each update, same as pendingBackgroundTaskIds — replace,
-    // don't merge.
-    workflowTaskStates:
-      taskUpdate.workflowTaskStates !== undefined
-        ? taskUpdate.workflowTaskStates
-        : (currentState.workflowTaskStates ?? {}),
+    // A map (possibly empty) is a full snapshot — replace, don't merge.
+    // null/undefined means unchanged: the backend suppresses the map from
+    // updates where no workflow state changed, since it can grow large.
+    workflowTaskStates: taskUpdate.workflowTaskStates ?? currentState.workflowTaskStates ?? {},
   };
 };
 

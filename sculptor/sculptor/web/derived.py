@@ -838,11 +838,14 @@ class TaskUpdate(SerializableModel):
     # (SCU-387).
     pending_background_task_ids: frozenset[str] = frozenset()
     # Live/last-known state of Workflow-tool background tasks, keyed by the
-    # launching tool_use_id. Sent as a full snapshot each update; the frontend
-    # replaces the map. Entries persist after completion (flipped to their
-    # final status with the final progress tree) so the workflow popover keeps
-    # rendering once the run is over.
-    workflow_task_states: dict[str, WorkflowTaskState] = {}
+    # launching tool_use_id. A dict (possibly empty) is a full snapshot that
+    # replaces the frontend's map; None means unchanged since the previous
+    # update on this stream. The stream layer suppresses unchanged snapshots
+    # because this map rides on every TaskUpdate (including chat ticks) and
+    # grows with a workflow's lifetime agent count. Entries persist after
+    # completion (flipped to their final status with the final progress tree)
+    # so the workflow popover keeps rendering once the run is over.
+    workflow_task_states: dict[str, WorkflowTaskState] | None = None
 
 
 class UserUpdate(SerializableModel):

@@ -54,4 +54,16 @@ describe("chatMessagesReducer workflowTaskStates", () => {
     const next = chatMessagesReducer(current, makeTaskUpdate({ workflowTaskStates: undefined }));
     expect(next.workflowTaskStates["toolu-wf-1"]!.status).toBe("running");
   });
+
+  it("preserves the current map when the update carries null (suppressed as unchanged)", () => {
+    const current = makeCurrentState({ "toolu-wf-1": makeWorkflowState("running") });
+    const next = chatMessagesReducer(current, makeTaskUpdate({ workflowTaskStates: null }));
+    expect(next.workflowTaskStates["toolu-wf-1"]!.status).toBe("running");
+  });
+
+  it("replaces a non-empty map with an empty snapshot", () => {
+    const current = makeCurrentState({ "toolu-wf-1": makeWorkflowState("running") });
+    const next = chatMessagesReducer(current, makeTaskUpdate({ workflowTaskStates: {} }));
+    expect(next.workflowTaskStates).toEqual({});
+  });
 });

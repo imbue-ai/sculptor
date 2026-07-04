@@ -47,9 +47,10 @@ type WorkflowTaskStateKey = {
 };
 
 // One derived atom per workflow pill, selected with deep equality: the
-// backend ships workflowTaskStates as a fresh object on every TaskUpdate, so
-// subscribing to a single entry keeps a progress tick on one workflow from
-// re-rendering every other pill in the transcript.
+// reducer produces a fresh detail object on every TaskUpdate (and a fresh
+// workflow map whenever one changes), so subscribing to a single entry keeps
+// a progress tick on one workflow from re-rendering every other pill in the
+// transcript.
 export const workflowTaskStateAtomFamily = atomFamily<WorkflowTaskStateKey, Atom<WorkflowTaskState | undefined>>(
   (key) =>
     selectAtom(taskDetailAtomFamily(key.taskId), (detail) => detail?.workflowTaskStates?.[key.toolUseId], isEqual),
