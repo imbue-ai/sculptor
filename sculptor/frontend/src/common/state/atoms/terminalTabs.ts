@@ -57,6 +57,7 @@ export const reportTerminalConnectionStatusAtom = atom(
         }
         return { ...previous, [panelId]: status };
       }
+
       if (!(panelId in previous)) {
         return previous;
       }

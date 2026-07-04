@@ -182,9 +182,7 @@ def test_file_tree_overlay_thumb_drag_scrolls_tree(sculptor_instance_: SculptorI
     tree overflows, its thumb appears and dragging it scrolls the tree."""
     page = sculptor_instance_.page
 
-    task_page = start_task_and_wait_for_ready(
-        sculptor_page=page, prompt=_write_tree_files_prompt(_TREE_FILE_COUNT)
-    )
+    task_page = start_task_and_wait_for_ready(sculptor_page=page, prompt=_write_tree_files_prompt(_TREE_FILE_COUNT))
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
