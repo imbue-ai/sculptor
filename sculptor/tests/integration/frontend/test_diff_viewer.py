@@ -17,8 +17,8 @@ When nothing is selected the viewer stays visible with an empty body and no
 loading bar; the loading bar shows only while an open file's diff is in flight.
 
 Coverage: branch-change diff refresh, single-viewer file swapping, the
-empty/loading state, the markdown render toggle and its GFM / link-safety
-rendering, opening a file's diff from a chat chip, the split/unified and
+empty/loading state, the markdown render toggle and its GFM / link-safety /
+frontmatter rendering, opening a file's diff from a chat chip, the split/unified and
 line-wrap toggles with persistence, find-in-file, copy-file-path for
 outside-repo files, and the Shiki-decoration / Pierre ``renderHunks`` /
 expansion-line-number guards.
@@ -158,6 +158,43 @@ _UNSAFE_FILE_CONTENT = """\
 [Click me](javascript:alert('xss'))
 
 <img src="x" onerror="window.__sculptor_pwn = 2">
+"""
+
+# YAML frontmatter exercising the shapes the metadata table must handle: plain
+# scalars, a boolean, a block-sequence (`tags`), and a nested mapping (`meta`).
+# The body has exactly one heading so tests can assert the frontmatter never
+# becomes a heading of its own (SCU-951: without the frontmatter split, the
+# closing `---` underlines the `key: value` lines into a setext `<h2>` — a
+# visually-broken blob).
+_FRONTMATTER_FILE_CONTENT = """\
+---
+title: Frontmatter Demo
+author: Example Author
+draft: false
+tags:
+  - docs
+  - internal
+meta:
+  level: 2
+---
+
+# Real heading
+
+Body paragraph.
+"""
+
+# TOML frontmatter (`+++` fences). It is detected and stripped so it never
+# mis-renders, but not parsed into rows yet — it shows verbatim in the
+# block as a raw fallback.
+_TOML_FRONTMATTER_FILE_CONTENT = """\
++++
+title = "Toml Demo"
+draft = false
++++
+
+# Toml heading
+
+Body.
 """
 
 _WRITE_FILE_PROMPT = """\
@@ -422,6 +459,37 @@ def _ensure_render_mode(viewer: PlaywrightDiffViewerElement, page: Page, mode: s
         expect(viewer.get_read_only_preview_markdown()).to_be_visible()
     else:
         expect(viewer.get_read_only_preview_markdown()).not_to_be_attached()
+
+
+def _get_frontmatter_block(viewer: PlaywrightDiffViewerElement) -> Locator:
+    """The frontmatter metadata table inside the rendered markdown body.
+
+    ``ReadOnlyPreview`` strips a leading frontmatter block off the markdown and
+    renders it as a styled table nested inside ``READ_ONLY_PREVIEW_MARKDOWN``,
+    so scoping through the markdown wrapper also pins that the block is a
+    rendered-view-only affordance.
+    """
+    return viewer.get_read_only_preview_markdown().get_by_test_id(ElementIDs.READ_ONLY_PREVIEW_FRONTMATTER)
+
+
+def _open_markdown_file_in_files_panel(page: Page, file_name: str, content: str) -> PlaywrightDiffViewerElement:
+    """Create a workspace whose agent writes ``file_name``, open it via the Files
+    panel, and return the panel's embedded viewer in rendered mode.
+
+    Rendered markdown is flag-gated, so the experimental toggle is enabled first
+    (it is server-persisted and a prior test could have left it off).
+    """
+    _set_rich_markdown_rendering_via_settings(page, enabled=True)
+
+    task_page = start_task_and_wait_for_ready(page, prompt=_write_file_via_fake_claude(file_name, content))
+    chat_panel = task_page.get_chat_panel()
+    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
+
+    section_root = open_panel(page, "files", sub_section="center")
+    files_panel = get_files_panel_in(section_root, page)
+    viewer = files_panel.open_file(file_name)
+    _ensure_render_mode(viewer, page, "rendered")
+    return viewer
 
 
 def _assert_gfm_features_present(body: Locator) -> None:
@@ -1008,6 +1076,90 @@ def test_unsafe_markdown_is_neutralised_in_read_only_preview(
     assert re.search(r"<img\b", html) is None, f"raw <img> reached the DOM as an element: {html[:600]!r}"
     # No real element should carry an `onerror=` attribute.
     assert re.search(r"<[^<>]*\bonerror\s*=", html) is None, f"onerror attribute is on a real element: {html[:600]!r}"
+
+
+# --------------------------------------------------------------------------- #
+# Markdown frontmatter (SCU-951)
+#
+# `ReadOnlyPreview` strips a leading frontmatter block before handing the
+# content to `react-markdown` and renders it as a styled metadata table.
+# Without this, the closing `---` underlines the `key: value` lines into a
+# setext `<h2>` — a visually-broken blob.
+# --------------------------------------------------------------------------- #
+
+
+@user_story("to see YAML frontmatter rendered as a styled metadata table instead of a broken heading")
+def test_yaml_frontmatter_renders_as_metadata_block(sculptor_instance_: SculptorInstance) -> None:
+    """A `.md` file that opens with YAML frontmatter shows a metadata table
+    with key/value rows, and the body's own heading is the only heading."""
+    page = sculptor_instance_.page
+    viewer = _open_markdown_file_in_files_panel(page, "frontmatter.md", _FRONTMATTER_FILE_CONTENT)
+
+    body = viewer.get_read_only_preview_markdown()
+    expect(body).to_be_visible()
+
+    # The metadata table renders the parsed key/value pairs. Block-sequence
+    # values collapse to a comma-joined list; nested mappings fall back to
+    # compact JSON.
+    block = _get_frontmatter_block(viewer)
+    expect(block).to_be_visible()
+    for fragment in ("title", "Frontmatter Demo", "author", "Example Author", "draft", "false", "docs, internal"):
+        expect(block).to_contain_text(fragment)
+    expect(block).to_contain_text('{"level":2}')
+
+    # The raw frontmatter lines never leak into the body as text; the body
+    # paragraph does render.
+    expect(body).not_to_contain_text("title: Frontmatter Demo")
+    expect(body).to_contain_text("Body paragraph.")
+
+    # Structural regression guard: the body's own heading rendered, and it is
+    # the *only* heading — the frontmatter never became a setext `<h2>` and
+    # never emitted a thematic rule. Read the HTML off the test-id'd body
+    # because per-tag CSS selectors are banned in integration tests by the
+    # `no-integration-css-locators` ratchet; the `<th>` cells in the metadata
+    # table are not `<h1>`–`<h6>`.
+    html = (body.inner_html() or "").lower()
+    assert "<h1>real heading</h1>" in html, f"body heading missing: {html[:600]!r}"
+    assert len(re.findall(r"<h[1-6]\b", html)) == 1, f"expected exactly one heading: {html[:800]!r}"
+    assert "<hr" not in html, f"frontmatter rendered a thematic break: {html[:600]!r}"
+
+
+@user_story("to keep the raw frontmatter visible when I switch the markdown file back to source view")
+def test_frontmatter_block_is_rendered_view_only(sculptor_instance_: SculptorInstance) -> None:
+    """The metadata block exists only in rendered view; flipping to source
+    removes both it and the rendered markdown body, so the raw `.md`
+    (frontmatter included) shows verbatim through the source renderer."""
+    page = sculptor_instance_.page
+    viewer = _open_markdown_file_in_files_panel(page, "frontmatter.md", _FRONTMATTER_FILE_CONTENT)
+    expect(_get_frontmatter_block(viewer)).to_be_visible()
+
+    _ensure_render_mode(viewer, page, "source")
+    # Rendered-only affordances are gone; the source view (Pierre) is showing
+    # the file verbatim, frontmatter and all.
+    expect(viewer.get_read_only_preview_markdown()).not_to_be_attached()
+    expect(_get_frontmatter_block(viewer)).to_have_count(0)
+    expect(viewer.get_read_only_preview()).to_be_visible()
+
+
+@user_story("to see TOML frontmatter stripped to a tidy block instead of a broken heading")
+def test_toml_frontmatter_renders_as_raw_block(sculptor_instance_: SculptorInstance) -> None:
+    """TOML (`+++`) frontmatter is detected and stripped — it shows verbatim
+    in the metadata block (no row parsing yet) and never leaks into the body
+    as a heading."""
+    page = sculptor_instance_.page
+    viewer = _open_markdown_file_in_files_panel(page, "toml.md", _TOML_FRONTMATTER_FILE_CONTENT)
+
+    body = viewer.get_read_only_preview_markdown()
+    expect(body).to_be_visible()
+    block = _get_frontmatter_block(viewer)
+    expect(block).to_be_visible()
+    expect(block).to_contain_text('title = "Toml Demo"')
+
+    # Body heading rendered and is the only heading (see the ratchet note in
+    # the YAML test for why this reads HTML instead of CSS locators).
+    html = (body.inner_html() or "").lower()
+    assert "<h1>toml heading</h1>" in html, f"body heading missing: {html[:600]!r}"
+    assert len(re.findall(r"<h[1-6]\b", html)) == 1, f"expected exactly one heading: {html[:800]!r}"
 
 
 # --------------------------------------------------------------------------- #

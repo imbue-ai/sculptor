@@ -23,7 +23,7 @@ from sculptor.testing.elements.alpha_chat_view import start_scroll_top_sampler
 from sculptor.testing.elements.alpha_chat_view import wait_for_stable_following_tail_gap
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.elements.panels import close_bottom_panel
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -67,7 +67,7 @@ def test_following_keeps_pin_gap_below_last_message(sculptor_instance_: Sculptor
         prompt=f'fake_claude:text `{{"text": "{_LONG_TEXT}"}}`',
     )
     chat_panel = task_page.get_chat_panel()
-    close_bottom_panel(page)
+    PlaywrightWorkspaceSection(page, "bottom").collapse_section()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
     # A bit of history so the follow-on user message scrolls off the top and we
@@ -132,7 +132,7 @@ def test_turn_end_does_not_restore_a_stale_reading_anchor(sculptor_instance_: Sc
         prompt=f'fake_claude:text `{{"text": "{_LONG_TEXT}"}}`',
     )
     chat_panel = task_page.get_chat_panel()
-    close_bottom_panel(page)
+    PlaywrightWorkspaceSection(page, "bottom").collapse_section()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
     send_chat_message(chat_panel, f'fake_claude:text `{{"text": "{_LONG_TEXT}"}}`')
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=4)
@@ -189,7 +189,7 @@ def test_turn_end_scrolls_turn_footer_into_view_when_following(sculptor_instance
         prompt='fake_claude:text `{"text": "Ready."}`',
     )
     chat_panel = task_page.get_chat_panel()
-    close_bottom_panel(page)
+    PlaywrightWorkspaceSection(page, "bottom").collapse_section()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
     view = get_alpha_chat_view(page)
