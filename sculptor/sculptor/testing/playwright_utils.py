@@ -492,7 +492,10 @@ def start_task_and_wait_for_ready(
     # awaited below never mounts and this helper times out. The source-branch
     # selector renders only once repo info has loaded, so waiting for it here
     # guarantees the create carries a source branch before we click.
-    expect(sculptor_page.get_by_test_id(ElementIDs.BRANCH_SELECTOR)).to_be_visible(timeout=45_000)
+    # Default timeout on purpose: repo info is retried every 3s up to 10 times
+    # after mount, so the selector appears within ~30s or never — waiting longer
+    # only stalls the failure.
+    expect(sculptor_page.get_by_test_id(ElementIDs.BRANCH_SELECTOR)).to_be_visible()
 
     # Wait for the submit button to be enabled — the worktree-mode branch-name
     # preview has populated the input (the form gates submit on a non-empty branch

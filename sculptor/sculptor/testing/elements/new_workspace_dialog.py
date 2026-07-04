@@ -221,11 +221,13 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
         self.set_keep_open(keep_open)
         # The form's source branch comes from repo info, which loads on a separate
         # request from the branch-name preview, and the create button does NOT gate
-        # on it — submitting before it resolves sends a create without a source
-        # branch, which the backend 400s. The branch selector mounts only once repo
+        # on it while repo info loads. The branch selector mounts only once repo
         # info has loaded (in every mode), so it is the "source branch resolved"
-        # signal.
-        expect(self.get_branch_selector()).to_be_visible(timeout=45_000)
+        # signal — waiting on it makes a repo-info failure surface here, at the
+        # unmet precondition, instead of as a downstream timeout. Default timeout
+        # on purpose: repo info is retried every 3s up to 10 times after mount,
+        # so the selector appears within ~30s or never.
+        expect(self.get_branch_selector()).to_be_visible()
         create_button = self.get_create_button()
         expect(create_button).to_be_enabled()
         if via_keyboard:

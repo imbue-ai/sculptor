@@ -62,8 +62,6 @@ export const buildWorkspaceActions = (runtime: WorkspaceActionRuntime): Readonly
     paletteTitleSuffix: "name",
     perform: (ws): void => runtime.beginRename(ws),
   },
-  // No close action: the sidebar always shows every workspace regardless of
-  // any "open tab" state, so closing one would have no observable effect.
   {
     id: "delete",
     title: "Delete workspace",
