@@ -8,7 +8,6 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useMemo } from "react";
 
-import { registerPanelComponent } from "~/components/sections/registry/panelRegistry.ts";
 import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 import { activeDiffTabAtomFamily, commitSelectionFromTab } from "~/pages/workspace/components/diffPanel/atoms.ts";
 import type { DiffSelection, TreeViewOptions } from "~/pages/workspace/components/diffViewer/index.ts";
@@ -94,5 +93,3 @@ export const CommitsPanel = (): ReactElement | null => {
   // selection state instead of carrying a stale commit across workspaces.
   return <CommitsPanelContent key={workspaceId} workspaceId={workspaceId} />;
 };
-
-registerPanelComponent("commits", CommitsPanel);

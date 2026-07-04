@@ -9,7 +9,7 @@ import { useSetAtom } from "jotai";
 import { type ReactElement, useCallback, useEffect } from "react";
 
 import { reportTerminalConnectionStatusAtom } from "~/common/state/atoms/terminalTabs.ts";
-import { makeTerminalPanelId, registerTerminalPanelComponent } from "~/components/sections/registry/dynamicPanels.tsx";
+import { makeTerminalPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
 import { terminalPanelMountedAtom } from "~/pages/workspace/atoms.ts";
 
 import styles from "./TerminalPanelView.module.scss";
@@ -60,6 +60,3 @@ export const TerminalPanelView = ({ workspaceId, index }: { workspaceId: string;
     </div>
   );
 };
-
-// Register at module load as the base the dynamicPanels cache binds per terminal id.
-registerTerminalPanelComponent(TerminalPanelView);

@@ -11,7 +11,6 @@ import { useCallback, useMemo, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
-import { registerPanelComponent } from "~/components/sections/registry/panelRegistry.ts";
 import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 import {
   activeDiffTabAtomFamily,
@@ -211,5 +210,3 @@ export const ChangesPanel = (): ReactElement | null => {
   // selection state instead of carrying a stale file path across workspaces.
   return <ChangesPanelContent key={workspaceId} workspaceId={workspaceId} />;
 };
-
-registerPanelComponent("changes", ChangesPanel);

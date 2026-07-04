@@ -1,8 +1,8 @@
 // The panel registry: the join point between layout state (which references panels
 // by id) and content (which renders them). Static single-instance panels carry
 // metadata here; their actual components are supplied through registerPanelComponent
-// at import time so this module never forward-imports components
-// that do not exist yet. Dynamic agent/terminal panels are derived in dynamicPanels.
+// (called once from registerPanels at app load) so this module never imports the
+// component modules directly. Dynamic agent/terminal panels are derived in dynamicPanels.
 // Panels carry no enable/disable flags; a panel's visibility is purely its placement
 // in the layout.
 
@@ -72,9 +72,9 @@ export const STATIC_PANEL_METADATA: ReadonlyArray<StaticPanelMeta> = [
   { id: "notes", displayName: "Notes", icon: NotebookPen, defaultSection: "right" },
 ];
 
-// Component registration indirection: the static panel modules register their
-// component at import time; the registry composes metadata + the registered
-// component. A panel with no registered component yet renders nothing.
+// Component registration indirection: registerPanels supplies each static panel's
+// component via registerPanelComponent at app load; the registry composes metadata +
+// the registered component. A panel with no registered component yet renders nothing.
 const registeredComponents = new Map<PanelId, ComponentType>();
 
 const MissingPanelPlaceholder: ComponentType = () => null;

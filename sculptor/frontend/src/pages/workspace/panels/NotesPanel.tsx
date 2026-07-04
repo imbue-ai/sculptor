@@ -9,7 +9,6 @@ import { notesDraftAtomFamily } from "~/common/state/atoms/notesDrafts.ts";
 import { usePromptDraft } from "~/common/state/hooks/usePromptDraft.ts";
 import { Editor } from "~/components/Editor.tsx";
 import { PanelHeader } from "~/components/panels/PanelHeader.tsx";
-import { registerPanelComponent } from "~/components/sections/registry/panelRegistry.ts";
 import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 
@@ -91,12 +90,10 @@ export const NotesPanel = (): ReactElement => {
 // The single-instance Notes panel for the section/panel shell: a thin, no-prop
 // wrapper that gates on the active workspace and renders the existing notes content.
 // Keyed on the workspace id so switching workspaces shows that workspace's notes.
-const NotesPanelForShell = (): ReactElement | null => {
+export const NotesPanelForShell = (): ReactElement | null => {
   const workspaceId = useAtomValue(activeWorkspaceIdAtom);
   if (workspaceId === null) {
     return null;
   }
   return <NotesPanel key={workspaceId} />;
 };
-
-registerPanelComponent("notes", NotesPanelForShell);

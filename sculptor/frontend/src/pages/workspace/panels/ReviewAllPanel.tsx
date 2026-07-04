@@ -10,7 +10,6 @@ import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
 import { fileBrowserDiffViewTypeAtom } from "~/common/state/atoms/userConfig.ts";
-import { registerPanelComponent } from "~/components/sections/registry/panelRegistry.ts";
 import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 import { CombinedDiffView } from "~/pages/workspace/components/diffPanel/CombinedDiffView.tsx";
 
@@ -38,5 +37,3 @@ export const ReviewAllPanel = (): ReactElement | null => {
   // per-file collapse state instead of carrying it across workspaces.
   return <ReviewAllPanelContent key={workspaceId} workspaceId={workspaceId} />;
 };
-
-registerPanelComponent("review-all", ReviewAllPanel);

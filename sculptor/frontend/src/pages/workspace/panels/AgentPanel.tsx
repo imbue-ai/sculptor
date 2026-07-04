@@ -7,11 +7,6 @@
 
 import type { ReactElement } from "react";
 
-import { registerAgentPanelComponent } from "~/components/sections/registry/dynamicPanels.tsx";
-
 import { ChatPanelContent } from "../components/ChatPanelContent.tsx";
 
 export const AgentPanel = ({ taskId }: { taskId: string }): ReactElement => <ChatPanelContent taskId={taskId} />;
-
-// Register at module load as the base the dynamicPanels cache binds per agent id.
-registerAgentPanelComponent(AgentPanel);

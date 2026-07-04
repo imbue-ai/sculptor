@@ -9,7 +9,6 @@ import type { ReactElement } from "react";
 import { useCallback, useMemo, useState } from "react";
 
 import { ElementIds } from "~/api";
-import { registerPanelComponent } from "~/components/sections/registry/panelRegistry.ts";
 import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 import { activeDiffTabAtomFamily, fileViewSelectionFromTab } from "~/pages/workspace/components/diffPanel/atoms.ts";
 import type { DiffSelection, TreeViewOptions } from "~/pages/workspace/components/diffViewer/index.ts";
@@ -143,5 +142,3 @@ export const FilesPanel = (): ReactElement | null => {
   // workspaces; the file selection is already per-workspace via its atom.
   return <FilesPanelContent key={workspaceId} workspaceId={workspaceId} />;
 };
-
-registerPanelComponent("files", FilesPanel);

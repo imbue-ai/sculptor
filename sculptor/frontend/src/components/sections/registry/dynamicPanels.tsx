@@ -7,9 +7,8 @@
 // The bound component per dynamic panel id is cached, so rebuilding the registry on
 // every task tick returns the SAME component reference per id and a live
 // agent/terminal panel never remounts (it stays mounted under SectionBody).
-// The base components are registered by AgentPanel/TerminalPanel at import time and
-// looked up at render time, so a cached bound component picks up its
-// base once it registers.
+// The base components are registered by registerPanels at app load and looked up at
+// render time, so a cached bound component picks up its base once it registers.
 
 import { Bot, Terminal } from "lucide-react";
 import type { ComponentType } from "react";
