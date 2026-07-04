@@ -27,7 +27,7 @@ import { layoutPersistenceAdapter } from "~/components/sections/persistence/Loca
 import { ResizeHandle } from "~/components/sections/ResizeHandle.tsx";
 import { Toast, type ToastContent } from "~/components/Toast.tsx";
 import { useWorkspaceTabActions } from "~/components/useWorkspaceTabActions.ts";
-import { VersionDisplay } from "~/components/VersionDisplay.tsx";
+import { VersionPopover } from "~/components/VersionPopover.tsx";
 import { HOME_TAB_ID, SETTINGS_TAB_ID } from "~/components/workspaceTabIds.ts";
 import { getTitleBarLeftPadding } from "~/electron/utils.ts";
 import { WorkspacePeekOverlay } from "~/pages/workspace/components/WorkspacePeekOverlay.tsx";
@@ -286,7 +286,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
           </ReportProblemPopover>
           <DevModeIndicator />
           <div className={styles.versionRow} data-testid={ElementIds.SIDEBAR_VERSION}>
-            <VersionDisplay />
+            <VersionPopover />
           </div>
         </nav>
 
