@@ -26,10 +26,14 @@ import { getTabStatusIcon } from "~/pages/workspace/panels/TerminalConnectionInd
 
 import { AddPanelDropdown } from "./AddPanelDropdown.tsx";
 import type { PanelContextMenuItem, PanelDefinition } from "./registry/panelRegistry.ts";
-import { panelDefinitionByIdAtom, panelRegistryAtom } from "./registry/panelRegistry.ts";
+import {
+  panelDefinitionByIdAtom,
+  panelRegistryAtom,
+  resolvedActivePanelIdInSubSectionAtom,
+} from "./registry/panelRegistry.ts";
 import { isMultiInstanceKind } from "./registry/panelRegistry.ts";
 import { closePanelAtom, setActivePanelAtom, splitSectionAtom } from "./sectionActions.ts";
-import { activePanelIdInSubSectionAtom, sectionSplitForSectionAtom } from "./sectionAtoms.ts";
+import { sectionSplitForSectionAtom } from "./sectionAtoms.ts";
 import styles from "./SectionHeader.module.scss";
 import type { PanelId, SubSectionId } from "./sectionTypes.ts";
 import { splitDirectionOptionsForSection, toSection } from "./sectionTypes.ts";
@@ -294,7 +298,11 @@ type SectionHeaderProps = { subSection: SubSectionId };
 
 const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElement => {
   const displayedPanelIds = useAtomValue(displayedPanelIdsAtom(subSection));
-  const activePanelId = useAtomValue(activePanelIdInSubSectionAtom(subSection));
+  // The registry-aware resolved id — the same atom SectionBody renders from — so the
+  // highlighted tab always matches the rendered body, including when the persisted
+  // active id is an unregistered (unloaded/still-loading) plugin panel and the body
+  // falls back to another open panel.
+  const activePanelId = useAtomValue(resolvedActivePanelIdInSubSectionAtom(subSection));
   const ghostPanelId = useAtomValue(ghostPanelIdAtom(subSection));
   const isReorderWithin = useAtomValue(isReorderWithinSubSectionAtom(subSection));
   const setMaximizedSection = useSetAtom(maximizedSectionAtom);

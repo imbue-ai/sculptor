@@ -15,7 +15,7 @@ import type { ComponentType } from "react";
 import type { TerminalConnectionStatus } from "~/pages/workspace/panels/useTerminal.ts";
 
 import type { AgentDotStatus } from "../../statusDot/statusUtils.ts";
-import { activePanelIdInSubSectionAtom } from "../sectionAtoms.ts";
+import { activePanelIdInSubSectionAtom, panelsInSubSectionAtom } from "../sectionAtoms.ts";
 import type { PanelId, SubSectionId } from "../sectionTypes.ts";
 
 export type PanelKind = "static" | "agent" | "terminal";
@@ -185,13 +185,37 @@ export const panelDefinitionByIdAtom = atomFamily((panelId: PanelId) =>
   ),
 );
 
+// The registry-aware resolution of a sub-section's active panel id — the id both
+// SectionBody renders and SectionHeader highlights, so the highlighted tab always
+// matches the rendered body.
+//
+// The persisted layout can name a panel id with no current registry definition:
+// plugin registration is async, so on every reload a persisted plugin-panel id is
+// transiently unregistered, and unloading a plugin removes its definitions while its
+// panels stay in the layout. Resolution therefore falls back — at read time only —
+// to the first OPEN panel in the sub-section that still has a definition (undefined
+// when none does, rendering the empty state). The layout itself must NEVER be
+// written/pruned in response: because the stored active id is left intact, the
+// resolution self-heals back to it the moment its definition (re)registers.
+export const resolvedActivePanelIdInSubSectionAtom = atomFamily((subSection: SubSectionId) =>
+  atom((get): PanelId | undefined => {
+    const registry = get(panelRegistryAtom);
+    const isRegistered = (panelId: PanelId): boolean => registry.some((definition) => definition.id === panelId);
+    const activePanelId = get(activePanelIdInSubSectionAtom(subSection));
+    if (activePanelId !== undefined && isRegistered(activePanelId)) {
+      return activePanelId;
+    }
+    return get(panelsInSubSectionAtom(subSection)).find(isRegistered);
+  }),
+);
+
 // The layout↔registry join SectionBody subscribes to: the resolved component for the
 // sub-section's active panel. Returns a stable reference per panel id (static
 // component or identity-cached dynamic component), so a registry rebuild on a task
 // tick never remounts live panel content.
 export const activePanelComponentInSubSectionAtom = atomFamily((subSection: SubSectionId) =>
   atom((get): ComponentType | undefined => {
-    const activePanelId = get(activePanelIdInSubSectionAtom(subSection));
+    const activePanelId = get(resolvedActivePanelIdInSubSectionAtom(subSection));
     if (activePanelId === undefined) {
       return undefined;
     }

@@ -1,4 +1,5 @@
 import { createStore } from "jotai";
+import { Puzzle } from "lucide-react";
 import type { ComponentType } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -10,11 +11,13 @@ import type { DynamicAgentInput } from "./dynamicPanels.tsx";
 import { deriveDynamicPanels } from "./dynamicPanels.tsx";
 import {
   activePanelComponentInSubSectionAtom,
+  buildPluginPanelDefinitions,
   buildStaticPanelDefinitions,
   isMultiInstanceKind,
   panelRegistriesEqual,
   panelRegistryAtom,
   registerPanelComponent,
+  resolvedActivePanelIdInSubSectionAtom,
 } from "./panelRegistry.ts";
 
 // A minimal agent input with the fields the status dot + diagnostics derivation reads.
@@ -171,5 +174,71 @@ describe("activePanelComponentInSubSectionAtom", () => {
     const resolved = store.get(activePanelComponentInSubSectionAtom("left"));
     expect(resolved).toBe(filesComponent);
     expect(store.get(activePanelComponentInSubSectionAtom("left"))).toBe(resolved);
+  });
+});
+
+describe("resolvedActivePanelIdInSubSectionAtom", () => {
+  const PLUGIN_PANEL_ID = "plugin:linear-issue:issues";
+  const pluginComponent: ComponentType = () => null;
+  const pluginDefinitions = buildPluginPanelDefinitions([
+    { id: PLUGIN_PANEL_ID, displayName: "Issues", icon: Puzzle, component: pluginComponent },
+  ]);
+
+  // A layout whose persisted active panel in "left" is the plugin panel, with "files"
+  // also open — the state left behind when a plugin unloads (or has not loaded yet)
+  // while its panel is the active tab.
+  const seedStore = (workspaceId: string): ReturnType<typeof createStore> => {
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, workspaceId);
+    store.set(workspaceLayoutAtom, {
+      ...EMPTY_WORKSPACE_LAYOUT,
+      placement: { [PLUGIN_PANEL_ID]: "left", files: "left" },
+      order: { left: [PLUGIN_PANEL_ID, "files"] },
+      activePanel: { left: PLUGIN_PANEL_ID },
+      expanded: { left: true },
+    });
+    return store;
+  };
+
+  it("falls back to the first open registered panel when the active id is unregistered", () => {
+    const filesComponent: ComponentType = () => null;
+    registerPanelComponent("files", filesComponent);
+    const store = seedStore("ws-unregistered-active");
+    // Static panels only: the plugin panel named by the layout has no definition.
+    store.set(panelRegistryAtom, buildStaticPanelDefinitions());
+
+    expect(store.get(resolvedActivePanelIdInSubSectionAtom("left"))).toBe("files");
+    // The body renders the same resolved id the header highlights.
+    expect(store.get(activePanelComponentInSubSectionAtom("left"))).toBe(filesComponent);
+  });
+
+  it("resolves to undefined when no open panel is registered", () => {
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-none-registered");
+    store.set(workspaceLayoutAtom, {
+      ...EMPTY_WORKSPACE_LAYOUT,
+      placement: { [PLUGIN_PANEL_ID]: "left" },
+      order: { left: [PLUGIN_PANEL_ID] },
+      activePanel: { left: PLUGIN_PANEL_ID },
+      expanded: { left: true },
+    });
+    store.set(panelRegistryAtom, buildStaticPanelDefinitions());
+
+    expect(store.get(resolvedActivePanelIdInSubSectionAtom("left"))).toBeUndefined();
+    expect(store.get(activePanelComponentInSubSectionAtom("left"))).toBeUndefined();
+  });
+
+  it("self-heals back to the persisted active id when its definition (re)registers", () => {
+    registerPanelComponent("files", () => null);
+    const store = seedStore("ws-self-heal");
+    store.set(panelRegistryAtom, buildStaticPanelDefinitions());
+    expect(store.get(resolvedActivePanelIdInSubSectionAtom("left"))).toBe("files");
+
+    // The plugin (re)loads: its definitions join the registry and — because the
+    // fallback never pruned the layout — the persisted active id wins again.
+    store.set(panelRegistryAtom, [...buildStaticPanelDefinitions(), ...pluginDefinitions]);
+    expect(store.get(resolvedActivePanelIdInSubSectionAtom("left"))).toBe(PLUGIN_PANEL_ID);
+    expect(store.get(activePanelComponentInSubSectionAtom("left"))).toBe(pluginComponent);
+    expect(store.get(workspaceLayoutAtom).activePanel.left).toBe(PLUGIN_PANEL_ID);
   });
 });
