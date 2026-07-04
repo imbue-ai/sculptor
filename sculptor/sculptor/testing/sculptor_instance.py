@@ -35,7 +35,6 @@ from sculptor.testing.packaged_electron_frontend import PackagedElectronFactory
 from sculptor.testing.playwright_utils import delete_all_workspaces_via_ui
 from sculptor.testing.playwright_utils import delete_project_via_settings
 from sculptor.testing.playwright_utils import expect_app_not_onboarding
-from sculptor.testing.playwright_utils import reset_active_panel_to_files
 from sculptor.testing.port_manager import PortManager
 from sculptor.testing.repo_resources import get_test_project_state
 from sculptor.testing.server_utils import SculptorFactory
@@ -493,8 +492,6 @@ class SculptorInstance:
 
         # Dismiss any open popover/context menu/dialog left by the previous test.
         self.page.keyboard.press("Escape")
-        reset_active_panel_to_files(self.page)
-        self._check_pre_test_timeout("reset_active_panel_to_files", start, test_id)
 
         self._delete_all_workspaces_via_api()
         self._check_pre_test_timeout("delete_all_workspaces_via_api", start, test_id)

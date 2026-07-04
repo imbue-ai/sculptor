@@ -8,8 +8,8 @@ from playwright.sync_api import expect
 
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
 from sculptor.testing.playwright_utils import navigate_to_workspace
+from sculptor.testing.playwright_utils import open_new_workspace_form
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -140,7 +140,7 @@ def test_status_pill_timer_persists_across_tab_switch(sculptor_instance_: Sculpt
     elapsed_before = float(elapsed_before_text.rstrip("s"))
     assert elapsed_before >= 2.0, f"Expected >= 2.0s before switch, got {elapsed_before}s"
 
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
 
     navigate_to_workspace(page)
 

@@ -137,7 +137,7 @@ def navigate_to_workspace(page: Page, name_or_index: str | int = 0) -> None:
     # The new-workspace modal renders a dimmed dialog overlay that covers the
     # whole page, so a sidebar row beneath it is not clickable (Playwright's
     # actionability check fails on "stable"). A common caller sequence is
-    # ``navigate_to_add_workspace_page`` (which opens that modal) then
+    # ``open_new_workspace_form`` (which opens that modal) then
     # ``navigate_to_workspace`` to return — so dismiss the modal first.
     # (First, before expanding the sidebar: the overlay would intercept the
     # expand-toggle click too.)
@@ -170,6 +170,14 @@ def navigate_to_workspace(page: Page, name_or_index: str | int = 0) -> None:
     # landed. The testid is suffixed per sub-section (no single id to match), so
     # this uses a data-testid prefix selector, encapsulated here like the POMs'
     # tab selectors to honour the integration-test css-locator ratchet.
+    #
+    # Waiting on the ring host is race-free even though the ACTIVE-SECTION RING is
+    # transient (it pulses on workspace entry and fades shortly after). The testid
+    # names the PanelSection ROOT div, which stays mounted for as long as the
+    # section renders; the ring itself is only a CSS ``::after`` overlay on that div
+    # whose opacity fades via the ring-visible flag (RING_VISIBLE_MS). So the fade
+    # never unmounts the element this waits on — only its overlay styling changes —
+    # and the host cannot disappear out from under the wait.
     ring_hosts = page.locator(f'[data-testid^="{ElementIDs.SECTION_ACTIVE_RING}-"]')
     expect(ring_hosts.first).to_be_visible()
     # A visible ring-host is necessary but NOT sufficient: on a workspace→workspace
@@ -243,7 +251,7 @@ def open_new_workspace_modal(page: Page) -> None:
     )(_press_and_wait)()
 
 
-def navigate_to_add_workspace_page(page: Page) -> None:
+def open_new_workspace_form(page: Page) -> None:
     """Bring up a workspace-creation surface (the new-workspace modal or inline form).
 
     No-op if a create surface is already showing — either the inline empty-first-run
@@ -320,36 +328,21 @@ def navigate_to_add_workspace_page(page: Page) -> None:
 
 
 def reset_active_panel_to_files(page: Page) -> None:
-    """Best-effort: reveal the Files panel in its seeded left section.
+    """Reveal the Files panel in the workspace's seeded left section.
 
-    No-op when the workspace section shell isn't rendered (Home / empty first-run
-    route) — the sidebar renders on Home too, so the center section (which only
-    exists once a workspace is open) is the guard signal.
-
-    This is a clean-baseline nicety: it runs as per-test cleanup (on the previous
-    test's about-to-be-deleted workspace, before the browser reset restores the
-    default layout) and from a couple of tests. A prior test may have *moved*
-    Files out of the left section (e.g. dragged it to the right), so this is
-    best-effort — it expands the left section and activates the Files tab when it
-    is there, and otherwise skips silently rather than failing setup.
-
-    Whole-thing best-effort: when this runs in per-test cleanup the previous test's
-    workspace may be mid-optimistic-delete (deleting the active workspace navigates
-    away and remounts the workspace header, so the section toggle never stabilizes
-    long enough to click). The browser reset that follows restores the default
-    layout anyway, so a churning shell here must not fail setup — swallow any
-    expand/activate error rather than blocking the next test.
+    An earlier step in the same test may have moved Files out of the left section
+    (e.g. dragged it to the right) or activated a different tab there, so this
+    expands the left section and re-activates the Files tab when it is present, and
+    no-ops when it is not. Callers must already be on an open workspace — the left
+    section (and ``expand_section``'s workspace-header toggle) only exist there.
+    ``expand_section`` is idempotent and rides out header re-render churn on its
+    own, so no extra guarding is needed here.
     """
-    if not page.get_by_test_id(ElementIDs.SECTION_CENTER).is_visible():
-        return
     left = PlaywrightWorkspaceSection(page, "left")
-    try:
-        left.expand_section()
-        files_tab = left.get_panel_tab("files")
-        if files_tab.count() > 0:
-            files_tab.click()
-    except (playwright.sync_api.Error, AssertionError) as error:
-        logger.debug("reset_active_panel_to_files skipped (workspace shell unstable): {}", error)
+    left.expand_section()
+    files_tab = left.get_panel_tab("files")
+    if files_tab.count() > 0:
+        files_tab.click()
 
 
 _MAX_WORKSPACE_DELETE_ITERATIONS = 50
@@ -410,7 +403,7 @@ def start_task_and_wait_for_ready(
     """Create a workspace and agent through the new-workspace UI.
 
     Opens the new-workspace modal (or uses the inline empty-first-run form when
-    no workspaces exist yet) via ``navigate_to_add_workspace_page``, fills in the
+    no workspaces exist yet) via ``open_new_workspace_form``, fills in the
     workspace name, clicks create, then waits for the agent chat page to appear.
 
     The new-workspace form has no model selector, so the model is switched on the
@@ -450,7 +443,7 @@ def start_task_and_wait_for_ready(
     if agent_type == "pi":
         enable_pi_agent(sculptor_page)
 
-    navigate_to_add_workspace_page(sculptor_page)
+    open_new_workspace_form(sculptor_page)
 
     # The same name/mode/agent-type fields and create button back both creation
     # surfaces (the new-workspace modal and the inline empty-first-run form); they

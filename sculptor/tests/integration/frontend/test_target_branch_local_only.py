@@ -24,7 +24,7 @@ from sculptor.testing.elements.chat_panel import wait_for_completed_message_coun
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.playwright_utils import open_new_workspace_form
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -49,7 +49,7 @@ def test_worktree_on_local_only_repo_shows_all_tab_and_uncommitted_changes(
     """
     page = sculptor_instance_.page
 
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     add_workspace_page = PlaywrightAddWorkspacePage(page=page)
     add_workspace_page.get_workspace_name_input().fill("Local only worktree")
 

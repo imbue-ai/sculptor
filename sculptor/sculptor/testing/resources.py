@@ -120,12 +120,20 @@ def sculptor_instance_empty_first_run_(
     """Shared instance settled on the empty first-run page.
 
     The shared ``sculptor_instance_`` already deletes every workspace in its
-    per-test cleanup and lands the browser on ``/ws/new`` with one repo and zero
-    workspaces — the genuine first-run state — so this fixture only waits for the
-    ``EmptyFirstRunGate`` to settle on ``EmptyFirstRunPage``. The gate briefly
-    flashes the legacy ``/ws/new`` page before the (empty) workspace snapshot
-    arrives and flips ``isWorkspaceListEmptyAtom`` true, so wait for the
-    empty-page marker rather than asserting it synchronously.
+    per-test cleanup and its browser reset navigates the hash to ``#/ws/new`` with
+    one repo and zero workspaces — the genuine first-run state — so this fixture
+    only waits for that landing to settle on ``EmptyFirstRunPage``.
+
+    There is no dedicated ``/ws/new`` page anymore: that route was removed, and the
+    ``#/ws/new`` URL now matches the generic ``/ws/:workspaceID`` route with the
+    sentinel id ``"new"``. ``EmptyFirstRunGate`` wraps that route and swaps in
+    ``EmptyFirstRunPage`` once the (empty) workspace snapshot flips
+    ``isWorkspaceListEmptyAtom`` true. Before that snapshot arrives the atom is
+    still false (the list is ``undefined`` while loading), so the gate falls
+    through to the routed ``Outlet`` — the AppShell chrome with ``WorkspacePage``,
+    which renders nothing for the unknown ``"new"`` id: a momentarily empty shell,
+    not a distinct page. So wait for the empty-page marker rather than asserting it
+    synchronously.
     """
     page = sculptor_instance_.page
     expect(page.get_by_test_id(ElementIDs.EMPTY_FIRST_RUN_PAGE)).to_be_visible(timeout=45_000)

@@ -20,9 +20,9 @@ from sculptor.testing.elements.chat_panel import wait_for_completed_message_coun
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import navigate_to_workspace
+from sculptor.testing.playwright_utils import open_new_workspace_form
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.test_repo_factory import TestRepoFactory
@@ -57,7 +57,7 @@ def test_create_new_project_from_add_workspace_page(
     _add_repo_via_settings(page, repo.base_path)
 
     # Navigate to the AddWorkspacePage so the UI picks up the new project
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     add_ws_page = PlaywrightAddWorkspacePage(page=page)
     expect(add_ws_page.get_submit_button()).to_be_visible()
 
@@ -89,7 +89,7 @@ def test_git_init_dialog_for_non_git_directories(sculptor_instance_: SculptorIns
     page = sculptor_instance_.page
 
     # Navigate to the AddWorkspacePage
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     add_ws_page = PlaywrightAddWorkspacePage(page=page)
 
     # Open the project selector and click "Open New Repo"
@@ -156,14 +156,14 @@ def test_create_workspaces_in_multiple_projects_and_switch(
     _add_repo_via_settings(page, repo_b.base_path)
 
     # Create a workspace in project A
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     PlaywrightAddWorkspacePage(page=page).select_project_by_name(project_a)
     task_page_a = start_task_and_wait_for_ready(page, prompt="Alpha task 1", workspace_name="Alpha Workspace")
     chat_panel_a = task_page_a.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel_a, expected_message_count=2)
 
     # Create a workspace in project B
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     PlaywrightAddWorkspacePage(page=page).select_project_by_name(project_b)
     task_page_b = start_task_and_wait_for_ready(page, prompt="Beta task 1", workspace_name="Beta Workspace")
     chat_panel_b = task_page_b.get_chat_panel()
@@ -214,7 +214,7 @@ def test_send_messages_across_multiple_project_workspaces(
     _add_repo_via_settings(page, repo_b.base_path)
 
     # Create workspace in project A
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     PlaywrightAddWorkspacePage(page=page).select_project_by_name(project_a)
     task_page_a = start_task_and_wait_for_ready(page, prompt=initial_prompt_a, workspace_name="Alpha Workspace")
     chat_panel_a = task_page_a.get_chat_panel()
@@ -225,7 +225,7 @@ def test_send_messages_across_multiple_project_workspaces(
     wait_for_completed_message_count(chat_panel=chat_panel_a, expected_message_count=4)
 
     # Create workspace in project B
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     PlaywrightAddWorkspacePage(page=page).select_project_by_name(project_b)
     task_page_b = start_task_and_wait_for_ready(page, prompt=initial_prompt_b, workspace_name="Beta Workspace")
     chat_panel_b = task_page_b.get_chat_panel()
@@ -282,12 +282,12 @@ def test_mru_project_updates_after_creating_workspace(
 
     # Step 2: Create a workspace in the original project A (not B).
     # The project selector should still show A since it's the first project.
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     PlaywrightAddWorkspacePage(page=page).select_project_by_name(project_a_name)
     start_task_and_wait_for_ready(page, prompt="Alpha task", workspace_name="Alpha Workspace")
 
     # Step 3: Navigate back to the Add Workspace page.
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
 
     # Step 4: Verify the project selector shows project A (not B) as the default,
     # because we most recently created a workspace in project A.

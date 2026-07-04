@@ -18,7 +18,7 @@ from playwright.sync_api import expect
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.user_config import enable_clone_workspaces
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.playwright_utils import open_new_workspace_form
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 from sculptor.testing.utils import get_playwright_modifier_key
@@ -58,7 +58,7 @@ def test_worktree_mode_collision_blocks_creation(sculptor_instance_: SculptorIns
     add_ws_page = PlaywrightAddWorkspacePage(page=page)
 
     # Worktree is the default — no mode-selector interaction needed.
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     add_ws_page.get_workspace_name_input().fill("test")
 
     branch_input = add_ws_page.get_branch_name_input()
@@ -92,7 +92,7 @@ def test_clone_mode_collision_blocks_creation(sculptor_instance_: SculptorInstan
     # Clone is opt-in; enable the flag and pick clone mode explicitly.
     enable_clone_workspaces(page)
 
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     add_ws_page.get_workspace_name_input().fill("test")
     add_ws_page.select_mode(ElementIDs.MODE_OPTION_CLONE)
 

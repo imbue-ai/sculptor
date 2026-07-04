@@ -14,7 +14,7 @@ leaves the user on the Add Workspace page.
 from playwright.sync_api import expect
 
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.playwright_utils import open_new_workspace_form
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.test_repo_factory import TestRepoFactory
 from sculptor.testing.user_stories import user_story
@@ -42,7 +42,7 @@ def test_add_repo_cmd_enter_stays_on_add_workspace_page(
     target_repo = test_repo_factory_.create_repo(name=target_repo_name, branch="main")
     target_repo_path = str(target_repo.base_path.resolve())
 
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     add_ws_page = PlaywrightAddWorkspacePage(page=page)
     # The page's Cmd+Enter handler bails on an empty branch name, so wait for the
     # submit button to enable (branch-name preview loaded) before triggering it.
