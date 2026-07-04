@@ -60,8 +60,9 @@ def test_terminal_tab_double_click_rename(sculptor_instance_: SculptorInstance) 
 
     terminal_tab = bottom_tabs.get_active_tab()
     expect(terminal_tab).to_be_visible()
-    terminal_tab.dblclick()
-    expect(bottom_tabs.get_inline_rename_input()).to_be_visible()
+    # Double-clicking starts the inline rename. The gesture is retried because a native
+    # double-click can be dropped under heavy main-thread contention (see the POM).
+    expect(bottom_tabs.start_inline_rename_via_double_click(terminal_tab)).to_be_visible()
 
 
 def _copy_via_context_menu(page: Page, panel_tabs: PlaywrightPanelTabElement, tab: Locator, label: str) -> str:

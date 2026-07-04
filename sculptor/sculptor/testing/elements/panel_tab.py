@@ -21,6 +21,15 @@ from playwright.sync_api import expect
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 
+# A native double-click is occasionally dropped when the browser's main thread is
+# saturated: under heavy CI contention the gap between the two synthetic clicks
+# stretches past the double-click threshold, so the browser registers two single
+# clicks and no ``dblclick`` fires — the inline rename never starts. Retry the gesture
+# this many times, waiting this long for the input each time, before giving up. Mirrors
+# the hover/menu-open retries the sibling add-panel POM uses for Radix teardown races.
+_DOUBLE_CLICK_RENAME_ATTEMPTS = 4
+_DOUBLE_CLICK_RENAME_TIMEOUT_MS = 3_000
+
 
 class PlaywrightPanelTabElement:
     """POM over the panel tabs in one sub-section's header + their affordances."""
@@ -144,11 +153,29 @@ class PlaywrightPanelTabElement:
         rename_input.press("Enter")
         expect(rename_input).not_to_be_visible()
 
+    def start_inline_rename_via_double_click(self, tab: Locator) -> Locator:
+        """Double-click ``tab`` to begin an inline rename and return the visible input.
+
+        Retries the double-click (see the module note on dropped double-clicks under
+        contention). Once the rename has started the input stays mounted, so a retry
+        after an earlier gesture already opened it is a no-op the visibility check
+        short-circuits.
+        """
+        rename_input = self.get_inline_rename_input()
+        for _ in range(_DOUBLE_CLICK_RENAME_ATTEMPTS):
+            tab.dblclick()
+            try:
+                expect(rename_input).to_be_visible(timeout=_DOUBLE_CLICK_RENAME_TIMEOUT_MS)
+                return rename_input
+            except AssertionError:
+                continue
+        # Out of retries: assert once more so the failure carries the standard message.
+        expect(rename_input).to_be_visible()
+        return rename_input
+
     def dblclick_rename(self, tab: Locator, new_name: str) -> None:
         """Double-click a tab to begin renaming, then commit a new label."""
-        tab.dblclick()
-        rename_input = self.get_inline_rename_input()
-        expect(rename_input).to_be_visible()
+        rename_input = self.start_inline_rename_via_double_click(tab)
         rename_input.fill(new_name)
         rename_input.press("Enter")
         expect(rename_input).not_to_be_visible()
