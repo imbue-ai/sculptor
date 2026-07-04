@@ -20,7 +20,3 @@ on its own:
 
 Open the button's menu to view details or edit the prompt Sculptor uses to create
 the PR.
-
----
-
-GitLab is also supported (via the `glab` CLI).

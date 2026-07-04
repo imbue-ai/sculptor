@@ -1,8 +1,9 @@
 import type { Virtualizer } from "@tanstack/react-virtual";
 import { act, renderHook } from "@testing-library/react";
-import type { MutableRefObject, RefObject } from "react";
+import type { RefObject } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { createScrollStateMachine, type ScrollStateMachine } from "../../scroll/scrollStateMachine.ts";
 import { useAlphaActivePromptIndex } from "../useAlphaActivePromptIndex.ts";
 
 const SCROLL_THROTTLE_MS = 100;
@@ -29,14 +30,14 @@ const setScrollTop = (el: HTMLDivElement, value: number): void => {
 describe("useAlphaActivePromptIndex", () => {
   let container: HTMLDivElement;
   let scrollContainerRef: RefObject<HTMLDivElement | null>;
-  let isNavigatingRef: MutableRefObject<boolean>;
+  let machine: ScrollStateMachine;
 
   beforeEach(() => {
     vi.useFakeTimers();
     container = createScrollContainer();
     setScrollTop(container, 0);
     scrollContainerRef = { current: container };
-    isNavigatingRef = { current: false };
+    machine = createScrollStateMachine();
   });
 
   afterEach(() => {
@@ -50,9 +51,7 @@ describe("useAlphaActivePromptIndex", () => {
   it("returns index 0 when userPromptIndices is empty", () => {
     const virtualizer = createMockVirtualizer([]);
 
-    const { result } = renderHook(() =>
-      useAlphaActivePromptIndex([], virtualizer, scrollContainerRef, false, isNavigatingRef),
-    );
+    const { result } = renderHook(() => useAlphaActivePromptIndex([], virtualizer, scrollContainerRef, false, machine));
 
     expect(result.current.index).toBe(0);
   });
@@ -63,7 +62,7 @@ describe("useAlphaActivePromptIndex", () => {
     const userPromptIndices = [0, 1, 2];
 
     const { result } = renderHook(() =>
-      useAlphaActivePromptIndex(userPromptIndices, virtualizer, scrollContainerRef, false, isNavigatingRef),
+      useAlphaActivePromptIndex(userPromptIndices, virtualizer, scrollContainerRef, false, machine),
     );
 
     // On mount, compute() runs with scrollTop=0 -> only start=0 <= 200, so active=0
@@ -92,7 +91,7 @@ describe("useAlphaActivePromptIndex", () => {
     const userPromptIndices = [0, 1, 2, 3, 4];
 
     const { result } = renderHook(() =>
-      useAlphaActivePromptIndex(userPromptIndices, virtualizer, scrollContainerRef, true, isNavigatingRef),
+      useAlphaActivePromptIndex(userPromptIndices, virtualizer, scrollContainerRef, true, machine),
     );
 
     // Regardless of scroll-computed value, stick-to-bottom wins -> length-1 = 4
@@ -105,7 +104,7 @@ describe("useAlphaActivePromptIndex", () => {
 
     const { result, rerender } = renderHook(
       ({ indices, isAtBottom }) =>
-        useAlphaActivePromptIndex(indices, virtualizer, scrollContainerRef, isAtBottom, isNavigatingRef),
+        useAlphaActivePromptIndex(indices, virtualizer, scrollContainerRef, isAtBottom, machine),
       { initialProps: { indices: initialIndices as ReadonlyArray<number>, isAtBottom: true } },
     );
 
@@ -128,7 +127,7 @@ describe("useAlphaActivePromptIndex", () => {
 
     const { result, rerender } = renderHook(
       ({ indices, isAtBottom }) =>
-        useAlphaActivePromptIndex(indices, virtualizer, scrollContainerRef, isAtBottom, isNavigatingRef),
+        useAlphaActivePromptIndex(indices, virtualizer, scrollContainerRef, isAtBottom, machine),
       { initialProps: { indices: [0, 1, 2] as ReadonlyArray<number>, isAtBottom: true } },
     );
 
@@ -150,10 +149,10 @@ describe("useAlphaActivePromptIndex", () => {
     ]);
     const userPromptIndices = [0, 1, 2, 3, 4];
 
-    isNavigatingRef.current = true;
+    machine.dispatch({ kind: "navStarted", promptIndex: 0 });
 
     const { result } = renderHook(() =>
-      useAlphaActivePromptIndex(userPromptIndices, virtualizer, scrollContainerRef, true, isNavigatingRef),
+      useAlphaActivePromptIndex(userPromptIndices, virtualizer, scrollContainerRef, true, machine),
     );
 
     // Nav mode suppresses stick-to-bottom, so the index follows the explicit
@@ -172,10 +171,10 @@ describe("useAlphaActivePromptIndex", () => {
     const virtualizer = createMockVirtualizer([{ start: 0 }, { start: 500 }, { start: 1000 }]);
     const userPromptIndices = [0, 1, 2];
 
-    isNavigatingRef.current = true;
+    machine.dispatch({ kind: "navStarted", promptIndex: 0 });
 
     const { result } = renderHook(() =>
-      useAlphaActivePromptIndex(userPromptIndices, virtualizer, scrollContainerRef, false, isNavigatingRef),
+      useAlphaActivePromptIndex(userPromptIndices, virtualizer, scrollContainerRef, false, machine),
     );
 
     act(() => {
@@ -202,10 +201,10 @@ describe("useAlphaActivePromptIndex", () => {
 
     // Nav mode is on (as if user just clicked a dot); stick-to-bottom is
     // suppressed so the scroll-derived index wins.
-    isNavigatingRef.current = true;
+    machine.dispatch({ kind: "navStarted", promptIndex: 0 });
 
     const { result } = renderHook(() =>
-      useAlphaActivePromptIndex(userPromptIndices, virtualizer, scrollContainerRef, false, isNavigatingRef),
+      useAlphaActivePromptIndex(userPromptIndices, virtualizer, scrollContainerRef, false, machine),
     );
 
     act(() => {
@@ -230,10 +229,10 @@ describe("useAlphaActivePromptIndex", () => {
     const virtualizer = createMockVirtualizer([{ start: 0 }, { start: 500 }, { start: 1000 }]);
     const userPromptIndices = [0, 1, 2];
 
-    isNavigatingRef.current = true;
+    machine.dispatch({ kind: "navStarted", promptIndex: 0 });
 
     const { result } = renderHook(() =>
-      useAlphaActivePromptIndex(userPromptIndices, virtualizer, scrollContainerRef, false, isNavigatingRef),
+      useAlphaActivePromptIndex(userPromptIndices, virtualizer, scrollContainerRef, false, machine),
     );
 
     act(() => {
@@ -259,10 +258,10 @@ describe("useAlphaActivePromptIndex", () => {
   it("touchstart/touchmove also cancel the programmatic-scroll freeze", () => {
     const virtualizer = createMockVirtualizer([{ start: 0 }, { start: 500 }, { start: 1000 }]);
 
-    isNavigatingRef.current = true;
+    machine.dispatch({ kind: "navStarted", promptIndex: 0 });
 
     const { result } = renderHook(() =>
-      useAlphaActivePromptIndex([0, 1, 2], virtualizer, scrollContainerRef, false, isNavigatingRef),
+      useAlphaActivePromptIndex([0, 1, 2], virtualizer, scrollContainerRef, false, machine),
     );
 
     act(() => {
@@ -284,10 +283,10 @@ describe("useAlphaActivePromptIndex", () => {
     const virtualizer = createMockVirtualizer([{ start: 0 }, { start: 100 }, { start: 200 }, { start: 300 }]);
     const userPromptIndices = [0, 1, 2, 3];
 
-    isNavigatingRef.current = true; // keep compute() from overwriting
+    machine.dispatch({ kind: "navStarted", promptIndex: 0 }); // keep compute() from overwriting
 
     const { result } = renderHook(() =>
-      useAlphaActivePromptIndex(userPromptIndices, virtualizer, scrollContainerRef, false, isNavigatingRef),
+      useAlphaActivePromptIndex(userPromptIndices, virtualizer, scrollContainerRef, false, machine),
     );
 
     // Capture the ref object before calling setIndex — it's the same identity across renders.
@@ -315,7 +314,7 @@ describe("useAlphaActivePromptIndex", () => {
     const userPromptIndices = [0, 1, 2, 3, 4];
 
     const { result } = renderHook(() =>
-      useAlphaActivePromptIndex(userPromptIndices, virtualizer, scrollContainerRef, true, isNavigatingRef),
+      useAlphaActivePromptIndex(userPromptIndices, virtualizer, scrollContainerRef, true, machine),
     );
 
     expect(result.current.index).toBe(4);
@@ -324,7 +323,7 @@ describe("useAlphaActivePromptIndex", () => {
       result.current.setIndex(1);
     });
 
-    // isNavigatingRef.current is false -> stick-to-bottom wins -> index = last = 4
+    // not navigating -> stick-to-bottom wins -> index = last = 4
     expect(result.current.index).toBe(4);
   });
 
@@ -333,11 +332,11 @@ describe("useAlphaActivePromptIndex", () => {
       const virtualizer = createMockVirtualizer([{ start: 0 }, { start: 500 }, { start: 1000 }]);
 
       const { result } = renderHook(() =>
-        useAlphaActivePromptIndex([0, 1, 2], virtualizer, scrollContainerRef, false, isNavigatingRef),
+        useAlphaActivePromptIndex([0, 1, 2], virtualizer, scrollContainerRef, false, machine),
       );
 
       // Pin active to index 1 (start=500) and scroll well below it.
-      isNavigatingRef.current = true;
+      machine.dispatch({ kind: "navStarted", promptIndex: 0 });
       act(() => result.current.setIndex(1));
       setScrollTop(container, 800);
 
@@ -348,10 +347,10 @@ describe("useAlphaActivePromptIndex", () => {
       const virtualizer = createMockVirtualizer([{ start: 0 }, { start: 500 }, { start: 1000 }]);
 
       const { result } = renderHook(() =>
-        useAlphaActivePromptIndex([0, 1, 2], virtualizer, scrollContainerRef, false, isNavigatingRef),
+        useAlphaActivePromptIndex([0, 1, 2], virtualizer, scrollContainerRef, false, machine),
       );
 
-      isNavigatingRef.current = true;
+      machine.dispatch({ kind: "navStarted", promptIndex: 0 });
       act(() => result.current.setIndex(1));
       // Exactly at the start — not scrolled past.
       setScrollTop(container, 500);
@@ -366,7 +365,7 @@ describe("useAlphaActivePromptIndex", () => {
       const virtualizer = createMockVirtualizer([{ start: 0 }, { start: 500 }]);
 
       const { result } = renderHook(() =>
-        useAlphaActivePromptIndex([], virtualizer, scrollContainerRef, false, isNavigatingRef),
+        useAlphaActivePromptIndex([], virtualizer, scrollContainerRef, false, machine),
       );
 
       setScrollTop(container, 1000);
@@ -377,9 +376,7 @@ describe("useAlphaActivePromptIndex", () => {
       const virtualizer = createMockVirtualizer([{ start: 0 }, { start: 500 }]);
       const emptyRef: RefObject<HTMLDivElement | null> = { current: null };
 
-      const { result } = renderHook(() =>
-        useAlphaActivePromptIndex([0, 1], virtualizer, emptyRef, false, isNavigatingRef),
-      );
+      const { result } = renderHook(() => useAlphaActivePromptIndex([0, 1], virtualizer, emptyRef, false, machine));
 
       expect(result.current.isScrolledPastActive()).toBe(false);
     });
@@ -389,9 +386,7 @@ describe("useAlphaActivePromptIndex", () => {
     const virtualizer = createMockVirtualizer([{ start: 0 }, { start: 500 }]);
     const emptyRef: RefObject<HTMLDivElement | null> = { current: null };
 
-    const { result } = renderHook(() =>
-      useAlphaActivePromptIndex([0, 1], virtualizer, emptyRef, false, isNavigatingRef),
-    );
+    const { result } = renderHook(() => useAlphaActivePromptIndex([0, 1], virtualizer, emptyRef, false, machine));
 
     // With no container, the scroll-listener effect returns early.  The
     // hook still provides a stable API surface.
@@ -399,7 +394,7 @@ describe("useAlphaActivePromptIndex", () => {
     expect(typeof result.current.setIndex).toBe("function");
     expect(result.current.isScrolledPastActive()).toBe(false);
     // setIndex still works (it doesn't touch the container).
-    isNavigatingRef.current = true;
+    machine.dispatch({ kind: "navStarted", promptIndex: 0 });
     act(() => result.current.setIndex(1));
     expect(result.current.index).toBe(1);
   });
@@ -407,10 +402,10 @@ describe("useAlphaActivePromptIndex", () => {
   it("rapid consecutive setIndex calls within the programmatic-scroll window respect the latest", () => {
     const virtualizer = createMockVirtualizer([{ start: 0 }, { start: 500 }, { start: 1000 }]);
 
-    isNavigatingRef.current = true;
+    machine.dispatch({ kind: "navStarted", promptIndex: 0 });
 
     const { result } = renderHook(() =>
-      useAlphaActivePromptIndex([0, 1, 2], virtualizer, scrollContainerRef, false, isNavigatingRef),
+      useAlphaActivePromptIndex([0, 1, 2], virtualizer, scrollContainerRef, false, machine),
     );
 
     act(() => {
@@ -436,7 +431,7 @@ describe("useAlphaActivePromptIndex", () => {
 
     const { result, rerender } = renderHook(
       ({ indices, isAtBottom }) =>
-        useAlphaActivePromptIndex(indices, virtualizer, scrollContainerRef, isAtBottom, isNavigatingRef),
+        useAlphaActivePromptIndex(indices, virtualizer, scrollContainerRef, isAtBottom, machine),
       { initialProps: { indices: [0, 1, 2] as ReadonlyArray<number>, isAtBottom: true } },
     );
 
@@ -452,12 +447,12 @@ describe("useAlphaActivePromptIndex", () => {
 
   it("unmount during the programmatic-scroll window does not warn about setState-on-unmounted", () => {
     const virtualizer = createMockVirtualizer([{ start: 0 }, { start: 500 }, { start: 1000 }]);
-    isNavigatingRef.current = true;
+    machine.dispatch({ kind: "navStarted", promptIndex: 0 });
 
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const { result, unmount } = renderHook(() =>
-      useAlphaActivePromptIndex([0, 1, 2], virtualizer, scrollContainerRef, false, isNavigatingRef),
+      useAlphaActivePromptIndex([0, 1, 2], virtualizer, scrollContainerRef, false, machine),
     );
 
     act(() => {
@@ -484,7 +479,7 @@ describe("useAlphaActivePromptIndex", () => {
     const userPromptIndices = [0, 1, 2];
 
     const { result } = renderHook(() =>
-      useAlphaActivePromptIndex(userPromptIndices, virtualizer, scrollContainerRef, false, isNavigatingRef),
+      useAlphaActivePromptIndex(userPromptIndices, virtualizer, scrollContainerRef, false, machine),
     );
 
     // A scroll event must not throw when dereferencing the missing entries.
@@ -506,7 +501,7 @@ describe("useAlphaActivePromptIndex", () => {
     const removeEventListenerSpy = vi.spyOn(container, "removeEventListener");
 
     const { unmount } = renderHook(() =>
-      useAlphaActivePromptIndex([0, 1], virtualizer, scrollContainerRef, false, isNavigatingRef),
+      useAlphaActivePromptIndex([0, 1], virtualizer, scrollContainerRef, false, machine),
     );
 
     unmount();

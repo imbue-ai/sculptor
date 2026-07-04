@@ -1,4 +1,4 @@
-import { Flex, IconButton, Skeleton, Text, Tooltip } from "@radix-ui/themes";
+import { Flex, IconButton, Skeleton, Spinner, Text, Tooltip } from "@radix-ui/themes";
 import { FileIcon, FileWarningIcon, XIcon } from "lucide-react";
 import type { ReactElement } from "react";
 
@@ -159,7 +159,7 @@ export const FilePreview = ({
   };
 
   const renderCompactContent = (): ReactElement => {
-    if (isFailed || !fileUrl) {
+    if (isFailed) {
       return (
         <Tooltip content="Failed to load file. The file may be corrupted or inaccessible.">
           <Flex align="center" justify="center" className={styles.previewError}>
@@ -168,6 +168,14 @@ export const FilePreview = ({
             </Text>
           </Flex>
         </Tooltip>
+      );
+    }
+
+    if (!fileUrl) {
+      return (
+        <Flex align="center" justify="center" className={styles.previewLoading}>
+          <Spinner size="1" />
+        </Flex>
       );
     }
 

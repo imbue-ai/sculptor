@@ -1,6 +1,6 @@
 import { useSetAtom } from "jotai";
 import { posthog } from "posthog-js";
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import { removeWorkspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
 import { removeWorkspaceAgentActionState } from "~/pages/workspace/panels/workspaceAgentActions.ts";
@@ -26,6 +26,10 @@ export const useOptimisticWorkspaceDelete = (
   const setRollbackDelete = useSetAtom(rollbackDeleteWorkspaceAtom);
   const setErrorToast = useSetAtom(workspaceDeleteErrorToastAtom);
   const removeWorkspaceLayout = useSetAtom(removeWorkspaceLayoutAtom);
+  // The Retry action re-invokes execute. Reach it through a ref (kept current
+  // by the effect below) so the callback doesn't reference itself before it is
+  // declared.
+  const executeRef = useRef<(workspaceId: string, workspaceName: string) => void>(undefined);
 
   const execute = useCallback(
     (workspaceId: string, workspaceName: string): void => {
@@ -62,7 +66,7 @@ export const useOptimisticWorkspaceDelete = (
               label: "Retry",
               handleClick: (): void => {
                 setErrorToast(null);
-                execute(workspaceId, workspaceName);
+                executeRef.current?.(workspaceId, workspaceName);
               },
             },
           });
@@ -70,6 +74,10 @@ export const useOptimisticWorkspaceDelete = (
     },
     [setOptimisticDelete, setRollbackDelete, setErrorToast, onNavigateAfterDelete, removeWorkspaceLayout],
   );
+
+  useEffect(() => {
+    executeRef.current = execute;
+  }, [execute]);
 
   return { execute };
 };

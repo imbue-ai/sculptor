@@ -14,6 +14,7 @@ from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.alpha_chat_view import get_message_top_offset
 from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_by
 from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_to_top
+from sculptor.testing.elements.alpha_chat_view import wait_for_alpha_scroll_settled
 from sculptor.testing.elements.alpha_prompt_navigator import ALPHA_DOT
 from sculptor.testing.elements.alpha_prompt_navigator import get_alpha_prompt_navigator
 from sculptor.testing.elements.base import wait_for_tiptap_ready
@@ -48,39 +49,6 @@ def _wait_for_no_highlight(page, *, timeout: int = 30_000) -> None:
     """Wait until no message is highlighted."""
     page.wait_for_function(
         f"() => document.querySelectorAll('.{HIGHLIGHT_CLASS}').length === 0",
-        timeout=timeout,
-    )
-
-
-def _wait_for_scroll_restore_settled(page, *, quiet_ms: int = 500, timeout: int = 30_000) -> None:
-    """Wait for the post-reload scroll restore to finish moving the chat.
-
-    After ``page.reload()`` the scroll-persistence hook restores the chat
-    scroll position, then re-asserts it from a deferred double-rAF once the
-    virtualizer has re-measured (see ``useAlphaScrollPersistence``). A dot-rail
-    click issued while that re-assert is still pending gets clobbered: the
-    re-assert lands after the click's ``scrollToIndex`` and yanks the view
-    back, so the clicked prompt never pins to the viewport top. Approximate
-    "restore settled" as "scrollTop unchanged for ``quiet_ms``": every restore
-    trigger has already fired by the time the dot rail is visible (the dots
-    derive from the same loaded messages), leaving at most a few frames of
-    rAF tail in flight.
-    """
-    page.evaluate("() => { delete window.__alphaScrollSettleProbe; }")
-    page.wait_for_function(
-        """(quietMs) => {
-            const el = document.querySelector('[data-testid="ALPHA_CHAT_VIEW"]');
-            if (!el) return false;
-            const now = performance.now();
-            const probe = (window.__alphaScrollSettleProbe ??= { top: null, since: now });
-            if (probe.top !== el.scrollTop) {
-                probe.top = el.scrollTop;
-                probe.since = now;
-                return false;
-            }
-            return now - probe.since >= quietMs;
-        }""",
-        arg=quiet_ms,
         timeout=timeout,
     )
 
@@ -152,7 +120,7 @@ def _setup_three_prompt_chat(sculptor_instance_: SculptorInstance):
     # Let the post-reload scroll restore fully settle before clicking a dot.
     # Otherwise the restore's deferred re-assert can land after the dot-click
     # scrollToIndex and clobber it, leaving the target prompt off the top.
-    _wait_for_scroll_restore_settled(page)
+    wait_for_alpha_scroll_settled(page)
 
     # Normalize scroll state: click the last dot so the virtualizer lands
     # scrollTop ≈ start[lastUserMessage], then immediately exit navigation by

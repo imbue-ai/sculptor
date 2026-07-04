@@ -116,13 +116,6 @@
   padding: var(--space-2);
 
   @include thin-scrollbar(both);
-
-  // Suppress the default light-square corner where the horizontal and vertical
-  // scrollbars meet — the rest of thin-scrollbar already paints transparent
-  // tracks, so the corner should match.
-  &::-webkit-scrollbar-corner {
-    background-color: transparent;
-  }
 }
 
 // When the dependency graph is on, the popover body becomes a horizontal

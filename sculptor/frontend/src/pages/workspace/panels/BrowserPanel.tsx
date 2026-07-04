@@ -155,8 +155,20 @@ const BrowserPanelElectron = (): ReactElement => {
     void window.sculptor?.captureBrowserPanelToClipboard(status.webContentsId);
   }, [status.webContentsId]);
 
+  // Surface the active workspace's webview status (from the per-workspace status
+  // atom, fed by the guest's did-attach / did-navigate events) onto the panel so
+  // integration tests gate on committed production state rather than
+  // focus-coupled or guest-evaluated proxies: data-webview-content-id is present
+  // only once the guest has attached, data-webview-current-url is the committed
+  // URL.
   return (
-    <div className={styles.panel} data-testid={ElementIds.BROWSER_PANEL} data-workspace-id={workspaceID}>
+    <div
+      className={styles.panel}
+      data-testid={ElementIds.BROWSER_PANEL}
+      data-workspace-id={workspaceID}
+      data-webview-content-id={status.webContentsId ?? undefined}
+      data-webview-current-url={status.currentUrl}
+    >
       <Flex align="center" gap="2" className={styles.toolbar}>
         <Tooltip content="Back">
           <IconButton

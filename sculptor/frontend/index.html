@@ -8,6 +8,9 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <!-- iOS ignores PWA manifest icons; Add to Home Screen uses this link.
+         Opaque on purpose — iOS renders icon transparency as black. -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <!--
       Import map for runtime-loaded frontend plugins. Each specifier resolves
       to a tiny stub that re-exports from window.__SCULPTOR_HOST__, ensuring

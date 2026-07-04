@@ -104,6 +104,10 @@ export type DynamicAgentInput = {
   status: TaskStatus;
   lastReadAt: string | null;
   updatedAt: string;
+  // True for the viewed agent (see viewedAgentIdAtom): its tab dot derives as
+  // "read" instead of flashing unread while the debounced mark-read lags. An
+  // explicit "Mark as unread" still wins inside the shared helper.
+  isViewed?: boolean;
   // Diagnostics powering the context-menu copy actions. Omitted until the
   // sync hook has fetched them.
   diagnostics?: DynamicAgentDiagnostics;
@@ -174,7 +178,7 @@ export function deriveDynamicPanels(
   for (const agent of agents) {
     const id = makeAgentPanelId(agent.taskId);
     liveIds.add(id);
-    const dotStatus = getAgentDotStatusWithUnreadOverride(agent.taskId, agent);
+    const dotStatus = getAgentDotStatusWithUnreadOverride(agent.taskId, agent, agent.isViewed ?? false);
     definitions.push({
       id,
       displayName: agent.displayName,

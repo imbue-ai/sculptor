@@ -1,6 +1,7 @@
 """Unit tests for :mod:`sculptor.primitives.threads`."""
 
 import time
+from queue import Empty
 from queue import Queue
 
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
@@ -32,14 +33,30 @@ def test_source_polls_and_emits_values(test_root_concurrency_group: ConcurrencyG
         concurrency_group=test_root_concurrency_group,
     )
     source.start()
-    time.sleep(0.2)
+
+    # Drain until the distinct values arrive rather than sleeping for a fixed
+    # window: the source emits at most one value per ``check_interval`` tick, so
+    # a fixed window encodes an assumption about how many ticks the polling
+    # thread gets to run — and under heavy parallel-test load that thread can be
+    # starved enough to fire far fewer ticks than the window nominally allows.
+    # Waiting on the eventual queue contents (with a generous timeout) keeps the
+    # assertion exact — duplicates de-duplicated — without baking in a
+    # scheduling assumption.
+    expected = [1, 2, 3]
+    drained: list[int] = []
+    deadline = time.monotonic() + 5.0
+    while len(drained) < len(expected) and time.monotonic() < deadline:
+        try:
+            drained.append(queue.get(timeout=0.1))
+        except Empty:
+            continue
     source.stop()
 
-    drained = []
-    while not queue.empty():
-        drained.append(queue.get())
     # Duplicate consecutive values are de-duplicated by the source.
-    assert drained == [1, 2, 3]
+    assert drained == expected
+    # The callback yields None forever once exhausted, so nothing further is
+    # emitted: a spurious extra value would mean a de-dup or stop-after-None bug.
+    assert queue.empty()
 
 
 def test_source_stops_itself_when_callback_raises_stop_polling(

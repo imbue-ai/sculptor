@@ -20,6 +20,7 @@ import { chatSearchVisibleAtom } from "~/common/state/atoms/chatSearch.ts";
 import { AgentLightboxProvider } from "~/components/AgentLightboxContext.tsx";
 import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
 import { Toast, type ToastContent, ToastType } from "~/components/Toast.tsx";
+import { VerticalOverlayScrollbar } from "~/components/VerticalOverlayScrollbar.tsx";
 import { isModifierPressed } from "~/electron/utils.ts";
 import { buildSubagentMetadataMap, buildSubagentTree } from "~/pages/workspace/utils/subagentTree.ts";
 
@@ -51,8 +52,8 @@ import { useAlphaSearch } from "./hooks/useAlphaSearch.ts";
 import { useAlphaVirtualizer } from "./hooks/useAlphaVirtualizer.ts";
 import { ChatScrollProvider } from "./hooks/useChatScroll.tsx";
 import { useJumpToBottom } from "./hooks/useJumpToBottom.ts";
-import { useViewportStability } from "./hooks/useViewportStability.ts";
 import { JumpToBottomButton } from "./JumpToBottomButton.tsx";
+import { useScrollStateMachine } from "./scroll/useScrollStateMachine.ts";
 import { StatusPill } from "./StatusPill.tsx";
 
 type AlphaChatInterfaceProps = ChatData & {
@@ -175,13 +176,20 @@ export const AlphaChatInterface = ({
   // useAlphaAutoScroll.handleScroll after it consumes the scroll event.
   const isProgrammaticScrollRef = useRef(false);
 
+  // Single owner of scroll state (authority + layout settle + suppression).
+  // Declared before the scroll hooks so its attach layout effect runs first and
+  // so they can dispatch into / read from it.
+  const scrollMachine = useScrollStateMachine(scrollContainerRef);
+
   const virtualizer = useAlphaVirtualizer(
     scrollContainerRef,
     filteredNodes.length,
     lastMessageRole,
     taskID,
+    scrollMachine,
     introHeight,
     isProgrammaticScrollRef,
+    isStreaming,
   );
 
   const density = useAtomValue(chatToolDensityAtom);
@@ -197,15 +205,13 @@ export const AlphaChatInterface = ({
     lastMessageRole,
     lastUserMessageIndex,
     taskID,
+    scrollMachine,
     isProgrammaticScrollRef,
   );
 
-  // Viewport stability: compensate scrollTop when items above viewport change height
-  useViewportStability(scrollContainerRef, virtualizer, isProgrammaticScrollRef);
-
   // Scroll position persistence per task
   const filteredMessageRefs = useMemo(() => filteredNodes.map((n) => ({ id: n.message.id })), [filteredNodes]);
-  useAlphaScrollPersistence(scrollContainerRef, virtualizer, taskID, filteredMessageRefs);
+  useAlphaScrollPersistence(scrollContainerRef, virtualizer, taskID, filteredMessageRefs, scrollMachine);
 
   // Prompt navigation: ArrowUp/Down to cycle through user prompts
   const filteredChatMessages = useMemo(() => filteredNodes.map((n) => n.message), [filteredNodes]);
@@ -227,19 +233,15 @@ export const AlphaChatInterface = ({
     [filteredNodes],
   );
 
-  // Shared ref: useAlphaPromptNav writes to it synchronously when entering/
-  // exiting nav, and useAlphaActivePromptIndex reads it to freeze the cursor
-  // during keyboard nav so the scroll spy and stick-to-bottom logic don't
-  // fight the explicit user intent.
-  const isNavigatingRef = useRef(false);
-
-  // Active dot index (scroll-spy) — shared with keyboard nav as the single cursor.
+  // Active dot index (scroll-spy) — shared with keyboard nav as the single
+  // cursor. Reads the `navigating` phase off the shared scroll machine so the
+  // scroll spy and stick-to-bottom logic don't fight the explicit user intent.
   const activePromptIndex = useAlphaActivePromptIndex(
     userPromptIndices,
     virtualizer,
     scrollContainerRef,
     isAtBottom,
-    isNavigatingRef,
+    scrollMachine,
   );
 
   // ─── Anchor the active user message during chat tool density flips ──────────
@@ -263,22 +265,23 @@ export const AlphaChatInterface = ({
   // synchronously and assign scrollTop *absolutely* (overrides whatever the
   // virtualizer's auto-compensation might also have adjusted).
   const prevDensityRef = useRef(density);
-  const anchorRef = useRef<{ msgIdx: number; oldStart: number; oldScrollTop: number } | null>(null);
-
-  if (prevDensityRef.current !== density && anchorRef.current === null) {
-    const container = scrollContainerRef.current;
-    const msgIdx = userPromptIndices[activePromptIndex.index];
-    const oldStart = msgIdx !== undefined ? virtualizer.measurementsCache[msgIdx]?.start : undefined;
-    if (container && msgIdx !== undefined && oldStart != null) {
-      anchorRef.current = { msgIdx, oldStart, oldScrollTop: container.scrollTop };
-    }
-  }
 
   useLayoutEffect(() => {
     if (prevDensityRef.current === density) return;
     prevDensityRef.current = density;
     const container = scrollContainerRef.current;
     if (!container) return;
+
+    // Capture the anchor *before* remeasuring below. This layout effect runs
+    // after the new-density DOM commits but before the manual remeasure, so the
+    // virtualizer's measurementsCache and the container's scrollTop still hold
+    // their pre-flip values here.
+    let captured: { msgIdx: number; oldStart: number; oldScrollTop: number } | null = null;
+    const msgIdx = userPromptIndices[activePromptIndex.index];
+    const oldStart = msgIdx !== undefined ? virtualizer.measurementsCache[msgIdx]?.start : undefined;
+    if (msgIdx !== undefined && oldStart != null) {
+      captured = { msgIdx, oldStart, oldScrollTop: container.scrollTop };
+    }
 
     // Each chat message wrapper carries `ref={virtualizer.measureElement}`,
     // but its identity is preserved across density flips, so the
@@ -295,8 +298,6 @@ export const AlphaChatInterface = ({
     });
     virtualizer.getVirtualItems();
 
-    const captured = anchorRef.current;
-    anchorRef.current = null;
     if (!captured) return;
     const newStart = virtualizer.measurementsCache[captured.msgIdx]?.start;
     if (newStart == null) return;
@@ -315,6 +316,10 @@ export const AlphaChatInterface = ({
       virtualContent.style.height = `${totalSize}px`;
     }
     container.scrollTop = newScrollTop;
+    // userPromptIndices / activePromptIndex are intentionally read at the
+    // density flip only; the effect early-returns on every other render, so
+    // re-running when they change would be wasted work.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [density, virtualizer]);
 
   const { exitNavigation, navigateToPrompt } = useAlphaPromptNav(
@@ -323,7 +328,7 @@ export const AlphaChatInterface = ({
     scrollToBottom,
     setIsSuppressed,
     activePromptIndex,
-    isNavigatingRef,
+    scrollMachine,
   );
 
   const handlePromptNavigate = useCallback(
@@ -377,13 +382,17 @@ export const AlphaChatInterface = ({
   // search navigation. Exit prompt navigation when search opens (it has its own
   // suppression that we supersede here).
   useEffect(() => {
+    // The machine's top-level suppression guard drops auto-scroll initiation
+    // events while search is open, so a search session never starts pinning or
+    // anchoring.
+    scrollMachine.setSuppressed(isSearchVisible);
     if (isSearchVisible) {
       exitNavigation();
       setIsSuppressed(true);
     } else {
       setIsSuppressed(false);
     }
-  }, [isSearchVisible, exitNavigation, setIsSuppressed]);
+  }, [isSearchVisible, exitNavigation, setIsSuppressed, scrollMachine]);
 
   // Jump-to-bottom button
   const { isVisible: isJumpVisible, label: jumpLabel } = useJumpToBottom(
@@ -393,9 +402,13 @@ export const AlphaChatInterface = ({
     isJumpSuppressed,
   );
 
-  // Global Cmd+Shift+Enter handler: interrupt and send the queued message
+  // Global Cmd+Shift+Enter handler: interrupt and send the queued message.
+  // Mirror the latest "has queued messages" flag into a ref so the keydown
+  // handler below reads the current value without re-subscribing the listener.
   const hasQueuedMessagesRef = useRef(effectiveQueuedMessages.length > 0);
-  hasQueuedMessagesRef.current = effectiveQueuedMessages.length > 0;
+  useEffect(() => {
+    hasQueuedMessagesRef.current = effectiveQueuedMessages.length > 0;
+  });
 
   useEffect(() => {
     if (!taskID) return;
@@ -608,6 +621,10 @@ export const AlphaChatInterface = ({
                 pendingBackgroundTaskCount={pendingBackgroundTaskCount}
               />
             </div>
+            <VerticalOverlayScrollbar
+              scrollRef={scrollContainerRef}
+              thumbTestId={ElementIds.ALPHA_CHAT_SCROLLBAR_THUMB}
+            />
           </div>
           <AlphaPromptNavigator
             userMessages={userMessages}

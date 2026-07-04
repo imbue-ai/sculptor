@@ -89,7 +89,31 @@ def _verify_image_in_message(
     return image_in_message
 
 
-@pytest.mark.electron
+@pytest.mark.browser_and_electron
+@user_story("to attach an image and see its preview in the web (non-Electron) build")
+def test_image_attach_preview_renders_over_http(sculptor_instance_: SculptorInstance, test_image_red_: str) -> None:
+    """Attaching an image renders its preview without relying on Electron IPC.
+
+    In the browser/web build (e.g. self-hosted/OpenHost) there is no
+    ``window.sculptor``, so the upload and preview must go over HTTP
+    (``POST /api/v1/upload-file`` then ``GET /api/v1/uploaded-file/<id>``).
+    A rendered ``FILE_PREVIEW`` <img> only exists once both succeed, so this
+    is the regression guard for the web-mode capability selection. The
+    ``browser_and_electron`` marker runs it in both browser and Electron
+    modes, so the HTTP path is exercised in the default browser run.
+
+    No message is sent, so no agent turn is required.
+    """
+    page = sculptor_instance_.page
+    task_page = start_task_and_wait_for_ready(page, workspace_name="Web Image Preview Test")
+    chat_panel = task_page.get_chat_panel()
+
+    # _attach_image_and_verify_preview asserts the FILE_PREVIEW <img> appears,
+    # which proves the HTTP upload + download round-trip worked.
+    _attach_image_and_verify_preview(chat_panel, test_image_red_)
+
+
+@pytest.mark.browser_and_electron
 @pytest.mark.electron_custom_command
 @user_story("to attach images from the chat input")
 def test_image_upload_from_create_task_form(sculptor_instance_: SculptorInstance, test_image_red_: str) -> None:
@@ -104,7 +128,7 @@ def test_image_upload_from_create_task_form(sculptor_instance_: SculptorInstance
     _verify_image_in_message(chat_panel, message_index=0)
 
 
-@pytest.mark.electron
+@pytest.mark.browser_and_electron
 @pytest.mark.electron_custom_command
 @user_story("to attach images from the chat input")
 def test_image_upload_from_chat_input(sculptor_instance_: SculptorInstance, test_image_green_: str) -> None:
@@ -120,7 +144,7 @@ def test_image_upload_from_chat_input(sculptor_instance_: SculptorInstance, test
     _verify_image_in_message(chat_panel, message_index=2)
 
 
-@pytest.mark.electron
+@pytest.mark.browser_and_electron
 @user_story("to upload multiple images in a single message")
 def test_multiple_image_upload(
     sculptor_instance_: SculptorInstance,
@@ -141,7 +165,7 @@ def test_multiple_image_upload(
     _verify_image_in_message(chat_panel, message_index=0, expected_image_count=3)
 
 
-@pytest.mark.electron
+@pytest.mark.browser_and_electron
 @pytest.mark.electron_custom_command
 @user_story("to see uploaded images persist in chat history")
 def test_image_persistence_in_chat_history(sculptor_instance_: SculptorInstance, test_image_red_: str) -> None:
@@ -161,7 +185,7 @@ def test_image_persistence_in_chat_history(sculptor_instance_: SculptorInstance,
     _verify_image_in_message(chat_panel, message_index=0)
 
 
-@pytest.mark.electron
+@pytest.mark.browser_and_electron
 @user_story("to attach images from a second agent in the same workspace")
 def test_image_upload_from_second_agent(sculptor_instance_: SculptorInstance, test_image_blue_: str) -> None:
     """Test that users can attach images when chatting in a second agent of the same workspace."""
@@ -183,7 +207,7 @@ def test_image_upload_from_second_agent(sculptor_instance_: SculptorInstance, te
     _verify_image_in_message(new_chat_panel, message_index=0)
 
 
-@pytest.mark.electron
+@pytest.mark.browser_and_electron
 @user_story("to remove attached images before sending")
 def test_remove_attached_image(
     sculptor_instance_: SculptorInstance,
@@ -204,7 +228,7 @@ def test_remove_attached_image(
     _verify_image_in_message(chat_panel, message_index=0, expected_image_count=1)
 
 
-@pytest.mark.electron
+@pytest.mark.browser_and_electron
 @pytest.mark.electron_custom_command
 @user_story("to have images deleted when a task is deleted")
 def test_images_deleted_when_task_deleted(
@@ -223,20 +247,32 @@ def test_images_deleted_when_task_deleted(
 
     images = _verify_image_in_message(chat_panel, message_index=0, expected_image_count=2)
 
-    image_paths = []
+    data_paths: list[str] = []
     for i in range(2):
-        image_path = images.nth(i).get_attribute("data-path")
-        image_paths.append(Path(image_path))
+        data_path = images.nth(i).get_attribute("data-path")
+        assert data_path is not None, "FILE_PREVIEW is missing its data-path attribute"
+        data_paths.append(data_path)
+    assert len(data_paths) == 2, "Should have extracted 2 image paths"
 
-    assert len(image_paths) == 2, "Should have extracted 2 image paths"
-    for image_path in image_paths:
-        assert image_path.exists(), f"Image should exist at {image_path}"
-
-    # Delete the workspace via the API. Use the backend's HTTP origin, not
-    # page.url: in Electron app-scheme mode the page is served from
-    # sculptor://app, which page.request cannot fetch ("Protocol sculptor: not
-    # supported").
+    # Use the backend's HTTP origin, not page.url: in Electron app-scheme mode
+    # the page is served from sculptor://app, which page.request cannot fetch
+    # ("Protocol sculptor: not supported").
     base_url = sculptor_instance_.backend_api_url.rstrip("/")
+
+    # A stored attachment reference is either an absolute path (Electron's local
+    # save) or a bare upload id (web/HTTP, and Electron custom-backend). Probe
+    # existence the matching way — the filesystem for an absolute path, or the
+    # backend's download endpoint (200 = present, 404 = cleaned up) for an upload
+    # id — so the disk-cleanup assertion holds in every launch mode.
+    def attachment_exists(ref: str) -> bool:
+        path = Path(ref)
+        if path.is_absolute():
+            return path.exists()
+        return page.request.get(f"{base_url}/api/v1/uploaded-file/{ref}").ok
+
+    for ref in data_paths:
+        assert attachment_exists(ref), f"Image {ref} should exist before deletion"
+
     response = page.request.get(f"{base_url}/api/v1/workspaces/recent")
     assert response.ok, f"Failed to list workspaces: {response.status}"
     workspaces = response.json().get("workspaces", [])
@@ -245,5 +281,5 @@ def test_images_deleted_when_task_deleted(
     delete_resp = page.request.delete(f"{base_url}/api/v1/workspaces/{ws_id}")
     assert delete_resp.ok, f"Failed to delete workspace: {delete_resp.status}"
 
-    for image_path in image_paths:
-        assert not image_path.exists(), f"Image should be deleted at {image_path}"
+    for ref in data_paths:
+        assert not attachment_exists(ref), f"Image {ref} should be deleted after workspace deletion"

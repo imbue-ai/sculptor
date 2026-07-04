@@ -8,7 +8,7 @@ import { ElementIds, updateWorkspace, WorkspaceInitializationStrategy } from "~/
 import { useActiveProjectID, useWorkspacePageParams } from "~/common/NavigateUtils";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus";
 import { prDefaultTargetBranchAtom } from "~/common/state/atoms/userConfig";
-import { useRepoInfo } from "~/common/state/hooks/useRepoInfo";
+import { useGitProvider } from "~/common/state/hooks/useGitProvider";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
 import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch";
 import { sidebarCollapsedAtom } from "~/components/layout/sidebarAtoms.ts";
@@ -94,7 +94,7 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
   const projectID = useActiveProjectID();
   const workspace = useWorkspace(workspaceID);
   const workspaceBranchInfo = useWorkspaceBranch(workspaceID);
-  const { repoInfo } = useRepoInfo(projectID ?? "");
+  const gitProvider = useGitProvider(projectID ?? "");
   const prDefaultTargetBranch = useAtomValue(prDefaultTargetBranchAtom);
   const prStatus = useAtomValue(prStatusAtomFamily(workspaceID));
   const targetBranches = useWorkspaceTargetBranches(workspaceID);
@@ -142,7 +142,7 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
 
   const handleSwitchTarget = useCallback(
     async (newTarget: string): Promise<void> => {
-      // MRs live on the origin remote, so prefer "origin/{bare}".
+      // PRs live on the origin remote, so prefer "origin/{bare}".
       const fullBranch =
         targetBranches.find((b) => b === `origin/${newTarget}`) ??
         targetBranches.find((b) => b.endsWith(`/${newTarget}`)) ??
@@ -157,15 +157,9 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
   );
 
   // JSX and rendering logic
-  const gitProvider: "gitlab" | "github" | null = repoInfo?.isGitlabOrigin
-    ? "gitlab"
-    : repoInfo?.isGithubOrigin
-      ? "github"
-      : null;
-  const isGitLab = gitProvider === "gitlab";
   const currentTargetBranch = workspace?.targetBranch ?? prDefaultTargetBranch;
 
-  // Only show mismatch when the MR's target branch differs from the current
+  // Only show mismatch when the PR's target branch differs from the current
   // workspace target. Compare bare names (strip remote prefix like "origin/").
   const currentTargetBare = currentTargetBranch.replace(/^[^/]+\//, "");
   const hasMismatch =
@@ -180,12 +174,12 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
         ? {
             targetBranch: prStatus.mismatchedPrTargetBranch!,
             badge: {
-              text: `${isGitLab ? "MR" : "PR"} ${isGitLab ? "!" : "#"}${prStatus.mismatchedPrIid}`,
-              tooltip: `Open ${isGitLab ? "MR" : "PR"} targets this branch`,
+              text: `PR #${prStatus.mismatchedPrIid}`,
+              tooltip: "Open PR targets this branch",
             },
           }
         : null,
-    [hasMismatch, prStatus?.mismatchedPrTargetBranch, prStatus?.mismatchedPrIid, isGitLab],
+    [hasMismatch, prStatus?.mismatchedPrTargetBranch, prStatus?.mismatchedPrIid],
   );
 
   // Plugin-contributed workspace widgets sit in the banner's action row beside the
@@ -201,8 +195,8 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
     return null;
   }
 
-  // The target-branch selector is host-agnostic, but PR/MR creation needs the
-  // GitHub or GitLab CLI, so the PR button stays gated on the git provider.
+  // The target-branch selector is host-agnostic, but PR creation needs the
+  // GitHub CLI, so the PR button stays gated on the git provider.
   const canCreatePr = gitProvider !== null;
   const isMismatched = mismatchForSelector != null;
 

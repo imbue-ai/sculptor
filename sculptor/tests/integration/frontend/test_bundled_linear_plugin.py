@@ -18,19 +18,13 @@ Runs in both browser and electron launch modes, since the plugin ships bundled
 into the served build for every mode.
 """
 
-from pathlib import Path
-
 import pytest
 from playwright.sync_api import Route
 from playwright.sync_api import expect
 
-from sculptor.services.user_config.user_config import load_config
-from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.elements.settings_plugins import PlaywrightPluginsSettingsElement
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
-from sculptor.testing.resources import _default_sculptor_folder_populator
-from sculptor.testing.resources import custom_sculptor_folder_populator
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 
@@ -46,27 +40,19 @@ LINEAR_SETTINGS_TEXT = "Personal API key from Linear"
 LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql"
 # Test-only testids the plugin sets on its contributions.
 LINEAR_API_KEY_PLACEHOLDER = "lin_api_..."
-LINEAR_WIDGET_TESTID = "linear-workspace-shortcut"
+LINEAR_WIDGET_TESTID = "linear-workspace-ticket"
 # The canned issue the mock returns as the workspace's (branch) ticket.
 WIDGET_TICKET_ID = "SCU-1234"
 _MOCK_PRIMARY_ISSUE = {
     "identifier": WIDGET_TICKET_ID,
-    "title": "Banner shortcut under test",
-    "url": "https://linear.app/imbue/issue/SCU-1234/banner-shortcut-under-test",
+    "title": "Banner ticket under test",
+    "url": "https://linear.app/imbue/issue/SCU-1234/banner-ticket-under-test",
     "description": None,
     "priorityLabel": None,
     "state": {"name": "In Progress", "type": "started", "color": "#5e6ad2"},
     "assignee": None,
     "attachments": {"nodes": []},
 }
-
-
-def _enable_frontend_plugins_populator(folder_path: Path) -> None:
-    """Seed the per-test sculptor folder with ``enable_frontend_plugins=True``."""
-    _default_sculptor_folder_populator(folder_path)
-    config_path = folder_path / "internal" / "config.toml"
-    config = load_config(config_path).model_copy(update={"enable_frontend_plugins": True})
-    save_config(config, config_path)
 
 
 def _mock_linear_graphql(instance: SculptorInstance) -> None:
@@ -107,7 +93,6 @@ def _assert_linear_plugin_loads_and_renders(plugins: PlaywrightPluginsSettingsEl
     expect(plugins.get_source_row(LINEAR_SOURCE)).to_contain_text(LINEAR_SETTINGS_TEXT)
 
 
-@custom_sculptor_folder_populator.with_args(_enable_frontend_plugins_populator)
 def test_bundled_linear_plugin_loads_and_renders(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
@@ -118,21 +103,20 @@ def test_bundled_linear_plugin_loads_and_renders(
         _assert_linear_plugin_loads_and_renders(plugins)
 
 
-@custom_sculptor_folder_populator.with_args(_enable_frontend_plugins_populator)
 def test_bundled_linear_plugin_workspace_widget_shows_branch_ticket(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
     """The plugin's workspace widget renders the branch ticket beside the PR button.
 
     Exercises the new ``registerWorkspaceWidget`` SDK surface end-to-end: with a
-    Linear API key set and the Linear API mocked, the compact shortcut the plugin
-    contributes to the workspace banner resolves the branch's (primary) ticket
-    and shows its identifier — the same ticket the panel defaults to.
+    Linear API key set and the Linear API mocked, the compact ticket chip the
+    plugin contributes to the workspace banner resolves the branch's (primary)
+    ticket and shows its identifier — the same ticket the panel defaults to.
 
     TODO(SCU-1495 follow-up): also cover assigning a *different* ticket from the
-    panel (the bookmark control) and asserting the widget follows the shared
-    ``shortcut`` setting. That needs a multi-ticket Linear mock (a primary plus a
-    PR-linked or pinned issue), so it is left as a follow-up.
+    panel (the assign control) and asserting the widget follows the shared
+    per-workspace assignment setting. That needs a multi-ticket Linear mock (a
+    primary plus a PR-linked or pinned issue), so it is left as a follow-up.
     """
     with sculptor_instance_factory_.spawn_instance() as instance:
         _mock_linear_graphql(instance)
@@ -156,10 +140,5 @@ def test_bundled_linear_plugin_loads_and_renders_in_electron(
 ) -> None:
     """In Electron, the bundled Linear plugin loads and renders its UI."""
     settings_page = navigate_to_settings_page(page=sculptor_instance_.page)
-    settings_page.click_on_experimental().set_frontend_plugins(enabled=True)
-    try:
-        plugins = settings_page.click_on_plugins()
-        _assert_linear_plugin_loads_and_renders(plugins)
-    finally:
-        # Leave the shared instance's flag as we found it for the next test.
-        settings_page.click_on_experimental().set_frontend_plugins(enabled=False)
+    plugins = settings_page.click_on_plugins()
+    _assert_linear_plugin_loads_and_renders(plugins)

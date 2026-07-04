@@ -37,6 +37,7 @@ const makeStatus = (overrides: Partial<DependenciesStatus>): DependenciesStatus 
   git: makeInfo({ installed: true }),
   claude: makeInfo({}),
   pi: makeInfo({}),
+  gh: makeInfo({}),
   ...overrides,
 });
 
@@ -60,7 +61,7 @@ describe("useManagedDependency", () => {
       makeStatus({
         pi: makeInfo({
           installed: true,
-          version: "0.78.0",
+          version: "0.80.2",
           mode: "MANAGED",
           isVersionInRange: true,
           installError: "stale error from an earlier attempt",

@@ -8,6 +8,7 @@ from sculptor.agents.pi_agent.output_processor import AgentMessage
 from sculptor.agents.pi_agent.output_processor import humanize_pi_failure_reason
 from sculptor.agents.pi_agent.output_processor import humanize_transient_failure_reason
 from sculptor.agents.pi_agent.output_processor import is_transient_provider_error
+from sculptor.agents.pi_agent.output_processor import sum_message_usage
 
 
 def test_agent_message_maps_camelcase_error_message() -> None:
@@ -17,6 +18,40 @@ def test_agent_message_maps_camelcase_error_message() -> None:
     )
     assert message.error_message == "401 Authentication Fails"
     assert message.stop_reason == "error"
+
+
+def test_agent_message_maps_camelcase_usage() -> None:
+    """An assistant message's `usage.{input,output}` is parsed onto the typed model."""
+    message = AgentMessage.model_validate(
+        {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "hi"}],
+            "stopReason": "stop",
+            "usage": {"input": 100, "output": 50, "cacheRead": 0, "cacheWrite": 0},
+        }
+    )
+    assert message.usage is not None
+    assert message.usage.input == 100
+    assert message.usage.output == 50
+
+
+def test_sum_message_usage_totals_assistant_usage() -> None:
+    """Usage is summed across assistant messages; non-assistant and usage-less messages are skipped."""
+    messages = [
+        AgentMessage.model_validate({"role": "user", "content": [], "usage": {"input": 999, "output": 999}}),
+        AgentMessage.model_validate({"role": "assistant", "content": [], "usage": {"input": 100, "output": 40}}),
+        AgentMessage.model_validate({"role": "assistant", "content": []}),
+        AgentMessage.model_validate({"role": "assistant", "content": [], "usage": {"input": 30, "output": 10}}),
+    ]
+    assert sum_message_usage(messages) == (130, 50)
+
+
+def test_sum_message_usage_returns_none_when_no_usage() -> None:
+    """No assistant usage (e.g. an interrupted turn) yields (None, None)."""
+    messages = [
+        AgentMessage.model_validate({"role": "assistant", "content": [], "stopReason": "aborted"}),
+    ]
+    assert sum_message_usage(messages) == (None, None)
 
 
 def test_humanize_auth_failure_leads_with_actionable_guidance_and_keeps_detail() -> None:

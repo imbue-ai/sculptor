@@ -44,14 +44,18 @@ export const useGlobalKeyboardShortcuts = (): void => {
 
   const isChatSearchVisible = useAtomValue(chatSearchVisibleAtom);
   const isChatSearchVisibleRef = useRef(isChatSearchVisible);
-  isChatSearchVisibleRef.current = isChatSearchVisible;
+  useEffect(() => {
+    isChatSearchVisibleRef.current = isChatSearchVisible;
+  });
 
   // In the empty first-run state, global shortcuts are off. Read
   // through a ref so the keydown effect doesn't re-subscribe when the flag
   // flips (it reads the latest value at event time instead).
   const areGlobalShortcutsDisabled = useAtomValue(areGlobalShortcutsDisabledAtom);
   const areGlobalShortcutsDisabledRef = useRef(areGlobalShortcutsDisabled);
-  areGlobalShortcutsDisabledRef.current = areGlobalShortcutsDisabled;
+  useEffect(() => {
+    areGlobalShortcutsDisabledRef.current = areGlobalShortcutsDisabled;
+  });
 
   const keybindingsMap = useAtomValue(keybindingsMapAtom);
 
@@ -87,9 +91,12 @@ export const useGlobalKeyboardShortcuts = (): void => {
         return;
       }
 
-      // Cmd+W / Ctrl+W: when an overlay is open, close it instead of
-      // letting Electron close the window.
-      if ((e.metaKey || e.ctrlKey) && e.key === "w" && isDismissibleOverlayOpen()) {
+      // Cmd+W / Ctrl+W: when an overlay is open, close it instead of letting
+      // Electron close the window. Scoped to the bare close_workspace chord
+      // (no Shift/Alt): Cmd+Shift+W is delete_workspace and opens the
+      // confirmation dialog, so treating it as a close-overlay gesture would
+      // dismiss the dialog it just opened.
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key === "w" && isDismissibleOverlayOpen()) {
         e.preventDefault();
         document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
         return;

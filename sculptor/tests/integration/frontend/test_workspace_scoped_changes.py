@@ -15,11 +15,10 @@ for BOTH agents.
 
 from playwright.sync_api import expect
 
-from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
-from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.playwright_utils import add_agent_and_wait_for_ready
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -53,12 +52,7 @@ fake_claude:write_file `{
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    create_agent_panel(page, section="center")
-
-    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
-    expect(tabs).to_have_count(2)
-
-    task_page_2 = PlaywrightTaskPage(page=page)
+    task_page_2 = add_agent_and_wait_for_ready(page)
     chat_panel_2 = task_page_2.get_chat_panel()
     send_chat_message(
         chat_panel=chat_panel_2,
@@ -75,6 +69,7 @@ fake_claude:write_file `{
     expect(changes_tree).to_be_visible()
     expect(changes_tree.get_tree_rows()).to_have_count(2)
 
+    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
     tabs.first.click()
 
     task_page.activate_changes_panel(scope="uncommitted")
@@ -110,12 +105,7 @@ fake_claude:write_file `{
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    create_agent_panel(page, section="center")
-
-    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
-    expect(tabs).to_have_count(2)
-
-    task_page_2 = PlaywrightTaskPage(page=page)
+    task_page_2 = add_agent_and_wait_for_ready(page)
     chat_panel_2 = task_page_2.get_chat_panel()
     send_chat_message(
         chat_panel=chat_panel_2,
@@ -173,12 +163,7 @@ fake_claude:write_file `{
     expect(changes_tree).to_be_visible()
     expect(changes_tree.get_tree_rows()).to_have_count(1)
 
-    create_agent_panel(page, section="center")
-
-    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
-    expect(tabs).to_have_count(2)
-
-    task_page_2 = PlaywrightTaskPage(page=page)
+    task_page_2 = add_agent_and_wait_for_ready(page)
     chat_panel_2 = task_page_2.get_chat_panel()
     send_chat_message(
         chat_panel=chat_panel_2,
@@ -190,6 +175,7 @@ fake_claude:write_file `{
     )
     wait_for_completed_message_count(chat_panel=chat_panel_2, expected_message_count=2)
 
+    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
     tabs.first.click()
 
     task_page.activate_changes_panel(scope="uncommitted")

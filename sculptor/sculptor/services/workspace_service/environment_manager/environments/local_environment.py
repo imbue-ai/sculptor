@@ -355,7 +355,7 @@ class LocalEnvironment(Environment):
         process = run_background(
             command,
             cwd=workdir,
-            env={k: str(v) for k, v in env.items() if v is not None},
+            env={k: v for k, v in env.items() if v is not None},
             is_checked=is_checked,
             timeout=timeout,
             shutdown_event=shutdown_event,
@@ -382,7 +382,7 @@ class LocalEnvironment(Environment):
         else:
             merged = {**self._project_env_vars, **os.environ}
         merged.pop("CLAUDECODE", None)
-        env = {k: str(v) for k, v in merged.items() if v is not None}
+        env = {k: v for k, v in merged.items() if v is not None}
         logger.info("Starting setup subprocess in workspace: {}", self.workspace_path)
         process = subprocess.Popen(
             ["bash", "-l", "-c", command],

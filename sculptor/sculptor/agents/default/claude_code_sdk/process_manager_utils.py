@@ -69,9 +69,9 @@ def get_claude_command(
     # The user prompt is sent as a JSON message on stdin after process start.
     claude_command = (
         f"exec {executable} --dangerously-skip-permissions --permission-prompt-tool stdio"
-        f" --output-format=stream-json --verbose"
-        f" --input-format stream-json"
-        f" --include-hook-events"
+        + " --output-format=stream-json --verbose"
+        + " --input-format stream-json"
+        + " --include-hook-events"
     )
 
     # Register Sculptor's in-process SDK MCP server (handled by ClaudeOutputProcessor's
@@ -583,11 +583,11 @@ def _create_synthetic_write_diff(file_path: str, content: str) -> str:
     additions = "\n".join("+" + line for line in lines)
     return (
         f"diff --git a/{file_path} b/{file_path}\n"
-        f"new file mode 100644\n"
-        f"--- /dev/null\n"
-        f"+++ b/{file_path}\n"
-        f"@@ -0,0 +1,{line_count} @@\n"
-        f"{additions}\n"
+        + "new file mode 100644\n"
+        + "--- /dev/null\n"
+        + f"+++ b/{file_path}\n"
+        + f"@@ -0,0 +1,{line_count} @@\n"
+        + f"{additions}\n"
     )
 
 

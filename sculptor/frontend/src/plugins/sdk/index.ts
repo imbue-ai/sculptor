@@ -7,13 +7,26 @@ import type { PluginPanelDefinition } from "../types.ts";
 
 export { openExternal } from "./actions.ts";
 export { Markdown, PanelHeader } from "./components.ts";
-export type { CurrentWorkspace } from "./hooks.ts";
-export { useCurrentWorkspace, usePluginSetting, useWorkspaces, useWorkspaceTasks } from "./hooks.ts";
-export type { CodingAgentTaskView, Workspace } from "~/api";
+export type { CurrentWorkspace, WorkspaceView } from "./hooks.ts";
+export {
+  useCurrentWorkspace,
+  useNavigateToWorkspace,
+  usePluginSetting,
+  usePluginSettings,
+  useWorkspaces,
+  useWorkspaceTasks,
+} from "./hooks.ts";
+export type { CodingAgentTaskView } from "~/api";
 // The contract a plugin's `activate(api)` targets. Re-exported as types so
 // plugins reference the host's real definitions instead of hand-redeclaring
 // the registration shape (types are erased at build, so no runtime stub).
-export type { OverlayDefinition, PluginHostApi, PluginManifest, WorkspaceWidgetDefinition } from "../types.ts";
+export type {
+  HomeViewDefinition,
+  OverlayDefinition,
+  PluginHostApi,
+  PluginManifest,
+  WorkspaceWidgetDefinition,
+} from "../types.ts";
 export type { PluginPanelDefinition };
 
 /**

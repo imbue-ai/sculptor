@@ -28,6 +28,7 @@ from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Task
 from sculptor.database.models import TaskID
+from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
@@ -56,6 +57,7 @@ from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
+from sculptor.web.derived import is_agent_busy_or_waiting
 from sculptor.web.derived import scan_terminal_signal_state
 from sculptor.web.pr_polling_service import PrPollingService
 from sculptor.web.terminal_input import TerminalDeliveryResult
@@ -165,7 +167,7 @@ class CIBabysitterWorkspaceStateView(SerializableModel):
 
 
 class CIBabysitterCoordinator(Service):
-    """In-process observer that turns CI/MR transitions into agent prompts."""
+    """In-process observer that turns CI/PR transitions into agent prompts."""
 
     _data_model_service: DataModelService = PrivateAttr()
     _task_service: TaskService = PrivateAttr()
@@ -205,23 +207,25 @@ class CIBabysitterCoordinator(Service):
         self._pr_polling_service.remove_observer(self._queue)
 
     def set_paused(self, workspace_id: WorkspaceID, paused: bool) -> None:
+        state = self._ensure_state(workspace_id)
+        if state is None:
+            logger.debug("set_paused: workspace {} not found", workspace_id)
+            return
         with self._lock:
-            state = self._state.get(workspace_id)
-            if state is None:
-                project_id = self._lookup_workspace_project_id(workspace_id)
-                if project_id is None:
-                    logger.debug("set_paused: workspace {} not found", workspace_id)
-                    return
-                state = CIBabysitterState(workspace_id=workspace_id, project_id=project_id)
-                self._state[workspace_id] = state
             state.paused = paused
+        # Persist so the flag survives a restart. The in-memory update above keeps
+        # the running coordinator authoritative; this write makes it durable.
+        self._persist_paused(workspace_id, paused)
 
     def get_state_snapshot(self, workspace_id: WorkspaceID) -> CIBabysitterWorkspaceStateView | None:
         config = get_user_config_instance()
+        # Hydrate from the persisted Workspace row on first touch so the paused
+        # flag is reported correctly after a restart, before any poll has rebuilt
+        # the in-memory state. Returns None only when the workspace is missing.
+        state = self._ensure_state(workspace_id)
+        if state is None:
+            return None
         with self._lock:
-            state = self._state.get(workspace_id)
-            if state is None:
-                return None
             paused = state.paused
             retry_count = state.retry_count
             retired = state.retired
@@ -262,25 +266,25 @@ class CIBabysitterCoordinator(Service):
                 continue
             try:
                 self._handle_status(item)
-            except Exception:
-                logger.exception("CIBabysitterCoordinator: error handling PrStatusInfo for {}", item.workspace_id)
+            except Exception as exc:
+                log_exception(
+                    exc,
+                    "CIBabysitterCoordinator: error handling PrStatusInfo for {workspace_id}",
+                    workspace_id=item.workspace_id,
+                )
 
     def _handle_status(self, new: PrStatusInfo) -> None:
+        state = self._ensure_state(new.workspace_id)
+        if state is None:
+            return
         with self._lock:
-            state = self._state.get(new.workspace_id)
-            if state is None:
-                project_id = self._lookup_workspace_project_id(new.workspace_id)
-                if project_id is None:
-                    return
-                state = CIBabysitterState(workspace_id=new.workspace_id, project_id=project_id)
-                self._state[new.workspace_id] = state
             prev = state.prev_status
-            # Transient "lost MR" gap: when the workspace's branch flips
+            # Transient "lost PR" gap: when the workspace's branch flips
             # (e.g. detached HEAD during a babysitter-driven rebase), the
-            # polling service can't match the workspace to an MR and emits
+            # polling service can't match the workspace to an PR and emits
             # pr_state="none". Treating this as a real transition would
             # clobber the coordinator's prev_status with an "unknown"
-            # value, and the next poll that re-finds the MR would look
+            # value, and the next poll that re-finds the PR would look
             # like a fresh False→True / running→failed transition.
             #
             # Suppress: don't update prev_status and don't dispatch.
@@ -311,6 +315,25 @@ class CIBabysitterCoordinator(Service):
         for transition in transitions:
             if transition in (Transition.PIPELINE_FAILED, Transition.MERGE_CONFLICT):
                 self._dispatch_prompt(state, transition, new)
+
+    def _are_all_workspace_agents_idle(self, state: CIBabysitterState) -> bool:
+        """True when no non-babysitter agent in the workspace is busy or waiting.
+
+        Reads each agent's *live* messages and asks ``is_agent_busy_or_waiting``,
+        which keys off the same agent status (WORKING/WAITING) the UI shows — so
+        the gate and the status dot never disagree. The babysitter's own task is
+        excluded by ``_workspace_agent_tasks_most_recent_first``. Any
+        busy/waiting agent makes the workspace not-idle, so the babysitter skips
+        this failure (SCU-1601); an idle, errored, or completed agent does not
+        count. A workspace with no prior agent is trivially idle.
+        """
+        with self._data_model_service.open_transaction(RequestID()) as transaction:
+            tasks = self._workspace_agent_tasks_most_recent_first(state.workspace_id, state.project_id, transaction)
+        for task in tasks:
+            messages = self._task_service.get_live_messages_for_task(task.object_id)
+            if is_agent_busy_or_waiting(task, messages):
+                return False
+        return True
 
     def _dispatch_prompt(self, state: CIBabysitterState, transition: Transition, new: PrStatusInfo) -> None:
         config = get_user_config_instance()
@@ -343,6 +366,26 @@ class CIBabysitterCoordinator(Service):
                         state.workspace_id,
                     )
                     return
+
+        # All-agents-idle gate (SCU-1601). Never inject a fix prompt while another
+        # agent in the workspace is busy or waiting for input — the babysitter
+        # runs as its own agent, so two agents would then edit the same workspace
+        # at once. Computing agent status does DB I/O, so it runs outside the lock.
+        #
+        # When the workspace isn't idle we DROP this failure rather than queueing
+        # it for later: pouncing the instant the user's agent finishes a turn is
+        # more disruptive than a missed prompt, and the user's own work may have
+        # already made the CI result moot. A still-relevant pipeline failure
+        # re-arms naturally on the next push (a new pipeline_id is a fresh
+        # PIPELINE_FAILED edge); a persistent merge conflict re-arms when it next
+        # clears and recurs. The drop counts no retry and sets no dedup.
+        if not self._are_all_workspace_agents_idle(state):
+            logger.info(
+                "CIBabysitterCoordinator: skipping {} for workspace={} — another agent is busy/waiting",
+                transition,
+                state.workspace_id,
+            )
+            return
 
         if transition is Transition.PIPELINE_FAILED:
             prompt_text = config.ci_babysitter.pipeline_failed_prompt
@@ -750,9 +793,55 @@ class CIBabysitterCoordinator(Service):
                 return message.model_name
         return None
 
-    def _lookup_workspace_project_id(self, workspace_id: WorkspaceID) -> ProjectID | None:
+    def _ensure_state(self, workspace_id: WorkspaceID) -> CIBabysitterState | None:
+        """Return the live in-memory state for a workspace, hydrating it from the
+        persisted Workspace row on first touch (e.g. after a restart).
+
+        The ``paused`` flag is the one piece of coordinator state that must
+        survive a restart; it is read back from the workspace here so the very
+        first read or poll after startup reflects the user's last choice rather
+        than the default. DB I/O runs outside the lock, and a double-check guards
+        against two threads hydrating the same workspace concurrently. Returns
+        None when the workspace is missing.
+        """
+        with self._lock:
+            existing = self._state.get(workspace_id)
+            if existing is not None:
+                return existing
+        hydrated = self._load_persisted_state(workspace_id)
+        if hydrated is None:
+            return None
+        with self._lock:
+            existing = self._state.get(workspace_id)
+            if existing is not None:
+                return existing
+            self._state[workspace_id] = hydrated
+            return hydrated
+
+    def _load_persisted_state(self, workspace_id: WorkspaceID) -> CIBabysitterState | None:
+        """Build a fresh per-workspace state seeded from the persisted Workspace
+        row, or None if the workspace is missing.
+
+        Only ``paused`` is durable; every other field (retry_count, prev_status,
+        ...) is genuinely per-session and starts at its default.
+        """
         with self._data_model_service.open_transaction(RequestID()) as transaction:
             workspace = transaction.get_workspace(workspace_id)
             if workspace is None:
                 return None
-            return workspace.project_id
+            return CIBabysitterState(
+                workspace_id=workspace_id,
+                project_id=workspace.project_id,
+                paused=workspace.ci_babysitter_paused,
+            )
+
+    def _persist_paused(self, workspace_id: WorkspaceID, paused: bool) -> None:
+        """Persist the per-workspace paused flag so it survives a restart.
+
+        Uses a targeted field update so it can't clobber concurrent writes to
+        other workspace columns (e.g. diff status).
+        """
+        with self._data_model_service.open_transaction(RequestID()) as transaction:
+            updated = transaction.update_workspace_fields(workspace_id, ci_babysitter_paused=paused)
+        if updated is None:
+            logger.debug("set_paused: workspace {} not found; paused flag not persisted", workspace_id)

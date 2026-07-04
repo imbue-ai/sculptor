@@ -29,45 +29,24 @@ export const buildWorkspaceActions = (runtime: WorkspaceActionRuntime): Readonly
   },
   {
     id: "create_pr",
-    // `title` / `paletteSubtitle` / `paletteKeywords` stay stable as
-    // fallbacks; the `get*` overrides flip the verb based on the
-    // workspace's git provider so users see only their provider's term.
     title: "Create pull request",
-    getTitle: (ws): string => (runtime.prTerm(ws) === "merge request" ? "Create merge request" : "Create pull request"),
     icon: GitPullRequestArrow,
     paletteSubtitle: "Push and open a new pull request",
-    getPaletteSubtitle: (ws): string =>
-      runtime.prTerm(ws) === "merge request" ? "Push and open a new merge request" : "Push and open a new pull request",
     paletteOrder: 20,
     paletteKeywords: ["pr", "pull", "request", "github"],
-    // GitHub: pr/pull/github. GitLab: mr/merge/gitlab. "request" is
-    // shared so users typing the generic noun still find the row.
-    getPaletteKeywords: (ws): ReadonlyArray<string> =>
-      runtime.prTerm(ws) === "merge request"
-        ? ["mr", "merge", "request", "gitlab"]
-        : ["pr", "pull", "request", "github"],
     disabled: (ws): boolean => !runtime.canCreatePr(ws),
-    disabledReason: (ws): string => `An open ${runtime.prTerm(ws)} already exists`,
+    disabledReason: (): string => "An open pull request already exists",
     perform: (ws): void => runtime.createMergeRequest(ws),
   },
   {
     id: "open_pr",
     title: "Open pull request",
-    getTitle: (ws): string => (runtime.prTerm(ws) === "merge request" ? "Open merge request" : "Open pull request"),
     icon: ExternalLink,
     paletteSubtitle: "Open the existing pull request in your browser",
-    getPaletteSubtitle: (ws): string =>
-      runtime.prTerm(ws) === "merge request"
-        ? "Open the existing merge request in your browser"
-        : "Open the existing pull request in your browser",
     paletteOrder: 30,
     paletteKeywords: ["pr", "pull", "request", "browser", "view", "github"],
-    getPaletteKeywords: (ws): ReadonlyArray<string> =>
-      runtime.prTerm(ws) === "merge request"
-        ? ["mr", "merge", "request", "browser", "view", "gitlab"]
-        : ["pr", "pull", "request", "browser", "view", "github"],
     disabled: (ws): boolean => !runtime.hasOpenPr(ws),
-    disabledReason: (ws): string => `No open ${runtime.prTerm(ws)} for this workspace`,
+    disabledReason: (): string => "No open pull request for this workspace",
     perform: (ws): void => runtime.openMergeRequest(ws),
   },
   // Right-click menu injects "Open in..." submenu here (after open_pr)

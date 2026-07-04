@@ -110,11 +110,18 @@ export function resetUnreadOverridesForTesting(): void {
 // precedence — the override only affects the read/unread classification.
 // Every override-aware dot surface (panel tab, workspace sidebar row) derives
 // through this one helper so they cannot drift.
+//
+// `isFocused` marks the viewed agent (see viewedAgentIdAtom): its content is on
+// screen, so the BASE derivation already reads it as "read" instead of flashing
+// unread while the debounced mark-read lags. The override flip is applied
+// STRICTLY AFTER that — an explicit "Mark as unread" must beat viewed-as-read,
+// or marking the agent you are looking at unread would silently not stick.
 export function getAgentDotStatusWithUnreadOverride(
   taskId: string,
   task: TaskReadState & { lastReadAt: string | null },
+  isFocused: boolean = false,
 ): AgentDotStatus {
-  const baseDotStatus = getAgentDotStatus(task.status, task.lastReadAt, task.updatedAt);
+  const baseDotStatus = getAgentDotStatus(task.status, task.lastReadAt, task.updatedAt, isFocused);
   return baseDotStatus === "read" && isUnreadOverrideActive(taskId, task) ? "unread" : baseDotStatus;
 }
 

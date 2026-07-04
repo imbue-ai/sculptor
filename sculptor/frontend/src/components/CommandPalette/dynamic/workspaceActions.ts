@@ -46,7 +46,7 @@ export const buildWorkspaceActionsProvider = (
       // intentionally generic — the action set grows over time, so an
       // explicit verb list goes stale.
       subtitle: `${name} — actions for this workspace`,
-      keywords: ["rename", "close", "delete", "manage", "edit", "commit", "pr", "mr", name.toLowerCase()],
+      keywords: ["rename", "close", "delete", "manage", "edit", "commit", "pr", name.toLowerCase()],
       group: "workspaces",
       icon: SettingsIcon,
       pageId: "workspace.actions",
@@ -115,7 +115,7 @@ export const buildWorkspaceActionsProvider = (
         icon: FolderOpenIcon,
         pageId: "workspace.open_in",
         onPage: "workspace.actions",
-        // Sits between Open MR (30) and Rename (50) — keeps the
+        // Sits between Open PR (30) and Rename (50) — keeps the
         // git/repo cluster contiguous before the naming + close groups.
         order: 40,
         // Disabled when the backend can't open paths (remote backend).

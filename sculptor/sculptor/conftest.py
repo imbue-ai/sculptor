@@ -16,6 +16,7 @@ from sculptor.services.dependency_management_service import DependencyManagement
 from sculptor.services.dependency_management_service import InstallResult
 from sculptor.services.git_repo_service.api import GitRepoService
 from sculptor.services.git_repo_service.default_implementation import DefaultGitRepoService
+from sculptor.services.pi_login_service import PiLoginService
 from sculptor.services.project_service.api import ProjectService
 from sculptor.services.project_service.default_implementation import DefaultProjectService
 from sculptor.services.task_service.api import TaskService
@@ -139,6 +140,11 @@ def test_service_collection(
         git_repo_service=_test_git_repo_service,
         pr_polling_service=pr_polling_service,
     )
+    pi_login_service = PiLoginService(
+        concurrency_group=test_root_concurrency_group.make_concurrency_group("pi_login_service"),
+        data_model_service=_test_data_model_service,
+        task_service=_test_task_service,
+    )
     services = CompleteServiceCollection(
         settings=test_settings,
         data_model_service=_test_data_model_service,
@@ -150,6 +156,7 @@ def test_service_collection(
         pr_polling_service=pr_polling_service,
         btw_service=BtwService(concurrency_group=test_root_concurrency_group.make_concurrency_group("btw_service")),
         ci_babysitter_service=ci_babysitter_service,
+        pi_login_service=pi_login_service,
     )
     with services.run_all():
         yield services

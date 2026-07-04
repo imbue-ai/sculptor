@@ -2,8 +2,9 @@ from abc import ABC
 from abc import abstractmethod
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import Generator
 from typing import Literal
+from typing import TYPE_CHECKING
 
 from sculptor.database.models import Project
 from sculptor.database.models import Workspace
@@ -18,6 +19,13 @@ from sculptor.interfaces.environments.agent_execution_environment import AgentEx
 from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.primitives.service import Service
+
+if TYPE_CHECKING:
+    from queue import Queue
+
+    # Imported only for type-checking: web.data_types imports this module, so a
+    # runtime import here would cycle.
+    from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
 
@@ -127,6 +135,20 @@ class WorkspaceService(Service, ABC):
     and transaction.get_workspaces() directly.
     """
 
+    @abstractmethod
+    def add_observer(self, queue: "Queue[StreamingUpdateSourceTypes]") -> None:
+        """Subscribe a queue to per-workspace git state (current branch, target branches).
+
+        Backfills current state immediately, then pushes updates as the branch
+        scan detects them. A single process-global scanner serves all observers,
+        so websocket streams subscribe here rather than each starting their own
+        per-workspace pollers. Per-connection scope filtering is the caller's job.
+        """
+
+    @abstractmethod
+    def remove_observer(self, queue: "Queue[StreamingUpdateSourceTypes]") -> None:
+        """Unsubscribe a queue previously passed to ``add_observer``."""
+
     # Workspace Operations
 
     @abstractmethod
@@ -222,7 +244,7 @@ class WorkspaceService(Service, ABC):
         concurrency_group: ConcurrencyGroup,
         root_progress_handle: RootProgressHandle,
         shutdown_event: ReadOnlyEvent,
-    ) -> Iterator[AgentExecutionEnvironment]:
+    ) -> Generator[AgentExecutionEnvironment, None, None]:
         """
         Set up the environment for a workspace.
 

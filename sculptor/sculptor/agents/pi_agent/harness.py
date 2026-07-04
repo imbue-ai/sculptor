@@ -1,20 +1,20 @@
 """The pi harness — non-Claude implementor of `Harness`.
 
-Pi is no longer a fully degraded harness. It renders tool calls
+Pi is a capable harness that renders tool calls
 (`supports_tool_use_rendering=True`): pi's tool-execution lane is adapted onto
 Sculptor's harness-agnostic tool blocks (see `agent_wrapper` / `tool_rendering`).
-Session resume IS supported — pi persists a per-task JSONL session
+Session resume is supported — pi persists a per-task JSONL session
 (`--session-dir`/`--session-id`) that a relaunched process resumes (see
-`agent_wrapper.PiAgent`). Skills ARE supported — pi is pointed at the
+`agent_wrapper.PiAgent`). Skills are supported — pi is pointed at the
 workspace's skill directories via `--skill` flags and follows an invoked skill
 (see `agent_wrapper._build_skill_launch_args` / `_rewrite_skill_invocation`).
 It also carries file references, image input, and file attachments (delivered
 by prompt assembly), and compacts context — `compaction_start/end` events drive
-the StatusPill "Compacting" chrome. And it gains an interactive backchannel
+the StatusPill "Compacting" chrome. It has an interactive backchannel
 (ask-user-question + plan mode) from the Sculptor-pinned `sculptor_backchannel`
 extension (see `backchannel.py` and `extensions/sculptor_backchannel.ts`), so
 `supports_interactive_backchannel` is `True` and the gated methods recognize
-that extension's tool names. Sub-agents ARE supported — the pinned
+that extension's tool names. Sub-agents are supported — the pinned
 `sculptor_subagent` extension spawns each child as its own `pi` process and
 streams structured per-child progress that the adapter renders as nested,
 attributed child messages under the parent `Agent` tool (see `subagent.py` and
@@ -84,7 +84,7 @@ class PiHarness(Harness):
 
     def capabilities(self) -> HarnessCapabilities:
         return HarnessCapabilities(
-            # Pi's chat is degraded but real — its main panel is the chat interface.
+            # Pi's chat is fully functional — its main panel is the chat interface.
             supports_chat_interface=True,
             # Delivered via the pinned `sculptor_backchannel` extension (AUQ +
             # plan mode); the gated methods below recognize its tool names.
@@ -173,6 +173,10 @@ class PiHarness(Harness):
         if task_state is None or task_state.current_model is None:
             return None
         return task_state.current_model.model_id
+
+    def sources_backend_models(self) -> bool:
+        # Pi sources its catalog from its authenticated providers.
+        return True
 
     def is_ask_user_question_tool(self, tool_name: str) -> bool:
         return tool_name == ASK_USER_QUESTION_TOOL_NAME

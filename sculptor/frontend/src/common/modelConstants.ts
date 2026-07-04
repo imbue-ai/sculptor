@@ -18,6 +18,56 @@ const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
 export const getModelShortName = (model: LlmModel): string => modelNames[model]?.short || "Unknown";
 export const getModelLongName = (model: LlmModel): string => modelNames[model]?.long || "Unknown";
 
+const PRODUCTION_MODELS: ReadonlyArray<LlmModel> = [
+  LlmModel.CLAUDE_FABLE_5,
+  LlmModel.CLAUDE_4_OPUS_200K,
+  LlmModel.CLAUDE_4_OPUS,
+  LlmModel.CLAUDE_4_7_OPUS_200K,
+  LlmModel.CLAUDE_4_7_OPUS,
+  LlmModel.CLAUDE_4_6_OPUS_200K,
+  LlmModel.CLAUDE_4_6_OPUS,
+  LlmModel.CLAUDE_4_SONNET_200K,
+  LlmModel.CLAUDE_4_SONNET,
+  LlmModel.CLAUDE_4_HAIKU,
+];
+
+// Fake Claude returns deterministic responses without making LLM calls; only
+// shown when integration testing is enabled.
+const TESTING_ONLY_MODELS: ReadonlyArray<LlmModel> = [LlmModel.FAKE_CLAUDE, LlmModel.FAKE_CLAUDE_2];
+
+/**
+ * The built-in Claude switcher list (Claude Code uses the user's existing
+ * authentication); the Fake Claude test doubles are appended only when
+ * integration testing is enabled.
+ */
+export const getClaudeModelList = (isIntegrationTesting: boolean): ReadonlyArray<LlmModel> =>
+  isIntegrationTesting ? [...PRODUCTION_MODELS, ...TESTING_ONLY_MODELS] : PRODUCTION_MODELS;
+
+export type ProviderGroup = {
+  provider: string;
+  models: ReadonlyArray<ModelOption>;
+};
+
+/**
+ * Partition a backend catalog (pi) into per-provider groups, preserving incoming
+ * order: the backend delivers it newest-first, which we keep within and across
+ * groups.
+ */
+export const groupModelsByProvider = (models: ReadonlyArray<ModelOption>): ReadonlyArray<ProviderGroup> => {
+  const order: Array<string> = [];
+  const byProvider = new Map<string, Array<ModelOption>>();
+  for (const model of models) {
+    const existing = byProvider.get(model.provider);
+    if (existing === undefined) {
+      order.push(model.provider);
+      byProvider.set(model.provider, [model]);
+    } else {
+      existing.push(model);
+    }
+  }
+  return order.map((provider) => ({ provider, models: byProvider.get(provider) ?? [] }));
+};
+
 const providerDisplayNames: Record<string, string> = {
   anthropic: "Anthropic",
   openrouter: "OpenRouter",

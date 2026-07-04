@@ -98,6 +98,7 @@ def _task_response_dict(
         },
         "availableModels": [],
         "selectedModelId": None,
+        "sourcesBackendModels": False,
         "fastMode": False,
         "effort": "medium",
         "isSmoothStreamingSupported": True,
@@ -173,9 +174,7 @@ class TestRun:
             return_value=Response(200, json=_task_response_dict())
         )
 
-        result = runner.invoke(
-            app, ["run", "Fix the bug", "--repo", "/tmp/test", "--strategy", "in-place"]
-        )
+        result = runner.invoke(app, ["run", "Fix the bug", "--repo", "/tmp/test", "--strategy", "in-place"])
 
         assert result.exit_code == 0
 
@@ -184,9 +183,9 @@ class TestRun:
         """sculpt run --strategy worktree --branch-name <name> forwards the name unchanged."""
         _mock_session()
         _mock_initialize_project()
-        preview_route = respx.get(
-            "http://localhost:5050/api/v1/workspaces/preview-branch-name"
-        ).mock(return_value=Response(200, json={"branchName": "should-not-be-used"}))
+        preview_route = respx.get("http://localhost:5050/api/v1/workspaces/preview-branch-name").mock(
+            return_value=Response(200, json={"branchName": "should-not-be-used"})
+        )
         ws_route = respx.post("http://localhost:5050/api/v1/workspaces").mock(
             return_value=Response(200, json=_workspace_response_dict(strategy="WORKTREE"))
         )
@@ -226,9 +225,9 @@ class TestRun:
         """sculpt run --strategy worktree without --branch-name auto-fills via preview-branch-name."""
         _mock_session()
         _mock_initialize_project()
-        preview_route = respx.get(
-            "http://localhost:5050/api/v1/workspaces/preview-branch-name"
-        ).mock(return_value=Response(200, json={"branchName": "dev/auto-from-name"}))
+        preview_route = respx.get("http://localhost:5050/api/v1/workspaces/preview-branch-name").mock(
+            return_value=Response(200, json={"branchName": "dev/auto-from-name"})
+        )
         ws_route = respx.post("http://localhost:5050/api/v1/workspaces").mock(
             return_value=Response(200, json=_workspace_response_dict(strategy="WORKTREE"))
         )
@@ -296,9 +295,7 @@ class TestRun:
         _mock_initialize_project()
         _mock_workspace_and_agent()
 
-        result = runner.invoke(
-            app, ["run", "Fix the bug", "--repo", "/tmp/test", "-m", "sonnet"]
-        )
+        result = runner.invoke(app, ["run", "Fix the bug", "--repo", "/tmp/test", "-m", "sonnet"])
 
         assert result.exit_code == 0
 
@@ -359,18 +356,14 @@ class TestRun:
     def test_run_connection_error(self, runner: CliRunner) -> None:
         _mock_session()
         _mock_initialize_project()
-        respx.post("http://localhost:5050/api/v1/workspaces").mock(
-            side_effect=ConnectError("Connection refused")
-        )
+        respx.post("http://localhost:5050/api/v1/workspaces").mock(side_effect=ConnectError("Connection refused"))
 
         result = runner.invoke(app, ["run", "Fix the bug", "--repo", "/tmp/test"])
 
         assert result.exit_code == 1
 
     def test_run_invalid_model(self, runner: CliRunner) -> None:
-        result = runner.invoke(
-            app, ["run", "Fix the bug", "--repo", "/tmp/test", "-m", "invalid"]
-        )
+        result = runner.invoke(app, ["run", "Fix the bug", "--repo", "/tmp/test", "-m", "invalid"])
 
         assert result.exit_code == 1
 
@@ -379,9 +372,7 @@ class TestRun:
         _mock_session()
         _mock_initialize_project()
 
-        result = runner.invoke(
-            app, ["run", "Fix the bug", "--repo", "/tmp/test", "--strategy", "bogus"]
-        )
+        result = runner.invoke(app, ["run", "Fix the bug", "--repo", "/tmp/test", "--strategy", "bogus"])
 
         assert result.exit_code == 1
         assert "Invalid strategy 'bogus'" in (result.stderr or result.output)
@@ -483,9 +474,7 @@ class TestWorkspaceCreateHelp:
     """SCU-1309: workspace create has the same --repo plumbing as run, and the same
     discoverability gap. Document SCULPT_PROJECT_ID there too."""
 
-    def test_workspace_create_help_documents_sculpt_project_id(
-        self, runner: CliRunner
-    ) -> None:
+    def test_workspace_create_help_documents_sculpt_project_id(self, runner: CliRunner) -> None:
         result = runner.invoke(app, ["workspace", "create", "--help"])
 
         assert result.exit_code == 0

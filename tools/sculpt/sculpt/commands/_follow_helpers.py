@@ -7,7 +7,7 @@ from typing import assert_never
 import httpx
 import typer
 
-from sculpt.client import Client
+from sculpt.auth import build_client
 from sculpt.commands.data_types import AgentStatusOutput
 from sculpt.formatting import cli_error
 from sculpt.message_formatting import format_message
@@ -21,7 +21,7 @@ from sculpt.ws_client import follow_agent
 def get_session_token_safe(base_url: str, json_output: bool) -> str:
     """Get a session token, exiting on failure."""
     try:
-        return get_session_token(Client(base_url=base_url))
+        return get_session_token(build_client(base_url))
     except SessionTokenError as e:
         cli_error(str(e), json_output=json_output)
     except (httpx.ConnectError, httpx.ConnectTimeout):

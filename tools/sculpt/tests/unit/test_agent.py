@@ -83,6 +83,7 @@ def _task_response_dict(
         },
         "availableModels": [],
         "selectedModelId": None,
+        "sourcesBackendModels": False,
         "fastMode": False,
         "effort": "medium",
         "isSmoothStreamingSupported": True,
@@ -147,9 +148,7 @@ class TestAgentCreate:
             return_value=Response(200, json=_task_response_dict())
         )
 
-        result = runner.invoke(
-            app, ["agent", "create", "-w", "ws_test123", "-p", "Do something", "-m", "sonnet"]
-        )
+        result = runner.invoke(app, ["agent", "create", "-w", "ws_test123", "-p", "Do something", "-m", "sonnet"])
 
         assert result.exit_code == 0
         assert "tsk_abc123def456" in result.output
@@ -162,9 +161,7 @@ class TestAgentCreate:
             return_value=Response(200, json=_task_response_dict())
         )
 
-        result = runner.invoke(
-            app, ["agent", "create", "-w", "ws_test123", "-p", "Do something", "--json"]
-        )
+        result = runner.invoke(app, ["agent", "create", "-w", "ws_test123", "-p", "Do something", "--json"])
 
         assert result.exit_code == 0
         data = json.loads(result.stdout)
@@ -202,9 +199,7 @@ class TestAgentCreate:
         assert result.exit_code == 0
 
     def test_create_invalid_model(self, runner: CliRunner) -> None:
-        result = runner.invoke(
-            app, ["agent", "create", "-w", "ws_test123", "-m", "invalid", "-p", "Do something"]
-        )
+        result = runner.invoke(app, ["agent", "create", "-w", "ws_test123", "-m", "invalid", "-p", "Do something"])
 
         assert result.exit_code == 1
 
@@ -216,9 +211,7 @@ class TestAgentCreate:
             side_effect=ConnectError("Connection refused")
         )
 
-        result = runner.invoke(
-            app, ["agent", "create", "-w", "ws_test123", "-p", "Do something"]
-        )
+        result = runner.invoke(app, ["agent", "create", "-w", "ws_test123", "-p", "Do something"])
 
         assert result.exit_code == 1
 
@@ -339,6 +332,27 @@ class TestAgentList:
         data = json.loads(result.stdout)
         assert len(data) == 1
         assert data[0]["id"] == "tsk_abc123def456"
+
+    @patch("sculpt.commands.agent.fetch_all_agents")
+    @patch("sculpt.commands._follow_helpers.get_session_token", return_value="test-token")
+    @respx.mock
+    def test_list_terminal_agent_reports_no_model(self, _mock_token: Any, mock_fetch: Any, runner: CliRunner) -> None:
+        """Terminal agents carry no model (SCU-1580): the list must not invent one."""
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        mock_fetch.return_value = [_make_snapshot(model=None)]
+
+        # Table output renders a placeholder, never a model name.
+        result = runner.invoke(app, ["agent", "list", "-w", "ws_test123"])
+        assert result.exit_code == 0
+        assert "opus" not in result.output
+        assert "sonnet" not in result.output
+
+        # JSON output reports the model as null.
+        result = runner.invoke(app, ["agent", "list", "-w", "ws_test123", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data[0]["model"] is None
 
     @patch("sculpt.commands.agent.fetch_all_agents")
     @patch("sculpt.commands._follow_helpers.get_session_token", return_value="test-token")
@@ -525,9 +539,7 @@ class TestAgentDelete:
             return_value=Response(200, text="null", headers={"content-type": "application/json"})
         )
 
-        result = runner.invoke(
-            app, ["agent", "delete", "tsk_abc123def456", "-w", "ws_test123", "--json"]
-        )
+        result = runner.invoke(app, ["agent", "delete", "tsk_abc123def456", "-w", "ws_test123", "--json"])
 
         assert result.exit_code == 0
         data = json.loads(result.stdout)
@@ -579,9 +591,7 @@ class TestAgentRename:
             return_value=Response(200, json=_task_response_dict(title="New Title"))
         )
 
-        result = runner.invoke(
-            app, ["agent", "rename", "tsk_abc123def456", "New Title", "-w", "ws_test123"]
-        )
+        result = runner.invoke(app, ["agent", "rename", "tsk_abc123def456", "New Title", "-w", "ws_test123"])
 
         assert result.exit_code == 0
         assert "renamed" in result.output
@@ -598,9 +608,7 @@ class TestAgentRename:
             return_value=Response(200, json=_task_response_dict(title="New Title"))
         )
 
-        result = runner.invoke(
-            app, ["agent", "rename", "tsk_abc123def456", "New Title", "-w", "ws_test123", "--json"]
-        )
+        result = runner.invoke(app, ["agent", "rename", "tsk_abc123def456", "New Title", "-w", "ws_test123", "--json"])
 
         assert result.exit_code == 0
         data = json.loads(result.stdout)
@@ -630,9 +638,7 @@ class TestAgentRename:
             return_value=Response(200, json=[_task_response_dict()])
         )
 
-        result = runner.invoke(
-            app, ["agent", "rename", "nonexistent", "New Title", "-w", "ws_test123"]
-        )
+        result = runner.invoke(app, ["agent", "rename", "nonexistent", "New Title", "-w", "ws_test123"])
 
         assert result.exit_code == 1
 
@@ -672,9 +678,7 @@ class TestAgentSend:
             return_value=Response(200, text="null", headers={"content-type": "application/json"})
         )
 
-        result = runner.invoke(
-            app, ["agent", "send", "tsk_abc123def456", "Fix the bug", "-w", "ws_test123", "--json"]
-        )
+        result = runner.invoke(app, ["agent", "send", "tsk_abc123def456", "Fix the bug", "-w", "ws_test123", "--json"])
 
         assert result.exit_code == 0
         data = json.loads(result.stdout)
@@ -695,10 +699,16 @@ class TestAgentSend:
         result = runner.invoke(
             app,
             [
-                "agent", "send", "tsk_abc123def456", "Fix it",
-                "-w", "ws_test123",
-                "--file", "path/to/file1.py",
-                "--file", "path/to/file2.py",
+                "agent",
+                "send",
+                "tsk_abc123def456",
+                "Fix it",
+                "-w",
+                "ws_test123",
+                "--file",
+                "path/to/file1.py",
+                "--file",
+                "path/to/file2.py",
             ],
         )
 
@@ -710,9 +720,7 @@ class TestAgentSend:
         assert result.exit_code == 1
 
     def test_send_invalid_model(self, runner: CliRunner) -> None:
-        result = runner.invoke(
-            app, ["agent", "send", "tsk_abc123", "hello", "-w", "ws_test123", "-m", "invalid"]
-        )
+        result = runner.invoke(app, ["agent", "send", "tsk_abc123", "hello", "-w", "ws_test123", "-m", "invalid"])
 
         assert result.exit_code == 1
 
@@ -727,9 +735,7 @@ class TestAgentSend:
             return_value=Response(200, text="null", headers={"content-type": "application/json"})
         )
 
-        result = runner.invoke(
-            app, ["agent", "send", "tsk_abc", "Fix it", "-w", "ws_test123"]
-        )
+        result = runner.invoke(app, ["agent", "send", "tsk_abc", "Fix it", "-w", "ws_test123"])
 
         assert result.exit_code == 0
 
@@ -744,9 +750,7 @@ class TestAgentSend:
             side_effect=ConnectError("Connection refused")
         )
 
-        result = runner.invoke(
-            app, ["agent", "send", "tsk_abc123def456", "Fix it", "-w", "ws_test123"]
-        )
+        result = runner.invoke(app, ["agent", "send", "tsk_abc123def456", "Fix it", "-w", "ws_test123"])
 
         assert result.exit_code == 1
 
@@ -765,9 +769,7 @@ class TestAgentSend:
             )
         )
 
-        result = runner.invoke(
-            app, ["agent", "send", "tsk_abc123def456", "Fix it", "-w", "ws_test123"]
-        )
+        result = runner.invoke(app, ["agent", "send", "tsk_abc123def456", "Fix it", "-w", "ws_test123"])
 
         assert result.exit_code == 1, f"Expected exit code 1 but got {result.exit_code}; output: {result.output}"
         assert "Message sent" not in result.output
@@ -787,9 +789,7 @@ class TestAgentSend:
             )
         )
 
-        result = runner.invoke(
-            app, ["agent", "send", "tsk_abc123def456", "Fix it", "-w", "ws_test123", "--json"]
-        )
+        result = runner.invoke(app, ["agent", "send", "tsk_abc123def456", "Fix it", "-w", "ws_test123", "--json"])
 
         assert result.exit_code == 1
         assert "Message sent" not in result.output
@@ -798,6 +798,7 @@ class TestAgentSend:
 def _make_snapshot(
     task_id: str = "tsk_abc123def456",
     status: str = "RUNNING",
+    model: str | None = "CLAUDE-4-SONNET",
     current_activity: str | None = None,
     last_activity: str | None = None,
     waiting_detail: str | None = None,
@@ -823,7 +824,7 @@ def _make_snapshot(
         error_detail=error_detail,
         updated_at="2026-01-15T10:35:00Z",
         title="Test task",
-        model="CLAUDE-4-SONNET",
+        model=model,
         interface="TERMINAL",
         project_id=project_id,
         workspace_id=workspace_id,
@@ -931,7 +932,15 @@ class TestAgentStatus:
     @patch("sculpt.commands.agent.follow_agent")
     @patch("sculpt.commands._follow_helpers.get_session_token", return_value="test-token")
     def test_status_follow_terminal_state(self, _mock_token: Any, mock_follow: Any, runner: CliRunner) -> None:
-        def side_effect(_base_url: str, _token: str, _agent_id: str, on_status: Any, _on_messages: Any, _on_reconnect: Any, **_kwargs: Any) -> ExitReason:
+        def side_effect(
+            _base_url: str,
+            _token: str,
+            _agent_id: str,
+            on_status: Any,
+            _on_messages: Any,
+            _on_reconnect: Any,
+            **_kwargs: Any,
+        ) -> ExitReason:
             on_status(_make_snapshot(status="READY"))
             return ExitReason.TERMINAL_STATE
 
@@ -945,7 +954,15 @@ class TestAgentStatus:
     @patch("sculpt.commands.agent.follow_agent")
     @patch("sculpt.commands._follow_helpers.get_session_token", return_value="test-token")
     def test_status_follow_waiting(self, _mock_token: Any, mock_follow: Any, runner: CliRunner) -> None:
-        def side_effect(_base_url: str, _token: str, _agent_id: str, on_status: Any, _on_messages: Any, _on_reconnect: Any, **_kwargs: Any) -> ExitReason:
+        def side_effect(
+            _base_url: str,
+            _token: str,
+            _agent_id: str,
+            on_status: Any,
+            _on_messages: Any,
+            _on_reconnect: Any,
+            **_kwargs: Any,
+        ) -> ExitReason:
             on_status(_make_snapshot(status="WAITING", waiting_detail="User input needed"))
             return ExitReason.WAITING
 
@@ -958,7 +975,15 @@ class TestAgentStatus:
     @patch("sculpt.commands.agent.follow_agent")
     @patch("sculpt.commands._follow_helpers.get_session_token", return_value="test-token")
     def test_status_follow_json(self, _mock_token: Any, mock_follow: Any, runner: CliRunner) -> None:
-        def side_effect(_base_url: str, _token: str, _agent_id: str, on_status: Any, _on_messages: Any, _on_reconnect: Any, **_kwargs: Any) -> ExitReason:
+        def side_effect(
+            _base_url: str,
+            _token: str,
+            _agent_id: str,
+            on_status: Any,
+            _on_messages: Any,
+            _on_reconnect: Any,
+            **_kwargs: Any,
+        ) -> ExitReason:
             on_status(_make_snapshot(status="RUNNING"))
             return ExitReason.TERMINAL_STATE
 
@@ -996,10 +1021,12 @@ class TestAgentMessages:
     @patch("sculpt.commands.agent.fetch_agent_state")
     @patch("sculpt.commands._follow_helpers.get_session_token", return_value="test-token")
     def test_messages_success(self, _mock_token: Any, mock_fetch: Any, runner: CliRunner) -> None:
-        mock_fetch.return_value = _make_snapshot(messages=[
-            _chat_message_dict(role="user", msg_id="msg_001", text="what is going on"),
-            _chat_message_dict(role="assistant", msg_id="msg_002", text="I am working on it"),
-        ])
+        mock_fetch.return_value = _make_snapshot(
+            messages=[
+                _chat_message_dict(role="user", msg_id="msg_001", text="what is going on"),
+                _chat_message_dict(role="assistant", msg_id="msg_002", text="I am working on it"),
+            ]
+        )
 
         result = runner.invoke(app, ["agent", "messages", "tsk_abc123def456"])
 
@@ -1105,7 +1132,13 @@ class TestAgentMessages:
             role="assistant",
             content=[
                 {"type": "tool_use", "name": "Read", "id": "tu1", "input": {"file_path": "src/main.py"}},
-                {"type": "tool_result", "toolUseId": "tu1", "toolName": "Read", "content": {"text": "file contents"}, "isError": False},
+                {
+                    "type": "tool_result",
+                    "toolUseId": "tu1",
+                    "toolName": "Read",
+                    "content": {"text": "file contents"},
+                    "isError": False,
+                },
             ],
         )
         mock_fetch.return_value = _make_snapshot(messages=[msg])
@@ -1120,11 +1153,21 @@ class TestAgentMessages:
     @patch("sculpt.commands.agent.follow_agent")
     @patch("sculpt.commands._follow_helpers.get_session_token", return_value="test-token")
     def test_messages_follow(self, _mock_token: Any, mock_follow: Any, runner: CliRunner) -> None:
-        def side_effect(_base_url: str, _token: str, _agent_id: str, _on_status: Any, on_messages: Any, _on_reconnect: Any, **_kwargs: Any) -> ExitReason:
-            on_messages([
-                _chat_message_dict(role="user", msg_id="msg_001", text="hello"),
-                _chat_message_dict(role="assistant", msg_id="msg_002", text="hi there"),
-            ])
+        def side_effect(
+            _base_url: str,
+            _token: str,
+            _agent_id: str,
+            _on_status: Any,
+            on_messages: Any,
+            _on_reconnect: Any,
+            **_kwargs: Any,
+        ) -> ExitReason:
+            on_messages(
+                [
+                    _chat_message_dict(role="user", msg_id="msg_001", text="hello"),
+                    _chat_message_dict(role="assistant", msg_id="msg_002", text="hi there"),
+                ]
+            )
             return ExitReason.TERMINAL_STATE
 
         mock_follow.side_effect = side_effect
@@ -1138,7 +1181,15 @@ class TestAgentMessages:
     @patch("sculpt.commands.agent.follow_agent")
     @patch("sculpt.commands._follow_helpers.get_session_token", return_value="test-token")
     def test_messages_follow_json(self, _mock_token: Any, mock_follow: Any, runner: CliRunner) -> None:
-        def side_effect(_base_url: str, _token: str, _agent_id: str, _on_status: Any, on_messages: Any, _on_reconnect: Any, **_kwargs: Any) -> ExitReason:
+        def side_effect(
+            _base_url: str,
+            _token: str,
+            _agent_id: str,
+            _on_status: Any,
+            on_messages: Any,
+            _on_reconnect: Any,
+            **_kwargs: Any,
+        ) -> ExitReason:
             on_messages([_chat_message_dict(role="assistant", msg_id="msg_001", text="hi")])
             return ExitReason.TERMINAL_STATE
 
@@ -1233,7 +1284,15 @@ class TestAgentSendFollow:
             return_value=Response(200, text="null", headers={"content-type": "application/json"})
         )
 
-        def side_effect(_base_url: str, _token: str, _agent_id: str, _on_status: Any, on_messages: Any, _on_reconnect: Any, **_kwargs: Any) -> ExitReason:
+        def side_effect(
+            _base_url: str,
+            _token: str,
+            _agent_id: str,
+            _on_status: Any,
+            on_messages: Any,
+            _on_reconnect: Any,
+            **_kwargs: Any,
+        ) -> ExitReason:
             on_messages([_chat_message_dict(role="assistant", msg_id="msg_001", text="Done!")])
             return ExitReason.TERMINAL_STATE
 

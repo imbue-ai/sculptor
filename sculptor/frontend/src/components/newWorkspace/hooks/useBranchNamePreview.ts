@@ -1,12 +1,19 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
-import type { WorkspaceInitializationStrategy } from "~/api";
-import { branchExists, previewBranchName, WorkspaceInitializationStrategy as Strategy } from "~/api";
+import type { NewBranchNameValidationResponse, WorkspaceInitializationStrategy } from "~/api";
+import { previewBranchName, validateNewBranchName, WorkspaceInitializationStrategy as Strategy } from "~/api";
 import type { BackendQueryKeyResult } from "~/common/queryClient.ts";
 import { SCULPTOR_QUERY_KEY_PREFIX } from "~/common/queryClient.ts";
 
-export type BranchNameCollisionState = "unknown" | "exists" | "available";
+/**
+ * Status of the displayed branch name, from the debounced backend check:
+ * - `unknown`: not checked yet (empty name, in-place mode, or in flight)
+ * - `invalid`: not a legal git ref name
+ * - `exists`: legal, but already a branch in the repo
+ * - `available`: legal and free to use
+ */
+export type BranchNameStatus = "unknown" | "invalid" | "exists" | "available";
 
 type BranchNamePreviewState = {
   /** The auto-filled value sourced from the backend `preview-branch-name` endpoint. */
@@ -15,8 +22,8 @@ type BranchNamePreviewState = {
   displayedValue: string;
   /** True while the auto preview isn't settled yet (debounce gap or fetch in flight). */
   isLoading: boolean;
-  /** Result of the debounced `branch-exists` check on `displayedValue`. */
-  collision: BranchNameCollisionState;
+  /** Result of the debounced `validate-new-branch-name` check on `displayedValue`. */
+  status: BranchNameStatus;
 };
 
 type UseBranchNamePreviewArgs = {
@@ -34,7 +41,7 @@ type UseBranchNamePreviewArgs = {
 };
 
 const PREVIEW_DEBOUNCE_MS = 250;
-const COLLISION_DEBOUNCE_MS = 300;
+const VALIDATION_DEBOUNCE_MS = 300;
 
 // Both endpoints are project-scoped and have no WebSocket push signal, so they
 // key under the project namespace. The blank-workspace-name preview returns a
@@ -58,8 +65,8 @@ const branchNamePreviewQueryKey = (
   isValid: projectId !== null,
 });
 
-const branchExistsQueryKey = (projectId: string | null, name: string): BackendQueryKeyResult => ({
-  key: [SCULPTOR_QUERY_KEY_PREFIX, "project", projectId, "branchExists", name] as const,
+const validateNewBranchNameQueryKey = (projectId: string | null, name: string): BackendQueryKeyResult => ({
+  key: [SCULPTOR_QUERY_KEY_PREFIX, "project", projectId, "validateNewBranchName", name] as const,
   isValid: projectId !== null,
 });
 
@@ -76,15 +83,19 @@ const fetchBranchNamePreview = async (
   return data?.branchName ?? "";
 };
 
-// Returns null (rather than false) when the backend gave no answer, so the
-// caller can distinguish "not checked" from a real "does not exist".
-const fetchBranchExists = async (projectId: string, name: string, signal: AbortSignal): Promise<boolean | null> => {
-  const { data } = await branchExists({
+// Returns null (rather than a verdict) when the backend gave no answer, so the
+// caller can distinguish "not checked" from a real validation result.
+const fetchBranchNameValidation = async (
+  projectId: string,
+  name: string,
+  signal: AbortSignal,
+): Promise<NewBranchNameValidationResponse | null> => {
+  const { data } = await validateNewBranchName({
     path: { project_id: projectId },
     query: { name },
     meta: { signal },
   });
-  return data ? data.exists : null;
+  return data ?? null;
 };
 
 // Delay a rapidly-changing value so it only settles after `delayMs` of quiet,
@@ -128,23 +139,26 @@ export function useBranchNamePreview({
   // gap before the request starts, plus the request itself.
   const isLoading = isPreviewEnabled && (previewQuery.isFetching || debouncedWorkspaceName !== workspaceName);
 
-  // Debounce the displayed value before the existence check so it fires on the
+  // Debounce the displayed value before the validation check so it fires on the
   // settled name, not on every intermediate keystroke or preview update.
-  const debouncedBranchName = useDebouncedValue(displayedValue.trim(), COLLISION_DEBOUNCE_MS);
-  const collisionKey = branchExistsQueryKey(projectId, debouncedBranchName);
-  const isCollisionEnabled = collisionKey.isValid && mode !== Strategy.IN_PLACE && debouncedBranchName !== "";
-  const collisionQuery = useQuery({
-    queryKey: collisionKey.key,
-    queryFn: ({ signal }) => fetchBranchExists(projectId!, debouncedBranchName, signal),
-    enabled: isCollisionEnabled,
+  const debouncedBranchName = useDebouncedValue(displayedValue.trim(), VALIDATION_DEBOUNCE_MS);
+  const validationKey = validateNewBranchNameQueryKey(projectId, debouncedBranchName);
+  const isValidationEnabled = validationKey.isValid && mode !== Strategy.IN_PLACE && debouncedBranchName !== "";
+  const validationQuery = useQuery({
+    queryKey: validationKey.key,
+    queryFn: ({ signal }) => fetchBranchNameValidation(projectId!, debouncedBranchName, signal),
+    enabled: isValidationEnabled,
     placeholderData: keepPreviousData,
     retry: false,
   });
 
-  let collision: BranchNameCollisionState = "unknown";
-  if (isCollisionEnabled && !collisionQuery.isError && collisionQuery.data != null) {
-    collision = collisionQuery.data ? "exists" : "available";
+  // "unknown" whenever the check is disabled or unanswered, so a stale verdict
+  // never lingers once the name empties or the mode stops needing a new branch.
+  let status: BranchNameStatus = "unknown";
+  if (isValidationEnabled && !validationQuery.isError && validationQuery.data != null) {
+    const { isValid, alreadyExists: doesBranchExist } = validationQuery.data;
+    status = !isValid ? "invalid" : doesBranchExist ? "exists" : "available";
   }
 
-  return { preview, displayedValue, isLoading, collision };
+  return { preview, displayedValue, isLoading, status };
 }

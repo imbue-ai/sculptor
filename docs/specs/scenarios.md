@@ -416,7 +416,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **HOME-010 — Workspace row contents**
   - Given: a workspace exists.
   - When: the row is shown.
-  - Then: it shows a status dot, the workspace name, the branch name (monospace), a PR/MR button if a branch exists, the project name (revealed on hover), a relative last-activity time, and a delete button (revealed on hover).
+  - Then: it shows a status dot, the workspace name, the branch name (monospace), a PR button if a branch exists, the project name (revealed on hover), a relative last-activity time, and a delete button (revealed on hover).
 
 - **HOME-011 — Row hover/focus styling**
   - Given: a workspace row.
@@ -463,10 +463,10 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user clicks Delete (or presses Enter).
   - Then: the dialog closes and the row disappears from the list immediately.
 
-- **HOME-020 — PR/MR button states on a row**
+- **HOME-020 — PR button states on a row**
   - Given: a workspace row with a branch.
   - When: the PR status is known.
-  - Then: the button reflects the state: a spinner + "Checking PR…" while loading; "Create PR"/"Create MR" when none exists; "PR #N"/"MR !N" with pipeline & review status dots when open; a merged/closed badge when merged/closed; an "Assign PR" option when a PR targets a different branch; and an error button (warning/info icon) on failure.
+  - Then: the button reflects the state: a spinner + "Checking PR…" while loading; "Create PR" when none exists; "PR #N" with pipeline & review status dots when open; a merged/closed badge when merged/closed; an "Assign PR" option when a PR targets a different branch; and an error button (warning/info icon) on failure.
   - (See WS-PR scenarios for full PR-button behavior; rows reuse the same component.)
 
 ---
@@ -569,6 +569,11 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the card shows the paste-a-code panel.
   - Then: the sign-in URL and instructions are shown with a "Paste code here" input; pasting the authorization code and submitting (Enter) completes sign-in.
 
+- **ONB-035 — GitHub CLI card: device-flow sign-in**
+  - Given: the optional GitHub CLI (`gh`) card shows "not signed in".
+  - When: the user clicks "Sign in".
+  - Then: the card shows a one-time code, an "Open verification page" link, and a waiting state; once the user approves at GitHub and `gh` reports authenticated, the card flips to signed-in on its own.
+
 - **ONB-018 — Claude managed install (progress)**
   - Given: Claude is managed and not installed.
   - When: installation runs (auto-triggered on load or via Install).
@@ -616,15 +621,20 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 
 ## Add-repo step
 
-- **ONB-027 — Add-repo step header & input**
+- **ONB-027 — Add-repo step header & source picker**
   - Given: the Add-Repo step is shown.
   - When: viewing the page.
-  - Then: "Add your first repo" with a path input (placeholder `~/path/to/repo`, autofocused) is shown.
+  - Then: "Add your first repo" with a source picker defaulting to **GitHub** (search/clone your repos) and a **Local Folder** option (a path input, placeholder `~/path/to/repo`) is shown.
 
 - **ONB-028 — Browse for folder (desktop)**
-  - Given: the Add-Repo step on desktop.
+  - Given: the Add-Repo step on desktop with the Local Folder source selected.
   - When: the user clicks "Or browse for a folder" and selects a folder.
   - Then: the path input is populated with the chosen path.
+
+- **ONB-036 — Connect first repo by cloning from GitHub**
+  - Given: the Add-Repo step on the GitHub source with `gh` authenticated.
+  - When: the user selects one of their GitHub repos (or pastes a URL) and submits.
+  - Then: a clone-progress view is shown; on success the repo is added and the wizard completes into the app.
 
 - **ONB-029 — Add button gating**
   - Given: the Add-Repo step.
@@ -787,7 +797,8 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **ADDREPO-001 — Open add-repo dialog**
   - Given: the repo selector dropdown is open (or another add-repo entry point).
   - When: the user clicks "Add Repository".
-  - Then: a modal opens with a path input (focused) and, on desktop, a Browse button.
+  - Then: a modal opens with a source picker (radio cards) defaulting to **GitHub**, plus a **Local
+    Folder** option; the Local Folder option shows a path input and, on desktop, a Browse button.
 
 - **ADDREPO-002 — Cancel dialog**
   - Given: the dialog is open and not validating.
@@ -823,6 +834,31 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - Given: the autocomplete dropdown has items.
   - When: viewing the footer.
   - Then: hints "Esc: close", "↵: open", "{Meta}↵: add" are shown; pressing Enter with the dropdown closed (or `Cmd+Enter` anytime) submits the trimmed path.
+
+- **ADDREPO-009 — GitHub repo search & select**
+  - Given: the dialog is on the GitHub source and `gh` is authenticated.
+  - When: the user types in the "Repository" combobox.
+  - Then: matching repos appear (each showing its name, a lock for private repos, and last-pushed time); selecting one fills the repo and a suggested target folder, ready to clone.
+
+- **ADDREPO-010 — Paste a clone URL instead**
+  - Given: the dialog is on the GitHub source.
+  - When: the user clicks "I'll paste a URL instead".
+  - Then: the form switches to a URL field accepting an HTTPS/SSH/`git` clone URL; "Search my repositories instead" switches back.
+
+- **ADDREPO-011 — GitHub not configured**
+  - Given: the dialog is on the GitHub source and `gh` is missing or not authenticated.
+  - When: viewing the GitHub form.
+  - Then: a "GitHub CLI not configured" message explains the requirement and offers a "Configure GitHub" shortcut to Settings; the user can still paste a URL.
+
+- **ADDREPO-012 — Clone progress**
+  - Given: a GitHub repo (or pasted URL) is selected.
+  - When: the user submits the clone.
+  - Then: a progress view appears titled "Cloning {owner/repo}…" with a progress bar until the clone finishes and the repo is added.
+
+- **ADDREPO-013 — Clone destination exists → add as local**
+  - Given: a clone whose target folder already exists.
+  - When: the clone fails for that reason.
+  - Then: Sculptor surfaces the error and offers to add the existing folder as a local repo instead.
 
 ---
 
@@ -937,16 +973,16 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user clicks the interrupt-and-send (arrow-up) button.
   - Then: the running turn is interrupted and the queued message is sent; the button is hidden if interruption is unsupported.
 
-## PR / MR button
+## PR button
 
-- **WS-022 — Checking PR/MR status**
+- **WS-022 — Checking PR status**
   - Given: a workspace with a branch.
   - When: PR status is loading.
-  - Then: a spinner with "Checking PR…" / "Checking MR…" is shown.
+  - Then: a spinner with "Checking PR…" is shown.
 
-- **WS-023 — Create PR/MR**
+- **WS-023 — Create PR**
   - Given: no PR exists for the branch.
-  - When: the user clicks "Create PR"/"Create MR".
+  - When: the user clicks "Create PR".
   - Then: a default PR-creation prompt (including the target branch) is sent to the agent.
 
 - **WS-024 — Edit PR prompt before creating**
@@ -955,14 +991,14 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - Then: a dialog opens to edit the prompt; Save updates it and closes.
 
 - **WS-025 — Open PR display**
-  - Given: an open PR/MR exists.
+  - Given: an open PR exists.
   - When: viewing the button.
-  - Then: it shows "PR #N"/"MR !N" with pipeline and review status dots.
+  - Then: it shows "PR #N" with pipeline and review status dots.
 
 - **WS-026 — Open PR in browser**
   - Given: an open PR button is shown.
   - When: the user clicks the PR number.
-  - Then: the PR/MR opens in the browser.
+  - Then: the PR opens in the browser.
 
 - **WS-027 — PR detail dropdown**
   - Given: an open PR button is shown.
@@ -972,7 +1008,8 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **WS-028 — CI babysitter toggle in PR dropdown**
   - Given: CI babysitter is enabled and the PR dropdown is open.
   - When: the user toggles the babysitter switch.
-  - Then: it pauses/resumes and the status text updates.
+  - Then: it pauses/resumes and the status text updates; the pause state is remembered for the
+    workspace and is still in effect after an app restart.
 
 - **WS-077 — CI babysitter disabled reason in PR dropdown**
   - Given: the babysitter can't run for this workspace (e.g. its configured agent type can't be resolved) and the PR dropdown is open.
@@ -992,7 +1029,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **WS-031 — Assign PR (target mismatch)**
   - Given: a PR exists for a different target than the workspace's.
   - When: viewing the button.
-  - Then: an "Assign PR"/"Assign MR" button is shown; opening it offers "Create PR → {target}" and "switch target to {target}".
+  - Then: an "Assign PR" button is shown; opening it offers "Create PR → {target}" and "switch target to {target}".
 
 - **WS-032 — PR error states**
   - Given: PR status checking failed.
@@ -1112,6 +1149,11 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user switches away and back.
   - Then: the terminal reconnects and previous scrollback is restored.
 
+- **WS-079 — Terminal pane focuses on tab select**
+  - Given: a workspace with a terminal agent among its tabs.
+  - When: the user selects the terminal agent's tab.
+  - Then: the terminal pane takes keyboard focus so the user can type into the shell immediately.
+
 ## Ask-user-question (input area)
 
 - **WS-053 — Question panel replaces input**
@@ -1161,7 +1203,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **WS-061 — Peek popover on hover**
   - Given: workspace tabs are shown.
   - When: the user hovers a workspace tab for a moment.
-  - Then: a peek popover appears showing status, agent list, PR/MR info, branch, and diff stats.
+  - Then: a peek popover appears showing status, agent list, PR info, branch, and diff stats.
 
 - **WS-062 — Smooth peek transitions**
   - Given: a peek popover is open.
@@ -1496,7 +1538,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **CHAT-046 — Capability-gated model picker / Pi model catalog**
   - Given: agents whose harness does and doesn't support model selection.
   - When: the user opens the model picker on each (a Claude agent, a Pi agent, and a terminal agent).
-  - Then: a Claude agent lists Claude models; a Pi agent lists Pi's own models grouped by provider; a terminal agent shows the picker disabled with the current model; switching a Pi model that the harness rejects leaves the selection unchanged and shows an error toast.
+  - Then: a Claude agent lists Claude models; a Pi agent lists Pi's own models grouped by provider (a single provider flat, two or more cascading into per-provider submenus), and a Pi agent with no authenticated providers shows an "Authenticate a provider" prompt instead of a list; a terminal agent shows the picker disabled with the current model; switching a Pi model that the harness rejects leaves the selection unchanged and shows an error toast.
 
 ---
 
@@ -2005,10 +2047,10 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: switching tabs/files and returning.
   - Then: each of these states is restored.
 
-## Plugin panels (experimental)
+## Plugin panels
 
 - **PANEL-057 — Plugin-contributed panel appears with a badge**
-  - Given: Frontend plugins is enabled and a plugin contributing a panel is loaded (e.g. the bundled Linear plugin).
+  - Given: the bundled Linear plugin (enabled by default) is loaded and contributes a panel.
   - When: the user views the Panels list and opens the plugin's panel.
   - Then: the panel is listed with a "plugin" badge and renders its content when opened.
 
@@ -2141,8 +2183,8 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 
 - **CMDP-024 — Workspace actions sub-page**
   - Given: a workspace.
-  - When: the user opens "Workspace actions…" and runs Commit changes / Create PR (or MR) / Open PR / Rename / Close / Close others / Close all / Delete.
-  - Then: each performs its action (Commit disabled without changes; Open PR disabled without an open PR; Delete and others as labeled), and the label reflects PR vs MR by provider.
+  - When: the user opens "Workspace actions…" and runs Commit changes / Create PR / Open PR / Rename / Close / Close others / Close all / Delete.
+  - Then: each performs its action (Commit disabled without changes; Open PR disabled without an open PR; Delete and others as labeled).
 
 - **CMDP-025 — Open-in sub-page**
   - Given: external apps are available and the backend is local.
@@ -2358,7 +2400,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 
 - **SET-029 — Experimental toggles**
   - Given: the Experimental section.
-  - When: the user toggles any feature (Always interrupt and send, Smooth streaming, Per-workspace panel layout, In-place workspaces, Clone workspaces, Review all, Entity mentions, Rich markdown rendering, Pi agent, Frontend plugins).
+  - When: the user toggles any feature (Always interrupt and send, Smooth streaming, Per-workspace panel layout, In-place workspaces, Clone workspaces, Review all, Entity mentions, Rich markdown rendering, Pi agent).
   - Then: each shows "Setting updated".
 
 - **SET-030 — Custom backend command & timeout**
@@ -2366,12 +2408,22 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user sets a custom backend command or readiness timeout.
   - Then: each saves with a "restart required" toast.
 
-## Plugins (experimental)
+## Plugins
 
 - **SET-038 — Manage plugin sources**
-  - Given: Frontend plugins is enabled, so a Plugins section appears in Settings.
+  - Given: the Plugins settings section with the plugin system enabled.
   - When: the user adds a plugin source by URL, toggles a plugin's enable/disable switch, clicks Refresh to rescan the plugins directory, or removes a user-added URL source.
   - Then: an added source appears in the list; the switch mutes/unmutes the plugin without removing it; Refresh re-scans drop-in plugins; a user-added URL source can be removed while bundled/disk-discovered ones cannot; the plugins directory path is shown.
+
+- **SET-040 — Global plugin enable/disable toggle**
+  - Given: the Plugins settings section (always present, since it hosts the global plugin toggle).
+  - When: the user toggles the global plugin switch at the top of the section off, then on.
+  - Then: turning it off hides the plugin-management UI (add-source input and list) while the section and switch remain; turning it on reveals the management UI again.
+
+- **SET-041 — Retry a failed plugin load**
+  - Given: a plugin source whose row is in the error state (its load failed).
+  - When: the user clicks the retry control on that row.
+  - Then: the row re-attempts the load — settling back to error if it fails again, or showing the loaded plugin's name and version if it now succeeds.
 
 ## Actions
 
@@ -2557,7 +2609,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   entity mentions, rich markdown rendering, clone/in-place workspaces, Review-all,
   Pi agent, image upload, CI babysitter, and the dev/devtools panels. Tests should set
   the relevant flag (or assert the gated UI is absent when off).
-- The home-page rows and the workspace banner reuse the same PR/MR button component, so
+- The home-page rows and the workspace banner reuse the same PR button component, so
   the WS-PR scenarios (WS-022…WS-032) also describe the home-row PR behavior (HOME-020).
 - Status dots (running / waiting / error / ready / read / unread, plus the two-dot mixed
   state) use one shared component across tab strips, home rows, agent tabs, peek popovers,

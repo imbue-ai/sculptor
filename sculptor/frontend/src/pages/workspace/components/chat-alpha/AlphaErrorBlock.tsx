@@ -57,6 +57,9 @@ export const AlphaErrorBlock = ({
   const binaryNotFoundTool = BINARY_NOT_FOUND_TOOLS.find((tool) => block.errorType?.endsWith(tool.errorSuffix));
   const errorLabel = block.errorType ? block.errorType.split(".").pop() : "Request Failed";
   const showRetry = !binaryNotFoundTool && isLastMessage && taskStatus !== TaskStatus.ERROR && onRetryRequest;
+  // The pi adapter's provider-auth turn failure leads with this phrasing
+  // (humanize_pi_failure_reason); offer a one-click route to authenticate.
+  const isAuthFailure = block.message?.includes("require authentication") ?? false;
 
   if (binaryNotFoundTool) {
     const isInstalled = dependenciesStatus ? binaryNotFoundTool.getInstalled(dependenciesStatus) : false;
@@ -107,6 +110,21 @@ export const AlphaErrorBlock = ({
       {isExpanded && block.traceback && (
         <div className={styles.tracebackScroll}>
           <pre className={styles.errorTraceback}>{block.traceback}</pre>
+        </div>
+      )}
+      {isAuthFailure && (
+        <div style={{ paddingTop: "var(--space-1)" }}>
+          <Button
+            size="1"
+            variant="soft"
+            data-testid={ElementIds.PI_ERROR_LOGIN_CTA}
+            onClick={(e): void => {
+              e.stopPropagation();
+              openSettings("PI");
+            }}
+          >
+            Open pi login
+          </Button>
         </div>
       )}
       {showRetry && (

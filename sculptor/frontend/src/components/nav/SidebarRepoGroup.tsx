@@ -265,7 +265,7 @@ export const SidebarRepoGroup = ({
               size="1"
               color="gray"
               className={styles.hoverReveal}
-              onClick={() => openSettings("repositories", group.projectId)}
+              onClick={() => openSettings("REPOSITORIES", group.projectId)}
               aria-label="Repository settings"
               data-testid={ElementIds.SIDEBAR_REPO_SETTINGS}
               data-project-id={group.projectId}

@@ -14,6 +14,7 @@ import { renameWorkspaceAgent } from "~/api";
 import { taskAtomFamily, tasksArrayAtom, updateTasksAtom } from "~/common/state/atoms/tasks.ts";
 import { terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
 import { markAgentUnreadAtom } from "~/common/state/atoms/unreadOverrides.ts";
+import { viewedAgentIdAtom } from "~/common/state/atoms/viewedAgent.ts";
 import { agentDeleteTargetAtom, terminalCloseTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
 import type { DynamicAgentInput, DynamicTerminalInput } from "~/components/sections/registry/dynamicPanels.tsx";
 import { deriveDynamicPanels, makeTerminalPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
@@ -76,6 +77,13 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
   );
   const diagnosticsByTaskId = useWorkspaceAgentDiagnostics(workspaceId, diagnosticsTargets);
 
+  // The viewed agent's tab dot derives as "read" (its content is on screen)
+  // instead of flashing unread while the debounced mark-read lags. A primitive
+  // id, so this host re-renders only when WHICH agent is viewed changes (a tab
+  // switch onto a different agent), and even then the registry write below is
+  // still guarded — it only commits when a dot actually changed.
+  const viewedAgentId = useAtomValue(viewedAgentIdAtom);
+
   // Map this workspace's tasks to the agent inputs the registry derives panels from.
   const agents = useMemo<ReadonlyArray<DynamicAgentInput>>(() => {
     return workspaceTasks.map((task) => ({
@@ -84,6 +92,7 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
       status: task.status,
       lastReadAt: task.lastReadAt,
       updatedAt: task.updatedAt,
+      isViewed: task.id === viewedAgentId,
       diagnostics: diagnosticsByTaskId[task.id],
       // Closing an agent tab deletes the agent with confirmation; confirming
       // runs the optimistic delete + rollback + Retry flow. Closing the last
@@ -114,7 +123,7 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
       // lastReadAt optimistically, and persist — all owned by markAgentUnreadAtom.
       onMarkUnread: (): void => store.set(markAgentUnreadAtom, { workspaceId, taskId: task.id }),
     }));
-  }, [workspaceTasks, diagnosticsByTaskId, setAgentDeleteTarget, updateTasks, store, workspaceId]);
+  }, [workspaceTasks, viewedAgentId, diagnosticsByTaskId, setAgentDeleteTarget, updateTasks, store, workspaceId]);
 
   // Map this workspace's persisted terminal tabs to terminal inputs. Each tab's label
   // already reflects the lowest-available-number reuse the old panel applied

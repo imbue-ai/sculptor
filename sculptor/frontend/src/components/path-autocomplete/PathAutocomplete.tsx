@@ -23,6 +23,7 @@ type PathAutocompleteProps = {
   onValueChange?: (value: string) => void;
   inputTestId?: string;
   autoFocus?: boolean;
+  suffix?: string;
 };
 
 /**
@@ -61,6 +62,7 @@ export const PathAutocomplete = ({
   onValueChange: controlledOnValueChange,
   inputTestId,
   autoFocus = false,
+  suffix,
 }: PathAutocompleteProps): ReactElement => {
   const [internalValue, setInternalValue] = useState<string>("");
   const inputValue = controlledValue ?? internalValue;
@@ -79,10 +81,13 @@ export const PathAutocomplete = ({
   const fetchIdRef = useRef(0);
   const rootRef = useRef<HTMLDivElement>(null);
   // Keep a ref in sync with isOpen so the document-level listeners below read the
-  // latest value without re-subscribing. Assigned during render (not in an effect)
-  // so the ref is never stale — see the "latest ref" pattern.
+  // latest value without re-subscribing. Synced in an effect (not during render)
+  // to satisfy the refs lint; the listeners only fire on user interaction, well
+  // after commit, so the ref is never observed stale — see the "latest ref" pattern.
   const isOpenRef = useRef(isOpen);
-  isOpenRef.current = isOpen;
+  useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
 
   const closeDropdown = useCallback((): void => {
     if (debounceRef.current) {
@@ -181,7 +186,13 @@ export const PathAutocomplete = ({
           closeDropdown();
           onSubmit(submittedPath);
         } else if (!isOpen && submittedPath) {
+          // We're consuming this Enter as the autocomplete's submit — stop it
+          // from bubbling. Inside a Radix Select dropdown the bubbled Enter
+          // re-fires onValueChange on the highlighted item, which in the
+          // Add Repository flow can close the dialog and reopen it via
+          // setIsAddDialogOpen(true) — wiping the user's source selection.
           e.preventDefault();
+          e.stopPropagation();
           onSubmit(submittedPath);
           setInputValue("");
         }
@@ -259,16 +270,23 @@ export const PathAutocomplete = ({
         ref={rootRef}
         onKeyDown={handleKeyDown}
       >
-        <Command.Input
-          className={styles.input}
-          value={inputValue}
-          onValueChange={handleInputChange}
-          onFocus={handleFocus}
-          placeholder={placeholder}
-          disabled={disabled}
-          data-testid={inputTestId}
-          autoFocus={autoFocus}
-        />
+        <div className={styles.inputWrapper} data-has-suffix={suffix ? "true" : "false"}>
+          <Command.Input
+            className={styles.input}
+            value={inputValue}
+            onValueChange={handleInputChange}
+            onFocus={handleFocus}
+            placeholder={placeholder}
+            disabled={disabled}
+            data-testid={inputTestId}
+            autoFocus={autoFocus}
+          />
+          {suffix && (
+            <span className={styles.suffix} aria-hidden="true">
+              {suffix}
+            </span>
+          )}
+        </div>
         {isDropdownVisible && (
           <Command.List className={styles.list}>
             {isLoading && items.length === 0 && (

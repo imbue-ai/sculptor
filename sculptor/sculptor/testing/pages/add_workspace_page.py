@@ -30,12 +30,19 @@ class PlaywrightAddWorkspacePage(PlaywrightProjectLayoutPage):
         return self.get_by_test_id(ElementIDs.OPEN_NEW_REPO_BUTTON)
 
     def open_add_repo_dialog(self) -> PlaywrightAddRepoDialogElement:
-        """Open the 'Add Repository' dialog from the repo selector."""
+        """Open the 'Add Repository' dialog from the repo selector.
+
+        The dialog defaults to the GitHub source, which keeps the local
+        path-input form mounted but hidden (``display:none``). This helper is
+        the local-path entry point, so select the Local source first so the
+        path input is interactable.
+        """
         self.get_project_selector().click()
         self.get_open_new_repo_button().click()
         dialog = PlaywrightAddRepoDialogElement(
             locator=self.get_by_test_id(ElementIDs.ADD_REPO_DIALOG), page=self._page
         )
+        dialog.select_local_source()
         expect(dialog.get_path_input()).to_be_visible()
         return dialog
 
@@ -54,8 +61,19 @@ class PlaywrightAddWorkspacePage(PlaywrightProjectLayoutPage):
     def get_branch_name_collision_error(self) -> Locator:
         return self.get_by_test_id(ElementIDs.BRANCH_NAME_COLLISION_ERROR)
 
+    def get_branch_name_invalid_error(self) -> Locator:
+        return self.get_by_test_id(ElementIDs.BRANCH_NAME_INVALID_ERROR)
+
     def get_branch_selector(self) -> Locator:
         return self.get_by_test_id(ElementIDs.BRANCH_SELECTOR)
+
+    def open_branch_selector(self) -> None:
+        """Open the source-branch dropdown so its options are rendered."""
+        self.get_branch_selector().click()
+
+    def get_branch_options(self) -> Locator:
+        """All branch options rendered in the (open) source-branch dropdown."""
+        return self.get_by_test_id(ElementIDs.BRANCH_OPTION)
 
     def select_branch(self, branch_name: str) -> None:
         self.get_branch_selector().click()

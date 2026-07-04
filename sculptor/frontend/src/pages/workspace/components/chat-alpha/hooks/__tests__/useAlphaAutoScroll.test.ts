@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChatMessageRole } from "~/api";
 
+import { PIN_BOTTOM_GAP } from "../../scroll/geometry.ts";
 import { useAlphaAutoScroll } from "../useAlphaAutoScroll.ts";
 
 // Mock ResizeObserver — jsdom doesn't provide one.
@@ -42,6 +43,15 @@ const setScrollPosition = (el: HTMLDivElement, scrollTop: number, scrollHeight: 
 const createMockVirtualizer = (): Virtualizer<HTMLDivElement, Element> => {
   return {
     scrollToIndex: vi.fn(),
+    // The reflow observer and reading-anchor capture read these; empty defaults
+    // mean captureReadingAnchor is a no-op (no items) for tests that drive
+    // geometry purely through the mock container.
+    getVirtualItems: vi.fn(() => []),
+    getTotalSize: vi.fn(() => 0),
+    measurementsCache: [],
+    // paddingEnd: 0 keeps distanceFromContentBottom == scrollHeight-based distance
+    // for the tests that drive geometry purely through the mock container.
+    options: { paddingEnd: 0 },
   } as unknown as Virtualizer<HTMLDivElement, Element>;
 };
 
@@ -50,6 +60,18 @@ const triggerResize = (): void => {
   for (const callback of resizeObserverCallbacks) {
     callback([], {} as ResizeObserver);
   }
+};
+
+/**
+ * Assert the container is pinned to the bottom — scrollTop at bottomPinOffset
+ * (content bottom plus the visible PIN_BOTTOM_GAP, clamped to the scroll
+ * range; 0 while the content still fits the viewport), the observable position
+ * rather than a virtualizer mock call.
+ */
+const expectPinnedToBottom = (el: HTMLDivElement, paddingEnd = 0): void => {
+  const contentBottom = Math.max(0, el.scrollHeight - paddingEnd - el.clientHeight);
+  const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
+  expect(el.scrollTop).toBe(contentBottom === 0 ? 0 : Math.min(contentBottom + PIN_BOTTOM_GAP, maxScroll));
 };
 
 describe("useAlphaAutoScroll", () => {
@@ -240,7 +262,7 @@ describe("useAlphaAutoScroll", () => {
       result.current.scrollToBottom();
     });
 
-    expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(9, { align: "end" });
+    expectPinnedToBottom(el);
     expect(result.current.isEngaged).toBe(true);
   });
 
@@ -255,7 +277,7 @@ describe("useAlphaAutoScroll", () => {
       result.current.scrollToBottom();
     });
 
-    expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(9, { align: "end" });
+    expectPinnedToBottom(el);
     expect(result.current.isEngaged).toBe(false);
   });
 
@@ -366,8 +388,8 @@ describe("useAlphaAutoScroll", () => {
     setScrollPosition(el, 1500, 2300); // distance = 2300 - 1500 - 500 = 300 > threshold
     rerender({ messageCount: 11 });
 
-    // Should scroll to show the new message
-    expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(10, { align: "end" });
+    // Should scroll to show the new message (pinned to the content bottom: 2300 - 500)
+    expectPinnedToBottom(el);
   });
 
   it("does NOT pin-to-bottom when user is scrolled away", () => {
@@ -498,12 +520,15 @@ describe("useAlphaAutoScroll", () => {
 
     vi.mocked(virtualizer.scrollToIndex).mockClear();
 
-    // Simulate content growing (streaming adds text)
+    // Simulate content growing (streaming adds text) so the content bottom drifts
+    // below the viewport, then a resize fires.
+    setScrollPosition(el, 1500, 2500); // grew; distance = 2500 - 1500 - 500 = 500
     act(() => {
       triggerResize();
     });
 
-    expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(9, { align: "end" });
+    // The resize re-pins to the new content bottom (2500 - 500).
+    expectPinnedToBottom(el);
   });
 
   it("ResizeObserver disconnects when disengaged", () => {
@@ -618,6 +643,7 @@ describe("useAlphaAutoScroll", () => {
       return {
         scrollToIndex: vi.fn(),
         getTotalSize: vi.fn().mockReturnValue(totalSize),
+        getVirtualItems: vi.fn(() => []),
         options: { paddingEnd },
         measurementsCache: [] as Array<unknown>,
       } as unknown as Virtualizer<HTMLDivElement, Element>;
@@ -1093,30 +1119,39 @@ describe("useAlphaAutoScroll", () => {
 
       vi.mocked(virtualizer.scrollToIndex).mockClear();
 
-      // Call scrollToBottom — should clear filling phase and scroll to end
+      // Anchoring places the user message near the top; start from a realistic
+      // scrolled-up position rather than parked in the empty tail padding.
+      setScrollPosition(el, 500, 2000);
+
+      // Call scrollToBottom — should clear filling phase and pin to the content
+      // bottom (scrollHeight 2000 - paddingEnd 100 - clientHeight 500 = 1400).
       act(() => {
         result.current.scrollToBottom();
       });
 
-      expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(10, { align: "end" });
+      expectPinnedToBottom(el, 100);
 
-      // Trigger a resize — should now scroll with align: "end" (not in filling
-      // mode anymore), confirming filling phase was cleared.
-      vi.mocked(virtualizer.scrollToIndex).mockClear();
+      // Drift up, then a resize should re-pin to the content bottom (following),
+      // not hold the position (filling/holdTurn) — confirming filling was cleared.
+      setScrollPosition(el, 1000, 2000);
       act(() => {
         triggerResize();
       });
-      expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(10, { align: "end" });
+      expectPinnedToBottom(el, 100);
     });
 
     it("isAtBottom tracks via ResizeObserver even when not engaged during streaming", () => {
       // Start streaming but NOT engaged (far from bottom).
       // The merged observer should still track isAtBottom regardless of engagement.
-      const el = createMockScrollContainer(200, 2000, 500); // distance=1300, far from bottom
+      const el = createMockScrollContainer(200, 2000, 500); // distance=1200, far from bottom
       const ref = { current: el };
       const virtualizer = createMockVirtualizerWithFilling(300, 100);
 
-      const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-task"));
+      // lastMessageRole=USER so the on-mount pin-to-bottom bails (it only pins for
+      // non-user messages), keeping this test's scrolled-up, not-engaged premise.
+      const { result } = renderHook(() =>
+        useAlphaAutoScroll(ref, true, 10, virtualizer, ChatMessageRole.USER, -1, "test-task"),
+      );
 
       // Not engaged because too far from bottom when streaming started
       expect(result.current.isEngaged).toBe(false);
@@ -1128,7 +1163,7 @@ describe("useAlphaAutoScroll", () => {
       expect(result.current.isAtBottom).toBe(false);
 
       // Change scroll position to near bottom, trigger another resize
-      setScrollPosition(el, 1350, 2000); // distance = 2000 - 1350 - 500 = 150 ≤ 200
+      setScrollPosition(el, 1350, 2000); // distance = 2000 - 100 - 1350 - 500 = 50 ≤ 200
       act(() => {
         triggerResize();
       });
@@ -1229,18 +1264,22 @@ describe("useAlphaAutoScroll", () => {
       const anchorEnd = anchorStart + anchorSize;
       vi.mocked(virtualizer.getTotalSize).mockReturnValue(anchorEnd + el.clientHeight + 200);
 
-      // Trigger resize — should detect overflow and switch to pin-to-bottom
-      act(() => {
-        triggerResize();
-      });
-      expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(11, { align: "end" });
+      // Anchoring holds the user message near the top; start scrolled up.
+      setScrollPosition(el, 500, 2000);
 
-      // Trigger another resize — should continue scrolling with align "end" (no longer filling)
-      vi.mocked(virtualizer.scrollToIndex).mockClear();
+      // Trigger resize — should detect overflow and pin to the content bottom
+      // (scrollHeight 2000 - paddingEnd 100 - clientHeight 500 = 1400).
       act(() => {
         triggerResize();
       });
-      expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(11, { align: "end" });
+      expectPinnedToBottom(el, 100);
+
+      // Drift up, then another resize should re-pin (following, no longer filling).
+      setScrollPosition(el, 1000, 2000);
+      act(() => {
+        triggerResize();
+      });
+      expectPinnedToBottom(el, 100);
     });
 
     it("filling phase overflow accounts for user message height (not full clientHeight)", () => {
@@ -1303,12 +1342,15 @@ describe("useAlphaAutoScroll", () => {
       // getTotalSize = contentBottom + paddingEnd = 1000 + 100 = 1100
       vi.mocked(virtualizer.getTotalSize).mockReturnValue(1100);
 
+      // Anchoring holds the user message near the top; start scrolled up.
+      setScrollPosition(el, 500, 2000);
+
       act(() => {
         triggerResize();
       });
 
-      // Should have transitioned to pin-to-bottom (overflow detected)
-      expect(virtualizer.scrollToIndex).toHaveBeenCalledWith(11, { align: "end" });
+      // Transitioned to following: pinned to the content bottom (2000 - 100 - 500).
+      expectPinnedToBottom(el, 100);
     });
 
     it("does NOT scroll at streaming end when still in filling phase (short response)", () => {
@@ -1366,15 +1408,10 @@ describe("useAlphaAutoScroll", () => {
         isStreaming: false,
       });
 
-      // The problematic anchor scroll (isEngaged + !isFillingRef path) must NOT fire,
-      // because the inflated paddingEnd causes scrollToIndex to land near scrollTop=0.
-      // Clearing filling phase does set isAtBottom=true, which lets pin-to-bottom
-      // fire exactly once — that call is a harmless no-op for short responses where
-      // content already fits in the viewport.
-      const endCalls = vi
-        .mocked(virtualizer.scrollToIndex)
-        .mock.calls.filter((call) => (call[1] as { align: string })?.align === "end");
-      expect(endCalls).toHaveLength(1); // exactly the pin-to-bottom call, not the anchor scroll
+      // At streaming end while still anchoring a short response, the view must stay
+      // put: the down-only content-bottom pin leaves scrollTop where it was rather
+      // than jumping toward the top.
+      expect(el.scrollTop).toBe(1500);
     });
 
     it("second user message during filling cancels previous and re-enters filling", () => {
@@ -1924,12 +1961,10 @@ describe("useAlphaAutoScroll", () => {
 
     vi.mocked(virtualizer.scrollToIndex).mockClear();
 
-    // Streaming stops while drifted — anchor scroll should re-pin
+    // Streaming stops while drifted — the final settle should re-pin to the
+    // content bottom (2000 - 500).
     rerender({ isStreaming: false });
 
-    const endCalls = vi
-      .mocked(virtualizer.scrollToIndex)
-      .mock.calls.filter((call) => (call[1] as { align: string })?.align === "end");
-    expect(endCalls).toHaveLength(1);
+    expectPinnedToBottom(el);
   });
 });

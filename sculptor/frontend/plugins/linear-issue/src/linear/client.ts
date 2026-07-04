@@ -6,7 +6,17 @@ const LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql";
 export type LinearAttachment = { url: string; sourceType: string | null; title: string | null };
 
 /** A Linear workflow state (e.g. "In Progress"), with its display color. */
-export type LinearState = { name: string; type: string; color: string };
+export type LinearState = {
+  name: string;
+  type: string;
+  color: string;
+  /**
+   * Linear's manual ordering of states within a team, used to sort states that
+   * share a `type` (a team can have several "started" states). Optional because
+   * not every fetch path selects it (e.g. sub-issue states don't need ordering).
+   */
+  position?: number;
+};
 
 /** A sub-issue, narrowed to what a ticket badge renders (id, title, status). */
 export type LinearChild = {
@@ -48,7 +58,7 @@ const ISSUE_FIELDS = `
   url
   description
   priorityLabel
-  state { name type color }
+  state { name type color position }
   assignee { displayName }
   attachments { nodes { url sourceType title } }
   children(first: ${CHILDREN_FETCH_LIMIT}) { nodes { identifier title url state { name type color } } }
@@ -121,17 +131,26 @@ export const fetchIssueByTicket = async (inputs: {
 };
 
 /**
- * The workspace's issue. Asks Linear which issue is linked to this VCS branch
- * (authoritative — Linear's own link), falling back to parsing an identifier
- * out of the branch name when Linear has no link yet.
+ * The workspace's issue, resolved through three tiers, cheapest/most
+ * authoritative first:
+ *
+ *  1. `issueVcsBranchSearch` — Linear's own branch→issue link.
+ *  2. an identifier parsed out of the branch name (e.g. `scu-1234`).
+ *  3. the workspace's PR URL via `attachmentsForURL` — Sculptor-generated branch
+ *     names carry no issue identifier and no Linear VCS link, but the workspace's
+ *     PR does (Linear links it from the `[SCU-####]` PR title), and Linear
+ *     resolves a PR URL to its issue authoritatively.
+ *
+ * Each tier is tried only when the previous one comes up empty.
  */
 export const fetchPrimaryIssue = async (inputs: {
   apiKey: string;
   branch: string;
   ticketFallback: Ticket | null;
+  pullRequestUrl: string | null;
   signal: AbortSignal;
 }): Promise<LinearIssue | null> => {
-  const { apiKey, branch, ticketFallback, signal } = inputs;
+  const { apiKey, branch, ticketFallback, pullRequestUrl, signal } = inputs;
   const data = await linearRequest<{ issueVcsBranchSearch: RawIssue | null }>({
     apiKey,
     query: `query ($branch: String!) { issueVcsBranchSearch(branchName: $branch) { ${ISSUE_FIELDS} } }`,
@@ -139,7 +158,14 @@ export const fetchPrimaryIssue = async (inputs: {
     signal,
   });
   if (data.issueVcsBranchSearch) return normalizeIssue(data.issueVcsBranchSearch);
-  if (ticketFallback) return fetchIssueByTicket({ apiKey, ticket: ticketFallback, signal });
+  if (ticketFallback) {
+    const byTicket = await fetchIssueByTicket({ apiKey, ticket: ticketFallback, signal });
+    if (byTicket) return byTicket;
+  }
+  if (pullRequestUrl) {
+    const linked = await fetchIssuesForUrl({ apiKey, url: pullRequestUrl, signal });
+    return linked[0] ?? null;
+  }
   return null;
 };
 
@@ -160,6 +186,30 @@ export const fetchIssuesForUrl = async (inputs: {
     .map((node) => node.issue)
     .filter((issue): issue is RawIssue => issue !== null)
     .map(normalizeIssue);
+};
+
+/**
+ * The current user's assigned issues, most-recently-updated first. Resolved
+ * through the API key's `viewer`, so "me" is whoever the key belongs to. The
+ * board caps the count and orders by `updatedAt` rather than filtering by state
+ * so that recently-finished work stays visible (a just-completed ticket is the
+ * most recently updated), while long-closed issues fall off the end.
+ */
+export const fetchAssignedIssues = async (inputs: {
+  apiKey: string;
+  limit: number;
+  signal: AbortSignal;
+}): Promise<Array<LinearIssue>> => {
+  const { apiKey, limit, signal } = inputs;
+  const data = await linearRequest<{ viewer: { assignedIssues: { nodes: Array<RawIssue> } } }>({
+    apiKey,
+    query: `query ($first: Int!) {
+      viewer { assignedIssues(first: $first, orderBy: updatedAt) { nodes { ${ISSUE_FIELDS} } } }
+    }`,
+    variables: { first: limit },
+    signal,
+  });
+  return data.viewer.assignedIssues.nodes.map(normalizeIssue);
 };
 
 /** Free-text issue search for the quick-search bar (`issueSearch` is deprecated). */

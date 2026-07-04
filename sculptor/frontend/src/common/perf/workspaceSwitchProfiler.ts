@@ -47,6 +47,22 @@ export type WsSwitchTimingRecord = {
   isTimedOut: boolean;
 };
 
+// The Window augmentation lives in this module rather than globals.d.ts so any
+// program that pulls the profiler in can compile it — the plugin-SDK .d.ts
+// rollup builds from the SDK entry alone and never sees ambient declaration files.
+declare global {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+  interface Window {
+    /** Inlined by the backend's static-HTML serve path when --trace-to is set.
+     * The renderer reads this synchronously at boot in common/tracing.ts. */
+    __SCULPTOR_TRACING__?: { enabled: boolean };
+    /** Opts the workspace-switch profiler in (set by perf/capture harnesses). */
+    __WS_SWITCH_PROFILER__?: boolean;
+    /** Finalized workspace-switch timing records, appended by the profiler. */
+    __WS_SWITCH_TIMINGS__?: Array<WsSwitchTimingRecord>;
+  }
+}
+
 // A switch that hasn't produced all milestones after this long is finalized
 // as-is, in case a render milestone legitimately never fires.
 const FINALIZE_TIMEOUT_MS = 5000;

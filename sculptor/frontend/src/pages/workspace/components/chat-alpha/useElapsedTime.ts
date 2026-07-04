@@ -52,6 +52,10 @@ export const useElapsedTime = (isVisible: boolean, isTicking: boolean, persistKe
       frozenOffsetRef.current = initialOffset;
       const formatted = formatElapsedSeconds(initialOffset);
       lastDisplayedRef.current = formatted;
+      // Syncs from external systems (the persisted-origins store and performance.now())
+      // on the visibility transition; the value reflects the clock at this moment and
+      // is not derivable during render without an impure time read.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setElapsed(formatted);
     } else {
       if (intervalRef.current !== null) {

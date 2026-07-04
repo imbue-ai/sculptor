@@ -6,7 +6,7 @@
 
 import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
-import { memo } from "react";
+import { createElement, memo } from "react";
 
 import { EmptySectionState } from "./EmptySectionState.tsx";
 import { activePanelComponentInSubSectionAtom } from "./registry/panelRegistry.ts";
@@ -16,11 +16,18 @@ import type { SubSectionId } from "./sectionTypes.ts";
 type SectionBodyProps = { subSection: SubSectionId };
 
 const SectionBodyComponent = ({ subSection }: SectionBodyProps): ReactElement => {
-  const ActivePanelComponent = useAtomValue(activePanelComponentInSubSectionAtom(subSection));
+  // The panel component arrives from the registry with a cached identity;
+  // createElement renders it without the compiler mistaking the local binding
+  // for a component defined during render.
+  const activePanelComponent = useAtomValue(activePanelComponentInSubSectionAtom(subSection));
 
   return (
     <div className={styles.content}>
-      {ActivePanelComponent !== undefined ? <ActivePanelComponent /> : <EmptySectionState subSection={subSection} />}
+      {activePanelComponent !== undefined ? (
+        createElement(activePanelComponent)
+      ) : (
+        <EmptySectionState subSection={subSection} />
+      )}
     </div>
   );
 };

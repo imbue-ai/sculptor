@@ -98,7 +98,7 @@ export const customActionsAtom = atom<CustomActionsConfig>((get) => {
 
 // PR creation settings
 const DEFAULT_PR_CREATION_PROMPT =
-  "Push my changes to origin and create a pull request. Check whether the repo uses GitHub (gh) or GitLab (glab) and use the appropriate tool. Write a clear description summarizing the changes.";
+  "Push my changes to origin and create a pull request using the GitHub CLI (gh). Write a clear description summarizing the changes.";
 
 export const prCreationPromptAtom = atom<string>(
   (get) => get(userConfigAtom)?.prCreationPrompt ?? DEFAULT_PR_CREATION_PROMPT,
@@ -119,9 +119,9 @@ export const prDefaultTargetBranchAtom = atom<string>(
 // that object with sensible per-field defaults for when the config hasn't
 // been loaded yet.
 const DEFAULT_CI_BABYSITTER_PIPELINE_PROMPT =
-  "Investigate the failing pipeline for this MR, identify the root cause, fix the code, commit, and push.";
+  "Investigate the failing pipeline for this PR, identify the root cause, fix the code, commit, and push.";
 const DEFAULT_CI_BABYSITTER_MERGE_CONFLICT_PROMPT =
-  "This MR has a merge conflict with its base branch. Fetch the latest, then rebase against the base branch, resolve all conflicts, and force-push the result.";
+  "This PR has a merge conflict with its base branch. Fetch the latest, then rebase against the base branch, resolve all conflicts, and force-push the result.";
 
 export const ciBabysitterConfigAtom = atom<CiBabysitterConfig | null>(
   (get) => get(userConfigAtom)?.ciBabysitter ?? null,
@@ -191,11 +191,6 @@ export const workspaceBranchDeletionPolicyAtom = atom<"never" | "delete_if_safe"
 // Entity mentions (experimental — off by default)
 export const isEntityMentionsEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableEntityMentions ?? false);
 
-// Rich markdown rendering (experimental — off by default)
-export const isRichMarkdownRenderingEnabledAtom = atom<boolean>(
-  (get) => get(userConfigAtom)?.enableRichMarkdownRendering ?? false,
-);
-
 // Pi agent (experimental — off by default). Gates only whether the pi option
 // is offered in the agent-type pickers (the + button menu and the
 // new-workspace form); an already-created pi agent keeps running regardless.
@@ -207,6 +202,16 @@ export const isPiAgentEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.
 // fully takes effect after a reload, since already-loaded plugins are not
 // unloaded mid-session.
 export const isFrontendPluginsEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableFrontendPlugins ?? false);
+
+// Whether agents may drive this renderer's plugin system over the per-user
+// WebSocket (the `sculpt plugin` commands). Off by default: even with the
+// frontend-plugins runtime on, an agent can't install or run a plugin in the UI
+// until the user opts in here. (The stream handler still replies to the agent
+// when off — see `respondToPluginCommand` — so the CLI gets a clear signal
+// rather than a timeout.)
+export const isAgentPluginLoadingAllowedAtom = atom<boolean>(
+  (get) => get(userConfigAtom)?.allowAgentPluginLoading ?? false,
+);
 
 // Agent defaults
 export const isDefaultFastModeAtom = atom<boolean>((get) => get(userConfigAtom)?.defaultFastMode ?? false);

@@ -960,6 +960,132 @@ def test_user_question_answer_sets_in_progress_user_message_id() -> None:
     assert state.in_progress_user_message_id == answer_message.message_id
 
 
+def _make_simple_question_data(question_text: str, tool_use_id: str) -> AskUserQuestionData:
+    return AskUserQuestionData(
+        questions=[
+            UserQuestion(
+                question=question_text,
+                header="Header",
+                options=[
+                    QuestionOption(label="A", description="first"),
+                    QuestionOption(label="B", description="second"),
+                ],
+                multi_select=False,
+            )
+        ],
+        tool_use_id=tool_use_id,
+    )
+
+
+def test_answering_one_of_two_pending_questions_surfaces_the_other() -> None:
+    """Two questions can pend concurrently (e.g. two subagents each asking
+    mid-turn). Answering the visible one must surface the other instead of
+    forgetting it — the frozen-question half of the subagent AUQ bug.
+    """
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    question_a = _make_simple_question_data("Question A?", "tool-use-ask-a")
+    question_b = _make_simple_question_data("Question B?", "tool-use-ask-b")
+
+    state = convert_agent_messages_to_task_update(
+        [
+            AskUserQuestionAgentMessage(message_id=AgentMessageID(), question_data=question_a),
+            AskUserQuestionAgentMessage(message_id=AgentMessageID(), question_data=question_b),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+    # The most recent question is the visible one; both are tracked.
+    assert state.pending_user_question is not None
+    assert state.pending_user_question.tool_use_id == "tool-use-ask-b"
+    assert [q.tool_use_id for q in state.pending_user_questions] == ["tool-use-ask-a", "tool-use-ask-b"]
+
+    answer_b = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"Question B?": "A"},
+        question_data=question_b,
+        tool_use_id="tool-use-ask-b",
+    )
+    state = convert_agent_messages_to_task_update(
+        [answer_b],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+    assert state.pending_user_question is not None
+    assert state.pending_user_question.tool_use_id == "tool-use-ask-a"
+
+    answer_a = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"Question A?": "B"},
+        question_data=question_a,
+        tool_use_id="tool-use-ask-a",
+    )
+    state = convert_agent_messages_to_task_update(
+        [answer_a],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+    assert state.pending_user_question is None
+    assert state.pending_user_questions == ()
+
+
+def test_subagent_question_reconstructed_from_persisted_child_block() -> None:
+    """On page reload the live AskUserQuestionAgentMessage (ephemeral) is gone;
+    a SUBAGENT's pending question must be reconstructed from the persisted
+    child ResponseBlockAgentMessage carrying its ToolUseBlock, just as
+    main-agent questions are reconstructed from theirs.
+    """
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    question_data = _make_simple_question_data("Subagent question?", "toolu_sub_ask")
+    ask_tool_block = ToolUseBlock(
+        id=ToolUseID("toolu_sub_ask"),
+        name="mcp__sculptor__ask_user_question",
+        input={"questions": [q.model_dump() for q in question_data.questions]},
+    )
+    child_message = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=AssistantMessageID("assistant-subagent-ask"),
+        message_id=AgentMessageID(),
+        content=(ask_tool_block,),
+        parent_tool_use_id="toolu_agent_launch",
+    )
+
+    # Fresh state (as after a reload) — only the persisted child message replays.
+    state = convert_agent_messages_to_task_update(
+        [child_message],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+    assert state.pending_user_question is not None
+    assert state.pending_user_question.tool_use_id == "toolu_sub_ask"
+
+    answer = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"Subagent question?": "A"},
+        question_data=question_data,
+        tool_use_id="toolu_sub_ask",
+    )
+    state = convert_agent_messages_to_task_update(
+        [answer],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+    assert state.pending_user_question is None
+
+
 def test_request_started_sets_current_request_id_without_queued_message() -> None:
     """RequestStartedAgentMessage should set current_request_id even when there is
     no matching queued message (e.g. for UserQuestionAnswerMessage which doesn't
@@ -3075,9 +3201,9 @@ def test_streaming_state_reset_after_interrupt_success_prevents_staircase() -> N
     assert in_progress is not None
     # BUG: Without the fix, this would be 2 (staircase: ["Good", "Good question."])
     assert len(in_progress.content) == 1, (
-        f"Second partial should replace the first, producing 1 content block. "
-        f"Got {len(in_progress.content)} blocks (staircase bug): "
-        f"{[b.text if isinstance(b, TextBlock) else type(b).__name__ for b in in_progress.content]}"
+        "Second partial should replace the first, producing 1 content block. "
+        + f"Got {len(in_progress.content)} blocks (staircase bug): "
+        + f"{[b.text if isinstance(b, TextBlock) else type(b).__name__ for b in in_progress.content]}"
     )
     second_block = in_progress.content[0]
     assert isinstance(second_block, TextBlock)
@@ -3103,7 +3229,7 @@ def test_streaming_state_reset_after_interrupt_success_prevents_staircase() -> N
     assert in_progress is not None
     assert len(in_progress.content) == 1, (
         f"Third partial should still be 1 block. Got {len(in_progress.content)} blocks: "
-        f"{[b.text if isinstance(b, TextBlock) else type(b).__name__ for b in in_progress.content]}"
+        + f"{[b.text if isinstance(b, TextBlock) else type(b).__name__ for b in in_progress.content]}"
     )
     third_block = in_progress.content[0]
     assert isinstance(third_block, TextBlock)
@@ -3714,6 +3840,104 @@ def test_background_task_notification_for_bash_does_not_synthesize_child() -> No
     # not Agent/Task, so attaching a child would make the frontend misclassify
     # it as a subagent.
     assert [m for m in state.chat_messages if m.parent_tool_use_id == bash_tool_use_id] == []
+
+
+def test_background_bash_notification_in_later_batch_does_not_synthesize_child() -> None:
+    """A background Bash whose completion arrives in a LATER batch (after the
+    launching turn was finalized) must still be recognised as a Bash and skip
+    child synthesis — otherwise the bash block silently turns into a subagent
+    pill and vanishes once the turn is done.
+
+    Real Claude keeps its process alive while a ``run_in_background`` Bash is
+    pending, so the completion normally arrives in the same request. But if the
+    user STOPS the turn while the command runs, ``RequestStopped`` finalizes the
+    turn (flushing the Bash ToolUseBlock to history) and the detached command's
+    completion is delivered on a later invocation — a SEPARATE conversion batch
+    in which the parent Bash is no longer in ``in_progress`` nor in the
+    per-batch completed list, only in the cross-batch history. The notification
+    handler must find it there and NOT synthesize a child (which AlphaToolGroup
+    would treat as ``children.length > 0`` and render as a subagent pill).
+    """
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    user_message = ChatInputUserMessage(
+        text="Profile the backend",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+    bash_tool_use_id = "toolu-bg-bash-pyspy"
+
+    request_started = RequestStartedAgentMessage(request_id=user_message.message_id)
+    response_block = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=AssistantMessageID("assistant-bg-bash"),
+        message_id=AgentMessageID(),
+        content=(
+            ToolUseBlock(
+                id=ToolUseID(bash_tool_use_id),
+                name="Bash",
+                input={"command": "sudo py-spy record --pid 123", "description": "Profile", "run_in_background": True},
+            ),
+        ),
+    )
+    task_started = BackgroundTaskStartedAgentMessage(
+        background_task_id="bg-task-pyspy",
+        tool_use_id=bash_tool_use_id,
+        description="Profile",
+    )
+
+    # Batch 1: the turn launches the background Bash and the user Stops it. The
+    # RequestStopped finalizes the turn, flushing the Bash to history.
+    state = convert_agent_messages_to_task_update(
+        [
+            user_message,
+            request_started,
+            response_block,
+            task_started,
+            RequestStoppedAgentMessage(
+                request_id=user_message.message_id, error=_make_serialized_exception("stopped")
+            ),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+    assert state.in_progress_chat_message is None
+
+    # Batch 2 (later invocation): the detached command finished and its
+    # notification is delivered. The parent Bash is only in cross-batch history.
+    notification = BackgroundTaskNotificationAgentMessage(
+        background_task_id="bg-task-pyspy",
+        tool_use_id=bash_tool_use_id,
+        status="completed",
+        summary="Profile",
+    )
+    state = convert_agent_messages_to_task_update(
+        [notification],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+
+    # Assert against the cross-batch history (``completed_by_id``), which is what
+    # the frontend merges — the batch-2 ``state.chat_messages`` is only the
+    # incremental update and would not carry batch-1's Bash either way.
+    #
+    # No synthetic child attached to the Bash tool_use_id: the parent was found
+    # in history and recognised as a Bash, so synthesis was skipped. Without the
+    # cross-batch lookup, a child would be appended here and the frontend would
+    # render the Bash as a subagent pill instead of a bash block.
+    assert [m for m in completed_by_id.values() if m.parent_tool_use_id == bash_tool_use_id] == []
+    # The Bash ToolUseBlock itself is still present in history (still rendered).
+    all_tool_use_ids = {
+        block.id
+        for message in completed_by_id.values()
+        for block in message.content
+        if isinstance(block, ToolUseBlock)
+    }
+    assert bash_tool_use_id in all_tool_use_ids
 
 
 def test_background_task_started_is_noop() -> None:
@@ -5684,6 +5908,88 @@ class TestChatMessageIdCollisionContract:
             expected_text_markers=("MARKER_A", "MARKER_SUB", "MARKER_B", "MARKER_C"),
             expected_tool_ids=("toolu_agent", "toolu_sub", "toolu_b"),
         )
+
+    def test_two_level_nested_subagent_turns_keep_parent_attribution(self) -> None:
+        """Two-level nesting (a subagent that spawns its own subagent) must preserve each
+        level's parent_tool_use_id so the frontend can rebuild the depth-2 tree.
+
+        Claude 2.1.172 lets a sub-agent spawn its own sub-agents.  A foreground grandchild's
+        messages carry their *immediate* parent's tool_use id (the level-1 Agent tool_use),
+        which itself lives in a message whose parent is the top-level Agent tool_use.  The
+        converter must keep all three parent contexts distinct as control descends
+        None -> toolu_l1 -> toolu_l2 and returns back to None: collapsing any adjacent pair
+        merges turns and loses an Agent tool_use or a subagent reply (the SCU-1421/1422
+        collapse class, one level deeper than
+        ``test_interleaved_subagent_and_main_turns_keep_distinct_ids``).  buildSubagentTree
+        reconstructs the nesting purely from these ids, so a flattened/dropped parent here
+        silently breaks the rendered tree.
+        """
+        request_id = AgentMessageID()
+        assistant = AssistantMessageID("assistant-1")
+        main_a, main_b = AgentMessageID(), AgentMessageID()
+        child, grandchild = AgentMessageID(), AgentMessageID()
+
+        stream = self._user_and_start(request_id) + [
+            # Main agent spawns the level-1 subagent (parent None).
+            PartialResponseBlockAgentMessage(
+                assistant_message_id=assistant,
+                message_id=AgentMessageID(),
+                first_response_message_id=main_a,
+                content=(TextBlock(text="MAIN_BEFORE"), ToolUseBlock(id=ToolUseID("toolu_l1"), name="Task", input={})),
+            ),
+            # Level-1 subagent runs and itself spawns the level-2 subagent
+            # (parent = the main agent's Agent tool_use).
+            ResponseBlockAgentMessage(
+                role="assistant",
+                assistant_message_id=AssistantMessageID("subagent-l1"),
+                message_id=child,
+                content=(TextBlock(text="L1_TEXT"), ToolUseBlock(id=ToolUseID("toolu_l2"), name="Task", input={})),
+                parent_tool_use_id="toolu_l1",
+            ),
+            # Level-2 grandchild runs a leaf tool (parent = the level-1 Agent tool_use).
+            ResponseBlockAgentMessage(
+                role="assistant",
+                assistant_message_id=AssistantMessageID("subagent-l2"),
+                message_id=grandchild,
+                content=(
+                    TextBlock(text="L2_TEXT"),
+                    ToolUseBlock(id=ToolUseID("toolu_l2_bash"), name="Bash", input={}),
+                ),
+                parent_tool_use_id="toolu_l2",
+            ),
+            # Control returns to the main agent (parent None again).
+            PartialResponseBlockAgentMessage(
+                assistant_message_id=assistant,
+                message_id=AgentMessageID(),
+                first_response_message_id=main_b,
+                content=(TextBlock(text="MAIN_AFTER"),),
+            ),
+            RequestSuccessAgentMessage(request_id=request_id),
+        ]
+
+        update = convert_agent_messages_to_task_update(
+            stream, task_id=TaskID(), harness=CLAUDE_CODE_HARNESS, completed_message_by_id={}
+        )
+        _assert_turns_survive(
+            update,
+            expected_text_markers=("MAIN_BEFORE", "L1_TEXT", "L2_TEXT", "MAIN_AFTER"),
+            expected_tool_ids=("toolu_l1", "toolu_l2", "toolu_l2_bash"),
+        )
+
+        # Every turn keeps its own nesting context: the grandchild points at the level-1
+        # Agent tool_use, the child at the top-level Agent tool_use, and the main turns at
+        # nothing.  A regression that flattened deep nesting would surface here as a wrong
+        # (or None) parent on L2_TEXT even while the survival assertion above still passes.
+        parent_by_marker = {
+            block.text: message.parent_tool_use_id
+            for message in _rendered_chat_messages(update)
+            for block in message.content
+            if isinstance(block, TextBlock)
+        }
+        assert parent_by_marker.get("MAIN_BEFORE") is None
+        assert parent_by_marker.get("L1_TEXT") == "toolu_l1"
+        assert parent_by_marker.get("L2_TEXT") == "toolu_l2"
+        assert parent_by_marker.get("MAIN_AFTER") is None
 
     def test_multi_step_turn_reusing_id_preserves_every_step(self) -> None:
         """A multi-step turn legitimately reuses one first_response_message_id across segments

@@ -128,24 +128,27 @@ export const Editor = ({
   const workspaceID = workspaceIDProp ?? routeWorkspaceID;
   // Keep "latest ref" copies of the callback props so the editor's long-lived
   // Tiptap callbacks always invoke the current handler. These refs are read
-  // only inside user-triggered Tiptap callbacks, never during render, so the
-  // sync is a direct assignment during render rather than an effect — an
-  // effect runs after commit, leaving a brief window where the ref is stale.
+  // only inside user-triggered Tiptap callbacks, never during render, so they
+  // are synced in an effect (after commit) to satisfy the refs lint; the brief
+  // post-commit window is never observed because no Tiptap callback fires during
+  // render.
   const onKeyDownRef = useRef<((event: KeyboardEvent) => boolean | void) | undefined>(onKeyDown);
-  onKeyDownRef.current = onKeyDown;
   const onFilesChangeRef = useRef(onFilesChange);
-  onFilesChangeRef.current = onFilesChange;
   const onErrorRef = useRef(onError);
-  onErrorRef.current = onError;
   const onTriggerImageUploadRef = useRef(onTriggerImageUpload);
-  onTriggerImageUploadRef.current = onTriggerImageUpload;
   // The editor is recreated only when `extensions` changes (see useEditor deps
   // below), so the `onUpdate` callback closes over whichever `onChange` was in
   // scope at editor creation. Route subsequent updates through a ref so a
   // parent that swaps in a new closure (e.g. one that captures other state)
   // doesn't end up calling a stale handler.
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  useEffect(() => {
+    onKeyDownRef.current = onKeyDown;
+    onFilesChangeRef.current = onFilesChange;
+    onErrorRef.current = onError;
+    onTriggerImageUploadRef.current = onTriggerImageUpload;
+    onChangeRef.current = onChange;
+  });
 
   const isEntityMentionsEnabled = useAtomValue(isEntityMentionsEnabledAtom);
   const projects = useAtomValue(projectsArrayAtom);
@@ -175,6 +178,7 @@ export const Editor = ({
   // the /api/v1/skills endpoint) is not re-invoked on every render.
   const extensions = useMemo(
     () =>
+      // eslint-disable-next-line react-hooks/refs -- entityDataRef is forwarded as a stable ref object; createTipTapExtensions reads .current only inside user-triggered suggestion callbacks, never during render.
       createTipTapExtensions({
         placeholder,
         editable: true,
@@ -278,6 +282,12 @@ export const Editor = ({
   // agents on screen) each carry their own handle. Both are nulled/removed on
   // teardown so a detaching editor (after an agent/workspace switch) stops
   // advertising a destroyed instance.
+  //
+  // Stashing the editor on its own DOM node is a deliberate test-access side
+  // effect; the immutability lint flags it (and the effect) because `dom` is
+  // derived from the hook-returned `editor`, but it cannot tell this apart from
+  // mutating render output — hence the scoped disable below.
+  /* eslint-disable react-hooks/immutability */
   useEffect(() => {
     if (editorRef) editorRef.current = editor;
     if (!editor) {
@@ -290,6 +300,7 @@ export const Editor = ({
       delete dom.__tiptapEditor;
     };
   }, [editor, editorRef]);
+  /* eslint-enable react-hooks/immutability */
 
   // Hydrate `+[type:id|display_name]` text into entity-mention nodes once the
   // editor exists. The editor is initialized with `content: value` and
@@ -338,11 +349,7 @@ export const Editor = ({
   }, [disabled, editor]);
 
   return (
-    <div
-      className={
-        wrapperClassName ? wrapperClassName : mergeClasses(optional(disabled, styles.disabled), styles.editorWrapper)
-      }
-    >
+    <div className={mergeClasses(wrapperClassName ?? styles.editorWrapper, optional(disabled, styles.disabled))}>
       <div className={mergeClasses(styles.scrollArea, scrollAreaClassName)}>
         <EditorContent editor={editor} />
       </div>

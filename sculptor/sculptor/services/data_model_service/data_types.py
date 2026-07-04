@@ -117,6 +117,7 @@ class WorkspaceFieldUpdate(TypedDict, total=False):
     setup_log_truncated: bool
     diff_status: DiffStatus
     diff_updated_at: datetime.datetime | None
+    ci_babysitter_paused: bool
 
 
 class DataModelTransaction(MutableModel, ABC):

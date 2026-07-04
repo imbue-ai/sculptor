@@ -1,4 +1,4 @@
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useEffect, useRef } from "react";
 
 import { markWorkspaceAgentRead } from "../../../api";
@@ -10,11 +10,11 @@ const DEBOUNCE_MS = 1000;
 export const useMarkRead = (workspaceID: string, agentID: string): void => {
   const task = useAtomValue(taskAtomFamily(agentID));
   const setTask = useSetAtom(taskAtomFamily(agentID));
+  const store = useStore();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Read inside the debounced setTimeout to see the latest state — the captured
-  // `task` closure may be stale by the time the timer fires.
-  const taskRef = useRef(task);
-  taskRef.current = task;
+  // True while a debounced mark-read is scheduled but hasn't fired yet, so the
+  // cleanup below can flush it when the user leaves this agent.
+  const hasPendingReadRef = useRef(false);
 
   const markRead = (): void => {
     // Functional update: read the latest atom value at apply time so a stale
@@ -25,15 +25,42 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
     });
   };
 
-  // Mark as read on mount / agent change. This is the "fresh activation" of the
-  // agent, so it also ends any explicit "Mark as unread" (see unreadOverrides.ts):
-  // the user coming back to the agent has seen it again.
+  // Whether the user's explicit "Mark as unread" is still in force for THIS agent
+  // (see unreadOverrides.ts for the override's lifetime). Read the task from the
+  // store, not the rendered `task`: on an agent switch the hook re-renders to the
+  // new agent before the departing agent's cleanup runs, so a render-scoped value
+  // would be the wrong agent; the cleanup's `agentID` closure still points at the
+  // departing one.
+  const isExplicitlyUnread = (): boolean => {
+    const latest = store.get(taskAtomFamily(agentID));
+    return latest !== null && isUnreadOverrideActive(agentID, latest);
+  };
+
+  // Mark as read on mount / agent change, and flush a still-pending debounced
+  // read when leaving this agent so it persists as read before the view moves on.
+  // A fresh activation is the user seeing the agent again, so it also ends any
+  // explicit "Mark as unread" (see unreadOverrides.ts).
   useEffect(() => {
-    if (!task) {
-      return;
+    if (task) {
+      clearUnreadOverride(agentID);
+      markRead();
     }
-    clearUnreadOverride(agentID);
-    markRead();
+
+    return (): void => {
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+
+      if (hasPendingReadRef.current) {
+        hasPendingReadRef.current = false;
+        // Don't undo an explicit mark-unread the user performed while the timer
+        // was pending.
+        if (!isExplicitlyUnread()) {
+          markRead();
+        }
+      }
+    };
     // Only run on mount and when agentID changes, not on every task update
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentID]);
@@ -54,8 +81,10 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
     if (timerRef.current !== null) {
       clearTimeout(timerRef.current);
     }
+    hasPendingReadRef.current = true;
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
+      hasPendingReadRef.current = false;
       // Skip while the user's explicit "Mark as unread" is still active — don't
       // undo their action. The override holds through the update that scheduled
       // this timer when the user marked the agent unread after it, and through
@@ -63,8 +92,7 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
       // marked unread during. Once the override expires — the next agent turn
       // after the mark, or after the marked run completes — the normal auto
       // mark-read resumes for the agent being viewed.
-      const latest = taskRef.current;
-      if (latest && isUnreadOverrideActive(agentID, latest)) {
+      if (isExplicitlyUnread()) {
         return;
       }
       markRead();

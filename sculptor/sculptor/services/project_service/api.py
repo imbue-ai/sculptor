@@ -12,7 +12,9 @@ class ProjectService(Service, ABC):
     """
     Handle initialization, retrieval and the lifecycle of the server project in the current sculptor session.
 
-    Workspace methods live on WorkspaceService.
+    Workspace methods live on WorkspaceService. Git target-branch scanning lives in
+    WorkspaceService's branch poller (keyed by common git dir), since CLONE-mode
+    workspaces are independent clones, not worktrees sharing the project repo.
     """
 
     @abstractmethod

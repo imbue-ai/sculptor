@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import contextlib
+import datetime
 import json
 import logging
 import mimetypes
@@ -8,9 +9,12 @@ import os
 import platform
 import queue
 import re
+import shutil
 import subprocess
 import sys
+import threading
 import time
+import traceback
 import urllib.parse
 from asyncio import CancelledError
 from importlib import resources
@@ -25,6 +29,7 @@ from typing import TypeVar
 from uuid import uuid4
 
 import anyio
+import anyio.to_thread
 import psutil
 import typeid.errors
 from fastapi import Depends
@@ -36,6 +41,7 @@ from fastapi import UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
+from fastapi.responses import PlainTextResponse
 from fastapi.responses import StreamingResponse
 from fastapi.websockets import WebSocket
 from fastapi.websockets import WebSocketDisconnect
@@ -44,8 +50,14 @@ from pydantic import ValidationError
 from pydantic.alias_generators import to_camel
 
 from sculptor import version
+from sculptor.agents.attachments import resolve_attachment_source
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import NoBtwSessionAvailable
 from sculptor.agents.harness_registry import get_harness_for_config
+from sculptor.agents.pi_agent.authenticated_providers import PiAuthJsonError
+from sculptor.agents.pi_agent.authenticated_providers import get_provider_auth_statuses
+from sculptor.agents.pi_agent.authenticated_providers import write_auth_json_entry
+from sculptor.agents.pi_agent.provider_catalog import ProviderGroup
+from sculptor.agents.pi_agent.provider_catalog import get_provider_entry
 from sculptor.common.plugin import get_plugin_dirs
 from sculptor.config.settings import SculptorSettings
 from sculptor.config.user_config import UserConfig
@@ -80,7 +92,6 @@ from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessa
 from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageUserMessage
-from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
 from sculptor.interfaces.agents.agent import SetModelUserMessage
 from sculptor.interfaces.agents.agent import TerminalAgentConfig
 from sculptor.interfaces.agents.agent import TerminalAgentSignalRunnerMessage
@@ -109,6 +120,9 @@ from sculptor.services.git_repo_service.default_implementation import LocalWrita
 from sculptor.services.git_repo_service.error_types import GitRepoError
 from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 from sculptor.services.git_repo_service.git_commands import run_git_command_local
+from sculptor.services.pi_login_service import PiLoginMode
+from sculptor.services.pi_login_service import broadcast_pi_models_refresh
+from sculptor.services.pi_login_service import pi_login_terminal_id
 from sculptor.services.project_service.default_implementation import get_most_recently_used_project_id
 from sculptor.services.project_service.default_implementation import update_most_recently_used_project
 from sculptor.services.task_service.errors import InvalidTaskOperation
@@ -161,10 +175,16 @@ from sculptor.utils.build import get_sculptor_folder
 from sculptor.utils.build import is_packaged
 from sculptor.utils.errors import is_irrecoverable_exception
 from sculptor.utils.timeout import log_runtime
+from sculptor.utils.tracing import DEFAULT_ADHOC_TRACER_ENTRIES
+from sculptor.utils.tracing import DEFAULT_TRACER_ENTRIES
 from sculptor.utils.tracing import ELECTRON_MAIN_PID
 from sculptor.utils.tracing import RENDERER_PID
 from sculptor.utils.tracing import add_external_events
+from sculptor.utils.tracing import get_buffered_external_event_count
+from sculptor.utils.tracing import get_trace_to_path
 from sculptor.utils.tracing import is_tracing_enabled
+from sculptor.utils.tracing import start_tracing
+from sculptor.utils.tracing import stop_and_write_trace
 from sculptor.web.access_log_filter import should_suppress_access_log
 from sculptor.web.auth import SESSION_TOKEN_HEADER_NAME
 from sculptor.web.auth import SessionTokenMiddleware
@@ -175,8 +195,9 @@ from sculptor.web.data_types import AnswerQuestionRequest
 from sculptor.web.data_types import ArtifactDataResponse
 from sculptor.web.data_types import AuthResult
 from sculptor.web.data_types import AuthStartResult
+from sculptor.web.data_types import AuthenticatedProviderEntry
+from sculptor.web.data_types import AuthenticatedProvidersResponse
 from sculptor.web.data_types import BatchUpdateOpenStateRequest
-from sculptor.web.data_types import BranchExistsResponse
 from sculptor.web.data_types import BtwRequest
 from sculptor.web.data_types import CommitDiffResponse
 from sculptor.web.data_types import CommitFileInfo
@@ -194,14 +215,25 @@ from sculptor.web.data_types import EmailConfigRequest
 from sculptor.web.data_types import EnvVarNamesResponse
 from sculptor.web.data_types import HealthCheckResponse
 from sculptor.web.data_types import InitializeGitRepoRequest
+from sculptor.web.data_types import InstallPluginRequest
+from sculptor.web.data_types import InstallPluginResponse
 from sculptor.web.data_types import ListTerminalAgentRegistrationsResponse
 from sculptor.web.data_types import ListWorkspacesResponse
 from sculptor.web.data_types import NamingPatternRequest
+from sculptor.web.data_types import NewBranchNameValidationResponse
 from sculptor.web.data_types import OpenFileUiAction
 from sculptor.web.data_types import OpenFileUiRequest
 from sculptor.web.data_types import OpenInOsRequest
 from sculptor.web.data_types import OpenPathInAppRequest
 from sculptor.web.data_types import OpenPathInAppResult
+from sculptor.web.data_types import PasteKeyRequest
+from sculptor.web.data_types import PiLoginRequest
+from sculptor.web.data_types import PiLoginResponse
+from sculptor.web.data_types import PiLoginStatusResponse
+from sculptor.web.data_types import PluginCommandRequest
+from sculptor.web.data_types import PluginCommandResponse
+from sculptor.web.data_types import PluginCommandResult
+from sculptor.web.data_types import PluginCommandUiAction
 from sculptor.web.data_types import PreviewBranchNameResponse
 from sculptor.web.data_types import ProjectEnvVarNames
 from sculptor.web.data_types import ProjectInitializationRequest
@@ -253,6 +285,10 @@ from sculptor.web.middleware import resolve_stream_scope
 from sculptor.web.middleware import run_sync_function_with_debugging_support_if_enabled
 from sculptor.web.middleware import shutdown_event as shutdown_event_impl
 from sculptor.web.open_with import open_path_in_external_app
+from sculptor.web.plugin_command_bus import close_correlation
+from sculptor.web.plugin_command_bus import open_correlation
+from sculptor.web.plugin_command_bus import submit_result
+from sculptor.web.remote_repos import remote_repos_router
 from sculptor.web.skills import discover_skills
 from sculptor.web.streams import Scope
 from sculptor.web.streams import ServerStopped
@@ -262,6 +298,7 @@ from sculptor.web.terminal_input import TerminalDeliveryResult
 from sculptor.web.terminal_input import deliver_prompt_to_terminal_agent
 from sculptor.web.ui_actions import next_webview_seq
 from sculptor.web.ui_actions import publish_ui_action
+from sculptor.web.ui_actions import subscriber_count
 from sculptor.web.upload_diagnostics import upload_diagnostics as perform_upload_diagnostics
 
 UpdateT = TypeVar("UpdateT", bound=StreamingUpdate)
@@ -653,10 +690,14 @@ def _cleanup_task_file_attachments(
 
     for file_path in file_paths:
         try:
-            file_file = Path(file_path)
-            if file_file.exists():
-                file_file.unlink()
-                logger.debug("Deleted file: {}", file_path)
+            # Resolve the stored reference to its real source: an absolute path
+            # (Electron) is used as-is; a bare upload id (web/HTTP) lives under
+            # <internal>/uploads/. Without this, http-uploaded files would never
+            # be deleted (Path("<id>").unlink() looks in the cwd, not uploads/).
+            source = resolve_attachment_source(file_path)
+            if source.exists():
+                source.unlink()
+                logger.debug("Deleted file: {}", source)
         except Exception as e:
             log_exception(e, "Failed to delete {file_path}", file_path=file_path)
     logger.info("Cleaned up {} file(s) for task {}", len(file_paths), task_id)
@@ -695,6 +736,12 @@ def create_workspace_v2(
 
         if branch_name:
             with services.git_repo_service.open_local_user_git_repo_for_read(project, log_command=False) as repo:
+                if not repo.is_valid_branch_name(branch_name):
+                    # Reject illegal ref names here so the user gets an actionable
+                    # error at creation, rather than an opaque WorktreeError raised
+                    # later when `git worktree add -b` runs during async environment
+                    # setup (and is surfaced only in the agent panel).
+                    raise HTTPException(status_code=400, detail=f"'{branch_name}' is not a valid git branch name")
                 if repo.is_branch_ref(branch_name):
                     raise HTTPException(status_code=409, detail=f"Branch '{branch_name}' already exists")
 
@@ -1524,6 +1571,13 @@ def workspace_read_file_at_ref(
     return ReadFileAtRefResponse(content=result.content, encoding=result.encoding)
 
 
+# Subdirectories of the plugins folder reserved for Sculptor's own use, never
+# reported as drop-in plugins. ``dev`` holds agent-loaded dev installs, nested as
+# ``dev/<workspace_id>/<plugin_id>/`` so they're visibly temporary and can't
+# collide across workspaces (see the `sculpt plugin` command endpoints below).
+_RESERVED_PLUGIN_DIR_NAMES = frozenset({"dev"})
+
+
 class LocalPluginInfo(SerializableModel):
     """A frontend plugin discovered in the Sculptor plugins directory.
 
@@ -1563,6 +1617,8 @@ def get_local_plugins() -> list[LocalPluginInfo]:
         return []
     plugins: list[LocalPluginInfo] = []
     for entry in entries:
+        if entry.name in _RESERVED_PLUGIN_DIR_NAMES:
+            continue
         if entry.is_dir() and (entry / "manifest.json").is_file():
             # Percent-encode the directory name: a name with URL-special chars
             # (#, ?, space) would otherwise corrupt the manifest URL the frontend
@@ -1593,6 +1649,193 @@ def get_local_plugins_directory() -> LocalPluginsDirectory:
     reports the path — enumerating the plugins inside it is ``get_local_plugins``.
     """
     return LocalPluginsDirectory(path=_display_path(get_sculptor_folder() / "plugins"))
+
+
+# How long the command endpoint waits for renderer replies before returning what
+# it has. Connected renderers usually answer in well under a second; this is the
+# ceiling for the "no window responded" case (and for a renderer that has the
+# plugin feature disabled and so never replies).
+_PLUGIN_COMMAND_TIMEOUT_SECONDS = 8.0
+# Ops that mutate the running UI (install/run frontend code) and so require the
+# agent-loading switch. ``inspect``/``list`` are read-only and stay ungated so an
+# agent can always check state.
+_PLUGIN_COMMAND_GATED_OPS = frozenset({"load", "reload", "unload"})
+
+
+def _require_agent_plugin_loading() -> None:
+    """Enforce the agent-loading switch; raise a clear 403 when it is closed."""
+    config = get_user_config_instance()
+    if config is None or not config.allow_agent_plugin_loading:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "agent_plugin_loading_disabled",
+                "message": "Agent plugin loading is disabled. Enable it in Settings -> Plugins.",
+            },
+        )
+
+
+def _validate_plugin_id(plugin_id: str) -> str:
+    """Reject ids that aren't a single safe path segment (the plugin's dir name)."""
+    if (
+        not plugin_id
+        or "/" in plugin_id
+        or "\\" in plugin_id
+        or plugin_id in {".", ".."}
+        or plugin_id in _RESERVED_PLUGIN_DIR_NAMES
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "invalid_plugin_id", "message": f"invalid plugin id: {plugin_id!r}"},
+        )
+    return plugin_id
+
+
+def _resolve_plugin_file_dest(plugin_dir: Path, relative_path: str) -> Path:
+    """Resolve a packaged file's destination, refusing paths that escape the dir."""
+    plugin_dir_resolved = plugin_dir.resolve()
+    candidate = (plugin_dir_resolved / relative_path).resolve()
+    if candidate != plugin_dir_resolved and not candidate.is_relative_to(plugin_dir_resolved):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "unsafe_plugin_path",
+                "message": f"plugin file path escapes the plugin directory: {relative_path!r}",
+            },
+        )
+    return candidate
+
+
+@router.post("/api/v1/workspaces/{workspace_id}/plugins/command")
+def post_plugin_command(workspace_id: str, command: PluginCommandRequest) -> PluginCommandResponse:
+    """Broadcast a plugin command to connected renderers and collect their replies.
+
+    Publishes a ``PluginCommandUiAction`` over the per-user WebSocket fan-out, then
+    blocks (in the sync threadpool) draining per-renderer replies from the
+    correlation bus until every connected renderer has answered or the timeout
+    elapses. The reply list is keyed by renderer in the CLI; an empty list means no
+    window responded. Write ops require the agent-loading switch; ``inspect`` and
+    ``list`` are read-only and ungated.
+    """
+    validated_workspace_id = validate_workspace_id(workspace_id)
+    if command.op in _PLUGIN_COMMAND_GATED_OPS:
+        _require_agent_plugin_loading()
+
+    correlation_id = str(uuid4())
+    result_queue = open_correlation(correlation_id)
+    try:
+        expected = subscriber_count()
+        publish_ui_action(
+            PluginCommandUiAction(
+                workspace_id=validated_workspace_id,
+                correlation_id=correlation_id,
+                op=command.op,
+                plugin_id=command.plugin_id,
+                source=command.source,
+                cache_bust=command.cache_bust,
+            )
+        )
+        results: list[PluginCommandResult] = []
+        # With no connected renderer, the broadcast reaches no one and nothing can
+        # reply — return immediately instead of blocking for the whole timeout.
+        if expected > 0:
+            deadline = time.monotonic() + _PLUGIN_COMMAND_TIMEOUT_SECONDS
+            while len(results) < expected:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                try:
+                    results.append(result_queue.get(timeout=remaining))
+                except queue.Empty:
+                    break
+        return PluginCommandResponse(correlation_id=correlation_id, results=results)
+    finally:
+        close_correlation(correlation_id)
+
+
+@router.post("/api/v1/plugins/command/{correlation_id}/result")
+def post_plugin_command_result(correlation_id: str, result: PluginCommandResult) -> Response:
+    """Renderer-facing endpoint: deliver one window's reply to a waiting command.
+
+    Quietly succeeds even if nobody is waiting (the originating request may have
+    already timed out), so a slow renderer never sees an error for a late reply.
+    """
+    # The reply is routed to the waiter by the path id; reject a body whose own
+    # correlation_id disagrees so a buggy client can't feed a mismatched result
+    # into the wrong command.
+    if result.correlation_id != correlation_id:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "correlation_id_mismatch",
+                "message": "result.correlation_id does not match the path correlation_id",
+            },
+        )
+    submit_result(correlation_id, result)
+    return Response(status_code=204)
+
+
+@router.post("/api/v1/workspaces/{workspace_id}/plugins/install")
+def post_plugin_install(workspace_id: str, install: InstallPluginRequest) -> InstallPluginResponse:
+    """Write a packaged plugin to the data folder so the static mount can serve it.
+
+    ``persist=False`` (dev) writes to the reserved
+    ``plugins/dev/<workspace_id>/<plugin_id>/`` tree; ``persist=True`` writes a
+    permanent install at the top-level ``plugins/<plugin_id>/``. Either way the
+    target is wiped and rewritten so reloads pick up edits. Returns the
+    origin-relative manifest URL the caller then loads via the command endpoint.
+    """
+    _require_agent_plugin_loading()
+    validated_workspace_id = validate_workspace_id(workspace_id)
+    plugin_id = _validate_plugin_id(install.plugin_id)
+    if not any(plugin_file.path == "manifest.json" for plugin_file in install.files):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "missing_manifest", "message": "packaged plugin must include a top-level manifest.json"},
+        )
+
+    plugins_root = get_sculptor_folder() / "plugins"
+    encoded_plugin_id = urllib.parse.quote(plugin_id, safe="")
+    if install.persist:
+        plugin_dir = plugins_root / plugin_id
+        manifest_url = f"/plugins/local/{encoded_plugin_id}/manifest.json"
+    else:
+        workspace_segment = str(validated_workspace_id)
+        plugin_dir = plugins_root / "dev" / workspace_segment / plugin_id
+        encoded_workspace = urllib.parse.quote(workspace_segment, safe="")
+        manifest_url = f"/plugins/local/dev/{encoded_workspace}/{encoded_plugin_id}/manifest.json"
+
+    if plugin_dir.exists():
+        shutil.rmtree(plugin_dir)
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    for plugin_file in install.files:
+        dest = _resolve_plugin_file_dest(plugin_dir, plugin_file.path)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            dest.write_bytes(base64.b64decode(plugin_file.content_base64, validate=True))
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "invalid_file_encoding", "message": f"file {plugin_file.path!r} is not valid base64"},
+            ) from e
+
+    return InstallPluginResponse(manifest_url=manifest_url, plugin_dir=_display_path(plugin_dir))
+
+
+@router.post("/api/v1/workspaces/{workspace_id}/plugins/{plugin_id}/remove")
+def post_plugin_remove(workspace_id: str, plugin_id: str) -> Response:
+    """Delete a dev install's files (the cleanup step of the dev lifecycle).
+
+    Only touches the workspace-scoped ``dev/`` tree; permanent top-level installs
+    are left alone. Idempotent — removing an absent dev install still succeeds.
+    """
+    _require_agent_plugin_loading()
+    validated_workspace_id = validate_workspace_id(workspace_id)
+    plugin_id = _validate_plugin_id(plugin_id)
+    plugin_dir = get_sculptor_folder() / "plugins" / "dev" / str(validated_workspace_id) / plugin_id
+    if plugin_dir.exists():
+        shutil.rmtree(plugin_dir)
+    return Response(status_code=204)
 
 
 @router.get("/api/v1/skills")
@@ -1975,7 +2218,8 @@ def create_workspace_agent(
                 agent_config=agent_config,
                 git_hash=initial_commit_hash,
                 system_prompt=project.default_system_prompt,
-                default_model=agent_request.model,
+                # Terminal agents don't carry a model — Sculptor doesn't control it (SCU-1580).
+                default_model=None if is_terminal_agent_config(agent_config) else agent_request.model,
             ),
             current_state=initial_task_state,
         )
@@ -2304,6 +2548,20 @@ def get_workspace_agent_diagnostics(
     )
 
 
+def _raise_for_terminal_delivery_result(result: TerminalDeliveryResult) -> None:
+    """Raise the HTTP 409 that a non-DELIVERED PTY write maps to, or return for
+    DELIVERED. The frontend's enable/disable logic and the integration tests
+    depend on these exact statuses and details, so every endpoint that drives a
+    terminal agent maps results through here to keep them identical.
+    """
+    if result is TerminalDeliveryResult.NOT_OPT_IN:
+        raise HTTPException(status_code=409, detail="this agent does not accept automated prompts")
+    if result is TerminalDeliveryResult.NOT_AT_PROMPT:
+        raise HTTPException(status_code=409, detail="agent is busy or not at its prompt")
+    if result is TerminalDeliveryResult.NO_PTY:
+        raise HTTPException(status_code=409, detail="terminal not running")
+
+
 @router.post("/api/v1/workspaces/{workspace_id}/agents/{agent_id}/messages")
 def send_workspace_agent_messages(
     workspace_id: str,
@@ -2327,45 +2585,64 @@ def send_workspace_agent_messages(
                 detail=[{"loc": ["body", "message"], "msg": "Message required", "type": "value_error.missing"}],
             )
 
-        saved_messages = services.task_service.get_saved_messages_for_task(task.object_id, transaction)
         assert isinstance(task.input_data, AgentTaskInputsV2), (
             f"Expected AgentTaskInputsV2 for agent message endpoint, got {type(task.input_data).__name__}"
         )
-        harness = get_harness_for_config(task.input_data.agent_config)
-        if message_request.enter_plan_mode and not harness.capabilities().supports_interactive_backchannel:
-            raise HTTPException(
-                status_code=400,
-                detail="plan mode requires a harness that supports the interactive backchannel",
+
+        # A registered terminal agent has no chat message stream to queue into;
+        # its delivery is handled below, outside this transaction. Chat agents
+        # take the original queueing path here, unchanged.
+        if not isinstance(task.input_data.agent_config, RegisteredTerminalAgentConfig):
+            saved_messages = services.task_service.get_saved_messages_for_task(task.object_id, transaction)
+            harness = get_harness_for_config(task.input_data.agent_config)
+            if message_request.enter_plan_mode and not harness.capabilities().supports_interactive_backchannel:
+                raise HTTPException(
+                    status_code=400,
+                    detail="plan mode requires a harness that supports the interactive backchannel",
+                )
+            task_state = convert_agent_messages_to_task_update(
+                saved_messages, task_id=task.object_id, completed_message_by_id={}, harness=harness
             )
-        task_state = convert_agent_messages_to_task_update(
-            saved_messages, task_id=task.object_id, completed_message_by_id={}, harness=harness
-        )
-        if task_state.pending_user_question is not None:
-            raise HTTPException(
-                status_code=409,
-                detail="Cannot send a message while the agent is waiting for a response to AskUserQuestion.",
+            if task_state.pending_user_question is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Cannot send a message while the agent is waiting for a response to AskUserQuestion.",
+                )
+
+            message_id = AgentMessageID()
+            logger.info("Sending message {} to agent {}: {}", message_id, agent_id, message_str[:100])
+
+            message = ChatInputUserMessage(
+                message_id=message_id,
+                text=message_str,
+                model_name=message_request.model,
+                files=message_request.files,
+                enter_plan_mode=message_request.enter_plan_mode,
+                exit_plan_mode=message_request.exit_plan_mode,
+                fast_mode=message_request.fast_mode,
+                effort=message_request.effort,
+                sent_via=message_request.sent_via,
             )
 
-        message_id = AgentMessageID()
-        logger.info("Sending message {} to agent {}: {}", message_id, agent_id, message_str[:100])
+            services.task_service.create_message(
+                message=message,
+                task_id=task.object_id,
+                transaction=transaction,
+            )
+            return
 
-        message = ChatInputUserMessage(
-            message_id=message_id,
-            text=message_str,
-            model_name=message_request.model,
-            files=message_request.files,
-            enter_plan_mode=message_request.enter_plan_mode,
-            exit_plan_mode=message_request.exit_plan_mode,
-            fast_mode=message_request.fast_mode,
-            effort=message_request.effort,
-            sent_via=message_request.sent_via,
-        )
-
-        services.task_service.create_message(
-            message=message,
-            task_id=task.object_id,
-            transaction=transaction,
-        )
+    # Registered terminal agent: type the prompt into the PTY via the shared
+    # helper, exactly as POST /agents/{id}/terminal/input and the CI Babysitter
+    # do, so every feature that drives a terminal agent stays identically gated.
+    # Done outside the transaction above — the helper sleeps briefly before the
+    # submit Enter and must not hold a DB transaction while it does.
+    result = deliver_prompt_to_terminal_agent(
+        task,
+        message_str,
+        submit=True,
+        task_service=services.task_service,
+    )
+    _raise_for_terminal_delivery_result(result)
 
 
 @router.post("/api/v1/workspaces/{workspace_id}/agents/{agent_id}/answer_question")
@@ -2469,9 +2746,11 @@ def set_workspace_agent_model(
     """Switch a running agent's model (the pi out-of-band `set_model` path).
 
     Used by harnesses with a backend model list (pi); Claude's model rides each
-    turn instead. The request blocks until the agent resolves the switch and
-    returns 400 with the agent's error message when the switch is rejected (e.g.
-    pi reports "Model not found"), so the frontend can toast it.
+    turn instead. Rejects (400) a harness that cannot switch models or a model not
+    in the agent's catalog; otherwise records the selection — written onto task
+    state so the server-driven switcher reflects it at once (even before a pi
+    process exists) and enqueued for the agent, which applies it to pi when it next
+    runs and rolls the switcher back if pi rejects it.
     """
     services = get_services_from_request_or_websocket(request)
 
@@ -2493,35 +2772,52 @@ def set_workspace_agent_model(
                 detail="model selection requires a harness that supports it",
             )
         # supports_model_selection also covers per-turn switching (Claude); the
-        # out-of-band set_model RPC is only honored by a harness that sources a
+        # out-of-band set_model path is only honored by a harness that sources a
         # backend model list (pi). A harness without a catalog has no
-        # SetModelUserMessage handler, so reject it rather than block the request
-        # forever on a message nothing resolves.
+        # SetModelUserMessage handler.
         model_state = task.current_state if isinstance(task.current_state, AgentTaskStateV2) else None
-        if not harness.get_available_models(model_state):
+        available_models = harness.get_available_models(model_state)
+        if not available_models:
             raise HTTPException(
                 status_code=400,
                 detail="this agent does not support switching models",
             )
-
-    message_id = AgentMessageID()
-    with await_request_outcome(message_id, task.object_id, services) as outcome:
-        with user_session.open_transaction(services) as transaction:
-            services.task_service.create_message(
-                message=SetModelUserMessage(
-                    message_id=message_id,
-                    provider=set_model_request.provider,
-                    model_id=set_model_request.model_id,
-                ),
-                task_id=task.object_id,
-                transaction=transaction,
+        # The switcher only offers models from this catalog, so a request for anything
+        # else cannot be honored — reject it rather than record a selection the agent
+        # would never apply (with no live agent, that would be a silent no-op).
+        selected_model = next(
+            (
+                option
+                for option in available_models
+                if option.provider == set_model_request.provider and option.model_id == set_model_request.model_id
+            ),
+            None,
+        )
+        if selected_model is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"model {set_model_request.provider}/{set_model_request.model_id} is not available for this agent",
             )
-    # The adapter resolves a rejected switch (e.g. pi "Model not found") as a
-    # RequestFailure; surface it to the caller so the frontend toasts it.
-    terminal = outcome[0] if outcome else None
-    if isinstance(terminal, RequestFailureAgentMessage):
-        detail = str(terminal.error.args[0]) if terminal.error.args else "Failed to set model"
-        raise HTTPException(status_code=400, detail=detail)
+
+    # Record the selection in one write: reflect it on the server-driven switcher now
+    # (optimistically, so it updates even with no live agent to acknowledge it), and
+    # enqueue the switch for the agent to apply to pi — adopted at start, or on the
+    # queued message — rolling the switcher back if pi rejects it.
+    with user_session.open_transaction(services) as transaction:
+        services.task_service.update_available_models(
+            task_id=task.object_id,
+            available_models=available_models,
+            current_model=selected_model,
+            transaction=transaction,
+        )
+        services.task_service.create_message(
+            message=SetModelUserMessage(
+                provider=set_model_request.provider,
+                model_id=set_model_request.model_id,
+            ),
+            task_id=task.object_id,
+            transaction=transaction,
+        )
 
 
 @router.post("/api/v1/workspaces/{workspace_id}/agents/{agent_id}/btw")
@@ -2632,7 +2928,7 @@ def await_message_response(
     message_id: AgentMessageID,
     task_id: TaskID,
     services: CompleteServiceCollection,
-) -> Iterator[None]:
+) -> Generator[None, None, None]:
     with services.task_service.subscribe_to_task(task_id) as updates_queue:
         yield
         logger.debug("Waiting for response to message {} in task {}", message_id, task_id)
@@ -2644,35 +2940,6 @@ def await_message_response(
             else:
                 if isinstance(update, PersistentRequestCompleteAgentMessage):
                     if update.request_id == message_id:
-                        break
-
-
-@contextlib.contextmanager
-def await_request_outcome(
-    message_id: AgentMessageID,
-    task_id: TaskID,
-    services: CompleteServiceCollection,
-) -> Iterator[list[PersistentRequestCompleteAgentMessage]]:
-    """Like `await_message_response`, but captures the terminal request message.
-
-    Yields a one-element list the caller reads after the block to inspect the
-    outcome (e.g. distinguish RequestSuccess from RequestFailure and surface the
-    failure to the HTTP caller). The list is empty only if the subscription is
-    torn down before the request resolves.
-    """
-    outcome: list[PersistentRequestCompleteAgentMessage] = []
-    with services.task_service.subscribe_to_task(task_id) as updates_queue:
-        yield outcome
-        logger.debug("Waiting for outcome of message {} in task {}", message_id, task_id)
-        while True:
-            try:
-                update = updates_queue.get(timeout=1.0)
-            except queue.Empty:
-                pass
-            else:
-                if isinstance(update, PersistentRequestCompleteAgentMessage):
-                    if update.request_id == message_id:
-                        outcome.append(update)
                         break
 
 
@@ -2739,7 +3006,7 @@ def get_config_status(
         has_email=bool(user_config.user_email) and check_is_user_email_field_valid(user_config),
         has_privacy_consent=user_config.is_privacy_policy_consented,
         has_project=has_project,
-        has_dependencies_passing=bool(deps_passing),
+        has_dependencies_passing=deps_passing,
     )
 
 
@@ -2760,9 +3027,9 @@ def save_user_email(
         user_config,
         {
             "user_email": email_config_request.user_email,
-            "user_id": create_user_id(str(email_config_request.user_email)),
+            "user_id": create_user_id(email_config_request.user_email),
             "user_full_name": email_config_request.full_name,
-            "organization_id": create_organization_id(str(email_config_request.user_email)),
+            "organization_id": create_organization_id(email_config_request.user_email),
             # Saving user email counts as consenting to the Policy email
             "is_privacy_policy_consented": True,
             # Telemetry choice comes from the welcome-step checkbox
@@ -3176,11 +3443,6 @@ def _extract_hostname(url: str) -> str:
     return parsed.hostname or ""
 
 
-def _is_gitlab_url(url: str) -> bool:
-    """Check if a URL points to a GitLab instance."""
-    return "gitlab" in _extract_hostname(url).lower()
-
-
 def _is_github_url(url: str) -> bool:
     """Check if a URL points to a GitHub instance."""
     return "github" in _extract_hostname(url).lower()
@@ -3195,14 +3457,13 @@ def _get_remote_branches(repo_path: Path, remote_filter: str | None = "origin") 
             Pass ``None`` to include branches from all remotes.
     """
     try:
-        result = subprocess.run(
+        result = run_blocking(
             ["git", "branch", "-r", "--format=%(refname:short)"],
             cwd=repo_path,
-            capture_output=True,
-            text=True,
             timeout=_GIT_INFO_TIMEOUT_SECONDS,
+            is_checked=False,
         )
-        if result.returncode != 0:
+        if result.returncode != 0 or result.is_timed_out:
             return []
         branches = []
         for line in result.stdout.strip().splitlines():
@@ -3216,7 +3477,7 @@ def _get_remote_branches(repo_path: Path, remote_filter: str | None = "origin") 
                 continue
             branches.append(branch)
         return branches
-    except (subprocess.TimeoutExpired, OSError):
+    except ProcessSetupError:
         return []
 
 
@@ -3270,33 +3531,44 @@ def get_current_branch(
         raise HTTPException(status_code=404, detail=str(e)) from e
 
 
-@router.get("/api/v1/projects/{project_id}/branch-exists")
-def branch_exists(
+@router.get("/api/v1/projects/{project_id}/validate-new-branch-name")
+def validate_new_branch_name(
     project_id: str,
     name: str,
     request: Request,
     user_session: UserSession = Depends(get_user_session),
-) -> BranchExistsResponse:
-    """Return whether `name` already exists as a local branch in the project's repo."""
+) -> NewBranchNameValidationResponse:
+    """Validate a prospective new workspace branch name in the project's repo.
+
+    Reports whether `name` is a legal git ref (`is_valid`) and whether it
+    collides with an existing local branch (`already_exists`). Backs the Add
+    Workspace form's inline error; `create_workspace_v2` re-checks both as the
+    authoritative gate. When the name is illegal, the collision check is skipped
+    (git can't resolve an invalid ref anyway).
+    """
     validated_project_id = validate_project_id(project_id)
     services = get_services_from_request_or_websocket(request)
 
     trimmed = name.strip()
     if not trimmed:
-        return BranchExistsResponse(exists=False)
+        return NewBranchNameValidationResponse(is_valid=False, already_exists=False)
 
     with user_session.open_transaction(services) as transaction:
         project = transaction.get_project(validated_project_id)
         if project is None:
             raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
+        # When the repo isn't reachable we can't check; don't surface a spurious
+        # error — let the create-time backstop catch any real problem.
         if not project.is_path_accessible:
-            return BranchExistsResponse(exists=False)
+            return NewBranchNameValidationResponse(is_valid=True, already_exists=False)
 
     try:
         with services.git_repo_service.open_local_user_git_repo_for_read(project, log_command=False) as repo:
-            return BranchExistsResponse(exists=repo.is_branch_ref(trimmed))
+            is_valid = repo.is_valid_branch_name(trimmed)
+            already_exists = is_valid and repo.is_branch_ref(trimmed)
+            return NewBranchNameValidationResponse(is_valid=is_valid, already_exists=already_exists)
     except GitRepoNotFoundError:
-        return BranchExistsResponse(exists=False)
+        return NewBranchNameValidationResponse(is_valid=True, already_exists=False)
 
 
 @router.get("/api/v1/projects/{project_id}/repo_info")
@@ -3354,7 +3626,6 @@ def get_repo_info(
 
         # Get origin URL and provider detection info
         origin_url = _get_origin_url(repo_path)
-        is_gitlab_origin = _is_gitlab_url(origin_url) if origin_url is not None else False
         is_github_origin = _is_github_url(origin_url) if origin_url is not None else False
         remote_branches = _get_remote_branches(repo_path)
 
@@ -3363,7 +3634,6 @@ def get_repo_info(
             current_branch=current_branch,
             recent_branches=branches,
             project_id=project.object_id,
-            is_gitlab_origin=is_gitlab_origin,
             is_github_origin=is_github_origin,
             remote_branches=remote_branches,
         )
@@ -3598,21 +3868,15 @@ def post_agent_terminal_input(
 
     # All three security guards and the bracketed-paste write live in the
     # shared helper so this endpoint and the CI Babysitter stay identically
-    # gated. Map each non-DELIVERED result to the status/detail the endpoint
-    # has always returned — the integration test and the frontend's
-    # enable/disable logic depend on these exact 409s.
+    # gated. _raise_for_terminal_delivery_result maps each non-DELIVERED result
+    # to the 409 the message endpoint returns too.
     result = deliver_prompt_to_terminal_agent(
         task,
         input_request.text,
         submit=input_request.submit,
         task_service=services.task_service,
     )
-    if result is TerminalDeliveryResult.NOT_OPT_IN:
-        raise HTTPException(status_code=409, detail="this agent does not accept automated prompts")
-    if result is TerminalDeliveryResult.NOT_AT_PROMPT:
-        raise HTTPException(status_code=409, detail="agent is busy or not at its prompt")
-    if result is TerminalDeliveryResult.NO_PTY:
-        raise HTTPException(status_code=409, detail="terminal not running")
+    _raise_for_terminal_delivery_result(result)
     return Response(status_code=204)
 
 
@@ -4006,8 +4270,8 @@ def get_health_check(request: Request) -> HealthCheckResponse:
     dependencies_status = services.dependency_management_service.get_status()
 
     return HealthCheckResponse(
-        version=str(version.__version__),
-        git_sha=str(version.__git_sha__),
+        version=version.__version__,
+        git_sha=version.__git_sha__,
         python_version=sys.version.split()[0],
         platform=platform.system(),
         platform_version=platform.release(),
@@ -4201,6 +4465,134 @@ def get_env_var_names(
     )
 
 
+@router.get("/api/v1/pi/providers/authenticated")
+def get_pi_authenticated_providers(
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> AuthenticatedProvidersResponse:
+    """Return the full pi provider catalog crossed with current authentication status.
+
+    Global (no workspace/agent): Settings reads process-level auth.json + env. The
+    underlying readers are best-effort, so a missing/garbled auth.json yields all
+    in_auth_json=False rather than an error.
+    """
+    return AuthenticatedProvidersResponse(
+        providers=tuple(
+            AuthenticatedProviderEntry(
+                provider_id=status.provider_id,
+                display_name=status.display_name,
+                group=status.group,
+                in_auth_json=status.in_auth_json,
+                env_detected=status.env_detected,
+                env_var_names=status.env_var_names,
+            )
+            for status in get_provider_auth_statuses()
+        )
+    )
+
+
+@router.post("/api/v1/pi/login")
+def start_pi_login(
+    request: Request,
+    pi_login_request: PiLoginRequest,
+    user_session: UserSession = Depends(get_user_session),
+) -> PiLoginResponse:
+    """Spawn an interactive pi /login (or /logout) PTY and return its login-session id.
+
+    Global (no workspace/agent): the PTY drives pi's own interactive flow against the
+    user's real ~/.pi/agent. The frontend attaches at GET /api/v1/pi/login/{id}/ws.
+    """
+    services = get_services_from_request_or_websocket(request)
+    pi_binary_path = services.dependency_management_service.resolve_binary_path(Dependency.PI)
+    if pi_binary_path is None:
+        raise HTTPException(status_code=400, detail="pi is not installed — configure it in Settings → Pi")
+    login_id = services.pi_login_service.spawn(
+        PiLoginMode(pi_login_request.mode),
+        pi_binary_path,
+        pi_login_request.provider_id,
+    )
+    return PiLoginResponse(login_id=login_id)
+
+
+@router.post("/api/v1/pi/login/{login_id}/done")
+def finish_pi_login(
+    login_id: str,
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> Response:
+    """Tear down a login PTY (Done button) and broadcast a model refresh. Idempotent."""
+    services = get_services_from_request_or_websocket(request)
+    services.pi_login_service.teardown(login_id)
+    return Response(status_code=204)
+
+
+@router.get("/api/v1/pi/login/{login_id}/status")
+def get_pi_login_status(
+    login_id: str,
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> PiLoginStatusResponse:
+    """Report whether a login session's credential change has landed in auth.json.
+
+    The login modal polls this to auto-close once pi finishes the /login or /logout,
+    replacing the manual Done click.
+    """
+    services = get_services_from_request_or_websocket(request)
+    return PiLoginStatusResponse(completed=services.pi_login_service.is_completed(login_id))
+
+
+@router.post("/api/v1/pi/providers/paste-key")
+def write_pi_provider_key(
+    request: Request,
+    paste_key_request: PasteKeyRequest,
+    user_session: UserSession = Depends(get_user_session),
+) -> Response:
+    """Merge a single-key provider's api key into auth.json and refresh running pi agents.
+
+    The optional power-user path (the primary path is interactive /login). The value
+    is written verbatim (literal / $ENV / !command); session-only and unknown
+    providers are rejected (their config is not expressible as a single auth.json key).
+    """
+    entry = get_provider_entry(paste_key_request.provider_id)
+    if entry is None or entry.group is not ProviderGroup.SINGLE_KEY:
+        raise HTTPException(status_code=400, detail="paste-key is only supported for single-key providers")
+    if not paste_key_request.key_value.strip():
+        raise HTTPException(status_code=400, detail="a key value is required")
+    try:
+        write_auth_json_entry(paste_key_request.provider_id, paste_key_request.key_value)
+    except PiAuthJsonError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    services = get_services_from_request_or_websocket(request)
+    with user_session.open_transaction(services) as transaction:
+        broadcast_pi_models_refresh(services.task_service, transaction)
+    return Response(status_code=204)
+
+
+@APP.websocket("/api/v1/pi/login/{login_id}/ws")
+async def pi_login_websocket(
+    websocket: WebSocket,
+    login_id: str,
+) -> None:
+    """Attach a WebSocket to a pi login PTY, reaping it (and refreshing models) on close.
+
+    Unlike agent terminals (which persist across disconnect), a login PTY is
+    ephemeral: when the socket closes the session is torn down and a model-catalog
+    refresh is broadcast, since credentials may have changed.
+    """
+    services = get_services_from_request_or_websocket(websocket)
+    if not services.pi_login_service.is_active(login_id):
+        # Accept before closing so the client receives a proper 4404 close frame
+        # (see agent_terminal_websocket for the full explanation).
+        await websocket.accept()
+        await websocket.close(code=4404, reason=f"pi login session {login_id} not found")
+        return
+    try:
+        await _connect_terminal_websocket(websocket, pi_login_terminal_id(login_id))
+    finally:
+        services.pi_login_service.teardown(login_id)
+
+
 @router.post("/api/v1/projects/init-git")
 def initialize_git_repository(
     request: Request,
@@ -4376,6 +4768,148 @@ def post_trace_batch(payload: TraceBatchRequest) -> None:
     add_external_events(payload.events, _TRACE_SOURCE_TO_PID[payload.source])
 
 
+class TraceStartRequest(SerializableModel):
+    """Knobs for arming an ad-hoc backend trace at runtime.
+
+    There is intentionally no ``output_path`` field: the file is always written
+    under a fixed server-owned directory (see ``post_trace_start``). These
+    endpoints require the session token, but constraining the path keeps an
+    attacker who obtains the token from using the trace writer as an
+    arbitrary-file-write primitive."""
+
+    # None → DEFAULT_ADHOC_TRACER_ENTRIES. Bounded server-side; the ring buffer
+    # costs ~50 bytes/entry of resident memory, so an unbounded value would be
+    # an OOM lever.
+    tracer_entries: int | None = None
+
+
+class TraceStatusResponse(SerializableModel):
+    enabled: bool
+    output_path: str | None
+    buffered_external_events: int
+
+
+class TraceStopResponse(SerializableModel):
+    output_path: str
+    backend_event_count: int
+    external_event_count: int
+
+
+def _adhoc_trace_dir(settings: SculptorSettings) -> Path:
+    return Path(settings.LOG_PATH) / "traces"
+
+
+@router.post("/api/v1/trace/start")
+def post_trace_start(
+    payload: TraceStartRequest,
+    settings: SculptorSettings = Depends(get_settings),
+) -> TraceStatusResponse:
+    """Arm viztracer on the running backend, writing to a fresh timestamped
+    file under ``{LOG_PATH}/traces``. 409 if a trace is already running (the
+    response reports where that trace is writing).
+
+    Renderer / Electron-main events are only captured if the renderer learned
+    tracing was on at boot (it reads ``window.__SCULPTOR_TRACING__`` once);
+    a trace armed at runtime therefore captures backend Python only, which is
+    the point of this endpoint — profiling a live (e.g. production) backend
+    without a restart. Requires the session token (not exempt like
+    ``/trace/batch``)."""
+    tracer_entries = payload.tracer_entries if payload.tracer_entries is not None else DEFAULT_ADHOC_TRACER_ENTRIES
+    if tracer_entries <= 0 or tracer_entries > DEFAULT_TRACER_ENTRIES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"tracer_entries must be in 1..{DEFAULT_TRACER_ENTRIES}",
+        )
+
+    # Microsecond precision (%f), not just seconds: a stop-then-immediate-start
+    # within the same second would otherwise reuse this path, and stop's
+    # os.replace would silently overwrite the previous session's trace.
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    output_path = _adhoc_trace_dir(settings) / f"trace-{timestamp}.json"
+    # Atomic check-and-arm: start_tracing returns False if a trace was already
+    # running. Gating the 409 on its return (rather than a separate, racy
+    # is_tracing_enabled() pre-check) means concurrent/duplicate starts get a
+    # truthful 409 pointing at the active trace, instead of all reporting
+    # "armed" for the one session that actually won.
+    if not start_tracing(output_path, tracer_entries=tracer_entries):
+        active = get_trace_to_path()
+        raise HTTPException(
+            status_code=409,
+            detail=f"A trace is already running, writing to {active}. Stop it first with `sculpt debug trace stop`.",
+        )
+    # Report the resolved path that start_tracing stored, so it matches what
+    # /trace/status and /trace/stop later report (start_tracing resolves it,
+    # e.g. /tmp -> /private/tmp on macOS).
+    resolved_path = get_trace_to_path()
+    logger.info("Ad-hoc trace armed, output -> {} (tracer_entries={})", resolved_path, tracer_entries)
+    return TraceStatusResponse(
+        enabled=True,
+        output_path=str(resolved_path),
+        buffered_external_events=get_buffered_external_event_count(),
+    )
+
+
+@router.post("/api/v1/trace/stop")
+def post_trace_stop() -> TraceStopResponse:
+    """Stop the running trace, flush the combined Chrome-JSON file to disk, and
+    return where it landed plus how much was captured. 409 if no trace is
+    running. The backend is left disarmed and ready to be armed again."""
+    if not is_tracing_enabled():
+        raise HTTPException(
+            status_code=409,
+            detail="No trace is running. Start one first with POST /api/v1/trace/start.",
+        )
+    result = stop_and_write_trace()
+    if result is None:
+        # Defensive: is_tracing_enabled() was true above, so a None here means
+        # the tracer state was torn down concurrently (e.g. process shutdown
+        # raced this request). Surface it rather than returning a bogus path.
+        raise HTTPException(status_code=409, detail="Trace was torn down before it could be written.")
+    logger.info("Ad-hoc trace written to {}", result.path)
+    return TraceStopResponse(
+        output_path=str(result.path),
+        backend_event_count=result.backend_event_count,
+        external_event_count=result.external_event_count,
+    )
+
+
+@router.get("/api/v1/trace/status")
+def get_trace_status() -> TraceStatusResponse:
+    """Report whether a trace is currently running and, if so, where it will be
+    written and how many external events are buffered so far."""
+    path = get_trace_to_path()
+    return TraceStatusResponse(
+        enabled=is_tracing_enabled(),
+        output_path=str(path) if path is not None else None,
+        buffered_external_events=get_buffered_external_event_count(),
+    )
+
+
+@router.get("/api/v1/debug/threads", response_class=PlainTextResponse)
+def get_debug_threads() -> PlainTextResponse:
+    """Dump a Python traceback for every live thread, as plain text.
+
+    Uses ``sys._current_frames()`` rather than ``faulthandler``/signals: it
+    reads Python frame objects and never walks the C stack, so it is safe with
+    greenlet (which manipulates the C stack for coroutine switching and makes
+    faulthandler's stack walk crash). A cheap, instant escape hatch for
+    inspecting a wedged backend without arming a full trace. Requires the
+    session token."""
+    chunks: list[str] = [
+        f"Thread dump at {datetime.datetime.now().isoformat()}\n",
+        "=" * 72 + "\n\n",
+    ]
+    thread_names = {t.ident: t.name for t in threading.enumerate()}
+    for thread_id, frame in sys._current_frames().items():
+        name = thread_names.get(thread_id, "<unknown>")
+        chunks.append(f"Thread {thread_id} ({name}):\n")
+        # traceback.format_stack returns lines that already end in "\n", so
+        # join them with "" — using "\n".join here would double every newline.
+        chunks.extend(traceback.format_stack(frame))
+        chunks.append("\n")
+    return PlainTextResponse("".join(chunks))
+
+
 # Dummy routes to include WebSocket types in OpenAPI schema
 
 
@@ -4398,6 +4932,7 @@ def _element_tags() -> ElementIDs:
 
 
 APP.include_router(router)
+APP.include_router(remote_repos_router)
 
 APP.add_middleware(SessionTokenMiddleware, settings_factory=get_settings)
 

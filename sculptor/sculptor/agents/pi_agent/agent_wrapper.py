@@ -59,9 +59,12 @@ from packaging.version import Version
 from pydantic import PrivateAttr
 from pydantic import ValidationError
 
+from sculptor.agents.attachments import save_attachments_to_environment
 from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
+from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.utils import get_state_file_contents
 from sculptor.agents.default.utils import get_turn_request_id
+from sculptor.agents.pi_agent.authenticated_providers import compute_authenticated_provider_ids
 from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_DIALOG_TITLE
 from sculptor.agents.pi_agent.backchannel import build_ask_user_question_data
 from sculptor.agents.pi_agent.backchannel import extension_ui_response_body
@@ -100,9 +103,9 @@ from sculptor.agents.pi_agent.output_processor import humanize_pi_failure_reason
 from sculptor.agents.pi_agent.output_processor import humanize_transient_failure_reason
 from sculptor.agents.pi_agent.output_processor import is_transient_provider_error
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
+from sculptor.agents.pi_agent.output_processor import sum_message_usage
 from sculptor.agents.pi_agent.prompt_assembly import build_attachment_instructions
 from sculptor.agents.pi_agent.prompt_assembly import build_image_block
-from sculptor.agents.pi_agent.prompt_assembly import save_attachments_to_environment
 from sculptor.agents.pi_agent.prompt_assembly import split_image_and_path_attachments
 from sculptor.agents.pi_agent.subagent import SubagentChild
 from sculptor.agents.pi_agent.subagent import SubagentCompletion
@@ -130,6 +133,7 @@ from sculptor.interfaces.agents.agent import ModelsAvailableAgentMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.interfaces.agents.agent import PlanModeAgentMessage
+from sculptor.interfaces.agents.agent import RefreshModelsUserMessage
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageUserMessage
 from sculptor.interfaces.agents.agent import RequestSkippedAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
@@ -137,6 +141,7 @@ from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
 from sculptor.interfaces.agents.agent import SetModelUserMessage
 from sculptor.interfaces.agents.agent import StopAgentUserMessage
+from sculptor.interfaces.agents.agent import TurnMetricsAgentMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_SHUTDOWN_DUE_TO_EXCEPTION
 from sculptor.interfaces.agents.errors import AgentCrashed
@@ -158,6 +163,7 @@ from sculptor.state.chat_state import ContentBlockTypes
 from sculptor.state.chat_state import TextBlock
 from sculptor.state.chat_state import ToolResultBlock
 from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.chat_state import TurnMetrics
 from sculptor.state.chat_state import make_plan_approval_question
 from sculptor.state.claude_state import get_tool_invocation_string
 from sculptor.state.messages import ChatInputUserMessage
@@ -316,13 +322,23 @@ def _model_sort_key(model: ModelOption) -> tuple[int, int, str]:
     return (-major, -minor, model.model_id)
 
 
-def _curate_models(models: list[ModelOption], current_model: ModelOption | None) -> list[ModelOption]:
+def _curate_models(
+    models: list[ModelOption],
+    current_model: ModelOption | None,
+    authenticated_providers: set[str] | None = None,
+) -> list[ModelOption]:
     """Trim pi's raw catalog to the models the switcher should offer, newest-first.
 
     Drops the obsolete `_PI_MODEL_BLACKLIST` ids and dated-pin duplicates
     (`_DATED_PIN_SUFFIX_RE`), then sorts newest-first (`_model_sort_key`). The
     current model is always kept even if a rule would drop it, so the switcher
     never shows an empty selection. Duplicate ids are de-duplicated, first-wins.
+
+    When `authenticated_providers` is provided, options whose `provider` is not in
+    that set are also dropped — pi gates its catalog on credential presence, not
+    validity, so a stray ambient key would otherwise leak that provider's models
+    into the picker. `None` (the default) disables the filter. The current model is
+    exempt from every rule, including this one.
     """
     kept: list[ModelOption] = []
     seen_ids: set[str] = set()
@@ -334,6 +350,8 @@ def _curate_models(models: list[ModelOption], current_model: ModelOption | None)
         if not is_current and model.model_id in _PI_MODEL_BLACKLIST:
             continue
         if not is_current and _DATED_PIN_SUFFIX_RE.search(model.model_id):
+            continue
+        if not is_current and authenticated_providers is not None and model.provider not in authenticated_providers:
             continue
         seen_ids.add(model.model_id)
         kept.append(model)
@@ -466,6 +484,7 @@ class _TurnState:
         "compaction_open",
         "first_message_id",
         "prompt_id",
+        "start_time",
         "tool_calls",
     )
 
@@ -475,6 +494,9 @@ class _TurnState:
         self.assistant_message_id = AssistantMessageID(generate_id())
         self.first_message_id = AgentMessageID()
         self.tool_calls: dict[str, _ToolCall] = {}
+        # Wall-clock start of this agent run, for the turn footer's duration
+        # (wall-clock, not the model's response-only time, to mirror Claude).
+        self.start_time = time.monotonic()
         # True between a compaction_start and its matching compaction_end.
         # Compaction spans assistant messages, so this is NOT reset in
         # reset_accumulator. If the run exits while it is still open (process
@@ -540,13 +562,20 @@ class PiAgent(DefaultAgentWrapper):
     harness: PiHarness
     config: PiAgentConfig
     git_hash: str
+    # The switcher's persisted value at construction (`AgentTaskStateV2.current_model`).
+    # A user can switch models before the first message — before this pi process
+    # exists — so the switch lands only in task state, not in pi's session. `start()`
+    # adopts it (`_adopt_preselected_model`) so pi runs the selected model from the
+    # first turn and the switcher does not flicker back to pi's own default. None when
+    # the switcher has no persisted selection yet (pi's default is used).
+    preselected_model: ModelOption | None = None
     # Carries chat turns AND between-turns control messages (context reset,
     # model switch) through one FIFO so each runs strictly after any in-flight
     # turn — the sole-reader window where the control RPCs' responses can be
     # consumed safely (see _process_message_queue).
-    _input_agent_messages: Queue[ChatInputUserMessage | ClearContextUserMessage | SetModelUserMessage] = PrivateAttr(
-        default_factory=Queue
-    )
+    _input_agent_messages: Queue[
+        ChatInputUserMessage | ClearContextUserMessage | SetModelUserMessage | RefreshModelsUserMessage
+    ] = PrivateAttr(default_factory=Queue)
     _shutdown_event: Event = PrivateAttr(default_factory=Event)
     _message_processing_thread: ObservableThread | None = PrivateAttr(default=None)
     # The pi session id this process resumes / creates (pinned via --session-id);
@@ -629,6 +658,13 @@ class PiAgent(DefaultAgentWrapper):
     # its `ModelsAvailableAgentMessage` carrier. Set and read on the
     # message-processing thread only.
     _available_models: tuple[ModelOption, ...] = PrivateAttr(default=())
+    # Tracks the working tree across a turn so the turn footer can report the
+    # git-relative paths of files changed by ANY tool (edit/write AND bash),
+    # mirroring Claude's DiffTracker. Diffs the tree SHA captured at the previous
+    # turn boundary against the tree at this turn's agent_end. Created lazily on
+    # the first turn (keeps `start()` git-free) and re-baselined per turn. Used
+    # only on the message-processing thread.
+    _diff_tracker: DiffTracker | None = PrivateAttr(default=None)
 
     def start(self, secrets: Mapping[str, str | Secret]) -> None:
         # Resolve and validate the pi binary BEFORE super().start so the
@@ -746,6 +782,12 @@ class PiAgent(DefaultAgentWrapper):
         if isinstance(message, SetModelUserMessage):
             # Enqueued on the same FIFO as chat turns so the switch runs strictly
             # between turns (see _handle_set_model); supports_model_selection.
+            self._input_agent_messages.put(message)
+            return True
+        if isinstance(message, RefreshModelsUserMessage):
+            # Enqueued on the same FIFO so the credential re-read + catalog re-emit
+            # runs strictly between turns (see _handle_refresh_models), where the
+            # get_* RPCs are safe. Broadcast on a global credential change.
             self._input_agent_messages.put(message)
             return True
         if isinstance(message, ResumeAgentResponseRunnerMessage):
@@ -1113,6 +1155,97 @@ class PiAgent(DefaultAgentWrapper):
             return []
         return [m for m in models if isinstance(m, dict)]
 
+    def _request_set_model_blocking(
+        self, provider: str, model_id: str, timeout: float = _MODEL_FETCH_TIMEOUT_SECONDS
+    ) -> ModelOption | None:
+        """Send `set_model` and return pi's new current model, or None on failure.
+
+        The non-raising counterpart to `_handle_set_model`'s RPC core, used by the
+        internal auto-reselect (`_reselect_unauthenticated_current_model`). Shares
+        the sole-reader constraint of `_consume_until_command_response`, so it is
+        only safe between turns.
+        """
+        if self._process is None:
+            return None
+        command_id = generate_id()
+        self._send_rpc({"type": "set_model", "id": command_id, "provider": provider, "modelId": model_id})
+        response = self._consume_until_command_response("set_model", command_id, timeout)
+        if response is None or not response.success:
+            return None
+        new_model = _model_option_from_pi(response.data) if isinstance(response.data, dict) else None
+        return new_model or ModelOption(provider=provider, model_id=model_id, display_name=model_id)
+
+    def _reselect_unauthenticated_current_model(
+        self, current_model: ModelOption, curated: list[ModelOption], authenticated: set[str]
+    ) -> ModelOption:
+        """Switch off a current model whose provider is no longer authenticated.
+
+        pi's catalog gates on credential presence, so disconnecting a provider can
+        leave the agent pointed at a model it can no longer run — and because the
+        current model is retained in `curated`, the switcher otherwise stays stuck on
+        it. If an authenticated model is available, switch to the first (newest-first)
+        one so the user is not stranded. Best-effort: a failed switch leaves the
+        current model unchanged. Only call when `current_model.provider` is already
+        known to be unauthenticated, and only after a successful catalog fetch (so pi
+        is proven responsive and the `set_model` write will not block).
+        """
+        replacement = next((option for option in curated if option.provider in authenticated), None)
+        if replacement is None:
+            logger.info(
+                "PiAgent current model {} is no longer authenticated and no authenticated model is available to switch to",
+                current_model.model_id,
+            )
+            return current_model
+        new_model = self._request_set_model_blocking(replacement.provider, replacement.model_id)
+        if new_model is None:
+            logger.info(
+                "PiAgent could not switch off deauthenticated model {}; leaving it selected", current_model.model_id
+            )
+            return current_model
+        logger.info(
+            "PiAgent switched off deauthenticated model {} to authenticated {}",
+            current_model.model_id,
+            new_model.model_id,
+        )
+        return new_model
+
+    def _adopt_preselected_model(
+        self, pi_default: ModelOption | None, options: list[ModelOption], authenticated: set[str]
+    ) -> ModelOption | None:
+        """Adopt the persisted `preselected_model` onto pi at start, returning the model
+        to surface as current.
+
+        Applied before the catalog is surfaced so pi runs the selection from the first
+        turn without the switcher flickering through pi's default. Only a selection pi
+        still offers and whose provider is authenticated is adopted (via `set_model`);
+        otherwise — a disconnected provider, or a failed switch — pi's own default is
+        kept rather than a model that cannot run.
+        """
+        preselected = self.preselected_model
+        if preselected is None:
+            return pi_default
+        if (
+            pi_default is not None
+            and preselected.provider == pi_default.provider
+            and preselected.model_id == pi_default.model_id
+        ):
+            return pi_default
+        if preselected.provider not in authenticated:
+            return pi_default
+        if not any(
+            option.provider == preselected.provider and option.model_id == preselected.model_id for option in options
+        ):
+            return pi_default
+        adopted = self._request_set_model_blocking(
+            preselected.provider, preselected.model_id, _MODEL_FETCH_TIMEOUT_SECONDS
+        )
+        if adopted is None:
+            logger.info(
+                "PiAgent could not adopt preselected model {} at start; using pi default", preselected.model_id
+            )
+            return pi_default
+        return adopted
+
     def _fetch_models_into_state(self) -> None:
         """Fetch pi's model catalog + current model and surface them onto task state.
 
@@ -1132,7 +1265,16 @@ class PiAgent(DefaultAgentWrapper):
             option = _model_option_from_pi(raw)
             if option is not None:
                 options.append(option)
-        curated = _curate_models(options, current_model)
+        authenticated = compute_authenticated_provider_ids()
+        current_model = self._adopt_preselected_model(current_model, options, authenticated)
+        curated = _curate_models(options, current_model, authenticated)
+        # Don't strand the agent on a model whose provider was just deauthorized
+        # (e.g. the user disconnected it): switch to an authenticated model and
+        # re-curate so the now-unusable model drops out of the switcher. Safe here
+        # because the fetch above already proved pi responsive.
+        if current_model is not None and current_model.provider not in authenticated:
+            current_model = self._reselect_unauthenticated_current_model(current_model, curated, authenticated)
+            curated = _curate_models(options, current_model, authenticated)
         if not curated and current_model is None:
             logger.info("PiAgent get_available_models returned no usable models; switcher will fall back to defaults")
             return
@@ -1234,7 +1376,7 @@ class PiAgent(DefaultAgentWrapper):
             option = _model_option_from_pi(raw)
             if option is not None:
                 options.append(option)
-        curated = _curate_models(options, current_model)
+        curated = _curate_models(options, current_model, compute_authenticated_provider_ids())
         if not curated and current_model is None:
             logger.info("PiAgent model probe found no usable models; switcher will fall back to defaults")
             return [], None
@@ -1400,6 +1542,11 @@ class PiAgent(DefaultAgentWrapper):
                 # Between-turns model switch (see _handle_set_model).
                 self._handle_set_model(message)
                 continue
+            if isinstance(message, RefreshModelsUserMessage):
+                # Between-turns credential re-read + catalog re-emit (see
+                # _handle_refresh_models).
+                self._handle_refresh_models(message)
+                continue
             self._run_prompt_turn(message)
 
     def _has_background_tasks(self) -> bool:
@@ -1434,6 +1581,7 @@ class PiAgent(DefaultAgentWrapper):
         # leaves this set so Stop can still settle it.
         self._in_flight_request_id = get_turn_request_id(message)
         self._update_plan_mode_from_message(message)
+        self._ensure_diff_baseline()
         with self._handle_user_message(message):
             # A fresh turn starts un-interrupted: clear interrupt state left by an
             # interrupt that raced in with no turn in flight, which would otherwise
@@ -1645,7 +1793,7 @@ class PiAgent(DefaultAgentWrapper):
         if not isinstance(new_session_id, str) or not new_session_id:
             logger.error(
                 "PiAgent could not read the post-clear pi session id (no get_state response); "
-                "a later resume may regress to the pre-clear session",
+                + "a later resume may regress to the pre-clear session",
             )
             return
         self._session_id = new_session_id
@@ -1663,9 +1811,11 @@ class PiAgent(DefaultAgentWrapper):
         session-level and persists for later turns. On success pi returns the new
         Model; we re-emit a `ModelsAvailableAgentMessage` carrier (same catalog,
         new current model) so the persisted current model and the switcher's
-        selection follow. A `success:false` response (e.g. `Model not found`) or
-        no acknowledgement is raised as `PiSetModelError`, leaving the current
-        model unchanged.
+        selection follow. A `success:false` response (e.g. `Model not found`) is
+        raised as `PiSetModelError` after rolling the switcher back to pi's real
+        current model (the endpoint wrote the requested model optimistically); an
+        unacknowledged switch (pi unreachable) is raised without a rollback, since pi
+        cannot be queried for its state.
         """
         with self._handle_user_message(message):
             command_id = generate_id()
@@ -1680,6 +1830,7 @@ class PiAgent(DefaultAgentWrapper):
                     "pi did not acknowledge set_model within the timeout", exit_code=None, metadata=None
                 )
             if not response.success:
+                self._emit_current_model_rollback()
                 raise PiSetModelError(
                     response.error or f"pi rejected set_model for {message.provider}/{message.model_id}",
                     exit_code=None,
@@ -1705,6 +1856,44 @@ class PiAgent(DefaultAgentWrapper):
                     current_model=new_model,
                 )
             )
+
+    def _emit_current_model_rollback(self) -> None:
+        """Re-emit the model pi is actually on, undoing an optimistically-written switch.
+
+        The set-model endpoint writes the requested model onto task state before pi
+        confirms it, so a rejected switch would otherwise leave the switcher showing a
+        model pi never adopted. Query pi's real current model and re-emit the cached
+        catalog with it so the switcher rolls back. Best-effort: only runs with a
+        cached catalog, and skips when pi reports no current model — the switch
+        failure itself is surfaced separately as a RequestFailure.
+        """
+        if not self._available_models:
+            return
+        state = self._request_state_blocking()
+        current_raw = state.get("model") if isinstance(state, dict) else None
+        current_model = _model_option_from_pi(current_raw) if isinstance(current_raw, dict) else None
+        if current_model is None:
+            return
+        self._output_messages.put(
+            ModelsAvailableAgentMessage(
+                message_id=AgentMessageID(),
+                available_models=self._available_models,
+                current_model=current_model,
+            )
+        )
+
+    def _handle_refresh_models(self, message: RefreshModelsUserMessage) -> None:
+        """Re-fetch pi's catalog and re-emit it after a global credential change.
+
+        Routed through the `_input_agent_messages` FIFO so it runs between turns,
+        where `get_available_models` / `get_state` are safe. Reuses
+        `_fetch_models_into_state` so the authenticated-set filter applied inside
+        that shared path applies here for free. Best-effort and fire-and-forget: a
+        re-fetch that finds nothing leaves the cached catalog as-is rather than
+        blanking it.
+        """
+        del message
+        self._fetch_models_into_state()
 
     def _consume_until_turn_end(self, prompt_id: str = "") -> None:
         """Drive pi's stdout until the current agent run terminates.
@@ -2468,7 +2657,64 @@ class PiAgent(DefaultAgentWrapper):
                     content=(TextBlock(text=state.accumulated_text),),
                 )
             )
+        self._emit_turn_metrics(parsed, state)
         return True
+
+    def _emit_turn_metrics(self, parsed: ParsedAgentEnd, state: _TurnState) -> None:
+        """Emit the per-turn footer metrics at the agent-run boundary.
+
+        The footer under a completed assistant turn shows wall-clock duration,
+        token totals, and the files it changed. Must be emitted BEFORE the turn's
+        terminating `RequestSuccess` so message_conversion stamps it onto the
+        in-progress chat message before finalizing (see `_attach_turn_metrics`).
+        Token totals are summed across the run's assistant messages (pi reports
+        usage per message); an interrupted turn with no usage still emits duration
+        + changed files. pi exposes no numeric context-window threshold on the
+        wire, so the context fields stay unset (the "% context" chip is
+        Claude-only).
+
+        Changed files come from the DiffTracker's tree-diff (git-relative paths
+        covering ALL tools, including bash-driven changes) rather than from tool
+        args, matching Claude and what the frontend's file-click navigation
+        expects. The tree baseline is then re-captured so the next turn's diff is
+        measured from this turn's end.
+        """
+        input_tokens, output_tokens = sum_message_usage(parsed.messages)
+        changed_files = self._collect_changed_files_and_rebaseline()
+        turn_metrics = TurnMetrics(
+            duration_seconds=time.monotonic() - state.start_time,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            reasoning_tokens=None,
+            changed_files=changed_files,
+        )
+        self._output_messages.put(TurnMetricsAgentMessage(message_id=AgentMessageID(), turn_metrics=turn_metrics))
+
+    def _ensure_diff_baseline(self) -> None:
+        """Capture the working-tree baseline before a turn, once.
+
+        Created lazily (not in `start()`) so a git failure never blocks startup and
+        the baseline reflects the tree right before the turn. `DiffTracker.__init__`
+        captures the tree SHA and never raises (it logs and degrades internally).
+        """
+        if self._diff_tracker is None:
+            self._diff_tracker = DiffTracker(self.environment)
+
+    def _collect_changed_files_and_rebaseline(self) -> list[str]:
+        """Return this turn's changed files (git-relative), then re-baseline the tree.
+
+        Diffs the working tree against the SHA captured at the previous turn
+        boundary, so it reflects only what changed during this turn. Re-baselining
+        afterwards means the next turn measures from here. Degrades to an empty
+        list if the tracker is unavailable (e.g. the turn ran before a baseline was
+        captured, as in unit tests that drive the pump directly).
+        """
+        tracker = self._diff_tracker
+        if tracker is None:
+            return []
+        changed_files = tracker.get_changed_file_paths()
+        tracker.update_initial_tree_sha()
+        return changed_files
 
     def _handle_auto_retry_end(self, parsed: ParsedAutoRetryEnd, state: _TurnState) -> None:
         if not parsed.success:

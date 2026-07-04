@@ -64,11 +64,7 @@ const DiffViewOptionItems = ({ isBinary, options }: { isBinary: boolean; options
       {options.lineWrapping === "wrap" ? "Unwrap lines" : "Wrap lines"}
     </DropdownMenu.Item>
     {options.showRenderToggle && (
-      <DropdownMenu.Item
-        disabled={!options.isRenderToggleEnabled}
-        onSelect={() => options.onToggleRender()}
-        data-testid={ElementIds.DIFF_RENDER_TOGGLE}
-      >
+      <DropdownMenu.Item onSelect={() => options.onToggleRender()} data-testid={ElementIds.DIFF_RENDER_TOGGLE}>
         {options.isRendered ? <Code size={14} /> : <BookOpen size={14} />}
         {options.isRendered ? "Show source" : "Render markdown"}
       </DropdownMenu.Item>

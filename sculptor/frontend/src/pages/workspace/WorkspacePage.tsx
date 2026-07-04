@@ -2,6 +2,8 @@ import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useEffect } from "react";
 
+import { useWorkspaceTabActions } from "~/components/useWorkspaceTabActions.ts";
+
 import { useIsMobile } from "../../common/hooks/useLayoutMode.ts";
 import { useImbueNavigate, useWorkspacePageParams } from "../../common/NavigateUtils.ts";
 import { markSwitchMilestone } from "../../common/perf/workspaceSwitchProfiler.ts";
@@ -40,7 +42,8 @@ const WorkspacePageContent = ({ workspaceId, taskId }: { workspaceId: string; ta
 
 export const WorkspacePage = (): ReactElement | null => {
   const { workspaceID, agentID: agentIDFromUrl } = useWorkspacePageParams();
-  const { navigateToAgent, navigateToHome } = useImbueNavigate();
+  const { navigateToAgent } = useImbueNavigate();
+  const { navigateToNextTab } = useWorkspaceTabActions();
   const isMobile = useIsMobile();
   // Narrow per-workspace slices, never the raw workspace/task arrays: those
   // rebuild on every streaming tick, and this component sits above the whole
@@ -59,9 +62,13 @@ export const WorkspacePage = (): ReactElement | null => {
   useEffect(() => {
     if (isKnownWorkspace === undefined) return; // first WS snapshot hasn't arrived
     if (!isKnownWorkspace) {
-      // Workspace was deleted between sessions — drop the tab and bail out.
+      // The workspace backing this route is gone: deleted from another session,
+      // or the active tab we just optimistically deleted while this route still
+      // holds the stale param. Drop the now-stale tab and route through
+      // navigateToNextTab (which falls back to Home when no tabs remain) so we
+      // land on a surviving sibling instead of hard-coding Home.
       removeTab(workspaceID);
-      navigateToHome();
+      navigateToNextTab(workspaceID);
       return;
     }
     if (agentIDFromUrl) return; // URL is authoritative, nothing to fix up
@@ -83,7 +90,7 @@ export const WorkspacePage = (): ReactElement | null => {
     agentIds,
     savedAgentId,
     navigateToAgent,
-    navigateToHome,
+    navigateToNextTab,
     setAgentForWorkspace,
     removeTab,
   ]);

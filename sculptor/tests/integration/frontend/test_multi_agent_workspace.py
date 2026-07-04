@@ -8,8 +8,6 @@ These tests verify:
 - Workspace survival when one agent is deleted from a multi-agent workspace
 """
 
-import re
-
 import pytest
 from playwright.sync_api import expect
 
@@ -23,6 +21,7 @@ from sculptor.testing.elements.section_helpers import drag_panel_to_section
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.playwright_utils import add_agent_and_wait_for_ready
 from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -58,6 +57,39 @@ def test_create_second_agent_in_existing_workspace(
     # Verify the chat panel is visible for the new agent
     chat_panel = task_page.get_chat_panel()
     expect(chat_panel).to_be_visible()
+
+
+@user_story("to immediately chat with a newly added agent")
+def test_message_to_newly_added_agent_lands_on_that_agent(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """A message sent immediately after adding a second agent must reach the new
+    agent's chat, not the outgoing one.
+
+    Adding an agent switches to it asynchronously; typing before the switch
+    settles can leave the new agent's send button disabled or its editor
+    unmounted.  ``add_agent_and_wait_for_ready`` settles the switch, and this
+    test pins that the new agent receives the message and no copy leaks onto
+    the first.
+    """
+    page = sculptor_instance_.page
+    second_agent_message = "Hello from the second agent"
+
+    task_page = start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="New Agent Chat WS")
+    wait_for_completed_message_count(task_page.get_chat_panel(), expected_message_count=2)
+
+    task_page_2 = add_agent_and_wait_for_ready(page)
+    chat_panel_2 = task_page_2.get_chat_panel()
+    send_chat_message(chat_panel_2, second_agent_message)
+    wait_for_completed_message_count(chat_panel_2, expected_message_count=2)
+    expect(chat_panel_2.get_messages().filter(has_text=second_agent_message)).to_have_count(1)
+
+    # The message landed only on the new agent: switching back shows the first
+    # agent still has just its own single exchange and no copy of the message.
+    PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs().first.click()
+    first_agent_chat = task_page.get_chat_panel()
+    expect(first_agent_chat.get_messages()).to_have_count(2)
+    expect(first_agent_chat.get_messages().filter(has_text=second_agent_message)).to_have_count(0)
 
 
 @user_story("to see which agents share a workspace")
@@ -165,20 +197,18 @@ def test_mark_read_follows_agent_panel_in_active_side_section(
     """
     page = sculptor_instance_.page
     task_page = PlaywrightTaskPage(page=page)
-    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
 
     # Step 1: Agent A with a completed first exchange, then agent B.
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Side Section Read WS")
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # create_agent_panel creates B and navigates to it, so the URL carries B's id —
-    # that id keys B's panel tab (``agent:<taskId>``).
-    create_agent_panel(page, section="center")
-    expect(panel_tabs.get_panel_tabs()).to_have_count(2)
-    match = re.search(r"/agent/([^/?#]+)", page.url)
-    assert match is not None, f"expected an agent route, got {page.url}"
-    panel_id = f"agent:{match.group(1)}"
+    # add_agent_and_wait_for_ready settles the async switch to B, so B is
+    # reliably the active agent and its task id keys B's panel tab
+    # (``agent:<taskId>``). Reading the id from the URL right after creation
+    # would race the navigation and could capture agent A's id instead.
+    task_page_2 = add_agent_and_wait_for_ready(page)
+    panel_id = f"agent:{task_page_2.get_task_id()}"
 
     # Step 2: Move B into the right section; clicking its tab makes B the active
     # panel of the active right sub-section.
@@ -249,8 +279,8 @@ def test_workspace_deleted_when_last_agent_deleted(
     workspace_dirs_after = {p for p in workspaces_dir.iterdir() if p.is_dir()} if workspaces_dir.exists() else set()
     deleted_dirs = workspace_dirs_before - workspace_dirs_after
     assert len(deleted_dirs) > 0, (
-        f"Expected at least one workspace directory to be deleted. "
-        f"Before: {workspace_dirs_before}, After: {workspace_dirs_after}"
+        "Expected at least one workspace directory to be deleted. "
+        + f"Before: {workspace_dirs_before}, After: {workspace_dirs_after}"
     )
 
 

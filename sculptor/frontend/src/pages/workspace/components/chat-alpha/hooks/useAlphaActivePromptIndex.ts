@@ -1,7 +1,9 @@
 import type { Virtualizer } from "@tanstack/react-virtual";
 import { throttle } from "lodash";
 import type { MutableRefObject, RefObject } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+
+import type { ScrollStateMachine } from "../scroll/scrollStateMachine.ts";
 
 /**
  * How far below the current scrollTop a prompt's virtual start position can be
@@ -59,9 +61,17 @@ export const useAlphaActivePromptIndex = (
   virtualizer: Virtualizer<HTMLDivElement, Element>,
   scrollContainerRef: RefObject<HTMLDivElement | null>,
   isAtBottom: boolean,
-  isNavigatingRef: MutableRefObject<boolean>,
+  machine: ScrollStateMachine,
 ): ActivePromptIndex => {
   const [activeIndex, setActiveIndex] = useState<number>(0);
+
+  // Whether keyboard prompt navigation is active, read off the scroll state
+  // machine's `navigating` phase. Suppresses the stick-to-bottom highlight so
+  // the explicit nav cursor isn't clobbered.
+  const isNavigating = useSyncExternalStore(
+    machine.subscribe,
+    () => machine.getState().authority.kind === "navigating",
+  );
 
   // Timestamp (ms, Date.now) until which the scroll-spy should skip updates
   // so programmatic scrolls from `setIndex` / `scrollToIndex` can't clobber
@@ -69,24 +79,36 @@ export const useAlphaActivePromptIndex = (
   const programmaticScrollUntilRef = useRef<number>(0);
 
   // Keep a ref so the throttled handler always reads the latest value without
-  // being recreated on every render.
+  // being recreated on every render.  Written in an effect (not during render)
+  // because the ref is only consumed in scroll/callbacks, never read in render.
   const userPromptIndicesRef = useRef(userPromptIndices);
-  userPromptIndicesRef.current = userPromptIndices;
+  useEffect(() => {
+    userPromptIndicesRef.current = userPromptIndices;
+  });
 
-  // Track whether we were at the bottom on the previous render.  When a new
-  // message is added the content height jumps before auto-scroll catches up,
-  // so `isAtBottom` can briefly flicker to false.  By remembering that we WERE
-  // at the bottom we can hold the last-dot highlight through that gap.
+  // Track whether we were at the bottom on the previous committed render.  When
+  // a new message is added the content height jumps before auto-scroll catches
+  // up, so `isAtBottom` can briefly flicker to false.  By remembering that we
+  // WERE at the bottom we can hold the last-dot highlight through that gap.
+  // The refs are written in an effect (after commit) so they hold the previous
+  // render's values across exactly one external re-render; the read below feeds
+  // `shouldStickToBottom`, which can only be computed from the prior render and
+  // therefore cannot be lifted to state without collapsing that one-render hold.
   const wasAtBottomRef = useRef(isAtBottom);
   const prevLengthRef = useRef(userPromptIndices.length);
 
+  // Prev-render tracker: reads the previous committed render's values (written
+  // by the effect below). This can only be derived from the prior render, so it
+  // cannot be lifted to state without collapsing the one-render hold.
   const shouldStickToBottom =
-    isAtBottom || (wasAtBottomRef.current && userPromptIndices.length >= prevLengthRef.current);
+    isAtBottom ||
+    // eslint-disable-next-line react-hooks/refs
+    (wasAtBottomRef.current && userPromptIndices.length >= prevLengthRef.current);
 
-  // Update refs *after* computing shouldStickToBottom so the comparison uses
-  // the previous render's values.
-  wasAtBottomRef.current = isAtBottom;
-  prevLengthRef.current = userPromptIndices.length;
+  useEffect(() => {
+    wasAtBottomRef.current = isAtBottom;
+    prevLengthRef.current = userPromptIndices.length;
+  });
 
   useEffect(() => {
     const el = scrollContainerRef.current;
@@ -152,14 +174,15 @@ export const useAlphaActivePromptIndex = (
   // after a new message is added), highlight the last prompt dot.  Suppressed
   // during keyboard navigation so the explicit cursor isn't clobbered.
   const effectiveIndex =
-    !isNavigatingRef.current && shouldStickToBottom && userPromptIndices.length > 0
-      ? userPromptIndices.length - 1
-      : activeIndex;
+    !isNavigating && shouldStickToBottom && userPromptIndices.length > 0 ? userPromptIndices.length - 1 : activeIndex;
 
   // Mirror the effective index into a ref so arrow-key handlers can read it
-  // synchronously without waiting for a re-render.
+  // synchronously without waiting for a re-render.  `setIndex` writes it
+  // eagerly; this effect keeps it in sync after scroll-spy driven updates.
   const indexRef = useRef(effectiveIndex);
-  indexRef.current = effectiveIndex;
+  useEffect(() => {
+    indexRef.current = effectiveIndex;
+  });
 
   const setIndex = useCallback((idx: number): void => {
     indexRef.current = idx;

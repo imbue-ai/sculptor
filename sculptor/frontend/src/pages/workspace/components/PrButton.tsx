@@ -14,7 +14,7 @@ import styles from "./PrButton.module.scss";
 import { PrDetailDropdown } from "./PrDetailDropdown.tsx";
 import { PrPromptDialog } from "./PrPromptDialog.tsx";
 
-export type GitProvider = "gitlab" | "github" | null;
+export type GitProvider = "github" | null;
 
 export type PrErrorCategory =
   | "cli_missing"
@@ -26,7 +26,6 @@ export type PrErrorCategory =
 
 export type EffectiveError = {
   category: PrErrorCategory;
-  provider: "gitlab" | "github" | null;
   message: string | null;
 };
 
@@ -36,78 +35,36 @@ type ErrorContent = {
   command: string | null;
 };
 
-const ERROR_CONTENT: Record<string, Record<string, ErrorContent>> = {
+const ERROR_CONTENT: Record<string, ErrorContent> = {
   cli_missing: {
-    gitlab: {
-      title: "GitLab CLI not installed",
-      description: "Install glab to create and manage merge requests.",
-      command: "brew install glab",
-    },
-    github: {
-      title: "GitHub CLI not installed",
-      description: "Install gh to create and manage pull requests.",
-      command: "brew install gh",
-    },
+    title: "GitHub CLI not installed",
+    description: "Install gh to create and manage pull requests.",
+    command: "brew install gh",
   },
   not_authenticated: {
-    gitlab: {
-      title: "GitLab authentication required",
-      description: "Sign in to enable merge requests.",
-      command: "glab auth login",
-    },
-    github: {
-      title: "GitHub authentication required",
-      description: "Sign in to enable pull requests.",
-      command: "gh auth login",
-    },
+    title: "GitHub authentication required",
+    description: "Sign in to enable pull requests.",
+    command: "gh auth login",
   },
   no_access: {
-    gitlab: {
-      title: "Repository access denied",
-      description: "Can't access this repository. Re-authenticate, or check your access with your admin.",
-      command: "glab auth login --scopes api,write_repository",
-    },
-    github: {
-      title: "Repository access denied",
-      description: "Can't access this repository. Re-authenticate, or check your access with your admin.",
-      command: "gh auth login --scopes repo",
-    },
+    title: "Repository access denied",
+    description: "Can't access this repository. Re-authenticate, or check your access with your admin.",
+    command: "gh auth login --scopes repo",
   },
   network_error: {
-    gitlab: {
-      title: "Can't connect to GitLab",
-      description: "DNS resolution failed. Check your network connection.",
-      command: null,
-    },
-    github: {
-      title: "Can't connect to GitHub",
-      description: "DNS resolution failed. Check your network connection.",
-      command: null,
-    },
+    title: "Can't connect to GitHub",
+    description: "DNS resolution failed. Check your network connection.",
+    command: null,
   },
   rate_limited: {
-    gitlab: {
-      title: "Rate limited by GitLab",
-      description: "Too many API requests. Status updates are paused and will resume automatically.",
-      command: null,
-    },
-    github: {
-      title: "Rate limited by GitHub",
-      description: "Too many API requests. Status updates are paused and will resume automatically.",
-      command: null,
-    },
+    title: "Rate limited by GitHub",
+    description: "Too many API requests. Status updates are paused and will resume automatically.",
+    command: null,
   },
   transient: {
-    gitlab: {
-      title: "Failed to fetch MR status",
-      description: "Something went wrong. Will retry automatically.",
-      command: null,
-    },
-    github: {
-      title: "Failed to fetch PR status",
-      description: "Something went wrong. Will retry automatically.",
-      command: null,
-    },
+    title: "Failed to fetch PR status",
+    description: "Something went wrong. Will retry automatically.",
+    command: null,
   },
 };
 
@@ -118,11 +75,10 @@ const USER_ACTIONABLE_ERRORS = new Set<PrErrorCategory>([
   "network_error",
 ]);
 
-const getErrorContent = (category: PrErrorCategory, provider: "gitlab" | "github" | null): ErrorContent => {
-  const providerKey = provider ?? "github";
+const getErrorContent = (category: PrErrorCategory): ErrorContent => {
   return (
-    ERROR_CONTENT[category]?.[providerKey] ?? {
-      title: providerKey === "gitlab" ? "Failed to fetch MR status" : "Failed to fetch PR status",
+    ERROR_CONTENT[category] ?? {
+      title: "Failed to fetch PR status",
       description: "Something went wrong. Will retry automatically.",
       command: null,
     }
@@ -147,12 +103,8 @@ const CreatePrButton = ({ targetBranch, gitProvider }: CreatePrButtonProps): Rea
   const chatActions = useAtomValue(chatActionsAtom);
   const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
 
-  const isGitLab = gitProvider === "gitlab";
-  const buttonLabel = isGitLab ? "Create MR" : "Create PR";
-
   const handleClick = (): void => {
-    const prTerm = isGitLab ? "merge request" : "pull request";
-    const message = `${prCreationPrompt}\n\nTarget the ${prTerm} against \`${targetBranch}\`.`;
+    const message = `${prCreationPrompt}\n\nTarget the pull request against \`${targetBranch}\`.`;
     posthog.capture("pr.create_initiated", {
       git_provider: gitProvider,
       // The branch name is user-entered text (it can encode feature/ticket/
@@ -172,14 +124,14 @@ const CreatePrButton = ({ targetBranch, gitProvider }: CreatePrButtonProps): Rea
             data-testid={ElementIds.PR_BUTTON_CREATE}
           >
             <PlusIcon size={12} className={styles.plusIcon} />
-            <Text size="1">{buttonLabel}</Text>
+            <Text size="1">Create PR</Text>
           </button>
         </ContextMenu.Trigger>
         <ContextMenu.Content size="1">
           <ContextMenu.Item onSelect={() => setIsPromptDialogOpen(true)}>Edit prompt...</ContextMenu.Item>
         </ContextMenu.Content>
       </ContextMenu.Root>
-      <PrPromptDialog open={isPromptDialogOpen} onOpenChange={setIsPromptDialogOpen} gitProvider={gitProvider} />
+      <PrPromptDialog open={isPromptDialogOpen} onOpenChange={setIsPromptDialogOpen} />
     </>
   );
 };
@@ -245,11 +197,6 @@ type OpenPrButtonProps = {
 };
 
 const OpenPrButton = ({ prStatus, isDropdownOpen, gitProvider }: OpenPrButtonProps): ReactElement => {
-  const isGitHub = gitProvider === "github";
-  const prefix = isGitHub ? "#" : "!";
-  const label = isGitHub ? "PR" : "MR";
-  const providerName = isGitHub ? "GitHub" : "GitLab";
-
   const handleOpenUrl = (): void => {
     if (prStatus.prWebUrl) {
       posthog.capture("pr.opened_in_browser", {
@@ -262,17 +209,14 @@ const OpenPrButton = ({ prStatus, isDropdownOpen, gitProvider }: OpenPrButtonPro
 
   return (
     <div className={styles.openButton}>
-      <Tooltip content={`Open ${prefix}${prStatus.prIid} in ${providerName}`}>
+      <Tooltip content={`Open #${prStatus.prIid} in GitHub`}>
         <button
           type="button"
           className={styles.prNumberArea}
           onClick={handleOpenUrl}
           data-testid={ElementIds.PR_BUTTON_OPEN}
         >
-          <Text size="1">
-            {label} {prefix}
-            {prStatus.prIid}
-          </Text>
+          <Text size="1">PR #{prStatus.prIid}</Text>
           <Tooltip content={getPipelineTooltip(prStatus.pipelineStatus)}>
             <span className={`${styles.statusDot} ${getPipelineDotClass(prStatus.pipelineStatus)}`} />
           </Tooltip>
@@ -296,15 +240,11 @@ type MergedPrButtonProps = {
 };
 
 const MergedPrButton = ({ prStatus, gitProvider }: MergedPrButtonProps): ReactElement => {
-  const isGitHub = gitProvider === "github";
-  const prefix = isGitHub ? "#" : "!";
-  const label = isGitHub ? "PR" : "MR";
-  const providerName = isGitHub ? "GitHub" : "GitLab";
   const isClosed = prStatus.prState === "closed";
   const stateLabel = isClosed ? "closed" : "merged";
   const tooltipContent = isClosed
-    ? `${prefix}${prStatus.prIid} was closed without merging — open in ${providerName}`
-    : `Open ${prefix}${prStatus.prIid} in ${providerName}`;
+    ? `#${prStatus.prIid} was closed without merging — open in GitHub`
+    : `Open #${prStatus.prIid} in GitHub`;
 
   const handleOpenUrl = (): void => {
     if (prStatus.prWebUrl) {
@@ -326,10 +266,7 @@ const MergedPrButton = ({ prStatus, gitProvider }: MergedPrButtonProps): ReactEl
         data-pr-state={prStatus.prState}
       >
         <GitMergeIcon size={12} className={styles.mergeIcon} />
-        <Text size="1">
-          {label} {prefix}
-          {prStatus.prIid}
-        </Text>
+        <Text size="1">PR #{prStatus.prIid}</Text>
         <Text size="1" className={styles.mergedLabel}>
           {stateLabel}
         </Text>
@@ -338,19 +275,18 @@ const MergedPrButton = ({ prStatus, gitProvider }: MergedPrButtonProps): ReactEl
   );
 };
 
-const LoadingPrButton = ({ gitProvider }: { gitProvider: GitProvider }): ReactElement => (
+const LoadingPrButton = (): ReactElement => (
   <div className={styles.loadingButton}>
     <Spinner size="1" />
-    <Text size="1">Checking {gitProvider === "gitlab" ? "MR" : "PR"}...</Text>
+    <Text size="1">Checking PR...</Text>
   </div>
 );
 
 type ErrorPrButtonProps = {
   error: EffectiveError;
-  gitProvider: GitProvider;
 };
 
-const ErrorPrButton = ({ error, gitProvider }: ErrorPrButtonProps): ReactElement => {
+const ErrorPrButton = ({ error }: ErrorPrButtonProps): ReactElement => {
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -363,9 +299,7 @@ const ErrorPrButton = ({ error, gitProvider }: ErrorPrButtonProps): ReactElement
   }, []);
 
   const isUserActionable = USER_ACTIONABLE_ERRORS.has(error.category);
-  const content = getErrorContent(error.category, error.provider ?? gitProvider);
-  const isGitLab = (error.provider ?? gitProvider) === "gitlab";
-  const buttonLabel = isGitLab ? "Create MR" : "Create PR";
+  const content = getErrorContent(error.category);
 
   const handleCopyCommand = useCallback(async (): Promise<void> => {
     if (!content.command) return;
@@ -395,7 +329,7 @@ const ErrorPrButton = ({ error, gitProvider }: ErrorPrButtonProps): ReactElement
             ) : (
               <Info size={12} className={styles.infoIcon} />
             )}
-            <Text size="1">{buttonLabel}</Text>
+            <Text size="1">Create PR</Text>
           </span>
         </Popover.Trigger>
         <Popover.Trigger>
@@ -457,15 +391,8 @@ const AssignPrButton = ({ prStatus, targetBranch, gitProvider, onSwitchTarget }:
   const prCreationPrompt = useAtomValue(prCreationPromptAtom);
   const chatActions = useAtomValue(chatActionsAtom);
 
-  const isGitLab = gitProvider === "gitlab";
-  const prefix = isGitLab ? "!" : "#";
-  const label = isGitLab ? "MR" : "PR";
-  const assignLabel = isGitLab ? "Assign MR" : "Assign PR";
-  const createLabel = isGitLab ? "Create MR" : "Create PR";
-
   const handleCreate = (): void => {
-    const prTerm = isGitLab ? "merge request" : "pull request";
-    const message = `${prCreationPrompt}\n\nTarget the ${prTerm} against \`${targetBranch}\`.`;
+    const message = `${prCreationPrompt}\n\nTarget the pull request against \`${targetBranch}\`.`;
     posthog.capture("pr.create_initiated", {
       git_provider: gitProvider,
       // The branch name is user-entered text (it can encode feature/ticket/
@@ -486,20 +413,19 @@ const AssignPrButton = ({ prStatus, targetBranch, gitProvider, onSwitchTarget }:
         <div className={styles.assignButton} data-testid={ElementIds.PR_BUTTON_ASSIGN}>
           <span className={styles.assignMainArea}>
             <GitMergeIcon size={12} className={styles.assignMergeIcon} />
-            <Text size="1">{assignLabel}</Text>
+            <Text size="1">Assign PR</Text>
           </span>
         </div>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content size="1" align="end">
         <DropdownMenu.Item onSelect={handleCreate}>
           <PlusIcon size={12} />
-          {createLabel} → <span className={styles.monoBranch}>{targetBranch}</span>
+          Create PR → <span className={styles.monoBranch}>{targetBranch}</span>
         </DropdownMenu.Item>
         <DropdownMenu.Separator />
         <DropdownMenu.Item onSelect={handleSwitchTarget}>
           <GitMergeIcon size={12} />
-          {label} {prefix}
-          {prStatus.mismatchedPrIid} exists → switch target to{" "}
+          PR #{prStatus.mismatchedPrIid} exists → switch target to{" "}
           <span className={styles.monoBranch}>{prStatus.mismatchedPrTargetBranch}</span>
         </DropdownMenu.Item>
       </DropdownMenu.Content>
@@ -519,8 +445,7 @@ export const PrButton = ({
 
   const effectiveError: EffectiveError | null = prStatus?.errorCategory
     ? {
-        category: prStatus.errorCategory,
-        provider: prStatus.errorProvider ?? null,
+        category: prStatus.errorCategory as PrErrorCategory,
         message: prStatus.errorMessage ?? null,
       }
     : null;
@@ -530,14 +455,14 @@ export const PrButton = ({
     if (hideCreateAction) {
       return null;
     }
-    return <LoadingPrButton gitProvider={gitProvider} />;
+    return <LoadingPrButton />;
   }
 
   if (effectiveError) {
     if (hideCreateAction) {
       return null;
     }
-    return <ErrorPrButton error={effectiveError} gitProvider={gitProvider} />;
+    return <ErrorPrButton error={effectiveError} />;
   }
 
   if (prStatus.prState === "none") {
@@ -568,7 +493,7 @@ export const PrButton = ({
       <Popover.Root open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
         <OpenPrButton prStatus={prStatus} isDropdownOpen={isDropdownOpen} gitProvider={gitProvider} />
         <Popover.Content align="end" sideOffset={5} onOpenAutoFocus={(e) => e.preventDefault()}>
-          <PrDetailDropdown prStatus={prStatus} gitProvider={gitProvider} />
+          <PrDetailDropdown prStatus={prStatus} />
         </Popover.Content>
       </Popover.Root>
     );

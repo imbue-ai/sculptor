@@ -10,7 +10,6 @@ import pytest
 from pydantic import ValidationError
 
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
-from sculptor.services.dependency_management_service import PI_VERSION_RANGE
 from sculptor.services.managed_tools import CLAUDE_VERSION_RANGE
 from sculptor.services.managed_tools import ClaudeManagedTool
 from sculptor.services.managed_tools import GCP_BUCKET_BASE_URL
@@ -26,8 +25,8 @@ from sculptor.services.managed_tools import _PI_PLATFORM_MAP
 from sculptor.services.managed_tools import get_managed_tool
 from sculptor.services.managed_tools import get_managed_tools
 
-# Verified darwin-arm64 sha256 for pi 0.78.0; regenerate with ``just compute-pi-pin 0.78.0``.
-_PI_DARWIN_ARM64_SHA256_0_78_0 = "68ebbe4f56a136a1c7bace3393eca4ad0aa1fd9f253b797fd370058bd39fe070"
+# Verified darwin-arm64 sha256 for pi 0.80.2; regenerate with ``just compute-pi-pin 0.80.2``.
+_PI_DARWIN_ARM64_SHA256_0_80_2 = "c7d125bbdebd863fa76d92274458ba0eb405e5cde39db34db1f49f767ed9f1dd"
 
 
 def _instantiate_with_no_arguments(candidate: Callable[[], object]) -> object:
@@ -91,10 +90,6 @@ def test_get_managed_tool_returns_none_for_unmanaged_git() -> None:
     assert get_managed_tool(Dependency.GIT) is None
 
 
-def test_pi_pin_version_equals_recommended_version_of_pi_version_range() -> None:
-    assert PI_PIN.version == PI_VERSION_RANGE.recommended_version
-
-
 def test_pi_pin_covers_exactly_the_three_supported_platform_keys() -> None:
     assert set(PI_PIN.platforms) == {"darwin-arm64", "darwin-x64", "linux-x64"}
 
@@ -105,7 +100,7 @@ def test_pi_pin_asset_names_follow_the_pi_release_naming_for_each_platform() -> 
 
 
 def test_pi_pin_darwin_arm64_sha256_matches_the_verified_value() -> None:
-    assert PI_PIN.platforms["darwin-arm64"].sha256 == _PI_DARWIN_ARM64_SHA256_0_78_0
+    assert PI_PIN.platforms["darwin-arm64"].sha256 == _PI_DARWIN_ARM64_SHA256_0_80_2
 
 
 def test_pi_pin_platform_sha256s_are_distinct_lowercase_hex_digests() -> None:
@@ -210,12 +205,6 @@ class TestPiManagedToolRegistration:
         assert tool.tool == Dependency.PI
         assert tool.retention_keep == 1
         assert tool.platform_keys == frozenset({"darwin-arm64", "darwin-x64", "linux-x64"})
-
-
-def test_pi_managed_tool_version_range_equals_the_service_pi_version_range() -> None:
-    # version_range is built from the pin (importing the service's PI_VERSION_RANGE
-    # would cycle); this test keeps the two from drifting apart.
-    assert PiManagedTool().version_range == PI_VERSION_RANGE
 
 
 def test_pi_platform_map_values_match_the_advertised_platform_keys() -> None:

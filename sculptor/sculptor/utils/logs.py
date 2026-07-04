@@ -88,7 +88,7 @@ def setup_loggers(
         logger.remove(default_handler_id)
 
     # add the stderr handler
-    logger.add(sys.__stderr__, level=required_level, format=format, diagnose=False)  # type: ignore
+    logger.add(sys.__stderr__, level=required_level, format=format, diagnose=False)  # type: ignore[no-matching-overload]
 
     # install internal log levels for exception reporting
     ensure_core_log_levels_configured()
@@ -198,9 +198,12 @@ def _patch_log_context_in_place(
     record: "loguru.Record", format_task_id: Callable[[str], str] = format_task_id
 ) -> None:
     record["extra"]["full_location"] = fix_full_location(record)
-    task_id: str | None = record["extra"].get("task_id", None)
+    # `record["extra"]` is untyped, and these values are typed-ID objects (e.g. TaskID),
+    # not `str` — so the `str()` coercions below are load-bearing. The locals are left
+    # unannotated rather than mis-annotated as `str | None`.
+    task_id = record["extra"].get("task_id", None)
     if task_id is None:
-        request_id: str | None = record["extra"].get("request_id", "")
+        request_id = record["extra"].get("request_id", "")
         formatted_context = str(request_id) if request_id else ""
         record["extra"]["formatted_context"] = f" [{formatted_context}]"
     else:

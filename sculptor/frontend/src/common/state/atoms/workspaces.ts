@@ -12,6 +12,7 @@ import { invalidateWorkspaceGitQueries, removeWorkspaceQueriesCache } from "../.
 import { tasksArrayAtom } from "./tasks.ts";
 import { workspaceOpenCloseErrorToastAtom } from "./toasts";
 import { getAgentDotStatusWithUnreadOverride } from "./unreadOverrides.ts";
+import { viewedAgentIdAtom } from "./viewedAgent.ts";
 import type { SetupStatusSnapshot } from "./workspaceSetupStatus";
 import { workspaceSetupStatusAtomFamily } from "./workspaceSetupStatus";
 
@@ -68,13 +69,22 @@ const areWorkspaceDotStatusesEqual = (a: WorkspaceDotStatus, b: WorkspaceDotStat
  */
 export const workspaceDotStatusAtomFamily = atomFamily((workspaceId: string) =>
   selectAtom(
-    tasksArrayAtom,
-    (tasks): WorkspaceDotStatus =>
+    // Pair the tasks with the viewed agent id so the aggregate re-derives when
+    // either changes. viewedAgentIdAtom resolves to a primitive, so layout
+    // writes that don't change WHICH agent is viewed never reach the selector,
+    // and the equality guard below still stops propagation unless a flag flips.
+    atom((get) => ({ tasks: get(tasksArrayAtom), viewedAgentId: get(viewedAgentIdAtom) })),
+    ({ tasks, viewedAgentId }): WorkspaceDotStatus =>
       computeWorkspaceDotStatus(
         (tasks ?? []).filter((task) => task.workspaceId === workspaceId),
         // Override-aware per-task resolution so a manual "Mark as unread"
-        // lights the workspace row exactly like the agent's panel tab.
-        (task) => getAgentDotStatusWithUnreadOverride(task.id, task),
+        // lights the workspace row exactly like the agent's panel tab. The
+        // viewed agent — necessarily one of the ACTIVE workspace's tasks, so
+        // the id match scopes it for free — counts as focused: its content is
+        // on screen, so it must not light the row as unread while the debounced
+        // mark-read lags (an explicit mark-unread override still wins inside
+        // the helper).
+        (task) => getAgentDotStatusWithUnreadOverride(task.id, task, task.id === viewedAgentId),
       ),
     areWorkspaceDotStatusesEqual,
   ),
@@ -90,7 +100,7 @@ const openWorkspaceIdsAtom = atom<ReadonlyArray<string>>((get) => {
   return workspaces.filter((ws) => ws.isOpen !== false).map((ws) => ws.objectId);
 });
 
-/** Sentinel `activeIndex` meaning "no MRU pointer" — rootLoader sends user to /ws/new. */
+/** Sentinel `activeIndex` meaning "no MRU pointer" — rootLoader falls back to /home. */
 export const INVALID_ACTIVE_INDEX = -1;
 
 export type TabEntry = { tabId: string; agentId: string | null };
@@ -210,8 +220,8 @@ const applyClose = (state: TabsState, tabId: string): TabsState => {
     // The active tab was closed. Land on the neighbor that shifted into its
     // slot (or the new last tab if we removed the end) so the persisted state
     // never points past the end — order[INVALID_ACTIVE_INDEX] is undefined, and
-    // on reload rootLoader reads that as "no MRU pointer" and bounces to
-    // /ws/new even though tabs survive. A subsequent navigation may refine this
+    // on reload rootLoader reads that as "no MRU pointer" and falls back to
+    // /home even though tabs survive. A subsequent navigation may refine this
     // to an MRU target; this only guarantees the pointer is always valid.
     // Only when nothing survives do we fall back to the sentinel.
     activeIndex = order.length > 0 ? Math.min(removedIndex, order.length - 1) : INVALID_ACTIVE_INDEX;
@@ -291,8 +301,8 @@ export const clearDraftCreatingAtom = atom(null, (get, set, draftId: string): vo
  *   - Stale WebSocket snapshots arriving after the close (e.g. from a slower,
  *     earlier open PATCH whose response is reordered behind the close ack)
  *     can't revert the workspace back to open.
- *   - The "Closed" pill stays stable instead of flickering as out-of-order
- *     SUs land.
+ *   - The workspace's closed state stays stable — it doesn't flicker back
+ *     into the open-tab set as out-of-order snapshot updates land.
  *
  * `updateWorkspacesAtom` consults this set and forces incoming `isOpen=true`
  * snapshots to `false` for any workspace in here. Entries are cleared by:
@@ -493,7 +503,7 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
     // active observers refetch. The same `diffUpdatedAt` bump fires for any
     // git event the backend surfaces — file changes, commits, branch
     // movement — so it's the right shared trigger. Non-git workspace queries
-    // (e.g. future MR status) live outside the `git` subtree and are
+    // (e.g. future PR status) live outside the `git` subtree and are
     // unaffected. We compare against the prior atom value here rather than
     // tracking the previous snapshot externally.
     const previous = get(workspaceAtomFamily(workspace.objectId));
@@ -641,7 +651,8 @@ export const optimisticDeleteWorkspaceAtom = atom(null, (get, set, workspaceId: 
   // Remove from tab order so the tab disappears immediately. When the deleted
   // workspace was the active tab, applyClose lands activeIndex on a surviving
   // neighbor so the persisted state never points past the end (which would make
-  // a reload bounce to /ws/new); a following navigation may refine it further.
+  // a reload fall back to /home instead of restoring the last-viewed
+  // workspace); a following navigation may refine it further.
   set(tabsAtom, applyClose(get(tabsAtom), workspaceId));
   // Track the deletion so components with their own workspace lists
   // (e.g. RecentWorkspaces) can filter it out without a page reload.

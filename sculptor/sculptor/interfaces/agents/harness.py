@@ -162,6 +162,16 @@ class Harness(BaseModel, abc.ABC):
         state)."""
         return None
 
+    def sources_backend_models(self) -> bool:
+        """Whether the switcher catalog comes from a backend (pi).
+
+        When True, `get_available_models` is authoritative: an empty list means
+        "no providers are configured" (the switcher prompts the user to
+        authenticate) rather than "fall back to the built-in list". The base
+        sources none, so the frontend uses its built-in default list.
+        """
+        return False
+
     def is_ask_user_question_tool(self, tool_name: str) -> bool:
         return False
 
@@ -198,7 +208,7 @@ class Harness(BaseModel, abc.ABC):
         """
         raise NotImplementedError(
             "a harness whose is_ask_user_question_tool can return True must override "
-            "reconstruct_pending_ask_user_question"
+            + "reconstruct_pending_ask_user_question"
         )
 
     def get_plan_file_path_from_tool_use(self, block: ContentBlock) -> str | None:

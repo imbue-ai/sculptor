@@ -100,10 +100,15 @@ def test_git_init_dialog_for_non_git_directories(sculptor_instance_: SculptorIns
     add_repo_dialog = add_ws_page.get_add_repo_dialog()
     expect(add_repo_dialog).to_be_visible()
 
+    add_repo_dialog.select_local_source()
     path_input = add_repo_dialog.get_path_input()
     path_input.fill(str(non_git_dir))
-    # Dismiss the autocomplete dropdown, then submit
-    path_input.press("Escape")
+
+    # Empty directory: the autocomplete dropdown never opens (the backend
+    # filters out the lone `.git` entry as a dotfile and returns []). Submit
+    # via Enter directly — pressing Escape first would bubble to Radix Dialog
+    # and close the dialog, since PathAutocomplete only swallows Escape when
+    # its own dropdown is open.
     path_input.press("Enter")
 
     # Git init dialog should appear
@@ -323,9 +328,15 @@ def test_empty_repo_initial_commit_dialog(sculptor_instance_: SculptorInstance, 
     # Click the "Add repository" button and fill the path
     add_repo_dialog = repos_section.open_add_repo_dialog()
 
+    add_repo_dialog.select_local_source()
     path_input = add_repo_dialog.get_path_input()
     path_input.fill(str(empty_repo_dir))
-    path_input.press("Escape")
+
+    # Empty git repo: the autocomplete dropdown never opens (the backend
+    # filters out the lone `.git` entry as a dotfile and returns []). Submit
+    # via Enter directly — pressing Escape first would bubble to Radix Dialog
+    # and close the dialog, since PathAutocomplete only swallows Escape when
+    # its own dropdown is open.
     path_input.press("Enter")
 
     # The validation dialog should appear with the initial commit prompt
@@ -363,6 +374,7 @@ def test_adding_duplicate_repo_shows_error(sculptor_instance_: SculptorInstance)
 
     add_repo_dialog = repos_section.open_add_repo_dialog()
 
+    add_repo_dialog.select_local_source()
     path_input = add_repo_dialog.get_path_input()
     path_input.fill(existing_repo_path)
 

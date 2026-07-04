@@ -124,7 +124,9 @@ export const SkillsPanel = (): ReactElement => {
   // can suppress the popover without re-subscribing.
   const isPanelDragging = useAtomValue(draggedPanelIdAtom) !== null;
   const isPanelDraggingRef = useRef(isPanelDragging);
-  isPanelDraggingRef.current = isPanelDragging;
+  useEffect(() => {
+    isPanelDraggingRef.current = isPanelDragging;
+  });
 
   const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -406,10 +408,13 @@ export const SkillsPanel = (): ReactElement => {
 
   // Reset the keyboard selection to the top of the list whenever the visible
   // list shifts (typing, filter toggle, group collapse, refetch) or the
-  // user opens search.
-  useEffect(() => {
+  // user opens search. Adjust during render (with prev-value guards) rather
+  // than in an effect so the selection never lags a frame behind the list.
+  const [prevSelectionInputs, setPrevSelectionInputs] = useState({ visibleSkills, isSearchOpen });
+  if (visibleSkills !== prevSelectionInputs.visibleSkills || isSearchOpen !== prevSelectionInputs.isSearchOpen) {
+    setPrevSelectionInputs({ visibleSkills, isSearchOpen });
     setSelectedIndex(0);
-  }, [visibleSkills, isSearchOpen]);
+  }
 
   const moveSelection = useCallback((delta: number): void => {
     setSelectedIndex((prev) => {

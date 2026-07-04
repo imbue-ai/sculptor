@@ -342,9 +342,18 @@ class TaskView(LimitedBaseTaskView[TaskInputType, TaskStateType], Generic[TaskIn
         for msg in reversed(self._messages):
             if _is_content_message(msg):
                 return msg.approximate_creation_time
-        # No content messages yet (e.g. freshly created task with only a user input)
-        # — use the earliest message.
-        return self._messages[0].approximate_creation_time
+        # No content messages: fall back to the earliest NON-ephemeral message
+        # (e.g. a freshly created chat task whose only message is the user's
+        # first input). Ephemeral messages (environment lifecycle, runner
+        # signals) are re-created with fresh timestamps on every restart, so
+        # using one here would push updated_at past last_read_at and make an
+        # idle, already-read terminal agent — whose only message is the
+        # ephemeral EnvironmentAcquiredRunnerMessage — look unread. With no
+        # non-ephemeral message, fall back to created_at.
+        for msg in self._messages:
+            if not msg.is_ephemeral:
+                return msg.approximate_creation_time
+        return self.created_at
 
     def add_message(self, message: Message) -> None:
         """During each update, we add the new messages"""
@@ -396,7 +405,11 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
 
     @computed_field
     @property
-    def model(self) -> LLMModel:
+    def model(self) -> LLMModel | None:
+        # Terminal agents have no chat and Sculptor does not control their model,
+        # so they carry no model at all — report None rather than a fallback (SCU-1580).
+        if is_terminal_agent_config(self.task_input.agent_config):
+            return None
         # Use the most recent chat message that carried an explicit model selection.
         for message in reversed(self._messages):
             if isinstance(message, ChatInputUserMessage) and message.model_name is not None:
@@ -429,6 +442,13 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
         """The model_id the switcher should show as selected, or None when the
         harness tracks no per-task selection."""
         return self._resolve_harness().get_selected_model_id(self.task_state)
+
+    @computed_field
+    @property
+    def sources_backend_models(self) -> bool:
+        """Whether the harness sources its switcher catalog from a backend (pi);
+        when False the frontend uses its built-in Claude list."""
+        return self._resolve_harness().sources_backend_models()
 
     @computed_field
     @property
@@ -795,6 +815,12 @@ class TaskUpdate(SerializableModel):
     # the chat "double printing" / staircase bug.
     streamed_segment_first_response_id: AgentMessageID | None = None
     pending_user_question: AskUserQuestionData | None = None
+    # Every currently-unanswered question, oldest first; pending_user_question
+    # (the one the frontend shows) is always the LAST entry. Multiple
+    # questions can pend concurrently — e.g. two subagents each calling
+    # ask_user_question mid-turn — and answering the visible one must
+    # surface the next, not forget it.
+    pending_user_questions: tuple[AskUserQuestionData, ...] = ()
     submitted_question_answers: dict[str, SubmittedQuestionAnswers] = {}
     is_in_plan_mode: bool = False
     # Buffered TurnMetrics waiting to be stamped onto the message at RequestSuccess/RequestStopped.
@@ -838,3 +864,30 @@ def create_initial_task_view(
     instance._task_container.append(task)
     instance._settings_container.append(settings)
     return instance
+
+
+def is_agent_busy_or_waiting(task: Task, messages: Sequence[Message]) -> bool:
+    """True when a coding agent is actively working (blue/busy) or waiting on the
+    user (yellow/waiting) — i.e. its agent status is ``WORKING`` or ``WAITING``.
+    False when it is idle, errored, or completed.
+
+    This is the "is another agent occupying the workspace right now?" predicate.
+    It is deliberately phrased in terms of the *agent status*
+    (``WorkspacePeekAgentStatus``) the UI surfaces — the status dot and workspace
+    peek — rather than a raw ``TaskStatus``, so callers can't drift from what the
+    user sees. ``WORKING`` covers ``BUILDING``/``RUNNING``; ``WAITING`` is a
+    pending question or plan approval; ``ERROR``/``COMPLETED``/``IDLE`` do not
+    occupy the workspace. The CI babysitter's all-agents-idle gate uses it so it
+    never injects a prompt while a second agent could be editing the tree.
+
+    ``messages`` MUST be the task's *live* messages (e.g. from
+    ``TaskService.get_live_messages_for_task``): the derivation depends on
+    ephemeral run-scoped messages (environment-acquired anchors, terminal-agent
+    signals) that the persisted message log never contains. No
+    ``SculptorSettings`` is needed — the status derivation does not read settings.
+    """
+    view = CodingAgentTaskView()
+    view._task_container.append(task)
+    for message in messages:
+        view.add_message(message)
+    return view.workspace_peek_status in (WorkspacePeekAgentStatus.WORKING, WorkspacePeekAgentStatus.WAITING)

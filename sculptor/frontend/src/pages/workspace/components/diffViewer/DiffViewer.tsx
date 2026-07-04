@@ -11,7 +11,6 @@ import {
   appThemeAtom,
   fileBrowserDiffViewTypeAtom,
   fileBrowserLineWrappingAtom,
-  isRichMarkdownRenderingEnabledAtom,
 } from "~/common/state/atoms/userConfig.ts";
 import { useUserConfig } from "~/common/state/hooks/useUserConfig.ts";
 import { invalidateWorkspaceCommitDiff, useWorkspaceCommitDiff } from "~/common/state/hooks/useWorkspaceCommitDiff.ts";
@@ -201,7 +200,6 @@ export const DiffViewer = ({
   }, [overflow, updateField]);
 
   const [markdownMode, setMarkdownMode] = useAtom(markdownRenderModeAtom);
-  const isRichMarkdownRenderingEnabled = useAtomValue(isRichMarkdownRenderingEnabledAtom);
 
   // A quick-opened file-view can carry an explicit "rendered" request (see the
   // DiffSelection type). It overrides the persisted global render-mode WITHOUT
@@ -216,9 +214,7 @@ export const DiffViewer = ({
   const effectiveMarkdownMode: MarkdownRenderMode = isQuickOpenRenderActive ? "rendered" : markdownMode;
 
   // ReadOnlyPreview is the only path that supports rendered markdown — used for
-  // file-view selections and "no diff" states. Hide the toggle elsewhere. Even
-  // when visible, the toggle is shown disabled (with a hint) until the
-  // experimental `enable_rich_markdown_rendering` flag is enabled.
+  // file-view selections and "no diff" states. Hide the toggle elsewhere.
   const isMarkdownToggleVisible = useMemo((): boolean => {
     const fp = content.filePath;
     if (!fp || !isMarkdownPath(fp)) return false;
@@ -259,21 +255,16 @@ export const DiffViewer = ({
     if (next === "rendered") handleCloseSearch();
   }, [effectiveMarkdownMode, setMarkdownMode, handleCloseSearch]);
 
-  // Find-in-file walks source-view DOM; rendered markdown has none. The rendered
-  // path only mounts when the experimental flag is on, so the persisted
-  // "rendered" preference doesn't suppress find-in-file when the flag is off.
-  const isRenderedMarkdownActive =
-    isMarkdownToggleVisible && effectiveMarkdownMode === "rendered" && isRichMarkdownRenderingEnabled;
+  // Find-in-file walks source-view DOM; rendered markdown has none.
+  const isRenderedMarkdownActive = isMarkdownToggleVisible && effectiveMarkdownMode === "rendered";
 
   // Quick-open a rendered view of a markdown file in the Files panel — offered
   // on the diff/commit headers (the file-view header has the render toggle
-  // instead). Hidden while the experimental rendering flag is off, since the
-  // opened view would just be source. The rendered request rides on the tab
-  // (`markdownMode`) so the receiving viewer renders it without this path
-  // rewriting the global render-mode preference.
+  // instead). The rendered request rides on the tab (`markdownMode`) so the
+  // receiving viewer renders it without this path rewriting the global
+  // render-mode preference.
   const openFileViewTab = useSetAtom(openFileViewTabAtom);
-  const canQuickOpenRenderedMarkdown =
-    content.filePath !== null && isMarkdownPath(content.filePath) && isRichMarkdownRenderingEnabled;
+  const canQuickOpenRenderedMarkdown = content.filePath !== null && isMarkdownPath(content.filePath);
   const handleOpenRenderedMarkdown = useCallback((): void => {
     if (!content.filePath) return;
     openFileViewTab({ workspaceId, filePath: content.filePath, markdownMode: "rendered" });
@@ -327,8 +318,7 @@ export const DiffViewer = ({
     onToggleLineWrapping: handleToggleLineWrapping,
     onToggleSearch: handleToggleSearch,
     showRenderToggle: isMarkdownToggleVisible,
-    isRendered: effectiveMarkdownMode === "rendered" && isRichMarkdownRenderingEnabled,
-    isRenderToggleEnabled: isRichMarkdownRenderingEnabled,
+    isRendered: effectiveMarkdownMode === "rendered",
     onToggleRender: handleToggleMarkdownRender,
   };
 

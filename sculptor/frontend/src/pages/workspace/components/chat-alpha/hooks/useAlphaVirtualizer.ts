@@ -5,6 +5,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 
 import { ChatMessageRole } from "~/api";
 
+import { FOOTER_REVEAL_WINDOW_MS, IDLE_TAIL_PADDING, STREAMING_TAIL_PADDING } from "../scroll/geometry.ts";
+import type { ScrollStateMachine } from "../scroll/scrollStateMachine.ts";
+
 const ESTIMATED_MESSAGE_HEIGHT = 120;
 const OVERSCAN = 5;
 
@@ -17,15 +20,17 @@ const OVERSCAN = 5;
 const MAX_CACHED_TASKS = 20;
 
 /**
- * Vertical padding around the virtualised list.
+ * Vertical padding above the virtualised list.
  *
- * Using `paddingStart`/`paddingEnd` is the correct TanStack Virtual way to
- * reserve space – CSS padding on the container div is ignored by
+ * Using `paddingStart` (and `paddingEnd` below) is the correct TanStack Virtual
+ * way to reserve space – CSS padding on the container div is ignored by
  * absolutely-positioned virtual items.
  *
  * paddingStart matches var(--space-9) so the first message sits at the same
  * vertical position as subsequent user messages (which get a margin-top of
- * var(--space-9) via the .newCycle class).
+ * var(--space-9) via the .newCycle class). The paddingEnd floor is the
+ * streaming-scoped IDLE_TAIL_PADDING / STREAMING_TAIL_PADDING pair — see the
+ * dynamicPaddingEnd derivation below.
  */
 const VIRTUAL_PADDING = 64;
 
@@ -57,9 +62,13 @@ export const touchLRU = <TK, TV>(map: Map<TK, TV>, key: TK, maxSize: number): vo
  * That causes visible jitter because every growth delta shifts scrollTop,
  * moving the content the user is reading.
  *
- * By comparing the item's *pre-growth* end (`item.start + item.size - delta`)
- * against `scrollOffset`, we only compensate when the item was completely
- * out of view above the viewport.
+ * The `item` TanStack hands this predicate is the *cached* measurement, so
+ * `item.start + item.size` is the item's end *before* this resize — its
+ * pre-growth end.  We compensate only when that pre-growth end was at or above
+ * `scrollOffset`, i.e. the item was completely out of view above the viewport.
+ * (`delta`, the size change, is intentionally not subtracted: the cached
+ * `item.size` is already the pre-growth size, so `item.start + item.size` is the
+ * pre-growth end as written.)
  */
 export const shouldAdjustScrollPosition = (
   item: VirtualItem,
@@ -67,7 +76,7 @@ export const shouldAdjustScrollPosition = (
   instance: Virtualizer<HTMLDivElement, Element>,
 ): boolean => {
   const scrollOffset = instance.scrollOffset ?? 0;
-  const previousEnd = item.start + item.size - delta;
+  const previousEnd = item.start + item.size;
   return previousEnd <= scrollOffset;
 };
 
@@ -95,11 +104,11 @@ export const skipNextScrollAdjustForItem = (index: number): void => {
  * listeners skip it.
  */
 export const buildShouldAdjustScrollPositionOnItemSizeChange = (
-  isSettlingRef: MutableRefObject<boolean>,
+  isMeasuring: () => boolean,
   isProgrammaticScrollRef?: MutableRefObject<boolean>,
 ): ((item: VirtualItem, delta: number, instance: Virtualizer<HTMLDivElement, Element>) => boolean) => {
   return (item, delta, instance): boolean => {
-    if (isSettlingRef.current) return false;
+    if (isMeasuring()) return false;
     if (skipAdjustForItemIndex !== null && item.index === skipAdjustForItemIndex) {
       skipAdjustForItemIndex = null;
       return false;
@@ -115,10 +124,14 @@ export const useAlphaVirtualizer = (
   messageCount: number,
   lastMessageRole: ChatMessageRole | null,
   taskId: string,
+  machine: ScrollStateMachine,
   introPaddingStart: number = VIRTUAL_PADDING,
   // Set true when an item size change triggers a scrollTop adjustment,
   // so chat-level scroll listeners can distinguish it from a user scroll.
   isProgrammaticScrollRef?: MutableRefObject<boolean>,
+  // Whether the task is streaming — drives the paddingEnd floor (see
+  // dynamicPaddingEnd below).
+  isStreaming: boolean = false,
 ): Virtualizer<HTMLDivElement, Element> => {
   const [containerHeight, setContainerHeight] = useState(0);
   const [tailContentHeight, setTailContentHeight] = useState(0);
@@ -133,11 +146,11 @@ export const useAlphaVirtualizer = (
   const tailCacheRef = useRef<Map<string, number>>(new Map());
   const currentEstimatesRef = useRef<Array<number>>([]);
 
-  // Suppress per-item scroll adjustments while measurements are settling
-  // after a task switch.  Without this, items partially visible at the
-  // viewport top that have slightly different real heights than their saved
-  // estimates cause a small visible shift.
-  const isSettlingRef = useRef(false);
+  // The settle window (per-item scroll-adjustment suppression after a task
+  // switch) is owned by the scroll state machine's layout phase: `measuring`
+  // while heights/paddingEnd reconverge, `stable` once they have. Without that
+  // suppression, items partially visible at the viewport top whose real heights
+  // differ slightly from their saved estimates cause a small visible shift.
   const settlingRafRef = useRef(0);
 
   // Counter incremented after settling clears to force a re-render.
@@ -172,6 +185,28 @@ export const useAlphaVirtualizer = (
     return (): void => cancelAnimationFrame(settlingRafRef.current);
   }, []);
 
+  // The paddingEnd floor is streaming-scoped. While a stream is active — and
+  // through the settle window after it ends, while late content changes (the
+  // cursor unmounting, the turn footer mounting) can still land — the floor is
+  // STREAMING_TAIL_PADDING: the pin keeps PIN_BOTTOM_GAP of it visible below
+  // the content and relies on the remainder as slack below scrollTop, so the
+  // turn-end shrink never clamps the scroll position. At rest the floor is
+  // IDLE_TAIL_PADDING (== the pin gap), so the scroll range ends exactly at
+  // the pin position: scrolling below the content reveals the gap and no more.
+  // The drop happens with scrollTop at the post-drop range end, so it never
+  // moves the view.
+  const [isTailSettling, setIsTailSettling] = useState(false);
+  useEffect(() => {
+    if (isStreaming) {
+      setIsTailSettling(true);
+      return;
+    }
+    if (!isTailSettling) return;
+    const timer = setTimeout(() => setIsTailSettling(false), FOOTER_REVEAL_WINDOW_MS);
+    return (): void => clearTimeout(timer);
+  }, [isStreaming, isTailSettling]);
+  const tailPaddingFloor = isStreaming || isTailSettling ? STREAMING_TAIL_PADDING : IDLE_TAIL_PADDING;
+
   // paddingEnd needs to be just large enough for the scroll-to-top target
   // (the last user message) to reach the viewport top.  The required padding
   // = containerHeight - tailContentHeight, where tailContentHeight is the sum
@@ -185,8 +220,8 @@ export const useAlphaVirtualizer = (
   // destabilises scroll positions during view switches and task restoration.
   const dynamicPaddingEnd =
     containerHeight > 0 && tailContentHeight > 0
-      ? Math.max(containerHeight - tailContentHeight, VIRTUAL_PADDING)
-      : VIRTUAL_PADDING;
+      ? Math.max(containerHeight - tailContentHeight, tailPaddingFloor)
+      : tailPaddingFloor;
 
   const virtualizer = useVirtualizer({
     count: messageCount,
@@ -229,6 +264,10 @@ export const useAlphaVirtualizer = (
       // task's correct heights were already saved during its last normal
       // (non-task-switch) render.
 
+      // The outgoing task's settle hold is meaningless for the incoming task;
+      // its own isStreaming re-arms the hold if it is mid-stream.
+      setIsTailSettling(false);
+
       // Restore saved state for the incoming task.
       currentEstimatesRef.current = heightCacheRef.current.get(taskId) ?? [];
       const savedTail = tailCacheRef.current.get(taskId);
@@ -261,14 +300,13 @@ export const useAlphaVirtualizer = (
       // positions are close to correct.
       virtualizer.measure();
 
-      // Suppress per-item scroll adjustments until measurements settle.
-      // Without this, small deltas between cached estimates and real DOM
-      // measurements cause visible scroll-position shifts.
-      isSettlingRef.current = true;
+      // Enter the `measuring` layout phase to suppress per-item scroll
+      // adjustments until measurements settle.
+      machine.dispatchLayout({ kind: "invalidated", taskId });
       cancelAnimationFrame(settlingRafRef.current);
       settlingRafRef.current = requestAnimationFrame(() => {
         settlingRafRef.current = requestAnimationFrame(() => {
-          isSettlingRef.current = false;
+          machine.dispatchLayout({ kind: "converged" });
           settlingRafRef.current = 0;
           // Force a re-render so the normal branch runs, which saves
           // heights and recalculates tailContentHeight.
@@ -288,7 +326,7 @@ export const useAlphaVirtualizer = (
     // The cached tailContentHeight (restored above) stays in effect until
     // settling completes, preventing a visible shift from intermediate
     // measurement values.
-    if (isSettlingRef.current) return;
+    if (machine.getState().layout.kind === "measuring") return;
 
     // The scroll-to-top target is the last user message: the last item when
     // it's from the user, otherwise the second-to-last item.
@@ -320,7 +358,7 @@ export const useAlphaVirtualizer = (
   });
 
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = buildShouldAdjustScrollPositionOnItemSizeChange(
-    isSettlingRef,
+    () => machine.getState().layout.kind === "measuring",
     isProgrammaticScrollRef,
   );
 

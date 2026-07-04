@@ -11,11 +11,11 @@ import { RUNTIME_MODULE_SPECIFIERS } from "./plugin-runtime-stubs.ts";
  * compiling) as part of the host build, emitting each bundle into
  * `public/plugins/<id>/` — the same tree the no-build, pure-JS plugins live in.
  *
- * `linear-issue` is the only such plugin today; pure-JS plugins need no build
- * (their source is committed directly under `public/plugins/<id>/`). Wiring the
- * compile into the host build means `npm run build` and the dev server produce
- * the bundle — there's no separate `cd plugins/<id> && npm run build` step, and
- * no second toolchain: the plugin reuses the host's Vite, React, and TypeScript.
+ * Pure-JS plugins need no build (their source is committed directly under
+ * `public/plugins/<id>/`). Wiring the compile into the host build means
+ * `npm run build` and the dev server produce the bundle — there's no separate
+ * `cd plugins/<id> && npm run build` step, and no second toolchain: the plugin
+ * reuses the host's Vite, React, and TypeScript.
  *
  * Each bundle externalises exactly `RUNTIME_MODULE_SPECIFIERS` — the bare
  * specifiers the host's import map resolves to its singletons — so it carries
@@ -24,7 +24,7 @@ import { RUNTIME_MODULE_SPECIFIERS } from "./plugin-runtime-stubs.ts";
  */
 
 /** Plugins built from TS/TSX source at `plugins/<id>/src/index.tsx`. */
-const COMPILED_PLUGIN_IDS: ReadonlyArray<string> = ["linear-issue"];
+const COMPILED_PLUGIN_IDS: ReadonlyArray<string> = ["linear-issue", "openhost-preview-switcher"];
 
 const buildCompiledPlugin = async (frontendRoot: string, id: string): Promise<void> => {
   const sourceDir = path.join(frontendRoot, "plugins", id);
@@ -132,9 +132,16 @@ export const bundledPlugins = (): Plugin => {
       server.watcher.on("change", (file: string): void => {
         if (!file.startsWith(sourceRoot) || isRebuilding) return;
         isRebuilding = true;
-        void buildAll().finally(() => {
-          isRebuilding = false;
-        });
+        void buildAll()
+          // A failed rebuild (a broken edit, a file missing mid-rename) must
+          // not crash the dev server as an unhandled rejection — log it and
+          // keep serving; the next change retries.
+          .catch((error: unknown) => {
+            server.config.logger.error(`bundled-plugins: plugin rebuild failed: ${String(error)}`);
+          })
+          .finally(() => {
+            isRebuilding = false;
+          });
       });
     },
   };

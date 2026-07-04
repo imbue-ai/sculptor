@@ -114,6 +114,10 @@ class Workspace(DatabaseModel):
     diff_updated_at: datetime.datetime | None = None
     # User-supplied or auto-generated branch name. Required for WORKTREE workspaces (validated at the API layer); optional for CLONE; null for IN_PLACE.
     requested_branch_name: str | None = None
+    # Per-workspace CI Babysitter pause flag. Set from the PR popover; persisted
+    # here so it survives a backend restart (the coordinator's in-memory state is
+    # rebuilt lazily and would otherwise revert to the default).
+    ci_babysitter_paused: bool = False
 
 
 # Runtime tables

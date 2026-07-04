@@ -7,7 +7,7 @@ name = "sculptor"
 
 # Non-release branches (including main) must always use a .dev suffix (e.g. 0.10.0.dev0).
 # Release branches set the concrete version (e.g. 0.10.0 or 0.10.0rc1).
-version = "0.39.0.dev0"
+version = "0.41.0.dev0"
 
 readme = "README.md"
 license = { text = "MIT" }
@@ -31,7 +31,7 @@ dependencies = [
     "loguru",
     "psutil>=5.9.0",
     "pydantic>=2.11.4",
-    "pydantic-settings",
+    "pydantic-settings>=2.14.2",
     "pygit2>=1.18.0",
     "pyjwt[crypto]",
     "python-multipart",
@@ -117,6 +117,10 @@ dev = [
     "syrupy",
     "tabulate>=0.9.0",
     "ty>=0.0.4",
+    "types-PyYAML",
+    "types-cachetools",
+    "types-psutil",
+    "types-requests",
     "websocket-client>=1.5.1",
 ]
 

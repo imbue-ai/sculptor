@@ -1,12 +1,14 @@
 import { Flex, IconButton, Tooltip } from "@radix-ui/themes";
 import { ListChecks } from "lucide-react";
-import type { ReactElement } from "react";
+import { type ReactElement, useCallback } from "react";
 
 import { type EffortLevel, ElementIds, type LlmModel } from "~/api";
 import { getModelCapabilities } from "~/common/modelCapabilities.ts";
+import { useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { EffortSelector } from "~/components/EffortSelector.tsx";
 import { FastModeToggle } from "~/components/FastModeToggle.tsx";
 import { ModelSelector } from "~/components/ModelSelector.tsx";
+import { SettingsSection } from "~/pages/settings/sections.ts";
 
 type AgentSettingsControlsProps = {
   model: LlmModel;
@@ -57,6 +59,12 @@ export const AgentSettingsControls = ({
   canUseFastMode = true,
 }: AgentSettingsControlsProps): ReactElement => {
   const { supportsFastMode: doesSupportFastMode } = getModelCapabilities(model);
+  const { navigateToGlobalSettings } = useImbueNavigate();
+  // ModelSelector's no-providers CTA (pi with an empty backend catalog) sends
+  // the user to the pi login flow under Settings -> Pi, matching ChatInput.
+  const handleAuthenticate = useCallback((): void => {
+    navigateToGlobalSettings(SettingsSection.PI);
+  }, [navigateToGlobalSettings]);
   return (
     <Flex align="center" flexShrink="0">
       {canEnterPlanMode && (
@@ -77,7 +85,7 @@ export const AgentSettingsControls = ({
       {doesSupportFastMode && canUseFastMode && <FastModeToggle isActive={isFastMode} onToggle={onFastModeToggle} />}
       <EffortSelector effort={effort} onEffortChange={onEffortChange} />
       <Flex pr="1">
-        <ModelSelector model={model} onModelChange={onModelChange} />
+        <ModelSelector model={model} onModelChange={onModelChange} onAuthenticate={handleAuthenticate} />
       </Flex>
     </Flex>
   );

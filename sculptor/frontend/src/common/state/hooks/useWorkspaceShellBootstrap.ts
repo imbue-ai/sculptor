@@ -21,36 +21,21 @@ import {
   ensureAgentPanelsPlacedAtom,
   workspaceAgentIdsAtomFamily,
 } from "~/common/state/agentPanelPlacement.ts";
+import { viewedAgentIdAtom } from "~/common/state/atoms/viewedAgent.ts";
 import { useMarkRead } from "~/common/state/hooks/useMarkRead";
 import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
 import { seedFirstVisitTerminal } from "~/components/sections/addPanelCore.ts";
 import { buildDefaultWorkspaceLayout } from "~/components/sections/persistence/defaultLayout.ts";
 import type { WorkspaceLayoutState } from "~/components/sections/persistence/types.ts";
-import {
-  AGENT_PANEL_ID_PREFIX,
-  makeAgentPanelId,
-  makeTerminalPanelId,
-} from "~/components/sections/registry/dynamicPanels.tsx";
+import { makeAgentPanelId, makeTerminalPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
 import { consumePendingPanelRevealAtom } from "~/components/sections/sectionActions.ts";
-import {
-  activePanelIdInSubSectionAtom,
-  activeSubSectionAtom,
-  isEmptyLayout,
-  switchActiveWorkspaceAtom,
-  workspaceLayoutFamily,
-} from "~/components/sections/sectionAtoms.ts";
+import { isEmptyLayout, switchActiveWorkspaceAtom, workspaceLayoutFamily } from "~/components/sections/sectionAtoms.ts";
 import type { PanelId } from "~/components/sections/sectionTypes.ts";
 import { activeSectionRingNonceAtom } from "~/components/sections/transientAtoms.ts";
 import { useAddPanelActions } from "~/components/sections/useAddPanelActions.ts";
 import { useArtifactSync } from "~/pages/workspace/hooks/useArtifactSync";
 
 import { useWorkspaceDynamicPanels } from "./useWorkspaceDynamicPanels.ts";
-
-// The agent id encoded in an agent panel id, or undefined for any other panel.
-const agentIdFromPanelId = (panelId: PanelId | undefined): string | undefined =>
-  panelId !== undefined && panelId.startsWith(AGENT_PANEL_ID_PREFIX)
-    ? panelId.slice(AGENT_PANEL_ID_PREFIX.length)
-    : undefined;
 
 // The seeded default for a workspace that has NO agents yet: the standard default
 // arrangement with the center left empty (its empty state offers the add-panel
@@ -96,24 +81,23 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
   // Per-viewed-agent data effects that the old workspace page owned: sync the
   // viewed agent's artifacts and mark it read while the user is looking at it.
   //
-  // The "viewed agent" follows the ACTIVE SUB-SECTION's active panel, not the route:
-  // an agent panel the user is watching in the right/bottom section (or a split
-  // half) counts as viewed just like one in the center. Switching agents via a tab
-  // bar only flips the active panel (handleActivate → setActivePanel) — it does not
-  // navigate — so keying off the route would leave the agent you just switched to
-  // unsynced and wrongly marked unread when it receives an update. When the active
-  // sub-section's panel isn't an agent (a terminal, Files, …) fall back to the
-  // center's agent, then to the route's taskId (e.g. before the layout settles).
-  // A panel-derived id is only trusted when it belongs to THIS workspace: on the first
-  // commit of a workspace switch the layout atoms still describe the previous workspace
-  // (the scope flip lands in the layout effect below), so a panel-derived id that isn't
-  // one of this workspace's agents falls back to the route rather than pairing this
-  // workspace with a foreign agent. Matches ChatInput's per-panel-agent isolation.
-  const activeSubSection = useAtomValue(activeSubSectionAtom) ?? "center";
-  const activePanelId = useAtomValue(activePanelIdInSubSectionAtom(activeSubSection));
-  const activeCenterPanelId = useAtomValue(activePanelIdInSubSectionAtom("center"));
-  const panelAgentId = agentIdFromPanelId(activePanelId) ?? agentIdFromPanelId(activeCenterPanelId);
-  const viewedAgentId = panelAgentId !== undefined && workspaceAgentIds.includes(panelAgentId) ? panelAgentId : taskId;
+  // The "viewed agent" (viewedAgentIdAtom — shared with the panel-tab and
+  // sidebar-row dot derivations) follows the ACTIVE SUB-SECTION's active panel,
+  // not the route: an agent panel the user is watching in the right/bottom
+  // section (or a split half) counts as viewed just like one in the center.
+  // Switching agents via a tab bar only flips the active panel (handleActivate →
+  // setActivePanel) — it does not navigate — so keying off the route would leave
+  // the agent you just switched to unsynced and wrongly marked unread when it
+  // receives an update.
+  // The panel-derived id is only trusted when it belongs to THIS workspace: on the
+  // first commit of a workspace switch the layout atoms still describe the previous
+  // workspace (the scope flip lands in the layout effect below), so a panel-derived
+  // id that isn't one of this workspace's agents falls back to the route's taskId
+  // (which also covers the window before the layout settles) rather than pairing
+  // this workspace with a foreign agent. Matches ChatInput's per-panel-agent
+  // isolation.
+  const panelAgentId = useAtomValue(viewedAgentIdAtom);
+  const viewedAgentId = panelAgentId !== null && workspaceAgentIds.includes(panelAgentId) ? panelAgentId : taskId;
   // Both hooks take a required id; in an agentless workspace the empty id matches
   // no task, so each is a safe no-op (their task lookups miss).
   useArtifactSync(workspaceId, viewedAgentId ?? "");

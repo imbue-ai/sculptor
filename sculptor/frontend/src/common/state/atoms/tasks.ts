@@ -94,8 +94,9 @@ export const taskStatusAtomFamily = atomFamily<string, Atom<TaskStatus | undefin
   atom((get) => get(taskAtomFamily(taskId))?.status),
 );
 
+// Terminal agents carry no model (`model` is null); treat that the same as "unknown".
 export const taskModelAtomFamily = atomFamily<string, Atom<string | undefined>>((taskId) =>
-  atom((get) => get(taskAtomFamily(taskId))?.model),
+  atom((get) => get(taskAtomFamily(taskId))?.model ?? undefined),
 );
 
 // The workspace that owns the task — immutable once the task view has loaded,
@@ -122,6 +123,13 @@ export const taskAvailableModelsAtomFamily = atomFamily<string, Atom<ReadonlyArr
 // (pi), or undefined when the harness tracks no per-task selection.
 export const taskSelectedModelIdAtomFamily = atomFamily<string, Atom<string | undefined>>((taskId) =>
   atom((get) => get(taskAtomFamily(taskId))?.selectedModelId ?? undefined),
+);
+
+// Whether the harness sources its switcher catalog from a backend (pi). A
+// non-capability view field, so the no-direct-harness-capability-read ratchet
+// does not apply.
+export const taskSourcesBackendModelsAtomFamily = atomFamily<string, Atom<boolean>>((taskId) =>
+  atom((get) => get(taskAtomFamily(taskId))?.sourcesBackendModels ?? false),
 );
 
 export const taskIsAutoCompactingAtomFamily = atomFamily<string, Atom<boolean>>((taskId) =>

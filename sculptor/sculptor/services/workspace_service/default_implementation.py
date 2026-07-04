@@ -6,7 +6,8 @@ import uuid
 from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from queue import Queue
+from typing import Generator
 from typing import Self
 from typing import cast
 
@@ -57,6 +58,7 @@ from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableErr
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
 from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.services.workspace_service.api import resolve_workspace_setup_command
+from sculptor.services.workspace_service.branch_poller import WorkspaceBranchPoller
 from sculptor.services.workspace_service.environment_manager.api import EnvironmentManager
 from sculptor.services.workspace_service.environment_manager.default_implementation import DefaultEnvironmentManager
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
@@ -77,6 +79,7 @@ from sculptor.utils.build import build_sculpt_backend_env
 from sculptor.utils.build import get_sculpt_bin_dir
 from sculptor.utils.timeout import timeout_monitor
 from sculptor.utils.type_utils import extract_leaf_types
+from sculptor.web.data_types import StreamingUpdateSourceTypes
 
 _ENVIRONMENT_CREATION_TIMEOUT_SECONDS = 60
 _DIFF_METADATA_FILENAME = "DIFF.meta.json"
@@ -92,8 +95,8 @@ _MAX_DIFF_CONTEXT_LINES = 50
 # (un-added) files appear in both views.
 _UNTRACKED_FILES_DIFF_CMD = (
     "git ls-files --others --exclude-standard -z"
-    " | xargs -0 -I {} find {} -maxdepth 0 -type f -print0"
-    " | xargs -0 -I {} git --no-pager diff --no-index /dev/null {}"
+    + " | xargs -0 -I {} find {} -maxdepth 0 -type f -print0"
+    + " | xargs -0 -I {} git --no-pager diff --no-index /dev/null {}"
 )
 
 
@@ -118,6 +121,8 @@ class DefaultWorkspaceService(WorkspaceService):
     _environment_setup_locks_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
     _setup_runner_instance: SetupCommandRunner | None = PrivateAttr(default=None)
     _setup_runner_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
+    _branch_poller_instance: WorkspaceBranchPoller | None = PrivateAttr(default=None)
+    _branch_poller_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
 
     @property
     def setup_runner(self) -> SetupCommandRunner:
@@ -125,6 +130,31 @@ class DefaultWorkspaceService(WorkspaceService):
             if self._setup_runner_instance is None:
                 self._setup_runner_instance = SetupCommandRunner(concurrency_group=self.concurrency_group)
             return self._setup_runner_instance
+
+    @property
+    def _branch_poller(self) -> WorkspaceBranchPoller:
+        """The process-global git-state scanner this service owns.
+
+        Lazily built (like ``setup_runner``) so a single instance is shared by
+        every websocket stream that subscribes via ``add_observer``, replacing the
+        per-connection pollers. It scans each workspace's current branch and its
+        repo's merge-target candidates (keyed by common git dir).
+        """
+        with self._branch_poller_lock:
+            if self._branch_poller_instance is None:
+                self._branch_poller_instance = WorkspaceBranchPoller(
+                    concurrency_group=self.concurrency_group,
+                    data_model_service=self.data_model_service,
+                    resolve_working_dir=self.get_workspace_working_directory,
+                    refresh_diff_on_branch_change=self.maybe_refresh_workspace_diff,
+                )
+            return self._branch_poller_instance
+
+    def add_observer(self, queue: Queue[StreamingUpdateSourceTypes]) -> None:
+        self._branch_poller.add_observer(queue)
+
+    def remove_observer(self, queue: Queue[StreamingUpdateSourceTypes]) -> None:
+        self._branch_poller.remove_observer(queue)
 
     def reconcile_setup_state(self) -> None:
         """Bring persisted setup state into a coherent state on app startup.
@@ -152,10 +182,10 @@ class DefaultWorkspaceService(WorkspaceService):
                     on_persist=self._persist_setup_state,
                 )
             elif workspace.setup_status == "pending":
-                # Honor the project's tri-state default: `None` means "use the
-                # current default" (so we keep `pending` and the runner picks it
-                # up on first open), `""` means the user explicitly cleared
-                # (demote to `not_configured`).
+                # Honor the project's tri-state default: `None` means use the
+                # current default (so we keep `pending` and the runner picks it
+                # up on first open), an empty string means the user explicitly
+                # cleared it (demote to `not_configured`).
                 command = resolve_workspace_setup_command(project.workspace_setup_command)
                 if not command:
                     self._persist_setup_state(
@@ -225,15 +255,18 @@ class DefaultWorkspaceService(WorkspaceService):
 
     def start(self) -> None:
         """Start the workspace service."""
-        pass
+        self._branch_poller.start()
 
     def stop(self) -> None:
         """Stop the workspace service.
 
         Stops all active terminals before the ConcurrencyGroup shuts down,
         ensuring pty processes and reader threads are cleanly terminated.
-        Also cancels any in-flight setup-command subprocesses.
+        Also cancels any in-flight setup-command subprocesses and the branch
+        scan loop.
         """
+        if self._branch_poller_instance is not None:
+            self._branch_poller_instance.stop()
         if self._setup_runner_instance is not None:
             self._setup_runner_instance.stop_all()
         stop_all_terminals()
@@ -560,7 +593,7 @@ class DefaultWorkspaceService(WorkspaceService):
     # Environment Lifecycle
 
     @contextmanager
-    def _environment_setup_lock(self, workspace_id: WorkspaceID) -> Iterator[None]:
+    def _environment_setup_lock(self, workspace_id: WorkspaceID) -> Generator[None, None, None]:
         """Per-workspace lock for environment setup.
 
         This prevents two tasks in the same workspace from racing to create
@@ -683,7 +716,7 @@ class DefaultWorkspaceService(WorkspaceService):
         concurrency_group: ConcurrencyGroup,
         root_progress_handle: RootProgressHandle,
         shutdown_event: ReadOnlyEvent,
-    ) -> Iterator[AgentExecutionEnvironment]:
+    ) -> Generator[AgentExecutionEnvironment, None, None]:
         """Set up the environment for a workspace and wrap it for agent use."""
         environment = self._create_or_resume_environment(
             project=project,

@@ -1,10 +1,11 @@
 import type { Virtualizer } from "@tanstack/react-virtual";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import type { ChatMessage } from "~/api";
 import { ChatMessageRole, ElementIds } from "~/api";
 import { CHAT_INPUT_ELEMENT_ID } from "~/common/Constants.ts";
 
+import { createScrollStateMachine, type ScrollStateMachine } from "../scroll/scrollStateMachine.ts";
 import type { ActivePromptIndex } from "./useAlphaActivePromptIndex.ts";
 
 const HIGHLIGHT_CLASS = "alphaPromptHighlight";
@@ -81,19 +82,30 @@ export const useAlphaPromptNav = (
   scrollToBottom: () => void,
   setIsSuppressed: (val: boolean) => void,
   activePromptIndex?: ActivePromptIndex,
-  isNavigatingRef?: React.MutableRefObject<boolean>,
+  // The scroll state machine owns the `navigating` authority phase. Falls back
+  // to an internal machine when omitted (e.g. in unit tests); the chat passes
+  // the shared one so the dot rail (useAlphaActivePromptIndex) sees nav state.
+  externalMachine?: ScrollStateMachine,
 ): UseAlphaPromptNavReturn => {
-  // Raw setter is wrapped below (`setIsNavigating`) to keep the external ref
-  // in sync synchronously; the pair-naming lint rule is not applicable.
-  // eslint-disable-next-line react/hook-use-state
-  const [isNavigating, setIsNavigatingState] = useState(false);
+  // eslint-disable-next-line react/hook-use-state -- stable fallback instance; the setter is intentionally unused
+  const [internalMachine] = useState(createScrollStateMachine);
+  const machine = externalMachine ?? internalMachine;
+  // `navigating` is the single source of truth, read reactively off the machine.
+  const isNavigating = useSyncExternalStore(
+    machine.subscribe,
+    () => machine.getState().authority.kind === "navigating",
+  );
   const highlightRafRef = useRef<number | null>(null);
 
   // Route the (possibly-undefined) controller methods through a ref so every
   // useCallback below has stable deps even though the parent re-creates the
-  // `activePromptIndex` object on every render.
+  // `activePromptIndex` object on every render. The ref is read only inside
+  // callbacks, never during render, so syncing it in an effect keeps render
+  // pure without changing behavior.
   const controllerRef = useRef(activePromptIndex);
-  controllerRef.current = activePromptIndex;
+  useEffect(() => {
+    controllerRef.current = activePromptIndex;
+  });
   const fallbackActiveRef = useRef(-1);
   const activeRef = activePromptIndex?.ref ?? fallbackActiveRef;
   const setActiveIndex = useCallback((i: number): void => {
@@ -102,16 +114,6 @@ export const useAlphaPromptNav = (
   const isScrolledPastActive = useCallback((): boolean => {
     return controllerRef.current?.isScrolledPastActive() ?? false;
   }, []);
-
-  // Sync the shared ref synchronously so other hooks' render-time reads see
-  // the new value in the same React render that triggered the state change.
-  const setIsNavigating = useCallback(
-    (val: boolean): void => {
-      if (isNavigatingRef !== undefined) isNavigatingRef.current = val;
-      setIsNavigatingState(val);
-    },
-    [isNavigatingRef],
-  );
 
   // Build array of indices into filteredMessages that are user prompts
   const userPromptIndices = useMemo(
@@ -158,12 +160,12 @@ export const useAlphaPromptNav = (
   }, []);
 
   const exitNavigation = useCallback((): void => {
-    setIsNavigating(false);
+    machine.dispatch({ kind: "navEnded" });
     cancelRaf(highlightRafRef);
     removeHighlight();
     setIsSuppressed(false);
     focusChatInput();
-  }, [removeHighlight, setIsSuppressed, focusChatInput, setIsNavigating]);
+  }, [machine, removeHighlight, setIsSuppressed, focusChatInput]);
 
   const navigateToPrompt = useCallback(
     (promptIdx: number): void => {
@@ -171,17 +173,25 @@ export const useAlphaPromptNav = (
       // Drive the shared active-index cursor so the dot rail and keyboard nav
       // are always in sync.
       setActiveIndex(promptIdx);
-      setIsNavigating(true);
+      // Enter (or move within) the `navigating` authority phase.
+      if (machine.getState().authority.kind === "navigating") {
+        machine.dispatch({ kind: "navMoved", promptIndex: promptIdx });
+      } else {
+        machine.dispatch({ kind: "navStarted", promptIndex: promptIdx });
+      }
       // Disengage auto-scroll whether triggered by keyboard or dot rail.
       setIsSuppressed(true);
       const messageIndex = userPromptIndices[promptIdx];
       virtualizer.scrollToIndex(messageIndex, { align: "start" });
       applyHighlight(messageIndex);
     },
-    [userPromptIndices, virtualizer, applyHighlight, setIsSuppressed, setActiveIndex, setIsNavigating],
+    [userPromptIndices, virtualizer, applyHighlight, setIsSuppressed, setActiveIndex, machine],
   );
 
-  // Exit navigation if messages shrink to no user prompts (e.g. agent switch)
+  // Exit navigation if messages shrink to no user prompts (e.g. agent switch).
+  // exitNavigation is an imperative teardown (DOM focus + class removal + a
+  // parent setIsSuppressed callback + a machine navEnded dispatch) that must run
+  // as a side effect, not during render.
   useEffect(() => {
     if (isNavigating && userPromptIndices.length === 0) exitNavigation();
   }, [isNavigating, userPromptIndices, exitNavigation]);

@@ -21,10 +21,8 @@ import {
   isCloneWorkspacesEnabledAtom,
   isDefaultFastModeAtom,
   isEntityMentionsEnabledAtom,
-  isFrontendPluginsEnabledAtom,
   isInPlaceWorkspacesEnabledAtom,
   isPiAgentEnabledAtom,
-  isRichMarkdownRenderingEnabledAtom,
   isSmoothStreamingUserPreferenceAtom,
   userEmailAtom,
 } from "../../common/state/atoms/userConfig.ts";
@@ -93,16 +91,7 @@ export const SettingsPage = (): ReactElement => {
   const isInPlaceWorkspacesEnabled = useAtomValue(isInPlaceWorkspacesEnabledAtom);
   const isCloneWorkspacesEnabled = useAtomValue(isCloneWorkspacesEnabledAtom);
   const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
-  const isFrontendPluginsEnabled = useAtomValue(isFrontendPluginsEnabledAtom);
-  // The Plugins section only shows once the experimental flag is on; the
-  // page itself stays reachable via ?section=PLUGINS for plugin development.
-  const visibleSections = SETTINGS_SECTIONS.filter((s) => s.id !== SettingsSection.PLUGINS || isFrontendPluginsEnabled);
-  // The mobile Select binds value={activeSection}, so its options must always
-  // include the active section — even one normally hidden (e.g. deep-linked to
-  // ?section=PLUGINS with the flag off) — or the trigger renders blank.
-  const mobileSections = SETTINGS_SECTIONS.filter((s) => visibleSections.includes(s) || s.id === activeSection);
   const isEntityMentionsEnabled = useAtomValue(isEntityMentionsEnabledAtom);
-  const isRichMarkdownRenderingEnabled = useAtomValue(isRichMarkdownRenderingEnabledAtom);
   const isSmoothStreamingEnabled = useAtomValue(isSmoothStreamingUserPreferenceAtom);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
@@ -166,7 +155,7 @@ export const SettingsPage = (): ReactElement => {
         <Flex position="relative" flexGrow="1" data-testid={ElementIds.SETTINGS_PAGE} minHeight="0" overflow="hidden">
           <Flex direction="column" px="6" pt="8" pb="4" className={styles.sidebar}>
             <Flex direction="column" gap="2">
-              {visibleSections.map(({ id }) => (
+              {SETTINGS_SECTIONS.map(({ id }) => (
                 <Box key={id}>
                   {id === SettingsSection.EXPERIMENTAL && <Separator size="4" my="2" className={styles.navSeparator} />}
                   <Box
@@ -187,7 +176,7 @@ export const SettingsPage = (): ReactElement => {
               <Select.Root value={activeSection} onValueChange={(value) => setActiveSection(value as SettingsSection)}>
                 <Select.Trigger variant="soft" />
                 <Select.Content>
-                  {mobileSections.map(({ id }) => (
+                  {SETTINGS_SECTIONS.map(({ id }) => (
                     <Select.Item key={id} value={id} data-testid={SECTION_TEST_IDS[id] ?? ""}>
                       {getDisplayName(id)}
                     </Select.Item>
@@ -370,7 +359,9 @@ export const SettingsPage = (): ReactElement => {
               {activeSection === SettingsSection.KEYBINDINGS && (
                 <KeybindingsSection onSettingChange={handleSettingChange} />
               )}
-              {activeSection === SettingsSection.PLUGINS && <PluginsSettingsSection />}
+              {activeSection === SettingsSection.PLUGINS && (
+                <PluginsSettingsSection onSettingChange={handleSettingChange} />
+              )}
               {activeSection === SettingsSection.PRIVACY && (
                 <SettingsSectionLayout description="Your email and telemetry preferences.">
                   <AccountFieldRow
@@ -466,18 +457,6 @@ export const SettingsPage = (): ReactElement => {
                     />
                   </SettingRow>
                   <SettingRow
-                    title="Rich markdown rendering"
-                    description="Render .md and .markdown files as formatted HTML in the file viewer instead of source. Toggle via the eye icon in the diff toolbar."
-                  >
-                    <Switch
-                      checked={isRichMarkdownRenderingEnabled}
-                      onCheckedChange={(checked) =>
-                        handleSettingChange(UserConfigField.ENABLE_RICH_MARKDOWN_RENDERING, checked)
-                      }
-                      data-testid={ElementIds.SETTINGS_ENABLE_RICH_MARKDOWN_RENDERING_TOGGLE}
-                    />
-                  </SettingRow>
-                  <SettingRow
                     title="Pi agent"
                     description="Offer the experimental pi agent as a choice when creating new agents."
                   >
@@ -485,18 +464,6 @@ export const SettingsPage = (): ReactElement => {
                       checked={isPiAgentEnabled}
                       onCheckedChange={(checked) => handleSettingChange(UserConfigField.ENABLE_PI_AGENT, checked)}
                       data-testid={ElementIds.SETTINGS_ENABLE_PI_AGENT_TOGGLE}
-                    />
-                  </SettingRow>
-                  <SettingRow
-                    title="Frontend plugins"
-                    description="Load runtime frontend plugins and show the Plugins settings section. Enabling applies immediately; disabling takes effect after an app reload."
-                  >
-                    <Switch
-                      checked={isFrontendPluginsEnabled}
-                      onCheckedChange={(checked) =>
-                        handleSettingChange(UserConfigField.ENABLE_FRONTEND_PLUGINS, checked)
-                      }
-                      data-testid={ElementIds.SETTINGS_ENABLE_FRONTEND_PLUGINS_TOGGLE}
                     />
                   </SettingRow>
                   <CustomBackendSection setToast={setToast} />

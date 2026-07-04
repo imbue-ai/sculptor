@@ -413,7 +413,7 @@ check:
     # Note: check-large-files is not included here as it checks staged files only (for pre-commit hooks)
     # Run checks in parallel (fastest first for quicker feedback).
     ./sculptor/frontend/node_modules/.bin/concurrently \
-      --names check-yaml,check-uv-lock,check-shellcheck,ratchets,typecheck,check-file-hygiene,check-reserved-plugin-names,lint \
+      --names check-yaml,check-uv-lock,check-shellcheck,ratchets,typecheck,check-file-hygiene,check-reserved-plugin-names,check-plugin-sdk-dts,lint \
       --prefix-colors auto \
       "just _run-check check-yaml" \
       "just _run-check check-uv-lock" \
@@ -422,6 +422,7 @@ check:
       "just _run-check typecheck" \
       "just _run-check check-file-hygiene" \
       "just _run-check check-reserved-plugin-names" \
+      "just _run-check check-plugin-sdk-dts" \
       "just _run-check lint" \
       2>&1 | grep -v 'exited with code 0'
 
@@ -596,6 +597,7 @@ _patch-electron-app-name label:
 [group("dev")]
 frontend:
     #!/usr/bin/env bash
+    {{ nvm_use }}
     just _patch-electron-app-name "Sculptor (from source)"
     cd "{{justfile_directory()}}/sculptor/frontend"
     env SCULPTOR_ICON_LABEL="src" \
@@ -608,6 +610,7 @@ frontend:
 frontend-container:
     #!/usr/bin/env bash
     set -euo pipefail
+    {{ nvm_use }}
     REPO_ROOT="{{justfile_directory()}}"
     IMAGE_NAME="sculptor-backend-dev"
     SCRIPT="$REPO_ROOT/container/run-backend-in-container.sh"
@@ -644,6 +647,7 @@ frontend-container:
 frontend-custom:
     #!/usr/bin/env bash
     set -euo pipefail
+    {{ nvm_use }}
     REPO_ROOT="{{justfile_directory()}}"
     PORT="${SCULPTOR_API_PORT:-5050}"
 
@@ -732,9 +736,131 @@ tmux-dev-no-project:
 tmux-stop:
 	tmux kill-session -t {{session_name}} 2>/dev/null && echo "Session '{{session_name}}' terminated" || echo "Session '{{session_name}}' did not exist"
 
-# Rebuilds everything needed to successfully `just start` after changing commits
+# A too-old `uv` hard-errors on EVERY `uv` command, so a fresh workspace that
+# ships an older uv can't build, test, or `uv run` anything until uv is upgraded.
+# doctor upgrades a self-updatable uv in place; otherwise it prints the exact
+# upgrade command for how uv was installed.
+# Detect an out-of-range uv and self-remediate it, or print the exact fix.
 [group("dev")]
-rebuild: clean install install-ratchets generate-api generate-sculpt-client
+doctor:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{justfile_directory()}}"
+
+    # Compare dotted numeric versions: exit 0 (success) iff $1 >= $2.
+    version_ge() {
+      awk -v a="$1" -v b="$2" 'BEGIN {
+        na = split(a, x, "."); nb = split(b, y, ".");
+        n = (na > nb) ? na : nb;
+        for (i = 1; i <= n; i++) {
+          xi = (i <= na) ? x[i] + 0 : 0;
+          yi = (i <= nb) ? y[i] + 0 : 0;
+          if (xi > yi) exit 0;
+          if (xi < yi) exit 1;
+        }
+        exit 0;
+      }'
+    }
+
+    # Print uv's numeric version (e.g. 0.11.24), empty if uv can't report one.
+    # The `|| true` matters: it keeps a failing `uv` from tripping `set -e` in
+    # the `$(uv_version)` callers, so doctor still prints guidance for a broken uv.
+    uv_version() {
+      uv --version 2>/dev/null | sed -n 's/^uv \([0-9][0-9.]*\).*/\1/p' || true
+    }
+
+    # Source of truth for the pin: the `required-version` line in pyproject.toml
+    # (e.g. `required-version = ">=0.11.22"`).
+    spec="$(awk -F'"' '/^required-version[[:space:]]*=/{print $2; exit}' pyproject.toml)"
+    if [ -z "$spec" ]; then
+      echo "doctor: could not read 'required-version' from pyproject.toml" >&2
+      exit 1
+    fi
+    # We reason about the '>=X.Y.Z' lower bound, which is what this repo pins.
+    min="$(printf '%s' "$spec" | sed -n 's/.*>=[[:space:]]*\([0-9][0-9.]*\).*/\1/p')"
+
+    if ! command -v uv >/dev/null 2>&1; then
+      echo "doctor: uv is not installed, but this repo requires uv $spec." >&2
+      echo "  Install it:  curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+      exit 1
+    fi
+    cur="$(uv_version)"
+
+    if [ -z "$min" ]; then
+      echo "doctor: cannot parse a '>=' lower bound from required-version=\"$spec\"." >&2
+      echo "  doctor only understands a '>=X.Y.Z' floor — update this recipe to handle" >&2
+      echo "  the new format, or fix the pin in pyproject.toml." >&2
+      exit 1
+    fi
+    if version_ge "$cur" "$min"; then
+      echo "doctor: uv $cur satisfies required $spec — OK"
+      exit 0
+    fi
+
+    echo "doctor: uv $cur is older than this repo requires ($spec)." >&2
+
+    # Detect how uv was installed and remediate accordingly. Only the
+    # standalone-installer build supports `uv self update`; a package-managed
+    # build must be upgraded through its own package manager.
+    uv_bin="$(command -v uv)"
+    if command -v realpath >/dev/null 2>&1; then
+      uv_real="$(realpath "$uv_bin" 2>/dev/null || printf '%s' "$uv_bin")"
+    else
+      uv_real="$uv_bin"
+    fi
+
+    recheck() {
+      new="$(uv_version)"
+      if version_ge "$new" "$min"; then
+        echo "doctor: uv upgraded to $new — OK"
+        return 0
+      fi
+      echo "doctor: uv is still $new after upgrading (needs $spec)." >&2
+      return 1
+    }
+
+    hint="standalone"
+    case "$uv_real" in
+      *"/Cellar/"*|*"/homebrew/"*|*"/.linuxbrew/"*) hint="brew" ;;
+      *"/pipx/"*) hint="pipx" ;;
+      *"/.cargo/"*) hint="cargo" ;;
+    esac
+    if command -v brew >/dev/null 2>&1; then
+      brew_prefix="$(brew --prefix 2>/dev/null || true)"
+      if [ -n "$brew_prefix" ] && [ "${uv_real#"$brew_prefix"}" != "$uv_real" ]; then
+        hint="brew"
+      fi
+    fi
+
+    case "$hint" in
+      standalone)
+        echo "doctor: attempting 'uv self update'..." >&2
+        if uv self update; then
+          recheck && exit 0
+        fi
+        echo "  If self-update is unavailable, reinstall the standalone build:" >&2
+        echo "      curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+        ;;
+      brew)
+        echo "  This uv is managed by Homebrew. Upgrade it with:" >&2
+        echo "      brew upgrade uv" >&2
+        ;;
+      pipx)
+        echo "  This uv is managed by pipx. Upgrade it with:" >&2
+        echo "      pipx upgrade uv" >&2
+        ;;
+      cargo)
+        echo "  This uv was installed via cargo. Upgrade it with:" >&2
+        echo "      cargo install --locked uv" >&2
+        ;;
+    esac
+    exit 1
+
+# Runs `doctor` first so a fresh workspace with an out-of-range uv is fixed (or
+# told exactly how to fix it) before the expensive clean/install steps run.
+# Rebuilds everything needed to successfully `just start` after changing commits.
+[group("dev")]
+rebuild: doctor clean install install-ratchets generate-api generate-sculpt-client
 
 # Open the per-test runtime distribution visualization in a browser.
 # Reads offload-history.jsonl from the repo root (tracked; updated by every `offload` run).
@@ -810,6 +936,38 @@ generate-api:
       pnpm run generate-api
     }
     quiet_by_default generate-api _do_generate_api
+
+# Roll up the plugin SDK declarations into the build-sculptor-plugin skill's sdk.d.ts
+[group("codegen")]
+generate-plugin-sdk-dts: generate-api
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ _quiet_by_default_fn }}
+    _do_generate_plugin_sdk_dts() {
+      {{ nvm_use }}
+      cd "{{justfile_directory()}}/sculptor/frontend"
+      pnpm run generate-plugin-sdk-dts
+    }
+    quiet_by_default generate-plugin-sdk-dts _do_generate_plugin_sdk_dts
+
+# Verify the checked-in sdk.d.ts rollup matches the plugin SDK source
+[group("ci")]
+check-plugin-sdk-dts:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ _quiet_by_default_fn }}
+    _do_check_plugin_sdk_dts() {
+      {{ nvm_use }}
+      cd "{{justfile_directory()}}/sculptor/frontend"
+      tmp_file=$(mktemp)
+      trap 'rm -f "$tmp_file"' EXIT
+      ./scripts/generate-plugin-sdk-dts.sh "$tmp_file"
+      if ! diff -u ../sculptor-plugin/skills/build-sculptor-plugin/sdk.d.ts "$tmp_file"; then
+        echo "sdk.d.ts is stale - run 'just generate-plugin-sdk-dts' and commit the result."
+        exit 1
+      fi
+    }
+    quiet_by_default check-plugin-sdk-dts _do_check_plugin_sdk_dts
 
 # Installs all frontend libraries necessary
 [group("install")]

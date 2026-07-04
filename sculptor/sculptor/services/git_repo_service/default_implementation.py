@@ -39,6 +39,23 @@ class _ReadOnlyGitRepoSharedMethods(_GitRepoSharedMethods, ABC):
         except GitRepoError:
             return False
 
+    def is_valid_branch_name(self, branch: str) -> bool:
+        """Whether `branch` is a legal git branch name.
+
+        Defers to `git check-ref-format --branch`, the authoritative validator,
+        so names git would reject (spaces, `:`, `~`, a trailing `.`, a leading
+        `-`, etc.) are caught before they reach `git worktree add -b`, which
+        would otherwise fail with an opaque error deep inside async environment
+        setup rather than at the point the name was chosen.
+        """
+        if not branch:
+            return False
+        try:
+            self._run_git(["check-ref-format", "--branch", branch])
+            return True
+        except GitRepoError:
+            return False
+
     def get_current_commit_hash(self) -> str:
         return self._run_git(["rev-parse", "HEAD"]).strip()
 
@@ -58,8 +75,13 @@ class _ReadOnlyGitRepoSharedMethods(_GitRepoSharedMethods, ABC):
 
     @log_runtime_decorator("get_all_branches")
     def get_all_branches(self) -> list[str]:
-        # Get all local branches in alphabetical order
-        all_branches_result = self._run_git(["branch", "--format=%(refname:short)"])
+        # Enumerate real local branches (refs/heads/) in alphabetical order.
+        # We use `for-each-ref` (plumbing) rather than `git branch` (porcelain)
+        # because, in a detached-HEAD state, `git branch` prepends a placeholder
+        # line like "(HEAD detached at <ref>)" that is not a branch. That
+        # placeholder would otherwise surface in the source-branch picker and, if
+        # selected, be passed to `git worktree add` as a ref git rejects.
+        all_branches_result = self._run_git(["for-each-ref", "--format=%(refname:short)", "refs/heads/"])
         all_branches = [b.strip() for b in all_branches_result.strip().split("\n") if b.strip()]
 
         if not all_branches:

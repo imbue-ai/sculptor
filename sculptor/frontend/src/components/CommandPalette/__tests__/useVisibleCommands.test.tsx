@@ -6,7 +6,7 @@
 import { act, cleanup } from "@testing-library/react";
 import { createStore } from "jotai";
 import type { ReactElement } from "react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CodingAgentTaskView } from "~/api";
 import { taskAtomFamily, taskIdsAtom, tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
@@ -23,13 +23,16 @@ import type { Command } from "../types.ts";
 const taskFor = (id: string, workspaceId: string, overrides: Partial<CodingAgentTaskView> = {}): CodingAgentTaskView =>
   ({ id, workspaceId, isDeleted: false, ...overrides }) as CodingAgentTaskView;
 
-let hostRenderCount = 0;
-let latestCommands: ReadonlyArray<Command> = [];
+// A vi.fn() recorder keeps the component body free of outer-variable
+// reassignment (react-hooks compiler rule): render count = call count,
+// latest hook result = last call's argument.
+const recordRender = vi.fn<(commands: ReadonlyArray<Command>) => void>();
+const hostRenderCount = (): number => recordRender.mock.calls.length;
+const latestCommands = (): ReadonlyArray<Command> => recordRender.mock.lastCall?.[0] ?? [];
 
 const Host = (): ReactElement => {
-  hostRenderCount += 1;
   const ctx = usePaletteContext();
-  latestCommands = useVisibleCommands(ctx);
+  recordRender(useVisibleCommands(ctx));
   return <div />;
 };
 
@@ -68,8 +71,7 @@ const registryWithTaskProvider = (store: Store): CommandRegistry => {
 describe("useVisibleCommands", () => {
   beforeEach(() => {
     localStorage.clear();
-    hostRenderCount = 0;
-    latestCommands = [];
+    recordRender.mockClear();
   });
 
   afterEach(() => {
@@ -80,7 +82,7 @@ describe("useVisibleCommands", () => {
     const store = createStore();
     store.set(activeWorkspaceIdAtom, "ws-test");
     renderHost(store, new CommandRegistry());
-    const rendersAfterMount = hostRenderCount;
+    const rendersAfterMount = hostRenderCount();
 
     act(() => {
       store.set(taskIdsAtom, ["t1"]);
@@ -93,7 +95,7 @@ describe("useVisibleCommands", () => {
       store.set(workspaceLayoutAtom, { ...EMPTY_WORKSPACE_LAYOUT });
     });
 
-    expect(hostRenderCount).toBe(rendersAfterMount);
+    expect(hostRenderCount()).toBe(rendersAfterMount);
   });
 
   it("builds the first-open list from state written while the palette was closed", () => {
@@ -106,12 +108,12 @@ describe("useVisibleCommands", () => {
       store.set(taskAtomFamily("t1"), taskFor("t1", "ws-test"));
     });
     // Closed: the memo short-circuits, so nothing is listed yet.
-    expect(latestCommands).toEqual([]);
+    expect(latestCommands()).toEqual([]);
 
     act(() => {
       store.set(commandPaletteOpenAtom, true);
     });
-    expect(latestCommands.map((cmd) => cmd.id)).toContain("test.task.t1");
+    expect(latestCommands().map((cmd) => cmd.id)).toContain("test.task.t1");
   });
 
   it("recomputes the list when a provider input changes while the palette is open", () => {
@@ -119,13 +121,13 @@ describe("useVisibleCommands", () => {
     store.set(commandPaletteOpenAtom, true);
     const registry = registryWithTaskProvider(store);
     renderHost(store, registry);
-    expect(latestCommands).toEqual([]);
+    expect(latestCommands()).toEqual([]);
 
     act(() => {
       store.set(taskIdsAtom, ["t1"]);
       store.set(taskAtomFamily("t1"), taskFor("t1", "ws-test"));
     });
 
-    expect(latestCommands.map((cmd) => cmd.id)).toContain("test.task.t1");
+    expect(latestCommands().map((cmd) => cmd.id)).toContain("test.task.t1");
   });
 });

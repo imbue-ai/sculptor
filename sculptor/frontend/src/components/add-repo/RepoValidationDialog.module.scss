@@ -4,6 +4,25 @@
   padding: var(--space-3);
 }
 
+/*
+ * Make the Radix Dialog overlay transparent so the underlying page (e.g. the
+ * onboarding wizard) stays visible behind the validation dialog. Radix Themes
+ * 3.x renders the overlay as a portal-mounted ancestor that wraps the scroll
+ * padding and Content; the overlay's *visible* background lives on its
+ * `::before` pseudo-element (`background-color: var(--color-overlay)`), so a
+ * direct `background: transparent` on `.rt-DialogOverlay` is a no-op. We mark
+ * the Content node with `transparentOverlay` and walk back up from the
+ * overlay with `:has()` to neutralize the `::before` for *this* dialog only.
+ */
+.transparentOverlay {
+  /* Placeholder so the CSS module exposes the class name. */
+}
+
+/* stylelint-disable-next-line selector-class-pattern -- Radix-internal class accessed via :global() */
+:global(.rt-DialogOverlay):has(.transparentOverlay)::before {
+  background-color: transparent;
+}
+
 .warningIcon {
   color: var(--amber-9);
   flex-shrink: 0;
@@ -16,5 +35,24 @@
 
 .errorIcon {
   color: var(--tomato-9);
+  flex-shrink: 0;
+}
+
+.pathBox {
+  background: var(--gray-a3);
+  border-radius: var(--radius-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+.pathText {
+  flex: 1;
+  font-family: var(--mono-font-family);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pathCopyButton {
   flex-shrink: 0;
 }

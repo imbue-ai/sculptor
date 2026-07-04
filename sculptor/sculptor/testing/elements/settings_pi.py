@@ -71,3 +71,59 @@ class PlaywrightPiSettingsElement(PlaywrightIntegrationTestElement):
         assertions.
         """
         return self.get_by_text(re.compile(r"sign in", re.IGNORECASE))
+
+    def get_providers_group_connected(self) -> Locator:
+        """Get the Connected section (one card per authenticated provider)."""
+        return self.get_by_test_id(ElementIDs.PI_PROVIDERS_GROUP_CONNECTED)
+
+    def get_providers_group_available(self) -> Locator:
+        """Get the Add-a-provider grid section."""
+        return self.get_by_test_id(ElementIDs.PI_PROVIDERS_GROUP_AVAILABLE)
+
+    def get_providers_group_session_only(self) -> Locator:
+        """Get the Session-only explainer callout."""
+        return self.get_by_test_id(ElementIDs.PI_PROVIDERS_GROUP_SESSION_ONLY)
+
+    def get_connected_card(self, provider_id: str) -> Locator:
+        """Get the Connected card for a specific provider id."""
+        return self.get_by_test_id(f"{ElementIDs.PI_PROVIDER_CARD}-{provider_id}")
+
+    def get_add_provider_cell(self, provider_id: str) -> Locator:
+        """Get the Add-a-provider grid cell for a specific provider id."""
+        return self.get_by_test_id(f"{ElementIDs.PI_PROVIDER_ADD_CELL}-{provider_id}")
+
+    def get_login_dialog(self) -> Locator:
+        """Get the centered pi /login (or /logout) modal.
+
+        The modal renders in a page-level portal, so it is reached via the page
+        rather than this section element (as with Radix Select options).
+        """
+        return self._page.get_by_test_id(ElementIDs.PI_LOGIN_DIALOG)
+
+    def get_authenticate_button(self) -> Locator:
+        """Get the 'Open pi login' button inside the login modal."""
+        return self._page.get_by_test_id(ElementIDs.PI_PROVIDER_AUTHENTICATE_BUTTON)
+
+    def get_disconnect_button(self, provider_id: str) -> Locator:
+        """Get a connected card's Disconnect button (auth.json-backed providers only)."""
+        return self.get_by_test_id(f"{ElementIDs.PI_PROVIDER_DISCONNECT_BUTTON}-{provider_id}")
+
+    def get_login_terminal(self) -> Locator:
+        """Get the embedded pi login terminal container inside the modal."""
+        return self._page.get_by_test_id(ElementIDs.PI_LOGIN_TERMINAL)
+
+    def get_login_done_button(self) -> Locator:
+        """Get the Done button that tears down the login session and closes the modal."""
+        return self._page.get_by_test_id(ElementIDs.PI_LOGIN_DONE_BUTTON)
+
+    def get_paste_key_switch(self) -> Locator:
+        """Get the 'Paste API key instead' button inside the login modal."""
+        return self._page.get_by_test_id(ElementIDs.PI_PROVIDER_PASTE_KEY_SWITCH)
+
+    def get_paste_key_input(self) -> Locator:
+        """Get the paste-key value input field inside the modal."""
+        return self._page.get_by_test_id(ElementIDs.PI_PASTE_KEY_INPUT)
+
+    def get_paste_key_save(self) -> Locator:
+        """Get the paste-key Save button inside the modal."""
+        return self._page.get_by_test_id(ElementIDs.PI_PASTE_KEY_SAVE)

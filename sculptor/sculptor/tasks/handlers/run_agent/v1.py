@@ -236,6 +236,10 @@ def run_agent_task_v1(
                         input_message_queue, task_state, shutdown_event
                     )
 
+                    # A pre-first-message model switch is written to task state out of band
+                    # from this in-memory copy; re-read so the selection is not lost here.
+                    task_state = _refresh_model_fields_from_db(task.object_id, task_state, services)
+
                     with title_prediction_context(
                         task_state,
                         initial_message,
@@ -347,9 +351,12 @@ def _run_agent_in_environment(
     last_user_chat_message_id: AgentMessageID | None = None
     # track the full history of persistent messages we've seen
     persistent_message_history: list[PersistentUserMessage | PersistentAgentMessage] = []
-    # tracks whether the agent has asked a question that hasn't been answered yet;
-    # while True, queued messages must not be dequeued — only the answer should be sent
-    is_waiting_for_question_answer: bool = False
+    # tool_use_ids of questions the agent asked that haven't been answered yet;
+    # while non-empty, queued messages must not be dequeued — only answers should
+    # be sent. A set (not a flag) because multiple questions can pend at once:
+    # subagents can each ask mid-turn, and answering one must not make the
+    # runner forget it is still waiting on the others.
+    pending_question_tool_use_ids: set[str] = set()
     with log_runtime("run_agent_in_environment pre-processing"):
         # figure out what command we need to run (eg, which agent to invoke)
         in_testing = settings.TESTING.INTEGRATION_ENABLED
@@ -508,8 +515,8 @@ def _run_agent_in_environment(
         # detect if the agent asked a question during this batch of messages
         for message in new_messages:
             if isinstance(message, AskUserQuestionAgentMessage):
-                is_waiting_for_question_answer = True
-            elif is_waiting_for_question_answer and isinstance(
+                pending_question_tool_use_ids.add(message.question_data.tool_use_id)
+            elif pending_question_tool_use_ids and isinstance(
                 message, (RequestFailureAgentMessage, RequestStoppedAgentMessage)
             ):
                 # SCU-530: the agent's chat request failed or was stopped while we
@@ -517,7 +524,7 @@ def _run_agent_in_environment(
                 # that answer is gone, so stop waiting. Without this, subsequent
                 # ChatInputUserMessages match the guard at line 624 and get silently
                 # appended to ``queued_user_input_messages`` forever.
-                is_waiting_for_question_answer = False
+                pending_question_tool_use_ids.clear()
 
         # add any persistent messages to our history
         for message in new_messages:
@@ -569,8 +576,8 @@ def _run_agent_in_environment(
         # AUQ anymore), so ``is_agent_turn_finished`` never fires for the
         # AUQ-triggering message — gate this block on either condition so
         # the answer can be dispatched mid-turn.
-        if is_agent_turn_finished or is_waiting_for_question_answer:
-            if is_waiting_for_question_answer:
+        if is_agent_turn_finished or pending_question_tool_use_ids:
+            if pending_question_tool_use_ids:
                 # The agent asked a question — don't dequeue the next message yet.
                 # Wait for the UserQuestionAnswerMessage before continuing.
                 # However, the answer may have already arrived and been queued while the
@@ -584,7 +591,7 @@ def _run_agent_in_environment(
                         remaining.append(queued_msg)
                 queued_user_input_messages = remaining
                 if queued_answer is not None:
-                    is_waiting_for_question_answer = False
+                    pending_question_tool_use_ids.discard(queued_answer.tool_use_id)
                     user_input_message_being_processed = _send_user_input_message(
                         agent_wrapper,
                         queued_answer,
@@ -623,13 +630,13 @@ def _run_agent_in_environment(
             if isinstance(message, PersistentUserMessage):
                 if isinstance(message, ChatInputUserMessage) and last_user_chat_message_id is None:
                     last_user_chat_message_id = message.message_id
-                if is_waiting_for_question_answer and not isinstance(message, UserQuestionAnswerMessage):
+                if pending_question_tool_use_ids and not isinstance(message, UserQuestionAnswerMessage):
                     # While the agent is waiting for a question answer, queue all other
                     # messages — only the answer should be sent to the agent.
                     queued_user_input_messages.append(message)
                 elif user_input_message_being_processed is None:
                     if isinstance(message, UserQuestionAnswerMessage):
-                        is_waiting_for_question_answer = False
+                        pending_question_tool_use_ids.discard(message.tool_use_id)
                     user_input_message_being_processed = _send_user_input_message(
                         agent_wrapper,
                         message,
@@ -1144,6 +1151,32 @@ def _record_available_models_in_state(
         task_state=task_state,
         services=services,
     )
+
+
+def _refresh_model_fields_from_db(
+    task_id: TaskID,
+    task_state: AgentTaskStateV2,
+    services: ServiceCollectionForTask,
+) -> AgentTaskStateV2:
+    """Pull the switcher's model fields (`available_models` / `current_model`) from the DB.
+
+    The set_model endpoint writes the selected model straight to task state while the
+    agent waits for its first message, so this handler's in-memory copy goes stale.
+    Refresh only those two fields (leaving the rest of the in-memory state as-is) so a
+    pre-message switch reaches agent construction and survives `finalize_task_setup`'s
+    write-back. A no-op when nothing changed or the task row is missing.
+    """
+    with services.data_model_service.open_task_transaction() as transaction:
+        task_row = transaction.get_task(task_id)
+    if task_row is None:
+        return task_state
+    db_state = AgentTaskStateV2.model_validate(task_row.current_state)
+    if db_state.available_models == task_state.available_models and db_state.current_model == task_state.current_model:
+        return task_state
+    mutable_task_state = evolver(task_state)
+    assign(mutable_task_state.available_models, lambda: db_state.available_models)
+    assign(mutable_task_state.current_model, lambda: db_state.current_model)
+    return chill(mutable_task_state)
 
 
 def _persist_available_models(

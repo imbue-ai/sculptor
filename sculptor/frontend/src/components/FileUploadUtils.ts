@@ -1,6 +1,5 @@
 import { baseUrl } from "~/apiClient.ts";
 import { setupAuthHeaders } from "~/common/Auth.ts";
-import { getBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 // NOTE: we can support PDF uploads but Claude Code can not read PDFs
@@ -161,30 +160,13 @@ const uploadFilesToBackend = async (files: Array<File>): Promise<Array<string>> 
 };
 
 /**
- * Save files using the window.sculptor API or HTTP upload depending on backend capabilities.
+ * Upload files to the backend over HTTP, returning their upload ids.
+ *
+ * Both the desktop and web builds route uploads through the backend now; the
+ * Electron `saveFile` IPC handler has been removed.
  */
 export const saveFiles = async (files: Array<File>): Promise<Array<string>> => {
-  if (getBackendCapabilities().fileUploadMode === "http") {
-    return uploadFilesToBackend(files);
-  }
-
-  const filePromises = files.map(async (file) => {
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-
-      if (window.sculptor?.saveFile) {
-        return await window.sculptor.saveFile(arrayBuffer, file.name);
-      }
-
-      return null;
-    } catch (error) {
-      console.error("Failed to save file:", error);
-      return null;
-    }
-  });
-
-  const savedFilePaths = await Promise.all(filePromises);
-  return savedFilePaths.filter((path): path is string => path !== null);
+  return uploadFilesToBackend(files);
 };
 
 export { ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES };

@@ -5,6 +5,7 @@ from functools import partial
 from pathlib import Path
 from queue import Empty
 from queue import Queue
+from typing import Callable
 from typing import Generator
 from typing import TypeVar
 from typing import assert_never
@@ -51,6 +52,7 @@ from sculptor.web.auth import UserSession
 from sculptor.web.data_types import BtwUpdate
 from sculptor.web.data_types import DependenciesStatus
 from sculptor.web.data_types import OpenFileUiAction
+from sculptor.web.data_types import PluginCommandUiAction
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.data_types import UserUpdateSourceTypes
 from sculptor.web.data_types import WebviewCommandUiAction
@@ -66,7 +68,6 @@ from sculptor.web.derived import WorkspaceTargetBranchesInfo
 from sculptor.web.derived import create_initial_task_view
 from sculptor.web.message_conversion import convert_agent_messages_to_task_update
 from sculptor.web.pr_polling_service import PrPollingService
-from sculptor.web.repo_polling_manager import manage_workspace_branch_polling
 from sculptor.web.ui_actions import add_subscriber as add_ui_action_subscriber
 from sculptor.web.ui_actions import remove_subscriber as remove_ui_action_subscriber
 
@@ -336,6 +337,7 @@ class StreamingUpdate(SerializableModel):
     btw_update: BtwUpdate | None = None
     ui_open_file_by_workspace_id: dict[WorkspaceID, OpenFileUiAction] = Field(default_factory=dict)
     ui_webview_command_by_workspace_id: dict[WorkspaceID, WebviewCommandUiAction] = Field(default_factory=dict)
+    ui_plugin_command_by_workspace_id: dict[WorkspaceID, PluginCommandUiAction] = Field(default_factory=dict)
 
 
 _WorkspaceValueT = TypeVar("_WorkspaceValueT")
@@ -447,6 +449,9 @@ def project_for_scope(
         ui_webview_command_by_workspace_id=_narrow_by_workspace_id(
             update.ui_webview_command_by_workspace_id, proj.scoped_workspace_ids
         ),
+        ui_plugin_command_by_workspace_id=_narrow_by_workspace_id(
+            update.ui_plugin_command_by_workspace_id, proj.scoped_workspace_ids
+        ),
     )
 
 
@@ -475,12 +480,12 @@ def stream_everything(
     #
     # - task_subscription_cm: which TaskService subscription to open
     #   (one of subscribe_to_all_tasks_for_user / project / workspace / single).
-    # - workspace_branch_workspace_filter, workspace_branch_project_filter:
-    #   narrowing args passed into the branch polling manager. None means
-    #   "no narrowing — poll everything".
-    # - polling_enabled: whether to attach the polling managers at all.
-    #   False only for ScopeAgent — project_for_scope drops every workspace-
-    #   and project-keyed field for that scope anyway, so polling is pure waste.
+    # - polling_enabled: whether to subscribe this connection to the polling
+    #   services (git-state scanner + PR polling). False only for ScopeAgent —
+    #   project_for_scope drops every workspace- and project-keyed field for that
+    #   scope anyway, so a subscription is pure waste. The git-state scanner is a
+    #   single process-global loop regardless of how many connections subscribe;
+    #   per-connection scope narrowing happens in project_for_scope, not here.
     # - attach_full_user_observers: gates the dependency-status observer
     #   AND the dependency_status entry in the initial dump. True only for
     #   ScopeAll, since project_for_scope drops user_update / dependencies_status
@@ -491,8 +496,6 @@ def stream_everything(
     #   True for ScopeProject and ScopeWorkspace. ScopeAgent gets deletion
     #   signals from its single-task subscription instead, so it leaves this
     #   observer detached entirely.
-    workspace_branch_workspace_filter: WorkspaceID | None = None
-    workspace_branch_project_filter: ProjectID | None = None
     attach_full_user_observers = False
     polling_enabled = False
     attach_user_changes_for_close_on_delete = False
@@ -504,14 +507,12 @@ def stream_everything(
         task_subscription_cm = services.task_service.subscribe_to_project_task_containers(
             scope.project_id, user_session.user_reference
         )
-        workspace_branch_project_filter = scope.project_id
         polling_enabled = True
         attach_user_changes_for_close_on_delete = True
     elif isinstance(scope, ScopeWorkspace):
         task_subscription_cm = services.task_service.subscribe_to_workspace_task_containers(
             scope.workspace_id, user_session.user_reference
         )
-        workspace_branch_workspace_filter = scope.workspace_id
         polling_enabled = True
         attach_user_changes_for_close_on_delete = True
     elif isinstance(scope, ScopeAgent):
@@ -538,6 +539,13 @@ def stream_everything(
         if register_pr_observer:
             assert pr_polling_service is not None
             pr_polling_service.add_observer(updates_queue_loosely_typed)
+        # Subscribe to WorkspaceService's per-workspace git state (current branch,
+        # target branches). add_observer backfills current state into the queue, so
+        # it is drained into the initial dump below and the PR-polling coupling in
+        # _notify_pr_polling_service sees it just as it did with the old poller.
+        branch_state_service = services.workspace_service if polling_enabled else None
+        if branch_state_service is not None:
+            branch_state_service.add_observer(updates_queue_loosely_typed)
         if btw_service is not None:
             btw_service.add_observer_queue(updates_queue_loosely_typed)
         add_ui_action_subscriber(updates_queue_loosely_typed.put_nowait)
@@ -551,22 +559,23 @@ def stream_everything(
                             queue=updates_queue_loosely_typed,
                         )
                     )
-                workspace_branch_manager = None
-                if polling_enabled:
-                    workspace_branch_manager = stack.enter_context(
-                        manage_workspace_branch_polling(
-                            services=services,
-                            queue=updates_queue_loosely_typed,
-                            concurrency_group=concurrency_group,
-                            workspace_filter=workspace_branch_workspace_filter,
-                            project_filter=workspace_branch_project_filter,
-                        )
-                    )
                 # Initialize state tracking
                 completed_message_by_task_id: dict[TaskID, dict[AgentMessageID, ChatMessage]] = {}
                 task_views_by_task_id: dict[TaskID, CodingAgentTaskView] = {}
                 task_update_state_by_task_id: dict[TaskID, TaskUpdate] = {}
                 pr_poll_last_branch: dict[WorkspaceID, str] = {}
+
+                def _pr_poll_workspace_in_scope(workspace_id: WorkspaceID) -> bool:
+                    # The git-state scanner fans branch infos out for every
+                    # workspace; only drive PR polling for those this stream serves.
+                    # Reads the live project_workspace_ids set, which the loop below
+                    # keeps current for ScopeProject. ScopeAgent never reaches here
+                    # (polling is disabled for it).
+                    if isinstance(scope, ScopeWorkspace):
+                        return workspace_id == scope.workspace_id
+                    if isinstance(scope, ScopeProject):
+                        return workspace_id in project_workspace_ids
+                    return True
 
                 # Yield the initial state dump
                 initial_data: list[StreamingUpdateSourceTypes] = _empty_update_queue(
@@ -595,11 +604,9 @@ def stream_everything(
                 # We yield the initial state before starting the background watchers to minimize time to first message for the frontend
                 yield project_for_scope(initial_update, scope, frozenset(project_workspace_ids))
 
-                # Start background watchers after emitting the initial state
-                if workspace_branch_manager is not None:
-                    workspace_branch_manager.initialize()
-                    workspace_branch_manager.update_pollers_based_on_stream(initial_data)
-                _notify_pr_polling_service(pr_polling_service_for_notify, initial_data, pr_poll_last_branch)
+                _notify_pr_polling_service(
+                    pr_polling_service_for_notify, initial_data, pr_poll_last_branch, _pr_poll_workspace_in_scope
+                )
 
                 # Track last-yielded dependencies status so we only send deltas.
                 # The service pushes unconditionally; we filter here per-connection.
@@ -612,9 +619,9 @@ def stream_everything(
                         shutdown_event=combined_event,
                         is_blocking_allowed=True,
                     )
-                    if workspace_branch_manager is not None:
-                        workspace_branch_manager.update_pollers_based_on_stream(new_data)
-                    _notify_pr_polling_service(pr_polling_service_for_notify, new_data, pr_poll_last_branch)
+                    _notify_pr_polling_service(
+                        pr_polling_service_for_notify, new_data, pr_poll_last_branch, _pr_poll_workspace_in_scope
+                    )
 
                     if isinstance(scope, ScopeProject):
                         for item in new_data:
@@ -661,6 +668,8 @@ def stream_everything(
                 dependency_management_service.remove_observer_queue(updates_queue_loosely_typed)
             if pr_polling_service is not None:
                 pr_polling_service.remove_observer(updates_queue_loosely_typed)
+            if branch_state_service is not None:
+                branch_state_service.remove_observer(updates_queue_loosely_typed)
             if btw_service is not None:
                 btw_service.remove_observer_queue(updates_queue_loosely_typed)
             remove_ui_action_subscriber(updates_queue_loosely_typed.put_nowait)
@@ -715,6 +724,7 @@ def _notify_pr_polling_service(
     pr_polling_service: PrPollingService | None,
     data: list[StreamingUpdateSourceTypes],
     last_branch_by_workspace: dict[WorkspaceID, str],
+    is_workspace_in_scope: Callable[[WorkspaceID], bool],
 ) -> None:
     """Forward workspace and branch change events to the PR polling service (non-blocking).
 
@@ -724,7 +734,12 @@ def _notify_pr_polling_service(
 
     Target branch changes do **not** emit a clearing sentinel — the old PR
     status stays visible until the immediate re-poll replaces it, avoiding
-    a visible flash to the "no MR" state.
+    a visible flash to the "no PR" state.
+
+    Branch infos are fanned out for *every* workspace by the process-global
+    scanner, but a narrow-scope stream must not drive PR polling for workspaces
+    it doesn't serve, so out-of-scope branch infos are skipped here (the
+    workspace's own in-scope stream notifies for it).
     """
     if pr_polling_service is None:
         return
@@ -738,8 +753,10 @@ def _notify_pr_polling_service(
                         pr_polling_service.on_workspace_created(model)
                         # Don't clear PR status on target branch change — the old
                         # status stays visible until the immediate re-poll replaces
-                        # it, avoiding a visible flash to the "no MR" state.
+                        # it, avoiding a visible flash to the "no PR" state.
         elif isinstance(item, WorkspaceBranchInfo):
+            if not is_workspace_in_scope(item.workspace_id):
+                continue
             prev = last_branch_by_workspace.get(item.workspace_id)
             last_branch_by_workspace[item.workspace_id] = item.current_branch
             if prev is None:
@@ -778,6 +795,7 @@ def _convert_to_streaming_update(
     latest_btw_update: BtwUpdate | None = None
     updated_ui_open_file_by_workspace_id: dict[WorkspaceID, OpenFileUiAction] = {}
     updated_ui_webview_command_by_workspace_id: dict[WorkspaceID, WebviewCommandUiAction] = {}
+    updated_ui_plugin_command_by_workspace_id: dict[WorkspaceID, PluginCommandUiAction] = {}
     messages_by_task: dict[TaskID, list[Message]] = defaultdict(list)
 
     for model in all_data:
@@ -832,6 +850,9 @@ def _convert_to_streaming_update(
         elif isinstance(model, WebviewCommandUiAction):
             updated_ui_webview_command_by_workspace_id[model.workspace_id] = model
 
+        elif isinstance(model, PluginCommandUiAction):
+            updated_ui_plugin_command_by_workspace_id[model.workspace_id] = model
+
         elif isinstance(model, Message):
             raise TypeError("should not have Message models in streaming update")
         else:
@@ -866,6 +887,7 @@ def _convert_to_streaming_update(
         btw_update=latest_btw_update,
         ui_open_file_by_workspace_id=updated_ui_open_file_by_workspace_id,
         ui_webview_command_by_workspace_id=updated_ui_webview_command_by_workspace_id,
+        ui_plugin_command_by_workspace_id=updated_ui_plugin_command_by_workspace_id,
     )
 
 

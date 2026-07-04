@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { createStore, Provider as JotaiProvider } from "jotai";
 import type { ReactElement } from "react";
 
-import type { DependenciesStatus } from "~/api";
+import type { DependenciesStatus, DependencyInfo } from "~/api";
 import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus";
 import { DependenciesSettingsSection } from "~/pages/settings/components/DependenciesSettingsSection";
 
@@ -12,9 +12,41 @@ const piNotInstalled = {
   version: null,
   isOverride: false,
   mode: null,
-  versionRange: { minVersion: "0.78.0", maxVersion: "0.78.0", recommendedVersion: "0.78.0" },
+  versionRange: { minVersion: "0.80.2", maxVersion: "0.80.2", recommendedVersion: "0.80.2" },
   isVersionInRange: null,
 } as const;
+
+const optionalCliNotInstalled: DependencyInfo = {
+  installed: false,
+  path: null,
+  version: null,
+  isOverride: false,
+  mode: null,
+  versionRange: null,
+  isVersionInRange: null,
+};
+
+const ghInstalled: DependencyInfo = {
+  installed: true,
+  path: "/opt/homebrew/bin/gh",
+  version: "2.65.0",
+  isOverride: false,
+  mode: null,
+  versionRange: null,
+  isVersionInRange: null,
+  isAuthenticated: true,
+};
+
+const ghInstalledNotAuthed: DependencyInfo = {
+  installed: true,
+  path: "/opt/homebrew/bin/gh",
+  version: "2.65.0",
+  isOverride: false,
+  mode: null,
+  versionRange: null,
+  isVersionInRange: null,
+  isAuthenticated: false,
+};
 
 const managedUpToDate: DependenciesStatus = {
   git: {
@@ -37,6 +69,7 @@ const managedUpToDate: DependenciesStatus = {
     managedVersion: "1.0.16",
   },
   pi: piNotInstalled,
+  gh: optionalCliNotInstalled,
 };
 
 const managedOutOfRange: DependenciesStatus = {
@@ -60,6 +93,7 @@ const managedOutOfRange: DependenciesStatus = {
     managedVersion: "0.9.2",
   },
   pi: piNotInstalled,
+  gh: optionalCliNotInstalled,
 };
 
 const pathMode: DependenciesStatus = {
@@ -82,6 +116,7 @@ const pathMode: DependenciesStatus = {
     isVersionInRange: true,
   },
   pi: piNotInstalled,
+  gh: optionalCliNotInstalled,
 };
 
 const customMode: DependenciesStatus = {
@@ -104,6 +139,7 @@ const customMode: DependenciesStatus = {
     isVersionInRange: true,
   },
   pi: piNotInstalled,
+  gh: optionalCliNotInstalled,
 };
 
 const notInstalled: DependenciesStatus = {
@@ -126,6 +162,7 @@ const notInstalled: DependenciesStatus = {
     isVersionInRange: null,
   },
   pi: piNotInstalled,
+  gh: optionalCliNotInstalled,
 };
 
 const withInstallProgress: DependenciesStatus = {
@@ -166,6 +203,17 @@ const managedUpgradeFailed: DependenciesStatus = {
     installError: "Download failed: Server error '503 Service Unavailable'",
   },
   pi: piNotInstalled,
+  gh: optionalCliNotInstalled,
+};
+
+const ghInstalledAuthed: DependenciesStatus = {
+  ...managedUpToDate,
+  gh: ghInstalled,
+};
+
+const ghNotAuthed: DependenciesStatus = {
+  ...managedUpToDate,
+  gh: ghInstalledNotAuthed,
 };
 
 const Wrapper = ({ deps }: { deps: DependenciesStatus }): ReactElement => {
@@ -208,6 +256,14 @@ export const PathMode: Story = {
 
 export const CustomMode: Story = {
   args: { deps: customMode },
+};
+
+export const GithubCliInstalledAndAuthed: Story = {
+  args: { deps: ghInstalledAuthed },
+};
+
+export const GithubCliInstalledNotAuthed: Story = {
+  args: { deps: ghNotAuthed },
 };
 
 export const NothingInstalled: Story = {

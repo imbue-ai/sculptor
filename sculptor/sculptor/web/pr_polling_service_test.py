@@ -1,12 +1,17 @@
+import datetime
 import queue
 import threading
 import time
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import pytest
+
 from sculptor.config.user_config import UserConfig
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.web.cli_status_utils import CliStatusError
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
 from sculptor.web.derived import WorkspaceBranchInfo
@@ -18,9 +23,19 @@ from sculptor.web.pr_polling_service import _HostThrottle
 from sculptor.web.pr_polling_service import _MIN_POLL_INTERVAL_SECONDS
 from sculptor.web.pr_polling_service import _PollJob
 from sculptor.web.pr_polling_service import _RATE_LIMIT_COOLDOWN_SECONDS
+from sculptor.web.pr_polling_service import _RATE_LIMIT_WINDOW_SECONDS
+from sculptor.web.pr_polling_service import _RoundCandidate
 from sculptor.web.pr_polling_service import _TERMINAL_STATE_MULTIPLIER
 from sculptor.web.pr_polling_service import _WorkspacePollState
+from sculptor.web.pr_polling_service import _build_pr_index
+from sculptor.web.pr_polling_service import _compute_governed_interval
 from sculptor.web.pr_polling_service import _compute_poll_delay
+from sculptor.web.pr_polling_service import _compute_round_interval
+from sculptor.web.pr_polling_service import _parse_origin
+from sculptor.web.pr_polling_service import _parse_origin_owner_repo
+from sculptor.web.pr_polling_service import _seconds_until_reset
+from sculptor.web.pr_status import GithubRateLimit
+from sculptor.web.pr_status import OpenPrSearchResult
 from sculptor.web.streams import _notify_pr_polling_service
 
 # ---------------------------------------------------------------------------
@@ -49,8 +64,12 @@ def _make_service() -> PrPollingService:
     svc._worker_sleep_until = {}
     svc._worker_sleep_lock = threading.Lock()
     svc._gh_available = None
-    svc._glab_available = None
     svc._throttle = _HostThrottle(_GLOBAL_MIN_POLL_SPACING_SECONDS)
+    svc._matched_workspaces = set()
+    svc._rate_limit_by_host = {}
+    svc._round_failed_hosts = set()
+    svc._cold_start_logged_hosts = set()
+    svc._governed_interval = None
     object.__setattr__(svc, "_data_model_service", MagicMock())
     object.__setattr__(svc, "_workspace_service", MagicMock())
     return svc
@@ -114,29 +133,6 @@ def test_gh_becomes_available_after_install() -> None:
     # Now should be cached
     with patch("shutil.which", side_effect=AssertionError("should not be called")):
         assert svc._is_gh_available() is True
-
-
-def test_glab_available_cached_when_found() -> None:
-    svc = _make_service()
-    with patch("shutil.which", return_value="/usr/bin/glab"):
-        assert svc._is_glab_available() is True
-    with patch("shutil.which", side_effect=AssertionError("should not be called")):
-        assert svc._is_glab_available() is True
-
-
-def test_glab_not_cached_when_missing() -> None:
-    svc = _make_service()
-    call_count = 0
-
-    def counting_which(name: str) -> None:
-        nonlocal call_count
-        call_count += 1
-        return None
-
-    with patch("shutil.which", side_effect=counting_which):
-        assert svc._is_glab_available() is False
-        assert svc._is_glab_available() is False
-    assert call_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -269,7 +265,7 @@ def test_notify_first_branch_info_calls_on_workspace_ready() -> None:
     data: list[StreamingUpdateSourceTypes] = [
         WorkspaceBranchInfo(current_branch="feat-1", workspace_id=workspace_id),
     ]
-    _notify_pr_polling_service(svc, data, last_branch)
+    _notify_pr_polling_service(svc, data, last_branch, lambda _workspace_id: True)
 
     svc.on_workspace_ready.assert_called_once_with(workspace_id)
     svc.on_branch_changed.assert_not_called()
@@ -284,7 +280,7 @@ def test_notify_same_branch_does_not_trigger_anything() -> None:
     data: list[StreamingUpdateSourceTypes] = [
         WorkspaceBranchInfo(current_branch="feat-1", workspace_id=workspace_id),
     ]
-    _notify_pr_polling_service(svc, data, last_branch)
+    _notify_pr_polling_service(svc, data, last_branch, lambda _workspace_id: True)
 
     svc.on_workspace_ready.assert_not_called()
     svc.on_branch_changed.assert_not_called()
@@ -298,7 +294,7 @@ def test_notify_branch_change_calls_on_branch_changed() -> None:
     data: list[StreamingUpdateSourceTypes] = [
         WorkspaceBranchInfo(current_branch="feat-2", workspace_id=workspace_id),
     ]
-    _notify_pr_polling_service(svc, data, last_branch)
+    _notify_pr_polling_service(svc, data, last_branch, lambda _workspace_id: True)
 
     svc.on_branch_changed.assert_called_once_with(workspace_id)
     svc.on_workspace_ready.assert_not_called()
@@ -313,7 +309,26 @@ def test_notify_none_service_is_noop() -> None:
     ]
 
     # Should not raise
-    _notify_pr_polling_service(None, data, last_branch)
+    _notify_pr_polling_service(None, data, last_branch, lambda _workspace_id: True)
+
+
+def test_notify_skips_out_of_scope_branch_info() -> None:
+    """A branch info for a workspace outside this stream's scope must not drive
+    PR polling — the process-global scanner fans branch infos out for every
+    workspace, but only the workspace's own in-scope stream notifies for it."""
+    svc = MagicMock(spec=PrPollingService)
+    in_scope_id = WorkspaceID()
+    out_of_scope_id = WorkspaceID()
+    last_branch: dict[WorkspaceID, str] = {}
+
+    data: list[StreamingUpdateSourceTypes] = [
+        WorkspaceBranchInfo(current_branch="feat-1", workspace_id=out_of_scope_id),
+    ]
+    _notify_pr_polling_service(svc, data, last_branch, lambda workspace_id: workspace_id == in_scope_id)
+
+    svc.on_workspace_ready.assert_not_called()
+    svc.on_branch_changed.assert_not_called()
+    assert out_of_scope_id not in last_branch
 
 
 # ---------------------------------------------------------------------------
@@ -562,7 +577,7 @@ def test_poll_dynamic_config_re_read_per_cycle() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Global throttle: spacing + per-provider cooldown
+# Global throttle: spacing + cooldown
 # ---------------------------------------------------------------------------
 
 
@@ -580,27 +595,25 @@ def test_host_throttle_reserve_slot_spaces_starts() -> None:
 
 def test_host_throttle_cooldown_remaining_tracks_window() -> None:
     throttle = _HostThrottle(min_interval=1.0)
-    assert throttle.cooldown_remaining("github") == 0.0
-    throttle.enter_cooldown("github", 30.0)
-    assert 29.0 <= throttle.cooldown_remaining("github") <= 30.0
-    # Cooldown is per-provider.
-    assert throttle.cooldown_remaining("gitlab") == 0.0
+    assert throttle.cooldown_remaining() == 0.0
+    throttle.enter_cooldown(30.0)
+    assert 29.0 <= throttle.cooldown_remaining() <= 30.0
 
 
 def test_host_throttle_enter_cooldown_never_shortens() -> None:
     throttle = _HostThrottle(min_interval=1.0)
-    throttle.enter_cooldown("github", 60.0)
+    throttle.enter_cooldown(60.0)
     # A shorter cooldown must not clobber the longer one already in effect.
-    throttle.enter_cooldown("github", 5.0)
-    assert throttle.cooldown_remaining("github") > 50.0
+    throttle.enter_cooldown(5.0)
+    assert throttle.cooldown_remaining() > 50.0
 
 
-def test_respect_throttle_defers_when_provider_in_cooldown() -> None:
-    """When a provider is cooling down, no slot is reserved and a deferral is returned."""
+def test_respect_throttle_defers_when_in_cooldown() -> None:
+    """When a cooldown is active, no slot is reserved and a deferral is returned."""
     svc = _make_service()
-    svc._throttle.enter_cooldown("github", 45.0)
+    svc._throttle.enter_cooldown(45.0)
 
-    result = svc._respect_throttle("github")
+    result = svc._respect_throttle()
 
     assert isinstance(result, _CooldownDeferred)
     assert 44.0 <= result.retry_after <= 45.0
@@ -609,7 +622,7 @@ def test_respect_throttle_defers_when_provider_in_cooldown() -> None:
 def test_respect_throttle_allows_when_not_in_cooldown() -> None:
     svc = _make_service()
     # First call is due immediately, so it returns None (proceed) without sleeping.
-    assert svc._respect_throttle("github") is None
+    assert svc._respect_throttle() is None
 
 
 def test_note_rate_limit_starts_cooldown_only_for_rate_limited() -> None:
@@ -617,14 +630,12 @@ def test_note_rate_limit_starts_cooldown_only_for_rate_limited() -> None:
     workspace_id = WorkspaceID()
 
     ok = PrStatusInfo(workspace_id=workspace_id, pr_state="open")
-    svc._note_rate_limit(ok, "github")
-    assert svc._throttle.cooldown_remaining("github") == 0.0
+    svc._note_rate_limit(ok)
+    assert svc._throttle.cooldown_remaining() == 0.0
 
-    limited = PrStatusInfo(
-        workspace_id=workspace_id, pr_state="none", error_category="rate_limited", error_provider="github"
-    )
-    svc._note_rate_limit(limited, "github")
-    assert svc._throttle.cooldown_remaining("github") > 0.0
+    limited = PrStatusInfo(workspace_id=workspace_id, pr_state="none", error_category="rate_limited")
+    svc._note_rate_limit(limited)
+    assert svc._throttle.cooldown_remaining() > 0.0
 
 
 def test_cooldown_deferred_result_does_not_overwrite_cache() -> None:
@@ -661,10 +672,8 @@ def test_rate_limited_result_re_enqueues_after_cooldown() -> None:
     svc._pending.add(workspace_id)
 
     # Simulate the cooldown the poll would have set via _note_rate_limit.
-    svc._throttle.enter_cooldown("github", _RATE_LIMIT_COOLDOWN_SECONDS)
-    limited = PrStatusInfo(
-        workspace_id=workspace_id, pr_state="none", error_category="rate_limited", error_provider="github"
-    )
+    svc._throttle.enter_cooldown(_RATE_LIMIT_COOLDOWN_SECONDS)
+    limited = PrStatusInfo(workspace_id=workspace_id, pr_state="none", error_category="rate_limited")
     config = _make_user_config(pr_poll_interval_seconds=30)
 
     with patch("sculptor.web.pr_polling_service.get_user_config_instance", return_value=config):
@@ -675,3 +684,524 @@ def test_rate_limited_result_re_enqueues_after_cooldown() -> None:
     delay = rescheduled.scheduled_time - time.monotonic()
     # Re-enqueued at ~the remaining cooldown (60s), not the 30s base interval.
     assert _RATE_LIMIT_COOLDOWN_SECONDS - 2 <= delay <= _RATE_LIMIT_COOLDOWN_SECONDS
+
+
+# ---------------------------------------------------------------------------
+# origin URL -> (host, owner, name) parsing (Change-1 fan-out, Risk-5 GHE hosts).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url, host, owner, name",
+    [
+        ("https://github.com/imbue-ai/sculptor.git", "github.com", "imbue-ai", "sculptor"),
+        ("git@github.com:imbue-ai/sculptor.git", "github.com", "imbue-ai", "sculptor"),
+        ("ssh://git@github.com/imbue-ai/sculptor.git", "github.com", "imbue-ai", "sculptor"),
+        ("https://github.com/imbue-ai/sculptor", "github.com", "imbue-ai", "sculptor"),
+        ("https://github.example.com/org/repo.git", "github.example.com", "org", "repo"),
+    ],
+)
+def test_parse_origin_valid_forms(url: str, host: str, owner: str, name: str) -> None:
+    info = _parse_origin(url)
+    assert info is not None
+    assert info.host == host
+    assert info.owner == owner
+    assert info.name == name
+    # name_with_owner is what the poller compares against repository.nameWithOwner.
+    assert info.name_with_owner == f"{owner}/{name}"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://github.com/onlyowner",
+        "git@github.com:onlyowner.git",
+        "https://github.com/",
+        "https://github.com/a/b/c",
+        "not a url",
+        "",
+    ],
+)
+def test_parse_origin_malformed_returns_none(url: str) -> None:
+    assert _parse_origin(url) is None
+
+
+def test_parse_origin_owner_repo_strips_dot_git() -> None:
+    # nameWithOwner from GitHub's API never carries .git; origin URLs usually do.
+    assert _parse_origin_owner_repo("https://github.com/imbue-ai/sculptor.git") == ("imbue-ai", "sculptor")
+    assert _parse_origin_owner_repo("git@github.com:imbue-ai/sculptor.git") == ("imbue-ai", "sculptor")
+
+
+# ---------------------------------------------------------------------------
+# Transient per-round (repo, branch) -> nodes index (Change-1 fan-out).
+# ---------------------------------------------------------------------------
+
+
+def _node(number: int, repo: str = "org/repo", head: str = "feat-1", base: str = "main") -> dict:
+    return {
+        "number": number,
+        "repository": {"nameWithOwner": repo},
+        "headRefName": head,
+        "baseRefName": base,
+    }
+
+
+def test_build_pr_index_keys_by_repo_and_head_branch() -> None:
+    nodes = [_node(1, head="feat-1"), _node(2, repo="org/other", head="feat-2")]
+    index = _build_pr_index(nodes)
+    assert set(index.keys()) == {("org/repo", "feat-1"), ("org/other", "feat-2")}
+    assert [n["number"] for n in index[("org/repo", "feat-1")]] == [1]
+
+
+def test_build_pr_index_groups_multiple_prs_on_one_branch_preserving_order() -> None:
+    # One source branch can carry several PRs (different bases); order is
+    # preserved (search returns most-recently-updated first).
+    nodes = [_node(10, head="feat-1", base="develop"), _node(11, head="feat-1", base="main")]
+    index = _build_pr_index(nodes)
+    assert [n["number"] for n in index[("org/repo", "feat-1")]] == [10, 11]
+
+
+def test_build_pr_index_skips_nodes_missing_repo_or_head() -> None:
+    nodes = [{"number": 1, "headRefName": "feat-1"}, {"number": 2, "repository": {"nameWithOwner": "org/repo"}}]
+    assert _build_pr_index(nodes) == {}
+
+
+def test_compute_round_interval_floors_at_minimum() -> None:
+    config = _make_user_config(pr_poll_interval_seconds=1)
+    assert _compute_round_interval(config) == _MIN_POLL_INTERVAL_SECONDS
+
+
+def test_compute_round_interval_uses_configured_interval() -> None:
+    config = _make_user_config(pr_poll_interval_seconds=45)
+    assert _compute_round_interval(config) == 45.0
+
+
+# ---------------------------------------------------------------------------
+# Batched search round: fan-out, Change-2 fallback, short-circuits, cadence.
+# ---------------------------------------------------------------------------
+
+
+_WORKING_DIR = Path("/tmp/repo")
+
+
+def _open_search_node(
+    number: int,
+    repo: str = "org/repo",
+    head: str = "feat-1",
+    base: str = "main",
+    mergeable: str | None = None,
+    check_state: str | None = None,
+    reviews: list[dict] | None = None,
+    threads: list[dict] | None = None,
+) -> dict:
+    """Build one ``... on PullRequest`` search node (open state)."""
+    rollup = {"state": check_state} if check_state is not None else None
+    node = {
+        "number": number,
+        "title": f"PR #{number}",
+        "url": f"https://github.com/{repo}/pull/{number}",
+        "state": "OPEN",
+        "baseRefName": base,
+        "repository": {"nameWithOwner": repo},
+        "headRefName": head,
+        "commits": {"nodes": [{"commit": {"statusCheckRollup": rollup}}]},
+        "latestReviews": {"nodes": reviews or []},
+        "reviewThreads": {"nodes": threads or []},
+    }
+    if mergeable is not None:
+        node["mergeable"] = mergeable
+    return node
+
+
+def _search_result(nodes: list[dict], rate_limit: GithubRateLimit | None = None) -> OpenPrSearchResult:
+    if rate_limit is None:
+        rate_limit = GithubRateLimit(cost=3, remaining=4997, limit=5000, reset_at="2026-01-01T00:00:00Z")
+    return OpenPrSearchResult(nodes=nodes, rate_limit=rate_limit)
+
+
+def _candidate(
+    svc: PrPollingService,
+    workspace_id: WorkspaceID,
+    target_branch: str,
+    current_branch: str = "feat-1",
+    repo: str = "org/repo",
+    host: str = "github.com",
+    is_open: bool = True,
+) -> _RoundCandidate:
+    """Register a poll state and build a matching round candidate (no git I/O)."""
+    state = _WorkspacePollState(
+        workspace_id=workspace_id,
+        working_dir=_WORKING_DIR,
+        target_branch=target_branch,
+        is_open=is_open,
+    )
+    svc._workspace_poll_state[workspace_id] = state
+    return _RoundCandidate(
+        workspace_id=workspace_id,
+        state=state,
+        working_dir=_WORKING_DIR,
+        current_branch=current_branch,
+        target_branch=target_branch,
+        host=host,
+        name_with_owner=repo,
+    )
+
+
+def test_round_shared_branch_different_target_keys_by_workspace_id() -> None:
+    # Two workspaces on the SAME (repo, head branch) but different targets. One
+    # open node (base=main) must yield "open" for the main-targeting workspace
+    # and "none + mismatched" for the develop-targeting one — proving the cache
+    # is keyed by WorkspaceID, not (repo, branch).
+    svc = _make_service()
+    ws_main = WorkspaceID()
+    ws_dev = WorkspaceID()
+    cand_main = _candidate(svc, ws_main, target_branch="main")
+    cand_dev = _candidate(svc, ws_dev, target_branch="develop")
+    node = _open_search_node(100, base="main")
+
+    with patch.object(PrPollingService, "_respect_throttle", return_value=None):
+        with patch(
+            "sculptor.web.pr_polling_service.fetch_open_prs_for_token",
+            return_value=_search_result([node]),
+        ):
+            svc._run_host_round("github.com", [cand_main, cand_dev])
+
+    assert svc._cache[ws_main].pr_state == "open"
+    assert svc._cache[ws_main].pr_iid == 100
+    assert svc._cache[ws_dev].pr_state == "none"
+    assert svc._cache[ws_dev].mismatched_pr_iid == 100
+    assert svc._cache[ws_dev].mismatched_pr_target_branch == "main"
+    # Both were resolved by the round, so neither needs a per-workspace fallback.
+    assert ws_main in svc._matched_workspaces
+    assert ws_dev in svc._matched_workspaces
+    assert svc._job_queue.empty()
+
+
+def test_round_conflicting_node_sets_has_conflicts() -> None:
+    # mergeable rides the search node, so a matched open PR's merge-conflict
+    # signal survives the round (Goal-4: the CI babysitter's MERGE_CONFLICT).
+    svc = _make_service()
+    ws = WorkspaceID()
+    cand = _candidate(svc, ws, target_branch="main")
+    node = _open_search_node(200, base="main", mergeable="CONFLICTING")
+
+    with patch.object(PrPollingService, "_respect_throttle", return_value=None):
+        with patch(
+            "sculptor.web.pr_polling_service.fetch_open_prs_for_token",
+            return_value=_search_result([node]),
+        ):
+            svc._run_host_round("github.com", [cand])
+
+    assert svc._cache[ws].pr_state == "open"
+    assert svc._cache[ws].has_conflicts is True
+
+
+def test_round_unmatched_branch_enqueues_fallback_and_does_not_emit() -> None:
+    # A workspace whose branch has no open authored PR in the search is unmatched:
+    # the round emits nothing for it and enqueues a per-workspace fallback.
+    svc = _make_service()
+    ws = WorkspaceID()
+    cand = _candidate(svc, ws, target_branch="main", current_branch="feat-no-pr")
+
+    with patch.object(PrPollingService, "_respect_throttle", return_value=None):
+        with patch(
+            "sculptor.web.pr_polling_service.fetch_open_prs_for_token",
+            return_value=_search_result([_open_search_node(1, head="other-branch")]),
+        ):
+            svc._run_host_round("github.com", [cand])
+
+    assert ws not in svc._cache
+    assert ws not in svc._matched_workspaces
+    assert ws in svc._pending
+    assert not svc._job_queue.empty()
+
+
+def test_round_stashes_rate_limit_for_governor() -> None:
+    svc = _make_service()
+    cand = _candidate(svc, WorkspaceID(), target_branch="main")
+    rate_limit = GithubRateLimit(cost=3, remaining=4000, limit=5000, reset_at="2026-01-01T00:00:00Z")
+
+    with patch.object(PrPollingService, "_respect_throttle", return_value=None):
+        with patch(
+            "sculptor.web.pr_polling_service.fetch_open_prs_for_token",
+            return_value=_search_result([], rate_limit=rate_limit),
+        ):
+            svc._run_host_round("github.com", [cand])
+
+    assert svc._rate_limit_by_host["github.com"] == rate_limit
+
+
+def test_round_logs_cold_start_unmatched_count_once() -> None:
+    svc = _make_service()
+    cand = _candidate(svc, WorkspaceID(), target_branch="main", current_branch="feat-no-pr")
+
+    with patch.object(PrPollingService, "_respect_throttle", return_value=None):
+        with patch(
+            "sculptor.web.pr_polling_service.fetch_open_prs_for_token",
+            return_value=_search_result([]),
+        ):
+            with patch("sculptor.web.pr_polling_service.logger") as mock_logger:
+                svc._run_host_round("github.com", [cand])
+                # Second round on the same host must not re-log the cold start.
+                svc._run_host_round("github.com", [cand])
+
+    cold_start_logs = [c for c in mock_logger.info.call_args_list if "cold start" in c.args[0]]
+    assert len(cold_start_logs) == 1
+
+
+def test_round_rate_limited_search_enters_cooldown_and_does_not_emit() -> None:
+    svc = _make_service()
+    ws = WorkspaceID()
+    cand = _candidate(svc, ws, target_branch="main")
+
+    with patch.object(PrPollingService, "_respect_throttle", return_value=None):
+        with patch(
+            "sculptor.web.pr_polling_service.fetch_open_prs_for_token",
+            side_effect=CliStatusError("rate_limited", "HTTP 403: API rate limit exceeded"),
+        ):
+            svc._run_host_round("github.com", [cand])
+
+    assert svc._throttle.cooldown_remaining() > 0
+    assert ws not in svc._cache
+
+
+def test_round_skips_search_when_in_cooldown() -> None:
+    # When _respect_throttle reports an active cooldown, the round issues NO
+    # search query at all.
+    svc = _make_service()
+    cand = _candidate(svc, WorkspaceID(), target_branch="main")
+
+    with patch.object(PrPollingService, "_respect_throttle", return_value=_CooldownDeferred(30.0)):
+        with patch(
+            "sculptor.web.pr_polling_service.fetch_open_prs_for_token",
+            side_effect=AssertionError("search must not run during cooldown"),
+        ):
+            svc._run_host_round("github.com", [cand])
+
+
+def test_round_short_circuit_on_target_issues_no_search() -> None:
+    # A workspace on its target branch resolves to `none` with zero gh calls —
+    # it never becomes a round candidate, so no search query runs.
+    svc = _make_service()
+    ws = WorkspaceID()
+    _add_workspace_poll_state(svc, ws)
+    svc._workspace_poll_state[ws].working_dir = _WORKING_DIR
+    svc._workspace_poll_state[ws].target_branch = "origin/main"
+    config = _make_user_config()
+
+    with patch("sculptor.web.pr_polling_service._get_workspace_current_branch", return_value="main"):
+        with patch(
+            "sculptor.web.pr_polling_service.fetch_open_prs_for_token",
+            side_effect=AssertionError("no search for an on-target workspace"),
+        ):
+            svc._run_round(config)
+
+    assert svc._cache[ws].pr_state == "none"
+
+
+def test_round_short_circuit_no_branch_issues_no_search() -> None:
+    svc = _make_service()
+    ws = WorkspaceID()
+    _add_workspace_poll_state(svc, ws)
+    svc._workspace_poll_state[ws].working_dir = _WORKING_DIR
+    config = _make_user_config()
+
+    with patch("sculptor.web.pr_polling_service._get_workspace_current_branch", return_value=None):
+        with patch(
+            "sculptor.web.pr_polling_service.fetch_open_prs_for_token",
+            side_effect=AssertionError("no search for a branchless workspace"),
+        ):
+            svc._run_round(config)
+
+    assert svc._cache[ws].pr_state == "none"
+
+
+def test_fallback_index_blip_open_to_none_is_noop() -> None:
+    # Prior cache shows open; the per-workspace fallback returns no PR at all (a
+    # one-round search-index drop-out). Rule 5: keep the open status, emit
+    # nothing — no spurious open→none transition.
+    svc = _make_service()
+    ws = WorkspaceID()
+    _add_workspace_poll_state(svc, ws)
+    state = svc._workspace_poll_state[ws]
+    svc._pending.add(ws)
+    open_status = PrStatusInfo(workspace_id=ws, pr_state="open", pr_iid=7)
+    svc._cache[ws] = open_status
+
+    observer: queue.Queue = queue.Queue()
+    svc.add_observer(observer)
+    observer.get_nowait()  # drain the replayed open status from add_observer
+
+    empty = PrStatusInfo(workspace_id=ws, pr_state="none")
+    with patch("sculptor.web.pr_polling_service.get_user_config_instance", return_value=_make_user_config()):
+        with patch.object(PrPollingService, "_execute_poll", return_value=empty):
+            svc._poll_and_handle_result(_PollJob(0.0, ws), state)
+
+    assert svc._cache[ws] == open_status
+    assert observer.empty()
+
+
+def test_fallback_terminal_merged_reschedules_at_terminal_cadence() -> None:
+    svc = _make_service()
+    ws = WorkspaceID()
+    _add_workspace_poll_state(svc, ws)
+    state = svc._workspace_poll_state[ws]
+    svc._pending.add(ws)
+    merged = PrStatusInfo(workspace_id=ws, pr_state="merged", pr_iid=9)
+    config = _make_user_config(pr_poll_interval_seconds=30)
+
+    with patch("sculptor.web.pr_polling_service.get_user_config_instance", return_value=config):
+        with patch.object(PrPollingService, "_execute_poll", return_value=merged):
+            svc._poll_and_handle_result(_PollJob(0.0, ws), state)
+
+    assert svc._cache[ws].pr_state == "merged"
+    rescheduled = svc._job_queue.get_nowait()
+    delay = rescheduled.scheduled_time - time.monotonic()
+    expected = 30.0 * _TERMINAL_STATE_MULTIPLIER
+    assert expected - 2 <= delay <= expected
+
+
+def test_fallback_no_pr_reschedules_at_base_interval_independent_of_round() -> None:
+    # A no-PR-yet workspace polls at the base interval via the fallback,
+    # decoupled from the round — the round interval doesn't enter the math.
+    svc = _make_service()
+    ws = WorkspaceID()
+    _add_workspace_poll_state(svc, ws)
+    state = svc._workspace_poll_state[ws]
+    svc._pending.add(ws)
+    none_status = PrStatusInfo(workspace_id=ws, pr_state="none")
+    config = _make_user_config(pr_poll_interval_seconds=45)
+
+    with patch("sculptor.web.pr_polling_service.get_user_config_instance", return_value=config):
+        with patch.object(PrPollingService, "_execute_poll", return_value=none_status):
+            svc._poll_and_handle_result(_PollJob(0.0, ws), state)
+
+    rescheduled = svc._job_queue.get_nowait()
+    delay = rescheduled.scheduled_time - time.monotonic()
+    assert 43 <= delay <= 45
+
+
+def test_fallback_matched_workspace_stops_rescheduling() -> None:
+    # Once the round has matched a workspace, a stale fallback fetch emits its
+    # result but does NOT reschedule — the round now owns it (rule 3 cost control).
+    svc = _make_service()
+    ws = WorkspaceID()
+    _add_workspace_poll_state(svc, ws)
+    state = svc._workspace_poll_state[ws]
+    svc._pending.add(ws)
+    svc._matched_workspaces.add(ws)
+    open_status = PrStatusInfo(workspace_id=ws, pr_state="open", pr_iid=5)
+
+    with patch("sculptor.web.pr_polling_service.get_user_config_instance", return_value=_make_user_config()):
+        with patch.object(PrPollingService, "_execute_poll", return_value=open_status):
+            svc._poll_and_handle_result(_PollJob(0.0, ws), state)
+
+    assert svc._cache[ws] == open_status
+    assert svc._job_queue.empty()
+    assert ws not in svc._pending
+
+
+# ---------------------------------------------------------------------------
+# Rate-budget governor (Change-3): back-off / recover / defer.
+# ---------------------------------------------------------------------------
+
+
+_BASE = 30.0
+_BUDGET_FRACTION = 0.8
+
+
+def _rate_limit(
+    remaining: int, limit: int = 5000, cost: int = 3, reset_at: str = "2026-01-01T00:00:00Z"
+) -> GithubRateLimit:
+    return GithubRateLimit(cost=cost, remaining=remaining, limit=limit, reset_at=reset_at)
+
+
+def test_governor_holds_at_base_with_plenty_of_headroom() -> None:
+    # Barely any of the budget spent → stay at the base interval.
+    interval, throttled = _compute_governed_interval(
+        _BASE, _BASE, _rate_limit(remaining=4900), _BUDGET_FRACTION, seconds_until_reset=3000.0
+    )
+    assert interval == _BASE
+    assert throttled is False
+
+
+def test_governor_backs_off_when_projected_spend_exceeds_ceiling() -> None:
+    # 4000 of 5000 spent in the first 600s of the window → ~24000/hr projected,
+    # far above the 4000/hr ceiling → lengthen the interval.
+    interval, throttled = _compute_governed_interval(
+        _BASE, _BASE, _rate_limit(remaining=1000), _BUDGET_FRACTION, seconds_until_reset=3000.0
+    )
+    assert interval > _BASE
+    assert throttled is True
+
+
+def test_governor_backoff_accumulates_up_to_cap() -> None:
+    over_budget = _rate_limit(remaining=1000)
+    # Each round multiplies the interval; it never exceeds base * the cap multiplier.
+    first, _ = _compute_governed_interval(_BASE, _BASE, over_budget, _BUDGET_FRACTION, 3000.0)
+    second, _ = _compute_governed_interval(_BASE, first, over_budget, _BUDGET_FRACTION, 3000.0)
+    assert second > first
+    capped, _ = _compute_governed_interval(_BASE, 100_000.0, over_budget, _BUDGET_FRACTION, 3000.0)
+    assert capped == _BASE * 20.0
+
+
+def test_governor_recovers_toward_base_when_headroom_returns() -> None:
+    # Stretched to 100s, but spend is now well under the ceiling → step back down,
+    # never below the base interval.
+    headroom = _rate_limit(remaining=4900)
+    recovered, throttled = _compute_governed_interval(_BASE, 100.0, headroom, _BUDGET_FRACTION, 3000.0)
+    assert _BASE <= recovered < 100.0
+    assert throttled is True  # still above base — recovering, not yet recovered
+    at_base, throttled_at_base = _compute_governed_interval(_BASE, _BASE, headroom, _BUDGET_FRACTION, 3000.0)
+    assert at_base == _BASE
+    assert throttled_at_base is False
+
+
+def test_governor_defers_to_reset_when_remaining_is_critically_low() -> None:
+    # remaining below 5% of limit → wait out the window (≈ seconds until reset).
+    interval, throttled = _compute_governed_interval(
+        _BASE, _BASE, _rate_limit(remaining=100), _BUDGET_FRACTION, seconds_until_reset=1800.0
+    )
+    assert interval == 1800.0
+    assert throttled is True
+
+
+def test_governor_ceiling_scales_with_reported_limit_not_hardcoded() -> None:
+    # Same spend rate (≈5000/hr): over the 4000 ceiling for a 5000-point token,
+    # but well under the 12000 ceiling for a 15000-point App token.
+    small_token = _rate_limit(remaining=4167, limit=5000)
+    big_token = _rate_limit(remaining=14167, limit=15000)
+    small_interval, small_throttled = _compute_governed_interval(_BASE, _BASE, small_token, _BUDGET_FRACTION, 3000.0)
+    big_interval, big_throttled = _compute_governed_interval(_BASE, _BASE, big_token, _BUDGET_FRACTION, 3000.0)
+    assert small_throttled is True and small_interval > _BASE
+    assert big_throttled is False and big_interval == _BASE
+
+
+def test_governor_backs_off_on_remaining_decline_even_with_tiny_cost() -> None:
+    # A small search cost but a large drop in remaining (the fallback fetches
+    # spent it) must still trigger back-off — proving the governor drives off
+    # remaining, not the search query's cost.
+    interval, throttled = _compute_governed_interval(
+        _BASE, _BASE, _rate_limit(remaining=1000, cost=3), _BUDGET_FRACTION, seconds_until_reset=3000.0
+    )
+    assert throttled is True
+    assert interval > _BASE
+
+
+def test_seconds_until_reset_parses_future_timestamp() -> None:
+    future = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=600)
+    seconds = _seconds_until_reset(future.isoformat().replace("+00:00", "Z"))
+    assert 590 <= seconds <= 600
+
+
+def test_seconds_until_reset_handles_missing_and_invalid() -> None:
+    assert _seconds_until_reset(None) == _RATE_LIMIT_WINDOW_SECONDS
+    assert _seconds_until_reset("") == _RATE_LIMIT_WINDOW_SECONDS
+    assert _seconds_until_reset("not-a-timestamp") == _RATE_LIMIT_WINDOW_SECONDS
+
+
+def test_seconds_until_reset_floors_past_and_caps_far_future() -> None:
+    past = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=120)
+    assert _seconds_until_reset(past.isoformat().replace("+00:00", "Z")) == 0.0
+    far_future = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=99999)
+    assert _seconds_until_reset(far_future.isoformat().replace("+00:00", "Z")) == _RATE_LIMIT_WINDOW_SECONDS

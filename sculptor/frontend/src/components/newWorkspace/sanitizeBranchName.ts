@@ -10,7 +10,8 @@
  * Trailing-position violations — a trailing "." or "/", or a ".lock" suffix — are
  * deliberately left alone: stripping them on every keystroke would eat the
  * separator the user is partway through typing (e.g. "feature/" or "release-1.").
- * The create call rejects those instead.
+ * The debounced validate-new-branch-name check catches those instead, surfacing
+ * the field's inline invalid error and disabling Create.
  */
 export const sanitizeBranchName = (raw: string): string =>
   raw

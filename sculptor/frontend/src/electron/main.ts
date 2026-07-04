@@ -25,6 +25,7 @@ import Store from "electron-store";
 import type { AnyBackendStatus, SculptorDevInfo } from "../shared/types";
 import { APP_SCHEME, getAppRendererUrl, resolveRequestToFilePath, shouldFallbackToIndex } from "./appProtocol";
 import { initAutoUpdater } from "./autoUpdater";
+import { captureNonEmptyPage } from "./captureNonEmptyPage";
 import type { ZoomCommand } from "./constants";
 import {
   BACKEND_PORT_CHANNEL_NAME,
@@ -41,7 +42,6 @@ import {
   GET_FILE_DATA_CHANNEL_NAME,
   GET_SESSION_TOKEN_CHANNEL_NAME,
   IS_CUSTOM_COMMAND_MODE_CHANNEL_NAME,
-  SAVE_FILE_CHANNEL_NAME,
   SELECT_PROJECT_DIRECTORY_CHANNEL_NAME,
   SET_CUSTOM_BACKEND_SETTINGS_CHANNEL_NAME,
   ZOOM_COMMAND_CHANNEL_NAME,
@@ -1097,7 +1097,10 @@ app.whenReady().then(async () => {
     if (!contents) {
       throw new Error(`No webContents with id ${webContentsId}`);
     }
-    const image = await contents.capturePage();
+    // Retry until the guest has painted: capturePage() resolves with an empty
+    // image until the first frame is composited, and writing that empty image
+    // would leave no PNG on the clipboard.
+    const image = await captureNonEmptyPage(contents);
     clipboard.writeImage(image);
   });
 
@@ -1105,31 +1108,9 @@ app.whenReady().then(async () => {
     registerTestIpcHandlers(ipcMain);
   }
 
-  ipcMain.handle(SAVE_FILE_CHANNEL_NAME, async (_event, fileData: ArrayBuffer, originalFilename: string) => {
-    try {
-      const userDataPath = app.getPath("userData");
-      const filesDir = path.join(userDataPath, "files");
-
-      if (!fs.existsSync(filesDir)) {
-        fs.mkdirSync(filesDir, { recursive: true });
-      }
-
-      const { randomUUID } = await import("crypto");
-      const uuid = randomUUID();
-      const ext = path.extname(originalFilename);
-      const uniqueFilename = `${uuid}${ext}`;
-      const filePath = path.join(filesDir, uniqueFilename);
-
-      fs.writeFileSync(filePath, Buffer.from(fileData));
-
-      logger.info(`File saved to: ${filePath}`);
-      return filePath;
-    } catch (error) {
-      logger.error("Error saving file:", error);
-      throw error;
-    }
-  });
-
+  // GET_FILE_DATA is retained to read legacy desktop attachments (saved to disk
+  // as absolute paths before uploads moved to the backend). New uploads go
+  // through the backend over HTTP, so there is no longer a SAVE_FILE handler.
   ipcMain.handle(GET_FILE_DATA_CHANNEL_NAME, async (_event, filePath: string) => {
     try {
       const fileBuffer = fs.readFileSync(filePath);

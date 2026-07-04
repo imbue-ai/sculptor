@@ -6,7 +6,7 @@ import type { WorkspaceInitializationStrategy } from "~/api";
 import { ElementIds, WorkspaceInitializationStrategy as Strategy } from "~/api";
 
 import styles from "./BranchNameField.module.scss";
-import type { BranchNameCollisionState } from "./hooks/useBranchNamePreview.ts";
+import type { BranchNameStatus } from "./hooks/useBranchNamePreview.ts";
 import { sanitizeBranchName } from "./sanitizeBranchName.ts";
 
 type BranchNameFieldProps = {
@@ -17,8 +17,8 @@ type BranchNameFieldProps = {
   isManuallyEdited: boolean;
   /** True while the preview fetch is in flight. */
   isLoading: boolean;
-  /** Result of the debounced collision check on `value`. */
-  collision: BranchNameCollisionState;
+  /** Result of the debounced branch-name validation on `value`. */
+  status: BranchNameStatus;
   /** Called whenever the user types into the input (already sanitized). */
   onUserEdit: (value: string) => void;
   /** Called when the user clicks the shuffle button to re-roll the name. */
@@ -35,14 +35,15 @@ type BranchNameFieldProps = {
 /**
  * The branch-name field: a monospace pill with input sanitization, a shuffle
  * button to re-roll the auto-filled name, a skeleton that stands in for the input
- * on a cold open, and a collision-error row rendered only when a name clashes.
+ * on a cold open, and an error row rendered only when a name is invalid or
+ * clashes with an existing branch.
  */
 export const BranchNameField = ({
   mode,
   value,
   isManuallyEdited,
   isLoading,
-  collision,
+  status,
   onUserEdit,
   onShuffle,
   disabled,
@@ -54,7 +55,12 @@ export const BranchNameField = ({
   }
 
   const placeholder = mode === Strategy.WORKTREE ? "Branch name (required)" : "Branch name (optional)";
-  const hasCollision = collision === "exists";
+  // The as-you-type sanitizer keeps most illegal characters out of `value`, so
+  // "invalid" only fires on the residue it deliberately lets through (trailing
+  // '.' or '/', a '.lock' suffix) — see sanitizeBranchName.ts.
+  const isInvalid = status === "invalid";
+  const hasCollision = status === "exists";
+  const hasError = isInvalid || hasCollision;
   const isPlain = variant === "plain";
   // The sparkles glyph doubles as the loading affordance: it pulses while a
   // fresh auto-filled name is being generated (there is no separate spinner).
@@ -75,7 +81,7 @@ export const BranchNameField = ({
 
   return (
     <div className={styles.container} data-testid={ElementIds.NEW_WORKSPACE_CONTEXT_PILL}>
-      <div className={`${styles.pill} ${isPlain ? styles.pillPlain : ""} ${hasCollision ? styles.pillError : ""}`}>
+      <div className={`${styles.pill} ${isPlain ? styles.pillPlain : ""} ${hasError ? styles.pillError : ""}`}>
         {isPlain ? null : (
           <span className={styles.prefix}>
             <GitBranchIcon size={12} />
@@ -114,11 +120,17 @@ export const BranchNameField = ({
       </div>
       {/* Error rendered only when present, so an error-free field is the same
           height as the breadcrumb chips (no always-reserved empty slot). */}
-      {hasCollision ? (
+      {hasError ? (
         <div className={styles.errorSlot}>
-          <span className={styles.error} data-testid={ElementIds.BRANCH_NAME_COLLISION_ERROR}>
-            Branch &apos;{value}&apos; already exists
-          </span>
+          {isInvalid ? (
+            <span className={styles.error} data-testid={ElementIds.BRANCH_NAME_INVALID_ERROR}>
+              &apos;{value}&apos; is not a valid branch name
+            </span>
+          ) : (
+            <span className={styles.error} data-testid={ElementIds.BRANCH_NAME_COLLISION_ERROR}>
+              Branch &apos;{value}&apos; already exists
+            </span>
+          )}
         </div>
       ) : null}
     </div>

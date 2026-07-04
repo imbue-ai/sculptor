@@ -256,16 +256,35 @@ as a card: a green check with the detected path and version when it's ready, or 
 expand a card to override the binary path or switch between a managed install and your system one. The
 sign-in flow also supports a **paste-a-code** path for headless or remote setups where a browser
 callback can't reach the app: Sculptor shows the sign-in URL, you approve access, and paste the
-returned authorization code back into the card to finish signing in. A
+returned authorization code back into the card to finish signing in. Alongside the required tools,
+an **optional GitHub CLI** (`gh`) card lets you **sign in to GitHub** so you can browse and clone your
+GitHub repos from inside Sculptor: clicking **Sign in** starts a browser **device flow** — Sculptor
+shows a one-time code and an **Open verification page** link, you enter the code at GitHub's device
+page and approve, and the card flips to signed-in on its own once `gh` reports authenticated. A
 **check again** link re-runs the checks. You can't move on until everything required is satisfied.
 
-Finally, you connect your first **repository** (→ §7.2 Workspaces). Point Sculptor at a repo by
-typing its path or, on desktop, browsing for a folder, then click **Add**. If the folder isn't a Git
-repo yet, or is a repo with no commits, Sculptor offers to initialize it or make an initial commit
-for you; a bad path surfaces an error you can dismiss. Once a valid repo is connected the wizard
-finishes and drops you into the app, ready to create a workspace and prompt your first agent.
+Finally, you connect your first **repository** (→ §7.2 Workspaces). You can **clone one of your GitHub
+repositories** — search your accessible repos (or paste a clone URL) and Sculptor clones it for you —
+or connect a **local folder** by typing its path or, on desktop, browsing for a folder, then click
+**Add**. If the folder isn't a Git repo yet, or is a repo with no commits, Sculptor offers to
+initialize it or make an initial commit for you; a bad path surfaces an error you can dismiss. Once a
+valid repo is connected the wizard finishes and drops you into the app, ready to create a workspace
+and prompt your first agent. (The full Add Repository surface — GitHub search/clone vs. local
+folder — is described in §7.2.)
 
 ### 7.2 Workspaces
+
+You add a **repository** (project) through the **Add Repository** dialog, reached from the repo
+selector. It opens on **GitHub** by default: search your accessible GitHub repos in a combobox (each
+row showing the repo, a lock for private ones, and when it was last pushed) and pick one to clone, or
+switch to **"I'll paste a URL instead"** to clone from a pasted HTTPS/SSH clone URL. Sculptor clones
+the repo for you — showing a progress view — into a default location under the Sculptor folder
+(`repos/github/<name>`, editable before you clone). If the GitHub CLI isn't signed in, the GitHub tab
+explains that and offers a **Configure GitHub** shortcut to Settings (you can still paste a URL). The
+other source is a **Local Folder** — type or, on desktop, browse for an existing repo path. If a clone
+fails because the destination already exists, Sculptor offers to **add that folder as a local repo**
+instead. (Opening a PR is GitHub-only → §7.6; the GitHub sign-in is the same one offered in onboarding
+→ §7.1.)
 
 A **workspace** is how you start work in Sculptor: you pick a project (repo) and Sculptor creates an
 isolated copy of it for agents to work in, rather than touching your own checkout. You create one
@@ -284,7 +303,7 @@ branch** — what its changes are diffed against — with a selector to change i
 open PR's target wouldn't match. The selector works for **every repo regardless of remote host**; a
 repo with a remote offers its remote-tracking branches as targets, while a repo with no remote falls
 back to offering the repo's own local branches. (Opening a pull request, by contrast, requires
-a GitHub or GitLab `origin` → §7.6 — the target-branch concept is independent of the PR surface.)
+a GitHub `origin` → §7.6 — the target-branch concept is independent of the PR surface.)
 A non-default mode (clone or in-place) is shown as a strategy badge, and the banner collapses
 progressively as space tightens.
 
@@ -322,8 +341,10 @@ The input toolbar shapes how the agent handles your next message. A **model** pi
 model answers — present only for agents whose harness supports model selection (a Claude or Pi chat
 agent), and shown disabled with the current model for those that don't; the list it offers comes from
 the agent's own harness, so a **Claude** agent picks from the Claude models while a **Pi** agent
-surfaces Pi's live catalog grouped by provider, and changing a Pi agent's model takes effect in-session
-(a failed switch leaves the choice unchanged and raises an actionable error toast). An **effort**
+surfaces Pi's live catalog grouped by provider — a single provider lists its models flat, while two or
+more providers cascade into a per-provider submenu, and a Pi agent with no authenticated providers
+shows an **Authenticate a provider** prompt in place of the list. Changing a Pi agent's model takes
+effect in-session (a failed switch leaves the choice unchanged and raises an actionable error toast). An **effort**
 selector budgets how much thinking it spends per step (Low, Medium, High, Extra High, Max — Extra High
 by default); a **fast mode** toggle trades some depth for quicker output on the models that support it
 (the Opus family, including Opus 4.8) and is disabled for the rest; and **plan mode** makes the agent
@@ -490,7 +511,7 @@ the experimental **Review All** feature enabled (→ §7.12) — a
 When you're satisfied, the **Commit** button at the top of the Changes tab, above the file list — labeled with the
 pending count, e.g. "Commit 2 changes," and disabled when there's nothing to commit — asks the agent
 to write a message and make the commit on the workspace branch. Committing does not push; the commit
-stays on the branch until you push it or open a PR/MR. Clicking the button does a **quick commit**
+stays on the branch until you push it or open a PR. Clicking the button does a **quick commit**
 with the default prompt; right-clicking it opens a dialog to **edit and save the commit-message
 prompt**, which then steers how messages are written on subsequent commits.
 
@@ -504,37 +525,35 @@ shows where the workspace's history forks from its starting point.
 
 ### 7.6 Pull Requests
 
-The pull-request surface described here appears **only when the workspace's repo has a GitHub or
-GitLab `origin`**; for any other repo there is no PR/MR control and you push the branch yourself. (The
+The pull-request surface described here appears **only when the workspace's repo has a GitHub
+`origin`**; for any other repo there is no PR control and you push the branch yourself. (The
 target-branch selector itself is *not* gated this way — it appears on every repo, → §7.2; only opening
-a PR/MR requires a detected provider.) Given such a repo, once you've committed work on a workspace branch you can
-open a **pull request** (on GitHub) or **merge request** (on GitLab) straight from the workspace's
-top bar — Sculptor stays provider-neutral, so the control reads "Create PR" or "Create MR" to match
-your repo. Clicking it pushes the branch and
-asks the agent to open the request against the workspace's target branch. If you'd rather adjust how
-that's done first, the button's chevron menu offers **Edit prompt...**, which opens a dialog to revise
-the PR/MR-creation prompt before you create anything. While Sculptor is looking up status, the button
-shows a spinner with "Checking PR..."/"Checking MR...".
+a PR requires a detected GitHub remote.) Given such a repo, once you've committed work on a workspace
+branch you can open a **pull request** straight from the workspace's top bar with **Create PR**.
+Clicking it pushes the branch and asks the agent to open the request against the workspace's target
+branch. If you'd rather adjust how that's done first, the button's chevron menu offers **Edit
+prompt...**, which opens a dialog to revise the PR-creation prompt before you create anything. While
+Sculptor is looking up status, the button shows a spinner with "Checking PR...".
 
-Once a request exists, the button displays "PR #N"/"MR !N" alongside small status dots for its
-**pipeline/CI** and **review** state; hovering the dots explains them ("Pipeline running/passed/
-failed," "Approved/Review pending," and so on). Clicking the number opens the request in your browser.
-The chevron opens a **detail dropdown** with the title and link, checks/pipeline status, approvals and
-reviewer names, and any unresolved comments. If a **CI babysitter** is available, a switch in this
-dropdown lets you pause or resume it — when on, Sculptor keeps an eye on the request's CI for you —
-and the status text updates as you toggle it. When the babysitter *can't* run — for example its
-configured agent type can't be resolved for this workspace — the dropdown surfaces a short
-**disabled reason** in place of the usual status, and for a persistent reason the switch itself is
-forced off and greyed out until the cause is fixed.
+Once a request exists, the button displays "PR #N" alongside small status dots for its **checks/CI**
+and **review** state; hovering the dots explains them ("Pipeline running/passed/failed," "Approved/
+Review pending," and so on). Clicking the number opens the request in your browser. The chevron opens
+a **detail dropdown** with the title and link, checks status, approvals and reviewer names, and any
+unresolved comments. If a **CI babysitter** is available, a switch in this dropdown lets you pause or
+resume it — when on, Sculptor keeps an eye on the request's CI for you — and the status text updates
+as you toggle it; the pause choice is remembered per workspace and survives a restart. When the
+babysitter *can't* run — for example its configured agent type can't be resolved for this workspace —
+the dropdown surfaces a short **disabled reason** in place of the usual status, and for a persistent
+reason the switch itself is forced off and greyed out until the cause is fixed.
 
 When the request is **merged** or **closed**, the button switches to a merge icon reading "PR #N
 merged"/"closed," and clicking it still opens the request in the browser. If a request already exists
-but targets a different branch than the workspace does, the button becomes **Assign PR/MR**, offering
+but targets a different branch than the workspace does, the button becomes **Assign PR**, offering
 to create a fresh request against the workspace's target or to switch the workspace's target to match
 the existing request. The target-branch selector itself flags the mismatch in a warning color, with a
 hover hint like "PR #N targets {branch} — retarget?". (A failing CI check itself just shows a red
 pipeline dot / "Failed" badge on the normal button.) If Sculptor can't *look up* the request's status
-at all — the provider CLI is missing, you're not authenticated, the host is rate-limiting, and so on
+at all — the `gh` CLI is missing, you're not authenticated, GitHub is rate-limiting, and so on
 — the button turns into an error state: a warning triangle for something you can act on, or an info
 icon otherwise, whose popover gives a title, description, optional details, and sometimes a copyable
 remediation command.
@@ -657,10 +676,12 @@ repos with their paths and agent counts and lets you add or remove them and conf
 creation prompt, PR-status polling and its interval (plus a multiplier that throttles polling for
 closed workspaces), the default target branch, the global
 branch-naming pattern, and the branch-deletion policy. CI configures the **CI babysitter** that
-watches pipelines and asks an agent to fix failures — a toggle, a retry cap, a **babysitter-agent
-selector** (which agent type the babysitter drives: the workspace's most-recently-used agent by
-default, or a pinned Claude, Pi, or registered terminal agent that accepts automated prompts), and
-editable prompts for pipeline failures and merge conflicts.
+watches pipelines and asks an agent to fix failures — handing the fix prompt to the agent only once
+the workspace's agents are **idle**, so a failed pipeline never interrupts an agent mid-turn. The CI
+controls are a toggle, a retry cap, a **babysitter-agent selector** (which agent type the babysitter
+drives: the workspace's most-recently-used agent by default, or a pinned Claude, Pi, or registered
+terminal agent that accepts automated prompts), and editable prompts for pipeline failures and merge
+conflicts.
 
 The remaining sections cover the environment and account. **Dependencies** manages the Claude CLI and
 git binaries Sculptor uses — switching between a managed install and a custom path, showing each one's
@@ -725,9 +746,6 @@ product makes no finer distinction than that: a feature is either generally avai
   viewer, toggled by the eye icon in the diff toolbar.
 - **Pi agent** — offer the experimental **Pi** agent as a choice when creating an agent (→ §7.4); an
   already-running Pi agent keeps going regardless of the toggle.
-- **Frontend plugins** — enable the experimental plugin system that lets third-party plugins extend
-  Sculptor's own UI (the plugin system below). Off by default; turning it off only fully takes effect
-  after an app reload, since already-loaded plugins aren't torn down live.
 - **Custom backend command** — the entry point for the container / remote backend described below.
 
 The **CI babysitter** (→ §7.6, §7.10) is likewise experimental and off by default.
@@ -745,21 +763,6 @@ notably the in-app **Browser** panel (desktop-only), which embeds a browser besi
 address bar and back/forward/reload/screenshot controls; outside the desktop app it shows a
 placeholder.
 
-**Frontend plugin system.** With **Frontend plugins** enabled, Sculptor can load third-party
-**plugins** that extend the app's own UI from inside the renderer — contributing new **panels** (which
-show up in the Panels list with a "plugin" badge) and full-screen **overlays**, built against a small
-versioned Sculptor SDK that reuses the host's React, Radix theming, icons, and shared data client so
-they look and behave like native UI. A new **Plugins** section appears in Settings to manage plugin
-**sources**: you add a plugin by dropping its folder into the Sculptor folder's `plugins/` directory
-(picked up on the next launch or via a **Refresh** button) or by adding the **URL** of a plugin
-server (saved and re-fetched on every launch). Each row has an enable/disable switch (mute a plugin
-without removing it) and, while enabled, Settings and Reload controls; user-added URL sources can also
-be removed, while bundled and disk-discovered plugins can't. Sculptor ships a bundled **Linear** example
-plugin and two no-build example plugins (**Sculpty** and **Pomodoro**). Because a plugin runs with the
-**same privileges as Sculptor's own UI** — and a URL source serves whatever code it holds at load time
-— adding a plugin means running that code, so you should only add sources you trust (the plugin trust
-model is documented in `SECURITY.md`; outbound links a plugin opens are restricted to `http(s)`).
-
 **Container / remote execution backend.** Pointing the **custom backend command** at a launcher lets
 Sculptor run agents somewhere other than your host machine — inside a Docker container, on a remote
 server over SSH, or in a VM. The launcher starts the backend and prints a URL the app connects to;
@@ -768,6 +771,40 @@ the GUI, workspace management, and agent orchestration are otherwise unchanged. 
 automatically restarts the custom backend (with backoff) if it crashes. The command can be set either
 in Settings or through an environment variable, and setting or clearing it requires restarting the app
 (→ §9.1 for the isolation and trust implications).
+
+### 7.13 Frontend plugins
+
+Sculptor loads **plugins** that extend the app's own UI from inside the renderer — contributing new
+**panels** (which show up in the Panels list with a "plugin" badge), full-screen **overlays**, and
+compact **workspace widgets** that sit in the workspace banner's action row (collapsing in priority
+order as space tightens, like the built-in segments) — built against a small versioned Sculptor SDK
+that reuses the host's React, Radix theming, icons, and shared data client so they look and behave
+like native UI. The plugin system is **on by default**. A
+toggle at the top of the **Plugins** settings section globally enables or disables all plugins:
+turning it off hides the plugin-management controls and, after an app reload, stops loading plugins
+(already-loaded plugins aren't torn down live), while the section and its toggle stay in place so the
+system can be turned back on.
+
+The **Plugins** settings section manages plugin **sources**: you add a plugin by dropping its folder
+into the Sculptor folder's `plugins/` directory (picked up on the next launch or via a **Refresh**
+button) or by adding the **URL** of a plugin server (saved and re-fetched on every launch). Each row
+has an enable/disable switch (mute a plugin without removing it) and, while enabled, Settings and
+Reload controls; user-added URL sources can also be removed, while bundled and disk-discovered plugins
+can't. Sculptor ships a bundled **Linear** plugin, enabled by default, alongside two no-build example
+plugins — **Sculpty** and **Pomodoro** — that ship disabled and can be switched on per plugin. The
+Linear plugin shows two surfaces: a banner **widget**, shown by default, displaying the workspace's
+primary issue as a `# TICKET-ID` badge with a state dot (clicking it opens the issue in Linear), and a
+side **panel** of ticket details with collapsible **sub-issues** (the open state is remembered per
+workspace) and badges marking where each ticket came from (branch, PR, or a pinned search). The panel
+ships **off by default** and is enabled from Settings → Panels (like the built-in Browser panel), so an
+on-by-default plugin doesn't claim a slot in the panel layout uninvited. It resolves the workspace's
+**primary issue** from the branch name first, falling back to the issues linked from the workspace's
+pull request.
+
+Because a plugin runs with the **same privileges as Sculptor's own UI** — and a URL source serves
+whatever code it holds at load time — adding a plugin means running that code, so you should only add
+sources you trust (the plugin trust model is documented in `SECURITY.md`; outbound links a plugin
+opens are restricted to `http(s)`).
 
 ## 8. The `sculpt` CLI  _(core product surface)_
 
@@ -950,16 +987,30 @@ file-hygiene and shell checks.
 Sculptor has three surfaces over one backend (GUI, CLI, API), kept from drifting by **generation
 rather than hand-maintenance**: TypeScript types and the frontend API client are generated from the
 FastAPI/OpenAPI schema, the `sculpt` client is generated similarly, and a **frozen model-schema
-snapshot** (→ §10.8) detects unintended backend-model changes. A backend-model change that isn't reflected across surfaces shows
+snapshot** (→ §10.9) detects unintended backend-model changes. A backend-model change that isn't reflected across surfaces shows
 up as a regenerated diff or a failing check, not a runtime surprise.
 
-#### 10.8 Data-durability machinery
+#### 10.8 Build-context data-folder resolution & isolation
+Where Sculptor keeps its data is resolved from **build context**, not hardcoded. A single
+`get_sculptor_folder()` routine picks `<repo>/.dev_sculptor` when **running from source** (detected by
+walking up the tree for a `.git` directory), `~/.dev-sculptor` for a **packaged dev build** (detected
+by a `.dev` version suffix), and `~/.sculptor` for a **packaged production build** — where "packaged"
+means a PyInstaller bundle (`sys.frozen`), mirrored on the Electron side as `app.isPackaged` so the
+shell resolves the same path. Above all of these, a **`SCULPTOR_FOLDER` env override wins outright**,
+and that override is the **isolation lever the whole test substrate rests on**: each test — and each
+parallel sandbox on offload (§10.5) — runs against a throwaway temp folder (the `custom_sculptor_folder`
+marker, §10.3), so suites never touch or race on a developer's real `~/.sculptor` state, and a source
+checkout, a dev build, and the shipped app can coexist on one machine without colliding. This
+build-context split is exactly what lets the harness run hundreds of backends in parallel against
+isolated state.
+
+#### 10.9 Data-durability machinery
 User data lives in a local SQLite database, and migrations are first-class: every Alembic migration
 ships with a **version test** that exercises the upgrade against representative data, and a frozen
 Pydantic-schema snapshot is wired in to guard the versioned JSON fields against unintended change. This is what lets the product evolve its
 data model across releases without corrupting users' existing state.
 
-#### 10.9 Diagnosability
+#### 10.10 Diagnosability
 Finally, infrastructure for understanding failures that escape the tests: distributed **tracing**,
 **Sentry** error reporting, structured logging conventions, in-app **debug / diagnostics** views
 (per-agent diagnostics, the chat debug view), the **auto-qa** headless-browser harness for
@@ -975,8 +1026,7 @@ Sculptor ships as a **desktop application** that combines a **React frontend** w
 backend**, bundled together into an **Electron app** via Electron Forge. The release pipeline builds
 for **macOS** (Apple Silicon) and **Linux** (x64, with arm64 as a best-effort, non-blocking target).
 The **`sculpt` CLI** is built and
-shipped alongside the app (together with a `sculptor_migrate` data-folder migration helper), so the
-command-line surface is available wherever Sculptor is installed.
+shipped alongside the app, so the command-line surface is available wherever Sculptor is installed.
 
 #### 11.2 Release & versioning
 
@@ -1008,7 +1058,7 @@ inconsistent about the §9-product-behavior vs. §10-engineering-substrate line:
 
 - **Do user-facing diagnostics belong in §7 or §10?** The diagnostics a user can actually open — the
   chat **debug view** (and its timestamp toggle), per-agent **diagnostics** from the agent context
-  menu, and the **diagnostics** in the version popover — are currently filed under §10.9
+  menu, and the **diagnostics** in the version popover — are currently filed under §10.10
   (Diagnosability) as engineering substrate, yet they're user-visible features that would otherwise
   belong in §7. They're documented in neither place right now. Decide the rule (user-openable ⇒ §7?)
   and apply it.

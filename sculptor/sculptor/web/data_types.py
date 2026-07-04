@@ -11,6 +11,7 @@ from pydantic import EmailStr
 from pydantic import Field
 from pydantic import Tag
 
+from sculptor.agents.pi_agent.provider_catalog import ProviderGroup
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.pydantic_serialization import SerializableModel
@@ -68,14 +69,14 @@ class WorkspaceTargetBranchesInfo(SerializableModel):
 
 
 class PrApproval(SerializableModel):
-    """A reviewer's approval status on a pull/merge request."""
+    """A reviewer's approval status on a pull request."""
 
     name: str
     approved: bool
 
 
 class PrComment(SerializableModel):
-    """An unresolved comment on a pull/merge request."""
+    """An unresolved comment on a pull request."""
 
     author: str
     file_path: str
@@ -101,7 +102,6 @@ class PrStatusInfo(SerializableModel):
     error_category: (
         Literal["cli_missing", "not_authenticated", "no_access", "network_error", "rate_limited", "transient"] | None
     ) = None
-    error_provider: Literal["gitlab", "github"] | None = None
     error_message: str | None = None
     mismatched_pr_iid: int | None = None
     mismatched_pr_target_branch: str | None = None
@@ -112,7 +112,7 @@ class PrStatusInfoCleared(SerializableModel):
     """Sentinel pushed to the stream to clear a workspace's PR status on the frontend.
 
     When the workspace branch changes, the old PR status is stale. This signal
-    causes the frontend atom to be set to null, showing "Checking MR/PR..." until
+    causes the frontend atom to be set to null, showing "Checking PR..." until
     the next poll result arrives.
     """
 
@@ -245,10 +245,16 @@ class PreviewBranchNameResponse(SerializableModel):
     branch_name: str
 
 
-class BranchExistsResponse(SerializableModel):
-    """Whether a branch already exists in a project's local repo."""
+class NewBranchNameValidationResponse(SerializableModel):
+    """Validation result for a prospective new workspace branch name.
 
-    exists: bool
+    `is_valid` is whether the name is a legal git ref (per `git check-ref-format`);
+    `already_exists` is whether it collides with an existing local branch. The two
+    feed the Add Workspace form's inline branch-name error.
+    """
+
+    is_valid: bool
+    already_exists: bool
 
 
 class ProjectEnvVarNames(SerializableModel):
@@ -265,6 +271,62 @@ class EnvVarNamesResponse(SerializableModel):
     global_var_names: tuple[str, ...]
     global_env_path: str
     projects: tuple[ProjectEnvVarNames, ...]
+
+
+class AuthenticatedProviderEntry(SerializableModel):
+    """One pi provider's catalog metadata annotated with its authentication status."""
+
+    provider_id: str
+    display_name: str
+    group: ProviderGroup
+    in_auth_json: bool
+    env_detected: bool
+    env_var_names: tuple[str, ...]
+
+
+class AuthenticatedProvidersResponse(SerializableModel):
+    """The full pi provider catalog crossed with current authentication status."""
+
+    providers: tuple[AuthenticatedProviderEntry, ...]
+
+
+class PiLoginRequest(RequestModel):
+    """Start an interactive pi login or logout PTY.
+
+    ``provider_id`` is on-screen guidance / refresh context only — pi's /login and
+    /logout take no provider argument (the user selects in pi's own TUI selector).
+    """
+
+    mode: Literal["login", "logout"]
+    provider_id: str | None = None
+
+
+class PiLoginResponse(SerializableModel):
+    """Identifies the spawned login session; the WS attaches at /pi/login/{id}/ws."""
+
+    login_id: str
+
+
+class PiLoginStatusResponse(SerializableModel):
+    """Whether a login session's credential change has landed in auth.json.
+
+    The modal polls this to auto-close (and refetch) without a manual Done:
+    ``completed`` flips true once pi has performed the /login (the provider appeared)
+    or /logout (the provider was removed).
+    """
+
+    completed: bool
+
+
+class PasteKeyRequest(RequestModel):
+    """Power-user paste-key write for a single-key provider.
+
+    ``key_value`` is stored verbatim in auth.json (a literal key, a ``$ENV``
+    reference, or a ``!command``); pi resolves it at read time.
+    """
+
+    provider_id: str
+    key_value: str
 
 
 class RecentWorkspaceResponse(SerializableModel):
@@ -444,7 +506,6 @@ class RepoInfo(SerializableModel):
     current_branch: str
     recent_branches: list[str]
     project_id: ProjectID
-    is_gitlab_origin: bool = False
     is_github_origin: bool = False
     remote_branches: list[str] = Field(default_factory=list)
 
@@ -668,10 +729,16 @@ class AuthStartResult(SerializableModel):
     On a machine with a usable local browser the CLI completes the loopback flow
     on its own and no code is needed — that case returns ``success=True`` with
     ``needs_code=False``.
+
+    Some tools (e.g. ``gh``) use a browser *device flow* instead: start returns
+    ``auth_url`` plus a ``user_code`` for the user to enter at that URL, then the
+    CLI polls and completes on its own — no code is pasted back (so ``needs_code``
+    stays ``False``); the frontend watches the dependency status for completion.
     """
 
     auth_url: str | None = None
     needs_code: bool = False
+    user_code: str | None = None
     success: bool = False
     error: str | None = None
 
@@ -689,6 +756,50 @@ class DependenciesStatus(SerializableModel):
     git: DependencyInfo
     claude: DependencyInfo
     pi: DependencyInfo
+    gh: DependencyInfo
+
+
+class RemoteRepo(SerializableModel):
+    """A repository listed from GitHub."""
+
+    full_name: str
+    clone_url: str
+    ssh_url: str
+    is_private: bool
+    pushed_at: str | None = None
+    description: str | None = None
+
+
+class RemoteCloneRequest(RequestModel):
+    """Request to clone a remote repository into a local directory."""
+
+    provider: Literal["github"]
+    url: str
+    target_dir: str
+    name: str
+    # When the user picked from the repo list (not the manual-URL form), we
+    # also send the `owner/repo` slug. The backend prefers passing this to
+    # `gh repo clone`, which then picks the protocol from the user's CLI
+    # config rather than forcing the protocol embedded in the URL.
+    full_name: str | None = None
+
+
+class RemoteCloneResponse(SerializableModel):
+    """Path of the newly-cloned repository on the backend host."""
+
+    project_path: str
+
+
+class CloneDefaults(SerializableModel):
+    """Backend-owned defaults for the Add Repository → GitHub clone flow.
+
+    ``default_clones_dir`` is the absolute parent dir (``<sculptor_folder>/repos``)
+    the dialog pre-fills the Target Folder with. Only the backend knows the real
+    sculptor folder, which varies by deployment (dev ``.dev_sculptor``, packaged
+    ``~/.sculptor``, hosted ``$SCULPTOR_FOLDER``).
+    """
+
+    default_clones_dir: str
 
 
 class WorkspaceSetupStatus(SerializableModel):
@@ -751,6 +862,124 @@ class WebviewCommandUiAction(SerializableModel):
     url: str | None = None
 
 
+PluginCommandOp = Literal["load", "reload", "unload", "inspect", "list"]
+
+
+class PluginCommandUiAction(SerializableModel):
+    """A command broadcast to renderers to act on the frontend plugin system.
+
+    Emitted when an agent runs a `sculpt plugin` command. ``correlation_id``
+    lets each renderer's reply be matched back to the originating CLI request
+    (see ``sculptor.web.plugin_command_bus``); ``workspace_id`` is the workspace
+    the agent's CLI is running in, and routes the action through the same
+    per-user WebSocket fan-out as the other UI actions.
+
+    Field meaning by ``op``: ``load`` uses ``source`` (a served manifest URL or
+    a remote URL); ``reload``/``unload``/``inspect`` use ``plugin_id``;
+    ``reload`` may carry ``cache_bust`` to force a fresh fetch; ``list`` ignores
+    both and asks for every plugin.
+    """
+
+    workspace_id: WorkspaceID
+    correlation_id: str
+    op: PluginCommandOp
+    plugin_id: str | None = None
+    source: str | None = None
+    cache_bust: str | None = None
+
+
+class RendererIdentity(SerializableModel):
+    """Self-reported identity of a connected renderer (one per page load).
+
+    ``environment`` comes from the renderer's own ``isElectron()`` check, not
+    from sniffing the WebSocket handshake. ``origin`` is ``window.location``'s
+    origin, which determines the localStorage domain — two renderers on
+    different origins can legitimately hold different plugin state.
+    """
+
+    renderer_id: str
+    environment: Literal["electron", "browser"]
+    origin: str
+
+
+class PluginRegistrations(SerializableModel):
+    """Names-only summary of what a plugin registered in a renderer."""
+
+    panels: list[str] = []
+    has_settings: bool = False
+    overlays: list[str] = []
+
+
+class PluginSnapshot(SerializableModel):
+    """A redacted, per-plugin view a renderer assembles for ``inspect``/``list``.
+
+    ``config_keys`` lists the persisted setting key names only — never their
+    values, which may be credentials (e.g. a plugin's API key).
+    """
+
+    plugin_id: str
+    source: str
+    status: Literal["loading", "loaded", "error", "disabled", "shadowed", "missing"]
+    origin: Literal["dev", "installed", "url", "builtin"]
+    error_phase: str | None = None
+    error_message: str | None = None
+    active_source: str | None = None
+    registrations: PluginRegistrations | None = None
+    config_keys: list[str] = []
+
+
+class PluginCommandResult(SerializableModel):
+    """One renderer's reply to a ``PluginCommandUiAction``."""
+
+    correlation_id: str
+    renderer: RendererIdentity
+    op: str
+    ok: bool
+    error: str | None = None
+    plugins: list[PluginSnapshot] = []
+
+
+class PluginCommandRequest(SerializableModel):
+    """Body for ``POST /api/v1/workspaces/{workspace_id}/plugins/command``."""
+
+    op: PluginCommandOp
+    plugin_id: str | None = None
+    source: str | None = None
+    cache_bust: str | None = None
+
+
+class PluginCommandResponse(SerializableModel):
+    """Aggregated per-renderer replies the command endpoint returns to the CLI."""
+
+    correlation_id: str
+    results: list[PluginCommandResult] = []
+
+
+class PluginFile(SerializableModel):
+    """One file of a packaged plugin, base64-encoded for transport."""
+
+    path: str
+    content_base64: str
+
+
+class InstallPluginRequest(SerializableModel):
+    """Body for ``POST /api/v1/workspaces/{workspace_id}/plugins/install``.
+
+    ``persist`` selects the destination: ``False`` (default) writes a dev
+    install under the reserved ``dev/<workspace_id>/<plugin_id>/`` tree;
+    ``True`` writes a permanent install at the top-level ``<plugin_id>/``.
+    """
+
+    plugin_id: str
+    files: list[PluginFile]
+    persist: bool = False
+
+
+class InstallPluginResponse(SerializableModel):
+    manifest_url: str
+    plugin_dir: str
+
+
 # Generic system dependency models for unified frontend rendering
 
 
@@ -777,4 +1006,5 @@ StreamingUpdateSourceTypes = (
     | BtwUpdate
     | OpenFileUiAction
     | WebviewCommandUiAction
+    | PluginCommandUiAction
 )

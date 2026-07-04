@@ -8,6 +8,7 @@ import {
   taskIsAutoCompactingAtomFamily,
   taskModelAtomFamily,
   taskSelectedModelIdAtomFamily,
+  taskSourcesBackendModelsAtomFamily,
   taskStatusAtomFamily,
   taskSupportsBackgroundTasksAtomFamily,
   taskSupportsChatInterfaceAtomFamily,
@@ -43,6 +44,10 @@ export const useTaskAvailableModels = (taskId: string): ReadonlyArray<ModelOptio
 /** Subscribe to the model_id the switcher should show selected for a backend list (pi). */
 export const useTaskSelectedModelId = (taskId: string): string | undefined =>
   useAtomValue(taskSelectedModelIdAtomFamily(taskId));
+
+/** Subscribe to whether the harness sources its model catalog from a backend (pi). */
+export const useTaskSourcesBackendModels = (taskId: string): boolean =>
+  useAtomValue(taskSourcesBackendModelsAtomFamily(taskId));
 
 export const useTaskIsAutoCompacting = (taskId: string): boolean =>
   useAtomValue(taskIsAutoCompactingAtomFamily(taskId));

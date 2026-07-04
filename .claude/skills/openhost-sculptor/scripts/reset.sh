@@ -22,4 +22,4 @@ esac
 echo "Removing '$APP' (full data wipe)..."
 oh app remove "$APP" # no --keep-data: deletes persistent app_data
 echo "Deploying fresh $REPO@$BRANCH as '$APP' (~10 min build)..."
-exec oh app deploy "$REPO@$BRANCH" --name "$APP" --grant-permissions-v2 --wait
+exec oh app deploy "$REPO@$BRANCH" --name "$APP" --wait

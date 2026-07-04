@@ -55,9 +55,6 @@ export type DiffViewOptions = {
   onToggleSearch: () => void;
   showRenderToggle: boolean;
   isRendered: boolean;
-  /** Off => the render item renders disabled with a hint, pointing at
-   *  Settings → Experimental where the flag lives. */
-  isRenderToggleEnabled: boolean;
   onToggleRender: () => void;
 };
 

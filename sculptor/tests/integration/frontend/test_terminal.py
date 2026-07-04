@@ -290,9 +290,15 @@ def test_terminal_does_not_expose_sculptor_api_port(sculptor_instance_: Sculptor
     # Print a deterministic marker. If SCULPTOR_API_PORT is unset (correct),
     # the shell expands ${SCULPTOR_API_PORT:-NOT_SET} to "NOT_SET" and we see
     # "LEAK_CHECK:NOT_SET".  If it is set (the bug), we see e.g. "LEAK_CHECK:5050".
-    type_with_delay(terminal_textarea, 'echo "LEAK_CHECK:${SCULPTOR_API_PORT:-NOT_SET}"', 30)
+    #
+    # LEAK_CHECK / LEAK_END are built from a shell variable so the contiguous
+    # tokens appear only in the OUTPUT, not the echoed command line
+    # ("${lk}_CHECK" / "${lk}_END"). Waiting on a bare "LEAK_CHECK:" would match
+    # the echo before the shell runs, racing the not-yet-printed value; LEAK_END
+    # prints after the value, so its presence means the value is in the buffer.
+    type_with_delay(terminal_textarea, 'lk=LEAK; echo "${lk}_CHECK:${SCULPTOR_API_PORT:-NOT_SET}:${lk}_END"', 30)
     terminal_textarea.press("Enter")
-    wait_for_xterm_substring(page, "LEAK_CHECK:")
+    wait_for_xterm_substring(page, "LEAK_END")
 
     buffer_text = get_xterm_buffer_text(page)
 

@@ -2,6 +2,8 @@ import { createStore } from "jotai";
 import { FolderOpen } from "lucide-react";
 import { describe, expect, it, vi } from "vitest";
 
+import type { PluginCommandUiAction } from "~/api";
+
 import { type LocalPluginRef, PluginManager, resolveEntryUrl, validateManifest } from "./pluginManager.tsx";
 import {
   pluginDisabledSourcesAtom,
@@ -771,5 +773,109 @@ describe("validateManifest", () => {
 
   it("rejects an SDK major the host does not provide", () => {
     expect(validateManifest({ ...valid(), sdkVersion: "2.0.0" })?.message).toContain("SDK major");
+  });
+});
+
+describe("PluginManager sculpt-command handling", () => {
+  // A served dev-mount source path (as `sculpt plugin load <dir>` produces); the
+  // fake loader derives the plugin id "alpha" from the directory name.
+  const DEV_SOURCE = "/plugins/local/dev/ws1/alpha/manifest.json";
+
+  const command = (
+    op: PluginCommandUiAction["op"],
+    extra: Partial<PluginCommandUiAction> = {},
+  ): PluginCommandUiAction => ({ workspaceId: "ws1", correlationId: "c1", op, ...extra });
+
+  // A loader that fetches the manifest fine but throws from activate — the
+  // common "uploaded + dispatched, then failed to run" case.
+  const failingActivateManager = (): PluginManager =>
+    new PluginManager({
+      builtinSources: [],
+      fetchManifest: async (manifestUrl) => ({ manifest: manifestFor(idFromManifestUrl(manifestUrl)) }),
+      activate: async (_url, manifest): Promise<PluginLoadError> => ({
+        manifest,
+        phase: "activate",
+        error: new Error("activate blew up"),
+      }),
+    });
+
+  it("reports ok:false when a load dispatches but the plugin then fails to activate", async () => {
+    const store = createStore();
+    const manager = failingActivateManager();
+
+    const result = await manager.handlePluginCommand(store, command("load", { source: DEV_SOURCE }));
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("activate");
+    expect(result.plugins?.[0]).toMatchObject({ pluginId: "alpha", status: "error", origin: "dev" });
+  });
+
+  it("makes a failed plugin addressable by id: inspect finds it, unload clears the stale row", async () => {
+    const store = createStore();
+    const manager = failingActivateManager();
+    await manager.handlePluginCommand(store, command("load", { source: DEV_SOURCE }));
+
+    const inspected = await manager.handlePluginCommand(store, command("inspect", { pluginId: "alpha" }));
+    expect((inspected.plugins ?? []).map((p) => p.pluginId)).toEqual(["alpha"]);
+    expect(inspected.plugins?.[0]?.status).toBe("error");
+
+    const unloaded = await manager.handlePluginCommand(store, command("unload", { pluginId: "alpha" }));
+    expect(unloaded.ok).toBe(true);
+    // The stale error row is gone immediately — no app reload needed.
+    expect(store.get(pluginSourceStatesAtom)[DEV_SOURCE]).toBeUndefined();
+    const listed = await manager.handlePluginCommand(store, command("list"));
+    expect(listed.plugins ?? []).toEqual([]);
+  });
+
+  it("also addresses a failed plugin by its source path", async () => {
+    const store = createStore();
+    const manager = failingActivateManager();
+    await manager.handlePluginCommand(store, command("load", { source: DEV_SOURCE }));
+
+    const inspected = await manager.handlePluginCommand(store, command("inspect", { pluginId: DEV_SOURCE }));
+    expect((inspected.plugins ?? []).map((p) => p.pluginId)).toEqual(["alpha"]);
+  });
+
+  it("attributes a plugin's overlays in inspect registrations", async () => {
+    const store = createStore();
+    const manager = new PluginManager({
+      builtinSources: [],
+      fetchManifest: async (manifestUrl): Promise<{ manifest: PluginManifest }> => ({
+        manifest: manifestFor(idFromManifestUrl(manifestUrl)),
+      }),
+      activate: async (_url, manifest, makeApi): Promise<LoadedPlugin> => {
+        makeApi(manifest).registerOverlay({ id: `${manifest.id}-overlay`, component: (): null => null });
+        return { manifest, dispose: vi.fn() };
+      },
+    });
+
+    await manager.addSource(store, "/plugins/beta");
+    const inspected = await manager.handlePluginCommand(store, command("inspect", { pluginId: "beta" }));
+
+    expect(inspected.plugins?.[0]?.registrations?.overlays).toEqual(["beta-overlay"]);
+  });
+
+  it("keeps a manifest-phase failure addressable by its source key, not the manifest url", async () => {
+    const store = createStore();
+    // A manifest fetch/parse failure yields a synthetic manifest whose id is the
+    // URL, not a real plugin id — so the snapshot must fall back to the source
+    // key, and the failure must be addressable by it.
+    const manager = new PluginManager({
+      builtinSources: [],
+      fetchManifest: async (manifestUrl): Promise<PluginLoadError> => ({
+        manifest: { id: manifestUrl, name: manifestUrl, version: "?", entry: "", sdkVersion: "?" },
+        phase: "manifest",
+        error: new Error("not valid JSON"),
+      }),
+      activate: async (_url, manifest): Promise<LoadedPlugin> => ({ manifest, dispose: vi.fn() }),
+    });
+    const source = "/plugins/local/dev/ws1/broken/manifest.json";
+
+    const result = await manager.handlePluginCommand(store, command("load", { source }));
+    expect(result.ok).toBe(false);
+    expect(result.plugins?.[0]?.pluginId).toBe(source);
+
+    const inspected = await manager.handlePluginCommand(store, command("inspect", { pluginId: source }));
+    expect((inspected.plugins ?? []).map((p) => p.pluginId)).toEqual([source]);
   });
 });

@@ -1,6 +1,6 @@
 """Integration tests for PR button error reporting.
 
-Tests verify that when the gh/glab CLI is missing, returns auth errors,
+Tests verify that when the gh CLI is missing, returns auth errors,
 or returns access errors, the frontend shows the ErrorPrButton with the
 appropriate message.  Fake CLI scripts are dropped into
 ``sculptor_instance_.fake_bin_dir`` (always on the backend subprocess's
@@ -8,7 +8,7 @@ PATH); within a test the fake CLI's behavior is switched via a control
 file that the script reads at invocation time.
 
 The "missing CLI" group still uses ``sculptor_instance_factory_`` because
-it needs PATH to *exclude* gh/glab entirely, which requires a dedicated
+it needs PATH to *exclude* gh entirely, which requires a dedicated
 backend process with a filtered PATH.
 """
 
@@ -31,7 +31,6 @@ from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
 
 _FAKE_GITHUB_REMOTE = "https://github.com/test-org/test-repo.git"
-_FAKE_GITLAB_REMOTE = "https://gitlab.com/test-group/test-repo.git"
 
 
 def _set_remote(instance: SculptorInstance, url: str) -> None:
@@ -82,8 +81,8 @@ def _expand_details_and_verify(task_page: PlaywrightTaskPage, expected_substring
 
 
 def _set_path_without_cli(factory: SculptorInstanceFactory, tmp_path: Path) -> None:
-    """Set PATH to exclude real gh/glab CLIs while keeping python and git available."""
-    cli_names = {"gh", "glab"}
+    """Set PATH to exclude the real gh CLI while keeping python and git available."""
+    cli_names = {"gh"}
     current_path = os.environ.get("PATH", "")
     filtered_dirs = [d for d in current_path.split(":") if not any((Path(d) / name).exists() for name in cli_names)]
     factory._delegate.environment["PATH"] = ":".join(filtered_dirs)
@@ -124,15 +123,14 @@ def _assert_error_button_with_popover(
     _expand_details_and_verify(task_page, details_text)
 
 
-@user_story("to see an error when gh/glab CLI is not installed")
-def test_cli_missing_shows_error_for_github_and_gitlab(
+@user_story("to see an error when gh CLI is not installed")
+def test_cli_missing_shows_error_for_github(
     sculptor_instance_factory_: SculptorInstanceFactory, tmp_path: Path
 ) -> None:
-    """When gh/glab is not on PATH, the error button should show 'CLI not installed'."""
+    """When gh is not on PATH, the error button should show 'CLI not installed'."""
     _set_path_without_cli(sculptor_instance_factory_, tmp_path)
 
     with sculptor_instance_factory_.spawn_instance() as instance:
-        # --- GitHub ---
         _set_remote(instance, _FAKE_GITHUB_REMOTE)
         task_page = _start_task_and_wait_for_pr_status(
             instance.page, "say hello", expected_button=ElementIDs.PR_BUTTON_ERROR
@@ -146,22 +144,6 @@ def test_cli_missing_shows_error_for_github_and_gitlab(
         )
         popover = task_page.get_pr_button_error_popover()
         expect(popover).to_contain_text("brew install gh")
-
-        # --- GitLab ---
-        _cleanup_workspaces(instance)
-        _set_remote(instance, _FAKE_GITLAB_REMOTE)
-        task_page = _start_task_and_wait_for_pr_status(
-            instance.page, "say hello", expected_button=ElementIDs.PR_BUTTON_ERROR
-        )
-
-        _assert_error_button_with_popover(
-            task_page,
-            button_label="Create MR",
-            popover_text="GitLab CLI not installed",
-            details_text="glab CLI not found in PATH",
-        )
-        popover = task_page.get_pr_button_error_popover()
-        expect(popover).to_contain_text("brew install glab")
 
 
 _FAKE_GH_SCRIPT = """\
@@ -286,57 +268,3 @@ def test_github_happy_paths(sculptor_instance_: SculptorInstance, tmp_path: Path
     open_button = task_page.get_pr_button_open()
     expect(open_button).to_be_visible()
     expect(open_button).to_contain_text("PR #42")
-
-
-_FAKE_GLAB_SCRIPT = """\
-#!/bin/bash
-MODE=$(cat "{mode_file}")
-case "$MODE" in
-    auth)
-        echo "not logged in. Run 'glab auth login'" >&2
-        exit 1
-        ;;
-    dns)
-        echo "could not resolve host: gitlab.com" >&2
-        exit 1
-        ;;
-esac
-"""
-
-
-@user_story("to see errors when glab CLI reports problems")
-def test_gitlab_cli_error_variants(sculptor_instance_: SculptorInstance, tmp_path: Path) -> None:
-    """Auth error and DNS error each show the correct error in the PR/MR button."""
-    mode_file = tmp_path / "glab_mode"
-    _create_fake_cli(sculptor_instance_.fake_bin_dir, "glab", _FAKE_GLAB_SCRIPT.format(mode_file=mode_file))
-    _set_remote(sculptor_instance_, _FAKE_GITLAB_REMOTE)
-
-    # --- Auth error ---
-    mode_file.write_text("auth")
-    task_page = _start_task_and_wait_for_pr_status(
-        sculptor_instance_.page, "say hello", expected_button=ElementIDs.PR_BUTTON_ERROR
-    )
-
-    _assert_error_button_with_popover(
-        task_page,
-        button_label="Create MR",
-        popover_text="GitLab authentication required",
-        details_text="not logged in",
-    )
-    popover = task_page.get_pr_button_error_popover()
-    expect(popover).to_contain_text("glab auth login")
-
-    # --- DNS error ---
-    _cleanup_workspaces(sculptor_instance_)
-    mode_file.write_text("dns")
-    _set_remote(sculptor_instance_, _FAKE_GITLAB_REMOTE)
-    task_page = _start_task_and_wait_for_pr_status(
-        sculptor_instance_.page, "say hello", expected_button=ElementIDs.PR_BUTTON_ERROR
-    )
-
-    _assert_error_button_with_popover(
-        task_page,
-        button_label="Create MR",
-        popover_text="Can't connect to GitLab",
-        details_text="could not resolve host: gitlab.com",
-    )

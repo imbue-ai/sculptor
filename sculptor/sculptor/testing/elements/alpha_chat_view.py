@@ -1,5 +1,8 @@
+import time
+
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
+from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
@@ -106,6 +109,11 @@ class PlaywrightAlphaChatViewElement(PlaywrightIntegrationTestElement):
         return self.get_table_wrap_toggles().and_(self._page.locator(f'[aria-label="{aria_label}"]'))
 
 
+def get_alpha_scrollbar_thumb(page: Page) -> Locator:
+    """Locator for the alpha chat's overlay scrollbar thumb (the draggable indicator)."""
+    return page.get_by_test_id(ElementIDs.ALPHA_CHAT_SCROLLBAR_THUMB)
+
+
 def get_jump_to_bottom_button(page: Page) -> Locator:
     """Locator for the jump-to-bottom button."""
     return page.get_by_test_id(ElementIDs.ALPHA_JUMP_TO_BOTTOM_BUTTON)
@@ -163,6 +171,122 @@ def get_alpha_scroll_height(page: Page) -> float:
     )
 
 
+def start_scroll_top_sampler(page: Page) -> None:
+    """Start an rAF loop recording the max scrollTop seen (the peak we followed to)."""
+    page.evaluate(
+        f"""() => {{
+        const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+        if (!el) return;
+        window.__st = {{ max: el.scrollTop }};
+        const tick = () => {{
+            if (el.scrollTop > window.__st.max) window.__st.max = el.scrollTop;
+            window.__st.raf = requestAnimationFrame(tick);
+        }};
+        window.__st.raf = requestAnimationFrame(tick);
+    }}"""
+    )
+
+
+def read_scroll_top_sampler(page: Page) -> dict:
+    """Stop the sampler; return {"max": peak scrollTop while sampling, "final": current}."""
+    return page.evaluate(
+        f"""() => {{
+        if (window.__st && window.__st.raf) cancelAnimationFrame(window.__st.raf);
+        const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+        return {{
+            max: window.__st ? Math.round(window.__st.max) : null,
+            final: el ? Math.round(el.scrollTop) : null,
+        }};
+    }}"""
+    )
+
+
+def get_last_turn_footer_viewport_gaps(page: Page) -> dict | None:
+    """Position of the last turn footer relative to the alpha chat viewport.
+
+    Returns ``None`` when no turn footer is rendered. Otherwise a dict:
+      - ``bottom_gap``: viewport bottom minus footer bottom, in px. ``>= 0`` means the
+        footer's bottom edge is at or above the viewport bottom (in view); ``< 0``
+        means the footer is cut off below the fold.
+      - ``top_gap``: footer top minus viewport top, in px. ``>= 0`` means the footer's
+        top edge is at or below the viewport top (not scrolled off the top).
+    """
+    return page.evaluate(
+        f"""() => {{
+        const view = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+        const footers = document.querySelectorAll('[data-testid="{ElementIDs.TURN_FOOTER}"]');
+        if (!view || footers.length === 0) return null;
+        const v = view.getBoundingClientRect();
+        const f = footers[footers.length - 1].getBoundingClientRect();
+        return {{ bottom_gap: Math.round(v.bottom - f.bottom), top_gap: Math.round(f.top - v.top) }};
+    }}"""
+    )
+
+
+def get_max_following_tail_gap(page: Page, frames: int = 18) -> float | None:
+    """Over a short ``requestAnimationFrame`` burst, the max gap (px) from the last
+    message's bottom edge UP to the viewport bottom.
+
+    While following, the pin holds this gap at ~PIN_BOTTOM_GAP (64px, see
+    chat-alpha/scroll/geometry.ts): ~0 means the pin is hugging the viewport edge
+    flush, and a full-padding gap (>= the 128px streaming floor) means it is
+    parked at the end of the padded range. The max across frames is returned so a
+    transient mid-growth frame (where the streaming tail briefly overflows below
+    the fold, giving a negative gap) does not mask the steady pinned gap. Returns
+    ``None`` if the chat view or its messages are absent.
+    """
+    return page.evaluate(
+        f"""(frames) => new Promise((resolve) => {{
+        const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+        if (!el) {{ resolve(null); return; }}
+        let maxGap = null;
+        let count = 0;
+        const tick = () => {{
+            const items = el.querySelectorAll('[data-index]');
+            let lastEl = null, lastIdx = -1;
+            items.forEach((it) => {{
+                const i = parseInt(it.getAttribute('data-index'));
+                if (i > lastIdx) {{ lastIdx = i; lastEl = it; }}
+            }});
+            if (lastEl) {{
+                const gap = el.getBoundingClientRect().bottom - lastEl.getBoundingClientRect().bottom;
+                if (maxGap === null || gap > maxGap) maxGap = gap;
+            }}
+            if (++count < frames) {{
+                requestAnimationFrame(tick);
+            }} else {{
+                resolve(maxGap === null ? null : Math.round(maxGap));
+            }}
+        }};
+        requestAnimationFrame(tick);
+    }})""",
+        frames,
+    )
+
+
+def wait_for_stable_following_tail_gap(
+    page: Page, *, stability_tolerance_px: int = 8, timeout_ms: int = 8_000
+) -> float | None:
+    """The tail gap once the pin has settled at its steady state, while following.
+
+    Entering ``following`` scrolls toward the pin position, so a single
+    ``get_max_following_tail_gap`` window sampled right away can catch that transit
+    instead of the resting gap. This polls successive windows until two consecutive
+    ones agree within ``stability_tolerance_px`` — the pin has landed (at a correct
+    *or* buggy resting position; the caller's assertions judge which) — and returns
+    that stable gap. On timeout the last sample is returned rather than raising, so
+    the caller's assertions report the actual geometry.
+    """
+    deadline = time.monotonic() + timeout_ms / 1000
+    previous = get_max_following_tail_gap(page)
+    while time.monotonic() < deadline:
+        current = get_max_following_tail_gap(page)
+        if previous is not None and current is not None and abs(current - previous) <= stability_tolerance_px:
+            return current
+        previous = current
+    return previous
+
+
 def scroll_alpha_chat_to_top(page: Page) -> None:
     """Scroll the alpha chat to the top.
 
@@ -192,6 +316,21 @@ def scroll_alpha_chat_to_top(page: Page) -> None:
     )
 
 
+def wait_for_alpha_scroll_settled(page: Page, *, timeout_ms: int = 30_000) -> None:
+    """Wait until the alpha chat's scroll has fully settled.
+
+    After a task/agent switch the scroll position and the virtualizer's
+    measurements settle asynchronously.  Rather than polling ``scrollTop`` for
+    frame-stability (a heuristic that can't tell "still settling" from "settled"
+    and times out under CI load), the scroll state machine stamps
+    ``data-scroll-settled="true"`` on the scroll container once the authority is
+    quiescent (userControlled or following) and the layout has converged.  We
+    await that deterministic DOM signal.  See
+    docs/development/scroll_state_unification.md (SCU-1566).
+    """
+    expect(get_alpha_chat_view(page)).to_have_attribute("data-scroll-settled", "true", timeout=timeout_ms)
+
+
 def scroll_alpha_chat_by(page: Page, delta: int) -> None:
     """Scroll the alpha chat by a pixel delta (negative = up, positive = down)."""
     page.evaluate(
@@ -204,6 +343,32 @@ def scroll_alpha_chat_by(page: Page, delta: int) -> None:
         }}
     }}""",
         delta,
+    )
+
+
+def scroll_test_id_into_chat_viewport(page: Page, test_id: str, *, top_margin: int = 120) -> None:
+    """Scroll the alpha chat so the first element with ``test_id`` sits
+    ``top_margin`` px below the scroll container's top edge.
+
+    This positions the element fully inside the viewport for a subsequent
+    :func:`click_visible_in_chat_viewport` (which refuses to scroll-into-view),
+    without assuming anything about how tall the surrounding content renders — a
+    fixed pixel delta from the bottom is not robust to content whose height
+    varies (e.g. tables that wrap vs. scroll). Fires a ``scroll`` event so the
+    chat's scroll listeners run, mirroring a real user scroll.
+    """
+    page.evaluate(
+        f"""({{ testId, topMargin }}) => {{
+        const container = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+        const el = container && container.querySelector('[data-testid="' + testId + '"]');
+        if (!container || !el) throw new Error("cannot scroll " + testId + " into view: not found");
+        const cRect = container.getBoundingClientRect();
+        const eRect = el.getBoundingClientRect();
+        container.dispatchEvent(new Event('wheel'));
+        container.scrollTop += (eRect.top - cRect.top) - topMargin;
+        container.dispatchEvent(new Event('scroll'));
+    }}""",
+        {"testId": test_id, "topMargin": top_margin},
     )
 
 

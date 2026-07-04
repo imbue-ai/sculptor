@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Entitlements for UNSIGNED LOCAL DEV builds only (`just pkg-dev`, which sets
+  SKIP_NOTARIZE_AND_SIGN=1). Identical to entitlements.mac.plist plus the two
+  task-attach keys below, so a profiler/debugger (py-spy, lldb) can attach to
+  the running `sculptor_backend` without anyone having to re-sign it by hand.
+
+  These keys MUST NOT be added to entitlements.mac.plist: `get-task-allow` is a
+  hardened-runtime bypass that lets any local process inspect/inject the target,
+  and Apple's notarization workflow strips it from release builds anyway. It is
+  acceptable only on a non-notarized dev build that is transferred without the
+  quarantine bit. See the `profile-sculptor-backend` skill and SCU-1604.
+-->
+<plist version="1.0">
+<dict>
+    <!-- Allow outgoing network connections -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- Allow incoming network connections (for local dev server) -->
+    <key>com.apple.security.network.server</key>
+    <true/>
+
+    <!-- Allow file system read access (user selected files) -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+
+    <!-- Allow reading downloads folder -->
+    <key>com.apple.security.files.downloads.read-write</key>
+    <true/>
+
+    <!-- Allow JIT compilation (required for V8 JavaScript engine) -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+
+    <!-- Allow unsigned executable memory (required for some native modules) -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+
+    <!-- Allow dyld environment variables (needed for some native modules) -->
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+
+    <!-- Disable library validation (allows loading of unsigned native modules) -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+
+    <!-- Allow spawning child processes (for running backend binaries) -->
+    <key>com.apple.security.cs.disable-executable-page-protection</key>
+    <true/>
+
+    <!-- Allow full file system access (for Git repositories anywhere) -->
+    <key>com.apple.security.files.all</key>
+    <true/>
+
+    <!-- DEV-ONLY: let profilers/debuggers obtain this process's task port so
+         py-spy / lldb can attach to `sculptor_backend`. Never ship on a
+         notarized build. -->
+    <key>com.apple.security.get-task-allow</key>
+    <true/>
+    <key>com.apple.security.cs.allow-get-task-allow</key>
+    <true/>
+</dict>
+</plist>

@@ -44,6 +44,7 @@ from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import TerminalAgentConfig
 from sculptor.interfaces.agents.agent import TerminalAgentSignalRunnerMessage
 from sculptor.interfaces.agents.agent import TerminalStatusSignal
+from sculptor.interfaces.agents.tasks import TaskState
 from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import OrganizationReference
 from sculptor.primitives.ids import ProjectID
@@ -248,6 +249,9 @@ class _StubGitRepo(ReadOnlyGitRepo):
     def is_branch_ref(self, branch: str) -> bool:
         return _stub(branch)
 
+    def is_valid_branch_name(self, branch: str) -> bool:
+        return _stub(branch)
+
     def _run_git(self, args: list[str]) -> str:
         return _stub(args)
 
@@ -317,6 +321,15 @@ class _FakeTransaction(_StubTransaction):
     def get_workspace(self, workspace_id: WorkspaceID) -> Workspace | None:
         return self._env.workspace if workspace_id == self._env.workspace.object_id else None
 
+    def update_workspace_fields(self, workspace_id: WorkspaceID, **fields: Any) -> Workspace | None:
+        # Model real persistence: apply the targeted field update to the env's
+        # workspace so a later get_workspace reflects it (e.g. the persisted
+        # ci_babysitter_paused flag).
+        if workspace_id != self._env.workspace.object_id:
+            return None
+        self._env.workspace = self._env.workspace.model_copy(update=fields)
+        return self._env.workspace
+
     def get_tasks_for_project(self, project_id: ProjectID, input_data_classes: Any = None) -> list[Task]:
         del project_id, input_data_classes
         return list(self._env.tasks)
@@ -348,6 +361,24 @@ def _ready_terminal_messages() -> list[Message]:
     ]
 
 
+def _idle_agent_messages() -> list[Message]:
+    """Live messages for which is_agent_busy_or_waiting is False (idle).
+
+    Just the run-start anchor, no in-flight request and no busy/waiting signal —
+    an IDLE agent status for both chat and terminal agents.
+    """
+    return [EnvironmentAcquiredRunnerMessage.model_construct(message_id=AgentMessageID(), environment=None)]
+
+
+def _busy_chat_messages() -> list[Message]:
+    """Live messages for a chat agent mid-turn (a sent prompt with no matching
+    request-complete) → is_agent_busy_or_waiting is True (WORKING)."""
+    return [
+        EnvironmentAcquiredRunnerMessage.model_construct(message_id=AgentMessageID(), environment=None),
+        ChatInputUserMessage(text="busy work", message_id=AgentMessageID(), model_name=LLMModel.FAKE_CLAUDE),
+    ]
+
+
 class _FakeTaskService(_StubTaskService):
     _env: _FakeEnv = PrivateAttr()
     _create_task_calls: list[Task] = PrivateAttr(default_factory=list)
@@ -359,11 +390,22 @@ class _FakeTaskService(_StubTaskService):
     # messages after the worker subscribes.
     _seeded_terminal_messages: list[Message] = PrivateAttr(default_factory=list)
     _live_terminal_queue: "Queue[Message] | None" = PrivateAttr(default=None)
+    # Per-task live messages backing get_live_messages_for_task (used by the
+    # all-agents-idle gate). Tasks without an explicit entry default to idle.
+    _live_messages_by_task_id: dict[TaskID, list[Message]] = PrivateAttr(default_factory=dict)
 
     def __init__(self, env: _FakeEnv, concurrency_group: ConcurrencyGroup) -> None:
         super().__init__(concurrency_group=concurrency_group, task_sync_dir=Path("/tmp"))
         self._env = env
         self._seeded_terminal_messages = _ready_terminal_messages()
+
+    def set_live_messages(self, task_id: TaskID, messages: list[Message]) -> None:
+        self._live_messages_by_task_id[task_id] = messages
+
+    def get_live_messages_for_task(self, task_id: TaskID) -> tuple[Message, ...]:
+        # Default to an at-rest (idle) agent; tests that exercise the all-idle
+        # gate set explicit busy/waiting messages via set_live_messages.
+        return tuple(self._live_messages_by_task_id.get(task_id, _idle_agent_messages()))
 
     @property
     def create_task_calls(self) -> list[Task]:
@@ -480,7 +522,7 @@ def _seed_baseline(coordinator: CIBabysitterCoordinator, workspace_id: Workspace
 
     The classifier suppresses PIPELINE_FAILED and MERGE_CONFLICT on
     `prev is None` to avoid burning a retry on Sculptor restart against
-    an already-red MR (architecture's first-poll baseline mitigation).
+    an already-red PR (architecture's first-poll baseline mitigation).
     Tests that want to exercise an actionable transition must seed a
     clean baseline poll first.
     """
@@ -572,13 +614,13 @@ def test_merge_conflict_present_at_first_observation_is_surfaced(
     env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
 ) -> None:
     """SCU-1361: a conflict already present the first time the coordinator
-    observes the MR (no clean baseline poll first) must still dispatch a
+    observes the PR (no clean baseline poll first) must still dispatch a
     MERGE_CONFLICT prompt.
 
     This is the common case: a branch cut from a stale main conflicts within
-    seconds of MR creation, so the very first poll already shows
+    seconds of PR creation, so the very first poll already shows
     has_conflicts=True. It also covers any backend restart against an
-    already-conflicted MR, since the coordinator's prev_status is in-memory
+    already-conflicted PR, since the coordinator's prev_status is in-memory
     and resets to None on restart. The deliberate absence of a _seed_baseline
     call is the whole point of the regression.
     """
@@ -639,6 +681,27 @@ def test_scenario_4_pause_prevents_prompt(
     assert task_service.create_task_calls == []
     state = coordinator._state[env.workspace_id]
     assert state.retry_count == 0
+
+
+def test_pause_persists_across_coordinator_restart(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    """A restart rebuilds the coordinator with empty in-memory state; the paused
+    flag must be restored from the persisted Workspace row (SCU-1579).
+    """
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    coordinator.set_paused(env.workspace_id, True)
+    # The flag is persisted onto the workspace row, not just held in memory.
+    assert env.workspace.ci_babysitter_paused is True
+
+    # Simulate a restart: a brand-new coordinator over the same persisted env,
+    # carrying none of the previous in-memory state.
+    restarted, _ = _build_coordinator(env, test_root_concurrency_group)
+    assert env.workspace_id not in restarted._state
+
+    snapshot = restarted.get_state_snapshot(env.workspace_id)
+    assert snapshot is not None
+    assert snapshot.paused is True
 
 
 def test_scenario_5_mid_turn_queueing_reuses_task(
@@ -728,7 +791,7 @@ def test_same_cycle_merge_and_failed_suppresses_prompt(
 ) -> None:
     """If MR_MERGED arrives in the same diff as PIPELINE_FAILED, retire wins.
 
-    Reproduces a race where a user manually merges a still-red MR. The
+    Reproduces a race where a user manually merges a still-red PR. The
     coordinator must process the retire transition before any pipeline-
     failed dispatch in the same diff, so no spurious prompt is sent.
     """
@@ -759,12 +822,80 @@ def test_scenario_8_feature_disabled(
     assert task_service.create_message_calls == []
 
 
+def _add_existing_agent(env: _FakeEnv, *, agent_config: Any = None) -> Task:
+    """Register a non-babysitter agent task in the workspace and return it.
+
+    Its outcome is RUNNING so is_agent_busy_or_waiting reads its live messages
+    (a QUEUED task would short-circuit to BUILDING regardless of messages).
+    """
+    task = _make_agent_task(env, agent_config or ClaudeCodeSDKAgentConfig(), "2026-01-01T00:00:00").model_copy(
+        update={"outcome": TaskState.RUNNING}
+    )
+    env.tasks.append(task)
+    env.tasks_by_id[task.object_id] = task
+    return task
+
+
+def test_busy_agent_skips_dispatch_without_pouncing_on_idle(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    """SCU-1601: with another agent busy, a PIPELINE_FAILED transition is dropped,
+    not queued — nothing is dispatched and no retry is burned. The babysitter must
+    NOT pounce when that agent later goes idle (the same failure never re-arrives);
+    only a *fresh* CI failure observed while idle drives a prompt."""
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    busy_agent = _add_existing_agent(env)
+    task_service.set_live_messages(busy_agent.object_id, _busy_chat_messages())
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+
+    # Dropped while busy: nothing dispatched, no retry burned, no dedup recorded.
+    assert task_service.create_task_calls == []
+    assert task_service.create_message_calls == []
+    state = coordinator._state[env.workspace_id]
+    assert state.retry_count == 0
+    assert state.last_dispatched_pipeline_failed_id is None
+
+    # The agent goes idle, but the still-failing pipeline_id=1 never re-arrives
+    # (the classifier only fires on a change), so the babysitter stays silent —
+    # no pounce the instant the user's agent finishes a turn.
+    task_service.set_live_messages(busy_agent.object_id, _idle_agent_messages())
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    assert task_service.create_message_calls == []
+
+    # A *fresh* failure (new pipeline_id) observed while idle DOES drive a prompt —
+    # proving the silence above was the busy gate, not a dead path.
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=2))
+    assert len(task_service.create_message_calls) == 1
+    sent_message, _ = task_service.create_message_calls[0]
+    assert sent_message.text == "FAILED_PROMPT"
+    assert state.retry_count == 1
+
+
+def test_idle_agent_dispatches_immediately(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    """An idle prior agent does not block the babysitter — it dispatches on the
+    failed transition."""
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    idle_agent = _add_existing_agent(env)
+    task_service.set_live_messages(idle_agent.object_id, _idle_agent_messages())
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+
+    assert len(task_service.create_message_calls) == 1
+    state = coordinator._state[env.workspace_id]
+    assert state.retry_count == 1
+
+
 def test_transient_pr_state_none_does_not_clobber_prev_status(
     env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
 ) -> None:
     """A transient pr_state="none" gap (e.g. detached HEAD mid-rebase)
     must not overwrite prev_status. If it did, the next poll that re-finds
-    the MR would look like a fresh False→True merge_conflict transition
+    the PR would look like a fresh False→True merge_conflict transition
     and dispatch a duplicate prompt.
     """
     coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
@@ -774,10 +905,10 @@ def test_transient_pr_state_none_does_not_clobber_prev_status(
     coordinator._handle_status(_make_status(env.workspace_id, pr_state="open", has_conflicts=True))
     assert len(task_service.create_message_calls) == 1
 
-    # 2. Branch flips: MR can't be matched → polling emits pr_state="none".
+    # 2. Branch flips: PR can't be matched → polling emits pr_state="none".
     coordinator._handle_status(_make_status(env.workspace_id, pr_state="none", has_conflicts=None))
 
-    # 3. Branch back: MR re-found, conflict still present.
+    # 3. Branch back: PR re-found, conflict still present.
     coordinator._handle_status(_make_status(env.workspace_id, pr_state="open", has_conflicts=True))
 
     # The prompt MUST NOT have been resent.

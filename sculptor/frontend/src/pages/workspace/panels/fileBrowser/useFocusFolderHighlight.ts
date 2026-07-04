@@ -3,7 +3,7 @@ import "./focusFolderHighlight.scss";
 import type { Virtualizer } from "@tanstack/react-virtual";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { RefObject } from "react";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import { mentionChipUnreachableToastAtom } from "~/common/state/atoms/toasts.ts";
 
@@ -51,8 +51,10 @@ export const useFocusFolderHighlight = ({ workspaceId, flatRows, virtualizer, sc
   // effect return, because that cleanup fires on every deps change (e.g.
   // when `flatRows` updates due to background tree refreshes), which would
   // strip the class before the 500ms + 1500ms fade can play out.
-  const clearPendingRef = useRef<() => void>(undefined);
-  clearPendingRef.current = (): void => {
+  //
+  // A stable useCallback (empty deps) since it closes over only stable refs
+  // and module-level constants, so its identity never needs to change.
+  const clearPending = useCallback((): void => {
     if (fadeTimeoutRef.current !== null) {
       clearTimeout(fadeTimeoutRef.current);
       fadeTimeoutRef.current = null;
@@ -72,7 +74,7 @@ export const useFocusFolderHighlight = ({ workspaceId, flatRows, virtualizer, sc
       highlightedElementRef.current.classList.remove(HIGHLIGHT_CLASS, FADE_OUT_CLASS);
       highlightedElementRef.current = null;
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!request || request.workspaceId !== workspaceId) return;
@@ -85,7 +87,7 @@ export const useFocusFolderHighlight = ({ workspaceId, flatRows, virtualizer, sc
     handledNonceRef.current = request.nonce;
 
     // Replace any still-running highlight from a prior request.
-    clearPendingRef.current?.();
+    clearPending();
 
     if (index < 0) {
       setUnreachableToast({ title: "Not viewable in Sculptor" });
@@ -126,7 +128,10 @@ export const useFocusFolderHighlight = ({ workspaceId, flatRows, virtualizer, sc
   }, [request?.nonce, request?.path, request?.workspaceId, workspaceId, flatRows]);
 
   // Final cleanup on unmount only — never tied to the main effect's deps.
+  // clearPending is a stable useCallback, so the empty dep array is correct
+  // and the effect still fires its cleanup solely on unmount.
   useEffect(() => {
-    return (): void => clearPendingRef.current?.();
+    return (): void => clearPending();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 };

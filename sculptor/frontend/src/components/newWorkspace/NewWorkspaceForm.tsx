@@ -129,7 +129,7 @@ export const NewWorkspaceForm = ({
   const {
     displayedValue: effectiveBranchName,
     isLoading: isBranchNamePreviewLoading,
-    collision: branchNameCollision,
+    status: branchNameStatus,
   } = useBranchNamePreview({
     projectId: selectedProjectId,
     workspaceName,
@@ -240,7 +240,10 @@ export const NewWorkspaceForm = ({
     (mode === WorkspaceInitializationStrategy.WORKTREE &&
       (effectiveBranchName.trim() === "" || isBranchNamePreviewLoading)) ||
     (repoInfo !== null && repoInfo.recentBranches?.length === 0) ||
-    branchNameCollision === "exists";
+    // A name the validator has flagged — illegal ref or existing branch — hard
+    // blocks Create; the backend re-checks at create time as the backstop.
+    branchNameStatus === "exists" ||
+    branchNameStatus === "invalid";
 
   const handleSubmit = useCallback(async (): Promise<void> => {
     if (isSubmitDisabled || selectedProjectId === null) return;
@@ -434,7 +437,7 @@ export const NewWorkspaceForm = ({
                 value={effectiveBranchName}
                 isManuallyEdited={isBranchNameManuallyEdited}
                 isLoading={isBranchNamePreviewLoading}
-                collision={branchNameCollision}
+                status={branchNameStatus}
                 onUserEdit={(value): void => setBranchNameOverride(value)}
                 onShuffle={handleShuffle}
                 disabled={isCreating}

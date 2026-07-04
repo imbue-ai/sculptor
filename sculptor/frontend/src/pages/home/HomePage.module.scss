@@ -1,16 +1,23 @@
-.container {
+.root {
   background: var(--gray-2);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.switcherBar {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  padding: var(--space-4) var(--space-5) 0 var(--space-5);
+}
+
+// Holds the active home view, which owns its own scrolling and padding.
+.body {
+  display: flex;
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  padding: var(--space-9) var(--space-5) var(--space-6) var(--space-5);
-}
-
-.content {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  max-width: min(850px, 90%);
-  min-height: 0;
-  width: 100%;
 }

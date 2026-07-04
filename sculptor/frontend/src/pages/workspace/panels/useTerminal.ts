@@ -76,11 +76,21 @@ const TERMINAL_OUTPUT_DECODER = new TextDecoder();
 // response is unlikely to fall inside it.
 const SOLICITED_QUERY_RESPONSE_WINDOW_MS = 1000;
 
-// A fresh terminal WebSocket can close with this code when the backend has the
-// terminal URL but hasn't started the PTY yet (e.g. workspace just created,
-// first agent still starting). We retry the connection after a short delay.
-const TERMINAL_NOT_STARTED_CLOSE_CODE = 4404;
+// Delay before retrying the terminal WebSocket after an unexpected close.
 const TERMINAL_RECONNECT_RETRY_DELAY_MS = 2000;
+
+// Close codes we do NOT retry, because reconnecting can't recover the session:
+// - 1000 is a normal, intentional close — nothing went wrong, so don't loop.
+// - 4401 is the backend rejecting our session token (it mirrors HTTP 401). The
+//   token is still invalid on a retry, so reconnecting would spin forever until
+//   the user re-authenticates. Mirrors the backend's
+//   WEBSOCKET_INVALID_SESSION_TOKEN_CLOSE_CODE.
+const WEBSOCKET_NORMAL_CLOSE_CODE = 1000;
+const TERMINAL_UNAUTHORIZED_CLOSE_CODE = 4401;
+const TERMINAL_NON_RETRYABLE_CLOSE_CODES = new Set<number>([
+  WEBSOCKET_NORMAL_CLOSE_CODE,
+  TERMINAL_UNAUTHORIZED_CLOSE_CODE,
+]);
 
 /**
  * Detect a terminal QUERY in live PTY output that xterm.js will answer with a
@@ -305,6 +315,16 @@ export const shouldClearActiveTerminal = (
   return container != null && container.contains(document.activeElement);
 };
 
+/** The live state of a terminal's WebSocket connection.
+ *
+ * - `connecting`: opening the initial connection, nothing shown yet.
+ * - `connected`: the socket is open and the terminal is interactive.
+ * - `reconnecting`: the socket dropped from a recoverable close and a retry is
+ *   pending/in flight — the terminal is temporarily frozen but will self-heal.
+ * - `disconnected`: the socket closed in a way we don't retry (a normal close,
+ *   or a rejected session token), so the terminal won't recover on its own. */
+export type TerminalConnectionStatus = "connecting" | "connected" | "reconnecting" | "disconnected";
+
 type UseTerminalArgs = {
   /** The backend WebSocket path for this terminal's PTY, e.g.
    * `/api/v1/workspaces/{id}/terminal/{index}/ws` (workspace terminals) or
@@ -312,12 +332,21 @@ type UseTerminalArgs = {
   terminalPath: string;
   isVisible: boolean;
   onOutput?: () => void;
+  /** Notified whenever the WebSocket connection state changes, so a parent can
+   * surface it (e.g. a status indicator on the terminal tab). */
+  onConnectionStatusChange?: (status: TerminalConnectionStatus) => void;
   /** Font size in px (default 12). Fixed at mount. */
   fontSize?: number;
   /** Cell-height multiplier (default 1). Fixed at mount. xterm's
    * customGlyphs rendering stretches box-drawing characters to the full
    * cell, so TUI borders stay seamless at line heights above 1. */
   lineHeight?: number;
+  /** When true, focus the terminal as soon as it is visible and ready —
+   * including the initial mount. Terminal *agents* set this: their pane is
+   * remounted on every tab switch and the terminal is the agent's only input
+   * surface, so it must take keyboard focus immediately. Workspace terminals
+   * leave it false so they don't steal focus from the chat input on load. */
+  focusOnVisible?: boolean;
 };
 
 type UseTerminalResult = {
@@ -328,8 +357,10 @@ export const useTerminal = ({
   terminalPath,
   isVisible,
   onOutput,
+  onConnectionStatusChange,
   fontSize = 12,
   lineHeight = 1,
+  focusOnVisible = false,
 }: UseTerminalArgs): UseTerminalResult => {
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
@@ -340,8 +371,21 @@ export const useTerminal = ({
   // reconnect) are dropped. See containsTerminalQuery / shouldForwardQueryResponse.
   const lastLiveQueryAtRef = useRef<number>(Number.NEGATIVE_INFINITY);
   const hasReceivedReplayRef = useRef<boolean>(false);
+  // Mirror onOutput into a ref so the WebSocket message handler always calls
+  // the latest callback without re-establishing the connection. The ref is
+  // read only inside that handler, never during render, so syncing it in an
+  // effect keeps render pure without changing behavior.
   const onOutputRef = useRef(onOutput);
-  onOutputRef.current = onOutput;
+  useEffect(() => {
+    onOutputRef.current = onOutput;
+  });
+  // Same ref pattern for the connection-status callback: the WebSocket effect
+  // reads it at event time, so syncing it here avoids re-establishing the
+  // connection when only the callback identity changes.
+  const onConnectionStatusChangeRef = useRef(onConnectionStatusChange);
+  useEffect(() => {
+    onConnectionStatusChangeRef.current = onConnectionStatusChange;
+  });
   const appTheme = useResolvedTheme();
   const grayColor = useThemeGrayColor();
   const accentColor = useThemeAccentColor();
@@ -489,6 +533,14 @@ export const useTerminal = ({
 
     let isCleanedUp = false;
 
+    const updateConnectionStatus = (status: TerminalConnectionStatus): void => {
+      // Guard centrally so a late event (e.g. an onopen that fires after this
+      // effect was torn down by unmount / terminalPath change) can't fire the
+      // callback post-cleanup.
+      if (isCleanedUp) return;
+      onConnectionStatusChangeRef.current?.(status);
+    };
+
     const connectWebSocket = async (wsUrl: string): Promise<void> => {
       if (isCleanedUp) return;
 
@@ -505,6 +557,7 @@ export const useTerminal = ({
       lastLiveQueryAtRef.current = Number.NEGATIVE_INFINITY;
 
       ws.onopen = (): void => {
+        updateConnectionStatus("connected");
         handleResize();
       };
 
@@ -546,18 +599,33 @@ export const useTerminal = ({
         console.error("Terminal WebSocket error:", error);
       };
 
-      // If the terminal isn't running yet (4404), retry after a delay.
-      // This handles the case where the frontend has the terminal URL
-      // (derived from environment ID) but the backend hasn't started the
-      // PTY yet (e.g., workspace just created, first agent still starting).
+      // Reconnect after an unexpected close so the terminal recovers on its own.
+      // The PTY is kept alive on the backend across disconnects and replays its
+      // buffered session on reconnect, so a fresh connection restores a responsive
+      // terminal. This covers a terminal not started yet (close code 4404 while
+      // the PTY is still registering — e.g. workspace just created, first agent
+      // still starting) and a connection dropped out from under us (code 1006 —
+      // e.g. the host sleeping or a backend restart), both of which would
+      // otherwise leave the terminal frozen.
+      //
+      // Skip the retry when reconnecting can't help: our own teardown (unmount /
+      // terminalPath change, via isCleanedUp) and the non-retryable close codes
+      // (a normal 1000 close, or a 4401 rejected session token that would loop).
       ws.onclose = (event: CloseEvent): void => {
-        if (!isCleanedUp && event.code === TERMINAL_NOT_STARTED_CLOSE_CODE) {
-          setTimeout(() => {
-            if (!isCleanedUp) {
-              connectWebSocket(wsUrl);
-            }
-          }, TERMINAL_RECONNECT_RETRY_DELAY_MS);
+        // Our own teardown — don't touch status; the hook is unmounting.
+        if (isCleanedUp) return;
+
+        if (TERMINAL_NON_RETRYABLE_CLOSE_CODES.has(event.code)) {
+          updateConnectionStatus("disconnected");
+          return;
         }
+
+        updateConnectionStatus("reconnecting");
+        setTimeout(() => {
+          if (!isCleanedUp) {
+            connectWebSocket(wsUrl);
+          }
+        }, TERMINAL_RECONNECT_RETRY_DELAY_MS);
       };
     };
 
@@ -678,6 +746,23 @@ export const useTerminal = ({
     };
   }, [isVisible, handleResize]);
 
+  // Focus the terminal as soon as it is visible and ready — including the
+  // initial mount — when the caller opts in via `focusOnVisible`. Terminal
+  // agents do: switching to a terminal agent's tab remounts this hook (the
+  // pane is keyed by agent id), so the `hasBeenVisibleRef` guard above always
+  // sees its first visible frame and never grants focus, leaving the user
+  // unable to type without first clicking into the pane (SCU-1578). The
+  // terminal is the agent's only input surface, so there is no chat input to
+  // steal focus from. `isXtermReady` is the readiness signal: it flips true
+  // only after `xterm.open()` has created the helper textarea, so the focus
+  // target exists in the DOM and we can focus synchronously.
+  useEffect(() => {
+    if (!focusOnVisible || !isVisible || !isXtermReady) return;
+    xtermRef.current?.focus();
+  }, [focusOnVisible, isVisible, isXtermReady]);
+
+  // ── Clear-terminal keybinding (focus-gated) ────────────────────────
+  //
   // Mirrors the `interrupt_agent` pattern in ChatInput.tsx — we read the
   // resolved binding from the keybindings registry and attach a window-level
   // keydown listener that only fires when this terminal instance has

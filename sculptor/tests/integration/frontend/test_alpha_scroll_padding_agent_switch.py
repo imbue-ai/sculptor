@@ -12,6 +12,7 @@ from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_by
+from sculptor.testing.elements.alpha_chat_view import wait_for_alpha_scroll_settled
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
@@ -134,7 +135,9 @@ def test_scroll_height_settles_after_agent_switch(sculptor_instance_: SculptorIn
     panel_tabs.get_panel_tabs().first.click()
     expect(get_alpha_chat_view(page)).to_be_visible()
 
-    # Record the scrollHeight BEFORE switching.
+    # Record the scrollHeight BEFORE switching, once the layout has settled so we
+    # capture the stable value rather than a mid-settle one.
+    wait_for_alpha_scroll_settled(page)
     handle = page.wait_for_function(
         f"""() => {{
             const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
@@ -150,7 +153,9 @@ def test_scroll_height_settles_after_agent_switch(sculptor_instance_: SculptorIn
     panel_tabs.get_panel_tabs().first.click()
     expect(chat_panel.get_messages()).to_have_count(4)
 
-    # The scrollHeight should settle to the same value as before the switch.
+    # Once the scroll machine reports settled, the scrollHeight should match the
+    # value from before the switch (dynamic padding recalculation is stable).
+    wait_for_alpha_scroll_settled(page)
     page.wait_for_function(
         f"""(expected) => {{
             const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');

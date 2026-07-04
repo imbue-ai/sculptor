@@ -45,6 +45,7 @@ from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.state.chat_state import ToolUseBlock
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
+from sculptor.state.messages import ModelOption
 from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.web.app import _agent_config_for_request
 from sculptor.web.auth import SESSION_TOKEN_HEADER_NAME
@@ -52,6 +53,7 @@ from sculptor.web.auth import UserSession
 from sculptor.web.auth import authenticate_anonymous
 from sculptor.web.data_types import AgentTypeName
 from sculptor.web.data_types import CreateAgentRequest
+from sculptor.web.data_types import CreateWorkspaceRequestV2
 from sculptor.web.data_types import SendMessageRequest
 from sculptor.web.data_types import SetModelRequest
 from sculptor.web.data_types import StartTaskRequest
@@ -220,6 +222,106 @@ def test_create_task_creates_task(
     response = client.get(f"/api/v1/workspaces/{workspace_id}/agents")
     assert response.status_code == 200
     assert len(response.json()) == 1
+
+
+def _post_create_worktree_workspace(client: TestClient, project: Project, branch_name: str) -> httpx.Response:
+    return client.post(
+        "/api/v1/workspaces",
+        json=model_dump(
+            CreateWorkspaceRequestV2(
+                project_id=str(project.object_id),
+                initialization_strategy=WorkspaceInitializationStrategy.WORKTREE,
+                source_branch="main",
+                requested_branch_name=branch_name,
+            ),
+            is_camel_case=True,
+        ),
+    )
+
+
+def test_create_worktree_workspace_rejects_invalid_branch_name(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    """An illegal git ref name must be rejected with 400 at creation, not surface
+    later as an opaque WorktreeError from `git worktree add -b` during async setup."""
+    # The exact shape that broke the manual test harness: a workspace-name field
+    # accidentally filled with a prompt, slugified into an illegal ref name.
+    bad_name = (
+        "imbue/board-demo-workspaceRun: git checkout -b dev/scu-1634-board-demo  (just create that branch, then stop)."
+    )
+    response = _post_create_worktree_workspace(client, test_project, bad_name)
+    assert response.status_code == 400, response.text
+    assert "not a valid git branch name" in response.json()["detail"]
+
+
+def test_create_worktree_workspace_accepts_valid_branch_name(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    response = _post_create_worktree_workspace(client, test_project, "imbue/board-demo-workspace")
+    assert response.status_code == 200, response.text
+
+
+def _validate_new_branch_name(client: TestClient, project: Project, name: str) -> dict:
+    response = client.get(
+        f"/api/v1/projects/{project.object_id}/validate-new-branch-name",
+        params={"name": name},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_validate_new_branch_name_reports_validity_and_collision(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    # A fresh, legal name is valid and available.
+    available = _validate_new_branch_name(client, test_project, "imbue/brand-new")
+    assert available == {"isValid": True, "alreadyExists": False}
+
+    # An illegal git ref is flagged invalid (and collision is not reported for it).
+    invalid = _validate_new_branch_name(client, test_project, "has space:and (parens)")
+    assert invalid == {"isValid": False, "alreadyExists": False}
+
+    # An existing branch (the fixture repo's default) is legal but collides.
+    existing = _validate_new_branch_name(client, test_project, "main")
+    assert existing == {"isValid": True, "alreadyExists": True}
+
+
+def test_terminal_agent_does_not_carry_a_model(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    """Terminal agents must not carry a model (SCU-1580).
+
+    Sculptor doesn't control the model for terminal agents, so creating one must
+    not stamp a ``default_model`` onto its task, and the agent view that
+    ``sculpt agent list`` (and the frontend) read must report no model — even
+    when the creation request happens to carry a model value.
+    """
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+
+    response = client.post(
+        f"/api/v1/workspaces/{workspace.object_id}/agents",
+        json=model_dump(
+            CreateAgentRequest(
+                agent_type=AgentTypeName.TERMINAL,
+                model=LLMModel.CLAUDE_4_OPUS,
+            ),
+            is_camel_case=True,
+        ),
+    )
+    assert response.status_code == 200, response.text
+
+    # The view the CLI / frontend consume must report no model for a terminal agent.
+    assert response.json()["model"] is None
+
+    # The deeper fix: creation must not persist a model on the terminal agent's task.
+    task_id = TaskID(response.json()["id"])
+    with user_session.open_transaction(test_services) as transaction:
+        created_task = test_services.task_service.get_task(task_id, transaction)
+    assert created_task is not None
+    assert isinstance(created_task.input_data, AgentTaskInputsV2)
+    assert created_task.input_data.default_model is None
 
 
 def test_create_task_returns_422_when_missing_required_attribute(
@@ -571,6 +673,89 @@ def test_set_model_rejects_claude_harness_without_a_backend_catalog(
         json=model_dump(SetModelRequest(provider="anthropic", model_id="claude-haiku-4-5"), is_camel_case=True),
     )
     assert response.status_code == 400, response.text
+
+
+_PI_CATALOG = [
+    ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Claude Opus 4.8"),
+    ModelOption(provider="anthropic", model_id="claude-haiku-4-5", display_name="Claude Haiku 4.5"),
+]
+
+
+def _create_pi_task_with_catalog(
+    transaction: DataModelTransaction,
+    user_session: UserSession,
+    project: Project,
+    services: CompleteServiceCollection,
+    workspace: Workspace,
+    current_model: ModelOption,
+) -> Task:
+    """A pi task whose state already carries pi's catalog (as the pre-message probe
+    leaves it) but with no live agent — the pre-first-message situation."""
+    task = Task(
+        object_id=TaskID(),
+        user_reference=user_session.user_reference,
+        organization_reference=user_session.organization_reference,
+        project_id=project.object_id,
+        input_data=AgentTaskInputsV2(agent_config=PiAgentConfig(), git_hash="doesn't matter", system_prompt=None),
+        current_state=AgentTaskStateV2(
+            workspace_id=workspace.object_id,
+            available_models=list(_PI_CATALOG),
+            current_model=current_model,
+        ),
+    )
+    services.task_service.create_task(task, transaction)
+    return task
+
+
+def test_set_model_before_first_message_persists_selection_without_a_live_agent(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    """A pi model switch made before the first message (no live agent to acknowledge it)
+    optimistically persists the selection onto task state, so the server-driven switcher
+    updates at once, and the request returns rather than hanging (SCU-1605)."""
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+        task = _create_pi_task_with_catalog(
+            transaction, user_session, test_project, test_services, workspace, current_model=_PI_CATALOG[0]
+        )
+    # No agent runs to resolve the switch; the endpoint records the selection and returns.
+    response = client.post(
+        f"/api/v1/workspaces/{workspace.object_id}/agents/{task.object_id}/set_model",
+        json=model_dump(SetModelRequest(provider="anthropic", model_id="claude-haiku-4-5"), is_camel_case=True),
+    )
+    assert response.status_code == 200, response.text
+    with user_session.open_transaction(test_services) as transaction:
+        updated = test_services.task_service.get_task(task.object_id, transaction)
+    assert updated is not None
+    state = AgentTaskStateV2.model_validate(updated.current_state)
+    assert state.current_model is not None
+    assert state.current_model.model_id == "claude-haiku-4-5"
+
+
+def test_set_model_rejects_a_model_not_in_the_catalog(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    """A model the agent's catalog does not offer is rejected at the boundary (400)
+    rather than recorded as a selection the agent would never apply."""
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+        task = _create_pi_task_with_catalog(
+            transaction, user_session, test_project, test_services, workspace, current_model=_PI_CATALOG[0]
+        )
+    response = client.post(
+        f"/api/v1/workspaces/{workspace.object_id}/agents/{task.object_id}/set_model",
+        json=model_dump(SetModelRequest(provider="anthropic", model_id="claude-not-a-real-model"), is_camel_case=True),
+    )
+    assert response.status_code == 400, response.text
+    # The rejected request leaves the current model untouched.
+    with user_session.open_transaction(test_services) as transaction:
+        updated = test_services.task_service.get_task(task.object_id, transaction)
+    assert updated is not None
+    state = AgentTaskStateV2.model_validate(updated.current_state)
+    assert state.current_model is not None
+    assert state.current_model.model_id == _PI_CATALOG[0].model_id
 
 
 def test_update_naming_pattern_performs_update(
