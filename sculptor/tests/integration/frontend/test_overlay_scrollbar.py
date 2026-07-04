@@ -13,6 +13,8 @@ These cover the behavioural core:
 - the file tree gets the same overlay thumb once it overflows.
 """
 
+import json
+
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
@@ -45,13 +47,18 @@ def _long_prompt(index: int) -> str:
 
 
 def _write_tree_files_prompt(count: int) -> str:
-    """A multi_step FakeClaude prompt that writes ``count`` root-level files."""
-    steps = ",".join(
-        f'{{"command": "write_file", '
-        f'"args": {{"file_path": "tree_file_{index:02d}.txt", "content": "row {index}\\n"}}}}'
-        for index in range(count)
-    )
-    return f'fake_claude:multi_step `{{"steps": [{steps}]}}`'
+    """A FakeClaude prompt that creates ``count`` root-level files in one Bash call.
+
+    The tree only needs the files to exist on disk to overflow; it doesn't care
+    how they got there. A single shell loop keeps the turn to one tool call (two
+    chat messages), so it streams and settles quickly. A ``write_file`` per file
+    would instead stream ~2x``count`` tool messages, whose streaming and render
+    routinely outlasts the finish-wait on a contended runner — the turn never
+    settles in time and the test flakes before it can open the panel. Keep this
+    a single tool call.
+    """
+    command = f'for i in $(seq 0 {count - 1}); do echo "row $i" > "tree_file_$(printf \'%02d\' "$i").txt"; done'
+    return f"fake_claude:bash `{json.dumps({'command': command})}`"
 
 
 def _fill_chat_until_overflow(page, chat_panel) -> None:
@@ -182,15 +189,9 @@ def test_file_tree_overlay_thumb_drag_scrolls_tree(sculptor_instance_: SculptorI
     tree overflows, its thumb appears and dragging it scrolls the tree."""
     page = sculptor_instance_.page
 
-    # Writing _TREE_FILE_COUNT files is one multi_step turn of ~2x that many tool
-    # messages (a Write tool_use + tool_result per file), which routinely takes longer
-    # than start_task_and_wait_for_ready's default 30s finish-wait to stream and render.
-    # Skip that inline wait and give the completion wait a budget sized for the turn.
-    task_page = start_task_and_wait_for_ready(
-        sculptor_page=page, prompt=_write_tree_files_prompt(_TREE_FILE_COUNT), wait_for_agent_to_finish=False
-    )
-    chat_panel = task_page.get_chat_panel()
-    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2, timeout=60_000)
+    # The prompt creates _TREE_FILE_COUNT files in a single Bash turn, so the
+    # default finish-wait is enough — no oversized completion budget needed.
+    start_task_and_wait_for_ready(sculptor_page=page, prompt=_write_tree_files_prompt(_TREE_FILE_COUNT))
 
     # Reveal the Files panel; the freshly written files land in its tree.
     section_root = open_panel(page, "files", sub_section="center")

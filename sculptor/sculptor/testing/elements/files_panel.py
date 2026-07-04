@@ -42,8 +42,16 @@ class PlaywrightFilesPanelElement(PlaywrightIntegrationTestElement):
         return self.get_by_test_id(ElementIDs.FILE_BROWSER_TREE_ROW)
 
     def get_scrollbar_thumb(self) -> Locator:
-        """Get the file tree's overlay scrollbar thumb."""
-        return self.get_by_test_id(ElementIDs.FILE_BROWSER_SCROLLBAR_THUMB)
+        """Get the file tree's overlay scrollbar thumb.
+
+        Scoped to the page, not this section root: ``VerticalOverlayScrollbar``
+        portals its thumb into the app's ``.radix-themes`` root (so it escapes
+        the tree's ``overflow`` clip and layers above the section resize handle),
+        which lives outside the owning section. A section-scoped lookup never
+        finds it. The thumb's test id is unique to the file tree, so a page-wide
+        match is unambiguous.
+        """
+        return self._page.get_by_test_id(ElementIDs.FILE_BROWSER_SCROLLBAR_THUMB)
 
     def get_status_indicators(self) -> Locator:
         return self.get_by_test_id(ElementIDs.FILE_BROWSER_TREE_ROW_STATUS)
