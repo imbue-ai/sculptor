@@ -179,8 +179,10 @@ class PlaywrightAddRepoStepElement(PlaywrightIntegrationTestElement):
         return self._page.get_by_test_id(ElementIDs.ADD_REPO_SUBMIT_BUTTON)
 
     def select_local_source(self) -> None:
-        """Select the Local Folder source. Required before entering a path since
-        the step defaults to GitHub (the path input is hidden in remote modes).
+        """Select the Local Folder source. Local is the step's default, so on a
+        fresh step this is an idempotent radio click — kept explicit so the
+        path input's visibility doesn't silently depend on the default (the
+        input is hidden in remote modes).
         """
         self.get_local_source_card().click()
 

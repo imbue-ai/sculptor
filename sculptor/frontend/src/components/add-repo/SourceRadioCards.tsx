@@ -25,14 +25,16 @@ type CardConfig = {
 
 // The remote provider pulls its label + icon from PROVIDER_META so adding a new
 // provider is a one-file change; the Local card is unique to this picker.
+// Local renders first: it's the default source (onboarding is local-repo-first —
+// a folder on disk needs no CLI install or auth), so the selected card leads.
 const CARDS: ReadonlyArray<CardConfig> = [
+  { value: "local", label: "Local Folder", Icon: FolderIcon, testId: ElementIds.ADD_REPO_SOURCE_LOCAL },
   {
     value: "github",
     label: PROVIDER_META.github.label,
     Icon: PROVIDER_META.github.Icon,
     testId: ElementIds.ADD_REPO_SOURCE_GITHUB,
   },
-  { value: "local", label: "Local Folder", Icon: FolderIcon, testId: ElementIds.ADD_REPO_SOURCE_LOCAL },
 ];
 
 export const SourceRadioCards = ({ value, onValueChange, disabled = false }: SourceRadioCardsProps): ReactElement => {

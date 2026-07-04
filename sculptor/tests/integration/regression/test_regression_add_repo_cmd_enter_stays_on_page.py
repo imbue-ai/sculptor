@@ -54,8 +54,9 @@ def test_add_repo_cmd_enter_stays_on_add_workspace_page(
     add_repo_dialog = add_ws_page.get_add_repo_dialog()
     expect(add_repo_dialog).to_be_visible()
 
-    # The dialog defaults to the GitHub source; switch to Local so the path
-    # input is visible.
+    # Local is the dialog's default source; select it explicitly (an
+    # idempotent radio click) so the path input's visibility doesn't
+    # silently depend on the default.
     add_repo_dialog.select_local_source()
 
     # Add the repo with Cmd+Enter; a successful add closes the dialog.

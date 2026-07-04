@@ -32,10 +32,10 @@ class PlaywrightAddWorkspacePage(PlaywrightProjectLayoutPage):
     def open_add_repo_dialog(self) -> PlaywrightAddRepoDialogElement:
         """Open the 'Add Repository' dialog from the repo selector.
 
-        The dialog defaults to the GitHub source, which keeps the local
-        path-input form mounted but hidden (``display:none``). This helper is
-        the local-path entry point, so select the Local source first so the
-        path input is interactable.
+        The dialog opens on the Local source (the default), so the path input
+        is already interactable. This helper still selects Local explicitly —
+        an idempotent radio click — so the precondition doesn't silently
+        depend on the default.
         """
         self.get_project_selector().click()
         self.get_open_new_repo_button().click()
