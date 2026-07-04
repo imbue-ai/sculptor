@@ -481,9 +481,22 @@ def start_task_and_wait_for_ready(
     if is_inline_form:
         sculptor_page.get_by_test_id(ElementIDs.NEW_WORKSPACE_PROMPT_TEXTAREA).fill("")
 
-    # Wait for the submit button to be enabled — repo info loaded, AND the
-    # worktree-mode branch-name preview has populated the input (the form
-    # gates submit on a non-empty branch name in worktree mode).
+    # A WORKTREE/CLONE create needs a source branch (the base ref to fork the
+    # worktree or clone from). The form derives it from the project's repo info
+    # (`sourceBranch = repoInfo.currentBranch`), which loads on a SEPARATE request
+    # from the branch-name preview. The submit button only gates on the branch
+    # NAME being populated — NOT on repo info — so it can go enabled while the
+    # source branch is still unresolved. Submitting in that window sends a create
+    # with no `source_branch`, the backend rejects it with 400 ("source_branch is
+    # required for WORKTREE workspaces"), and the form stays put, so the chat panel
+    # awaited below never mounts and this helper times out. The source-branch
+    # selector renders only once repo info has loaded, so waiting for it here
+    # guarantees the create carries a source branch before we click.
+    expect(sculptor_page.get_by_test_id(ElementIDs.BRANCH_SELECTOR)).to_be_visible(timeout=45_000)
+
+    # Wait for the submit button to be enabled — the worktree-mode branch-name
+    # preview has populated the input (the form gates submit on a non-empty branch
+    # name in worktree mode).
     expect(submit_button).to_be_enabled()
 
     # Click create workspace

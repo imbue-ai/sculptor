@@ -70,6 +70,12 @@ class PlaywrightEmptyFirstRun(PlaywrightIntegrationTestElement):
         The create navigates to the new agent, flipping the gate off so the
         normal workspace shell takes over and the chat panel renders.
         """
+        # The form's source branch comes from repo info, which loads on a separate
+        # request from the branch-name preview, and the create button does NOT gate
+        # on it — submitting before it resolves sends a create without a source
+        # branch, which the backend 400s. The branch selector mounts only once repo
+        # info has loaded, so it is the "source branch resolved" signal.
+        expect(self._page.get_by_test_id(ElementIDs.BRANCH_SELECTOR)).to_be_visible(timeout=45_000)
         create_button = self.get_create_button()
         expect(create_button).to_be_enabled()
         create_button.click()

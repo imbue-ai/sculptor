@@ -21,11 +21,10 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
     workspace in that repo, only falling back to this dialog when the branch can't be
     resolved or the create fails.
 
-    The form's field ids are shared with the (still-present) ``/ws/new`` page and
-    with the inline empty-first-run form, so the getters here are mirrored by
-    ``PlaywrightEmptyFirstRun``. Only one form renders at a time, so the field
-    getters resolve page-wide; the create button is re-pointed to the modal's
-    ``NEW_WORKSPACE_CREATE_BUTTON`` (not the legacy ``START_TASK_BUTTON``).
+    The form's field ids are shared with the inline empty-first-run form, so the
+    getters here are mirrored by ``PlaywrightEmptyFirstRun``. Only one form
+    renders at a time, so the field getters resolve page-wide; the create button
+    is the modal's ``NEW_WORKSPACE_CREATE_BUTTON``.
     """
 
     def __init__(self, page: Page) -> None:
@@ -220,6 +219,13 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
         if workspace_name is not None:
             self.get_workspace_name_input().fill(workspace_name)
         self.set_keep_open(keep_open)
+        # The form's source branch comes from repo info, which loads on a separate
+        # request from the branch-name preview, and the create button does NOT gate
+        # on it — submitting before it resolves sends a create without a source
+        # branch, which the backend 400s. The branch selector mounts only once repo
+        # info has loaded (in every mode), so it is the "source branch resolved"
+        # signal.
+        expect(self.get_branch_selector()).to_be_visible(timeout=45_000)
         create_button = self.get_create_button()
         expect(create_button).to_be_enabled()
         if via_keyboard:
