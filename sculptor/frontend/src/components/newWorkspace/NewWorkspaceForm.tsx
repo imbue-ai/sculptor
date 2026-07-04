@@ -239,6 +239,11 @@ export const NewWorkspaceForm = ({
     isCreating ||
     (mode === WorkspaceInitializationStrategy.WORKTREE &&
       (effectiveBranchName.trim() === "" || isBranchNamePreviewLoading)) ||
+    // Worktree and clone workspaces both base off a source branch; a create
+    // without a resolved one 400s on the backend. `sourceBranch` is undefined
+    // until `repoInfo` arrives (the selector shows a Skeleton meanwhile). In-place
+    // uses the repo's current branch and needs none, so only gate the other two.
+    (mode !== WorkspaceInitializationStrategy.IN_PLACE && sourceBranch === undefined) ||
     (repoInfo !== null && repoInfo.recentBranches?.length === 0) ||
     // A name the validator has flagged — illegal ref or existing branch — hard
     // blocks Create; the backend re-checks at create time as the backstop.
