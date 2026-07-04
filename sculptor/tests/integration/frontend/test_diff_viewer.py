@@ -51,7 +51,6 @@ from sculptor.testing.elements.diff_viewer import PlaywrightDiffViewerElement
 from sculptor.testing.elements.diff_viewer import ensure_unified_view
 from sculptor.testing.elements.files_panel import get_files_panel_in
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
-from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -417,21 +416,6 @@ def _write_file_via_fake_claude(file_path: str, content: str) -> str:
     return f'fake_claude:multi_step `{{"steps": [{{"command": "write_file", "args": {{"file_path": "{file_path}", "content": "{escaped}"}}}}]}}`'
 
 
-def _set_rich_markdown_rendering_via_settings(page: Page, *, enabled: bool) -> None:
-    """Set the experimental rich-markdown-rendering toggle in Settings →
-    Experimental.
-
-    The flag is server-persisted, so a previous test in the same browser
-    context could leave it in either state — the POM helper reads the toggle's
-    data-state and clicks only if needed. Call this *before*
-    ``start_task_and_wait_for_ready``; that helper navigates back to the
-    workspace flow on its own.
-    """
-    settings_page = navigate_to_settings_page(page=page)
-    experimental = settings_page.click_on_experimental()
-    experimental.set_rich_markdown_rendering(enabled=enabled)
-
-
 def _ensure_render_mode(viewer: PlaywrightDiffViewerElement, page: Page, mode: str) -> None:
     """Drive the render-markdown toggle (a flipping item in the triple-dot
     menu) to ``mode`` (``rendered`` / ``source``).
@@ -476,11 +460,9 @@ def _open_markdown_file_in_files_panel(page: Page, file_name: str, content: str)
     """Create a workspace whose agent writes ``file_name``, open it via the Files
     panel, and return the panel's embedded viewer in rendered mode.
 
-    Rendered markdown is flag-gated, so the experimental toggle is enabled first
-    (it is server-persisted and a prior test could have left it off).
+    Rendered markdown is the default view for ``.md`` files, so ``_ensure_render_mode``
+    only has to confirm (and, after a prior test's toggle, restore) the rendered view.
     """
-    _set_rich_markdown_rendering_via_settings(page, enabled=True)
-
     task_page = start_task_and_wait_for_ready(page, prompt=_write_file_via_fake_claude(file_name, content))
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
@@ -893,7 +875,6 @@ def test_markdown_toggle_switches_views(sculptor_instance_: SculptorInstance) ->
     """The render-markdown menu option should appear for `.md` files, default to
     rendered, and switch the visible view when clicked."""
     page = sculptor_instance_.page
-    _set_rich_markdown_rendering_via_settings(page, enabled=True)
 
     task_page = start_task_and_wait_for_ready(page, prompt=_WRITE_MD_AND_PY_PROMPT)
     chat_panel = task_page.get_chat_panel()
@@ -906,7 +887,7 @@ def test_markdown_toggle_switches_views(sculptor_instance_: SculptorInstance) ->
     preview = viewer.get_read_only_preview()
     expect(preview).to_be_visible()
 
-    # The render toggle (now a checkbox in the triple-dot menu) is present.
+    # The render toggle (a checkbox in the triple-dot menu) is present.
     viewer.open_menu()
     expect(viewer.get_menu_option("render")).to_be_visible()
     page.keyboard.press("Escape")
@@ -957,7 +938,6 @@ def test_find_in_file_option_hidden_in_rendered_markdown(sculptor_instance_: Scu
     the menu option is hidden while rendered, then re-appears after switching to
     source."""
     page = sculptor_instance_.page
-    _set_rich_markdown_rendering_via_settings(page, enabled=True)
 
     task_page = start_task_and_wait_for_ready(page, prompt=_WRITE_MD_AND_PY_PROMPT)
     chat_panel = task_page.get_chat_panel()
@@ -977,40 +957,6 @@ def test_find_in_file_option_hidden_in_rendered_markdown(sculptor_instance_: Scu
     expect(viewer.get_menu_option("find_in_file")).to_be_visible()
 
 
-@user_story("to see a hint that rendered markdown is experimental when the flag is off")
-def test_markdown_toggle_disabled_when_flag_off(sculptor_instance_: SculptorInstance) -> None:
-    """When the `enable_rich_markdown_rendering` flag is off, the render-markdown
-    toggle is rendered disabled (so the experimental feature is discoverable but
-    unusable), the rendered DOM is not mounted, and the source view is shown
-    instead — even when the persisted preference is "rendered"."""
-    page = sculptor_instance_.page
-    _set_rich_markdown_rendering_via_settings(page, enabled=False)
-
-    task_page = start_task_and_wait_for_ready(page, prompt=_WRITE_MD_AND_PY_PROMPT)
-    chat_panel = task_page.get_chat_panel()
-    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
-
-    section_root = open_panel(page, "files", sub_section="center")
-    files_panel = get_files_panel_in(section_root, page)
-    viewer = files_panel.open_file("notes.md")
-
-    preview = viewer.get_read_only_preview()
-    expect(preview).to_be_visible()
-
-    # Toggle is mounted but disabled — discoverability for the experimental
-    # opt-in. The persisted "rendered" preference is ignored: the effective view
-    # is source (verified by content below), not the checkbox preference.
-    viewer.open_menu()
-    toggle = viewer.get_menu_option("render")
-    expect(toggle).to_be_visible()
-    expect(toggle).to_be_disabled()
-    page.keyboard.press("Escape")
-
-    # Source view is mounted; the rendered wrapper is not.
-    expect(viewer.get_read_only_preview_markdown()).not_to_be_attached()
-    expect(preview).to_contain_text("# Hello, World!")
-
-
 # --------------------------------------------------------------------------- #
 # Markdown GFM rendering + link safety
 # --------------------------------------------------------------------------- #
@@ -1021,7 +967,6 @@ def test_gfm_features_render_in_read_only_preview(sculptor_instance_: SculptorIn
     """A `.md` file containing each GFM feature renders as the right
     semantic HTML in ``ReadOnlyPreview``."""
     page = sculptor_instance_.page
-    _set_rich_markdown_rendering_via_settings(page, enabled=True)
 
     task_page = start_task_and_wait_for_ready(page, prompt=_write_file_via_fake_claude("gfm.md", _GFM_FILE_CONTENT))
     chat_panel = task_page.get_chat_panel()
@@ -1045,7 +990,6 @@ def test_unsafe_markdown_is_neutralised_in_read_only_preview(
     ``javascript:`` URLs, or inject DOM nodes outside the markdown
     sandbox."""
     page = sculptor_instance_.page
-    _set_rich_markdown_rendering_via_settings(page, enabled=True)
 
     task_page = start_task_and_wait_for_ready(
         page, prompt=_write_file_via_fake_claude("unsafe.md", _UNSAFE_FILE_CONTENT)
