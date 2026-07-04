@@ -1,9 +1,18 @@
 import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 
-// The status union lives here (not in useTerminal.ts) so registry/atom consumers can
-// import it without pulling the terminal runtime - and its window-global ambient
-// deps - into type-only programs like the plugin-SDK .d.ts rollup.
+/** The live state of a terminal's WebSocket connection.
+ *
+ * - `connecting`: opening the initial connection, nothing shown yet.
+ * - `connected`: the socket is open and the terminal is interactive.
+ * - `reconnecting`: the socket dropped from a recoverable close and a retry is
+ *   pending/in flight — the terminal is temporarily frozen but will self-heal.
+ * - `disconnected`: the socket closed in a way we don't retry (a normal close,
+ *   or a rejected session token), so the terminal won't recover on its own.
+ *
+ * The union lives here (not in useTerminal.ts) so registry/atom consumers can
+ * import it without pulling the terminal runtime — and its window-global
+ * ambient deps — into type-only programs like the plugin-SDK .d.ts rollup. */
 export type TerminalConnectionStatus = "connecting" | "connected" | "reconnecting" | "disconnected";
 
 type PersistedTerminalTab = {

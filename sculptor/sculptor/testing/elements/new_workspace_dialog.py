@@ -111,7 +111,7 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
             switch.click()
             expect(switch).to_have_attribute("aria-checked", "true" if enabled else "false")
 
-    # -- Repo selector (ported from the /ws/new page POM) --
+    # -- Repo selector --
 
     def get_project_selector(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.PROJECT_SELECTOR)
@@ -159,7 +159,7 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
         # so a page-wide locator is ambiguous (Playwright strict-mode violation).
         return self.get_form().get_by_test_id(ElementIDs.PLAN_MODE_TOGGLE)
 
-    # -- Mode selector (ported from the /ws/new page POM) --
+    # -- Mode selector --
 
     def get_mode_selector(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.MODE_SELECTOR)
@@ -181,7 +181,7 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
         mode_option.click()
         expect(mode_option).not_to_be_visible()
 
-    # -- Source-branch selector (ported from the /ws/new page POM) --
+    # -- Source-branch selector --
 
     def get_branch_selector(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.BRANCH_SELECTOR)

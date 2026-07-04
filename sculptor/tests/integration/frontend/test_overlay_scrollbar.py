@@ -197,7 +197,7 @@ def test_file_tree_overlay_thumb_drag_scrolls_tree(sculptor_instance_: SculptorI
     files_panel = get_files_panel_in(section_root, page)
     expect(files_panel.get_tree_rows().filter(has_text="tree_file_00.txt")).to_be_visible()
 
-    thumb = page.get_by_test_id(ElementIDs.FILE_BROWSER_SCROLLBAR_THUMB)
+    thumb = files_panel.get_scrollbar_thumb()
     expect(thumb).to_be_visible()
     box = thumb.bounding_box()
     assert box is not None, "file-tree scrollbar thumb has no bounding box"

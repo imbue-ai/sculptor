@@ -158,8 +158,8 @@ class PlaywrightPanelTabElement:
 
         Retries the double-click (see the module note on dropped double-clicks under
         contention). Once the rename has started the input stays mounted, so a retry
-        after an earlier gesture already opened it is a no-op the visibility check
-        short-circuits.
+        after an earlier gesture already opened it just re-clicks the open row —
+        harmless — and the visibility check passes.
         """
         rename_input = self.get_inline_rename_input()
         for _ in range(_DOUBLE_CLICK_RENAME_ATTEMPTS):

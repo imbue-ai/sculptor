@@ -124,9 +124,9 @@ def sculptor_instance_empty_first_run_(
     one repo and zero workspaces — the genuine first-run state — so this fixture
     only waits for that landing to settle on ``EmptyFirstRunPage``.
 
-    There is no dedicated ``/ws/new`` page anymore: that route was removed, and the
-    ``#/ws/new`` URL now matches the generic ``/ws/:workspaceID`` route with the
-    sentinel id ``"new"``. ``EmptyFirstRunGate`` wraps that route and swaps in
+    The ``#/ws/new`` URL matches the generic ``/ws/:workspaceID`` route with the
+    sentinel id ``"new"`` (there is no dedicated page for it). ``EmptyFirstRunGate``
+    wraps that route and swaps in
     ``EmptyFirstRunPage`` once the (empty) workspace snapshot flips
     ``isWorkspaceListEmptyAtom`` true. Before that snapshot arrives the atom is
     still false (the list is ``undefined`` while loading), so the gate falls

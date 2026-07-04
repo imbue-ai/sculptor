@@ -316,14 +316,6 @@ export const shouldClearActiveTerminal = (
   return container != null && container.contains(document.activeElement);
 };
 
-/** The live state of a terminal's WebSocket connection.
- *
- * - `connecting`: opening the initial connection, nothing shown yet.
- * - `connected`: the socket is open and the terminal is interactive.
- * - `reconnecting`: the socket dropped from a recoverable close and a retry is
- *   pending/in flight — the terminal is temporarily frozen but will self-heal.
- * - `disconnected`: the socket closed in a way we don't retry (a normal close,
- *   or a rejected session token), so the terminal won't recover on its own. */
 export type { TerminalConnectionStatus };
 
 type UseTerminalArgs = {

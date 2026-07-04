@@ -23,9 +23,9 @@ export default function activate(api: PluginHostApi): () => void {
   });
   const disposeSettings = api.registerSettings(LinearSettings);
   // The banner ticket chip: a compact ticket reference beside the PR button,
-  // sharing the panel's per-workspace ticket-assignment state. collapsePriority 3
-  // sits between the host's repo (2) and PR (4) items, so it collapses before the
-  // PR button but after the repo breadcrumb when the banner runs out of room.
+  // sharing the panel's per-workspace ticket-assignment state. collapsePriority
+  // orders this widget among the other plugin widgets when the banner runs out
+  // of room (lower collapses first).
   const disposeWidget = api.registerWorkspaceWidget({
     id: PLUGIN_ID,
     component: WorkspaceTicketWidget,

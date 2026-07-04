@@ -28,7 +28,7 @@ type CardConfig = {
 // Local renders first: it's the default source (onboarding is local-repo-first —
 // a folder on disk needs no CLI install or auth), so the selected card leads.
 const CARDS: ReadonlyArray<CardConfig> = [
-  { value: "local", label: "Local Folder", Icon: FolderIcon, testId: ElementIds.ADD_REPO_SOURCE_LOCAL },
+  { value: "local", label: "Local folder", Icon: FolderIcon, testId: ElementIds.ADD_REPO_SOURCE_LOCAL },
   {
     value: "github",
     label: PROVIDER_META.github.label,

@@ -27,7 +27,7 @@ def test_agent_type_select_visible_with_claude_default(
 ) -> None:
     page = sculptor_instance_.page
 
-    # The picker is no longer flag-gated — visible for everyone.
+    # The agent-type picker is visible for everyone; it is not flag-gated.
     disable_pi_agent(page)
     open_new_workspace_form(page)
     picker = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_AGENT_TYPE_SELECT)

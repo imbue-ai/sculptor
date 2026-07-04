@@ -13,13 +13,10 @@
 // which also leaves every other workspace's agents unaffected.
 //
 // This is the single source of truth for "which agent counts as viewed";
-// consumers must not re-derive it from the layout atoms themselves:
-//   - useWorkspaceShellBootstrap: auto mark-read + artifact sync for the viewed
-//     agent (with a route fallback while a workspace switch settles);
-//   - the status-dot derivations (panel tabs via useWorkspaceDynamicPanels,
-//     workspace sidebar rows via workspaceDotStatusAtomFamily): the viewed agent
-//     derives as "read" instead of flashing unread while the debounced mark-read
-//     lags (see getAgentDotStatus's isFocused parameter).
+// consumers (mark-read, the status-dot derivations) must not re-derive it from
+// the layout atoms themselves. The viewed agent derives as "read" instead of
+// flashing unread while the debounced mark-read lags (see getAgentDotStatus's
+// isFocused parameter).
 
 import { atom } from "jotai";
 

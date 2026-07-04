@@ -126,7 +126,7 @@ export const SkillsPanel = (): ReactElement => {
   const isPanelDraggingRef = useRef(isPanelDragging);
   useEffect(() => {
     isPanelDraggingRef.current = isPanelDragging;
-  });
+  }, [isPanelDragging]);
 
   const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

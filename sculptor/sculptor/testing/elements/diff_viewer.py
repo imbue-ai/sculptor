@@ -46,6 +46,16 @@ class PlaywrightDiffViewerElement(PlaywrightIntegrationTestElement):
     def get_read_only_preview_markdown(self) -> Locator:
         return self.get_read_only_preview().get_by_test_id(ElementIDs.READ_ONLY_PREVIEW_MARKDOWN)
 
+    def get_read_only_preview_frontmatter(self) -> Locator:
+        """The frontmatter metadata table inside the rendered markdown body.
+
+        ``ReadOnlyPreview`` strips a leading frontmatter block off the markdown
+        and renders it as a styled table nested inside
+        ``READ_ONLY_PREVIEW_MARKDOWN``, so scoping through the markdown wrapper
+        also pins that the block is a rendered-view-only affordance.
+        """
+        return self.get_read_only_preview_markdown().get_by_test_id(ElementIDs.READ_ONLY_PREVIEW_FRONTMATTER)
+
     def get_skeleton(self) -> Locator:
         """The static, no-shimmer placeholder shown while a diff is about to render."""
         return self.get_by_test_id(ElementIDs.DIFF_SKELETON)

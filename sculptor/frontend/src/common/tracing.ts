@@ -27,7 +27,7 @@ const FLUSH_INTERVAL_MS = 3000;
 // leak that grows until the tab dies.
 const MAX_PENDING_EVENTS = 20_000;
 
-// window.__SCULPTOR_TRACING__ is declared in globals.d.ts.
+// window.__SCULPTOR_TRACING__ is declared in common/perf/workspaceSwitchProfiler.ts.
 
 type ChromeEvent = Record<string, unknown>;
 

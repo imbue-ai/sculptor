@@ -86,7 +86,8 @@ def test_message_to_newly_added_agent_lands_on_that_agent(
 
     # The message landed only on the new agent: switching back shows the first
     # agent still has just its own single exchange and no copy of the message.
-    PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs().first.click()
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    panel_tabs.get_panel_tabs().first.click()
     first_agent_chat = task_page.get_chat_panel()
     expect(first_agent_chat.get_messages()).to_have_count(2)
     expect(first_agent_chat.get_messages().filter(has_text=second_agent_message)).to_have_count(0)

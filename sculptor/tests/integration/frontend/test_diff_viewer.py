@@ -116,10 +116,10 @@ fake_claude:multi_step `{
 }`"""
 
 # Markdown content exercising every GFM feature called out in SCU-522,
-# plus a fenced code block (regression for the global `code { … }` rule in
-# src/index.css that previously made multi-line fences look like inline
-# pills), plus fragment + relative links (regression for the anchor click
-# handling — fragment / relative clicks must not hijack the app router).
+# plus a fenced code block (guards the global `code { … }` rule in
+# src/index.css from styling multi-line fences as inline pills), plus
+# fragment + relative links (regression for the anchor click handling —
+# fragment / relative clicks must not hijack the app router).
 _GFM_FILE_CONTENT = """\
 # GFM showcase
 
@@ -443,17 +443,6 @@ def _ensure_render_mode(viewer: PlaywrightDiffViewerElement, page: Page, mode: s
         expect(viewer.get_read_only_preview_markdown()).to_be_visible()
     else:
         expect(viewer.get_read_only_preview_markdown()).not_to_be_attached()
-
-
-def _get_frontmatter_block(viewer: PlaywrightDiffViewerElement) -> Locator:
-    """The frontmatter metadata table inside the rendered markdown body.
-
-    ``ReadOnlyPreview`` strips a leading frontmatter block off the markdown and
-    renders it as a styled table nested inside ``READ_ONLY_PREVIEW_MARKDOWN``,
-    so scoping through the markdown wrapper also pins that the block is a
-    rendered-view-only affordance.
-    """
-    return viewer.get_read_only_preview_markdown().get_by_test_id(ElementIDs.READ_ONLY_PREVIEW_FRONTMATTER)
 
 
 def _open_markdown_file_in_files_panel(page: Page, file_name: str, content: str) -> PlaywrightDiffViewerElement:
@@ -1045,7 +1034,7 @@ def test_yaml_frontmatter_renders_as_metadata_block(sculptor_instance_: Sculptor
     # The metadata table renders the parsed key/value pairs. Block-sequence
     # values collapse to a comma-joined list; nested mappings fall back to
     # compact JSON.
-    block = _get_frontmatter_block(viewer)
+    block = viewer.get_read_only_preview_frontmatter()
     expect(block).to_be_visible()
     for fragment in ("title", "Frontmatter Demo", "author", "Example Author", "draft", "false", "docs, internal"):
         expect(block).to_contain_text(fragment)
@@ -1075,13 +1064,13 @@ def test_frontmatter_block_is_rendered_view_only(sculptor_instance_: SculptorIns
     (frontmatter included) shows verbatim through the source renderer."""
     page = sculptor_instance_.page
     viewer = _open_markdown_file_in_files_panel(page, "frontmatter.md", _FRONTMATTER_FILE_CONTENT)
-    expect(_get_frontmatter_block(viewer)).to_be_visible()
+    expect(viewer.get_read_only_preview_frontmatter()).to_be_visible()
 
     _ensure_render_mode(viewer, page, "source")
     # Rendered-only affordances are gone; the source view (Pierre) is showing
     # the file verbatim, frontmatter and all.
     expect(viewer.get_read_only_preview_markdown()).not_to_be_attached()
-    expect(_get_frontmatter_block(viewer)).to_have_count(0)
+    expect(viewer.get_read_only_preview_frontmatter()).to_have_count(0)
     expect(viewer.get_read_only_preview()).to_be_visible()
 
 
@@ -1095,7 +1084,7 @@ def test_toml_frontmatter_renders_as_raw_block(sculptor_instance_: SculptorInsta
 
     body = viewer.get_read_only_preview_markdown()
     expect(body).to_be_visible()
-    block = _get_frontmatter_block(viewer)
+    block = viewer.get_read_only_preview_frontmatter()
     expect(block).to_be_visible()
     expect(block).to_contain_text('title = "Toml Demo"')
 

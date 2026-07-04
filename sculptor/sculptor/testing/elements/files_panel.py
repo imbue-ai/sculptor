@@ -41,6 +41,10 @@ class PlaywrightFilesPanelElement(PlaywrightIntegrationTestElement):
     def get_tree_rows(self) -> Locator:
         return self.get_by_test_id(ElementIDs.FILE_BROWSER_TREE_ROW)
 
+    def get_scrollbar_thumb(self) -> Locator:
+        """Get the file tree's overlay scrollbar thumb."""
+        return self.get_by_test_id(ElementIDs.FILE_BROWSER_SCROLLBAR_THUMB)
+
     def get_status_indicators(self) -> Locator:
         return self.get_by_test_id(ElementIDs.FILE_BROWSER_TREE_ROW_STATUS)
 
