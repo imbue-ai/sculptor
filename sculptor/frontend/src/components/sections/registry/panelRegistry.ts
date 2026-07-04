@@ -12,7 +12,7 @@ import type { LucideIcon } from "lucide-react";
 import { FileText, GitBranch, GitCommitVertical, Globe, ListChecks, NotebookPen, Sparkles, Zap } from "lucide-react";
 import type { ComponentType } from "react";
 
-import type { TerminalConnectionStatus } from "~/pages/workspace/panels/useTerminal.ts";
+import type { TerminalConnectionStatus } from "~/common/state/atoms/terminalTabs.ts";
 
 import type { AgentDotStatus } from "../../statusDot/statusUtils.ts";
 import { activePanelIdInSubSectionAtom, panelsInSubSectionAtom } from "../sectionAtoms.ts";

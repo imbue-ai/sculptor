@@ -1,7 +1,10 @@
 import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 
-import type { TerminalConnectionStatus } from "~/pages/workspace/panels/useTerminal.ts";
+// The status union lives here (not in useTerminal.ts) so registry/atom consumers can
+// import it without pulling the terminal runtime - and its window-global ambient
+// deps - into type-only programs like the plugin-SDK .d.ts rollup.
+export type TerminalConnectionStatus = "connecting" | "connected" | "reconnecting" | "disconnected";
 
 type PersistedTerminalTab = {
   id: string;

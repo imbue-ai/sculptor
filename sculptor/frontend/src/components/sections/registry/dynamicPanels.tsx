@@ -17,8 +17,8 @@ import { createElement } from "react";
 
 import type { TaskStatus } from "~/api";
 import { ElementIds } from "~/api";
+import type { TerminalConnectionStatus } from "~/common/state/atoms/terminalTabs.ts";
 import { clearUnreadOverride, getAgentDotStatusWithUnreadOverride } from "~/common/state/atoms/unreadOverrides.ts";
-import type { TerminalConnectionStatus } from "~/pages/workspace/panels/useTerminal.ts";
 
 import type { PanelId } from "../sectionTypes.ts";
 import type { PanelContextMenuItem, PanelDefinition } from "./panelRegistry.ts";
