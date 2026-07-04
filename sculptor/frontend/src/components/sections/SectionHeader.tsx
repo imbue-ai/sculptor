@@ -22,6 +22,7 @@ import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { sidebarCollapsedAtom } from "~/components/layout/sidebarAtoms.ts";
 import { AgentStatusDot } from "~/components/statusDot";
 import { getCollapsedSidebarToggleClearance } from "~/electron/utils.ts";
+import { getTabStatusIcon } from "~/pages/workspace/panels/TerminalConnectionIndicator.tsx";
 
 import { AddPanelDropdown } from "./AddPanelDropdown.tsx";
 import type { PanelContextMenuItem, PanelDefinition } from "./registry/panelRegistry.ts";
@@ -197,6 +198,15 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
           aria-hidden="true"
         >
           <AgentStatusDot status={definition.dotStatus} size={8} />
+        </div>
+      )}
+      {/* A terminal's connection-issue dot (amber pulsing = reconnecting, red static =
+          disconnected). Only terminal panels carry connectionStatus and they never carry
+          dotStatus, so the two dot slots are mutually exclusive. getTabStatusIcon emits
+          the TERMINAL_TAB_STATUS_INDICATOR testid + data-status the harness reads. */}
+      {definition.connectionStatus !== undefined && (
+        <div className={styles.dot} aria-hidden="true">
+          {getTabStatusIcon(definition.connectionStatus)}
         </div>
       )}
       {isRenaming && canRename ? (

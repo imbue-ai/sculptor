@@ -16,6 +16,7 @@ import type { ReactElement } from "react";
 import { memo } from "react";
 
 import { AgentStatusDot } from "~/components/statusDot";
+import { getTabStatusIcon } from "~/pages/workspace/panels/TerminalConnectionIndicator.tsx";
 
 import { panelDefinitionByIdAtom } from "./registry/panelRegistry.ts";
 import type { PanelId } from "./sectionTypes.ts";
@@ -45,6 +46,14 @@ const TabPillComponent = ({ panelId, variant }: TabPillProps): ReactElement | nu
         // individually; the ghost's whole root is already aria-hidden.
         <div className={styles.dot} data-panel-tab-dot={definition.dotStatus} aria-hidden={isGhost ? undefined : true}>
           <AgentStatusDot status={definition.dotStatus} size={8} />
+        </div>
+      )}
+      {/* A terminal's connection-issue dot, mirroring the source tab (SectionHeader's
+          PanelTab) so the pill keeps the same footprint while dragged. Terminal panels
+          never carry dotStatus, so the two dot slots are mutually exclusive. */}
+      {definition.connectionStatus !== undefined && (
+        <div className={styles.dot} aria-hidden={isGhost ? undefined : true}>
+          {getTabStatusIcon(definition.connectionStatus)}
         </div>
       )}
       <span className={styles.label}>{definition.displayName}</span>

@@ -12,7 +12,7 @@ import { useLayoutEffect, useMemo, useRef } from "react";
 
 import { renameWorkspaceAgent } from "~/api";
 import { taskAtomFamily, tasksArrayAtom, updateTasksAtom } from "~/common/state/atoms/tasks.ts";
-import { terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
+import { terminalConnectionStatusesAtom, terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
 import { markAgentUnreadAtom } from "~/common/state/atoms/unreadOverrides.ts";
 import { viewedAgentIdAtom } from "~/common/state/atoms/viewedAgent.ts";
 import { agentDeleteTargetAtom, terminalCloseTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
@@ -125,6 +125,13 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
     }));
   }, [workspaceTasks, viewedAgentId, diagnosticsByTaskId, setAgentDeleteTarget, updateTasks, store, workspaceId]);
 
+  // Live connection state per terminal panel id, written by each mounted
+  // TerminalPanelView; holds only unhealthy states, so a healthy terminal reads as
+  // undefined. Threaded onto the terminal PanelDefinitions below so the tab can show
+  // a reconnecting/disconnected dot; panelDefinitionEqual compares the field, so a
+  // status change gets past the registry write guard and re-renders only that tab.
+  const terminalConnectionStatuses = useAtomValue(terminalConnectionStatusesAtom);
+
   // Map this workspace's persisted terminal tabs to terminal inputs. Each tab's label
   // already reflects the lowest-available-number reuse the old panel applied
   // when creating it, so numbering stays in one place. onRequestClose opens the close
@@ -135,6 +142,7 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
       workspaceId,
       index: tab.index,
       displayName: tab.label,
+      connectionStatus: terminalConnectionStatuses[makeTerminalPanelId(workspaceId, tab.index)],
       onRequestClose: (): void =>
         setTerminalCloseTarget({
           panelId: makeTerminalPanelId(workspaceId, tab.index),
@@ -158,7 +166,7 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
           };
         }),
     }));
-  }, [allTerminalTabs, workspaceId, setTerminalCloseTarget, setTerminalTabs]);
+  }, [allTerminalTabs, terminalConnectionStatuses, workspaceId, setTerminalCloseTarget, setTerminalTabs]);
 
   // The diagnostics the previous registry rebuild saw, so the write guard below can
   // tell a callbacks-only change (diagnostics arriving) from a no-op rebuild.

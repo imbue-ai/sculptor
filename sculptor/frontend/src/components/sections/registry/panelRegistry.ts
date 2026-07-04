@@ -12,6 +12,8 @@ import type { LucideIcon } from "lucide-react";
 import { FileText, GitBranch, GitCommitVertical, Globe, ListChecks, NotebookPen, Sparkles, Zap } from "lucide-react";
 import type { ComponentType } from "react";
 
+import type { TerminalConnectionStatus } from "~/pages/workspace/panels/useTerminal.ts";
+
 import type { AgentDotStatus } from "../../statusDot/statusUtils.ts";
 import { activePanelIdInSubSectionAtom } from "../sectionAtoms.ts";
 import type { PanelId, SubSectionId } from "../sectionTypes.ts";
@@ -32,6 +34,12 @@ export type PanelDefinition = {
   // tab element as `data-dot-status` so tests can read read/unread/running/waiting/error
   // without depending on the dot's visual styling. Unset for static/plain-terminal panels.
   dotStatus?: AgentDotStatus;
+  // A terminal's live WebSocket connection state, rendered as an indicator dot on its
+  // tab (data-status: reconnecting/disconnected). Only terminal panels carry it, and
+  // only while the connection is unhealthy — a healthy terminal, or one that is not
+  // mounted (SectionBody unmounts non-active panels, closing the socket), leaves it
+  // unset so the tab shows no indicator.
+  connectionStatus?: TerminalConnectionStatus;
   contextMenuActions?: ReadonlyArray<PanelContextMenuItem>;
   // When set, the tab's close button runs this instead of removing the panel from the
   // layout. Multi-instance panels use it so closing an agent/terminal tab deletes the
@@ -125,9 +133,9 @@ export const panelRegistryAtom = atom<ReadonlyArray<PanelDefinition>>(buildStati
 // so without this comparator selectAtom would re-emit (new object reference) and
 // re-render the tab every tick. `component` and `icon` are identity-stable
 // (registeredComponents map / dynamicPanels componentCache; icons are module
-// constants) and `dotStatus` is a scalar, so comparing these fields suppresses
-// spurious re-emits while still re-rendering on a real change (e.g. rename or
-// dot-status change).
+// constants) and `dotStatus`/`connectionStatus` are scalars, so comparing these
+// fields suppresses spurious re-emits while still re-rendering on a real change
+// (e.g. rename, dot-status change, or a terminal dropping its connection).
 //
 // The callback fields (contextMenuActions / onRequestClose / onRename) are deliberately
 // omitted: every registry derivation rebuilds them as fresh closures, so comparing them
@@ -146,6 +154,7 @@ function panelDefinitionEqual(a: PanelDefinition | undefined, b: PanelDefinition
       a.kind === b.kind &&
       a.defaultSection === b.defaultSection &&
       a.dotStatus === b.dotStatus &&
+      a.connectionStatus === b.connectionStatus &&
       a.component === b.component)
   );
 }

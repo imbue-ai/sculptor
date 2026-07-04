@@ -6,21 +6,43 @@
 // useTerminal — this file only owns the container element and its styling.
 
 import { useSetAtom } from "jotai";
-import { type ReactElement, useEffect } from "react";
+import { type ReactElement, useCallback, useEffect } from "react";
 
-import { registerTerminalPanelComponent } from "~/components/sections/registry/dynamicPanels.tsx";
+import { reportTerminalConnectionStatusAtom } from "~/common/state/atoms/terminalTabs.ts";
+import { makeTerminalPanelId, registerTerminalPanelComponent } from "~/components/sections/registry/dynamicPanels.tsx";
 import { terminalPanelMountedAtom } from "~/pages/workspace/atoms.ts";
 
 import styles from "./TerminalPanelView.module.scss";
+import type { TerminalConnectionStatus } from "./useTerminal.ts";
 import { useTerminal } from "./useTerminal.ts";
 
 export const TerminalPanelView = ({ workspaceId, index }: { workspaceId: string; index: number }): ReactElement => {
+  // Publish this terminal's WebSocket connection state keyed by its panel id, so the
+  // panel tab (SectionHeader) can show a reconnecting/disconnected dot for it.
+  const panelId = makeTerminalPanelId(workspaceId, index);
+  const reportConnectionStatus = useSetAtom(reportTerminalConnectionStatusAtom);
+  const handleConnectionStatusChange = useCallback(
+    (status: TerminalConnectionStatus): void => reportConnectionStatus({ panelId, status }),
+    [panelId, reportConnectionStatus],
+  );
+
   // Reuse the existing xterm + WebSocket I/O unchanged. A panel-hosted terminal is
   // always the rendered content of its sub-section, so it is visible whenever mounted.
   const { terminalContainerRef } = useTerminal({
     terminalPath: `/api/v1/workspaces/${workspaceId}/terminal/${index}/ws`,
     isVisible: true,
+    onConnectionStatusChange: handleConnectionStatusChange,
   });
+
+  // Forget this terminal's connection status on unmount. useTerminal deliberately
+  // suppresses its final callback during teardown, and SectionBody unmounts every
+  // non-active panel — without this cleanup, backgrounding a terminal mid-reconnect
+  // would leave a stale "reconnecting" dot stuck on its tab.
+  useEffect(() => {
+    return (): void => {
+      reportConnectionStatus({ panelId, status: null });
+    };
+  }, [panelId, reportConnectionStatus]);
 
   // Reactive signal for the command palette: maintain a shared mount counter so
   // terminal-scoped commands (e.g. "Clear terminal") gate on whether a terminal is open.

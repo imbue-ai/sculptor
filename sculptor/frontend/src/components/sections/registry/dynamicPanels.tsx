@@ -18,6 +18,7 @@ import { createElement } from "react";
 import type { TaskStatus } from "~/api";
 import { ElementIds } from "~/api";
 import { clearUnreadOverride, getAgentDotStatusWithUnreadOverride } from "~/common/state/atoms/unreadOverrides.ts";
+import type { TerminalConnectionStatus } from "~/pages/workspace/panels/useTerminal.ts";
 
 import type { PanelId } from "../sectionTypes.ts";
 import type { PanelContextMenuItem, PanelDefinition } from "./panelRegistry.ts";
@@ -160,6 +161,11 @@ export type DynamicTerminalInput = {
   workspaceId: string;
   index: number;
   displayName: string;
+  // The terminal's live WebSocket connection state, shown as a dot on its panel tab.
+  // Supplied by the sync hook from terminalConnectionStatusesAtom, which holds only
+  // unhealthy states (reconnecting/disconnected) for MOUNTED terminals — healthy,
+  // backgrounded (unmounted), and never-opened terminals leave it undefined.
+  connectionStatus?: TerminalConnectionStatus;
   // Closing a terminal tab kills the backend shell with a confirmation.
   // Supplied by the sync hook; absent for callers that don't wire the close flow.
   onRequestClose?: () => void;
@@ -203,6 +209,7 @@ export function deriveDynamicPanels(
       kind: "terminal",
       defaultSection: "bottom",
       component: getTerminalComponent(terminal.workspaceId, terminal.index),
+      connectionStatus: terminal.connectionStatus,
       onRequestClose: terminal.onRequestClose,
       onRename: terminal.onRename,
     });
