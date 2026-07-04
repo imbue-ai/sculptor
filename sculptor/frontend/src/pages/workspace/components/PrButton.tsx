@@ -10,11 +10,10 @@ import { ElementIds } from "../../../api";
 import { chatActionsAtom } from "../../../common/state/atoms/chatActions.ts";
 import { prStatusAtomFamily } from "../../../common/state/atoms/prStatus.ts";
 import { prCreationPromptAtom } from "../../../common/state/atoms/userConfig.ts";
+import type { GitProvider } from "../../../common/state/hooks/useGitProvider.ts";
 import styles from "./PrButton.module.scss";
 import { PrDetailDropdown } from "./PrDetailDropdown.tsx";
 import { PrPromptDialog } from "./PrPromptDialog.tsx";
-
-export type GitProvider = "github" | null;
 
 export type PrErrorCategory =
   | "cli_missing"
