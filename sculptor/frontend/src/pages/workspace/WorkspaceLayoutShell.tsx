@@ -12,6 +12,7 @@ import type { ReactElement } from "react";
 
 import { PanelDndProvider } from "~/components/sections/PanelDndProvider.tsx";
 import { useOrphanedLayoutGc } from "~/components/sections/persistence/orphanedLayoutGc.ts";
+import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 import { SectionGrid } from "~/components/sections/SectionGrid.tsx";
 import { isAnySectionMaximizedAtom } from "~/components/sections/transientAtoms.ts";
 import { useActiveSectionRing } from "~/components/sections/useActiveSectionRing.ts";
@@ -24,6 +25,15 @@ import styles from "./WorkspaceLayoutShell.module.scss";
 
 export const WorkspaceLayoutShell = (): ReactElement => {
   const isMaximized = useAtomValue(isAnySectionMaximizedAtom);
+  // Settle signal for the first-commit workspace-switch transient. On a workspace
+  // switch the route changes a render before the layout scope flips: the flip lands
+  // in useWorkspaceShellBootstrap's layout effect (switchActiveWorkspaceAtom), so the
+  // first commit after the new route still renders the PREVIOUS workspace's panels.
+  // Stamping activeWorkspaceIdAtom — the post-flip scope, NOT the route — means this
+  // attribute equals the target id only once the layout atoms describe the new
+  // workspace. Tests and tools key on it to know a switch has settled before
+  // snapshotting panels (see navigate_to_workspace in playwright_utils.py).
+  const activeWorkspaceId = useAtomValue(activeWorkspaceIdAtom);
 
   // The active-section ring fade timer, mounted once for the whole shell.
   useActiveSectionRing();
@@ -35,7 +45,7 @@ export const WorkspaceLayoutShell = (): ReactElement => {
 
   return (
     <PanelDndProvider>
-      <div className={styles.shell}>
+      <div className={styles.shell} data-active-workspace-id={activeWorkspaceId ?? ""}>
         {!isMaximized && <WorkspaceHeader />}
         <SectionGrid />
       </div>

@@ -153,6 +153,11 @@ def navigate_to_workspace(page: Page, name_or_index: str | int = 0) -> None:
     else:
         row = rows.filter(has_text=name_or_index)
     expect(row).to_be_visible()
+    # Capture the target workspace id BEFORE clicking — the row button stamps it
+    # as ``data-workspace-id`` — for the settle gate below. Reading it from the
+    # row is race-free; the post-click URL is only a fallback because Playwright's
+    # cached ``page.url`` can momentarily lag a hash-only navigation.
+    target_workspace_id = row.get_attribute("data-workspace-id")
     row.click()
     # Settle on the workspace shell before returning so a caller that follows
     # with a non-retrying check doesn't race the route change. The landing signal
@@ -167,6 +172,26 @@ def navigate_to_workspace(page: Page, name_or_index: str | int = 0) -> None:
     # tab selectors to honour the integration-test css-locator ratchet.
     ring_hosts = page.locator(f'[data-testid^="{ElementIDs.SECTION_ACTIVE_RING}-"]')
     expect(ring_hosts.first).to_be_visible()
+    # A visible ring-host is necessary but NOT sufficient: on a workspace→workspace
+    # switch the route changes a commit before the layout scope flips (the flip lands
+    # in useWorkspaceShellBootstrap's layout effect), so the PREVIOUS workspace's
+    # ring-host is still mounted and this check can pass inside that pre-flip window —
+    # a follow-up non-retrying POM snapshot would then read the old workspace's panels.
+    # Gate on the shell's settle attribute, which WorkspaceLayoutShell stamps from
+    # the post-flip scope (activeWorkspaceIdAtom), so it equals the target id only
+    # once the layout atoms describe the new workspace. The workspace URL segment
+    # (``/ws/<id>``, with or without an ``/agent/<id>`` suffix) backs up the row
+    # attribute. Non-workspace destinations never reach here (this helper only
+    # clicks workspace rows), so Home/Settings navigations are unaffected.
+    if target_workspace_id is None:
+        workspace_match = re.search(r"/ws/([^/?#]+)", page.url)
+        target_workspace_id = workspace_match.group(1) if workspace_match is not None else None
+    if target_workspace_id is not None:
+        # data-active-workspace-id is a plain data attribute (its value is the id, not
+        # a fixed testid), so it is matched by a raw attribute selector, encapsulated
+        # here like the ring-host prefix selector above to honour the css-locator ratchet.
+        settled_shell = page.locator("[data-active-workspace-id]")
+        expect(settled_shell).to_have_attribute("data-active-workspace-id", target_workspace_id)
 
 
 def get_workspace_creation_button(page: Page) -> tuple[Locator, bool]:
