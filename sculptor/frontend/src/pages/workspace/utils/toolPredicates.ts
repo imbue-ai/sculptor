@@ -13,7 +13,7 @@ export const isEnterPlanModeTool = (toolName: string): boolean => {
   return toolName === "EnterPlanMode";
 };
 
-/** Tools that should be hidden from the alpha chat UI (still visible in debug view). */
+/** Tools that should be hidden from the chat UI (still visible in debug view). */
 const HIDDEN_TOOL_NAMES = new Set(["TaskList", "TaskGet", "TaskOutput", "TaskStop"]);
 
 export const isHiddenTool = (toolName: string): boolean => HIDDEN_TOOL_NAMES.has(toolName);

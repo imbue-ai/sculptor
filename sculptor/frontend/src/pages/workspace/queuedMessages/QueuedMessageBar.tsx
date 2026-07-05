@@ -12,8 +12,8 @@ import { useInterruptAgent } from "../../../common/state/hooks/useInterruptAgent
 import { usePromptDraft } from "../../../common/state/hooks/usePromptDraft.ts";
 import { Toast } from "../../../components/Toast.tsx";
 import { getMetaKey } from "../../../electron/platform.ts";
-import { CapabilityGate } from "../chatAlpha/CapabilityGate.tsx";
-import { useChatAgent } from "../chatAlpha/ChatAgentContext.tsx";
+import { CapabilityGate } from "../chat/CapabilityGate.tsx";
+import { useChatAgent } from "../chat/ChatAgentContext.tsx";
 import type { BlockUnion } from "../utils/blockGuards.ts";
 import { isFileBlock, isTextBlock } from "../utils/blockGuards.ts";
 import { stripHtml } from "../utils/stripHtml.ts";
@@ -87,7 +87,7 @@ export const QueuedMessageBar = ({ message, onEditConflict }: QueuedMessageBarPr
     if (hasRealDraft) {
       // Un-queue before showing dialog to prevent the message from being
       // promoted while the user is choosing what to do.  The dialog is rendered
-      // by AlphaChatInterface (our parent) so it survives this component
+      // by ChatInterface (our parent) so it survives this component
       // unmounting.
       await handleDelete();
       onEditConflict({ rawTextContent, plainTextContent, fileSources });

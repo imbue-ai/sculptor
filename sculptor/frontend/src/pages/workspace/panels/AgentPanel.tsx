@@ -7,6 +7,6 @@
 
 import type { ReactElement } from "react";
 
-import { ChatPanelContent } from "../chatAlpha/ChatPanelContent.tsx";
+import { ChatPanelContent } from "../chat/ChatPanelContent.tsx";
 
 export const AgentPanel = ({ agentId }: { agentId: string }): ReactElement => <ChatPanelContent agentId={agentId} />;

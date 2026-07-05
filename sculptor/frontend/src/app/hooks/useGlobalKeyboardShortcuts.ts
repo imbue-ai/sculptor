@@ -21,7 +21,7 @@ import {
   areGlobalShortcutsDisabledAtom,
   newWorkspaceDialogAtom,
 } from "../../components/newWorkspace/newWorkspaceAtoms.ts";
-import { chatToolDensityAtom } from "../../pages/workspace/chatAlpha/atoms/chatAlpha.ts";
+import { chatToolDensityAtom } from "../../pages/workspace/chat/atoms/chat.ts";
 
 export const useGlobalKeyboardShortcuts = (): void => {
   const store = useStore();
