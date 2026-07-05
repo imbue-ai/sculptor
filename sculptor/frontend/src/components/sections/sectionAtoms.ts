@@ -24,9 +24,9 @@ import { shallowArrayEqual } from "./shallowArrayEqual.ts";
 type WorkspaceLayoutUpdater = WorkspaceLayoutState | ((prev: WorkspaceLayoutState) => WorkspaceLayoutState);
 type GlobalLayoutUpdater = GlobalLayoutState | ((prev: GlobalLayoutState) => GlobalLayoutState);
 
-function applyUpdater<T>(prev: T, updater: T | ((prev: T) => T)): T {
+const applyUpdater = <T>(prev: T, updater: T | ((prev: T) => T)): T => {
   return typeof updater === "function" ? (updater as (p: T) => T)(prev) : updater;
-}
+};
 
 // Scope atoms
 
@@ -126,9 +126,9 @@ export const isActiveSubSectionAtom = atomFamily((subSection: SubSectionId) =>
 
 // Global slices
 
-function sectionSizesEqual(a: GlobalLayoutState["sectionSizes"], b: GlobalLayoutState["sectionSizes"]): boolean {
+const sectionSizesEqual = (a: GlobalLayoutState["sectionSizes"], b: GlobalLayoutState["sectionSizes"]): boolean => {
   return a.left === b.left && a.right === b.right && a.bottom === b.bottom;
-}
+};
 
 export const sectionSizesAtom: Atom<GlobalLayoutState["sectionSizes"]> = selectAtom(
   globalLayoutAtom,
@@ -173,9 +173,9 @@ export const explorerListWidthAtom: WritableAtom<number, [number], void> = atom(
 // placed and no sub-section is active. The bootstrap uses this as the first-visit
 // signal to seed the default arrangement + terminal; a restored
 // snapshot is never empty, so it is never re-seeded.
-export function isEmptyLayout(layout: WorkspaceLayoutState): boolean {
+export const isEmptyLayout = (layout: WorkspaceLayoutState): boolean => {
   return Object.keys(layout.placement).length === 0 && layout.activeSubSection === null;
-}
+};
 
 // Switch the active workspace in one write. First visit seeds the default layout if
 // provided and the family entry is still empty; the full default-layout seeding plus

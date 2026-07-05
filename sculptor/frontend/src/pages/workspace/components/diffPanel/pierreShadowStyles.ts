@@ -29,7 +29,7 @@ export const HIDE_NATIVE_HSCROLLBAR_CSS = [
  * caller-specific rules, for module-level reuse (one sheet per embedding
  * surface, adopted into every shadow root that surface creates).
  */
-export function createPierreOverrideSheet(...extraCss: Array<string>): CSSStyleSheet {
+export const createPierreOverrideSheet = (...extraCss: Array<string>): CSSStyleSheet => {
   const sheet = new CSSStyleSheet();
   // jsdom constructs CSSStyleSheet but does not implement replaceSync; guard so
   // component tests can import Pierre-embedding modules without crashing.
@@ -37,7 +37,7 @@ export function createPierreOverrideSheet(...extraCss: Array<string>): CSSStyleS
     sheet.replaceSync([BG_OVERRIDE_CSS, ...extraCss].join("\n"));
   }
   return sheet;
-}
+};
 
 /**
  * Adopts `sheet` into the shadow root of the `<diffs-container>` under `host`,
@@ -47,7 +47,7 @@ export function createPierreOverrideSheet(...extraCss: Array<string>): CSSStyleS
  * background in dark mode. Pierre's web component upgrades synchronously on
  * element creation, so the shadow root is already attached when the effect runs.
  */
-export function adoptPierreOverrideSheet(host: HTMLElement | null, sheet: CSSStyleSheet): void {
+export const adoptPierreOverrideSheet = (host: HTMLElement | null, sheet: CSSStyleSheet): void => {
   const shadowRoot = host?.querySelector("diffs-container")?.shadowRoot;
   if (!shadowRoot) {
     return;
@@ -56,4 +56,4 @@ export function adoptPierreOverrideSheet(host: HTMLElement | null, sheet: CSSSty
   if (!shadowRoot.adoptedStyleSheets.includes(sheet)) {
     shadowRoot.adoptedStyleSheets = [...shadowRoot.adoptedStyleSheets, sheet];
   }
-}
+};

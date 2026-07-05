@@ -14,7 +14,7 @@ import { useEffect, useRef } from "react";
 
 import { activeSectionRingNonceAtom, activeSectionRingVisibleAtom, RING_VISIBLE_MS } from "./transientAtoms.ts";
 
-export function useActiveSectionRing(): void {
+export const useActiveSectionRing = (): void => {
   const nonce = useAtomValue(activeSectionRingNonceAtom);
   const setRingVisible = useSetAtom(activeSectionRingVisibleAtom);
   const lastNonceRef = useRef<number>(nonce);
@@ -39,4 +39,4 @@ export function useActiveSectionRing(): void {
   useEffect(() => {
     return (): void => setRingVisible(false);
   }, [setRingVisible]);
-}
+};

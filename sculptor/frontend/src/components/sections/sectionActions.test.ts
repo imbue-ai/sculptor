@@ -21,12 +21,12 @@ import {
 import { activeWorkspaceIdAtom, workspaceLayoutAtom, workspaceLayoutFamily } from "./sectionAtoms.ts";
 import { activeSectionRingNonceAtom, maximizedSectionAtom } from "./transientAtoms.ts";
 
-function storeWith(layout: Partial<WorkspaceLayoutState>, workspaceId = "ws-test"): ReturnType<typeof createStore> {
+const storeWith = (layout: Partial<WorkspaceLayoutState>, workspaceId = "ws-test"): ReturnType<typeof createStore> => {
   const store = createStore();
   store.set(activeWorkspaceIdAtom, workspaceId);
   store.set(workspaceLayoutAtom, { ...EMPTY_WORKSPACE_LAYOUT, ...layout });
   return store;
-}
+};
 
 beforeEach(() => {
   localStorage.clear();

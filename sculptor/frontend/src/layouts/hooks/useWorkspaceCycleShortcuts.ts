@@ -22,19 +22,19 @@ type CycleDirection = 1 | -1;
 
 // A missing current (-1) anchors at index 0, so the step lands on the neighbour of the
 // first element (forward → second, backward → last).
-function stepIndex(length: number, current: number, direction: CycleDirection): number {
+const stepIndex = (length: number, current: number, direction: CycleDirection): number => {
   const base = current === -1 ? 0 : current;
   return (base + direction + length) % length;
-}
+};
 
 // The workspace id in the current URL hash, or null off workspace routes (Home,
 // Settings). Matches the hash router's "#/ws/<id>[/agent/<id>]" shape, excluding
 // "new" the same way NavigateUtils' isWorkspaceRoute does (a legacy /ws/new/...
 // URL names a draft, not a workspace).
-function getWorkspaceIdFromHash(): string | null {
+const getWorkspaceIdFromHash = (): string | null => {
   const pathname = window.location.hash.replace(/^#/, "").split("?")[0] ?? "";
   return pathname.match(/^\/ws\/(?!new\b)([^/]+)/)?.[1] ?? null;
-}
+};
 
 export const useWorkspaceCycleShortcuts = (): void => {
   const store = useStore();

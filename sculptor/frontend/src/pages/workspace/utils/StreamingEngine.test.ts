@@ -3,29 +3,29 @@ import { describe, expect, it } from "vitest";
 import { StreamingEngine } from "./StreamingEngine.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function msg(blocks: Array<{ type: string; [k: string]: unknown }>): any {
+const msg = (blocks: Array<{ type: string; [k: string]: unknown }>): any => {
   return { role: "assistant", id: "msg-1", content: blocks, approximateCreationTime: new Date().toISOString() };
-}
+};
 
-function txt(text: string): { type: "text"; text: string } {
+const txt = (text: string): { type: "text"; text: string } => {
   return { type: "text" as const, text };
-}
+};
 
-function tool(
+const tool = (
   id: string,
   name: string,
-): { type: "tool_use"; id: string; name: string; input: Record<string, unknown> } {
+): { type: "tool_use"; id: string; name: string; input: Record<string, unknown> } => {
   return { type: "tool_use" as const, id, name, input: {} };
-}
+};
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function visibleText(result: any): string {
+const visibleText = (result: any): string => {
   if (!result) return "";
   return result.content
     .filter((b: { type: string }) => b.type === "text")
     .map((b: { text: string }) => b.text)
     .join("");
-}
+};
 
 describe("StreamingEngine", () => {
   it("flush returns null when no snapshot", () => {

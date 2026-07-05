@@ -102,12 +102,12 @@ describe("identifyAnalyticsUser", () => {
   });
 });
 
-function makeUserConfig(overrides: {
+const makeUserConfig = (overrides: {
   isTelemetryEnabled: boolean;
   userEmail?: string;
   isErrorReportingEnabled?: boolean;
   isProductAnalyticsEnabled?: boolean;
-}): UserConfig {
+}): UserConfig => {
   const isTelemetryOn = overrides.isTelemetryEnabled;
   return {
     userEmail: overrides.userEmail ?? "alice@imbue.com",
@@ -118,15 +118,15 @@ function makeUserConfig(overrides: {
     isProductAnalyticsEnabled: overrides.isProductAnalyticsEnabled ?? isTelemetryOn,
     isSessionRecordingEnabled: false,
   } as unknown as UserConfig;
-}
+};
 
-function makeTelemetryInfo(userConfig: UserConfig): TelemetryInfo {
+const makeTelemetryInfo = (userConfig: UserConfig): TelemetryInfo => {
   return {
     userConfig,
     sculptorVersion: "0.0.0",
     sculptorExecutionInstanceId: "exec_123",
   } as unknown as TelemetryInfo;
-}
+};
 
 describe("telemetry consent reconciliation", () => {
   let optInSpy: ReturnType<typeof vi.spyOn>;

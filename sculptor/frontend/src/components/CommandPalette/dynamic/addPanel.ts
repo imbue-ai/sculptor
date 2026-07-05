@@ -33,13 +33,13 @@ import type { Command, DynamicProvider } from "../types.ts";
 // so a registered terminal-agent program can't resolve to its display name here — the
 // row collapses to a plain "New agent" instead of doubling the word. Built-in types
 // (Claude, pi) title from the stored default via the shared label helper.
-function recentAgentRowTitle(runtime: CommandRuntime): string {
+const recentAgentRowTitle = (runtime: CommandRuntime): string => {
   const stored = runtime.store.get(recentAgentTypeAtom);
   if (stored.startsWith(REGISTERED_AGENT_TYPE_PREFIX)) {
     return "New agent";
   }
   return `New ${recentAgentLabel(stored, [])} agent`;
-}
+};
 
 export const buildAddPanelProvider = (runtime: CommandRuntime): DynamicProvider => ({
   id: "dynamic.add_panel",

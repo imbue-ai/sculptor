@@ -29,10 +29,10 @@ export type DefaultWorkspaceLayoutInputs = {
   terminalPanelId: PanelId;
 };
 
-export function buildDefaultWorkspaceLayout({
+export const buildDefaultWorkspaceLayout = ({
   agentPanelId,
   terminalPanelId,
-}: DefaultWorkspaceLayoutInputs): WorkspaceLayoutState {
+}: DefaultWorkspaceLayoutInputs): WorkspaceLayoutState => {
   return {
     placement: {
       [agentPanelId]: "center",
@@ -60,4 +60,4 @@ export function buildDefaultWorkspaceLayout({
     splits: {},
     activeSubSection: "center",
   };
-}
+};

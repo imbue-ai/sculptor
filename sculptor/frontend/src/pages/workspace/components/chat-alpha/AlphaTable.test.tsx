@@ -25,7 +25,7 @@ afterEach(() => {
   cleanup();
 });
 
-function twoColumnTable(): React.ReactElement {
+const twoColumnTable = (): React.ReactElement => {
   return (
     <AlphaTable>
       <thead>
@@ -46,13 +46,13 @@ function twoColumnTable(): React.ReactElement {
       </tbody>
     </AlphaTable>
   );
-}
+};
 
-function clickCopyButton(container: HTMLElement): void {
+const clickCopyButton = (container: HTMLElement): void => {
   const button = container.querySelector('button[aria-label="Copy table"]');
   expect(button).toBeTruthy();
   fireEvent.click(button!);
-}
+};
 
 describe("AlphaTable", () => {
   it("renders children inside a table element", () => {

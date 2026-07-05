@@ -18,14 +18,14 @@ export type WebsocketHookOptions<T> = {
 /**
  * Hook for managing WebSocket connections with automatic reconnection
  */
-export function useWebsocket<T>({
+export const useWebsocket = <T>({
   url,
   onMessage,
   onError,
   onOpen,
   onClose,
   enabled = true,
-}: WebsocketHookOptions<T>): void {
+}: WebsocketHookOptions<T>): void => {
   // Use refs for callbacks to avoid stale closures
   const onMessageRef = useRef(onMessage);
   const onErrorRef = useRef(onError);
@@ -165,4 +165,4 @@ export function useWebsocket<T>({
       }
     };
   }, [enabled, url]);
-}
+};

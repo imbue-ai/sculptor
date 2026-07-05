@@ -6,20 +6,20 @@ import { formatShortcutForDisplay, isDismissibleOverlayOpen, shouldHandleKeybind
 import { keybindingsMapAtom } from "./atoms.ts";
 import type { KeybindingId } from "./types.ts";
 
-export function useKeybinding(id: KeybindingId): string | null {
+export const useKeybinding = (id: KeybindingId): string | null => {
   const map = useAtomValue(keybindingsMapAtom);
   return map[id].binding;
-}
+};
 
-export function useKeybindingDisplayText(id: KeybindingId): string {
+export const useKeybindingDisplayText = (id: KeybindingId): string => {
   const binding = useKeybinding(id);
   return useMemo(() => {
     if (binding == null) return "";
     return formatShortcutForDisplay(binding);
   }, [binding]);
-}
+};
 
-export function useKeybindingHandler(id: KeybindingId, handler: () => void): void {
+export const useKeybindingHandler = (id: KeybindingId, handler: () => void): void => {
   const binding = useKeybinding(id);
 
   // Keep the latest handler in a ref so the keydown listener is registered only
@@ -47,4 +47,4 @@ export function useKeybindingHandler(id: KeybindingId, handler: () => void): voi
     window.addEventListener("keydown", listener);
     return (): void => window.removeEventListener("keydown", listener);
   }, [binding]);
-}
+};

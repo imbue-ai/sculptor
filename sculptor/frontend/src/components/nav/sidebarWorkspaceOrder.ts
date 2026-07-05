@@ -14,10 +14,10 @@ import type { RepoGroup } from "./SidebarRepoGroup.tsx";
 // Group workspaces by repo (project). Every workspace has a projectId, but the
 // project record itself may not have loaded yet — those fall back to an "Other"
 // group name (see the `?? "Other"` below) so nothing disappears.
-export function groupWorkspacesByRepo(
+export const groupWorkspacesByRepo = (
   workspaces: ReadonlyArray<Workspace>,
   projects: ReadonlyArray<Project>,
-): ReadonlyArray<RepoGroup> {
+): ReadonlyArray<RepoGroup> => {
   const projectsById = new Map(projects.map((project) => [project.objectId, project]));
   const byProject = new Map<string, Array<Workspace>>();
   for (const ws of workspaces) {
@@ -32,7 +32,7 @@ export function groupWorkspacesByRepo(
       workspaces: wsList.sort((a, b) => (a.description ?? "").localeCompare(b.description ?? "")),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
-}
+};
 
 // The sidebar's repo groups in render order. WorkspaceSidebar renders these.
 export const sidebarWorkspaceGroupsAtom = atom<ReadonlyArray<RepoGroup>>((get) =>

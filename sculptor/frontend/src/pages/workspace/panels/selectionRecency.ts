@@ -27,17 +27,17 @@ type ReconcileParams<TLocal extends { at: number }> = {
  * agent-opened diff must not clear the Files panel's open file, and vice-versa.
  * Ties go to the local click.
  */
-export function reconcileSelectionByRecency<TLocal extends { at: number }>({
+export const reconcileSelectionByRecency = <TLocal extends { at: number }>({
   local,
   tab,
   tabKind,
   toSelection,
   fromTab,
-}: ReconcileParams<TLocal>): DiffSelection | null {
+}: ReconcileParams<TLocal>): DiffSelection | null => {
   const tabViewedAt = tab !== null && tab.kind === tabKind ? tab.viewedAt : null;
   const isLocalNewer = local !== null && (tabViewedAt === null || local.at >= tabViewedAt);
   if (local !== null && isLocalNewer) {
     return toSelection(local);
   }
   return fromTab(tab);
-}
+};

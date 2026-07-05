@@ -20,19 +20,19 @@ import { createTipTapExtensions } from "./TipTapConfig.ts";
  * round-trip without interfering with list parsing.
  */
 describe("prompt serialization and round-trip", () => {
-  function createEditableEditor(): Editor {
+  const createEditableEditor = (): Editor => {
     const extensions = createTipTapExtensions({ editable: true });
     return new Editor({ extensions });
-  }
+  };
 
-  function createViewerEditor(markdown: string): Editor {
+  const createViewerEditor = (markdown: string): Editor => {
     const extensions = createTipTapExtensions({ editable: false });
     return new Editor({
       extensions,
       content: markdown,
       contentType: "markdown" as const,
     });
-  }
+  };
 
   // -- List followed by text --------------------------------------------------
 
@@ -208,15 +208,15 @@ describe("prompt serialization and round-trip", () => {
 });
 
 describe("mention node markdown round-trip", () => {
-  function createEditableEditor(): Editor {
+  const createEditableEditor = (): Editor => {
     return new Editor({ extensions: createTipTapExtensions({ editable: true }) });
-  }
+  };
 
-  function createEditorFromMarkdown(markdown: string): Editor {
+  const createEditorFromMarkdown = (markdown: string): Editor => {
     const editor = new Editor({ extensions: createTipTapExtensions({ editable: true }) });
     editor.commands.setContent(markdown, { contentType: "markdown" });
     return editor;
-  }
+  };
 
   type MentionAttrs = {
     id?: string | null;
@@ -229,7 +229,7 @@ describe("mention node markdown round-trip", () => {
     entityDisplayName?: string | null;
   };
 
-  function findMentionNodes(json: JSONContent): Array<MentionAttrs> {
+  const findMentionNodes = (json: JSONContent): Array<MentionAttrs> => {
     const out: Array<MentionAttrs> = [];
     const walk = (node: JSONContent): void => {
       if (node.type === "mention") out.push((node.attrs ?? {}) as MentionAttrs);
@@ -238,15 +238,15 @@ describe("mention node markdown round-trip", () => {
     };
     walk(json);
     return out;
-  }
+  };
 
-  function insertMentionNode(editor: Editor, attrs: MentionAttrs): void {
+  const insertMentionNode = (editor: Editor, attrs: MentionAttrs): void => {
     editor
       .chain()
       .focus()
       .insertContent({ type: "mention", attrs: attrs as Record<string, unknown> })
       .run();
-  }
+  };
 
   it("file mention round-trips as a sculptor-node span", () => {
     const editor = createEditableEditor();
@@ -412,13 +412,13 @@ describe("mention node markdown round-trip", () => {
  * picker can own that character.
  */
 describe("CustomBulletList — bullet-list shortcut on + is disabled", () => {
-  function createEditableEditor(): Editor {
+  const createEditableEditor = (): Editor => {
     return new Editor({ extensions: createTipTapExtensions({ editable: true }) });
-  }
+  };
 
-  function isBulletList(node: JSONContent | undefined): boolean {
+  const isBulletList = (node: JSONContent | undefined): boolean => {
     return node?.type === "bulletList";
-  }
+  };
 
   it("typing '+ ' at the start of a line does not produce a bullet list", () => {
     const editor = createEditableEditor();

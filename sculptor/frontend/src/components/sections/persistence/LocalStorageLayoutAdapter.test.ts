@@ -7,7 +7,7 @@ import { LAYOUT_SNAPSHOT_VERSION } from "./types.ts";
 const WS_SCOPE: LayoutScope = { kind: "workspace", workspaceId: "ws-1" };
 const GLOBAL_SCOPE: LayoutScope = { kind: "global" };
 
-function makeWorkspaceLayout(activePanel: string): WorkspaceLayoutState {
+const makeWorkspaceLayout = (activePanel: string): WorkspaceLayoutState => {
   return {
     placement: { [activePanel]: "center" },
     order: { center: [activePanel] },
@@ -16,7 +16,7 @@ function makeWorkspaceLayout(activePanel: string): WorkspaceLayoutState {
     splits: {},
     activeSubSection: "center",
   };
-}
+};
 
 describe("LocalStorageLayoutAdapter", () => {
   let adapter: LocalStorageLayoutAdapter;

@@ -13,15 +13,18 @@ import { isSecondary, SECTION_IDS, toSecondary, toSection } from "./sectionTypes
 
 // Center is always expanded and is never in the collapsed set; the other sections
 // are collapsed unless explicitly flagged expanded.
-export function isSectionExpanded(layout: WorkspaceLayoutState, section: SectionId): boolean {
+export const isSectionExpanded = (layout: WorkspaceLayoutState, section: SectionId): boolean => {
   return section === "center" ? true : (layout.expanded[section] ?? false);
-}
+};
 
 // Open panels in a sub-section, ordered. A panel's presence in `placement` is its
 // "open" state (so a dynamic panel that is placed but whose source has not loaded
 // yet still counts as occupying its sub-section); `order` gives the tab order. Any
 // placed-but-unordered panel is appended so the result never drops an open panel.
-export function openPanelsInSubSection(layout: WorkspaceLayoutState, subSection: SubSectionId): ReadonlyArray<PanelId> {
+export const openPanelsInSubSection = (
+  layout: WorkspaceLayoutState,
+  subSection: SubSectionId,
+): ReadonlyArray<PanelId> => {
   const placedHere = (Object.keys(layout.placement) as ReadonlyArray<PanelId>).filter(
     (panelId) => layout.placement[panelId] === subSection,
   );
@@ -29,7 +32,7 @@ export function openPanelsInSubSection(layout: WorkspaceLayoutState, subSection:
   const ordered = (layout.order[subSection] ?? []).filter((panelId) => placedSet.has(panelId));
   const orderedSet = new Set(ordered);
   return [...ordered, ...placedHere.filter((panelId) => !orderedSet.has(panelId))];
-}
+};
 
 // The sub-sections enumerated in section order: each section's primary and, when the
 // section is both expanded and split, its secondary half (a collapsed section only
@@ -38,10 +41,10 @@ export function openPanelsInSubSection(layout: WorkspaceLayoutState, subSection:
 // section-cycle steps through the expanded (active-able) sub-sections only, while
 // the add-panel locations include collapsed sections because adding a panel there
 // expands the section.
-export function listSubSections(
+export const listSubSections = (
   layout: WorkspaceLayoutState,
   options: { includeCollapsed: boolean },
-): ReadonlyArray<SubSectionId> {
+): ReadonlyArray<SubSectionId> => {
   const subSections: Array<SubSectionId> = [];
   for (const section of SECTION_IDS) {
     const isExpanded = isSectionExpanded(layout, section);
@@ -54,7 +57,7 @@ export function listSubSections(
     }
   }
   return subSections;
-}
+};
 
 export type AddPanelLocation = { subSection: SubSectionId; label: string };
 
@@ -68,7 +71,7 @@ const SECTION_LABELS: Readonly<Record<SectionId, string>> = {
 // The locations a panel can be added to, labeled for the add-panel menus. A split
 // section's halves are disambiguated as "(primary)" / "(secondary)"; an unsplit
 // section is just its plain label.
-export function listAvailableLocations(layout: WorkspaceLayoutState): ReadonlyArray<AddPanelLocation> {
+export const listAvailableLocations = (layout: WorkspaceLayoutState): ReadonlyArray<AddPanelLocation> => {
   const subSections = listSubSections(layout, { includeCollapsed: true });
   const splitSections = new Set(subSections.filter(isSecondary).map(toSection));
   return subSections.map((subSection) => {
@@ -78,7 +81,7 @@ export function listAvailableLocations(layout: WorkspaceLayoutState): ReadonlyAr
     }
     return { subSection, label: splitSections.has(toSection(subSection)) ? `${sectionLabel} (primary)` : sectionLabel };
   });
-}
+};
 
 export type AvailableStaticPanel = {
   id: PanelId;
@@ -90,12 +93,12 @@ export type AvailableStaticPanel = {
 // Sourced from the live registry (not STATIC_PANEL_METADATA) so plugin-contributed
 // panels — also kind "static" — are offered too; the multi-instance agent/terminal
 // panels are excluded by the kind filter.
-export function listAvailableStaticPanels(
+export const listAvailableStaticPanels = (
   registry: ReadonlyArray<PanelDefinition>,
   placement: WorkspaceLayoutState["placement"],
-): ReadonlyArray<AvailableStaticPanel> {
+): ReadonlyArray<AvailableStaticPanel> => {
   const openPanelIds = new Set<PanelId>(Object.keys(placement));
   return registry
     .filter((definition) => definition.kind === "static" && !openPanelIds.has(definition.id))
     .map((definition) => ({ id: definition.id, displayName: definition.displayName, icon: definition.icon }));
-}
+};

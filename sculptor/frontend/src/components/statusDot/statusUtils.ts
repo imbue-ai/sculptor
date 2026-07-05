@@ -8,16 +8,16 @@ import { TaskStatus } from "~/api";
  */
 export type AgentDotStatus = "running" | "waiting" | "error" | "unread" | "read";
 
-function hasUnreadUpdate(lastReadAt: string | null, updatedAt: string): boolean {
+const hasUnreadUpdate = (lastReadAt: string | null, updatedAt: string): boolean => {
   return lastReadAt === null || new Date(updatedAt) > new Date(lastReadAt);
-}
+};
 
-export function getAgentDotStatus(
+export const getAgentDotStatus = (
   status: TaskStatus,
   lastReadAt: string | null,
   updatedAt: string,
   isFocused: boolean = false,
-): AgentDotStatus {
+): AgentDotStatus => {
   if (status === TaskStatus.RUNNING || status === TaskStatus.BUILDING) {
     return "running";
   }
@@ -44,7 +44,7 @@ export function getAgentDotStatus(
   }
 
   return hasUnreadUpdate(lastReadAt, updatedAt) ? "unread" : "read";
-}
+};
 
 /**
  * Aggregated visual status for a workspace's status dot(s).
@@ -83,10 +83,10 @@ type AgentTaskLike = {
 const resolveBaseDotStatus = (task: AgentTaskLike): AgentDotStatus =>
   getAgentDotStatus(task.status, task.lastReadAt, task.updatedAt);
 
-export function computeWorkspaceDotStatus<T extends AgentTaskLike>(
+export const computeWorkspaceDotStatus = <T extends AgentTaskLike>(
   tasks: ReadonlyArray<T>,
   resolveDotStatus: (task: T) => AgentDotStatus = resolveBaseDotStatus,
-): WorkspaceDotStatus {
+): WorkspaceDotStatus => {
   const activeTasks = tasks.filter((task) => !task.isDeleted && !task.isArchived);
 
   if (activeTasks.length === 0) {
@@ -102,4 +102,4 @@ export function computeWorkspaceDotStatus<T extends AgentTaskLike>(
   const hasUnread = activeTasks.some((task) => resolveDotStatus(task) === "unread");
 
   return { hasError, hasWaiting, hasRunning, isAllError, hasUnread };
-}
+};

@@ -34,7 +34,7 @@ const FONT_CANDIDATES: Record<string, Array<string>> = {
   ],
 };
 
-function findFont(): string | null {
+const findFont = (): string | null => {
   // Try well-known paths first.
   for (const candidate of FONT_CANDIDATES[process.platform] ?? []) {
     if (fs.existsSync(candidate)) return candidate;
@@ -55,29 +55,29 @@ function findFont(): string | null {
   }
 
   return null;
-}
+};
 
-function hashString(s: string): number {
+const hashString = (s: string): number => {
   let h = 0;
   for (let i = 0; i < s.length; i++) {
     h = (h * 31 + s.charCodeAt(i)) >>> 0;
   }
   return h;
-}
+};
 
-function hue2rgb(p: number, q: number, t: number): number {
+const hue2rgb = (p: number, q: number, t: number): number => {
   const tt = t < 0 ? t + 1 : t > 1 ? t - 1 : t;
   if (tt < 1 / 6) return p + (q - p) * 6 * tt;
   if (tt < 1 / 2) return q;
   if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
   return p;
-}
+};
 
 /**
  * Invert and hue-shift an RGBA bitmap buffer in-place.
  * Alpha channel is preserved; fully transparent pixels are skipped.
  */
-function invertAndHueShift(bitmap: Buffer, hueShift: number): void {
+const invertAndHueShift = (bitmap: Buffer, hueShift: number): void => {
   for (let i = 0; i < bitmap.length; i += 4) {
     if (bitmap[i + 3] === 0) continue; // preserve fully transparent pixels
 
@@ -116,7 +116,7 @@ function invertAndHueShift(bitmap: Buffer, hueShift: number): void {
     bitmap[i + 1] = Math.round(ng * 255);
     bitmap[i + 2] = Math.round(nb * 255);
   }
-}
+};
 
 /**
  * Render text overlays onto the icon bitmap:
@@ -127,13 +127,13 @@ function invertAndHueShift(bitmap: Buffer, hueShift: number): void {
  * If no suitable font is found on the system, returns the bitmap unchanged
  * (the color-shifted icon is still useful without text).
  */
-function renderTextOverlays(
+const renderTextOverlays = (
   bitmap: Buffer,
   width: number,
   height: number,
   label: string | undefined,
   port: string | undefined,
-): Buffer {
+): Buffer => {
   if (!label && !port) return bitmap;
 
   const fontPath = findFont();
@@ -180,7 +180,7 @@ function renderTextOverlays(
   }
 
   return Buffer.from(img.data);
-}
+};
 
 type DevIconOptions = {
   /** Large label rendered at the top of the icon (e.g. "src", "pytest"). */
@@ -194,7 +194,7 @@ type DevIconOptions = {
  * Returns null if the source icon is missing or an unexpected error occurs
  * (this must never prevent the app from starting).
  */
-export function createDevIcon(options: DevIconOptions): Electron.NativeImage | null {
+export const createDevIcon = (options: DevIconOptions): Electron.NativeImage | null => {
   try {
     const iconPath = path.join(__dirname, "..", "..", "assets", "desktop_icon.png");
     if (!fs.existsSync(iconPath)) {
@@ -220,4 +220,4 @@ export function createDevIcon(options: DevIconOptions): Electron.NativeImage | n
     logger.error("[devIcon] Failed to generate dev icon:", error);
     return null;
   }
-}
+};

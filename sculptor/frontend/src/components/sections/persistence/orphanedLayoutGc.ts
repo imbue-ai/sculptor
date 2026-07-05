@@ -37,17 +37,17 @@ const scheduleWhenIdle = (task: () => void): void => {
  * workspace id is not in `liveWorkspaceIds`. Pure so the pruning decision is
  * unit-testable without touching localStorage.
  */
-export function findOrphanedWorkspaceLayoutKeys(
+export const findOrphanedWorkspaceLayoutKeys = (
   storedKeys: ReadonlyArray<string>,
   liveWorkspaceIds: ReadonlySet<string>,
-): Array<string> {
+): Array<string> => {
   return storedKeys.filter(
     (key) => key.startsWith(WORKSPACE_KEY_PREFIX) && !liveWorkspaceIds.has(key.slice(WORKSPACE_KEY_PREFIX.length)),
   );
-}
+};
 
 /** Remove every orphaned per-workspace layout key from localStorage. */
-export function pruneOrphanedWorkspaceLayouts(liveWorkspaceIds: ReadonlySet<string>): void {
+export const pruneOrphanedWorkspaceLayouts = (liveWorkspaceIds: ReadonlySet<string>): void => {
   let storedKeys: Array<string>;
   try {
     storedKeys = Object.keys(localStorage);
@@ -63,7 +63,7 @@ export function pruneOrphanedWorkspaceLayouts(liveWorkspaceIds: ReadonlySet<stri
       // Ignore: a failed removal just leaves the orphan for a later session.
     }
   }
-}
+};
 
 let hasSweptThisSession = false;
 
@@ -72,7 +72,7 @@ let hasSweptThisSession = false;
  * re-renders) for the workspace list to finish loading, then prunes during
  * idle time. Mounted by the workspace shell; safe to mount many times.
  */
-export function useOrphanedLayoutGc(): void {
+export const useOrphanedLayoutGc = (): void => {
   const store = useStore();
 
   useEffect(() => {
@@ -108,4 +108,4 @@ export function useOrphanedLayoutGc(): void {
     });
     return unsubscribe;
   }, [store]);
-}
+};

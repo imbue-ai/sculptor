@@ -40,29 +40,29 @@ type CycleDirection = 1 | -1;
 
 // A missing current (-1) anchors at index 0, so the step lands on the neighbour of the
 // first element (forward → second, backward → last).
-function stepIndex(length: number, current: number, direction: CycleDirection): number {
+const stepIndex = (length: number, current: number, direction: CycleDirection): number => {
   const base = current === -1 ? 0 : current;
   return (base + direction + length) % length;
-}
+};
 
 // The next panel to activate when cycling within a sub-section. Cycles only over panels
 // that currently RENDER — i.e. have a registry definition. An open panel without one
 // (an agent whose task is mid-load or was just deleted) shows as the empty-section
 // state, so including it would let a cycle land on "nothing selected" between two real
 // panels. Returns undefined (a no-op) for an empty or single renderable-panel section.
-export function nextCyclablePanel(
+export const nextCyclablePanel = (
   openPanels: ReadonlyArray<PanelId>,
   renderablePanelIds: ReadonlySet<PanelId>,
   active: PanelId | undefined,
   direction: CycleDirection,
-): PanelId | undefined {
+): PanelId | undefined => {
   const panels = openPanels.filter((panelId) => renderablePanelIds.has(panelId));
   if (panels.length < 2) {
     return undefined;
   }
   const currentIndex = active === undefined ? -1 : panels.indexOf(active);
   return panels[stepIndex(panels.length, currentIndex, direction)];
-}
+};
 
 export const useWorkspaceShortcuts = (): void => {
   const store = useStore();

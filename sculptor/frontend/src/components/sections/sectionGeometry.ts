@@ -28,7 +28,7 @@ export type ResolveSectionSizesParams = {
   isBottomExpanded: boolean;
 };
 
-export function resolveSectionPixelSizes(params: ResolveSectionSizesParams): SectionPixelSizes {
+export const resolveSectionPixelSizes = (params: ResolveSectionSizesParams): SectionPixelSizes => {
   const { containerWidth, containerHeight, sizes, isLeftExpanded, isRightExpanded, isBottomExpanded } = params;
 
   let leftPx = isLeftExpanded ? Math.max(SIDE_MIN_WIDTH_PX, Math.round((sizes.left / 100) * containerWidth)) : 0;
@@ -55,12 +55,12 @@ export function resolveSectionPixelSizes(params: ResolveSectionSizesParams): Sec
     : 0;
 
   return { leftPx, rightPx, bottomPx };
-}
+};
 
 // Convert a dragged pixel size back to a clamped global percentage of its axis.
-export function sizeToPercent(px: number, dimension: number): number {
+export const sizeToPercent = (px: number, dimension: number): number => {
   if (dimension <= 0) {
     return SECTION_SIZE_MIN_PERCENT;
   }
   return Math.max(SECTION_SIZE_MIN_PERCENT, Math.min(SECTION_SIZE_MAX_PERCENT, (px / dimension) * 100));
-}
+};

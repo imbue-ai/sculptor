@@ -559,7 +559,7 @@ export declare const useWorkspaces: () => ReadonlyArray<WorkspaceView> | undefin
  * The selector should be pure over the workspace (no external closure state):
  * its identity may change between renders, but its logic must not.
  */
-export declare function useCurrentWorkspace<T = WorkspaceView | null>(selector?: (workspace: WorkspaceView | null) => T, equalityFn?: (a: T, b: T) => boolean): T;
+export declare const useCurrentWorkspace: <T = WorkspaceView | null>(selector?: (workspace: WorkspaceView | null) => T, equalityFn?: (a: T, b: T) => boolean) => T;
 /**
  * Returns a function that navigates to a workspace by id — the host's own
  * workspace-open behavior: it opens (or converts the home tab into) the

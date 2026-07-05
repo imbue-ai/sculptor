@@ -32,13 +32,13 @@ const DIRECTIONAL_CODES: ReadonlyArray<string> = [
 // start (so the initial `over` is the source) and cleared on drag end.
 let keyboardDropTargetId: UniqueIdentifier | null = null;
 
-export function setKeyboardDropTarget(id: UniqueIdentifier | null): void {
+export const setKeyboardDropTarget = (id: UniqueIdentifier | null): void => {
   keyboardDropTargetId = id;
-}
+};
 
-export function resetKeyboardDropTarget(): void {
+export const resetKeyboardDropTarget = (): void => {
   keyboardDropTargetId = null;
-}
+};
 
 // The pointer's live viewport position during a pointer drag, captured from the
 // collision detection below (dnd-kit passes it the raw activation-plus-translate
@@ -50,13 +50,13 @@ export function resetKeyboardDropTarget(): void {
 type PointerPosition = { x: number; y: number };
 let dragPointerCoordinates: PointerPosition | null = null;
 
-export function getDragPointerCoordinates(): PointerPosition | null {
+export const getDragPointerCoordinates = (): PointerPosition | null => {
   return dragPointerCoordinates;
-}
+};
 
-export function resetDragPointerCoordinates(): void {
+export const resetDragPointerCoordinates = (): void => {
   dragPointerCoordinates = null;
-}
+};
 
 export const panelKeyboardCoordinateGetter: KeyboardCoordinateGetter = (
   event,

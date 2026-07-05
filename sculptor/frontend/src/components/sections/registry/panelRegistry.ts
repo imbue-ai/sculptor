@@ -54,9 +54,9 @@ export type PanelDefinition = {
 };
 
 // Agent and terminal are the only multi-instance (renamable) panels.
-export function isMultiInstanceKind(kind: PanelKind): boolean {
+export const isMultiInstanceKind = (kind: PanelKind): boolean => {
   return kind === "agent" || kind === "terminal";
-}
+};
 
 // Icons reference lucide-react. lucide names: agent → Bot, terminal → Terminal.
 type StaticPanelMeta = { id: PanelId; displayName: string; icon: LucideIcon; defaultSection?: SubSectionId };
@@ -79,11 +79,11 @@ const registeredComponents = new Map<PanelId, ComponentType>();
 
 const MissingPanelPlaceholder: ComponentType = () => null;
 
-export function registerPanelComponent(id: PanelId, component: ComponentType): void {
+export const registerPanelComponent = (id: PanelId, component: ComponentType): void => {
   registeredComponents.set(id, component);
-}
+};
 
-export function buildStaticPanelDefinitions(): ReadonlyArray<PanelDefinition> {
+export const buildStaticPanelDefinitions = (): ReadonlyArray<PanelDefinition> => {
   return STATIC_PANEL_METADATA.map((meta) => ({
     id: meta.id,
     displayName: meta.displayName,
@@ -92,7 +92,7 @@ export function buildStaticPanelDefinitions(): ReadonlyArray<PanelDefinition> {
     defaultSection: meta.defaultSection,
     component: registeredComponents.get(meta.id) ?? MissingPanelPlaceholder,
   }));
-}
+};
 
 // The minimal plugin-panel shape this registry adapts. Declared structurally (rather
 // than importing the plugins module) so the registry stays plugin-agnostic and the
@@ -109,9 +109,9 @@ export type PluginRegistryPanel = {
 // resolve and render them. Plugin panels are single-instance ("static") and
 // host-managed; the plugin's component is already wrapped (error boundary + contexts)
 // by the loader before it reaches here.
-export function buildPluginPanelDefinitions(
+export const buildPluginPanelDefinitions = (
   pluginPanels: ReadonlyArray<PluginRegistryPanel>,
-): ReadonlyArray<PanelDefinition> {
+): ReadonlyArray<PanelDefinition> => {
   return pluginPanels.map((panel) => ({
     id: panel.id,
     displayName: panel.displayName,
@@ -120,7 +120,7 @@ export function buildPluginPanelDefinitions(
     defaultSection: panel.defaultSection,
     component: panel.component,
   }));
-}
+};
 
 // The current registry (static + plugin + dynamic). Kept in sync with the active
 // workspace's agent/terminal panels and the loaded plugins by useWorkspaceDynamicPanels;
@@ -143,7 +143,7 @@ export const panelRegistryAtom = atom<ReadonlyArray<PanelDefinition>>(buildStati
 // never invokes a callback captured through this guarded slice — it re-reads the CURRENT
 // definition from panelRegistryAtom at menu-open / invocation time, so a suppressed
 // re-emit cannot strand a stale callback.
-function panelDefinitionEqual(a: PanelDefinition | undefined, b: PanelDefinition | undefined): boolean {
+const panelDefinitionEqual = (a: PanelDefinition | undefined, b: PanelDefinition | undefined): boolean => {
   return (
     a === b ||
     (a !== undefined &&
@@ -157,7 +157,7 @@ function panelDefinitionEqual(a: PanelDefinition | undefined, b: PanelDefinition
       a.connectionStatus === b.connectionStatus &&
       a.component === b.component)
   );
-}
+};
 
 // True when two registries hold pairwise render-equal definitions in the same order.
 // The registry sync hook uses this to skip the atom write for rebuilds that changed
@@ -165,9 +165,9 @@ function panelDefinitionEqual(a: PanelDefinition | undefined, b: PanelDefinition
 // second during streaming. Because panelDefinitionEqual ignores the callback fields,
 // the hook must separately force a write when a callback INPUT (agent diagnostics)
 // changes — see useWorkspaceDynamicPanels.
-export function panelRegistriesEqual(a: ReadonlyArray<PanelDefinition>, b: ReadonlyArray<PanelDefinition>): boolean {
+export const panelRegistriesEqual = (a: ReadonlyArray<PanelDefinition>, b: ReadonlyArray<PanelDefinition>): boolean => {
   return a.length === b.length && a.every((definition, index) => panelDefinitionEqual(definition, b[index]));
-}
+};
 
 // A single panel's definition, sliced out of the registry and memoized per id.
 // Tabs subscribe to this rather than the whole registry so a registry rebuild on a

@@ -10,7 +10,7 @@ type FakeMentionNode = {
 type FakeTextNode = { type: { name: "text" }; text: string };
 type FakeChild = FakeMentionNode | FakeTextNode;
 
-function fakeEditor(children: Array<FakeChild>): TipTapEditor {
+const fakeEditor = (children: Array<FakeChild>): TipTapEditor => {
   const paragraph = {
     childCount: children.length,
     child: (index: number): FakeChild => children[index],
@@ -20,7 +20,7 @@ function fakeEditor(children: Array<FakeChild>): TipTapEditor {
     child: (_: number): typeof paragraph => paragraph,
   };
   return { state: { doc } } as unknown as TipTapEditor;
-}
+};
 
 const emptyEditor = (): TipTapEditor => fakeEditor([]);
 

@@ -53,7 +53,7 @@ const BANNER_ICONS: Partial<Record<WorkspacePeekAgentStatus, string>> = {
   [WorkspacePeekAgentStatus.COMPLETED]: "✓",
 };
 
-function computeWorkspaceStatus(agents: ReadonlyArray<CodingAgentTaskView>): WorkspacePeekAgentStatus {
+const computeWorkspaceStatus = (agents: ReadonlyArray<CodingAgentTaskView>): WorkspacePeekAgentStatus => {
   if (agents.some((a) => a.workspacePeekStatus === WorkspacePeekAgentStatus.ERROR))
     return WorkspacePeekAgentStatus.ERROR;
   if (agents.some((a) => a.workspacePeekStatus === WorkspacePeekAgentStatus.WAITING))
@@ -64,9 +64,9 @@ function computeWorkspaceStatus(agents: ReadonlyArray<CodingAgentTaskView>): Wor
     return WorkspacePeekAgentStatus.COMPLETED;
   }
   return WorkspacePeekAgentStatus.IDLE;
-}
+};
 
-function formatTimeAgo(dateStr: string): string {
+const formatTimeAgo = (dateStr: string): string => {
   const ms = Date.now() - new Date(dateStr).getTime();
   const seconds = Math.floor(ms / 1000);
   if (seconds < 60) return "just now";
@@ -76,9 +76,9 @@ function formatTimeAgo(dateStr: string): string {
   if (hours < 24) return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
   const days = Math.floor(hours / 24);
   return `${days} day${days !== 1 ? "s" : ""} ago`;
-}
+};
 
-function getSummary(status: WorkspacePeekAgentStatus, agents: ReadonlyArray<CodingAgentTaskView>): string {
+const getSummary = (status: WorkspacePeekAgentStatus, agents: ReadonlyArray<CodingAgentTaskView>): string => {
   const totalCompleted = agents.reduce((sum, a) => sum + a.taskCompleted, 0);
   const totalTodos = agents.reduce((sum, a) => sum + a.taskTotal, 0);
   const firstWorking = agents.find((a) => a.workspacePeekStatus === WorkspacePeekAgentStatus.WORKING);
@@ -100,9 +100,9 @@ function getSummary(status: WorkspacePeekAgentStatus, agents: ReadonlyArray<Codi
       return `No active agents. Last activity ${formatTimeAgo(mostRecent.updatedAt)}.`;
     }
   }
-}
+};
 
-function getPeekPipelineDotClass(status: PrStatusInfo["pipelineStatus"]): string {
+const getPeekPipelineDotClass = (status: PrStatusInfo["pipelineStatus"]): string => {
   switch (status) {
     case "running":
       return styles.dotRunning;
@@ -115,13 +115,13 @@ function getPeekPipelineDotClass(status: PrStatusInfo["pipelineStatus"]): string
     default:
       return styles.dotMuted;
   }
-}
+};
 
-function getPeekReviewDotClass(prStatus: PrStatusInfo): string {
+const getPeekReviewDotClass = (prStatus: PrStatusInfo): string => {
   if (!prStatus.approvals || prStatus.approvals.length === 0) return styles.dotMuted;
   if (prStatus.approvals.every((a) => a.approved)) return styles.dotApproved;
   return styles.dotPending;
-}
+};
 
 const AgentRow = ({
   agent,

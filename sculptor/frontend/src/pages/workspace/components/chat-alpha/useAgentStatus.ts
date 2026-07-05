@@ -56,7 +56,7 @@ const STATE_CONFIG: Record<AgentState, { label: string; isCancellable: boolean }
 // like compacting / stopping which are about the agent itself, not a bg task.
 const ACTIVE_OVERRIDABLE_STATES: ReadonlySet<AgentState> = new Set(["thinking", "streaming", "calling_tools"]);
 
-function deriveRawState(props: UseAgentStatusProps): AgentState {
+const deriveRawState = (props: UseAgentStatusProps): AgentState => {
   const {
     isAutoCompacting,
     isStoppingTask,
@@ -117,9 +117,9 @@ function deriveRawState(props: UseAgentStatusProps): AgentState {
   }
 
   return activeState;
-}
+};
 
-export function useAgentStatus(props: UseAgentStatusProps): AgentStatusResult {
+export const useAgentStatus = (props: UseAgentStatusProps): AgentStatusResult => {
   const rawState = deriveRawState(props);
 
   const [displayedState, setDisplayedState] = useState<AgentState>(rawState);
@@ -224,4 +224,4 @@ export function useAgentStatus(props: UseAgentStatusProps): AgentStatusResult {
     isCancellable: config.isCancellable,
     isVisible: displayedState !== "idle",
   };
-}
+};

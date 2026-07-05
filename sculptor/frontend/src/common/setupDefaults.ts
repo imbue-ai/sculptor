@@ -7,8 +7,8 @@ export const DEFAULT_WORKSPACE_SETUP_COMMAND = "git fetch origin 2>/dev/null || 
 //   null         → returns the current default (project never configured)
 //   ""           → returns null (user explicitly cleared, run nothing)
 //   other string → returns as-is (user's custom command)
-export function resolveWorkspaceSetupCommand(stored: string | null | undefined): string | null {
+export const resolveWorkspaceSetupCommand = (stored: string | null | undefined): string | null => {
   if (stored === null || stored === undefined) return DEFAULT_WORKSPACE_SETUP_COMMAND;
   if (stored === "") return null;
   return stored;
-}
+};

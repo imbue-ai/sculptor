@@ -14,13 +14,13 @@ afterEach(() => {
   }
 });
 
-function trackedEditor(): Editor {
+const trackedEditor = (): Editor => {
   const editor = new Editor({ extensions: createTipTapExtensions({ editable: false }) });
   editors.push(editor);
   return editor;
-}
+};
 
-function setPlainTextParagraphs(editor: Editor, paragraphs: Array<string>): void {
+const setPlainTextParagraphs = (editor: Editor, paragraphs: Array<string>): void => {
   const doc: JSONContent = {
     type: "doc",
     content: paragraphs.map((text) => ({
@@ -29,7 +29,7 @@ function setPlainTextParagraphs(editor: Editor, paragraphs: Array<string>): void
     })),
   };
   editor.commands.setContent(doc as Parameters<typeof editor.commands.setContent>[0]);
-}
+};
 
 type CollectedMention = {
   entityType: string | null | undefined;
@@ -37,7 +37,7 @@ type CollectedMention = {
   entityDisplayName: string | null | undefined;
 };
 
-function collectMentionNodes(editor: Editor): Array<CollectedMention> {
+const collectMentionNodes = (editor: Editor): Array<CollectedMention> => {
   const out: Array<CollectedMention> = [];
   const walk = (node: JSONContent): void => {
     if (node.type === "mention") {
@@ -53,11 +53,11 @@ function collectMentionNodes(editor: Editor): Array<CollectedMention> {
   };
   walk(editor.getJSON());
   return out;
-}
+};
 
-function collectTextContent(editor: Editor): string {
+const collectTextContent = (editor: Editor): string => {
   return editor.getText();
-}
+};
 
 describe("hydrateEntityMentions — single token", () => {
   it("replaces a lone token with a mention node carrying entity attrs", () => {

@@ -44,13 +44,13 @@ let hasLoggedImbueDebug = false;
 // posthog-js persists its own opt-out state, but Sentry has no equivalent.
 const TELEMETRY_OPT_OUT_STORAGE_KEY = "sculptor.telemetryOptedOut";
 
-function readPersistedOptOut(): boolean {
+const readPersistedOptOut = (): boolean => {
   try {
     return window.localStorage.getItem(TELEMETRY_OPT_OUT_STORAGE_KEY) === "true";
   } catch {
     return false;
   }
-}
+};
 
 // The frontend Sentry beforeSend (instrument.ts) reads this on every event.
 // Defaults to `true` on fresh installs so bootstrap crashes still reach
@@ -81,9 +81,9 @@ export const getTelemetryEnabled = (): boolean => isTelemetryEnabled;
  * defense-in-depth with the same conservative bias. Session recording is
  * excluded — it is always written as off and is not part of the consent.
  */
-export function computeIsTelemetryEnabled(userConfig: UserConfig): boolean {
+export const computeIsTelemetryEnabled = (userConfig: UserConfig): boolean => {
   return (userConfig.isErrorReportingEnabled ?? false) && (userConfig.isProductAnalyticsEnabled ?? false);
-}
+};
 
 /**
  * For @imbue.com users only: expose `posthog` on `window` for console
@@ -93,14 +93,14 @@ export function computeIsTelemetryEnabled(userConfig: UserConfig): boolean {
  * `window` (only the script-tag snippet does that). So without this, you
  * can't inspect or call `posthog` from DevTools.
  */
-function maybeEnableImbueDebug(email: string | undefined): void {
+const maybeEnableImbueDebug = (email: string | undefined): void => {
   const isImbue = email?.toLocaleLowerCase().endsWith("@imbue.com") ?? false;
   if (!isImbue || hasLoggedImbueDebug) return;
 
   (window as unknown as { posthog: PostHog }).posthog = posthog;
   console.log(`Email ${email} is @imbue.com — enabling PostHog debug mode and exposing window.posthog`);
   hasLoggedImbueDebug = true;
-}
+};
 
 // Autocapture is structure-only. Combined with `mask_all_text` (which strips
 // element text from the events), this ignore-list drops the attributes that
@@ -111,7 +111,7 @@ const STRUCTURE_ONLY_AUTOCAPTURE: AutocaptureConfig = {
   element_attribute_ignorelist: ["title", "aria-label", "alt", "placeholder", "href", "src"],
 };
 
-function buildPostHogConfig(telemetryInfo: TelemetryInfo | null): Partial<PostHogConfig> {
+const buildPostHogConfig = (telemetryInfo: TelemetryInfo | null): Partial<PostHogConfig> => {
   const userConfig = telemetryInfo?.userConfig;
   const isProductAnalyticsEnabled = userConfig?.isProductAnalyticsEnabled ?? true;
   const isSessionRecordingEnabled = userConfig?.isSessionRecordingEnabled ?? false;
@@ -132,7 +132,7 @@ function buildPostHogConfig(telemetryInfo: TelemetryInfo | null): Partial<PostHo
     capture_exceptions: false, // Needed for compatibility with Sentry integration
     debug: userEmail.toLocaleLowerCase().endsWith("@imbue.com"),
   };
-}
+};
 
 /**
  * Bare-bones PostHog init. Runs at app mount, before any BE call.
@@ -145,7 +145,7 @@ function buildPostHogConfig(telemetryInfo: TelemetryInfo | null): Partial<PostHo
  * distinct_id stored in localStorage. We identify later, once we know who the
  * user is (post-email-submit).
  */
-export function initializeTelemetry(): void {
+export const initializeTelemetry = (): void => {
   if (isInitialized) return;
   if (!FRONTEND_POSTHOG_TOKEN || FRONTEND_POSTHOG_TOKEN === "") {
     console.log("PostHog token not configured, skipping telemetry initialization");
@@ -170,7 +170,7 @@ export function initializeTelemetry(): void {
   });
 
   isInitialized = true;
-}
+};
 
 /**
  * Reconcile both SDKs with the user's telemetry consent so flips take effect
@@ -178,7 +178,7 @@ export function initializeTelemetry(): void {
  * on every handshake and config change, and from the Settings telemetry switch
  * for its optimistic flip.
  */
-export function applyTelemetryConsent(isEnabled: boolean, userEmail?: string | null): void {
+export const applyTelemetryConsent = (isEnabled: boolean, userEmail?: string | null): void => {
   setTelemetryEnabled(isEnabled);
 
   if (isInitialized) {
@@ -219,13 +219,13 @@ export function applyTelemetryConsent(isEnabled: boolean, userEmail?: string | n
   } else {
     Sentry.setUser(null);
   }
-}
+};
 
-function reconcileTelemetryConsent(userConfig: UserConfig): boolean {
+const reconcileTelemetryConsent = (userConfig: UserConfig): boolean => {
   const isEnabled = computeIsTelemetryEnabled(userConfig);
   applyTelemetryConsent(isEnabled, userConfig.userEmail);
   return isEnabled;
-}
+};
 
 /**
  * Called when `/api/v1/telemetry_info` resolves. Wires up the rest of the
@@ -237,7 +237,7 @@ function reconcileTelemetryConsent(userConfig: UserConfig): boolean {
  * user stays anonymous until the OnboardingWizard calls `identifyAnalyticsUser`
  * directly.
  */
-export function applyTelemetryInfo(telemetryInfo: TelemetryInfo): void {
+export const applyTelemetryInfo = (telemetryInfo: TelemetryInfo): void => {
   const { userConfig, sculptorVersion, sculptorExecutionInstanceId } = telemetryInfo;
 
   const isEnabled = reconcileTelemetryConsent(userConfig);
@@ -272,7 +272,7 @@ export function applyTelemetryInfo(telemetryInfo: TelemetryInfo): void {
       );
     }
   }
-}
+};
 
 /**
  * Identify the current user in PostHog.
@@ -285,7 +285,7 @@ export function applyTelemetryInfo(telemetryInfo: TelemetryInfo): void {
  * Idempotent: if posthog-js's current distinct_id already matches, this just
  * refreshes person properties without firing an `$identify` merge event.
  */
-export function identifyAnalyticsUser(email: string, extraProperties: Record<string, unknown> = {}): void {
+export const identifyAnalyticsUser = (email: string, extraProperties: Record<string, unknown> = {}): void => {
   if (!isInitialized) return;
 
   const analyticsUserId = computeAnalyticsUserId(email);
@@ -297,7 +297,7 @@ export function identifyAnalyticsUser(email: string, extraProperties: Record<str
   }
 
   posthog.identify(analyticsUserId, properties);
-}
+};
 
 /**
  * Called when telemetry config changes after the initial handshake — e.g. the
@@ -308,7 +308,7 @@ export function identifyAnalyticsUser(email: string, extraProperties: Record<str
  * the difference is that `applyTelemetryInfo` also registers super properties,
  * which only need to happen once.
  */
-export function updateTelemetryConfig(telemetryInfo: TelemetryInfo): void {
+export const updateTelemetryConfig = (telemetryInfo: TelemetryInfo): void => {
   const { userConfig } = telemetryInfo;
 
   const isEnabled = reconcileTelemetryConsent(userConfig);
@@ -322,4 +322,4 @@ export function updateTelemetryConfig(telemetryInfo: TelemetryInfo): void {
     posthog.set_config(buildPostHogConfig(telemetryInfo));
     maybeEnableImbueDebug(userConfig.userEmail);
   }
-}
+};

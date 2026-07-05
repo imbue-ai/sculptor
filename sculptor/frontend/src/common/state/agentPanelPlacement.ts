@@ -72,10 +72,10 @@ export const workspaceAgentIdsWhenLoadedAtomFamily = atomFamily((workspaceId: st
 // is appended, and entries duplicated in a persisted snapshot are collapsed to
 // their first occurrence. A duplicate order entry would render as a duplicate tab,
 // so the invariant is repaired here rather than trusted.
-export function withAgentPanelsEnsured(
+export const withAgentPanelsEnsured = (
   layout: WorkspaceLayoutState,
   agentTaskIds: ReadonlyArray<string>,
-): WorkspaceLayoutState {
+): WorkspaceLayoutState => {
   const missing: Array<PanelId> = [];
   const missingSet = new Set<PanelId>();
   for (const taskId of agentTaskIds) {
@@ -108,7 +108,7 @@ export function withAgentPanelsEnsured(
     placement[panelId] = AGENT_CENTER_SUB_SECTION;
   }
   return { ...layout, placement, order: { ...layout.order, [AGENT_CENTER_SUB_SECTION]: nextOrder } };
-}
+};
 
 // Ensure each of the given agent task ids has its panel placed (open) in the center
 // section. Writes once with the full reconciled snapshot, and skips the write

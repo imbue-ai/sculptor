@@ -27,6 +27,6 @@ export const APPEND_INDEX = Number.MAX_SAFE_INTEGER;
 
 // Droppable id for a sub-section's drop target. The expanded section body and the
 // collapsed section's drop rail share this id (never mounted together).
-export function sectionBodyDroppableId(subSection: SubSectionId): string {
+export const sectionBodyDroppableId = (subSection: SubSectionId): string => {
   return `section-body:${subSection}`;
-}
+};

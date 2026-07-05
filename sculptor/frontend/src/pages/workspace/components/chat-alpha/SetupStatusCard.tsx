@@ -36,7 +36,7 @@ const POPOVER_STYLE: CSSProperties = {
 
 const postNoBody = async (path: string): Promise<Response> => fetch(path, { method: "POST" });
 
-function useElapsedSinceStart(startedAt: number | null, isRunning: boolean): string {
+const useElapsedSinceStart = (startedAt: number | null, isRunning: boolean): string => {
   const [now, setNow] = useState<number>(() => Date.now() / 1000);
   useEffect(() => {
     if (!isRunning) return;
@@ -47,20 +47,20 @@ function useElapsedSinceStart(startedAt: number | null, isRunning: boolean): str
   }, [isRunning]);
   if (startedAt === null) return "0.0s";
   return formatDuration(Math.max(0, now - startedAt));
-}
+};
 
 // Render a multiline command on a single line by joining nonblank lines with
 // `&&`. Matches the bash-tool-call convention of showing one command-shaped
 // string in the header. Whitespace-only lines and trailing/leading blanks are
 // dropped.
-function joinCommandForHeader(command: string): string {
+const joinCommandForHeader = (command: string): string => {
   const segments = command
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0 && !line.startsWith("#"));
   if (segments.length === 0) return command.trim();
   return segments.join(" && ");
-}
+};
 
 type SetupRowProps = {
   title: ReactNode;
@@ -456,7 +456,7 @@ export const SetupStatusCard = ({ workspaceId }: SetupStatusCardProps): ReactEle
   );
 };
 
-function durationBetween(startedAt: number | null, finishedAt: number | null): string {
+const durationBetween = (startedAt: number | null, finishedAt: number | null): string => {
   if (startedAt === null || finishedAt === null) return "";
   return formatDuration(Math.max(0, finishedAt - startedAt));
-}
+};

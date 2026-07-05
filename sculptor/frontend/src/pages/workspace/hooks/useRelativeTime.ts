@@ -10,7 +10,7 @@ type RelativeTimeResult = {
 const EMPTY_RESULT: RelativeTimeResult = { relativeTime: "", absoluteTime: "" };
 const UPDATE_INTERVAL_MS = 60_000;
 
-function computeRelativeTime(isoTimestamp: string): string {
+const computeRelativeTime = (isoTimestamp: string): string => {
   const now = Date.now();
   const then = new Date(isoTimestamp).getTime();
   const diffSeconds = Math.floor((now - then) / 1000);
@@ -36,9 +36,9 @@ function computeRelativeTime(isoTimestamp: string): string {
 
   const diffWeeks = Math.floor(diffDays / 7);
   return `${diffWeeks}w ago`;
-}
+};
 
-function computeAbsoluteTime(isoTimestamp: string): string {
+const computeAbsoluteTime = (isoTimestamp: string): string => {
   const date = new Date(isoTimestamp);
   return date.toLocaleString(undefined, {
     month: "short",
@@ -47,9 +47,9 @@ function computeAbsoluteTime(isoTimestamp: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
-}
+};
 
-function computeResult(isoTimestamp: string | null | undefined): RelativeTimeResult {
+const computeResult = (isoTimestamp: string | null | undefined): RelativeTimeResult => {
   if (!isoTimestamp) {
     return EMPTY_RESULT;
   }
@@ -57,9 +57,9 @@ function computeResult(isoTimestamp: string | null | undefined): RelativeTimeRes
     relativeTime: computeRelativeTime(isoTimestamp),
     absoluteTime: computeAbsoluteTime(isoTimestamp),
   };
-}
+};
 
-export function useRelativeTime(isoTimestamp: string | null | undefined): RelativeTimeResult {
+export const useRelativeTime = (isoTimestamp: string | null | undefined): RelativeTimeResult => {
   // Derive the displayed value during render from the timestamp, so it always
   // reflects the latest `isoTimestamp` without an effect. The interval below
   // forces a re-render on a schedule so the relative time recomputes as
@@ -84,4 +84,4 @@ export function useRelativeTime(isoTimestamp: string | null | undefined): Relati
   }, UPDATE_INTERVAL_MS);
 
   return result;
-}
+};

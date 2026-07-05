@@ -29,13 +29,13 @@ export type TerminalPanelBaseComponent = ComponentType<{ workspaceId: string; in
 let agentBaseComponent: AgentPanelBaseComponent | null = null;
 let terminalBaseComponent: TerminalPanelBaseComponent | null = null;
 
-export function registerAgentPanelComponent(component: AgentPanelBaseComponent): void {
+export const registerAgentPanelComponent = (component: AgentPanelBaseComponent): void => {
   agentBaseComponent = component;
-}
+};
 
-export function registerTerminalPanelComponent(component: TerminalPanelBaseComponent): void {
+export const registerTerminalPanelComponent = (component: TerminalPanelBaseComponent): void => {
   terminalBaseComponent = component;
-}
+};
 
 // Single source of truth for the dynamic (multi-instance) panel id format. The id
 // embeds the agent/terminal identity behind these prefixes; isMultiInstancePanelId
@@ -43,23 +43,23 @@ export function registerTerminalPanelComponent(component: TerminalPanelBaseCompo
 export const AGENT_PANEL_ID_PREFIX = "agent:";
 export const TERMINAL_PANEL_ID_PREFIX = "terminal:";
 
-export function makeAgentPanelId(taskId: string): PanelId {
+export const makeAgentPanelId = (taskId: string): PanelId => {
   return `${AGENT_PANEL_ID_PREFIX}${taskId}`;
-}
+};
 
-export function makeTerminalPanelId(workspaceId: string, index: number): PanelId {
+export const makeTerminalPanelId = (workspaceId: string, index: number): PanelId => {
   return `${TERMINAL_PANEL_ID_PREFIX}${workspaceId}:${index}`;
-}
+};
 
 // True when a panel id is a dynamic agent/terminal panel (multi-instance). Distinct
 // from isMultiInstanceKind, which keys off the registry kind rather than the id.
-export function isMultiInstancePanelId(panelId: PanelId): boolean {
+export const isMultiInstancePanelId = (panelId: PanelId): boolean => {
   return panelId.startsWith(AGENT_PANEL_ID_PREFIX) || panelId.startsWith(TERMINAL_PANEL_ID_PREFIX);
-}
+};
 
 const componentCache = new Map<PanelId, ComponentType>();
 
-function getAgentComponent(taskId: string): ComponentType {
+const getAgentComponent = (taskId: string): ComponentType => {
   const id = makeAgentPanelId(taskId);
   let cached = componentCache.get(id);
   if (cached === undefined) {
@@ -69,9 +69,9 @@ function getAgentComponent(taskId: string): ComponentType {
     componentCache.set(id, cached);
   }
   return cached;
-}
+};
 
-function getTerminalComponent(workspaceId: string, index: number): ComponentType {
+const getTerminalComponent = (workspaceId: string, index: number): ComponentType => {
   const id = makeTerminalPanelId(workspaceId, index);
   let cached = componentCache.get(id);
   if (cached === undefined) {
@@ -81,7 +81,7 @@ function getTerminalComponent(workspaceId: string, index: number): ComponentType
     componentCache.set(id, cached);
   }
   return cached;
-}
+};
 
 // Diagnostics for an agent's context menu. Fetched lazily by the
 // sync hook when the tab's menu opens; absent/null fields disable the matching copy
@@ -125,14 +125,14 @@ export type DynamicAgentInput = {
   onMarkUnread?: () => void;
 };
 
-async function copyToClipboard(text: string): Promise<void> {
+const copyToClipboard = async (text: string): Promise<void> => {
   await navigator.clipboard.writeText(text);
-}
+};
 
 // Build an agent's tab context-menu actions: "Mark as unread" first, then the flat
 // diagnostics copy actions. Copy agent id / name are always available; session id
 // and transcript paths are disabled until a session exists.
-function buildAgentContextMenuActions(agent: DynamicAgentInput): ReadonlyArray<PanelContextMenuItem> {
+const buildAgentContextMenuActions = (agent: DynamicAgentInput): ReadonlyArray<PanelContextMenuItem> => {
   const { sessionId, claudeTranscriptPath, sculptorTranscriptPath } = agent.diagnostics ?? {};
   return [
     { label: "Mark as unread", action: () => agent.onMarkUnread?.(), testId: ElementIds.TAB_CONTEXT_MENU_MARK_UNREAD },
@@ -154,7 +154,7 @@ function buildAgentContextMenuActions(agent: DynamicAgentInput): ReadonlyArray<P
       action: () => void (sculptorTranscriptPath && copyToClipboard(sculptorTranscriptPath)),
     },
   ];
-}
+};
 
 export type DynamicTerminalInput = {
   workspaceId: string;
@@ -173,10 +173,10 @@ export type DynamicTerminalInput = {
   onRename?: (newName: string) => void;
 };
 
-export function deriveDynamicPanels(
+export const deriveDynamicPanels = (
   agents: ReadonlyArray<DynamicAgentInput>,
   terminals: ReadonlyArray<DynamicTerminalInput>,
-): ReadonlyArray<PanelDefinition> {
+): ReadonlyArray<PanelDefinition> => {
   const liveIds = new Set<PanelId>();
   const definitions: Array<PanelDefinition> = [];
 
@@ -229,4 +229,4 @@ export function deriveDynamicPanels(
   }
 
   return definitions;
-}
+};

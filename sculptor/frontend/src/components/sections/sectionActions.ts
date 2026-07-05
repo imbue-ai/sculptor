@@ -24,7 +24,7 @@ const DEFAULT_SPLIT_RATIO = 0.5;
 // Merge a section's split secondary back into its primary and drop the split.
 // Membership is placement-based (see openPanelsInSubSection), so a dynamic panel
 // that is placed but whose source has not loaded yet is still merged back.
-function closeSplitInLayout(layout: WorkspaceLayoutState, section: SectionId): WorkspaceLayoutState {
+const closeSplitInLayout = (layout: WorkspaceLayoutState, section: SectionId): WorkspaceLayoutState => {
   if (layout.splits[section] === undefined) {
     return layout;
   }
@@ -54,14 +54,14 @@ function closeSplitInLayout(layout: WorkspaceLayoutState, section: SectionId): W
 
   const activeSubSection = layout.activeSubSection === secondary ? section : layout.activeSubSection;
   return { ...layout, placement, order, splits, activePanel, activeSubSection };
-}
+};
 
-function reassignActiveOnRemoval(
+const reassignActiveOnRemoval = (
   activePanel: Partial<Record<SubSectionId, PanelId>>,
   subSection: SubSectionId,
   removed: PanelId,
   remaining: ReadonlyArray<PanelId>,
-): void {
+): void => {
   if (activePanel[subSection] !== removed) {
     return;
   }
@@ -71,7 +71,7 @@ function reassignActiveOnRemoval(
   } else {
     delete activePanel[subSection];
   }
-}
+};
 
 // ── Pure reducers ─────────────────────────────────────────────────────────────
 
@@ -85,14 +85,14 @@ type CloseSplitParams = { section: SectionId };
 type SetSplitRatioParams = { section: SectionId; ratio: number };
 type SetActiveSectionParams = { subSection: SubSectionId };
 
-function withExpandedSection(layout: WorkspaceLayoutState, section: SectionId): WorkspaceLayoutState {
+const withExpandedSection = (layout: WorkspaceLayoutState, section: SectionId): WorkspaceLayoutState => {
   if (section === "center" || layout.expanded[section] === true) {
     return layout;
   }
   return { ...layout, expanded: { ...layout.expanded, [section]: true } };
-}
+};
 
-function withMovePanel(layout: WorkspaceLayoutState, { panelId, to, index }: MovePanelParams): WorkspaceLayoutState {
+const withMovePanel = (layout: WorkspaceLayoutState, { panelId, to, index }: MovePanelParams): WorkspaceLayoutState => {
   const from = layout.placement[panelId];
   const order = { ...layout.order };
   if (from !== undefined) {
@@ -115,9 +115,12 @@ function withMovePanel(layout: WorkspaceLayoutState, { panelId, to, index }: Mov
   // place: the emptied half shows the empty-section state until the user closes
   // the split explicitly.
   return withExpandedSection({ ...layout, placement, order, activePanel }, toSection(to));
-}
+};
 
-function withOpenPanel(layout: WorkspaceLayoutState, { panelId, in: target }: OpenPanelParams): WorkspaceLayoutState {
+const withOpenPanel = (
+  layout: WorkspaceLayoutState,
+  { panelId, in: target }: OpenPanelParams,
+): WorkspaceLayoutState => {
   const existing = layout.placement[panelId];
   if (!isMultiInstancePanelId(panelId)) {
     if (existing !== undefined) {
@@ -141,9 +144,9 @@ function withOpenPanel(layout: WorkspaceLayoutState, { panelId, in: target }: Op
   const placement = { ...layout.placement, [panelId]: target };
   const activePanel = { ...layout.activePanel, [target]: panelId };
   return withExpandedSection({ ...layout, order, placement, activePanel }, toSection(target));
-}
+};
 
-function withClosePanel(layout: WorkspaceLayoutState, { panelId }: ClosePanelParams): WorkspaceLayoutState {
+const withClosePanel = (layout: WorkspaceLayoutState, { panelId }: ClosePanelParams): WorkspaceLayoutState => {
   const subSection = layout.placement[panelId];
   if (subSection === undefined) {
     return layout;
@@ -156,19 +159,19 @@ function withClosePanel(layout: WorkspaceLayoutState, { panelId }: ClosePanelPar
   // Closing the last panel in a split half deliberately leaves the split in place
   // (see withMovePanel): the emptied half shows the empty-section state.
   return { ...layout, placement, order, activePanel };
-}
+};
 
-function withSetActivePanel(
+const withSetActivePanel = (
   layout: WorkspaceLayoutState,
   { panelId, in: target }: SetActivePanelParams,
-): WorkspaceLayoutState {
+): WorkspaceLayoutState => {
   if (layout.placement[panelId] !== target) {
     return layout;
   }
   return { ...layout, activePanel: { ...layout.activePanel, [target]: panelId } };
-}
+};
 
-function withToggleSection(layout: WorkspaceLayoutState, { section }: ToggleSectionParams): WorkspaceLayoutState {
+const withToggleSection = (layout: WorkspaceLayoutState, { section }: ToggleSectionParams): WorkspaceLayoutState => {
   if (section === "center") {
     return layout;
   }
@@ -179,12 +182,12 @@ function withToggleSection(layout: WorkspaceLayoutState, { section }: ToggleSect
     activeSubSection = "center";
   }
   return { ...layout, expanded, activeSubSection };
-}
+};
 
-function withSplitSection(
+const withSplitSection = (
   layout: WorkspaceLayoutState,
   { section, panelId, axis }: SplitSectionParams,
-): WorkspaceLayoutState {
+): WorkspaceLayoutState => {
   if (layout.splits[section] !== undefined || !canSplitAxis(section, axis)) {
     return layout;
   }
@@ -206,19 +209,19 @@ function withSplitSection(
     { ...layout, splits, placement, order, activePanel, activeSubSection: secondary },
     section,
   );
-}
+};
 
-function withSetSplitRatio(
+const withSetSplitRatio = (
   layout: WorkspaceLayoutState,
   { section, ratio }: SetSplitRatioParams,
-): WorkspaceLayoutState {
+): WorkspaceLayoutState => {
   const split = layout.splits[section];
   if (split === undefined) {
     return layout;
   }
   const clamped = Math.min(SPLIT_RATIO_MAX, Math.max(SPLIT_RATIO_MIN, ratio));
   return { ...layout, splits: { ...layout.splits, [section]: { ...split, ratio: clamped } } };
-}
+};
 
 // ── Action atoms ──────────────────────────────────────────────────────────────
 
@@ -290,10 +293,10 @@ type RevealPanelParams = { workspaceId: string; panelId: PanelId; in: SubSection
 // snapshot. Holds at most one reveal; recording a new one replaces the old.
 const pendingPanelRevealAtom = atom<RevealPanelParams | null>(null);
 
-function applyPanelReveal(set: Setter, params: RevealPanelParams): void {
+const applyPanelReveal = (set: Setter, params: RevealPanelParams): void => {
   set(openPanelAtom, { panelId: params.panelId, in: params.in });
   set(jumpToSectionAtom, { subSection: params.in });
-}
+};
 
 // Open a panel in a SPECIFIC workspace's layout and jump to its section. When that
 // workspace is already the active scope the reveal applies immediately; otherwise

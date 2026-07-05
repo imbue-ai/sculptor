@@ -16,12 +16,12 @@ import {
 } from "./agentPanelPlacement.ts";
 import { taskAtomFamily, taskIdsAtom } from "./atoms/tasks.ts";
 
-function storeWith(layout: Partial<WorkspaceLayoutState>, workspaceId = "ws-test"): ReturnType<typeof createStore> {
+const storeWith = (layout: Partial<WorkspaceLayoutState>, workspaceId = "ws-test"): ReturnType<typeof createStore> => {
   const store = createStore();
   store.set(activeWorkspaceIdAtom, workspaceId);
   store.set(workspaceLayoutAtom, { ...EMPTY_WORKSPACE_LAYOUT, ...layout });
   return store;
-}
+};
 
 const taskFor = (id: string, workspaceId: string, overrides: Partial<CodingAgentTaskView> = {}): CodingAgentTaskView =>
   ({ id, workspaceId, isDeleted: false, ...overrides }) as CodingAgentTaskView;

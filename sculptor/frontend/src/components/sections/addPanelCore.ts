@@ -46,7 +46,7 @@ import type { PanelId, SubSectionId } from "./sectionTypes.ts";
 
 type AppStore = ReturnType<typeof useStore>;
 
-export function openStaticPanelInLocation(store: AppStore, panelId: PanelId, subSection: SubSectionId): void {
+export const openStaticPanelInLocation = (store: AppStore, panelId: PanelId, subSection: SubSectionId): void => {
   // Review All always OPENS on the full branch review ("All" scope). Guarded on
   // the panel not being placed yet, so re-adding/revealing an already-open panel
   // keeps whatever scope the user picked meanwhile.
@@ -57,24 +57,24 @@ export function openStaticPanelInLocation(store: AppStore, panelId: PanelId, sub
   // Adding a panel is a deliberate interaction: make its section active and pulse the
   // ring. openPanel has already expanded the section, so the jump applies.
   store.set(jumpToSectionAtom, { subSection });
-}
+};
 
 // Append a fresh tab to the workspace's persisted terminal state. The index comes from
 // terminalNextIndexAtom (monotonic) and the label reuses the lowest free number via
 // getNextTerminalLabel, so the numbering matches what useWorkspaceDynamicPanels renders.
 // Returns the new tab's index (which keys the terminal's panel id); placement is the
 // caller's concern.
-function appendTerminalTab(store: AppStore, workspaceId: string): number {
+const appendTerminalTab = (store: AppStore, workspaceId: string): number => {
   const index = store.get(terminalNextIndexAtom)[workspaceId] ?? 1;
   const existingTabs = store.get(terminalTabStateAtom)[workspaceId] ?? [];
   const newTab = { id: `terminal-${index}`, index, label: getNextTerminalLabel(existingTabs) };
   store.set(terminalTabStateAtom, (prev) => ({ ...prev, [workspaceId]: [...(prev[workspaceId] ?? []), newTab] }));
   store.set(terminalNextIndexAtom, (prev) => ({ ...prev, [workspaceId]: index + 1 }));
   return index;
-}
+};
 
 // Append a fresh terminal tab, then place the terminal panel in the sub-section.
-export function createTerminalInLocation(store: AppStore, subSection: SubSectionId): void {
+export const createTerminalInLocation = (store: AppStore, subSection: SubSectionId): void => {
   const workspaceId = store.get(activeWorkspaceIdAtom);
   if (workspaceId === null) {
     return;
@@ -85,7 +85,7 @@ export function createTerminalInLocation(store: AppStore, subSection: SubSection
   store.set(openPanelAtom, { panelId, in: subSection });
   store.set(setActivePanelAtom, { panelId, in: subSection });
   store.set(jumpToSectionAtom, { subSection });
-}
+};
 
 // Seed the workspace's first-visit terminal for the default bottom section.
 // Reuses the first existing terminal tab if one is already persisted (so a no-migration
@@ -94,13 +94,13 @@ export function createTerminalInLocation(store: AppStore, subSection: SubSection
 // createTerminalInLocation. Returns the terminal's index so the default layout can
 // reference its panel id. Unlike createTerminalInLocation it does NOT place/activate the
 // panel — buildDefaultWorkspaceLayout owns the bottom placement.
-export function seedFirstVisitTerminal(store: AppStore, workspaceId: string): number {
+export const seedFirstVisitTerminal = (store: AppStore, workspaceId: string): number => {
   const firstExisting = (store.get(terminalTabStateAtom)[workspaceId] ?? [])[0];
   if (firstExisting !== undefined) {
     return firstExisting.index;
   }
   return appendTerminalTab(store, workspaceId);
-}
+};
 
 // Resolve a stored/requested agent type against the pi feature flag: "pi" while the
 // pi harness is disabled falls back to Claude (e.g. a remembered type from before
@@ -110,9 +110,12 @@ export function seedFirstVisitTerminal(store: AppStore, workspaceId: string): nu
 // seed) resolves through here so they cannot drift. A bare "terminal" passes
 // through: the new-workspace form legitimately stores it, and surfaces that cannot
 // use it layer their own fallback on top (see normalizeRecentAgentType).
-export function resolveStoredAgentType<T extends StoredAgentType>(stored: T, isPiAgentEnabled: boolean): T | "claude" {
+export const resolveStoredAgentType = <T extends StoredAgentType>(
+  stored: T,
+  isPiAgentEnabled: boolean,
+): T | "claude" => {
   return stored === "pi" && !isPiAgentEnabled ? "claude" : stored;
-}
+};
 
 // The stored last-used agent type, normalized for the pinned "New {recent} agent"
 // row shared by the section "+" dropdown, the empty-section quick actions, the
@@ -120,12 +123,12 @@ export function resolveStoredAgentType<T extends StoredAgentType>(stored: T, isP
 // "terminal" cannot back an agent row and falls back to Claude — the add-panel
 // model has no bare terminal AGENT; the dedicated "New terminal" row owns terminal
 // creation. A disabled "pi" falls back through resolveStoredAgentType.
-export function normalizeRecentAgentType(stored: StoredAgentType, isPiAgentEnabled: boolean): StoredAgentType {
+export const normalizeRecentAgentType = (stored: StoredAgentType, isPiAgentEnabled: boolean): StoredAgentType => {
   if (stored === "terminal") {
     return "claude";
   }
   return resolveStoredAgentType(stored, isPiAgentEnabled);
-}
+};
 
 // Display label for the pinned "New {recent} agent" row, shared by the section "+"
 // dropdown and the Cmd+K "Add panel" flow so the two surfaces label the row
@@ -133,16 +136,16 @@ export function normalizeRecentAgentType(stored: StoredAgentType, isPiAgentEnabl
 // name for a registered terminal agent, and the generic "agent" when the
 // registration is unknown (removed since it was stored, or the caller has no
 // registrations list — the Cmd+K provider runs outside React and passes none).
-export function recentAgentLabel(
+export const recentAgentLabel = (
   stored: StoredAgentType,
   registrations: ReadonlyArray<TerminalAgentRegistration>,
-): string {
+): string => {
   if (stored.startsWith(REGISTERED_AGENT_TYPE_PREFIX)) {
     const { registrationId } = parseStoredAgentType(stored);
     return registrations.find((registration) => registration.registrationId === registrationId)?.displayName ?? "agent";
   }
   return AGENT_TYPE_LABELS[stored as Exclude<AgentTypeName, "registered">];
-}
+};
 
 // ── Derived read atoms for the add-panel surfaces ─────────────────────────────
 //
@@ -161,10 +164,10 @@ export const recentAgentTypeAtom: Atom<StoredAgentType> = atom((get) =>
   normalizeRecentAgentType(get(lastUsedAgentTypeAtom), get(isPiAgentEnabledAtom)),
 );
 
-function availableStaticPanelListsEqual(
+const availableStaticPanelListsEqual = (
   a: ReadonlyArray<AvailableStaticPanel>,
   b: ReadonlyArray<AvailableStaticPanel>,
-): boolean {
+): boolean => {
   return (
     a.length === b.length &&
     a.every(
@@ -172,7 +175,7 @@ function availableStaticPanelListsEqual(
         panel.id === b[index].id && panel.displayName === b[index].displayName && panel.icon === b[index].icon,
     )
   );
-}
+};
 
 // listAvailableStaticPanels over two sources; the selectAtom wrapper is what holds
 // the equality guard (a plain derived atom would emit a fresh array per recompute).
@@ -189,12 +192,12 @@ export const availableStaticPanelsAtom: Atom<ReadonlyArray<AvailableStaticPanel>
   availableStaticPanelListsEqual,
 );
 
-function locationListsEqual(a: ReadonlyArray<AddPanelLocation>, b: ReadonlyArray<AddPanelLocation>): boolean {
+const locationListsEqual = (a: ReadonlyArray<AddPanelLocation>, b: ReadonlyArray<AddPanelLocation>): boolean => {
   return (
     a.length === b.length &&
     a.every((location, index) => location.subSection === b[index].subSection && location.label === b[index].label)
   );
-}
+};
 
 // The labeled locations a panel can be added to (the Cmd+K "Add panel" location
 // page; the section "+" dropdown is already scoped to its own sub-section).
@@ -215,10 +218,10 @@ export type AgentTypeOption = {
 // The agent-type sub-menu options: Claude, pi (gated), and each registered
 // terminal-agent program. No bare "Terminal" agent type — terminal creation
 // belongs to the dedicated "New terminal" row.
-export function buildAgentTypeOptions(inputs: {
+export const buildAgentTypeOptions = (inputs: {
   isPiAgentEnabled: boolean;
   registrations: ReadonlyArray<TerminalAgentRegistration>;
-}): ReadonlyArray<AgentTypeOption> {
+}): ReadonlyArray<AgentTypeOption> => {
   const options: Array<AgentTypeOption> = [
     {
       key: "claude",
@@ -248,7 +251,7 @@ export function buildAgentTypeOptions(inputs: {
     });
   }
   return options;
-}
+};
 
 type CreateAgentInputs = { agentType: AgentTypeName; registrationId?: string; activeAgentId?: string };
 
@@ -258,11 +261,11 @@ type CreateAgentInputs = { agentType: AgentTypeName; registrationId?: string; ac
 // task loads. Placing the panel here (before the caller navigates) means the shell's
 // active-agent effect sees an existing placement and leaves the agent in this section
 // rather than pulling it into center.
-export async function createAgentInLocation(
+export const createAgentInLocation = async (
   store: AppStore,
   subSection: SubSectionId,
   inputs: CreateAgentInputs,
-): Promise<string | undefined> {
+): Promise<string | undefined> => {
   // Any create surface can hand in a remembered "pi" type from before the pi flag
   // was turned off — resolve the fallback here so no caller has to.
   const agentType: AgentTypeName = resolveStoredAgentType(inputs.agentType, store.get(isPiAgentEnabledAtom));
@@ -304,18 +307,18 @@ export async function createAgentInLocation(
     console.error("Failed to create agent:", error);
     return undefined;
   }
-}
+};
 
 // Create an agent in the sub-section, then navigate to it; on failure surface the
 // shared error toast. The add-panel dropdown / empty-state (via useAddPanelActions)
 // and the Cmd+K "New agent" row all funnel through here so their post-create
 // behavior (navigation + failure feedback) cannot drift.
-export async function createAgentAndNavigate(
+export const createAgentAndNavigate = async (
   store: AppStore,
   subSection: SubSectionId,
   inputs: CreateAgentInputs,
   navigateToAgent: (workspaceId: string, taskId: string) => void,
-): Promise<void> {
+): Promise<void> => {
   const workspaceId = store.get(activeWorkspaceIdAtom);
   const taskId = await createAgentInLocation(store, subSection, inputs);
   if (taskId !== undefined && workspaceId !== null) {
@@ -328,4 +331,4 @@ export async function createAgentAndNavigate(
     type: ToastType.ERROR,
     action: null,
   });
-}
+};

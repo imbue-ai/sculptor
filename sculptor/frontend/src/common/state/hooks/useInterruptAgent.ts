@@ -24,10 +24,10 @@ type UseInterruptAgentResult = {
 //
 // Toast state is per-hook-instance: feedback appears next to whichever
 // surface initiated the action.
-export function useInterruptAgent(
+export const useInterruptAgent = (
   workspaceID: string | undefined,
   taskID: string | undefined,
-): UseInterruptAgentResult {
+): UseInterruptAgentResult => {
   const store = useStore();
   const isInterrupting = useAtomValue(isInterruptingAtomFamily(taskID ?? ""));
   const [toast, setToast] = useState<ToastContent | null>(null);
@@ -49,4 +49,4 @@ export function useInterruptAgent(
   }, [store, workspaceID, taskID]);
 
   return { isInterrupting, interrupt, toast, setToast };
-}
+};

@@ -19,19 +19,19 @@ const PSEUDO_SKILL_BY_NAME: ReadonlyMap<PseudoSkillName, { argMode: ArgMode }> =
   PSEUDO_SKILLS.map((s) => [s.name, { argMode: s.argMode }]),
 );
 
-export function isPseudoSkill(name: string): name is PseudoSkillName {
+export const isPseudoSkill = (name: string): name is PseudoSkillName => {
   return PSEUDO_SKILL_NAMES.has(name);
-}
+};
 
 export type ParsedPseudoSkillCommand = { name: PseudoSkillName; args: string };
 
 // Matches ProseMirror's internal text-node concatenation for a single paragraph.
 // Returns the text content that *follows* the leading mention, preserving
 // embedded whitespace but stripping one leading separator.
-function collectTextAfterMention(paragraph: {
+const collectTextAfterMention = (paragraph: {
   childCount: number;
   child: (index: number) => { type: { name: string }; text?: string };
-}): string {
+}): string => {
   const parts: Array<string> = [];
   for (let i = 1; i < paragraph.childCount; i += 1) {
     const child = paragraph.child(i);
@@ -42,9 +42,9 @@ function collectTextAfterMention(paragraph: {
     }
   }
   return parts.join("").replace(/^\s+/, "");
-}
+};
 
-export function parsePseudoSkillCommand(editor: TipTapEditor, promptDraft: string): ParsedPseudoSkillCommand | null {
+export const parsePseudoSkillCommand = (editor: TipTapEditor, promptDraft: string): ParsedPseudoSkillCommand | null => {
   const doc = editor.state.doc;
   if (doc.childCount === 1) {
     const paragraph = doc.child(0);
@@ -97,4 +97,4 @@ export function parsePseudoSkillCommand(editor: TipTapEditor, promptDraft: strin
   }
 
   return null;
-}
+};

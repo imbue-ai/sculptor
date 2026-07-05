@@ -41,7 +41,7 @@ import { useWorkspaceDynamicPanels } from "./useWorkspaceDynamicPanels.ts";
 // arrangement with the center left empty (its empty state offers the add-panel
 // quick actions). Built by stripping a placeholder center panel from the standard
 // default so the two arrangements cannot drift structurally.
-function buildAgentlessDefaultLayout(terminalPanelId: PanelId): WorkspaceLayoutState {
+const buildAgentlessDefaultLayout = (terminalPanelId: PanelId): WorkspaceLayoutState => {
   const placeholderPanelId = makeAgentPanelId("placeholder");
   const layout = buildDefaultWorkspaceLayout({ agentPanelId: placeholderPanelId, terminalPanelId });
   const placement = { ...layout.placement };
@@ -49,7 +49,7 @@ function buildAgentlessDefaultLayout(terminalPanelId: PanelId): WorkspaceLayoutS
   const activePanel = { ...layout.activePanel };
   delete activePanel.center;
   return { ...layout, placement, activePanel, order: { ...layout.order, center: [] } };
-}
+};
 
 // `taskId` is the route's agent id; it is undefined for a workspace with no agents,
 // which renders the shell with an empty center instead of a blank page.

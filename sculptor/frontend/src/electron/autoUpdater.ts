@@ -170,11 +170,11 @@ class AutoUpdaterManager {
   }
 }
 
-export function initAutoUpdater(
+export const initAutoUpdater = (
   window: BrowserWindow,
   store: Store,
   onBeforeInstall?: () => void,
-): AutoUpdaterManager | null {
+): AutoUpdaterManager | null => {
   // Kill switch: setting SCULPTOR_DISABLE_AUTO_UPDATE to any non-empty value
   // prevents the auto-updater from initializing regardless of other flags.
   if (process.env.SCULPTOR_DISABLE_AUTO_UPDATE) {
@@ -202,4 +202,4 @@ export function initAutoUpdater(
   }
 
   return new AutoUpdaterManager(window, store, onBeforeInstall);
-}
+};

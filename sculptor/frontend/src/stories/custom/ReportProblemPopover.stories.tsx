@@ -36,11 +36,11 @@ const handleCopyReference = (): void => {
   console.log("copy reference");
 };
 
-function createHealthCheckStore(): ReturnType<typeof createStore> {
+const createHealthCheckStore = (): ReturnType<typeof createStore> => {
   const store = createStore();
   store.set(healthCheckDataAtom, SAMPLE_HEALTH_CHECK);
   return store;
-}
+};
 
 type StoryProps = {
   submitState: SubmitState;

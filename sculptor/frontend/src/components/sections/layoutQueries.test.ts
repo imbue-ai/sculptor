@@ -12,9 +12,9 @@ import { EMPTY_WORKSPACE_LAYOUT } from "./persistence/types.ts";
 import type { PanelDefinition } from "./registry/panelRegistry.ts";
 import { buildStaticPanelDefinitions } from "./registry/panelRegistry.ts";
 
-function layoutWith(overrides: Partial<WorkspaceLayoutState>): WorkspaceLayoutState {
+const layoutWith = (overrides: Partial<WorkspaceLayoutState>): WorkspaceLayoutState => {
   return { ...EMPTY_WORKSPACE_LAYOUT, ...overrides };
-}
+};
 
 describe("isSectionExpanded", () => {
   it("treats center as always expanded", () => {

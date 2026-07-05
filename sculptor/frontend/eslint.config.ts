@@ -142,6 +142,9 @@ export default tseslint.config(
       // This is only recommended in the open-source style guide,
       // but our style guide enforces this.
       "@typescript-eslint/explicit-function-return-type": "error",
+      // Arrow functions everywhere, not just components (components are
+      // covered by react/function-component-definition below).
+      "func-style": ["error", "expression"],
 
       // From the section "Variables":
       "no-restricted-syntax": [

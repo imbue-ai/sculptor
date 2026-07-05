@@ -49,7 +49,7 @@ type DropTarget = { to: SubSectionId; index: number };
 // pointer X. Counts only the non-dragged tabs (the live ghost is spliced into the
 // rendered strip, so it must be excluded or the index is off by one). With no
 // pointer (keyboard drag) the panel appends.
-function computeDropIndex(subSection: SubSectionId, draggedPanelId: PanelId, pointerX: number | null): number {
+const computeDropIndex = (subSection: SubSectionId, draggedPanelId: PanelId, pointerX: number | null): number => {
   if (pointerX === null) {
     return APPEND_INDEX;
   }
@@ -67,11 +67,11 @@ function computeDropIndex(subSection: SubSectionId, draggedPanelId: PanelId, poi
     }
   }
   return tabs.length;
-}
+};
 
 // The drop target resolved from a drag event, or null when the pointer is not over a
 // known drop zone (a release there is a no-op that leaves placement unchanged).
-function resolveDropTarget(event: DragMoveEvent | DragOverEvent | DragEndEvent): DropTarget | null {
+const resolveDropTarget = (event: DragMoveEvent | DragOverEvent | DragEndEvent): DropTarget | null => {
   const overData = event.over?.data.current as PanelDropData | undefined;
   if (overData?.kind !== "section-body") {
     return null;
@@ -85,7 +85,7 @@ function resolveDropTarget(event: DragMoveEvent | DragOverEvent | DragEndEvent):
   // strip auto-scrolls mid-drag, since event.delta folds in that scroll adjustment.
   const pointerX = getDragPointerCoordinates()?.x ?? null;
   return { to: overData.subSection, index: computeDropIndex(overData.subSection, activeData.panelId, pointerX) };
-}
+};
 
 export const PanelDndProvider = ({ children }: { children: ReactNode }): ReactElement => {
   const draggedPanelId = useAtomValue(draggedPanelIdAtom);

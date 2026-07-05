@@ -31,13 +31,13 @@ afterEach(() => {
 // A top-level (EnterPlanMode) tool_use block routes through the `topLevelBlocks`
 // branch, which sets `isExecuting = inProgressMessageId != null && !hasResult`.
 // ToolLine renders a PulsingDot when executing, otherwise a chevron icon.
-function planModeBlock(): ToolUseBlock {
+const planModeBlock = (): ToolUseBlock => {
   return { type: "tool_use", id: "tool-1", name: "EnterPlanMode", input: {} };
-}
+};
 
-function emptyNode(): SubagentTreeNode {
+const emptyNode = (): SubagentTreeNode => {
   return { children: new Map() } as SubagentTreeNode;
-}
+};
 
 describe("ToolBlockGroup", () => {
   // Regression: the executing check used `inProgressMessageId !== null`, so an

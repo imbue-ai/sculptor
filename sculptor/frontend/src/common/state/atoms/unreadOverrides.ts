@@ -66,12 +66,12 @@ const overridesByTaskId = new Map<string, UnreadOverride>();
 // pair getAgentDotStatus renders as a running dot.
 const isMidRun = (status: TaskStatus): boolean => status === TaskStatus.RUNNING || status === TaskStatus.BUILDING;
 
-export function setUnreadOverride(taskId: string, task: TaskReadState): void {
+export const setUnreadOverride = (taskId: string, task: TaskReadState): void => {
   overridesByTaskId.set(
     taskId,
     isMidRun(task.status) ? { expiresOn: "runCompletion" } : { expiresOn: "nextTurn", updatedAt: task.updatedAt },
   );
-}
+};
 
 // Whether the user's explicit "Mark as unread" is still in force for this task,
 // given the task's current status/updatedAt. Observing a marked-mid-run task after
@@ -80,7 +80,7 @@ export function setUnreadOverride(taskId: string, task: TaskReadState): void {
 // happens on read because every consumer (dot derivations, the useMarkRead guard)
 // re-runs on the task write that carries the completion, so it is observed
 // consistently; the mutation is idempotent for a given task state.
-export function isUnreadOverrideActive(taskId: string, task: TaskReadState): boolean {
+export const isUnreadOverrideActive = (taskId: string, task: TaskReadState): boolean => {
   const override = overridesByTaskId.get(taskId);
   if (override === undefined) {
     return false;
@@ -93,15 +93,15 @@ export function isUnreadOverrideActive(taskId: string, task: TaskReadState): boo
     return true;
   }
   return override.updatedAt === task.updatedAt;
-}
+};
 
-export function clearUnreadOverride(taskId: string): void {
+export const clearUnreadOverride = (taskId: string): void => {
   overridesByTaskId.delete(taskId);
-}
+};
 
-export function resetUnreadOverridesForTesting(): void {
+export const resetUnreadOverridesForTesting = (): void => {
   overridesByTaskId.clear();
-}
+};
 
 // The dot status for one agent with the unread override applied. An explicit
 // "Mark as unread" wins over "read": while the override is active a stale
@@ -116,14 +116,14 @@ export function resetUnreadOverridesForTesting(): void {
 // unread while the debounced mark-read lags. The override flip is applied
 // STRICTLY AFTER that — an explicit "Mark as unread" must beat viewed-as-read,
 // or marking the agent you are looking at unread would silently not stick.
-export function getAgentDotStatusWithUnreadOverride(
+export const getAgentDotStatusWithUnreadOverride = (
   taskId: string,
   task: TaskReadState & { lastReadAt: string | null },
   isFocused: boolean = false,
-): AgentDotStatus {
+): AgentDotStatus => {
   const baseDotStatus = getAgentDotStatus(task.status, task.lastReadAt, task.updatedAt, isFocused);
   return baseDotStatus === "read" && isUnreadOverrideActive(taskId, task) ? "unread" : baseDotStatus;
-}
+};
 
 // The user-facing "Mark as unread" action: record the override, flip the task's
 // lastReadAt optimistically so the dot updates immediately, and persist.

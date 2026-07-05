@@ -96,10 +96,10 @@ const noCurrentWorkspaceAtom = atom<WorkspaceView | null>(null);
  * The selector should be pure over the workspace (no external closure state):
  * its identity may change between renders, but its logic must not.
  */
-export function useCurrentWorkspace<T = WorkspaceView | null>(
+export const useCurrentWorkspace = <T = WorkspaceView | null>(
   selector?: (workspace: WorkspaceView | null) => T,
   equalityFn?: (a: T, b: T) => boolean,
-): T {
+): T => {
   // Resolve the active id: the panel's workspace if mounted in one (read
   // non-throwing, so overlays don't crash), else the current route.
   const panelContext = useContext(WorkspacePluginContext);
@@ -135,7 +135,7 @@ export function useCurrentWorkspace<T = WorkspaceView | null>(
     [sourceAtom],
   );
   return useAtomValue(selectedAtom);
-}
+};
 
 /**
  * Returns a function that navigates to a workspace by id — the host's own

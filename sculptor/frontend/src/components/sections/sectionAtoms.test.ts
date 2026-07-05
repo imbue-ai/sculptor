@@ -22,9 +22,9 @@ import {
 } from "./sectionAtoms.ts";
 import { SECTION_SIZE_MAX_PERCENT, SECTION_SIZE_MIN_PERCENT } from "./sectionGeometry.ts";
 
-function layoutWith(overrides: Partial<WorkspaceLayoutState>): WorkspaceLayoutState {
+const layoutWith = (overrides: Partial<WorkspaceLayoutState>): WorkspaceLayoutState => {
   return { ...EMPTY_WORKSPACE_LAYOUT, ...overrides };
-}
+};
 
 beforeEach(() => {
   localStorage.clear();

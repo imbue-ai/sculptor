@@ -7,18 +7,18 @@ const UPDATE_CHANNEL_DISPLAY_NAMES: Record<UpdateChannel, string> = {
   RC: "Latest",
 };
 
-export function getUpdateChannelDisplayName(channel: UpdateChannel): string {
+export const getUpdateChannelDisplayName = (channel: UpdateChannel): string => {
   return UPDATE_CHANNEL_DISPLAY_NAMES[channel];
-}
+};
 
 /**
  * Returns a human-readable status string for the current auto-update state.
  */
-export function getUpdateStatusText(
+export const getUpdateStatusText = (
   status: AutoUpdateStatus | null,
   channel: UpdateChannel | null,
   currentVersion: string | undefined,
-): string {
+): string => {
   if (!status || status.type === "disabled") {
     return "Auto-updates are disabled.";
   }
@@ -50,4 +50,4 @@ export function getUpdateStatusText(
       }
       return "Up to date.";
   }
-}
+};

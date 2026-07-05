@@ -29,32 +29,32 @@ export const SECTION_IDS: ReadonlyArray<SectionId> = ["left", "center", "right",
 
 const SECONDARY_SUFFIX = ":secondary";
 
-export function isSectionId(value: unknown): value is SectionId {
+export const isSectionId = (value: unknown): value is SectionId => {
   return value === "left" || value === "center" || value === "right" || value === "bottom";
-}
+};
 
-export function toSecondary(section: SectionId): SubSectionId {
+export const toSecondary = (section: SectionId): SubSectionId => {
   return `${section}${SECONDARY_SUFFIX}`;
-}
+};
 
-export function toSection(subSection: SubSectionId): SectionId {
+export const toSection = (subSection: SubSectionId): SectionId => {
   const index = subSection.indexOf(SECONDARY_SUFFIX);
   return (index === -1 ? subSection : subSection.slice(0, index)) as SectionId;
-}
+};
 
-export function isSecondary(subSection: SubSectionId): boolean {
+export const isSecondary = (subSection: SubSectionId): boolean => {
   return subSection.endsWith(SECONDARY_SUFFIX);
-}
+};
 
 // The primary sub-section id is the section id itself; provided for symmetry.
-export function primaryOf(section: SectionId): SubSectionId {
+export const primaryOf = (section: SectionId): SubSectionId => {
   return section;
-}
+};
 
 // Split-direction rules: left/right split top/bottom
 // (horizontal divider), bottom splits left/right (vertical divider), center allows
 // either direction.
-export function allowedSplitAxesForSection(section: SectionId): ReadonlyArray<SplitAxis> {
+export const allowedSplitAxesForSection = (section: SectionId): ReadonlyArray<SplitAxis> => {
   switch (section) {
     case "left":
     case "right":
@@ -64,11 +64,11 @@ export function allowedSplitAxesForSection(section: SectionId): ReadonlyArray<Sp
     case "center":
       return ["horizontal", "vertical"];
   }
-}
+};
 
-export function canSplitAxis(section: SectionId, axis: SplitAxis): boolean {
+export const canSplitAxis = (section: SectionId, axis: SplitAxis): boolean => {
   return allowedSplitAxesForSection(section).includes(axis);
-}
+};
 
 // The (section, axis) → user-facing direction word that labels the panel right-click
 // "Create {direction} split and move panel" option.
@@ -81,10 +81,10 @@ export function canSplitAxis(section: SectionId, axis: SplitAxis): boolean {
 // bottom only; bottom → right only; center → both).
 export type SplitDirectionOption = { axis: SplitAxis; label: string };
 
-export function splitDirectionLabel(axis: SplitAxis): string {
+export const splitDirectionLabel = (axis: SplitAxis): string => {
   return axis === "horizontal" ? "bottom" : "right";
-}
+};
 
-export function splitDirectionOptionsForSection(section: SectionId): ReadonlyArray<SplitDirectionOption> {
+export const splitDirectionOptionsForSection = (section: SectionId): ReadonlyArray<SplitDirectionOption> => {
   return allowedSplitAxesForSection(section).map((axis) => ({ axis, label: splitDirectionLabel(axis) }));
-}
+};

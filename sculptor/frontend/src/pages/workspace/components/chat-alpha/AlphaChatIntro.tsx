@@ -12,7 +12,7 @@ import { SetupStatusCard } from "./SetupStatusCard";
 
 const DETAIL_ICON_SIZE_PX = 14;
 
-function formatTimestamp(isoString: string): string {
+const formatTimestamp = (isoString: string): string => {
   const date = new Date(isoString);
   return date.toLocaleString(undefined, {
     month: "short",
@@ -20,7 +20,7 @@ function formatTimestamp(isoString: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
-}
+};
 
 export const AlphaChatIntro = (): ReactElement => {
   // The owning chat panel's agent + workspace, so the intro names the agent

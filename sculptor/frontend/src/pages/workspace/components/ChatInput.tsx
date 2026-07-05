@@ -101,14 +101,14 @@ const SEND_SPINNER_START_DELAY_MS = 1_000;
  * lives in `parsePseudoSkillCommand` but that needs a TipTap editor handle;
  * this string-only version is enough for gating.
  */
-function draftIsBypassCommand(draft: string | null | undefined): boolean {
+const draftIsBypassCommand = (draft: string | null | undefined): boolean => {
   const trimmed = (draft ?? "").trim();
   if (!trimmed.startsWith("/btw")) {
     return false;
   }
   const rest = trimmed.slice("/btw".length);
   return rest === "" || /^\s/.test(rest);
-}
+};
 
 type ChatInputProps = {
   isDisabled: boolean;

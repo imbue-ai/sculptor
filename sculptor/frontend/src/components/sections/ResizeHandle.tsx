@@ -14,17 +14,17 @@ const BODY_RESIZING_CLASS = "sculptor-resizing";
 // Counter so concurrent drags (e.g. nested handles) don't clear the class early.
 let activeDragCount = 0;
 
-function beginGlobalDrag(): void {
+const beginGlobalDrag = (): void => {
   activeDragCount += 1;
   document.body.classList.add(BODY_RESIZING_CLASS);
-}
+};
 
-function endGlobalDrag(): void {
+const endGlobalDrag = (): void => {
   activeDragCount = Math.max(0, activeDragCount - 1);
   if (activeDragCount === 0) {
     document.body.classList.remove(BODY_RESIZING_CLASS);
   }
-}
+};
 
 const KEYBOARD_STEP_FRACTION = 0.1;
 

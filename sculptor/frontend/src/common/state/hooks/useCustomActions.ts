@@ -28,14 +28,14 @@ type UseCustomActionsResult = {
   importActions: (importedActions: Array<CustomAction>, importedGroups: Array<CustomActionGroup>) => Promise<void>;
 };
 
-function getNextOrder(items: ReadonlyArray<{ order?: number }>): number {
+const getNextOrder = (items: ReadonlyArray<{ order?: number }>): number => {
   if (items.length === 0) return 0;
   return Math.max(...items.map((item) => item.order ?? 0)) + 1;
-}
+};
 
-function recomputeOrders<T extends { order?: number }>(items: Array<T>): Array<T> {
+const recomputeOrders = <T extends { order?: number }>(items: Array<T>): Array<T> => {
   return items.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((item, index) => ({ ...item, order: index }));
-}
+};
 
 export const useCustomActions = (): UseCustomActionsResult => {
   const config = useAtomValue(customActionsAtom);

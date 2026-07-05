@@ -21,7 +21,7 @@ vi.mock("./AddPanelDropdown.tsx", () => ({
 
 afterEach(cleanup);
 
-function storeWith(maximized: boolean): ReturnType<typeof createStore> {
+const storeWith = (maximized: boolean): ReturnType<typeof createStore> => {
   const store = createStore();
   store.set(activeWorkspaceIdAtom, "ws-test");
   store.set(workspaceLayoutAtom, { ...EMPTY_WORKSPACE_LAYOUT });
@@ -29,7 +29,7 @@ function storeWith(maximized: boolean): ReturnType<typeof createStore> {
     store.set(maximizedSectionAtom, "center");
   }
   return store;
-}
+};
 
 describe("SectionHeader chrome layout", () => {
   it("left-aligns the add-panel button next to the tab strip, apart from the right-pinned maximize control", () => {
@@ -66,7 +66,7 @@ describe("SectionHeader chrome layout", () => {
 // strip, "files" active. Tabs are dnd-kit draggables, so they render inside a real
 // DndContext with its default sensors — Space must stay the keyboard sensor's
 // drag-pickup key while Enter activates the tab.
-function storeWithTwoTabs(): ReturnType<typeof createStore> {
+const storeWithTwoTabs = (): ReturnType<typeof createStore> => {
   const store = createStore();
   store.set(activeWorkspaceIdAtom, "ws-test");
   store.set(workspaceLayoutAtom, {
@@ -76,9 +76,9 @@ function storeWithTwoTabs(): ReturnType<typeof createStore> {
     activePanel: { center: "files" },
   });
   return store;
-}
+};
 
-function renderTwoTabs(onDragStart?: () => void): ReturnType<typeof createStore> {
+const renderTwoTabs = (onDragStart?: () => void): ReturnType<typeof createStore> => {
   const store = storeWithTwoTabs();
   renderWithProviders(
     <DndContext onDragStart={onDragStart}>
@@ -87,7 +87,7 @@ function renderTwoTabs(onDragStart?: () => void): ReturnType<typeof createStore>
     { store },
   );
   return store;
-}
+};
 
 describe("SectionHeader keyboard activation", () => {
   it("exposes the tab strip as a horizontal tablist of tabs", () => {

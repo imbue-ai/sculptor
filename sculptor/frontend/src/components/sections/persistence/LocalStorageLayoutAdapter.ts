@@ -14,19 +14,19 @@ export const WORKSPACE_KEY_PREFIX = "sculptor-layout-ws-";
 const GLOBAL_KEY = "sculptor-layout-global";
 const WRITE_DEBOUNCE_MS = 250;
 
-function keyFor(scope: LayoutScope): string {
+const keyFor = (scope: LayoutScope): string => {
   return scope.kind === "global" ? GLOBAL_KEY : `${WORKSPACE_KEY_PREFIX}${scope.workspaceId}`;
-}
+};
 
-function isObject(value: unknown): value is Record<string, unknown> {
+const isObject = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+};
 
 // Structural guard so a valid-JSON-but-wrong-shape snapshot (e.g. a stale schema
 // or a hand-edited entry) is treated as "nothing stored" rather than hydrated and
 // crashing the layout atoms downstream. Intentionally shallow: it checks the
 // presence/kind of the top-level fields each scope's atoms rely on, not every nested value.
-function isValidSnapshot(scope: LayoutScope, value: unknown): boolean {
+const isValidSnapshot = (scope: LayoutScope, value: unknown): boolean => {
   if (!isObject(value)) {
     return false;
   }
@@ -58,7 +58,7 @@ function isValidSnapshot(scope: LayoutScope, value: unknown): boolean {
     typeof value.sidebarCollapsed === "boolean" &&
     typeof value.explorerListWidthPx === "number"
   );
-}
+};
 
 export class LocalStorageLayoutAdapter implements LayoutPersistenceAdapter {
   private readonly pending = new Map<string, unknown>();
