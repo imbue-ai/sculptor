@@ -10,9 +10,24 @@ import { POPOVER_FRIENDLY_MODAL_ATTRIBUTE } from "./popoverFriendlyModal.ts";
 type DeleteConfirmationDialogProps = {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  entityType: "workspace" | "agent";
+  entityType: "workspace" | "agent" | "terminal";
   entityName: string;
   onConfirm: () => void;
+};
+
+const DESCRIPTION_BY_TYPE: Record<DeleteConfirmationDialogProps["entityType"], (name: string) => string> = {
+  workspace: (name) => `This will permanently delete the workspace "${name}" and all of its agents.`,
+  agent: (name) => `This will permanently delete the agent "${name}".`,
+  terminal: (name) => `This will close the terminal "${name}" and end its session.`,
+};
+
+// Confirm-button verb per entity. Terminals are "closed" (they hold no durable
+// history), everything else is "deleted". Keyed on entityType so the label can't
+// drift from the title/description a caller renders.
+const CONFIRM_LABEL_BY_TYPE: Record<DeleteConfirmationDialogProps["entityType"], string> = {
+  workspace: "Delete",
+  agent: "Delete",
+  terminal: "Close",
 };
 
 export const DeleteConfirmationDialog = ({
@@ -24,11 +39,10 @@ export const DeleteConfirmationDialog = ({
 }: DeleteConfirmationDialogProps): ReactElement => {
   const dangerColor = useThemeDangerColor();
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
-  const title = `Delete ${entityType}?`;
-  const description =
-    entityType === "workspace"
-      ? `This will permanently delete the workspace "${entityName}" and all of its agents.`
-      : `This will permanently delete the agent "${entityName}".`;
+  // Terminals are "closed", not "deleted" — they hold no durable history.
+  const title = entityType === "terminal" ? "Close terminal?" : `Delete ${entityType}?`;
+  const description = DESCRIPTION_BY_TYPE[entityType](entityName);
+  const confirmLabel = CONFIRM_LABEL_BY_TYPE[entityType];
 
   // Radix' AlertDialog defaults focus to the first focusable element
   // (Cancel) for safety, which makes Enter dismiss the dialog instead of
@@ -63,7 +77,7 @@ export const DeleteConfirmationDialog = ({
               onClick={onConfirm}
               data-testid={ElementIds.DELETE_CONFIRMATION_CONFIRM}
             >
-              Delete
+              {confirmLabel}
             </Button>
           </AlertDialog.Action>
         </Flex>

@@ -14,6 +14,7 @@ import {
   globalShortcut,
   ipcMain,
   Menu,
+  nativeTheme,
   net,
   protocol,
   shell,
@@ -751,6 +752,11 @@ const createWindow = async (): Promise<void> => {
   }
 
   window = new BrowserWindow({
+    // The native layer shows this color wherever the renderer hasn't painted
+    // (window resizes, startup) — Electron's default is white, which flashes
+    // hard in dark mode. Follow the OS theme; the renderer's real background
+    // takes over as soon as it paints. Matches --color-background in dark mode.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#111111" : "#ffffff",
     width: savedBounds.width,
     height: savedBounds.height,
     x: savedBounds.x,

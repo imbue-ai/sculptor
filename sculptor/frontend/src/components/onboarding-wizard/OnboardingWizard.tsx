@@ -82,7 +82,7 @@ export const OnboardingWizard = ({ initialStep, onComplete }: OnboardingWizardPr
 
       // Identify the user in PostHog and fire the email-confirmation event.
       // The Clay webhook subscribes to this event for mailing-list signup.
-      // (Phase 2 / SCU-764 will move identification to BE; for now FE owns it.)
+      // The frontend owns PostHog identification.
       if (isTelemetryEnabled) {
         identifyAnalyticsUser(email, fullName ? { full_name: fullName } : {});
         posthog.capture("onboarding.email_confirmation", {

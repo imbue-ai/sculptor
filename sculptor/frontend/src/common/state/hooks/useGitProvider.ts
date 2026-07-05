@@ -1,7 +1,7 @@
-import type { GitProvider } from "~/pages/workspace/components/PrButton.tsx";
-
-import type { ProjectID } from "../../Types";
+import type { ProjectID } from "../../Types.ts";
 import { useRepoInfo } from "./useRepoInfo.ts";
+
+export type GitProvider = "github" | null;
 
 export const useGitProvider = (projectId: ProjectID): GitProvider => {
   const { repoInfo } = useRepoInfo(projectId);

@@ -1,10 +1,10 @@
-"""Integration tests for restart-MRU restoration of workspace, agent, and draft tabs.
+"""Integration tests for restart-MRU restoration of workspace and agent tabs.
 
 Cold start should reproduce the user's last-active tab synchronously
-from the sculptor-tabs localStorage entry: workspace + agent URL,
-draft URL, or /ws/new when no MRU was ever recorded or the saved
-workspace was deleted between sessions. Also covers the legacy
-sculptor-tab-order → sculptor-tabs migration.
+from the sculptor-tabs localStorage entry: the workspace + agent URL, or
+/home when no MRU was ever recorded or the saved workspace was deleted
+between sessions. Also covers the legacy sculptor-tab-order → sculptor-tabs
+migration.
 """
 
 import json
@@ -13,7 +13,7 @@ import re
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
+from sculptor.testing.elements.new_workspace_dialog import PlaywrightNewWorkspaceDialog
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -60,29 +60,36 @@ def test_restart_restores_active_workspace_and_agent(
         expect(task_page.get_chat_panel()).to_be_visible()
 
 
-@user_story("to come back to the same /ws/new draft I was on when I quit")
-def test_restart_restores_draft_tab(
+@user_story("to restore my workspace after restart, with no leftover new-workspace surface")
+def test_restart_does_not_restore_new_workspace_modal(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
-    """A draft (/ws/new/<draftId>) should be restored on restart, not replaced with a fresh draft."""
+    """The new-workspace modal is transient: opening it persists no draft tab to restore.
+
+    Workspace creation happens in a modal over the app shell, not on a routed /ws/new
+    draft page, so opening it over a workspace keeps the MRU pointed at the workspace
+    underneath. A cold start restores that workspace's URL and the modal does not
+    reappear.
+    """
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
-        add_ws_page = PlaywrightAddWorkspacePage(page)
-        expect(add_ws_page.get_submit_button()).to_be_visible()
-        draft_url_hash = _hash_of(page)
-        assert re.match(r"^#/ws/new/[^/]+$", draft_url_hash), draft_url_hash
+        start_task_and_wait_for_ready(page, prompt="Hi", workspace_name="Modal MRU WS")
+        active_url_hash = _hash_of(page)
+        assert re.match(r"^#/ws/[^/]+/agent/[^/]+$", active_url_hash), active_url_hash
+        # Opening the modal over the workspace must not overwrite the MRU with a draft.
+        PlaywrightNewWorkspaceDialog(page).open_via_shortcut()
 
     with sculptor_instance_factory_.spawn_instance() as instance:
-        expect(instance.page).to_have_url(
-            re.compile(re.escape(draft_url_hash) + "$"),
-        )
+        page = instance.page
+        expect(page).to_have_url(re.compile(re.escape(active_url_hash) + "$"))
+        expect(PlaywrightNewWorkspaceDialog(page).get_dialog()).to_have_count(0)
 
 
-@user_story("to land on /ws/new when my last workspace was deleted between sessions")
+@user_story("to land on Home when my last workspace was deleted between sessions")
 def test_restart_clears_pointer_when_workspace_deleted(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
-    """Saved active workspace that no longer exists should drop the entry and land on /ws/new."""
+    """Saved active workspace that no longer exists should drop the entry and land on /home."""
     bogus_ws_id = "ws_01" + "0" * 24
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
@@ -100,20 +107,20 @@ def test_restart_clears_pointer_when_workspace_deleted(
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
         # The rootLoader optimistically redirects, then WorkspacePage's validation
-        # effect splices the bogus entry and navigates to /ws/new.
-        expect(page).to_have_url(re.compile(r"#/ws/new"))
+        # effect splices the bogus entry and navigates to /home.
+        expect(page).to_have_url(re.compile(r"#/home"))
         tabs = _read_sculptor_tabs(page)
         assert tabs is not None
         assert all(entry["tabId"] != bogus_ws_id for entry in tabs["order"]), tabs
 
 
-@user_story("to start at /ws/new on a fresh install with no MRU")
-def test_restart_with_no_mru_lands_on_new(
+@user_story("to start on Home on a fresh install with no MRU")
+def test_restart_with_no_mru_lands_on_home(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
-    """Cold start with empty localStorage should land on /ws/new/<uuid>."""
+    """Cold start with empty localStorage should land on /home."""
     with sculptor_instance_factory_.spawn_instance() as instance:
-        expect(instance.page).to_have_url(re.compile(r"#/ws/new/"))
+        expect(instance.page).to_have_url(re.compile(r"#/home"))
 
 
 @user_story("to keep my tab list when upgrading from the prior build")

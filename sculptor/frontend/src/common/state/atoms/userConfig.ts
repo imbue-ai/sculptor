@@ -146,12 +146,6 @@ export const ciBabysitterAgentAtom = atom<NonNullable<CiBabysitterConfig["agent"
 );
 
 // File browser settings
-export const fileBrowserSplitRatioAtom = atom<number>((get) => get(userConfigAtom)?.fileBrowserDefaultSplitRatio ?? 50);
-
-export const fileBrowserTabCloseBehaviorAtom = atom<"mru" | "adjacent">(
-  (get) => (get(userConfigAtom)?.fileBrowserTabCloseBehavior as "mru" | "adjacent") ?? "mru",
-);
-
 export const fileBrowserLineWrappingAtom = atom<"wrap" | "scroll">(
   (get) => (get(userConfigAtom)?.fileBrowserLineWrapping as "wrap" | "scroll") ?? "wrap",
 );
@@ -174,11 +168,6 @@ export const isSmoothStreamingUserPreferenceAtom = atom<boolean>(
   (get) => (get(userConfigAtom)?.isSmoothStreamingEnabled as boolean | undefined) ?? true,
 );
 
-// Per-workspace panel layout
-export const isPanelLayoutPerWorkspaceAtom = atom<boolean>(
-  (get) => get(userConfigAtom)?.isPanelLayoutPerWorkspace ?? false,
-);
-
 // In-place workspaces (opt-in — off by default)
 export const isInPlaceWorkspacesEnabledAtom = atom<boolean>(
   (get) => get(userConfigAtom)?.enableInPlaceWorkspaces ?? false,
@@ -198,9 +187,6 @@ export const workspaceBranchDeletionPolicyAtom = atom<"never" | "delete_if_safe"
     (get(userConfigAtom)?.workspaceBranchDeletionPolicy as "never" | "delete_if_safe" | "always" | undefined) ??
     "delete_if_safe",
 );
-
-// Review All combined diff view (experimental — off by default)
-export const isReviewAllEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableReviewAll ?? false);
 
 // Entity mentions (experimental — off by default)
 export const isEntityMentionsEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableEntityMentions ?? false);

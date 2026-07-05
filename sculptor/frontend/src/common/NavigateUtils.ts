@@ -2,17 +2,15 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
+import { markSwitchStart } from "./perf/workspaceSwitchProfiler.ts";
 import { setActiveTabByIdAtom, setAgentForWorkspaceAtom, workspaceAtomFamily } from "./state/atoms/workspaces";
 
 type ImbueNavigationFunctions = {
   navigateToWorkspace: (workspaceID: string) => void;
   navigateToAgent: (workspaceID: string, agentID: string) => void;
-  navigateToAddWorkspace: (draftId?: string) => void;
   navigateToHome: () => void;
   navigateToGlobalSettings: (section?: string) => void;
   navigateToRepoSetupCommand: (projectId: string) => void;
-  navigateToPanelSettings: (panelId: string) => void;
-  navigateToComponentGallery: () => void;
   navigateToRoot: () => void;
 };
 
@@ -24,6 +22,7 @@ export const useImbueNavigate = (): ImbueNavigationFunctions => {
   return {
     navigateToWorkspace: useCallback(
       (workspaceID: string): void => {
+        markSwitchStart(workspaceID);
         navigate(`/ws/${workspaceID}`);
       },
       [navigate],
@@ -36,17 +35,12 @@ export const useImbueNavigate = (): ImbueNavigationFunctions => {
     // and redirect to /ws/<wsId> instead of /ws/<wsId>/agent/<agentID>.
     navigateToAgent: useCallback(
       (workspaceID: string, agentID: string): void => {
+        markSwitchStart(workspaceID);
         setActiveTabById(workspaceID);
         setAgentForWorkspace({ wsId: workspaceID, agentId: agentID });
         navigate(`/ws/${workspaceID}/agent/${agentID}`);
       },
       [navigate, setActiveTabById, setAgentForWorkspace],
-    ),
-    navigateToAddWorkspace: useCallback(
-      (draftId?: string): void => {
-        navigate(`/ws/new/${draftId ?? crypto.randomUUID()}`);
-      },
-      [navigate],
     ),
     navigateToHome: useCallback((): void => {
       navigate(`/home`);
@@ -63,15 +57,6 @@ export const useImbueNavigate = (): ImbueNavigationFunctions => {
       },
       [navigate],
     ),
-    navigateToPanelSettings: useCallback(
-      (panelId: string): void => {
-        navigate(`/settings?section=PANELS&panel=${encodeURIComponent(panelId)}`);
-      },
-      [navigate],
-    ),
-    navigateToComponentGallery: useCallback((): void => {
-      navigate(`/component-gallery`);
-    }, [navigate]),
     navigateToRoot: useCallback((): void => {
       navigate(`/`);
     }, [navigate]),
@@ -81,11 +66,8 @@ export const useImbueNavigate = (): ImbueNavigationFunctions => {
 type ImbueLocationType = {
   isAgentRoute: boolean;
   isWorkspaceRoute: boolean;
-  isAddWorkspaceRoute: boolean;
-  addWorkspaceDraftId: string | null;
   isHomeRoute: boolean;
   isSettingsRoute: boolean;
-  isComponentGalleryRoute: boolean;
   /** Parsed `workspaceId` from the current pathname, or null when not on a workspace/agent route. */
   workspaceId: string | null;
   /** Parsed agent (task) id from the current pathname, or null when not on an agent route. */
@@ -97,14 +79,13 @@ export const useImbueLocation = (): ImbueLocationType => {
   const pathname = location.pathname;
 
   const isAgentRoute = /^\/ws\/[^/]+\/agent\/[^/]+$/.test(pathname);
-  const addWorkspaceMatch = pathname.match(/^\/ws\/new\/([^/]+)$/);
-  const isAddWorkspaceRoute = /^\/ws\/new(\/[^/]+)?$/.test(pathname);
-  const addWorkspaceDraftId = addWorkspaceMatch ? addWorkspaceMatch[1] : null;
   const isHomeRoute = /^\/home$/.test(pathname);
   const isSettingsRoute = /^\/settings$/.test(pathname);
-  const isComponentGalleryRoute = /^\/component-gallery$/.test(pathname);
   // A "workspace route" means we're viewing a specific workspace (or one of
-  // its agents). Excludes the new-workspace draft page (/ws/new/...).
+  // its agents). "new" is never parsed as a workspace id — /ws/new is a
+  // reserved path (workspace creation lives in the new-workspace dialog, or
+  // EmptyFirstRunPage when the workspace list is empty), and the rootLoader
+  // redirects draft tabs — which have no URL — to /home.
   const isWorkspaceRoute = /^\/ws\/(?!new\b)[^/]+/.test(pathname);
 
   // Parse the workspace + agent ids from the path. We can't use `useParams`
@@ -117,11 +98,8 @@ export const useImbueLocation = (): ImbueLocationType => {
   return {
     isAgentRoute,
     isWorkspaceRoute,
-    isAddWorkspaceRoute,
-    addWorkspaceDraftId,
     isHomeRoute,
     isSettingsRoute,
-    isComponentGalleryRoute,
     workspaceId,
     agentId,
   };

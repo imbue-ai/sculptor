@@ -13,6 +13,7 @@ from playwright.sync_api import expect
 
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_to_home_page
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -194,11 +195,9 @@ def test_at_mention_persists_as_styled_span_after_workspace_switch(
     expect(mention_span).to_be_visible()
     expect(mention_span).to_contain_text("stuff")
 
-    # Navigate to Home, then click the workspace tab to go back
+    # Navigate to Home, then click the workspace row to go back
     navigate_to_home_page(page)
-    workspace_tab = task_page.get_workspace_tabs()
-    expect(workspace_tab).to_be_visible()
-    workspace_tab.click()
+    navigate_to_workspace(page)
 
     # After switching back the mention span must still render correctly —
     # the bug caused the raw "<span data-sculptor-node>…</span>" HTML to appear

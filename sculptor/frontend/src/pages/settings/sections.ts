@@ -5,7 +5,6 @@ import {
   FolderTreeIcon,
   GitBranchIcon,
   KeyboardIcon,
-  LayoutGridIcon,
   PaintbrushIcon,
   PlayIcon,
   PuzzleIcon,
@@ -34,7 +33,6 @@ export const SettingsSection = {
   GENERAL: "GENERAL",
   AGENT: "AGENT",
   KEYBINDINGS: "KEYBINDINGS",
-  PANELS: "PANELS",
   PLUGINS: "PLUGINS",
   DEPENDENCIES: "DEPENDENCIES",
   PI: "PI",
@@ -91,14 +89,6 @@ export const SETTINGS_SECTIONS: ReadonlyArray<SettingsSectionDescriptor> = [
     paletteKeywords: ["shortcuts", "hotkeys"],
     icon: KeyboardIcon,
     testId: ElementIds.SETTINGS_NAV_KEYBINDINGS,
-  },
-  {
-    id: SettingsSection.PANELS,
-    displayName: "Panels",
-    paletteSubtitle: "Configure panel layout, shortcuts, and visibility",
-    paletteKeywords: ["layout", "docking", "zones"],
-    icon: LayoutGridIcon,
-    testId: ElementIds.SETTINGS_NAV_PANELS,
   },
   // The Plugins section is always visible: it hosts the frontend-plugins
   // master switch, so it must stay reachable even when the system is off (to

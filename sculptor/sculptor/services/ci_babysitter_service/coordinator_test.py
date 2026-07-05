@@ -1198,7 +1198,7 @@ def test_pinned_registered_unavailable_is_disabled(
 def test_deliver_prompt_to_agent_writes_to_terminal_via_helper(
     env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The seam dispatches a registered-terminal task through the Task 1.1 helper.
+    # The seam dispatches a registered-terminal task through the shared helper.
     coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
     terminal_config = RegisteredTerminalAgentConfig(
         registration_id="claude-code",

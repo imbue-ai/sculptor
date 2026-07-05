@@ -137,3 +137,33 @@ def test_user_config_silently_ignores_removed_chat_view_legacy_field() -> None:
         }
     )
     assert not hasattr(config, "chat_view_legacy")
+
+
+def test_user_config_tolerates_and_drops_stale_keys() -> None:
+    """Deleted `UserConfig` fields keep parsing without error.
+
+    On-disk config files and payloads from older clients can contain keys for
+    fields that no longer exist on the model. `SerializableModel` validates
+    with `extra="allow"` and clears `__pydantic_extra__` in `model_post_init`,
+    so stale keys of any shape (scalars, nested objects) are accepted and then
+    dropped — they must not raise, and must not survive a round trip.
+    """
+    stale_keys = {
+        "isPanelLayoutPerWorkspace": True,
+        "fileBrowserDefaultSplitRatio": 65,
+        "panelLayout": {"zoneAssignments": {"chat": "left"}, "zoneSizes": {"left": 0.4}},
+        "someFutureUnknownSetting": "value",
+    }
+    config = UserConfig.model_validate(
+        {
+            "userEmail": "test@example.com",
+            "userId": "user123",
+            "organizationId": "org123",
+            "instanceId": "inst123",
+            **stale_keys,
+        }
+    )
+    assert config.user_email == "test@example.com"
+    dumped = config.model_dump(by_alias=True)
+    for key in stale_keys:
+        assert key not in dumped

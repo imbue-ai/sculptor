@@ -49,7 +49,12 @@ export const updateTasksAtom = atom(null, (get, set, updates: Record<string, Cod
     }
   });
 
-  if (didIdsChange) {
+  // Write even when nothing changed if the list is still undefined: every
+  // stream frame carries a task-view map, so the first one — empty in a
+  // zero-task instance — marks the list as loaded. Consumers rely on the
+  // undefined → array transition to tell "still loading" from "no tasks"
+  // (e.g. WorkspacePage's agentless-workspace gate).
+  if (didIdsChange || get(taskIdsAtom) === undefined) {
     set(taskIdsAtom, Array.from(seenIds));
   }
 });
@@ -80,13 +85,6 @@ export const rollbackDeleteTaskAtom = atom(
   },
 );
 
-// Holds optimistic agent titles by agent id while a rename is in flight (and for a
-// short trailing window after, to mask stale WebSocket pushes — see the comment in
-// AgentTabs.tsx where this is set). Both AgentTabs and the chat intro read from this
-// atom so the tab label and intro text update in lockstep instead of the intro waiting
-// for the rename round-trip to update taskAtomFamily.
-export const pendingAgentTitlesAtom = atom<Readonly<Record<string, string>>>({});
-
 // Fine-grained derived atoms for commonly-read task fields.
 // Components subscribing to these only re-render when the specific field changes.
 // Jotai uses Object.is for primitive comparisons, so string/boolean fields that
@@ -99,6 +97,13 @@ export const taskStatusAtomFamily = atomFamily<string, Atom<TaskStatus | undefin
 // Terminal agents carry no model (`model` is null); treat that the same as "unknown".
 export const taskModelAtomFamily = atomFamily<string, Atom<string | undefined>>((taskId) =>
   atom((get) => get(taskAtomFamily(taskId))?.model ?? undefined),
+);
+
+// The workspace that owns the task — immutable once the task view has loaded,
+// so subscribers re-render only on load/removal, never on task churn (status,
+// timestamps, artifacts, ...).
+export const taskWorkspaceIdAtomFamily = atomFamily<string, Atom<string | undefined>>((taskId) =>
+  atom((get) => get(taskAtomFamily(taskId))?.workspaceId ?? undefined),
 );
 
 // A stable reference for the "no backend list" case, so the derived atom below

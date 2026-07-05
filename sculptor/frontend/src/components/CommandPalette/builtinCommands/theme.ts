@@ -6,10 +6,8 @@ import { APPEARANCE_MODES } from "~/common/theme/appearanceModes.ts";
 import type { CommandRuntime } from "../runtime.ts";
 import type { Command } from "../types.ts";
 
-// Theme commands share the "view" group with panel / layout commands
-// (see groups.ts — heading is "Theme & Layout"). Explicit low `order`
-// values ensure theme entries lead the merged group, with panel /
-// layout rows (which use higher orders, see panels.ts) following.
+// Theme commands make up the "view" group (see groups.ts — heading is
+// "Theme"); panel / section rows live in the separate "panels" group.
 export const buildThemeCommands = (runtime: CommandRuntime): Array<Command> => [
   {
     id: "theme.toggle",
@@ -20,8 +18,7 @@ export const buildThemeCommands = (runtime: CommandRuntime): Array<Command> => [
     icon: MoonIcon,
     shortcut: "toggle_theme",
     // Promoted to primary so it shares the primary tier with the other
-    // root-level Theme & Layout entries — without this, the existing
-    // sort would place it after every primary panel/layout row.
+    // root-level Theme entries.
     primary: true,
     // Order 10 so this leads `theme.switch` (order 20) in the static
     // sort. Both score the same on the "theme" query (word-prefix tier

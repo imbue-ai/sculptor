@@ -35,7 +35,6 @@ from sculptor.testing.packaged_electron_frontend import PackagedElectronFactory
 from sculptor.testing.playwright_utils import delete_all_workspaces_via_ui
 from sculptor.testing.playwright_utils import delete_project_via_settings
 from sculptor.testing.playwright_utils import expect_app_not_onboarding
-from sculptor.testing.playwright_utils import reset_active_panel_to_files
 from sculptor.testing.port_manager import PortManager
 from sculptor.testing.repo_resources import get_test_project_state
 from sculptor.testing.server_utils import SculptorFactory
@@ -305,25 +304,28 @@ class SculptorInstance:
         self.page.goto("about:blank")
 
         # Reset persistent user-config flags only after the previous SPA
-        # has been unloaded.  If we PUT the reset while the old page is
-        # still alive, a debounced sync hook (e.g. usePanelLayoutSync)
-        # can fire afterwards and PUT the full stale config back —
-        # silently re-enabling flags like enableInPlaceWorkspaces and
-        # breaking the next test.  about:blank tears down the React
-        # tree, which cancels those pending timers.
+        # has been unloaded.  While the old page is still alive its React
+        # tree can still issue a config PUT (an in-flight or queued settings
+        # write); if one lands after our reset it silently re-writes a flag
+        # like enableInPlaceWorkspaces and breaks the next test.  about:blank
+        # tears down that tree first, so no write from the previous test can
+        # race the reset below.
         self._reset_user_config_defaults()
 
         self.page.goto(f"{self.frontend_url}#/ws/new")
 
-        # Wait for the Add Workspace page to render — raise if onboarding
-        # shows instead (no shared-instance test should trigger onboarding).
-        start_task_button = self.page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
-        expect_app_not_onboarding(self.page, start_task_button)
+        # Wait for the app shell to render — raise if onboarding shows instead (no
+        # shared-instance test should trigger onboarding). The sidebar rail is the
+        # universal "app rendered" signal in the new shell (present whether this lands on
+        # the add-workspace form, the empty-first-run page, or a workspace).
+        app_ready = self.page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
+        expect_app_not_onboarding(self.page, app_ready)
 
-        # Verify no workspace tabs leaked through via stale WebSocket updates.
-        workspace_tabs = self.page.get_by_test_id(ElementIDs.WORKSPACE_TAB)
-        if workspace_tabs.count() > 0:
-            logger.debug("Stale workspace tab(s) after reset — deleting via UI")
+        # Workspace cleanup is API-based (_delete_all_workspaces_via_api in _pre_test); this
+        # is only a belt-and-suspenders leak check for any row that lingered in the sidebar.
+        workspace_rows = self.page.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW)
+        if workspace_rows.count() > 0:
+            logger.debug("Stale workspace row(s) after reset — deleting via UI")
             delete_all_workspaces_via_ui(self.page)
 
     # Hard upper bound on _pre_test duration.  If cleanup takes longer than
@@ -384,11 +386,11 @@ class SculptorInstance:
         flag is better caught here than as a failure later.
 
         After a successful PUT we reload the page so the frontend's in-memory
-        userConfigAtom picks up the reset values.  Without the reload, the
-        frontend's debounced sync hooks (e.g. usePanelLayoutSync, which fires
-        ~2s after any panel change) can write the stale userConfigAtom — still
-        carrying the previous test's flags — back to the backend, undoing the
-        reset before the test body runs.  See SCU-541 for the original failure.
+        userConfigAtom picks up the reset values.  Without the reload, a later
+        config write from the still-live frontend — built from the stale
+        userConfigAtom, which still carries the previous test's flags — writes
+        those flags back to the backend, undoing the reset before the test body
+        runs.  See SCU-541 for the original failure.
         """
         base_url = self.backend_api_url.rstrip("/")
         timeout = self._default_timeout_ms
@@ -490,17 +492,14 @@ class SculptorInstance:
 
         # Dismiss any open popover/context menu/dialog left by the previous test.
         self.page.keyboard.press("Escape")
-        reset_active_panel_to_files(self.page)
-        self._check_pre_test_timeout("reset_active_panel_to_files", start, test_id)
 
         self._delete_all_workspaces_via_api()
         self._check_pre_test_timeout("delete_all_workspaces_via_api", start, test_id)
 
         # Note: _reset_user_config_defaults() runs inside _reset_browser_state
         # below, after about:blank has unloaded the previous page's JS.
-        # Resetting earlier races with debounced config syncs (e.g.
-        # usePanelLayoutSync) that PUT the full stale config and undo the
-        # reset.
+        # Resetting earlier races a config write from the still-live previous
+        # page, which could land after the reset and undo it.
 
         self._empty_fake_bin_dir()
         self._check_pre_test_timeout("empty_fake_bin_dir", start, test_id)

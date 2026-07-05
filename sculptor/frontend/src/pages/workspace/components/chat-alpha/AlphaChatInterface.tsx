@@ -15,7 +15,6 @@ import {
   sendWorkspaceAgentMessages,
   TaskStatus,
 } from "~/api";
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
 import { chatSearchVisibleAtom } from "~/common/state/atoms/chatSearch.ts";
 import { AgentLightboxProvider } from "~/components/AgentLightboxContext.tsx";
@@ -44,6 +43,7 @@ import {
 import { AlphaPromptNavigator } from "./AlphaPromptNavigator.tsx";
 import { AlphaSearchBar } from "./AlphaSearchBar.tsx";
 import { chatToolDensityAtom } from "./atoms.ts";
+import { useChatTask } from "./ChatTaskContext.tsx";
 import { useAlphaActivePromptIndex } from "./hooks/useAlphaActivePromptIndex.ts";
 import { useAlphaAutoScroll } from "./hooks/useAlphaAutoScroll.ts";
 import { useAlphaPromptNav } from "./hooks/useAlphaPromptNav.ts";
@@ -78,7 +78,8 @@ export const AlphaChatInterface = ({
   pendingBackgroundTaskCount,
   bottomSentinelRef,
 }: AlphaChatInterfaceProps): ReactElement => {
-  const { workspaceID, agentID: taskID } = useWorkspacePageParams();
+  // The PANEL's agent identity, seeded by ChatPanelContent — never the route's.
+  const { workspaceId: workspaceID, taskId: taskID } = useChatTask();
   const [toast, setToast] = useState<ToastContent | null>(null);
   // Stable callback so the memoized <Toast> below bails out instead of
   // re-rendering on every unrelated parent render. (SCU-1455)
@@ -184,7 +185,7 @@ export const AlphaChatInterface = ({
     scrollContainerRef,
     filteredNodes.length,
     lastMessageRole,
-    taskID ?? "",
+    taskID,
     scrollMachine,
     introHeight,
     isProgrammaticScrollRef,
@@ -203,14 +204,14 @@ export const AlphaChatInterface = ({
     virtualizer,
     lastMessageRole,
     lastUserMessageIndex,
-    taskID ?? "",
+    taskID,
     scrollMachine,
     isProgrammaticScrollRef,
   );
 
   // Scroll position persistence per task
   const filteredMessageRefs = useMemo(() => filteredNodes.map((n) => ({ id: n.message.id })), [filteredNodes]);
-  useAlphaScrollPersistence(scrollContainerRef, virtualizer, taskID ?? "", filteredMessageRefs, scrollMachine);
+  useAlphaScrollPersistence(scrollContainerRef, virtualizer, taskID, filteredMessageRefs, scrollMachine);
 
   // Prompt navigation: ArrowUp/Down to cycle through user prompts
   const filteredChatMessages = useMemo(() => filteredNodes.map((n) => n.message), [filteredNodes]);
@@ -517,7 +518,7 @@ export const AlphaChatInterface = ({
   }, [submitAnswersToBackend, pendingUserQuestion, taskID, workspaceID]);
 
   return (
-    <AgentLightboxProvider taskId={taskID ?? ""}>
+    <AgentLightboxProvider taskId={taskID}>
       <ChatScrollProvider scrollContainerRef={scrollContainerRef} isUserScrollingRef={isUserScrollingRef}>
         <Flex
           direction="column"
@@ -636,7 +637,7 @@ export const AlphaChatInterface = ({
             (pendingUserQuestion ? (
               <AskUserQuestion
                 key={pendingUserQuestion.toolUseId}
-                taskId={taskID ?? ""}
+                taskId={taskID}
                 questionData={pendingUserQuestion}
                 onSubmit={handleSubmitAnswers}
                 onDismiss={handleDismissQuestion}
@@ -649,10 +650,12 @@ export const AlphaChatInterface = ({
                 appendTextRef={appendTextRef}
                 insertSkillRef={insertSkillRef}
                 editorRef={editorRef}
+                taskId={taskID}
+                workspaceId={workspaceID}
                 showPromptNavHint
               />
             ))}
-          {taskStatus === TaskStatus.ERROR && <ErrorInput workspaceId={workspaceID} taskId={taskID ?? ""} />}
+          {taskStatus === TaskStatus.ERROR && <ErrorInput workspaceId={workspaceID} taskId={taskID} />}
         </Flex>
       </ChatScrollProvider>
       <Toast open={!!toast} onOpenChange={handleToastOpenChange} title={toast?.title} type={toast?.type} />

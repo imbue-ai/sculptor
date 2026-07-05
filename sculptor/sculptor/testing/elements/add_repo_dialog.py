@@ -8,10 +8,12 @@ class PlaywrightAddRepoDialogElement(PlaywrightIntegrationTestElement):
     def select_local_source(self) -> None:
         """Click the "Local" source radio card so the path-input form is shown.
 
-        The dialog defaults to GitHub, which keeps the Local form mounted but
-        hidden (`display:none`). Tests that drive the path input must select
-        Local first or Playwright will time out waiting for the input to
-        become visible.
+        Local is the dialog's default source, so on a freshly opened dialog
+        this click is an idempotent no-op (radio semantics: clicking the
+        selected card keeps it selected). Tests still call it to make their
+        precondition explicit — and it stays required for flows that switched
+        to GitHub, where the Local form is mounted but hidden (`display:none`)
+        and Playwright would time out waiting for the path input.
         """
         self.get_source_local_card().click()
 

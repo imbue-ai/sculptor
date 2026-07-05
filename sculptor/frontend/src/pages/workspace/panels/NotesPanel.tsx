@@ -1,22 +1,27 @@
 import { Flex } from "@radix-ui/themes";
-import { useAtom } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
 import { CopyIcon, TextCursorInput } from "lucide-react";
 import type { ReactElement } from "react";
 import { useState } from "react";
 
 import { ElementIds } from "~/api";
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { notesDraftAtomFamily } from "~/common/state/atoms/notesDrafts.ts";
 import { usePromptDraft } from "~/common/state/hooks/usePromptDraft.ts";
 import { Editor } from "~/components/Editor.tsx";
 import { PanelHeader } from "~/components/panels/PanelHeader.tsx";
+import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 
 import { UndoQueuedMessageDialog } from "../components/UndoQueuedMessageDialog.tsx";
 import styles from "./NotesPanel.module.scss";
+import { activeChatAgentIdAtomFamily } from "./workspaceAgentActions.ts";
 
 export const NotesPanel = (): ReactElement => {
-  const { workspaceID, agentID: taskID } = useWorkspacePageParams();
+  // Identity comes from the section shell, not the route: "add to prompt"
+  // must target the workspace's current chat agent, and the route's agent id
+  // goes stale when a different center tab is activated.
+  const workspaceID = useAtomValue(activeWorkspaceIdAtom) ?? "";
+  const taskID = useAtomValue(activeChatAgentIdAtomFamily(workspaceID));
   const [notes, setNotes] = useAtom(notesDraftAtomFamily(workspaceID));
   const [promptDraft, setPromptDraft] = usePromptDraft(taskID ?? "");
   const [isConflictOpen, setIsConflictOpen] = useState(false);
@@ -80,4 +85,15 @@ export const NotesPanel = (): ReactElement => {
       />
     </Flex>
   );
+};
+
+// The single-instance Notes panel for the section/panel shell: a thin, no-prop
+// wrapper that gates on the active workspace and renders the existing notes content.
+// Keyed on the workspace id so switching workspaces shows that workspace's notes.
+export const NotesPanelForShell = (): ReactElement | null => {
+  const workspaceId = useAtomValue(activeWorkspaceIdAtom);
+  if (workspaceId === null) {
+    return null;
+  }
+  return <NotesPanel key={workspaceId} />;
 };

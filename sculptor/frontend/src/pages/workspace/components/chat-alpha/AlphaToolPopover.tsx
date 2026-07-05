@@ -6,10 +6,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ToolResultBlock, ToolUseBlock } from "~/api";
 import { isGenericToolContent } from "~/common/Guards.ts";
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
 
 import styles from "./AlphaToolPopover.module.scss";
+import { useChatTask } from "./ChatTaskContext.tsx";
 import { OutsideWorkspaceIcon } from "./OutsideWorkspaceIcon.tsx";
 import headerStyles from "./PopoverHeader.module.scss";
 import { PopoverHeader } from "./PopoverHeader.tsx";
@@ -70,7 +70,7 @@ const ReadEntry = ({
   const text = getResultText(result);
   const lineCount = text ? text.trimEnd().split("\n").length : null;
 
-  const { workspaceID } = useWorkspacePageParams();
+  const { workspaceId: workspaceID } = useChatTask();
   const openFileViewTab = useSetAtom(openFileViewTabAtom);
   const [isCopied, setIsCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);

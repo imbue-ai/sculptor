@@ -22,9 +22,7 @@ import {
   isDefaultFastModeAtom,
   isEntityMentionsEnabledAtom,
   isInPlaceWorkspacesEnabledAtom,
-  isPanelLayoutPerWorkspaceAtom,
   isPiAgentEnabledAtom,
-  isReviewAllEnabledAtom,
   isSmoothStreamingUserPreferenceAtom,
   userEmailAtom,
 } from "../../common/state/atoms/userConfig.ts";
@@ -42,7 +40,6 @@ import { EnvironmentVariablesSection } from "./components/EnvironmentVariablesSe
 import { FileBrowserSettingsSection } from "./components/FileBrowserSettingsSection.tsx";
 import { GitSettingsSection } from "./components/GitSettingsSection.tsx";
 import { KeybindingsSection } from "./components/KeybindingsSection.tsx";
-import { PanelsSettingsSection } from "./components/PanelsSettingsSection.tsx";
 import { PiSettingsSection } from "./components/PiSettingsSection.tsx";
 import { PluginsSettingsSection } from "./components/PluginsSettingsSection.tsx";
 import { ReposSection } from "./components/ReposSection.tsx";
@@ -69,7 +66,14 @@ const getDisplayName = (section: SettingsSection): string => SECTION_DISPLAY_NAM
 const activeSectionAtom = atomWithStorage<SettingsSection>("sculptor-settings-active-section", SettingsSection.GENERAL);
 
 export const SettingsPage = (): ReactElement => {
-  const [activeSection, setActiveSection] = useAtom(activeSectionAtom);
+  const [storedSection, setActiveSection] = useAtom(activeSectionAtom);
+  // A persisted section id can outlive the section it names (e.g. a section that
+  // existed in an earlier build is gone here). An unknown value would leave the
+  // nav unhighlighted, the mobile Select trigger blank, and every content branch
+  // false — so fall back to General, mirroring the ?section= guard below.
+  const activeSection: SettingsSection = (Object.values(SettingsSection) as Array<string>).includes(storedSection)
+    ? storedSection
+    : SettingsSection.GENERAL;
   const [searchParams] = useSearchParams();
   const { install, isInstalling } = useInstallUpdate();
 
@@ -86,11 +90,9 @@ export const SettingsPage = (): ReactElement => {
   const isAlwaysInterruptAndSend = useAtomValue(isAlwaysInterruptAndSendAtom);
   const isInPlaceWorkspacesEnabled = useAtomValue(isInPlaceWorkspacesEnabledAtom);
   const isCloneWorkspacesEnabled = useAtomValue(isCloneWorkspacesEnabledAtom);
-  const isReviewAllEnabled = useAtomValue(isReviewAllEnabledAtom);
   const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
   const isEntityMentionsEnabled = useAtomValue(isEntityMentionsEnabledAtom);
   const isSmoothStreamingEnabled = useAtomValue(isSmoothStreamingUserPreferenceAtom);
-  const isPanelLayoutPerWorkspace = useAtomValue(isPanelLayoutPerWorkspaceAtom);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
   const autoUpdateStatus = useAtomValue(autoUpdateStatusAtom);
@@ -357,9 +359,6 @@ export const SettingsPage = (): ReactElement => {
               {activeSection === SettingsSection.KEYBINDINGS && (
                 <KeybindingsSection onSettingChange={handleSettingChange} />
               )}
-              {activeSection === SettingsSection.PANELS && (
-                <PanelsSettingsSection onSettingChange={handleSettingChange} />
-              )}
               {activeSection === SettingsSection.PLUGINS && (
                 <PluginsSettingsSection onSettingChange={handleSettingChange} />
               )}
@@ -422,17 +421,6 @@ export const SettingsPage = (): ReactElement => {
                     />
                   </SettingRow>
                   <SettingRow
-                    title="Per-workspace panel layout"
-                    description="Panel visibility and sizes are local to each workspace. Panel positions are still shared."
-                  >
-                    <Switch
-                      checked={isPanelLayoutPerWorkspace}
-                      onCheckedChange={(checked) =>
-                        handleSettingChange(UserConfigField.IS_PANEL_LAYOUT_PER_WORKSPACE, checked)
-                      }
-                    />
-                  </SettingRow>
-                  <SettingRow
                     title="In-place workspaces"
                     description="Allow creating in-place workspaces that operate directly in your repository instead of a clone."
                   >
@@ -454,16 +442,6 @@ export const SettingsPage = (): ReactElement => {
                         handleSettingChange(UserConfigField.ENABLE_CLONE_WORKSPACES, checked)
                       }
                       data-testid={ElementIds.SETTINGS_ENABLE_CLONE_WORKSPACES_TOGGLE}
-                    />
-                  </SettingRow>
-                  <SettingRow
-                    title="Review All"
-                    description="Show the Review All combined diff view in the File Browser."
-                  >
-                    <Switch
-                      checked={isReviewAllEnabled}
-                      onCheckedChange={(checked) => handleSettingChange(UserConfigField.ENABLE_REVIEW_ALL, checked)}
-                      data-testid={ElementIds.SETTINGS_ENABLE_REVIEW_ALL_TOGGLE}
                     />
                   </SettingRow>
                   <SettingRow

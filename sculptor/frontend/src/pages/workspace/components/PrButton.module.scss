@@ -12,39 +12,16 @@
   white-space: nowrap;
 }
 
-.createSplitButton {
+// The create action is a single button; editing the PR prompt lives in its
+// right-click context menu.
+.createButton {
   composes: splitButtonBase;
-}
-
-.createMainArea {
-  align-items: center;
-  background: transparent;
-  border: none;
   cursor: pointer;
-  display: inline-flex;
-  font-family: inherit;
-  font-size: inherit;
   gap: var(--space-1);
   padding: 2px var(--space-2);
 
   &:hover {
     background: var(--gray-a4);
-    border-radius: var(--radius-2) 0 0 var(--radius-2);
-  }
-}
-
-.createChevronArea {
-  align-items: center;
-  background: transparent;
-  border: none;
-  border-left: 1px solid var(--gray-a4);
-  cursor: pointer;
-  display: inline-flex;
-  padding: 2px var(--space-1);
-
-  &:hover {
-    background: var(--gray-a4);
-    border-radius: 0 var(--radius-2) var(--radius-2) 0;
   }
 }
 

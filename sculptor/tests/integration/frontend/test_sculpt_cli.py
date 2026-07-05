@@ -23,8 +23,9 @@ from typing import Any
 import playwright.sync_api
 from playwright.sync_api import expect
 
-from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
+from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropdownElement
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
 from sculptor.testing.pages.home_page import PlaywrightHomePage
@@ -1380,14 +1381,17 @@ def test_sculpt_agent_send_types_into_registered_terminal_agent_pty(
         f'display_name = "Fake Prompts"\nlaunch_command = "{_FAKE_PROMPTS_COMMAND}"\naccepts_automated_prompts = true\n'
     )
     try:
-        # Launch the registered terminal agent and wait until it is at its prompt.
-        agent_tab_bar = PlaywrightAgentTabBarElement(page)
-        agent_tab_bar.open_agent_type_menu()
-        registered_item = agent_tab_bar.get_agent_type_menu_item_registered("fake-prompts")
+        # Launch the registered terminal agent via the section `+` add-panel
+        # dropdown and wait until it is at its prompt.
+        panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+        dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
+        dropdown.open()
+        dropdown.open_agent_type_submenu()
+        registered_item = dropdown.get_agent_type_item_registered("fake-prompts")
         expect(registered_item).to_be_visible()
         registered_item.click()
 
-        prompts_tab = agent_tab_bar.get_agent_tab_by_name("Fake Prompts 1").first
+        prompts_tab = panel_tabs.get_panel_tab_by_name("Fake Prompts 1").first
         expect(prompts_tab).to_be_visible()
         expect(get_agent_terminal_panel(page)).to_be_visible()
         wait_for_xterm_substring(page, "FAKE-PROMPTS-BANNER")

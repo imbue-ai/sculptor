@@ -9,18 +9,14 @@ from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 
 
 class PlaywrightDiffPanelElement(PlaywrightIntegrationTestElement):
-    """Page Object Model for the diff panel.
+    """Page Object Model for the single embedded diff/file viewer.
 
-    Wraps the panel's DOM region so tests can interact with tabs, the
-    read-only preview, and inline diff views without holding raw test-id
-    locators.
+    The section shell renders ONE embedded ``DiffViewer`` per host panel
+    (Files / Changes / Commits) — there is no multi-file tab bar. This POM
+    wraps that single viewer's DOM region (``DIFF_PANEL``) so tests can read
+    the open file's header, read-only preview, and inline diff views without
+    holding raw test-id locators.
     """
-
-    def get_tabs(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.DIFF_TAB)
-
-    def get_tab_by_name(self, tab_text: str) -> Locator:
-        return self.get_tabs().filter(has_text=tab_text)
 
     def get_loading_bar(self) -> Locator:
         """The indeterminate progress bar shown while a diff fetch is in flight.
@@ -31,56 +27,14 @@ class PlaywrightDiffPanelElement(PlaywrightIntegrationTestElement):
         """
         return self.get_by_role("progressbar")
 
-    def close_tab(self, tab_text: str) -> None:
-        """Close the tab labelled ``tab_text`` via its hover-revealed close button."""
-        tab = self.get_tab_by_name(tab_text)
-        expect(tab).to_be_visible()
-        tab.hover()
-        close_btn = tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
-        expect(close_btn).to_be_visible()
-        close_btn.click()
-
-    def get_file_view_marker(self) -> Locator:
-        """Hidden marker element rendered inside file-view tab labels.
-
-        File-view, single-diff, combined-review, and commit-diff tabs all
-        share the ``DIFF_TAB`` test id; the marker is what distinguishes a
-        file-view tab from the others.
-        """
-        return self._page.get_by_test_id(ElementIDs.FILE_VIEW_TAB_MARKER)
-
     def get_file_header(self) -> Locator:
         return self.get_by_test_id(ElementIDs.DIFF_FILE_HEADER)
 
     def get_read_only_preview(self) -> Locator:
         return self.get_by_test_id(ElementIDs.READ_ONLY_PREVIEW)
 
-    def get_file_sections(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.COMBINED_DIFF_FILE_SECTION)
-
-    def get_scope_picker(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.DIFF_SCOPE_PICKER)
-
-    def get_scope_all(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.DIFF_SCOPE_ALL)
-
-    def get_scope_uncommitted(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.DIFF_SCOPE_UNCOMMITTED)
-
-    def get_expand_toggle(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.DIFF_EXPAND_TOGGLE)
-
     def get_unified_diff_views(self) -> Locator:
         return self.get_by_test_id(ElementIDs.DIFF_VIEW_UNIFIED)
-
-    def close_other_tabs_via_context_menu(self, tab_text: str) -> None:
-        """Right-click a tab and select 'Close other tabs' from the context menu."""
-        tab = self.get_tab_by_name(tab_text)
-        expect(tab).to_be_visible()
-        tab.click(button="right")
-        close_others = self._page.get_by_test_id("close-other-tabs")
-        expect(close_others).to_be_visible()
-        close_others.click()
 
     def get_split_view_toggle(self) -> Locator:
         return self.get_by_test_id(ElementIDs.DIFF_SPLIT_VIEW_TOGGLE)
@@ -90,9 +44,6 @@ class PlaywrightDiffPanelElement(PlaywrightIntegrationTestElement):
 
     def get_line_wrap_toggle(self) -> Locator:
         return self.get_by_test_id(ElementIDs.DIFF_LINE_WRAP_TOGGLE)
-
-    def get_close_panel_button(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.DIFF_CLOSE_PANEL_BUTTON)
 
     def get_render_toggle(self) -> Locator:
         return self.get_by_test_id(ElementIDs.DIFF_RENDER_TOGGLE)
@@ -146,13 +97,15 @@ class PlaywrightDiffPanelElement(PlaywrightIntegrationTestElement):
             split_toggle.click()
         expect(split_toggle).to_have_attribute("data-state", "split")
 
-    def expect_shows_file_view(self, tab_text: str) -> None:
-        """Assert a file-view tab with ``tab_text`` is open and rendering content."""
+    def expect_shows_file(self, file_name: str) -> None:
+        """Assert the single viewer is open and rendering ``file_name``'s content.
+
+        The single embedded viewer shows one file at a time. A file is "open"
+        when the viewer is visible, its header breadcrumb shows the basename,
+        and the read-only preview renders the content (without a load error).
+        """
         expect(self).to_be_visible()
-        tab = self.get_tab_by_name(tab_text)
-        expect(tab.first).to_be_visible()
-        file_view_tab = tab.filter(has=self.get_file_view_marker())
-        expect(file_view_tab.first).to_be_visible()
+        expect(self.get_file_header()).to_contain_text(file_name)
         expect(self.get_read_only_preview()).to_be_visible()
         expect(self).not_to_contain_text("Could not load file content")
 

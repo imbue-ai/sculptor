@@ -16,7 +16,7 @@ export const buildChatCommands = (runtime: CommandRuntime): Array<Command> => [
     shortcut: "focus_input",
     // Only show on surfaces where there's actually a chat input to
     // focus. The `focus_input` keybinding (in
-    // usePageLayoutKeyboardShortcuts) covers the AddWorkspace name
+    // useGlobalKeyboardShortcuts) covers the AddWorkspace name
     // input as a separate, keyboard-only fallback — but the palette
     // row's title says "Focus chat input", so it must not surface
     // anywhere a chat input doesn't exist.

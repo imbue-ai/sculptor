@@ -23,13 +23,17 @@ from tenacity import wait_fixed
 from sculptor.constants import ElementIDs
 from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.state.messages import LLMModel
+from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.base import type_into_tiptap
 from sculptor.testing.elements.chat_panel import select_model_by_name
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.elements.user_config import enable_clone_workspaces
 from sculptor.testing.elements.user_config import enable_pi_agent
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.pages.settings_page import PlaywrightSettingsPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.utils import get_playwright_modifier_key
 
 _ResponseT = TypeVar("_ResponseT")
 
@@ -62,158 +66,304 @@ def expect_app_not_onboarding(page: Page, app_element: Locator, *, timeout: int 
         )
 
 
-def navigate_to_home_page(page: Page) -> None:
-    """Navigate to the Home page (/home).
+def _expect_home_landed(page: Page) -> None:
+    """Wait for the Home destination to render after navigating to ``/home``.
 
-    Clicks the Home button in the top bar, or falls back to direct URL
-    navigation when the button is not visible (e.g. on settings page).
+    The ``/home`` route resolves to one of two pages depending on the workspace
+    list. With workspaces it is the Home list page, which shows workspace rows
+    (or, in the search-empty case, the ``ADD_WORKSPACE_EMPTY_STATE`` heading).
+    With NO workspaces the app gate swaps in the empty-first-run page instead —
+    it renders neither of those, just the inline new-workspace form keyed by
+    ``EMPTY_FIRST_RUN_PAGE``. All three are valid "we landed on Home" signals;
+    waiting on only the first two times out whenever the list is empty (e.g.
+    right after pre-test cleanup deletes every workspace).
     """
-    home_button = page.get_by_test_id(ElementIDs.HOME_BUTTON)
-    if home_button.is_visible():
-        home_button.click()
-        # Wait for the workspace list or empty state to appear
-        workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
-        empty_state = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
-        expect(workspace_rows.first.or_(empty_state)).to_be_visible(timeout=10000)
-        return
-
-    # Home button not visible — navigate via URL. Append the hash directly to
-    # the base (no extra "/"): an injected slash would turn a document path
-    # like ".../index.html" into ".../index.html/", breaking relative-to-
-    # document asset resolution under the sculptor://app origin.
-    base_url = page.url.split("#")[0].rstrip("/")
-    page.goto(f"{base_url}#/home")
     workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
     empty_state = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
-    expect(workspace_rows.first.or_(empty_state)).to_be_visible(timeout=10000)
+    empty_first_run = page.get_by_test_id(ElementIDs.EMPTY_FIRST_RUN_PAGE)
+    expect(workspace_rows.first.or_(empty_state).or_(empty_first_run)).to_be_visible(timeout=10000)
 
 
-def navigate_to_add_workspace_page(page: Page) -> None:
-    """Navigate to the Add Workspace page (/ws/new).
+def ensure_sidebar_expanded(page: Page) -> None:
+    """Expand the sidebar when a prior step collapsed it.
 
-    Clicks the "+" button in the workspace tabs bar, or is a no-op if the
-    submit button is already visible (i.e. we're already on the page).
-    Falls back to direct URL navigation when on a page that doesn't show
-    workspace controls (e.g. settings).
+    Collapsing does not hide the sidebar — it unmounts it (``AppShell`` and the
+    empty first-run page render ``CollapsedSidebarToggle`` in its place), so
+    while collapsed the sidebar's nav links do not exist in the DOM at all.
+    Helpers that click sidebar chrome call this first so they find their
+    targets even after a collapse — whether by the test itself or leftover from
+    the previous test on the shared instance (per-test cleanup runs against the
+    prior test's end state before the browser reset restores the default).
 
-    If an "Open Workspace" tab already exists in the tab bar, clicks it
-    instead of creating a new one via "+".  This avoids creating duplicate
-    tabs when the add-workspace page is still loading (e.g. fetching projects).
+    Waits for one of the two mutually exclusive shell states (rail or expand
+    icon) to render before deciding, so a call racing a fresh page load doesn't
+    misread "not rendered yet" as "expanded". The only surface rendering
+    neither is the onboarding wizard, where sidebar navigation is meaningless —
+    a timeout here is the correct loud failure.
     """
-    submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
-    if submit_button.is_visible():
+    sidebar = page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
+    expand_icon = page.get_by_test_id(ElementIDs.SIDEBAR_EXPAND_ICON)
+    expect(sidebar.or_(expand_icon)).to_be_visible()
+    if expand_icon.is_visible():
+        expand_icon.click()
+    expect(sidebar).to_be_visible()
+
+
+def navigate_to_home_page(page: Page) -> None:
+    """Navigate to the Home page (/home) via the sidebar Home link.
+
+    The sidebar renders on every in-app route (``AppShell`` hosts them all, and
+    the empty first-run page mounts its own copy), so the Home link is always
+    reachable once the sidebar is expanded — ``ensure_sidebar_expanded``
+    restores it when a prior step collapsed the rail.
+    """
+    ensure_sidebar_expanded(page)
+    sidebar_home_link = page.get_by_test_id(ElementIDs.SIDEBAR_HOME_LINK)
+    expect(sidebar_home_link).to_be_visible()
+    sidebar_home_link.click()
+    _expect_home_landed(page)
+
+
+def navigate_to_workspace(page: Page, name_or_index: str | int = 0) -> None:
+    """Navigate to a workspace by clicking its sidebar row.
+
+    Navigation happens through the sidebar's workspace rows (the successor to
+    the home-page rows). ``name_or_index`` selects the row by its visible name
+    (substring match) or by zero-based position.
+
+    Workspace rows only exist while at least one workspace does, so callers
+    must have created (or be positioned on) a workspace already.
+    """
+    # The new-workspace modal renders a dimmed dialog overlay that covers the
+    # whole page, so a sidebar row beneath it is not clickable (Playwright's
+    # actionability check fails on "stable"). A common caller sequence is
+    # ``open_new_workspace_form`` (which opens that modal) then
+    # ``navigate_to_workspace`` to return — so dismiss the modal first.
+    # (First, before expanding the sidebar: the overlay would intercept the
+    # expand-toggle click too.)
+    dialog = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)
+    if dialog.count() > 0:
+        page.keyboard.press("Escape")
+        expect(dialog).to_have_count(0)
+
+    ensure_sidebar_expanded(page)
+    rows = page.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW)
+    if isinstance(name_or_index, int):
+        row = rows.nth(name_or_index)
+    else:
+        row = rows.filter(has_text=name_or_index)
+    expect(row).to_be_visible()
+    # Capture the target workspace id BEFORE clicking — the row button stamps it
+    # as ``data-workspace-id`` — for the settle gate below. Reading it from the
+    # row is race-free; the post-click URL is only a fallback because Playwright's
+    # cached ``page.url`` can momentarily lag a hash-only navigation.
+    target_workspace_id = row.get_attribute("data-workspace-id")
+    row.click()
+    # Settle on the workspace shell before returning so a caller that follows
+    # with a non-retrying check doesn't race the route change. The landing signal
+    # must hold in BOTH shell modes: the normal grid mounts SECTION_CENTER, but a
+    # workspace restored to its per-workspace maximize renders ONLY the maximized
+    # section's PanelSection (no SECTION_CENTER container), so keying on
+    # SECTION_CENTER alone would time out there. Every rendered PanelSection —
+    # normal or maximized, even a zero-agent workspace's empty center — carries
+    # the sub-section-suffixed ring-host testid, so any match means the shell
+    # landed. The testid is suffixed per sub-section (no single id to match), so
+    # this uses a data-testid prefix selector, encapsulated here like the POMs'
+    # tab selectors to honour the integration-test css-locator ratchet.
+    #
+    # Waiting on the ring host is race-free even though the ACTIVE-SECTION RING is
+    # transient (it pulses on workspace entry and fades shortly after). The testid
+    # names the PanelSection ROOT div, which stays mounted for as long as the
+    # section renders; the ring itself is only a CSS ``::after`` overlay on that div
+    # whose opacity fades via the ring-visible flag (RING_VISIBLE_MS). So the fade
+    # never unmounts the element this waits on — only its overlay styling changes —
+    # and the host cannot disappear out from under the wait.
+    ring_hosts = page.locator(f'[data-testid^="{ElementIDs.SECTION_ACTIVE_RING}-"]')
+    expect(ring_hosts.first).to_be_visible()
+    # A visible ring-host is necessary but NOT sufficient: on a workspace→workspace
+    # switch the route changes a commit before the layout scope flips (the flip lands
+    # in useWorkspaceShellBootstrap's layout effect), so the PREVIOUS workspace's
+    # ring-host is still mounted and this check can pass inside that pre-flip window —
+    # a follow-up non-retrying POM snapshot would then read the old workspace's panels.
+    # Gate on the shell's settle attribute, which WorkspaceLayoutShell stamps from
+    # the post-flip scope (activeWorkspaceIdAtom), so it equals the target id only
+    # once the layout atoms describe the new workspace. The workspace URL segment
+    # (``/ws/<id>``, with or without an ``/agent/<id>`` suffix) backs up the row
+    # attribute. Non-workspace destinations never reach here (this helper only
+    # clicks workspace rows), so Home/Settings navigations are unaffected.
+    if target_workspace_id is None:
+        workspace_match = re.search(r"/ws/([^/?#]+)", page.url)
+        target_workspace_id = workspace_match.group(1) if workspace_match is not None else None
+    if target_workspace_id is not None:
+        # data-active-workspace-id is a plain data attribute (its value is the id, not
+        # a fixed testid), so it is matched by a raw attribute selector, encapsulated
+        # here like the ring-host prefix selector above to honour the css-locator ratchet.
+        settled_shell = page.locator("[data-active-workspace-id]")
+        expect(settled_shell).to_have_attribute("data-active-workspace-id", target_workspace_id)
+
+
+def get_workspace_creation_button(page: Page) -> tuple[Locator, bool]:
+    """Resolve the workspace-creation surface and its create button.
+
+    Two surfaces create a workspace, and both use ``NEW_WORKSPACE_CREATE_BUTTON``:
+    the new-workspace modal (when workspaces already exist) and the inline
+    empty-first-run form (when none do). They are distinguished by the modal's
+    ``NEW_WORKSPACE_DIALOG`` wrapper, which only the modal renders.
+
+    Waits for the create button to mount, then returns ``(button, is_inline_form)``
+    where ``is_inline_form`` is true for the empty-first-run form (which pre-seeds
+    the prompt) and false for the modal.
+    """
+    create_button = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_CREATE_BUTTON)
+    expect(create_button).to_be_visible(timeout=45_000)
+    is_inline_form = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG).count() == 0
+    return create_button, is_inline_form
+
+
+def open_new_workspace_modal(page: Page) -> None:
+    """Press the new-workspace keybinding until the modal's create button appears.
+
+    The ``new_workspace`` shortcut (Cmd/Meta+T) is a ``window`` keydown handler,
+    but a single press can be lost: focus may sit in the chat input (a prior
+    ``start_task_and_wait_for_ready`` leaves it focused) or in a still-open / just-
+    closed Radix overlay (a model/select dropdown), and while a dismissible overlay
+    is the active element the shortcut hook's overlay-suppression branch swallows
+    the press without opening the modal. Dismiss an intercepting overlay (Escape)
+    and blur the active element before each press so it reaches the handler, then
+    retry — a retried press is harmless because the modal toggle is keyed off the
+    create button being absent (it is only pressed again while no modal is open).
+    """
+    create_button = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_CREATE_BUTTON)
+    mod = get_playwright_modifier_key()
+
+    def _press_and_wait() -> None:
+        page.keyboard.press("Escape")
+        blur_active_element(page)
+        page.keyboard.press(f"{mod}+t")
+        page.keyboard.up(mod)
+        expect(create_button).to_be_visible(timeout=5_000)
+
+    retry(
+        stop=stop_after_delay(45),
+        wait=wait_fixed(0.1),
+        retry=retry_if_exception_type(AssertionError),
+        reraise=True,
+    )(_press_and_wait)()
+
+
+def open_new_workspace_form(page: Page) -> None:
+    """Bring up a workspace-creation surface (the new-workspace modal or inline form).
+
+    No-op if a create surface is already showing — either the inline empty-first-run
+    form or an already-open modal exposes ``NEW_WORKSPACE_CREATE_BUTTON``. Otherwise
+    opens the new-workspace modal via the ``new_workspace`` keybinding (Cmd/Meta+T)
+    and waits for its create button to appear.
+
+    Callers may arrive parked on a surface that exposes NEITHER create button nor
+    chat panel: the Settings page (a prior step navigated there, or a config flag
+    helper's GET+PUT+``page.reload()`` reloaded the current ``/settings`` URL), or
+    the Home workspace list (a prior step routed Home, and workspaces now exist so
+    it renders the list rather than the empty-first-run inline form). Both are
+    recognized below so the settle never times out, and from either the modal
+    shortcut opens the create button.
+    """
+    create_button = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_CREATE_BUTTON)
+    # The center section is the "we are on a workspace" signal — present whatever the
+    # active panel is. CHAT_PANEL alone misses a workspace whose active agent is a
+    # terminal (no chat panel), which would leave the settle below with nothing to match.
+    workspace_shell = page.get_by_test_id(ElementIDs.SECTION_CENTER)
+    chat_panel = page.get_by_test_id(ElementIDs.CHAT_PANEL)
+    settings_page = page.get_by_test_id(ElementIDs.SETTINGS_PAGE)
+    # The empty-first-run page (no workspaces anywhere) hosts the inline create form,
+    # but its create button only mounts AFTER the form finishes loading projects, so
+    # the page can be parked here with no create button yet. This is its own settle
+    # signal — and a multi-repo create-in-sequence routinely lands here between
+    # workspaces (a create-and-delete leaves zero workspaces) — so it must be in the
+    # settle set or a caller parked here times out before the button mounts.
+    empty_first_run = page.get_by_test_id(ElementIDs.EMPTY_FIRST_RUN_PAGE)
+    # The Home workspace list (rows, or its search-empty heading) is a valid
+    # parked surface too: it exposes no create button until the modal opens, so
+    # it must be in the settle set or a caller parked there times out.
+    home_list = page.get_by_test_id(ElementIDs.WORKSPACE_ROW).first.or_(
+        page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
+    )
+
+    # Settle on a known surface before deciding. Without this, a non-waiting
+    # is_visible() check on a not-yet-rendered page can race: pressing the modal
+    # shortcut on the empty-first-run page (where it is disabled, and where the
+    # inline form is the create surface) would open the modal OVER the inline form
+    # and leave its overlay stuck. Wait until a create surface is showing (inline
+    # form or already-open modal), the empty-first-run page is up, we are on a
+    # workspace (chat panel), parked on Settings, or sitting on the Home list.
+    #
+    # ``.first`` is required: these surfaces OVERLAP (the empty-first-run page shows
+    # both EMPTY_FIRST_RUN_PAGE and, once its form loads, NEW_WORKSPACE_CREATE_BUTTON),
+    # so the bare ``or_`` chain resolves to >1 element and a strict-mode
+    # ``to_be_visible()`` raises "resolved to N elements". ``.first`` makes the wait
+    # mean "at least one of these surfaces is visible", which is the intent.
+    expect(
+        create_button.or_(chat_panel).or_(workspace_shell).or_(settings_page).or_(empty_first_run).or_(home_list).first
+    ).to_be_visible(timeout=45_000)
+    # Parked on Settings (no create affordance) — route Home, which settles on a
+    # definite Home surface: the empty-first-run inline form (no workspaces) or the
+    # Home workspace list. navigate_to_home_page waits for Home to land, so no extra
+    # wait is needed here.
+    if settings_page.is_visible():
+        navigate_to_home_page(page)
+    if create_button.is_visible():
         return
 
-    # If an add-workspace tab already exists (e.g. from an earlier redirect or
-    # navigation), click it instead of creating a new one.  This handles the
-    # case where we're already on /ws/new/<draftId> but the form is still
-    # loading (showing a spinner while projects load).
-    add_workspace_tab = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_TAB)
-    if add_workspace_tab.count() > 0:
-        add_workspace_tab.first.click()
-        expect(submit_button).to_be_visible(timeout=45_000)
+    # On the empty-first-run page the inline form IS the create surface, but its
+    # create button mounts only after the form loads projects — and the modal
+    # shortcut (Cmd/Meta+T) is disabled here, so falling through to it
+    # would hang. Wait for the inline create button to appear instead.
+    if empty_first_run.is_visible():
+        expect(create_button).to_be_visible(timeout=45_000)
         return
 
-    add_workspace_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
-    if add_workspace_button.is_visible():
-        add_workspace_button.click()
-        expect(submit_button).to_be_visible(timeout=45_000)
-        return
-
-    # Neither button visible (e.g. on settings page) — navigate via URL.
-    # Use the base URL without a hash to force the SPA to reinitialize from
-    # the root loader, which redirects to /ws/new.  A hash-only goto can be
-    # a no-op if the router thinks we're already on a /ws/new path.
-    base_url = page.url.split("#")[0].rstrip("/")
-    page.goto(base_url)
-    page.wait_for_load_state("domcontentloaded")
-    expect(submit_button).to_be_visible(timeout=45_000)
+    # No create surface yet — a workspace (chat panel) or the Home list. Open the
+    # modal via the new_workspace keybinding (Cmd/Meta+T), which is mounted on every
+    # route. The empty-first-run case already returned above via the inline button.
+    open_new_workspace_modal(page)
 
 
 def reset_active_panel_to_files(page: Page) -> None:
-    """Click the files sidebar icon to ensure the file browser is active.
+    """Reveal the Files panel in the workspace's seeded left section.
 
-    Any test that clicks a different sidebar tab changes the
-    ``activePanelPerZone`` atom.  Calling this resets it through normal
-    UI interaction so subsequent tests start with the default panel visible.
-
-    No-op if the sidebar icons aren't visible (e.g. on the Add Workspace page).
+    An earlier step in the same test may have moved Files out of the left section
+    (e.g. dragged it to the right) or activated a different tab there, so this
+    expands the left section and re-activates the Files tab when it is present, and
+    no-ops when it is not. Callers must already be on an open workspace — the left
+    section (and ``expand_section``'s workspace-header toggle) only exist there.
+    ``expand_section`` is idempotent and rides out header re-render churn on its
+    own, so no extra guarding is needed here.
     """
-    files_icon = page.get_by_test_id(ElementIDs.PANEL_ICON_FILES)
-    if files_icon.is_visible():
-        files_icon.click()
-        # Click again to ensure the panel is *active* (first click might toggle
-        # it closed if it was already active, second click re-opens it).
-        if not page.get_by_test_id(ElementIDs.FILE_BROWSER_PANEL).is_visible():
-            files_icon.click()
+    left = PlaywrightWorkspaceSection(page, "left")
+    left.expand_section()
+    files_tab = left.get_panel_tab("files")
+    if files_tab.count() > 0:
+        files_tab.click()
 
 
 _MAX_WORKSPACE_DELETE_ITERATIONS = 50
 
 
 def delete_all_workspaces_via_ui(page: Page) -> None:
-    """Delete every workspace through the UI and land on the Add Workspace page.
+    """Delete every workspace through the Home page workspace list.
 
-    Phase 1: For each open workspace tab, right-click → Delete → Confirm.
-    Phase 2: Navigate to the Add Workspace page, then delete any remaining
-    workspace rows (closed-but-not-deleted workspaces) via their inline
-    delete buttons.
+    Workspaces live in the sidebar + Home list now (no tab strip); deleting each
+    Home row via its inline delete button + confirmation removes them all and
+    lands on the empty first-run state.
     """
     # Dismiss any open popover/context menu that might intercept clicks.
     page.keyboard.press("Escape")
 
-    workspace_tabs = page.get_by_test_id(ElementIDs.WORKSPACE_TAB)
     confirm_button = page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CONFIRM)
     confirm_dialog = page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)
 
-    # Phase 1: Delete all open workspace tabs.
-    for _ in range(_MAX_WORKSPACE_DELETE_ITERATIONS):
-        if workspace_tabs.count() == 0:
-            break
-        workspace_tabs.first.click(button="right")
-        delete_item = page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_DELETE).first
-        expect(delete_item).to_be_visible()
-        delete_item.click()
-        expect(confirm_button).to_be_visible()
-        confirm_button.click()
-        expect(confirm_dialog).to_be_hidden()
-    else:
-        remaining = workspace_tabs.count()
-        logger.error(
-            "Failed to delete all workspace tabs after {} iterations ({} remaining)",
-            _MAX_WORKSPACE_DELETE_ITERATIONS,
-            remaining,
-        )
-        raise RuntimeError(
-            f"Could not delete all workspace tabs after {_MAX_WORKSPACE_DELETE_ITERATIONS} iterations ({remaining} remaining)"
-        )
-
-    # Close any leftover pseudo-tabs (Settings, Component Gallery, Open Workspace)
-    # that a previous test may have opened.  These persist in localStorage and
-    # can interfere with navigation expectations in subsequent tests.
-    for tab_test_id in (ElementIDs.SETTINGS_TAB, ElementIDs.COMPONENT_GALLERY_TAB):
-        tab = page.get_by_test_id(tab_test_id)
-        if tab.is_visible():
-            tab.hover()
-            close_btn = tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
-            expect(close_btn).to_be_visible()
-            close_btn.click()
-            expect(tab).not_to_be_visible()
-
-    # Close extra "Open Workspace" tabs (multiple can exist now).
-    # Leave at most one — it won't have a close button when it's the sole tab.
-    add_workspace_tabs = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_TAB)
-    while add_workspace_tabs.count() > 1:
-        tab = add_workspace_tabs.first
-        tab.hover()
-        close_btn = tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
-        expect(close_btn).to_be_visible()
-        close_btn.click()
-
     navigate_to_home_page(page)
 
-    # Phase 2: Delete any remaining workspaces from the workspace list
-    # on the home page (these were closed but not deleted by the test).
+    # Delete each workspace from the Home page workspace list.
     # navigate_to_home_page already waits for workspace rows or empty state.
     workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
 
@@ -250,18 +400,20 @@ def start_task_and_wait_for_ready(
     mode: str | None = None,
     agent_type: str | None = None,
 ) -> PlaywrightTaskPage:
-    """Create a workspace and agent through the Add Workspace UI.
+    """Create a workspace and agent through the new-workspace UI.
 
-    Navigates to the Add Workspace form by clicking the "+" button in the
-    workspace tabs bar, fills in the workspace name, clicks submit,
-    then waits for the agent chat page to appear.  If the Add Workspace form
-    is already showing (e.g. no workspaces exist yet), skips the "+" click.
+    Opens the new-workspace modal (or uses the inline empty-first-run form when
+    no workspaces exist yet) via ``open_new_workspace_form``, fills in the
+    workspace name, clicks create, then waits for the agent chat page to appear.
 
-    The Add Workspace page no longer has a model selector, so the model
-    is switched on the chat panel once the workspace is ready.
+    The new-workspace form has no model selector, so the model is switched on the
+    chat panel once the workspace is ready.
 
-    When *prompt* is provided, it is sent as the first chat message after the
-    workspace is created (the Add Workspace page has no prompt input).
+    When *prompt* is provided, this helper leaves the creation form's own prompt
+    field empty and sends *prompt* through the chat input after the workspace is
+    created, so both creation surfaces (the new-workspace modal and the inline
+    empty-first-run form, which share the same prompt-as-first-message field)
+    behave identically.
 
     When *prompt* is empty the agent is created in a waiting state and
     ``wait_for_agent_to_finish`` is ignored.
@@ -291,7 +443,12 @@ def start_task_and_wait_for_ready(
     if agent_type == "pi":
         enable_pi_agent(sculptor_page)
 
-    navigate_to_add_workspace_page(sculptor_page)
+    open_new_workspace_form(sculptor_page)
+
+    # The same name/mode/agent-type fields and create button back both creation
+    # surfaces (the new-workspace modal and the inline empty-first-run form); they
+    # differ only in that the inline form pre-seeds the prompt (cleared below).
+    submit_button, is_inline_form = get_workspace_creation_button(sculptor_page)
 
     # Fill in the workspace name. Each call gets a unique name by default so
     # the auto-generated worktree branch (`<user>/<slug>`) doesn't collide
@@ -317,14 +474,42 @@ def start_task_and_wait_for_ready(
         }[agent_type]
         sculptor_page.get_by_test_id(option_id).click()
 
-    # Wait for the submit button to be enabled — repo info loaded, AND the
-    # worktree-mode branch-name preview has populated the input (the page
-    # gates submit on a non-empty branch name in worktree mode).
-    submit_button = sculptor_page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+    # The empty-first-run inline form seeds the prompt with `/sculptor:help`; clear
+    # it so the first agent is created promptless and this helper sends `prompt` as
+    # the first chat message below (matching the modal flow) — otherwise the agent
+    # would receive both the prefill and the test's prompt.
+    if is_inline_form:
+        sculptor_page.get_by_test_id(ElementIDs.NEW_WORKSPACE_PROMPT_TEXTAREA).fill("")
+
+    # A WORKTREE/CLONE create needs a source branch (the base ref to fork the
+    # worktree or clone from). The form derives it from the project's repo info
+    # (`sourceBranch = repoInfo.currentBranch`), which loads on a SEPARATE request
+    # from the branch-name preview. The submit button only gates on the branch
+    # NAME being populated — NOT on repo info — so it can go enabled while the
+    # source branch is still unresolved. Submitting in that window sends a create
+    # with no `source_branch`, the backend rejects it with 400 ("source_branch is
+    # required for WORKTREE workspaces"), and the form stays put, so the chat panel
+    # awaited below never mounts and this helper times out. The source-branch
+    # selector renders only once repo info has loaded, so waiting for it here
+    # guarantees the create carries a source branch before we click.
+    # Default timeout on purpose: repo info is retried every 3s up to 10 times
+    # after mount, so the selector appears within ~30s or never — waiting longer
+    # only stalls the failure.
+    expect(sculptor_page.get_by_test_id(ElementIDs.BRANCH_SELECTOR)).to_be_visible()
+
+    # Wait for the submit button to be enabled — the worktree-mode branch-name
+    # preview has populated the input (the form gates submit on a non-empty branch
+    # name in worktree mode).
     expect(submit_button).to_be_enabled()
 
     # Click create workspace
     submit_button.click()
+
+    # When created via the modal, its overlay backdrop lingers through the close
+    # animation and intercepts pointer events on the workspace beneath (e.g. the model
+    # selector). Wait for the dialog to fully close before interacting. The inline
+    # first-run form has no dialog, so this resolves instantly there.
+    expect(sculptor_page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)).to_have_count(0, timeout=60_000)
 
     # A terminal first agent has no chat surface — wait for the terminal
     # panel instead and skip the chat-panel/model/prompt steps entirely.
@@ -394,13 +579,13 @@ def start_task_and_wait_for_ready(
 
 
 def add_agent_and_wait_for_ready(page: Page) -> PlaywrightTaskPage:
-    """Click the agent tab "+" to add an agent and wait until the new agent is
+    """Add an agent panel to the center section and wait until the new agent is
     the active one, with a chat input ready to receive a message.
 
     Returns a ``PlaywrightTaskPage`` bound to the new (now-active) agent.
 
     Adding an agent navigates to it only after an async create request
-    resolves, but the agent-tab count flips to N+1 as soon as the agent-list
+    resolves, but the panel-tab count flips to N+1 as soon as the agent-list
     query refreshes — which can happen before that navigation lands.  Callers
     must not type into the chat input until the switch completes, or the text
     lands in the outgoing agent's editor (or no editor, mid-remount).  Waiting
@@ -408,11 +593,11 @@ def add_agent_and_wait_for_ready(page: Page) -> PlaywrightTaskPage:
     """
     task_page = PlaywrightTaskPage(page=page)
     previous_agent_id = task_page.get_task_id()
-    agent_tab_bar = task_page.get_agent_tab_bar()
-    existing_tab_count = agent_tab_bar.get_agent_tabs().count()
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    existing_tab_count = panel_tabs.get_panel_tabs().count()
 
-    agent_tab_bar.get_add_agent_button().click()
-    expect(agent_tab_bar.get_agent_tabs()).to_have_count(existing_tab_count + 1)
+    create_agent_panel(page, section="center")
+    expect(panel_tabs.get_panel_tabs()).to_have_count(existing_tab_count + 1)
 
     # The create-agent POST and clone/setup can be slow on contended runners.
     page.wait_for_function(
@@ -510,16 +695,15 @@ def request_with_retry(
 
 
 def navigate_to_settings_page(page: Page, **_kwargs: object) -> PlaywrightSettingsPage:
-    """Open Settings the way a user does — click the gear in the top bar.
+    """Open Settings the way a user does — click the sidebar Settings link.
 
-    The settings button lives in the persistent ``TopBar``, which ``PageLayout``
-    renders on every in-app route (Home, Add Workspace, Workspace, Settings), so
-    it is reachable from any state this helper is called from — including the
-    add-workspace page that pre-test cleanup lands on after deleting all
-    workspaces. Clicking routes via React Router with no document reload, so it
-    keeps the WebSocket connection alive and avoids re-fetching ``index.html``
-    (and its assets) under the ``sculptor://app`` origin, where the built
-    renderer references assets via absolute paths.
+    The Settings link lives in the persistent sidebar (``AppShell`` renders it
+    on every in-app route, and the empty first-run page mounts its own copy),
+    so it is reachable from any state this helper is called from. Clicking
+    routes via React Router with no document reload, so it keeps the WebSocket
+    connection alive and avoids re-fetching ``index.html`` (and its assets)
+    under the ``sculptor://app`` origin, where the built renderer references
+    assets via absolute paths.
 
     The click is retried until the settings page actually renders. A single
     click can lose a race with an in-flight imperative redirect: deleting the
@@ -529,10 +713,15 @@ def navigate_to_settings_page(page: Page, **_kwargs: object) -> PlaywrightSettin
     fires while WorkspacePage is mounted, so once we reach Settings nothing
     redirects away again.
     """
-    settings_button = page.get_by_test_id(ElementIDs.SETTINGS_BUTTON)
+    settings_button = page.get_by_test_id(ElementIDs.SIDEBAR_SETTINGS_LINK)
     settings_page_marker = page.get_by_test_id(ElementIDs.SETTINGS_PAGE)
 
     def _click_into_settings() -> None:
+        # Inside the retry body: this helper also runs during per-test cleanup
+        # (_delete_extra_projects_via_ui) against the PREVIOUS test's end
+        # state, where the sidebar may be collapsed — its Settings link is then
+        # unmounted, not just hidden — and the shell may still be churning.
+        ensure_sidebar_expanded(page)
         expect(settings_button).to_be_visible(timeout=5_000)
         settings_button.click()
         expect(settings_page_marker).to_be_visible(timeout=5_000)
@@ -558,8 +747,9 @@ def delete_project_via_settings(
     repos_section = settings_page.click_on_repositories()
     repos_section.remove_repo(project_name, path_contains=path_contains)
 
-    # Navigate back to the Add Workspace page after deletion
-    navigate_to_add_workspace_page(page)
+    # Land on a neutral Home surface after deletion — rather than leaving the
+    # Settings page (or a lingering create surface) up for the caller.
+    navigate_to_home_page(page)
 
 
 def upload_file_via_api(page: Page, *, name: str, mime_type: str, content: bytes) -> str:
@@ -622,18 +812,18 @@ def soft_reload_page(page: Page, wait_until: str | None = None) -> None:
 
 
 def navigate_away_and_back(page: Page) -> None:
-    """Navigate to the Add Workspace page and back to force Jotai store reinitialization.
+    """Navigate to the Home page and back to force Jotai store reinitialization.
 
     The Sculptor frontend caches state in Jotai atoms that are initialized from
     localStorage on first load.  A hash-only navigation within the SPA does not
-    unload/reload atoms.  By navigating to a different route (``#/ws/new``) and
+    unload/reload atoms.  By navigating to a different route (``#/home``) and
     then back, we force the atoms to reinitialize from whatever values are
     currently in localStorage.
     """
     current_url = page.url
     base_url = current_url.split("#")[0].rstrip("/")
-    page.goto(f"{base_url}#/ws/new")
-    expect(page.get_by_test_id(ElementIDs.START_TASK_BUTTON)).to_be_visible()
+    page.goto(f"{base_url}#/home")
+    _expect_home_landed(page)
     page.goto(current_url)
 
 
@@ -737,6 +927,76 @@ def navigate_to_workspace_without_agent(page: Page, workspace_id: str) -> None:
     a hash-only navigation via React Router).
     """
     page.evaluate(f"window.location.hash = '/ws/{workspace_id}'")
+
+
+def wait_for_workspace_list_loaded(page: Page) -> None:
+    """Wait until the frontend's workspace list has finished its initial load.
+
+    Global keyboard shortcuts and every command-palette open path no-op while
+    ``areGlobalShortcutsDisabledAtom`` is set, and it stays set while the
+    workspace list is still loading (``undefined``) — not just while it is
+    empty. The empty first-run page is deliberately NOT rendered during that
+    load window (so it never flashes), which means a momentary
+    ``EMPTY_FIRST_RUN_PAGE.is_visible()`` probe — e.g. the one inside
+    ``ensure_workspace_exists`` — cannot distinguish "list still loading" from
+    "list loaded with workspaces", and on a slow runner it lands in the load
+    window, skips workspace creation, and every later palette open / shortcut
+    press is silently suppressed. Wait for one of the two loaded-list signals
+    before deciding anything: a sidebar workspace row (loaded, non-empty) or
+    the empty first-run page (loaded, empty).
+    """
+    workspace_rows = page.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW)
+    empty_first_run = page.get_by_test_id(ElementIDs.EMPTY_FIRST_RUN_PAGE)
+    expect(workspace_rows.or_(empty_first_run).first).to_be_visible()
+
+
+def create_zero_agent_workspace(page: Page, *, description: str | None = None, source_branch: str = "testing") -> str:
+    """Create a WORKTREE workspace with NO agent and navigate to it, returning its id.
+
+    The redesign relaxes the old "≥1 agent" invariant, so a
+    workspace can exist with an empty center section. This drives that state via
+    the backend API — ``POST /api/v1/workspaces`` creates the workspace WITHOUT
+    an agent (agents are a separate ``/agents`` POST), so no agent is ever
+    created — then navigates to ``/ws/<id>`` with a hash change so the WebSocket
+    stays alive (mirroring ``navigate_to_workspace_without_agent``).
+
+    Resolves the active project and a unique branch name (via the same
+    ``preview-branch-name`` endpoint the Add Workspace form uses) so the worktree
+    branch never collides across repeated calls.
+    """
+    base_url = page.url.split("#")[0].rstrip("/")
+
+    projects_response = request_with_retry(page.request.get, f"{base_url}/api/v1/projects/active")
+    assert projects_response.ok, f"list active projects failed: {projects_response.status} {projects_response.text()}"
+    projects = projects_response.json()
+    assert projects, "no active project to create a zero-agent workspace in"
+    project_id = projects[0]["objectId"]
+
+    workspace_name = description or f"Zero Agent WS {next(_workspace_name_counter)}"
+    preview_response = request_with_retry(
+        page.request.get,
+        f"{base_url}/api/v1/workspaces/preview-branch-name",
+        params={"project_id": project_id, "workspace_name": workspace_name, "mode": "WORKTREE"},
+    )
+    assert preview_response.ok, f"preview-branch-name failed: {preview_response.status} {preview_response.text()}"
+    branch_name = preview_response.json()["branchName"]
+
+    create_response = request_with_retry(
+        page.request.post,
+        f"{base_url}/api/v1/workspaces",
+        data={
+            "projectId": project_id,
+            "initializationStrategy": "WORKTREE",
+            "sourceBranch": source_branch,
+            "requestedBranchName": branch_name,
+            "description": workspace_name,
+        },
+    )
+    assert create_response.ok, f"create workspace failed: {create_response.status} {create_response.text()}"
+    workspace_id = create_response.json()["objectId"]
+
+    navigate_to_workspace_without_agent(page, workspace_id)
+    return workspace_id
 
 
 def dispatch_modified_shortcuts_in_one_task(page: Page, shortcuts: Sequence[tuple[str, str]]) -> list[str]:

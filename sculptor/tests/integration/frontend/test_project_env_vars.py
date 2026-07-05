@@ -15,14 +15,15 @@ from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.elements.terminal import get_add_terminal_button
+from sculptor.testing.elements.terminal import add_terminal
 from sculptor.testing.elements.terminal import get_terminal_tabs
 from sculptor.testing.elements.terminal import open_terminal_and_wait
 from sculptor.testing.elements.terminal import run_command_in_active_terminal
+from sculptor.testing.elements.terminal import wait_for_xterm_buffer_nonempty
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
-from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -207,10 +208,16 @@ def test_terminal_picks_up_newly_added_env_var(sculptor_instance_: SculptorInsta
 
     global_env_file.write_text("SCTEST_LATE_TERMINAL_VAR=terminal_loaded_after\n")
 
-    get_add_terminal_button(page).click()
+    add_terminal(page)
     expect(get_terminal_tabs(page)).to_have_count(2)
-    expect(page.get_by_label("Terminal input")).to_have_count(2)
+    # In the section shell only the ACTIVE panel mounts its component, so exactly
+    # one terminal xterm (the newly-added, now-active tab) is in the DOM — the
+    # inactive first terminal is unmounted while its tab is backgrounded.
+    expect(page.get_by_label("Terminal input")).to_have_count(1)
 
+    # Wait for the new terminal's xterm to connect and render its shell prompt
+    # before typing, so the echo isn't dropped on a not-yet-connected terminal.
+    wait_for_xterm_buffer_nonempty(page)
     run_command_in_active_terminal(page, 'echo "TERM_LATE_CHECK:${SCTEST_LATE_TERMINAL_VAR:-MISSING}"')
     wait_for_xterm_substring(page, "TERM_LATE_CHECK:terminal_loaded_after")
 
@@ -373,10 +380,7 @@ def test_env_var_reminder_not_re_emitted_after_app_restart(
         assert _ENV_VAR_PREAMBLE in files[0][1]
 
     with sculptor_instance_factory_.spawn_instance() as instance:
-        layout = PlaywrightProjectLayoutPage(page=instance.page)
-        workspace_tab = layout.get_workspace_tabs().first
-        expect(workspace_tab).to_be_visible()
-        workspace_tab.click()
+        navigate_to_workspace(instance.page)
 
         task_page = PlaywrightTaskPage(page=instance.page)
         chat_panel = task_page.get_chat_panel()

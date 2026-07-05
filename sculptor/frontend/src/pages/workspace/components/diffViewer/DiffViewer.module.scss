@@ -1,0 +1,17 @@
+.content {
+  min-height: 0;
+}
+
+// The minimal header shown when no file is selected — keeps the sidebar toggle and
+// the list's tree options reachable.
+.emptyHeader {
+  border-bottom: 1px solid var(--gray-a5);
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- matches the 41px file-viewer header
+  height: 41px;
+}
+
+// Sits on top of the panel edge so a fetch indicator doesn't shift any of the
+// panel content. `z-index` keeps it above the header's bottom border.
+.progressOverlay {
+  z-index: 1;
+}

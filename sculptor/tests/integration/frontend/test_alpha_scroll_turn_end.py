@@ -23,7 +23,7 @@ from sculptor.testing.elements.alpha_chat_view import start_scroll_top_sampler
 from sculptor.testing.elements.alpha_chat_view import wait_for_stable_following_tail_gap
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.elements.panels import close_bottom_panel
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -39,12 +39,17 @@ _LOREM_STREAM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
 # The visible gap the pin keeps between the last message's bottom and the viewport
 # bottom while following — mirrors PIN_BOTTOM_GAP in chat-alpha/scroll/geometry.ts.
 _PIN_BOTTOM_GAP_PX = 64
-# Slop around the pin gap for message margins and sub-pixel rounding. The band it
-# defines separates the two regressions this guards against: hugging the viewport
-# bottom flush (~0px, no breathing room under the newest line) and parking deep in
-# the paddingEnd gap (>= the 128px streaming padding floor, no slack for the
-# turn-end shrink).
-_PIN_GAP_TOLERANCE_PX = 24
+# Slop around the pin gap. At rest the pin lands the tail EXACTLY PIN_BOTTOM_GAP
+# above the viewport bottom (see bottomPinOffset), but this gap is sampled mid-stream
+# while the tail is still growing: the down-only follow pin trails each content reflow
+# by a frame or two, and the virtualizer's measureElement lags the DOM asynchronously,
+# so a mid-growth sample reads a few px off the resting gap. That transient spread is
+# platform-timing-dependent (larger under slower CI rendering), so the band is sized to
+# absorb it while still cleanly separating the two regressions it guards against: hugging
+# the viewport bottom flush (~0px, no breathing room under the newest line) and parking
+# deep in the paddingEnd gap (>= the 128px streaming padding floor, no slack for the
+# turn-end shrink). 64 +/- 40 == [24, 104] stays clear of both (0 and 128).
+_PIN_GAP_TOLERANCE_PX = 40
 
 # The view must not scroll UP across the turn boundary. A tiny settle for the turn
 # footer is fine; a jump back to an earlier message is a whole-turn (hundreds of px)
@@ -67,7 +72,7 @@ def test_following_keeps_pin_gap_below_last_message(sculptor_instance_: Sculptor
         prompt=f'fake_claude:text `{{"text": "{_LONG_TEXT}"}}`',
     )
     chat_panel = task_page.get_chat_panel()
-    close_bottom_panel(page)
+    PlaywrightWorkspaceSection(page, "bottom").collapse_section()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
     # A bit of history so the follow-on user message scrolls off the top and we
@@ -132,7 +137,7 @@ def test_turn_end_does_not_restore_a_stale_reading_anchor(sculptor_instance_: Sc
         prompt=f'fake_claude:text `{{"text": "{_LONG_TEXT}"}}`',
     )
     chat_panel = task_page.get_chat_panel()
-    close_bottom_panel(page)
+    PlaywrightWorkspaceSection(page, "bottom").collapse_section()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
     send_chat_message(chat_panel, f'fake_claude:text `{{"text": "{_LONG_TEXT}"}}`')
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=4)
@@ -189,7 +194,7 @@ def test_turn_end_scrolls_turn_footer_into_view_when_following(sculptor_instance
         prompt='fake_claude:text `{"text": "Ready."}`',
     )
     chat_panel = task_page.get_chat_panel()
-    close_bottom_panel(page)
+    PlaywrightWorkspaceSection(page, "bottom").collapse_section()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
     view = get_alpha_chat_view(page)

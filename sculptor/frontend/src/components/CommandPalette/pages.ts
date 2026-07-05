@@ -47,12 +47,23 @@ export const PAGE_DEFINITIONS: Record<PageId, PageDefinition> = {
     placeholder: "Pick an action...",
   },
   "view.layout": {
-    title: "Toggle layout",
-    placeholder: "Pick a layout option...",
+    title: "Toggle sections",
+    placeholder: "Pick a section to toggle...",
   },
   "view.panels": {
     title: "Toggle panel visibility",
     placeholder: "Pick a panel to toggle...",
+  },
+  "addpanel.location": {
+    title: "Add panel",
+    placeholder: "Pick a section...",
+  },
+  "addpanel.panels": {
+    title: "Add panel",
+    placeholder: "Pick a panel...",
+    // The panel list depends on the chosen location, so it must not be revealed
+    // at the root via fuzzy search — the user picks a location first.
+    hideFromRootSearch: true,
   },
 };
 

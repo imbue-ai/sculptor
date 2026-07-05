@@ -6,16 +6,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ElementIds } from "~/api";
 
 import { AlphaChipDiffPopover } from "../AlphaChipDiffPopover.tsx";
+import { ChatTaskProvider } from "../ChatTaskContext.tsx";
 import type { ChipData } from "../chipRow.types.ts";
 
 const WORKSPACE_PATH = "/repo/workspace";
 
-vi.mock("~/common/NavigateUtils.ts", () => ({
-  useWorkspacePageParams: (): { workspaceID: string } => ({ workspaceID: "ws-test" }),
-}));
-
 vi.mock("~/pages/workspace/hooks/useWorkspaceCodePath.ts", () => ({
   useWorkspaceCodePath: (): string => WORKSPACE_PATH,
+}));
+
+// The highlighter-readiness gate would kick off a real shiki load in jsdom;
+// these tests never render a diff body (chipData.results: []), so report
+// ready without loading anything.
+vi.mock("~/pages/workspace/components/diffPanel/usePierreHighlighterReady.ts", () => ({
+  usePierreHighlighterReady: (): boolean => true,
 }));
 
 // Replace every atom the component reads with a labelled placeholder so the
@@ -74,9 +78,11 @@ const makeChipData = (overrides: Partial<ChipData> = {}): ChipData => ({
 });
 
 const renderPopover = (chipData: ChipData): ReactElement => (
-  <Theme>
-    <AlphaChipDiffPopover chipData={chipData} onClose={(): void => {}} onNavigate={(): void => {}} />
-  </Theme>
+  <ChatTaskProvider workspaceId="ws-test" taskId="agent-1">
+    <Theme>
+      <AlphaChipDiffPopover chipData={chipData} onClose={(): void => {}} onNavigate={(): void => {}} />
+    </Theme>
+  </ChatTaskProvider>
 );
 
 beforeEach(() => {

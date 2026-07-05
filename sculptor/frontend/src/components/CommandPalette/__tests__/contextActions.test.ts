@@ -20,7 +20,6 @@ const fakeAgent = (id: string): Agent =>
   }) as unknown as Agent;
 
 type WorkspaceRuntimeOverrides = {
-  canCloseOthers?: boolean;
   hasUncommittedChanges?: boolean;
   hasOpenPr?: boolean;
   canCreatePr?: boolean;
@@ -30,11 +29,7 @@ type WorkspaceRuntimeOverrides = {
 
 const makeWorkspaceRuntime = (overrides: WorkspaceRuntimeOverrides = {}): WorkspaceActionRuntime => ({
   beginRename: vi.fn(),
-  closeWorkspace: vi.fn(),
-  closeOtherWorkspaces: vi.fn(),
-  closeAllWorkspaces: vi.fn(),
   beginDelete: vi.fn(),
-  canCloseOthers: vi.fn(() => overrides.canCloseOthers ?? true),
   commitChanges: vi.fn(),
   createMergeRequest: vi.fn(),
   openMergeRequest: vi.fn(),
@@ -47,7 +42,6 @@ const makeWorkspaceRuntime = (overrides: WorkspaceRuntimeOverrides = {}): Worksp
 });
 
 const makeAgentRuntime = (): AgentActionRuntime => ({
-  beginRename: vi.fn(),
   markUnread: vi.fn(),
   beginDelete: vi.fn(),
 });
@@ -55,22 +49,15 @@ const makeAgentRuntime = (): AgentActionRuntime => ({
 describe("buildWorkspaceActions", () => {
   it("emits the canonical right-click menu set in order", () => {
     const actions = buildWorkspaceActions(makeWorkspaceRuntime());
-    expect(actions.map((a) => a.id)).toEqual([
-      "commit",
-      "create_pr",
-      "open_pr",
-      "rename",
-      "close",
-      "close_others",
-      "close_all",
-      "delete",
-    ]);
+    expect(actions.map((a) => a.id)).toEqual(["commit", "create_pr", "open_pr", "rename", "delete"]);
   });
 
-  it("close_others is hidden when there is only one tab open", () => {
-    const actions = buildWorkspaceActions(makeWorkspaceRuntime({ canCloseOthers: false }));
-    const closeOthers = actions.find((a) => a.id === "close_others") as WorkspaceAction;
-    expect(closeOthers.visible?.(fakeWorkspace("w1"))).toBe(false);
+  it("omits the defunct close-workspace actions (workspaces can no longer be closed)", () => {
+    const actions = buildWorkspaceActions(makeWorkspaceRuntime());
+    const ids = actions.map((a) => a.id);
+    expect(ids).not.toContain("close");
+    expect(ids).not.toContain("close_others");
+    expect(ids).not.toContain("close_all");
   });
 
   it("delete is destructive and adds a separator", () => {
@@ -85,10 +72,8 @@ describe("buildWorkspaceActions", () => {
     const actions = buildWorkspaceActions(runtime);
     const ws = fakeWorkspace("w1");
     actions.find((a) => a.id === "rename")?.perform(ws);
-    actions.find((a) => a.id === "close")?.perform(ws);
     actions.find((a) => a.id === "delete")?.perform(ws);
     expect(runtime.beginRename).toHaveBeenCalledWith(ws);
-    expect(runtime.closeWorkspace).toHaveBeenCalledWith(ws);
     expect(runtime.beginDelete).toHaveBeenCalledWith(ws);
   });
 
@@ -146,7 +131,12 @@ describe("buildWorkspaceActions", () => {
 describe("buildAgentActions", () => {
   it("emits the canonical right-click menu set", () => {
     const actions = buildAgentActions(makeAgentRuntime());
-    expect(actions.map((a) => a.id)).toEqual(["rename", "mark_unread", "delete"]);
+    expect(actions.map((a) => a.id)).toEqual(["mark_unread", "delete"]);
+  });
+
+  it("omits rename — agent rename is the panel tab's inline edit, not a palette action", () => {
+    const actions = buildAgentActions(makeAgentRuntime());
+    expect(actions.map((a) => a.id)).not.toContain("rename");
   });
 
   it("delete is destructive and routes through the runtime", () => {
