@@ -12,7 +12,7 @@ import { openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms/diffPanel
 
 import styles from "./AlphaChatView.module.scss";
 import { useChatTask } from "./ChatTaskContext.tsx";
-import { PulsingDot } from "./pill-animations";
+import { PulsingDot } from "./pillAnimations";
 
 const DISMISSED_ANSWER = "[Dismissed]";
 const APPROVE_PLAN_ANSWER = "Approve plan";

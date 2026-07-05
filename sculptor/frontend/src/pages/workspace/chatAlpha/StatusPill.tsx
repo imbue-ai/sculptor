@@ -23,8 +23,8 @@ import { Toast } from "~/components/Toast.tsx";
 
 import { AgentTasksPanel } from "./AgentTasksPanel.tsx";
 import { useChatTask } from "./ChatTaskContext.tsx";
-import type { AnimationProps } from "./pill-animations";
-import { ANIMATION_POOL, pickAnimationIndex, SpinnerAnimation } from "./pill-animations";
+import type { AnimationProps } from "./pillAnimations";
+import { ANIMATION_POOL, pickAnimationIndex, SpinnerAnimation } from "./pillAnimations";
 import styles from "./StatusPill.module.scss";
 import type { AgentState } from "./useAgentStatus.ts";
 import { useAgentStatus } from "./useAgentStatus.ts";

@@ -12,7 +12,7 @@ import { AlphaSubagentPopover } from "./AlphaSubagentPopover.tsx";
 import { formatDuration } from "./durationUtils.ts";
 import { useCloseOnChatScroll } from "./hooks/useChatScroll.tsx";
 import { usePillHoverDelay } from "./hooks/usePillHoverDelay.ts";
-import { ANIMATION_POOL, pickAnimationIndex } from "./pill-animations";
+import { ANIMATION_POOL, pickAnimationIndex } from "./pillAnimations";
 import { useToolNavigation } from "./ToolNavigationContext.tsx";
 import { useElapsedTime } from "./useElapsedTime.ts";
 

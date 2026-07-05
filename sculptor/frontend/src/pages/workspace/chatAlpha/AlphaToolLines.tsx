@@ -13,7 +13,7 @@ import { isDiffToolContent, isGenericToolContent } from "~/pages/workspace/utils
 import { parseDiff } from "~/pages/workspace/utils/diff";
 
 import styles from "./AlphaChatView.module.scss";
-import { PulsingDot } from "./pill-animations";
+import { PulsingDot } from "./pillAnimations";
 
 const getToolResultText = (content: GenericToolContent | DiffToolContent): string => {
   if (isGenericToolContent(content)) return content.text;

@@ -49,6 +49,15 @@ principles didn't fully determine. Flip any of them and I'll rework.
    commands into a registration pattern (features register commands, like
    panels register components).
 
+10. **Kebab-case directory renames (`add-workspace`→`addWorkspace`,
+    `pill-animations`→`pillAnimations`, `app-icons`→`appIcons`).** The stage-H
+    `check-file/folder-naming-convention` rule requires camelCase folders
+    (frontend_structure.md: "directories are camelCase, without exception");
+    these three predated the rule. Renamed via `git mv` with every importer
+    updated. `appIcons` holds only PNGs so the lint never examines it, but it is
+    renamed anyway for consistency with the documented rule. A tree-wide find
+    now reports zero non-camelCase folder segments (excluding `__tests__`).
+
 ## Follow-up candidates surfaced during the work (not executed)
 
 - Merge `diffPanel/` + `diffViewer/` into one `diff/` feature (see 3).
@@ -63,3 +72,71 @@ principles didn't fully determine. Flip any of them and I'll rework.
 - `storybook build` is broken independently of this pass: `.storybook/main.ts`
   uses `__dirname` under ESM (Storybook v10) and dies while loading presets.
   Worth its own ticket if Storybook builds are expected to work.
+
+## Import-boundary exceptions (temporary)
+
+Stage H turns `import/no-restricted-paths` on in `sculptor/frontend/eslint.config.ts`
+to enforce the layering in `docs/development/style/frontend_structure.md`
+(common ↛ components/pages/app/electron; components ↛ pages/app; a page ↛ another
+page; electron ↛ renderer UI). Enforcement is real for aliased imports too:
+`eslint-import-resolver-typescript` was added so the rule follows `~/…`
+specifiers, not only relative ones.
+
+Every cross-boundary import that exists today is captured by an `except` entry
+in that config (the boundary is NOT weakened globally — each except names a
+specific module). The full set is **87 import lines across 38 files**, grouped
+below by the follow-up that deletes the exception. Removing a follow-up's code
+lets the paired `except` entries come out.
+
+**F1 — Promote workspace layout state to `common/state` (ruling 4 / decision 9).**
+_55 import lines, 19 files._ `common/` state hooks and `components/` (chiefly
+`commandPalette`, plus `newWorkspace`, `diffSummary`, `workspacePeek`) read
+`pages/workspace/layout/**` (section/sectionActions/addPanel/transient/sidebar
+atoms, the persistence adapter + snapshot, the panel registry + dynamicPanels,
+and `types/section`). Excepts: `./workspace/layout` in both the `common→pages`
+and `components→pages` zones. The alternative fix (decision 9) is inverting the
+palette's workspace commands to a registration pattern.
+
+**F2 — Invert the command palette to command registration (ruling 4).**
+_3 import lines, 3 files._ `common/state/hooks/{useWorkspaceDynamicPanels,
+useWorkspaceShellBootstrap}` (and the dynamic-panels test) reach back into
+`components/commandPalette` command/context-action state. Excepts (in
+`common→components`): `./commandPalette/contextActions/atoms/contextActions.ts`,
+`./commandPalette/utils/commandActions.ts`.
+
+**F3 — Move new-workspace form atoms to `common/state`.** _1 import line, 1 file._
+`common/state/hooks/useCreateWorkspace.ts` reads
+`components/newWorkspace/newWorkspaceAtoms.ts`. Except (in `common→components`):
+`./newWorkspace/newWorkspaceAtoms.ts`.
+
+**F4 — Promote the remaining workspace feature-state modules to their shared
+home as second consumers appear.** _18 import lines, 11 files._ Shared UI/state
+reaches into workspace feature internals beyond layout: `diffPanel` atoms/types,
+`panels/browser` atoms, `panels/fileBrowser` atoms/types/`fileIcons`,
+`panels/workspaceAgentActions`, `chatAlpha` atoms/`chipRowUtils`, and
+`workspace/hooks/useTimedLatch`. Excepts: those specific files in the
+`common→pages` and `components→pages` zones (kept at file granularity so the
+boundary still catches new, unrelated reaches).
+
+**F5 — Move the `SettingsSection` enum to `common/`.** _4 import lines, 4 files._
+`components/commandPalette` (settings command + drift test), `components/
+newWorkspace/AgentSettingsControls`, and `pages/workspace/chatAlpha/ChatInput`
+import `pages/settings/sections.ts`. Excepts: `./settings/sections.ts` in the
+`components→pages` zone and in the `pages/workspace` page zone.
+
+**F6 — Promote `RecentWorkspaces` to `components/`.** _1 import line, 1 file._
+`pages/home/RecentWorkspacesHomeView` imports the component from
+`pages/addWorkspace`. Except (in the `pages/home` page zone):
+`./addWorkspace/components/RecentWorkspaces.tsx`.
+
+**F7 — Promote the `useTerminal` hook to `common/`.** _1 import line, 1 file._
+`pages/settings/components/PiLoginTerminal` imports
+`pages/workspace/panels/useTerminal.ts`. Except (in the `pages/settings` page
+zone): `./workspace/panels/useTerminal.ts`.
+
+**F8 — Move platform detection to `common/`.** _4 import lines, 4 files._
+`common/{apiClient, keybindings/format, keybindings/matching, openInApp/items}`
+import `isMac`/`isElectron`/`getMetaKey` from `electron/platform.ts`. This is
+shared glue, not electron-main-process code; ruling 5 already relocated the
+renderer-domain unions so `common/` need not import `electron/`, and `platform.ts`
+is the last holdout. Except (in `common→electron`): `./platform.ts`.

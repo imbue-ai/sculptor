@@ -4,6 +4,7 @@ import stylisticPlugin from "@stylistic/eslint-plugin";
 import typescriptPlugin from "@typescript-eslint/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
 import prettierConfig from "eslint-config-prettier/flat";
+import checkFilePlugin from "eslint-plugin-check-file";
 import cssPlugin from "eslint-plugin-css";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const importPlugin = require("eslint-plugin-import");
@@ -15,6 +16,11 @@ import simpleImportSortPlugin from "eslint-plugin-simple-import-sort";
 import storybookPlugin from "eslint-plugin-storybook";
 import globals from "globals";
 import tseslint from "typescript-eslint";
+
+// A page owns one routed surface; shared code moves up to components/ or
+// common/ rather than being reached across pages. See frontend_structure.md.
+const PAGE_ISOLATION_MESSAGE =
+  "A page must not import from another page; move shared code up to components/ or common/. See frontend_structure.md.";
 
 // Default export is expected by eslint:
 // eslint-disable-next-line import/no-default-export
@@ -75,6 +81,15 @@ export default tseslint.config(
     settings: {
       react: {
         version: "detect",
+      },
+      // Teach eslint-plugin-import the `~/` tsconfig path alias (and TS
+      // extensions) so the import/no-restricted-paths layering below can follow
+      // `~/…` specifiers to real files. Without this the node resolver silently
+      // fails to resolve aliased imports and the boundary rule skips them.
+      "import/resolver": {
+        typescript: {
+          project: ["./tsconfig.json", "./tsconfig.node.json"],
+        },
       },
     },
   },
@@ -158,6 +173,155 @@ export default tseslint.config(
       // From the section "Naming":
       /* Imports: https://github.com/import-js/eslint-plugin-import?tab=readme-ov-file#rules */
       "import/no-default-export": "error",
+
+      // Import layering — keeps the dependency graph flowing one way, matching
+      // docs/development/style/frontend_structure.md: app/ is the composition
+      // root and may import anything; a page never imports another page;
+      // components/ (shared UI) never reaches into pages/; common/ (shared
+      // non-UI) never reaches up into components/, pages/, the app shell, or the
+      // electron main process; and electron/ (main process) never imports
+      // renderer UI.
+      //
+      // Every `except` here is TEMPORARY and mirrored in the "Import-boundary
+      // exceptions (temporary)" section of agent_docs/scu1746/decisions.md, each
+      // grouped by the follow-up that deletes it (e.g. promoting workspace
+      // layout state into common/state). Do NOT add a new except to dodge a
+      // boundary — move the shared code to its correct layer instead.
+      "import/no-restricted-paths": [
+        "error",
+        {
+          basePath: import.meta.dirname,
+          zones: [
+            {
+              target: "./src/common",
+              from: "./src/components",
+              except: [
+                // commandPalette command/context-action state read by the
+                // workspace state hooks (ruling 4): removed when the palette
+                // inverts to command registration.
+                "./commandPalette/contextActions/atoms/contextActions.ts",
+                "./commandPalette/utils/commandActions.ts",
+                // useCreateWorkspace reads the new-workspace form atoms: removed
+                // when those atoms move to common/state.
+                "./newWorkspace/newWorkspaceAtoms.ts",
+              ],
+              message: "common/ is shared non-UI; it must not import from components/. See frontend_structure.md.",
+            },
+            {
+              target: "./src/common",
+              from: "./src/pages",
+              except: [
+                // Workspace layout + panel state lives feature-side (ruling 4
+                // fallback); common/state hooks that orchestrate it read it
+                // here. Removed when layout state is promoted to common/state.
+                "./workspace/layout",
+                "./workspace/diffPanel/atoms/diffPanel.ts",
+                "./workspace/panels/browser/atoms/browser.ts",
+                "./workspace/panels/workspaceAgentActions.ts",
+                "./workspace/panels/fileBrowser/types/fileBrowser.ts",
+              ],
+              message: "common/ is shared non-UI; it must not import from pages/. See frontend_structure.md.",
+            },
+            {
+              target: "./src/common",
+              from: "./src/electron",
+              except: [
+                // Platform detection (isMac / isElectron / getMetaKey) is shared
+                // glue that still lives in electron/. Removed when platform.ts
+                // moves to common/.
+                "./platform.ts",
+              ],
+              message:
+                "common/ is shared non-UI; it must not import from the electron main process. See frontend_structure.md.",
+            },
+            {
+              target: "./src/components",
+              from: "./src/pages",
+              except: [
+                // Palette + shared widgets currently read workspace feature
+                // state (ruling 4). Removed as each state module moves to its
+                // correct shared layer.
+                "./workspace/layout",
+                "./workspace/hooks/useTimedLatch.ts",
+                "./workspace/diffPanel/atoms/diffPanel.ts",
+                "./workspace/diffPanel/types/diffPanel.ts",
+                "./workspace/panels/fileBrowser/atoms/fileBrowser.ts",
+                "./workspace/panels/fileBrowser/fileIcons.ts",
+                "./workspace/chatAlpha/atoms/chatAlpha.ts",
+                "./workspace/chatAlpha/chipRowUtils.ts",
+                "./settings/sections.ts",
+              ],
+              message: "components/ is shared UI; it must not import from pages/. See frontend_structure.md.",
+            },
+            // Nothing below the shell imports the shell.
+            {
+              target: ["./src/common", "./src/components"],
+              from: "./src/app",
+              message: "app/ is the composition root; lower layers must not import it. See frontend_structure.md.",
+            },
+            // The electron main process must never import renderer UI.
+            {
+              target: "./src/electron",
+              from: ["./src/components", "./src/pages", "./src/app"],
+              message: "electron/ is the main process; it must not import renderer UI. See frontend_structure.md.",
+            },
+            // A page never imports another page. Each zone forbids importing
+            // anything under src/pages except the page's own subtree; a handful
+            // of temporary cross-page excepts are catalogued in decisions.md.
+            {
+              target: "./src/pages/addWorkspace",
+              from: "./src/pages",
+              except: ["./addWorkspace"],
+              message: PAGE_ISOLATION_MESSAGE,
+            },
+            {
+              target: "./src/pages/error",
+              from: "./src/pages",
+              except: ["./error"],
+              message: PAGE_ISOLATION_MESSAGE,
+            },
+            {
+              target: "./src/pages/home",
+              from: "./src/pages",
+              except: [
+                "./home",
+                // RecentWorkspaces is shared by home + addWorkspace: removed
+                // when it is promoted to components/.
+                "./addWorkspace/components/RecentWorkspaces.tsx",
+              ],
+              message: PAGE_ISOLATION_MESSAGE,
+            },
+            {
+              target: "./src/pages/onboarding",
+              from: "./src/pages",
+              except: ["./onboarding"],
+              message: PAGE_ISOLATION_MESSAGE,
+            },
+            {
+              target: "./src/pages/settings",
+              from: "./src/pages",
+              except: [
+                "./settings",
+                // PiLoginTerminal reuses the workspace terminal hook: removed
+                // when useTerminal is promoted to common/.
+                "./workspace/panels/useTerminal.ts",
+              ],
+              message: PAGE_ISOLATION_MESSAGE,
+            },
+            {
+              target: "./src/pages/workspace",
+              from: "./src/pages",
+              except: [
+                "./workspace",
+                // ChatInput reads the SettingsSection enum: removed when it
+                // moves to common/.
+                "./settings/sections.ts",
+              ],
+              message: PAGE_ISOLATION_MESSAGE,
+            },
+          ],
+        },
+      ],
       // The open-source style guide defines boolean, typeAlias
       "@typescript-eslint/naming-convention": [
         "error",
@@ -258,6 +422,35 @@ export default tseslint.config(
       // configure simple-import-sort plugin
       "simple-import-sort/imports": "error",
       "simple-import-sort/exports": "error",
+    },
+  },
+  // File/folder naming enforcement (docs/development/style/frontend_structure.md):
+  // directories are camelCase, and the generic basenames the style guide bans
+  // (utils/helpers/hooks/atoms/types/misc) fail the blocklist so plumbing files
+  // are named for their topic instead. Scoped to source modules; `__tests__` is
+  // the one non-camelCase folder we allow.
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    plugins: {
+      "check-file": checkFilePlugin,
+    },
+    rules: {
+      "check-file/folder-naming-convention": ["error", { "src/**/": "CAMEL_CASE" }, { ignoreWords: ["__tests__"] }],
+      "check-file/filename-blocklist": [
+        "error",
+        {
+          "**/utils.ts": "*.<topic>.ts",
+          "**/helpers.ts": "*.<topic>.ts",
+          "**/hooks.ts": "use<Name>.ts",
+          "**/atoms.ts": "*.<topic>.ts",
+          "**/types.ts": "*.<topic>.ts",
+          "**/misc.ts": "*.<topic>.ts",
+        },
+        {
+          errorMessage:
+            'Generic basename "{{ target }}" is banned (matched "{{ pattern }}"). Name the topic, or the feature for a lone file (e.g. atoms/selection.ts, utils/formatting.ts). See frontend_structure.md.',
+        },
+      ],
     },
   },
 );

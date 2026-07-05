@@ -14,7 +14,7 @@ import type { ReactElement, ReactNode } from "react";
 import { useEffect, useState } from "react";
 
 import chatStyles from "~/pages/workspace/chatAlpha/AlphaChatView.module.scss";
-import { PulsingDot } from "~/pages/workspace/chatAlpha/pill-animations";
+import { PulsingDot } from "~/pages/workspace/chatAlpha/pillAnimations";
 import { TurnFooter } from "~/pages/workspace/chatAlpha/TurnFooter";
 import { PierreDiffView } from "~/pages/workspace/diffPanel/PierreDiffView.tsx";
 

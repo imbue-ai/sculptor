@@ -4,14 +4,14 @@ import { Check, Square } from "lucide-react";
 import type { ComponentType, ReactElement } from "react";
 
 import { ElementIds } from "~/api";
-import type { AnimationProps } from "~/pages/workspace/chatAlpha/pill-animations";
+import type { AnimationProps } from "~/pages/workspace/chatAlpha/pillAnimations";
 import {
   ANIMATION_POOL,
   BouncingDotsAnimation,
   OrbitAnimation,
   SpinnerAnimation,
   WaveDotsAnimation,
-} from "~/pages/workspace/chatAlpha/pill-animations";
+} from "~/pages/workspace/chatAlpha/pillAnimations";
 import styles from "~/pages/workspace/chatAlpha/StatusPill.module.scss";
 
 /**
