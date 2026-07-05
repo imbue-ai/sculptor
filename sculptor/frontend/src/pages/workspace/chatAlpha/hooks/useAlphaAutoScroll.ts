@@ -87,7 +87,7 @@ export const useAlphaAutoScroll = (
   virtualizer: Virtualizer<HTMLDivElement, Element>,
   lastMessageRole: ChatMessageRole | null,
   lastUserMessageIndex: number,
-  taskId: string,
+  agentId: string,
   // The scroll state machine owns the auto-scroll authority: `following`
   // (pin-to-bottom) and `anchoringTurn` (the filling phase — a new user message
   // anchored at the top while its response grows below). This hook reads those
@@ -312,41 +312,41 @@ export const useAlphaAutoScroll = (
     return (): void => el.removeEventListener("scroll", handleScroll);
   }, [scrollContainerRef, isSuppressed, virtualizer, isProgrammaticScroll, machine, isEngaged, captureReadingAnchor]);
 
-  // Reset auto-scroll state on task switch.  Without this, stale state from
+  // Reset auto-scroll state on agent switch.  Without this, stale state from
   // the previous agent leaks into the new agent's first render — e.g. a stale
   // at-bottom sample from agent A causes pin-to-bottom to fire for agent B,
   // and a higher lastUserMessageIndex triggers a spurious scroll-to-top
   // animation.  This effect MUST be declared before scroll-to-top and
   // pin-to-bottom so it runs first in the layout-effect queue.
-  const prevAutoScrollTaskRef = useRef(taskId);
+  const prevAutoScrollAgentRef = useRef(agentId);
   useLayoutEffect(() => {
-    if (prevAutoScrollTaskRef.current !== taskId) {
-      prevAutoScrollTaskRef.current = taskId;
+    if (prevAutoScrollAgentRef.current !== agentId) {
+      prevAutoScrollAgentRef.current = agentId;
       prevLastUserMessageIndexRef.current = lastUserMessageIndex;
-      // Sample "not at bottom" so pin-to-bottom can't fire for the incoming task
+      // Sample "not at bottom" so pin-to-bottom can't fire for the incoming agent
       // before its saved position is restored. A restore that lands at the
       // bottom re-samples true via the resulting scroll event.
       machine.setGeometryAtBottom(false);
-      // Drop the outgoing task's reading anchor — its message index/offset is
-      // meaningless for the incoming task. The first user scroll re-samples it.
+      // Drop the outgoing agent's reading anchor — its message index/offset is
+      // meaningless for the incoming agent. The first user scroll re-samples it.
       machine.setReadingAnchor(null);
       prevScrollTopRef.current = -1;
-      // Cancel any in-flight footer-reveal window from the outgoing task.
+      // Cancel any in-flight footer-reveal window from the outgoing agent.
       revealFooterUntilRef.current = 0;
       // The authority (following/anchoring) is reset by the machine's
-      // taskSwitched -> restoring transition (dispatched by the persistence
+      // agentSwitched -> restoring transition (dispatched by the persistence
       // hook); this effect only resets auto-scroll's own observations and
       // tears down any in-flight scroll-to-top animation.
       clearScrollAnimation(scrollContainerRef.current, scrollAnimationRef, virtualizer, savedScrollAdjustRef);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskId]);
+  }, [agentId]);
 
   // Transition side-effects that don't belong to any single event site:
   //  - leaving the anchoring (filling) phase tears down its scroll-to-top
   //    animation and clears jump suppression, however we left it (user scroll,
-  //    overflow into following, streaming stop, or a task switch);
-  //  - when a restore settles into userControlled on a still-streaming task
+  //    overflow into following, streaming stop, or an agent switch);
+  //  - when a restore settles into userControlled on a still-streaming agent
   //    whose restored view sits at the bottom, re-engage following (the
   //    streaming-start engage effect was a no-op while we were `restoring`).
   useEffect(() => {

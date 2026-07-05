@@ -8,14 +8,19 @@ import { pluginManager } from "~/plugins/pluginManager.tsx";
 import { getRendererIdentity } from "~/plugins/rendererIdentity.ts";
 
 import type { StreamingUpdate } from "../../../api";
+import { chatMessagesReducer } from "../agentDetailReducers.ts";
+import {
+  getEmptyAgentDetailState,
+  updateAgentDetailStateAtom,
+  updateAgentUpdatedArtifactsAtom,
+} from "../atoms/agentDetails";
+import { updateAgentsAtom } from "../atoms/agents";
 import { handleBtwUpdateAtom } from "../atoms/btwPopup";
 import { dependenciesStatusAtom } from "../atoms/dependenciesStatus";
 import { notificationsAtom } from "../atoms/notifications";
 import { updateProjectsAtom } from "../atoms/projects";
 import { updatePrStatusAtom } from "../atoms/prStatus";
 import { sculptorSettingsAtom } from "../atoms/sculptorSettings";
-import { getEmptyTaskDetailState, updateTaskDetailAtom, updateTaskUpdatedArtifactsAtom } from "../atoms/taskDetails";
-import { updateTasksAtom } from "../atoms/tasks";
 import { isAgentPluginLoadingAllowedAtom, isFrontendPluginsEnabledAtom } from "../atoms/userConfig";
 import { updateWorkspaceBranchAtom } from "../atoms/workspaceBranch";
 import { updateWorkspacesAtom } from "../atoms/workspaces";
@@ -23,7 +28,6 @@ import { appendSetupOutputChunkAtom } from "../atoms/workspaceSetupOutput";
 import { updateWorkspaceSetupStatusAtom } from "../atoms/workspaceSetupStatus";
 import { updateWorkspaceTargetBranchesAtom } from "../atoms/workspaceTargetBranches";
 import { acknowledgeRequests, updateActiveWebsockets } from "../requestTracking";
-import { chatMessagesReducer } from "../taskDetailReducers.ts";
 import { useWebsocket } from "./useWebsocket";
 
 const API_BASE_URL = "/api/v1";
@@ -85,22 +89,22 @@ const respondToPluginCommand = (
 /**
  * This hook:
  * 1. Connects to the unified WebSocket stream
- * 2. Processes task view updates (for sidebar/task list)
- * 3. Processes task detail updates for ALL tasks (even background ones)
+ * 2. Processes agent view updates (for sidebar/agent list)
+ * 3. Processes agent detail updates for ALL agents (even background ones)
  * 4. Processes user updates (projects, settings, repo info)
  * 5. Handles request tracking acknowledgments
  *
- * Task details are accumulated in global atoms so switching between tasks
+ * Agent details are accumulated in global atoms so switching between agents
  * doesn't lose state.
  */
 export const useUnifiedStream = (): void => {
-  const updateTasks = useSetAtom(updateTasksAtom);
+  const updateAgents = useSetAtom(updateAgentsAtom);
   const updateProjects = useSetAtom(updateProjectsAtom);
   const updateWorkspaces = useSetAtom(updateWorkspacesAtom);
   const setNotifications = useSetAtom(notificationsAtom);
   const setSculptorSettings = useSetAtom(sculptorSettingsAtom);
-  const updateTaskDetail = useSetAtom(updateTaskDetailAtom);
-  const updateTaskUpdatedArtifacts = useSetAtom(updateTaskUpdatedArtifactsAtom);
+  const updateAgentDetailState = useSetAtom(updateAgentDetailStateAtom);
+  const updateAgentUpdatedArtifacts = useSetAtom(updateAgentUpdatedArtifactsAtom);
   const updatePrStatus = useSetAtom(updatePrStatusAtom);
   const updateWorkspaceBranch = useSetAtom(updateWorkspaceBranchAtom);
   const updateWorkspaceTargetBranches = useSetAtom(updateWorkspaceTargetBranchesAtom);
@@ -121,20 +125,20 @@ export const useUnifiedStream = (): void => {
 
   const onMessage = useCallback(
     (data: StreamingUpdate): void => {
-      // Handle task views (for task list/sidebar)
+      // Handle agent views (for agent list/sidebar)
       if (data.taskViewsByTaskId) {
-        updateTasks(data.taskViewsByTaskId);
+        updateAgents(data.taskViewsByTaskId);
       }
 
-      // Handle task details (for chat pages)
-      //    Process ALL tasks, even if not currently viewing them
-      // NOTE: This is O(activeTasks) because we only get a task update if something happens
+      // Handle agent details (for chat pages)
+      //    Process ALL agents, even if not currently viewing them
+      // NOTE: This is O(activeAgents) because we only get an agent update if something happens
       if (data.taskUpdateByTaskId && Object.keys(data.taskUpdateByTaskId).length > 0) {
-        Object.entries(data.taskUpdateByTaskId).forEach(([taskId, taskUpdate]) => {
-          updateTaskDetail({
-            taskId,
+        Object.entries(data.taskUpdateByTaskId).forEach(([agentId, taskUpdate]) => {
+          updateAgentDetailState({
+            agentId,
             updater: (currentState) => {
-              const state = currentState ?? getEmptyTaskDetailState();
+              const state = currentState ?? getEmptyAgentDetailState();
 
               // Process incremental updates using pure reducers
               const newChatState = chatMessagesReducer(
@@ -160,8 +164,8 @@ export const useUnifiedStream = (): void => {
 
           // Track which artifacts need fetching
           if (taskUpdate.updatedArtifacts && taskUpdate.updatedArtifacts.length > 0) {
-            updateTaskUpdatedArtifacts({
-              taskId,
+            updateAgentUpdatedArtifacts({
+              agentId,
               artifactTypes: taskUpdate.updatedArtifacts,
             });
           }
@@ -281,13 +285,13 @@ export const useUnifiedStream = (): void => {
       }
     },
     [
-      updateTasks,
+      updateAgents,
       updateProjects,
       updateWorkspaces,
       setNotifications,
       setSculptorSettings,
-      updateTaskDetail,
-      updateTaskUpdatedArtifacts,
+      updateAgentDetailState,
+      updateAgentUpdatedArtifacts,
       updatePrStatus,
       updateWorkspaceBranch,
       updateWorkspaceTargetBranches,

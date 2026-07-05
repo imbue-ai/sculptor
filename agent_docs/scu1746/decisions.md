@@ -72,6 +72,11 @@ principles didn't fully determine. Flip any of them and I'll rework.
 - `storybook build` is broken independently of this pass: `.storybook/main.ts`
   uses `__dirname` under ESM (Storybook v10) and dies while loading presets.
   Worth its own ticket if Storybook builds are expected to work.
+- From the task→agent rename: normalize leftover `"task-1"`-style test-fixture
+  id strings to agent spelling; a coordinated `data-taskid` → `data-agentid`
+  rename with `sculptor/tests/integration/frontend/test_read_unread_status.py`;
+  and a product-copy pass (e.g. "Describe a task for the agent") — copy was
+  deliberately out of scope for the mechanical rename.
 
 ## Import-boundary exceptions (temporary)
 

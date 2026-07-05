@@ -5,7 +5,7 @@ import { initialAuthority, nextAuthority } from "../scrollAuthority.ts";
 
 const ALL_STATES: ReadonlyArray<ScrollAuthority> = [
   { kind: "userControlled" },
-  { kind: "restoring", taskId: "t" },
+  { kind: "restoring", agentId: "t" },
   { kind: "anchoringTurn", anchorIndex: 3 },
   { kind: "following" },
   { kind: "navigating", promptIndex: 1 },
@@ -21,10 +21,10 @@ describe("nextAuthority", () => {
       expect(nextAuthority(state, { kind: "userScrolled" })).toEqual({ kind: "userControlled" });
     });
 
-    it.each(ALL_STATES)("taskSwitched begins restoring (from %o)", (state) => {
-      expect(nextAuthority(state, { kind: "taskSwitched", taskId: "next" })).toEqual({
+    it.each(ALL_STATES)("agentSwitched begins restoring (from %o)", (state) => {
+      expect(nextAuthority(state, { kind: "agentSwitched", agentId: "next" })).toEqual({
         kind: "restoring",
-        taskId: "next",
+        agentId: "next",
       });
     });
   });
@@ -47,7 +47,7 @@ describe("nextAuthority", () => {
   });
 
   describe("from restoring", () => {
-    const s: ScrollAuthority = { kind: "restoring", taskId: "t" };
+    const s: ScrollAuthority = { kind: "restoring", agentId: "t" };
     it("restoreSettled -> userControlled", () => {
       expect(nextAuthority(s, { kind: "restoreSettled" })).toEqual({ kind: "userControlled" });
     });
@@ -111,7 +111,7 @@ describe("nextAuthority", () => {
 
   it("never throws for any (state, event) pair", () => {
     const events: ReadonlyArray<ScrollEvent> = [
-      { kind: "taskSwitched", taskId: "x" },
+      { kind: "agentSwitched", agentId: "x" },
       { kind: "restoreSettled" },
       { kind: "userScrolled" },
       { kind: "newUserTurn", index: 0 },

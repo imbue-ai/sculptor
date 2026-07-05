@@ -187,7 +187,7 @@ const Wrapper = ({
   <JotaiProvider>
     <div style={{ width: "600px" }}>
       <AskUserQuestion
-        taskId="storybook-demo"
+        agentId="storybook-demo"
         questionData={questionData}
         onSubmit={handleSubmit}
         onDismiss={onDismiss ? handleDismiss : undefined}

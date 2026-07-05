@@ -61,7 +61,7 @@ describe("useAlphaScrollPersistence", () => {
     const messages = [{ id: "msg-1" }, { id: "msg-2" }, { id: "msg-3" }];
     const store = createStore();
 
-    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, createScrollStateMachine()), {
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "agent-1", messages, createScrollStateMachine()), {
       wrapper: wrapperFor(store),
     });
 
@@ -86,7 +86,7 @@ describe("useAlphaScrollPersistence", () => {
     const messages = [{ id: "msg-1" }, { id: "msg-2" }, { id: "msg-3" }];
     const store = createStore();
 
-    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, createScrollStateMachine()), {
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "agent-1", messages, createScrollStateMachine()), {
       wrapper: wrapperFor(store),
     });
 
@@ -105,7 +105,7 @@ describe("useAlphaScrollPersistence", () => {
       vi.advanceTimersByTime(16); // rAF debounce
     });
 
-    const savedPosition = store.get(alphaScrollPositionAtomFamily("task-1"));
+    const savedPosition = store.get(alphaScrollPositionAtomFamily("agent-1"));
     expect(savedPosition).toBeDefined();
     expect(savedPosition?.firstVisibleMessageId).toBe("msg-2"); // item at index 1 (start=200, end=400 > scrollTop=300)
     expect(savedPosition?.pixelOffset).toBe(100); // 300 - 200
@@ -121,13 +121,13 @@ describe("useAlphaScrollPersistence", () => {
     const store = createStore();
 
     // Pre-set a saved position that was near bottom
-    store.set(alphaScrollPositionAtomFamily("task-1"), {
+    store.set(alphaScrollPositionAtomFamily("agent-1"), {
       firstVisibleMessageId: "msg-3",
       pixelOffset: 0,
       distanceFromBottom: 100, // within threshold
     });
 
-    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, createScrollStateMachine()), {
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "agent-1", messages, createScrollStateMachine()), {
       wrapper: wrapperFor(store),
     });
 
@@ -151,13 +151,13 @@ describe("useAlphaScrollPersistence", () => {
 
     // Saved while scrolled 300px past the content bottom, into the padding —
     // e.g. the anchored-turn rest position or a manual max scroll.
-    store.set(alphaScrollPositionAtomFamily("task-1"), {
+    store.set(alphaScrollPositionAtomFamily("agent-1"), {
       firstVisibleMessageId: "msg-3",
       pixelOffset: 0,
       distanceFromBottom: -300,
     });
 
-    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, createScrollStateMachine()), {
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "agent-1", messages, createScrollStateMachine()), {
       wrapper: wrapperFor(store),
     });
 
@@ -179,13 +179,13 @@ describe("useAlphaScrollPersistence", () => {
     const messages = [{ id: "msg-1" }, { id: "msg-2" }, { id: "msg-3" }];
     const store = createStore();
 
-    store.set(alphaScrollPositionAtomFamily("task-1"), {
+    store.set(alphaScrollPositionAtomFamily("agent-1"), {
       firstVisibleMessageId: "msg-3",
       pixelOffset: 0,
       distanceFromBottom: -600,
     });
 
-    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, createScrollStateMachine()), {
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "agent-1", messages, createScrollStateMachine()), {
       wrapper: wrapperFor(store),
     });
 
@@ -206,13 +206,13 @@ describe("useAlphaScrollPersistence", () => {
     const store = createStore();
 
     // Pre-set a saved position in the middle
-    store.set(alphaScrollPositionAtomFamily("task-1"), {
+    store.set(alphaScrollPositionAtomFamily("agent-1"), {
       firstVisibleMessageId: "msg-2",
       pixelOffset: 50,
       distanceFromBottom: 800,
     });
 
-    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, createScrollStateMachine()), {
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "agent-1", messages, createScrollStateMachine()), {
       wrapper: wrapperFor(store),
     });
 
@@ -231,7 +231,7 @@ describe("useAlphaScrollPersistence", () => {
     const store = createStore();
     const machine = createScrollStateMachine();
 
-    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, machine), {
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "agent-1", messages, machine), {
       wrapper: wrapperFor(store),
     });
 
@@ -251,13 +251,13 @@ describe("useAlphaScrollPersistence", () => {
     const virtualizer = createMockVirtualizer([createMockVirtualItem(0, 0, 200)]);
     const messages = [{ id: "msg-1" }, { id: "msg-2" }, { id: "msg-3" }];
     const store = createStore();
-    store.set(alphaScrollPositionAtomFamily("task-1"), {
+    store.set(alphaScrollPositionAtomFamily("agent-1"), {
       firstVisibleMessageId: "msg-2",
       pixelOffset: 50,
       distanceFromBottom: 800,
     });
 
-    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, createScrollStateMachine()), {
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "agent-1", messages, createScrollStateMachine()), {
       wrapper: wrapperFor(store),
     });
 
@@ -274,14 +274,14 @@ describe("useAlphaScrollPersistence", () => {
     const virtualizer = createMockVirtualizer([createMockVirtualItem(0, 0, 200)]);
     const messages = [{ id: "msg-1" }, { id: "msg-2" }, { id: "msg-3" }];
     const store = createStore();
-    store.set(alphaScrollPositionAtomFamily("task-1"), {
+    store.set(alphaScrollPositionAtomFamily("agent-1"), {
       firstVisibleMessageId: "msg-2",
       pixelOffset: 50,
       distanceFromBottom: 800,
     });
     const machine = createScrollStateMachine();
 
-    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, machine), {
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "agent-1", messages, machine), {
       wrapper: wrapperFor(store),
     });
 

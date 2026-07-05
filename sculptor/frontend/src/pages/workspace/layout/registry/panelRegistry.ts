@@ -127,7 +127,7 @@ export const buildPluginPanelDefinitions = (
 export const panelRegistryAtom = atom<ReadonlyArray<PanelDefinition>>(buildStaticPanelDefinitions());
 
 // True when two panel definitions are equal for render purposes: same identity, or
-// all of the stable, render-relevant fields match. A registry rebuild on a task tick
+// all of the stable, render-relevant fields match. A registry rebuild on an agent tick
 // produces fresh PanelDefinition objects even when nothing a tab cares about changed,
 // so without this comparator selectAtom would re-emit (new object reference) and
 // re-render the tab every tick. `component` and `icon` are identity-stable
@@ -160,7 +160,7 @@ const panelDefinitionEqual = (a: PanelDefinition | undefined, b: PanelDefinition
 
 // True when two registries hold pairwise render-equal definitions in the same order.
 // The registry sync hook uses this to skip the atom write for rebuilds that changed
-// nothing (task ticks), so whole-registry subscribers don't re-render several times per
+// nothing (agent ticks), so whole-registry subscribers don't re-render several times per
 // second during streaming. Because panelDefinitionEqual ignores the callback fields,
 // the hook must separately force a write when a callback INPUT (agent diagnostics)
 // changes — see useWorkspaceDynamicPanels.
@@ -169,13 +169,13 @@ export const panelRegistriesEqual = (a: ReadonlyArray<PanelDefinition>, b: Reado
 };
 
 // A single panel's definition, sliced out of the registry and memoized per id.
-// Tabs subscribe to this rather than the whole registry so a registry rebuild on a
-// task tick (which produces a new array but the same per-id definition) does not
+// Tabs subscribe to this rather than the whole registry so a registry rebuild on an
+// agent tick (which produces a new array but the same per-id definition) does not
 // re-render every tab — only the tab whose own definition changed.
 //
 // The family is keyed by panel id, which for agents/terminals is unbounded across a
 // session, so the dynamic-panel eviction (deriveDynamicPanels) removes an entry once
-// its task/terminal is gone — alongside its cached component.
+// its agent/terminal is gone — alongside its cached component.
 export const panelDefinitionByIdAtom = atomFamily((panelId: PanelId) =>
   selectAtom(
     panelRegistryAtom,
@@ -210,7 +210,7 @@ export const resolvedActivePanelIdInSubSectionAtom = atomFamily((subSection: Sub
 
 // The layout↔registry join SectionBody subscribes to: the resolved component for the
 // sub-section's active panel. Returns a stable reference per panel id (static
-// component or identity-cached dynamic component), so a registry rebuild on a task
+// component or identity-cached dynamic component), so a registry rebuild on an agent
 // tick never remounts live panel content.
 export const activePanelComponentInSubSectionAtom = atomFamily((subSection: SubSectionId) =>
   atom((get): ComponentType | undefined => {

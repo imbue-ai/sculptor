@@ -2,7 +2,7 @@ import { Text, Tooltip } from "@radix-ui/themes";
 import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
-import { useTask } from "~/common/state/hooks/useTaskHelpers";
+import { useAgent } from "~/common/state/hooks/useAgentHelpers";
 import { type AgentDotStatus, getAgentDotStatus } from "~/common/utils/statusDot.ts";
 import { AgentStatusDot as AgentStatusDotBase } from "~/components/statusDot";
 
@@ -10,7 +10,7 @@ import { useRelativeTime } from "./hooks/useRelativeTime";
 import styles from "./PeekAgentStatusDot.module.scss";
 
 type BannerAgentStatusDotProps = {
-  taskId: string | null | undefined;
+  agentId: string | null | undefined;
   workspaceCreatedAt: string | undefined;
 };
 
@@ -22,10 +22,10 @@ const STATUS_LABELS: Record<AgentDotStatus, string> = {
   read: "Idle",
 };
 
-export const PeekAgentStatusDot = ({ taskId, workspaceCreatedAt }: BannerAgentStatusDotProps): ReactElement => {
-  const task = useTask(taskId ?? "");
-  const dotStatus = task ? getAgentDotStatus(task.status, task.lastReadAt, task.updatedAt) : "read";
-  const activeTime = useRelativeTime(task?.updatedAt);
+export const PeekAgentStatusDot = ({ agentId, workspaceCreatedAt }: BannerAgentStatusDotProps): ReactElement => {
+  const agent = useAgent(agentId ?? "");
+  const dotStatus = agent ? getAgentDotStatus(agent.status, agent.lastReadAt, agent.updatedAt) : "read";
+  const activeTime = useRelativeTime(agent?.updatedAt);
   const createdTime = useRelativeTime(workspaceCreatedAt);
 
   const tooltipContent = (

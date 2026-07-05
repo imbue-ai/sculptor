@@ -26,24 +26,24 @@ export const AgentLightboxContext = createContext<AgentLightboxContextValue | nu
 export const useAgentLightbox = (): AgentLightboxContextValue | null => useContext(AgentLightboxContext);
 
 type AgentLightboxProviderProps = {
-  taskId?: string;
+  agentId?: string;
   children: ReactNode;
 };
 
-export const AgentLightboxProvider = ({ taskId, children }: AgentLightboxProviderProps): ReactElement => {
+export const AgentLightboxProvider = ({ agentId, children }: AgentLightboxProviderProps): ReactElement => {
   // Registered media is real state (keyed by list id), so the render reads state
   // rather than a mutable ref and updates re-render automatically.
   const [lists, setLists] = useState<ReadonlyMap<string, ListEntry>>(() => new Map());
   const [lightboxPath, setLightboxPath] = useState<string | null>(null);
 
   // Reset the media registry and close the lightbox when switching agents.
-  // Adjusting state during render (comparing taskId to its previous value)
-  // instead of remounting via key={taskId} avoids scroll container DOM element
+  // Adjusting state during render (comparing agentId to its previous value)
+  // instead of remounting via key={agentId} avoids scroll container DOM element
   // swaps and visible scroll flickering, and avoids the extra render an effect
   // would introduce.
-  const [prevTaskId, setPrevTaskId] = useState(taskId);
-  if (taskId !== prevTaskId) {
-    setPrevTaskId(taskId);
+  const [prevAgentId, setPrevAgentId] = useState(agentId);
+  if (agentId !== prevAgentId) {
+    setPrevAgentId(agentId);
     setLists(new Map());
     setLightboxPath(null);
   }

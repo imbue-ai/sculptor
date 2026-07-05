@@ -13,19 +13,19 @@ import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 
 import { ActionsPanel } from "./ActionsPanel";
 
-// Mock useWorkspacePanelData (deep dependency on routing, task state, etc.)
+// Mock useWorkspacePanelData (deep dependency on routing, agent state, etc.)
 vi.mock("~/pages/workspace/panels/useWorkspacePanelData", () => ({
   useWorkspacePanelData: (): {
-    task: null;
+    agent: null;
     artifacts: Record<string, never>;
     userMessageIds: Array<string>;
-    taskID: string;
+    agentId: string;
     projectID: string;
   } => ({
-    task: null,
+    agent: null,
     artifacts: {},
     userMessageIds: [],
-    taskID: "test-task",
+    agentId: "test-task",
     projectID: "test-project",
   }),
 }));

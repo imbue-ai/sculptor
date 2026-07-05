@@ -37,9 +37,9 @@ describe("createScrollStateMachine", () => {
     const listener = vi.fn();
     m.subscribe(listener);
 
-    m.dispatch({ kind: "taskSwitched", taskId: "t1" });
+    m.dispatch({ kind: "agentSwitched", agentId: "t1" });
 
-    expect(m.getState().authority).toEqual({ kind: "restoring", taskId: "t1" });
+    expect(m.getState().authority).toEqual({ kind: "restoring", agentId: "t1" });
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
@@ -63,7 +63,7 @@ describe("createScrollStateMachine", () => {
     expect(el.getAttribute(SCROLL_PHASE_ATTR)).toBe("userControlled");
     expect(el.getAttribute(SCROLL_SETTLED_ATTR)).toBe("true");
 
-    m.dispatch({ kind: "taskSwitched", taskId: "t1" });
+    m.dispatch({ kind: "agentSwitched", agentId: "t1" });
     expect(el.getAttribute(SCROLL_PHASE_ATTR)).toBe("restoring");
     expect(el.getAttribute(SCROLL_SETTLED_ATTR)).toBe("false");
 
@@ -107,7 +107,7 @@ describe("createScrollStateMachine", () => {
     const el = document.createElement("div");
     m.attach(el);
 
-    m.dispatchLayout({ kind: "invalidated", taskId: "t1" });
+    m.dispatchLayout({ kind: "invalidated", agentId: "t1" });
     expect(isScrollSettled(m.getState())).toBe(false);
     expect(el.getAttribute(SCROLL_SETTLED_ATTR)).toBe("false");
 
@@ -143,7 +143,7 @@ describe("createScrollStateMachine", () => {
     it("defers to the sampled geometry in every other phase", () => {
       for (const authority of [
         { kind: "userControlled" } as const,
-        { kind: "restoring", taskId: "t" } as const,
+        { kind: "restoring", agentId: "t" } as const,
         { kind: "navigating", promptIndex: 0 } as const,
       ]) {
         expect(
@@ -226,7 +226,7 @@ describe("createScrollStateMachine", () => {
     });
 
     it("leaves scrollTop to the owner while restoring or navigating", () => {
-      expect(projectReflow(stateWith({ authority: { kind: "restoring", taskId: "t" } }))).toEqual({ kind: "ignore" });
+      expect(projectReflow(stateWith({ authority: { kind: "restoring", agentId: "t" } }))).toEqual({ kind: "ignore" });
       expect(projectReflow(stateWith({ authority: { kind: "navigating", promptIndex: 0 } }))).toEqual({
         kind: "ignore",
       });
@@ -280,8 +280,8 @@ describe("createScrollStateMachine", () => {
       const m = createScrollStateMachine();
       m.setSuppressed(true);
 
-      m.dispatch({ kind: "taskSwitched", taskId: "t1" });
-      expect(m.getState().authority).toEqual({ kind: "restoring", taskId: "t1" });
+      m.dispatch({ kind: "agentSwitched", agentId: "t1" });
+      expect(m.getState().authority).toEqual({ kind: "restoring", agentId: "t1" });
 
       m.dispatch({ kind: "userScrolled" });
       expect(m.getState().authority).toEqual({ kind: "userControlled" });
@@ -304,7 +304,7 @@ describe("createScrollStateMachine", () => {
     const listener = vi.fn();
     const unsubscribe = m.subscribe(listener);
 
-    m.dispatch({ kind: "taskSwitched", taskId: "t1" });
+    m.dispatch({ kind: "agentSwitched", agentId: "t1" });
     expect(listener).toHaveBeenCalledTimes(1);
 
     unsubscribe();
@@ -317,6 +317,6 @@ describe("createScrollStateMachine", () => {
     const el = document.createElement("div");
     m.attach(el);
     m.attach(null);
-    expect(() => m.dispatch({ kind: "taskSwitched", taskId: "t1" })).not.toThrow();
+    expect(() => m.dispatch({ kind: "agentSwitched", agentId: "t1" })).not.toThrow();
   });
 });

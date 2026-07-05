@@ -5,8 +5,8 @@ import type { ReactElement, ReactNode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { CodingAgentTaskView, Project, Workspace } from "~/api";
+import { agentAtomFamily, agentIdsAtom } from "~/common/state/atoms/agents";
 import { projectAtomFamily, projectIdsAtom } from "~/common/state/atoms/projects";
-import { taskAtomFamily, taskIdsAtom } from "~/common/state/atoms/tasks";
 import { workspaceAtomFamily, workspaceIdsAtom } from "~/common/state/atoms/workspaces";
 
 import { AgentDetailPane } from "./AgentDetailPane";
@@ -15,13 +15,13 @@ import { WorkspaceDetailPane } from "./WorkspaceDetailPane";
 
 type Store = ReturnType<typeof createStore>;
 
-const makeTask = (overrides: Partial<CodingAgentTaskView> = {}): CodingAgentTaskView =>
+const makeAgent = (overrides: Partial<CodingAgentTaskView> = {}): CodingAgentTaskView =>
   ({
     id: "task-1",
     projectId: "proj-1",
     createdAt: "2024-01-01T00:00:00Z",
     updatedAt: "2024-01-01T00:00:00Z",
-    taskStatus: "RUNNING",
+    agentStatus: "RUNNING",
     isAutoCompacting: false,
     artifactNames: [],
     initialPrompt: "Test prompt",
@@ -60,9 +60,9 @@ const makeProject = (overrides: Partial<Project> = {}): Project =>
     ...overrides,
   }) as unknown as Project;
 
-const seedTask = (store: Store, task: CodingAgentTaskView): void => {
-  store.set(taskAtomFamily(task.id), task);
-  store.set(taskIdsAtom, [...(store.get(taskIdsAtom) ?? []), task.id]);
+const seedAgent = (store: Store, agent: CodingAgentTaskView): void => {
+  store.set(agentAtomFamily(agent.id), agent);
+  store.set(agentIdsAtom, [...(store.get(agentIdsAtom) ?? []), agent.id]);
 };
 
 const seedWorkspace = (store: Store, workspace: Workspace): void => {
@@ -92,9 +92,9 @@ describe("AgentDetailPane", () => {
   it("renders title, goal, and workspace description when populated", () => {
     const store = createStore();
     seedWorkspace(store, makeWorkspace({ objectId: "ws-1", description: "Parent WS" }));
-    seedTask(
+    seedAgent(
       store,
-      makeTask({
+      makeAgent({
         id: "task-1",
         title: "Ship the refactor",
         status: "READY",
@@ -108,7 +108,7 @@ describe("AgentDetailPane", () => {
     expect(screen.getByText("Ship the refactor")).toBeTruthy();
     expect(screen.getByText("Finish the plan")).toBeTruthy();
     expect(screen.getByText("in Parent WS")).toBeTruthy();
-    // Status badge was retired from this pane — task status is shown elsewhere.
+    // Status badge was retired from this pane — agent status is shown elsewhere.
     expect(screen.queryByText("READY")).toBeNull();
   });
 
@@ -120,9 +120,9 @@ describe("AgentDetailPane", () => {
     expect(screen.getByText("Agent no longer exists")).toBeTruthy();
   });
 
-  it("omits the goal line when the task has no goal", () => {
+  it("omits the goal line when the agent has no goal", () => {
     const store = createStore();
-    seedTask(store, makeTask({ id: "task-1", title: "Ship it", goal: "", workspaceId: null }));
+    seedAgent(store, makeAgent({ id: "task-1", title: "Ship it", goal: "", workspaceId: null }));
 
     const { container } = renderWithStore(store, <AgentDetailPane agentId="task-1" entityDisplayName="fallback" />);
 
@@ -131,16 +131,16 @@ describe("AgentDetailPane", () => {
     expect(container.textContent).not.toContain("in ");
   });
 
-  it("omits the workspace row when the task has no workspace", () => {
+  it("omits the workspace row when the agent has no workspace", () => {
     const store = createStore();
-    seedTask(store, makeTask({ id: "task-1", title: "Standalone", workspaceId: null }));
+    seedAgent(store, makeAgent({ id: "task-1", title: "Standalone", workspaceId: null }));
     const { container } = renderWithStore(store, <AgentDetailPane agentId="task-1" entityDisplayName="fallback" />);
     expect(container.textContent).not.toContain("in ");
   });
 
-  it("uses goal as the title when the task has no title", () => {
+  it("uses goal as the title when the agent has no title", () => {
     const store = createStore();
-    seedTask(store, makeTask({ id: "task-1", title: null, goal: "First goal line\nsecond line", workspaceId: null }));
+    seedAgent(store, makeAgent({ id: "task-1", title: null, goal: "First goal line\nsecond line", workspaceId: null }));
 
     renderWithStore(store, <AgentDetailPane agentId="task-1" entityDisplayName="fallback" />);
 
@@ -153,8 +153,8 @@ describe("WorkspaceDetailPane", () => {
     const store = createStore();
     seedProject(store, makeProject({ objectId: "proj-1", name: "Core" }));
     seedWorkspace(store, makeWorkspace({ objectId: "ws-1", description: "Main line", projectId: "proj-1" }));
-    seedTask(store, makeTask({ id: "t1", title: "Rebuild tabs", workspaceId: "ws-1" }));
-    seedTask(store, makeTask({ id: "t2", title: "Upgrade router", workspaceId: "ws-1" }));
+    seedAgent(store, makeAgent({ id: "t1", title: "Rebuild tabs", workspaceId: "ws-1" }));
+    seedAgent(store, makeAgent({ id: "t2", title: "Upgrade router", workspaceId: "ws-1" }));
 
     renderWithStore(store, <WorkspaceDetailPane workspaceId="ws-1" entityDisplayName="fallback" />);
 
@@ -166,7 +166,7 @@ describe("WorkspaceDetailPane", () => {
     expect(screen.queryByText("Upgrade router")).toBeNull();
   });
 
-  it("renders 'No agents yet' when the workspace has no non-deleted tasks", () => {
+  it("renders 'No agents yet' when the workspace has no non-deleted agents", () => {
     const store = createStore();
     seedWorkspace(store, makeWorkspace({ objectId: "ws-1", description: "Empty" }));
 
@@ -190,7 +190,7 @@ describe("WorkspaceDetailPane", () => {
     expect(screen.getByText("No agents yet")).toBeTruthy();
 
     act(() => {
-      seedTask(store, makeTask({ id: "t1", title: "Fresh agent", workspaceId: "ws-1" }));
+      seedAgent(store, makeAgent({ id: "t1", title: "Fresh agent", workspaceId: "ws-1" }));
     });
     expect(screen.getByText("1 agent")).toBeTruthy();
   });

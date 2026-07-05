@@ -5,17 +5,17 @@ import type { AskUserQuestionData, ChatMessage, TaskStatus } from "~/api";
 import { LlmModel, sendWorkspaceAgentMessages } from "~/api";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
 import { chatActionsAtom } from "~/common/state/atoms/chatActions.ts";
-import { useTaskChatMessages, useTaskDetailWithDefaults } from "~/common/state/hooks/useTaskDetail";
-import { useTaskIsAutoCompacting, useTaskModel, useTaskStatus } from "~/common/state/hooks/useTaskHelpers.ts";
+import { useAgentChatMessages, useAgentDetailWithDefaults } from "~/common/state/hooks/useAgentDetail";
+import { useAgentIsAutoCompacting, useAgentModel, useAgentStatusField } from "~/common/state/hooks/useAgentHelpers.ts";
 import { useChatSmoothStreaming } from "~/pages/workspace/chatAlpha/hooks/useSmoothStreaming.ts";
 import {
-  useSmoothStreamingOnTaskSwitch,
+  useSmoothStreamingOnAgentSwitch,
   useSmoothStreamingViewportObserver,
 } from "~/pages/workspace/chatAlpha/hooks/useSmoothStreamingViewportObserver.ts";
 import { activeChatAgentIdAtomFamily } from "~/pages/workspace/panels/workspaceAgentActions.ts";
 
 type UseChatDataArgs = {
-  taskID: string;
+  agentId: string;
   workspaceID: string;
   appendTextRef: React.MutableRefObject<((text: string) => void) | null> | undefined;
   insertSkillRef: React.MutableRefObject<((skill: InsertSkillArg) => void) | null> | undefined;
@@ -27,23 +27,23 @@ export type ChatData = {
   isStreaming: boolean;
   workingUserMessageId: string | null;
   queuedChatMessages: Array<ChatMessage>;
-  taskStatus: TaskStatus | undefined;
-  taskModel: string | undefined;
+  agentStatus: TaskStatus | undefined;
+  agentModel: string | undefined;
   isAutoCompacting: boolean;
   pendingUserQuestion: AskUserQuestionData | null;
   pendingBackgroundTaskCount: number;
   bottomSentinelRef: React.MutableRefObject<HTMLDivElement | null>;
 };
 
-export const useChatData = ({ taskID, workspaceID, appendTextRef, insertSkillRef }: UseChatDataArgs): ChatData => {
+export const useChatData = ({ agentId, workspaceID, appendTextRef, insertSkillRef }: UseChatDataArgs): ChatData => {
   const {
     chatMessages: rawChatMessages,
     inProgressChatMessage,
     workingUserMessageId,
     queuedChatMessages,
     pendingBackgroundTaskIds,
-  } = useTaskChatMessages(taskID);
-  const { pendingUserQuestion } = useTaskDetailWithDefaults(taskID);
+  } = useAgentChatMessages(agentId);
+  const { pendingUserQuestion } = useAgentDetailWithDefaults(agentId);
   const smoothInProgressChatMessage = useChatSmoothStreaming(inProgressChatMessage);
   const chatMessages = useMemo(() => {
     // Only substitute the smooth message when its ID matches the current
@@ -59,12 +59,12 @@ export const useChatData = ({ taskID, workspaceID, appendTextRef, insertSkillRef
   }, [rawChatMessages, smoothInProgressChatMessage, inProgressChatMessage]);
   const isStreaming = smoothInProgressChatMessage !== null;
 
-  const taskStatus = useTaskStatus(taskID);
-  const taskModel = useTaskModel(taskID);
-  const isAutoCompacting = useTaskIsAutoCompacting(taskID);
+  const agentStatus = useAgentStatusField(agentId);
+  const agentModel = useAgentModel(agentId);
+  const isAutoCompacting = useAgentIsAutoCompacting(agentId);
   const setChatActions = useSetAtom(chatActionsAtom);
   const bottomSentinelRef = useSmoothStreamingViewportObserver();
-  useSmoothStreamingOnTaskSwitch(taskID, bottomSentinelRef);
+  useSmoothStreamingOnAgentSwitch(agentId, bottomSentinelRef);
 
   // `chatActionsAtom` is a single slot shared by workspace-scoped consumers
   // (SkillsPanel, ActionsPanel, PrButton, the command palette), but several
@@ -73,9 +73,9 @@ export const useChatData = ({ taskID, workspaceID, appendTextRef, insertSkillRef
   // is the same resolution the consumers gate on, so actions reach the agent
   // they display as their target instead of whichever panel bound last, and
   // one panel unmounting cannot strand a surviving panel's registration.
-  const isChatActionsOwner = useAtomValue(activeChatAgentIdAtomFamily(workspaceID)) === taskID;
+  const isChatActionsOwner = useAtomValue(activeChatAgentIdAtomFamily(workspaceID)) === agentId;
 
-  // Bind the action closures whenever ownership/taskID/model/refs change. No
+  // Bind the action closures whenever ownership/agentId/model/refs change. No
   // cleanup here — a re-run just overwrites the previous closures, and the
   // teardown lives in its own ownership-scoped effect below.
   useEffect(() => {
@@ -89,14 +89,14 @@ export const useChatData = ({ taskID, workspaceID, appendTextRef, insertSkillRef
         insertSkillRef?.current?.(skill);
       },
       sendMessage: async (message: string): Promise<void> => {
-        if (!taskID) return;
+        if (!agentId) return;
         await sendWorkspaceAgentMessages({
-          path: { workspace_id: workspaceID, agent_id: taskID },
-          body: { message, model: (taskModel as LlmModel) || LlmModel.CLAUDE_4_OPUS_200K },
+          path: { workspace_id: workspaceID, agent_id: agentId },
+          body: { message, model: (agentModel as LlmModel) || LlmModel.CLAUDE_4_OPUS_200K },
         });
       },
     }));
-  }, [setChatActions, isChatActionsOwner, appendTextRef, insertSkillRef, workspaceID, taskID, taskModel]);
+  }, [setChatActions, isChatActionsOwner, appendTextRef, insertSkillRef, workspaceID, agentId, agentModel]);
 
   // Track `isDisabled` separately so a queue-length change doesn't tear down
   // and re-bind the action closures on every queued-message mutation.
@@ -108,7 +108,7 @@ export const useChatData = ({ taskID, workspaceID, appendTextRef, insertSkillRef
 
   // When this panel stops owning the slot (its agent is no longer the active
   // chat agent, or the panel unmounts while owning), null the closures so
-  // consumers don't hold stale references to a torn-down editor or task, and
+  // consumers don't hold stale references to a torn-down editor or agent, and
   // flip isDisabled back to true so they treat the chat as unavailable. The
   // cleanup is registered only while owning, so a non-owner unmounting never
   // wipes the owner's registration; on an ownership hand-off React runs this
@@ -126,8 +126,8 @@ export const useChatData = ({ taskID, workspaceID, appendTextRef, insertSkillRef
     isStreaming,
     workingUserMessageId,
     queuedChatMessages,
-    taskStatus,
-    taskModel,
+    agentStatus,
+    agentModel,
     isAutoCompacting,
     pendingUserQuestion,
     pendingBackgroundTaskCount: pendingBackgroundTaskIds.length,

@@ -6,8 +6,8 @@ import type { ChatMessage } from "../../../api";
 import { LlmModel, sendWorkspaceAgentMessages } from "../../../api";
 import { attachedFilesAtomFamily } from "../../../common/state/atoms/attachedFiles.ts";
 import { promptDraftAtomFamily } from "../../../common/state/atoms/promptDrafts.ts";
-import { useTaskModel } from "../../../common/state/hooks/useTaskHelpers.ts";
-import { useChatTask } from "../chatAlpha/ChatTaskContext.tsx";
+import { useAgentModel } from "../../../common/state/hooks/useAgentHelpers.ts";
+import { useChatAgent } from "../chatAlpha/ChatAgentContext.tsx";
 import { type EditConflictData, QueuedMessageBar } from "./QueuedMessageBar.tsx";
 import { UndoQueuedMessageDialog } from "./UndoQueuedMessageDialog.tsx";
 
@@ -24,14 +24,14 @@ type QueuedMessagesProps = {
 export const QueuedMessages = ({ messages }: QueuedMessagesProps): ReactElement => {
   // The owning chat panel's agent — the queued message ids being edited or
   // re-sent belong to it, not to the route's agent.
-  const { workspaceId: workspaceID, taskId: taskID } = useChatTask();
-  const taskModel = useTaskModel(taskID);
+  const { workspaceId: workspaceID, agentId } = useChatAgent();
+  const agentModel = useAgentModel(agentId);
   const [undoDialogData, setUndoDialogData] = useState<EditConflictData | null>(null);
 
   // Write-only — avoids subscribing to value changes that would cause
   // unnecessary re-renders of the parent component tree.
-  const setPromptDraft = useSetAtom(promptDraftAtomFamily(taskID));
-  const setAttachedFiles = useSetAtom(attachedFilesAtomFamily(taskID));
+  const setPromptDraft = useSetAtom(promptDraftAtomFamily(agentId));
+  const setAttachedFiles = useSetAtom(attachedFilesAtomFamily(agentId));
 
   const handleEditConflict = useCallback((data: EditConflictData): void => {
     setUndoDialogData(data);
@@ -54,15 +54,15 @@ export const QueuedMessages = ({ messages }: QueuedMessagesProps): ReactElement 
   const handleUndoCancel = useCallback((): void => {
     if (!undoDialogData) return;
     void sendWorkspaceAgentMessages({
-      path: { workspace_id: workspaceID, agent_id: taskID },
+      path: { workspace_id: workspaceID, agent_id: agentId },
       body: {
         message: undoDialogData.rawTextContent,
-        model: (taskModel as LlmModel) || LlmModel.CLAUDE_4_OPUS_200K,
+        model: (agentModel as LlmModel) || LlmModel.CLAUDE_4_OPUS_200K,
         files: undoDialogData.fileSources,
       },
     });
     setUndoDialogData(null);
-  }, [undoDialogData, taskID, workspaceID, taskModel]);
+  }, [undoDialogData, agentId, workspaceID, agentModel]);
 
   return (
     <>

@@ -8,7 +8,7 @@ import type { AskUserQuestionData } from "~/api";
 import { ElementIds } from "~/api";
 import { useFocusOnMountIfUnclaimed } from "~/common/hooks/useFocusOnMountIfUnclaimed";
 import { useKeybinding } from "~/common/keybindings/useKeybinding.ts";
-import { draftQuestionStateAtomFamily, EMPTY_DRAFT_QUESTION_STATE } from "~/common/state/atoms/taskDetails";
+import { draftQuestionStateAtomFamily, EMPTY_DRAFT_QUESTION_STATE } from "~/common/state/atoms/agentDetails";
 import { mergeClasses } from "~/common/utils/classNames";
 import { optional } from "~/common/utils/optional";
 import { MarkdownBlock } from "~/components/MarkdownBlock";
@@ -28,7 +28,7 @@ const OTHER_PLACEHOLDER = "Provide an alternative";
 const SUBMIT_SPINNER_START_DELAY_MS = 1_000;
 
 type AskUserQuestionProps = {
-  taskId: string;
+  agentId: string;
   questionData: AskUserQuestionData;
   // May be async; `handleSubmit` awaits it to drive the in-flight state.
   onSubmit: (answers: Record<string, string>, notes: Record<string, string>) => void | Promise<void>;
@@ -42,9 +42,9 @@ const recordToMap = <TV,>(record: Record<string, TV>): Map<string, TV> => new Ma
 const recordToMapOfSets = (record: Record<string, Array<string>>): Map<string, Set<string>> =>
   new Map(Object.entries(record).map(([k, v]) => [k, new Set(v)]));
 
-export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: AskUserQuestionProps): ReactElement => {
+export const AskUserQuestion = ({ agentId, questionData, onSubmit, onDismiss }: AskUserQuestionProps): ReactElement => {
   const { questions } = questionData;
-  const [rawDraftState, setDraftState] = useAtom(draftQuestionStateAtomFamily(taskId));
+  const [rawDraftState, setDraftState] = useAtom(draftQuestionStateAtomFamily(agentId));
 
   // If the stored draft belongs to a different question batch, discard it.
   const draftState = rawDraftState.toolUseId === questionData.toolUseId ? rawDraftState : EMPTY_DRAFT_QUESTION_STATE;

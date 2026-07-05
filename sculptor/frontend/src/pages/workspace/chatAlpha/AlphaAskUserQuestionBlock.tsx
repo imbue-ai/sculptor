@@ -3,11 +3,11 @@ import type { ReactElement } from "react";
 
 import type { SubmittedQuestionAnswers, ToolUseBlock } from "~/api";
 import { ElementIds } from "~/api";
-import { useTaskDetailWithDefaults } from "~/common/state/hooks/useTaskDetail";
+import { useAgentDetailWithDefaults } from "~/common/state/hooks/useAgentDetail";
 import { splitAnswerIntoParts } from "~/pages/workspace/chatAlpha/utils/askUserQuestion";
 
 import styles from "./AlphaAskUserQuestionBlock.module.scss";
-import { useChatTask } from "./ChatTaskContext.tsx";
+import { useChatAgent } from "./ChatAgentContext.tsx";
 
 const DISMISSED_ANSWER = "[Dismissed]";
 
@@ -74,8 +74,8 @@ const DismissedOptionsList = ({ question }: { question: Question }): ReactElemen
 export const AlphaAskUserQuestionBlock = ({ toolBlock }: { toolBlock: ToolUseBlock }): ReactElement => {
   // The owning chat panel's agent — `toolBlock.id` lives in that agent's
   // transcript, so the answers lookup must use the same agent.
-  const { taskId: taskID } = useChatTask();
-  const { submittedQuestionAnswers } = useTaskDetailWithDefaults(taskID);
+  const { agentId } = useChatAgent();
+  const { submittedQuestionAnswers } = useAgentDetailWithDefaults(agentId);
 
   const matchingAnswers: SubmittedQuestionAnswers | undefined = submittedQuestionAnswers[toolBlock.id];
 

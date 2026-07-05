@@ -7,15 +7,15 @@ describe("nextLayout", () => {
     expect(initialLayout).toEqual({ kind: "stable" });
   });
 
-  it("invalidated -> measuring with the task id", () => {
-    expect(nextLayout(initialLayout, { kind: "invalidated", taskId: "t1" })).toEqual({
+  it("invalidated -> measuring with the agent id", () => {
+    expect(nextLayout(initialLayout, { kind: "invalidated", agentId: "t1" })).toEqual({
       kind: "measuring",
-      sinceTaskId: "t1",
+      sinceAgentId: "t1",
     });
   });
 
   it("converged -> stable while measuring", () => {
-    const measuring = { kind: "measuring", sinceTaskId: "t1" } as const;
+    const measuring = { kind: "measuring", sinceAgentId: "t1" } as const;
     expect(nextLayout(measuring, { kind: "converged" })).toEqual({ kind: "stable" });
   });
 
@@ -23,11 +23,11 @@ describe("nextLayout", () => {
     expect(nextLayout(initialLayout, { kind: "converged" })).toBe(initialLayout);
   });
 
-  it("a second invalidation re-targets the task id", () => {
-    const measuring = nextLayout(initialLayout, { kind: "invalidated", taskId: "t1" });
-    expect(nextLayout(measuring, { kind: "invalidated", taskId: "t2" })).toEqual({
+  it("a second invalidation re-targets the agent id", () => {
+    const measuring = nextLayout(initialLayout, { kind: "invalidated", agentId: "t1" });
+    expect(nextLayout(measuring, { kind: "invalidated", agentId: "t2" })).toEqual({
       kind: "measuring",
-      sinceTaskId: "t2",
+      sinceAgentId: "t2",
     });
   });
 });

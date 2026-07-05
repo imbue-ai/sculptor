@@ -7,7 +7,7 @@
 // shallow-equal-deduped displayedPanelIdsAtom (which splices in the in-flight drag
 // ghost), so an insertion-index change during a drag reorders a string array without
 // rebuilding tab objects. Each tab subscribes to its OWN registry slice
-// (panelDefinitionByIdAtom) so a registry rebuild on a task tick re-renders only the
+// (panelDefinitionByIdAtom) so a registry rebuild on an agent tick re-renders only the
 // tab whose definition actually changed, not the whole strip.
 
 import { useDraggable } from "@dnd-kit/core";

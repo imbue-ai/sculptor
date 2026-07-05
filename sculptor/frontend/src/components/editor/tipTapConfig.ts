@@ -336,7 +336,7 @@ export const createTipTapExtensions = ({
       ...(editable && (projectID || workspaceID || entityDataRef)
         ? {
             suggestions: [
-              // CAPABILITY-GAP: supportsFileReferences — the @-mention file/folder picker resolves path references the agent reads itself; both Claude and pi report true today, so no harness suppresses it yet. createTipTapExtensions has no taskID, so gate here (thread the capability through Editor) when a harness reports !supportsFileReferences.
+              // CAPABILITY-GAP: supportsFileReferences — the @-mention file/folder picker resolves path references the agent reads itself; both Claude and pi report true today, so no harness suppresses it yet. createTipTapExtensions has no agentId, so gate here (thread the capability through Editor) when a harness reports !supportsFileReferences.
               ...(workspaceID && projectID ? [createFileSuggestion(projectID, workspaceID)] : []),
               // The slash-command skill picker is harness-agnostic: it fetches
               // the full discover_skills list for every harness and sends a

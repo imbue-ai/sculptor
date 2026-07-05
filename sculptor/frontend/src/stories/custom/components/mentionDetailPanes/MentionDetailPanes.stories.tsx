@@ -3,8 +3,8 @@ import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 
 import type { CodingAgentTaskView, Project, Workspace } from "~/api";
+import { agentAtomFamily, agentIdsAtom } from "~/common/state/atoms/agents";
 import { projectAtomFamily, projectIdsAtom } from "~/common/state/atoms/projects";
-import { taskAtomFamily, taskIdsAtom } from "~/common/state/atoms/tasks";
 import { workspaceAtomFamily, workspaceIdsAtom } from "~/common/state/atoms/workspaces";
 import { AgentDetailPane } from "~/components/mentionDetailPanes/AgentDetailPane";
 import { RepositoryDetailPane } from "~/components/mentionDetailPanes/RepositoryDetailPane";
@@ -14,13 +14,13 @@ import { WorkspaceDetailPane } from "~/components/mentionDetailPanes/WorkspaceDe
 // independent. The panes read from atoms, so we wrap each story in a jotai
 // `<Provider>` with a fresh store.
 
-const makeTask = (overrides: Partial<CodingAgentTaskView>): CodingAgentTaskView =>
+const makeAgent = (overrides: Partial<CodingAgentTaskView>): CodingAgentTaskView =>
   ({
     id: "task-1",
     projectId: "proj-1",
     createdAt: "2024-01-01T00:00:00Z",
     updatedAt: "2024-01-01T00:00:00Z",
-    taskStatus: "RUNNING",
+    agentStatus: "RUNNING",
     isAutoCompacting: false,
     artifactNames: [],
     initialPrompt: "Test prompt",
@@ -66,11 +66,11 @@ const seed = (
   {
     projects = [],
     workspaces = [],
-    tasks = [],
+    agents = [],
   }: {
     projects?: ReadonlyArray<Project>;
     workspaces?: ReadonlyArray<Workspace>;
-    tasks?: ReadonlyArray<CodingAgentTaskView>;
+    agents?: ReadonlyArray<CodingAgentTaskView>;
   },
 ): void => {
   for (const p of projects) {
@@ -87,12 +87,12 @@ const seed = (
     workspaceIdsAtom,
     workspaces.map((w) => w.objectId),
   );
-  for (const t of tasks) {
-    store.set(taskAtomFamily(t.id), t);
+  for (const agent of agents) {
+    store.set(agentAtomFamily(agent.id), agent);
   }
   store.set(
-    taskIdsAtom,
-    tasks.map((t) => t.id),
+    agentIdsAtom,
+    agents.map((agent) => agent.id),
   );
 };
 
@@ -123,8 +123,8 @@ export const AgentPopulated: AgentStory = {
     seed(store, {
       projects: [makeProject({ objectId: "proj-1", name: "Core" })],
       workspaces: [makeWorkspace({ objectId: "ws-1", description: "Workflow overhaul", projectId: "proj-1" })],
-      tasks: [
-        makeTask({
+      agents: [
+        makeAgent({
           id: "task-1",
           title: "Ship the entity mention refactor",
           goal: "Unify the three chip systems",
@@ -143,7 +143,7 @@ export const AgentRunning: AgentStory = {
     const store = createStore();
     seed(store, {
       workspaces: [makeWorkspace({ objectId: "ws-1", description: "Live build" })],
-      tasks: [makeTask({ id: "task-1", title: "Sweep flaky tests", status: "RUNNING", workspaceId: "ws-1" })],
+      agents: [makeAgent({ id: "task-1", title: "Sweep flaky tests", status: "RUNNING", workspaceId: "ws-1" })],
     });
     return withStore(store, <AgentDetailPane agentId="task-1" entityDisplayName="Sweep flaky tests" />);
   },
@@ -154,7 +154,7 @@ export const AgentNoWorkspace: AgentStory = {
   render: (): ReactElement => {
     const store = createStore();
     seed(store, {
-      tasks: [makeTask({ id: "task-1", title: "Standalone agent", status: "READY" })],
+      agents: [makeAgent({ id: "task-1", title: "Standalone agent", status: "READY" })],
     });
     return withStore(store, <AgentDetailPane agentId="task-1" entityDisplayName="Standalone agent" />);
   },
@@ -175,10 +175,10 @@ export const WorkspacePopulated: StoryObj<typeof WorkspaceDetailPane> = {
     seed(store, {
       projects: [makeProject({ objectId: "proj-1", name: "Core" })],
       workspaces: [makeWorkspace({ objectId: "ws-1", description: "Prompt navigator", projectId: "proj-1" })],
-      tasks: [
-        makeTask({ id: "t1", title: "Arrow rail", workspaceId: "ws-1" }),
-        makeTask({ id: "t2", title: "Jump-to-bottom button", workspaceId: "ws-1" }),
-        makeTask({ id: "t3", title: "Scroll lock-in", workspaceId: "ws-1" }),
+      agents: [
+        makeAgent({ id: "t1", title: "Arrow rail", workspaceId: "ws-1" }),
+        makeAgent({ id: "t2", title: "Jump-to-bottom button", workspaceId: "ws-1" }),
+        makeAgent({ id: "t3", title: "Scroll lock-in", workspaceId: "ws-1" }),
       ],
     });
     return withStore(store, <WorkspaceDetailPane workspaceId="ws-1" entityDisplayName="Prompt navigator" />);

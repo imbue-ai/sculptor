@@ -1,9 +1,9 @@
 import { ArrowUpRight, BotIcon } from "lucide-react";
 
-import { tasksArrayAtom } from "../../../common/state/atoms/tasks.ts";
+import { agentsArrayAtom } from "../../../common/state/atoms/agents.ts";
 import type { Command, DynamicProvider } from "../types/commandPalette.ts";
 import type { CommandRuntime } from "../utils/runtime.ts";
-import { taskDisplayTitle } from "./agentTitle.ts";
+import { agentDisplayTitle } from "./agentTitle.ts";
 
 /**
  * Surfaces agents in the palette, scoped to the workspace the user is
@@ -25,9 +25,9 @@ export const buildAgentProvider = (runtime: CommandRuntime): DynamicProvider => 
   produce: (ctx): Array<Command> => {
     const activeWorkspaceId = ctx.activeWorkspaceId;
     if (activeWorkspaceId == null) return [];
-    const tasks = runtime.store.get(tasksArrayAtom) ?? [];
-    const inWorkspace = tasks
-      .filter((t) => t.workspaceId === activeWorkspaceId)
+    const agents = runtime.store.get(agentsArrayAtom) ?? [];
+    const inWorkspace = agents
+      .filter((agent) => agent.workspaceId === activeWorkspaceId)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     const hasMultipleAgents = inWorkspace.length >= 2;
@@ -61,11 +61,11 @@ export const buildAgentProvider = (runtime: CommandRuntime): DynamicProvider => 
 
     if (!hasMultipleAgents) return out;
 
-    for (const task of inWorkspace) {
-      const display = taskDisplayTitle(task);
-      const isCurrent = ctx.activeAgentId === task.id;
+    for (const agent of inWorkspace) {
+      const display = agentDisplayTitle(agent);
+      const isCurrent = ctx.activeAgentId === agent.id;
       out.push({
-        id: `agents.page.${task.id}`,
+        id: `agents.page.${agent.id}`,
         title: display,
         subtitle: isCurrent ? "Current agent" : undefined,
         keywords: ["agent", "task", "go to"],
@@ -74,7 +74,7 @@ export const buildAgentProvider = (runtime: CommandRuntime): DynamicProvider => 
         onPage: "agents.switch",
         disabled: isCurrent,
         disabledReason: isCurrent ? "Already on this agent" : undefined,
-        perform: () => runtime.navigate.toAgent(activeWorkspaceId, task.id),
+        perform: () => runtime.navigate.toAgent(activeWorkspaceId, agent.id),
       });
     }
 

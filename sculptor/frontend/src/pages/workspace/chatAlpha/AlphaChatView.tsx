@@ -30,7 +30,7 @@ type AlphaMessageNodeProps = {
   activeSearchOccurrence?: number;
   isLastMessage?: boolean;
   isStreaming?: boolean;
-  taskStatus?: TaskStatus;
+  agentStatus?: TaskStatus;
   onRetryRequest?: () => void;
   onOpenDiffFile?: (filePath: string) => void;
   messageIndex?: number;
@@ -47,7 +47,7 @@ export const AlphaMessageNode = ({
   activeSearchOccurrence = -1,
   isLastMessage = false,
   isStreaming = false,
-  taskStatus = TaskStatus.RUNNING,
+  agentStatus = TaskStatus.RUNNING,
   onRetryRequest,
   onOpenDiffFile,
   messageIndex = 0,
@@ -82,7 +82,7 @@ export const AlphaMessageNode = ({
               messageIndex={messageIndex}
             />
           </div>
-          {isLastMessage && taskStatus === TaskStatus.RUNNING && <StreamingCursor />}
+          {isLastMessage && agentStatus === TaskStatus.RUNNING && <StreamingCursor />}
         </>
       ) : (
         <AssistantMessageContent
@@ -93,7 +93,7 @@ export const AlphaMessageNode = ({
           inProgressMessageId={inProgressMessageId}
           isLastMessage={isLastMessage}
           isStreaming={isStreaming}
-          taskStatus={taskStatus}
+          agentStatus={agentStatus}
           onRetryRequest={onRetryRequest}
           searchQuery={searchQuery}
           activeSearchBlockIndex={activeSearchBlockIndex}

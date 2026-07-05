@@ -6,8 +6,8 @@ import type { ReactElement } from "react";
 import { useEffect, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
 
+import { agentsArrayAtom } from "~/common/state/atoms/agents";
 import { projectsArrayAtom } from "~/common/state/atoms/projects";
-import { tasksArrayAtom } from "~/common/state/atoms/tasks";
 import { isEntityMentionsEnabledAtom } from "~/common/state/atoms/userConfig";
 import { workspacesArrayAtom } from "~/common/state/atoms/workspaces";
 
@@ -154,7 +154,7 @@ export const Editor = ({
   const isEntityMentionsEnabled = useAtomValue(isEntityMentionsEnabledAtom);
   const projects = useAtomValue(projectsArrayAtom);
   const workspaces = useAtomValue(workspacesArrayAtom);
-  const tasks = useAtomValue(tasksArrayAtom);
+  const agents = useAtomValue(agentsArrayAtom);
 
   // The ref is read only inside Tiptap suggestion callbacks (user-triggered
   // events like typing `@`), never during React render. The effect below
@@ -164,16 +164,16 @@ export const Editor = ({
   const entityDataRef: EntityDataRef = useRef({
     repositories: projects ?? [],
     workspaces: workspaces ?? [],
-    agents: tasks ?? [],
+    agents: agents ?? [],
   });
 
   useEffect(() => {
     entityDataRef.current = {
       repositories: projects ?? [],
       workspaces: workspaces ?? [],
-      agents: tasks ?? [],
+      agents: agents ?? [],
     };
-  }, [projects, workspaces, tasks]);
+  }, [projects, workspaces, agents]);
 
   // Memoize extensions so that createSkillSuggestion (which eagerly fetches
   // the /api/v1/skills endpoint) is not re-invoked on every render.

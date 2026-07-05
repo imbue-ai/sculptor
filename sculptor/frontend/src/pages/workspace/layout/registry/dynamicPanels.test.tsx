@@ -15,7 +15,7 @@ const UPDATED_AT = "2024-01-01T00:00:00Z";
 const LATER_UPDATED_AT = "2024-01-01T00:05:00Z";
 
 const createAgentInput = (overrides: Partial<DynamicAgentInput> = {}): DynamicAgentInput => ({
-  taskId: "task-1",
+  agentId: "task-1",
   displayName: "Agent 1",
   status: TaskStatus.READY,
   // Read after the last update, so the base dot derivation reads as "read".

@@ -1,7 +1,7 @@
 // A section's content area: the active panel's component (agent chat, terminal, diff
 // viewer, …) or the empty-section state. THIS IS THE BOUNDARY that subscribes to the
 // resolved active panel COMPONENT (identity-cached per panel id in the registry), NOT
-// the panel id followed by a lookup in render — so a registry rebuild on a task tick,
+// the panel id followed by a lookup in render — so a registry rebuild on an agent tick,
 // or a workspace switch, never remounts live panel content.
 
 import { useAtomValue } from "jotai";

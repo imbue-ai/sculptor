@@ -21,9 +21,9 @@ export const NotesPanel = (): ReactElement => {
   // must target the workspace's current chat agent, and the route's agent id
   // goes stale when a different center tab is activated.
   const workspaceID = useAtomValue(activeWorkspaceIdAtom) ?? "";
-  const taskID = useAtomValue(activeChatAgentIdAtomFamily(workspaceID));
+  const agentId = useAtomValue(activeChatAgentIdAtomFamily(workspaceID));
   const [notes, setNotes] = useAtom(notesDraftAtomFamily(workspaceID));
-  const [promptDraft, setPromptDraft] = usePromptDraft(taskID ?? "");
+  const [promptDraft, setPromptDraft] = usePromptDraft(agentId ?? "");
   const [isConflictOpen, setIsConflictOpen] = useState(false);
 
   const handleAddToPrompt = (): void => {
@@ -50,7 +50,7 @@ export const NotesPanel = (): ReactElement => {
             <TooltipIconButton
               tooltipText="Add notes to prompt"
               onClick={handleAddToPrompt}
-              disabled={!notes || !taskID}
+              disabled={!notes || !agentId}
             >
               <TextCursorInput size={14} />
             </TooltipIconButton>

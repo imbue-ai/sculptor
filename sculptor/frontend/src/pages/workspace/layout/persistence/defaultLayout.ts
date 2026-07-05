@@ -1,7 +1,7 @@
 // The default workspace arrangement, seeded on a workspace's FIRST visit. It is
 // built here as a pure function so it can be unit-tested and reused; the dynamic
 // agent/terminal ids are resolved by the caller (the bootstrap) from the active
-// task and the first-visit seeded terminal — never hardcoded.
+// agent and the first-visit seeded terminal — never hardcoded.
 //
 //   center — the only EXPANDED section: holds the active agent, and is the
 //            active sub-section on load.
@@ -22,7 +22,7 @@ const DEFAULT_LEFT_PANEL_IDS: ReadonlyArray<PanelId> = ["files", "changes", "com
 const DEFAULT_ACTIVE_LEFT_PANEL_ID: PanelId = "files";
 
 export type DefaultWorkspaceLayoutInputs = {
-  // The active agent panel id (`agent:<taskId>`) placed into the center section.
+  // The active agent panel id (`agent:<agentId>`) placed into the center section.
   agentPanelId: PanelId;
   // The first-visit terminal panel id (`terminal:<wsId>:<index>`, indices start
   // at 1) placed into bottom. The terminal itself is seeded by the bootstrap;

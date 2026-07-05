@@ -49,7 +49,7 @@ export type RepoGroup = {
  * delegated through the callback props.
  *
  * The row owns its status-dot subscription and is memoized: the per-workspace
- * status slice is equality-guarded, so a task streaming tick re-renders only
+ * status slice is equality-guarded, so an agent streaming tick re-renders only
  * the rows whose aggregate flags actually flip — not the whole sidebar. For
  * the memo to hold, every non-primitive prop must be reference-stable across
  * parent renders (memoized action lists, id-taking callbacks).

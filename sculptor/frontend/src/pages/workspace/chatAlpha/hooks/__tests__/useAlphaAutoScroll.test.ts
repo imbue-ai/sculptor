@@ -89,7 +89,7 @@ describe("useAlphaAutoScroll", () => {
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
 
-    const { result } = renderHook(() => useAlphaAutoScroll(ref, false, 10, virtualizer, null, -1, "test-task"));
+    const { result } = renderHook(() => useAlphaAutoScroll(ref, false, 10, virtualizer, null, -1, "test-agent"));
 
     expect(result.current.isEngaged).toBe(false);
   });
@@ -101,7 +101,7 @@ describe("useAlphaAutoScroll", () => {
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
 
-    const { result } = renderHook(() => useAlphaAutoScroll(ref, false, 5, virtualizer, null, -1, "test-task"));
+    const { result } = renderHook(() => useAlphaAutoScroll(ref, false, 5, virtualizer, null, -1, "test-agent"));
 
     expect(result.current.isAtBottom).toBe(true);
   });
@@ -112,7 +112,7 @@ describe("useAlphaAutoScroll", () => {
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
 
-    const { result } = renderHook(() => useAlphaAutoScroll(ref, false, 10, virtualizer, null, -1, "test-task"));
+    const { result } = renderHook(() => useAlphaAutoScroll(ref, false, 10, virtualizer, null, -1, "test-agent"));
 
     act(() => {
       el.dispatchEvent(new Event("scroll"));
@@ -126,7 +126,7 @@ describe("useAlphaAutoScroll", () => {
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
 
-    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-task"));
+    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-agent"));
 
     // Engaged automatically by the isStreaming effect (at bottom)
     expect(result.current.isEngaged).toBe(true);
@@ -137,7 +137,7 @@ describe("useAlphaAutoScroll", () => {
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
 
-    const { result } = renderHook(() => useAlphaAutoScroll(ref, false, 10, virtualizer, null, -1, "test-task"));
+    const { result } = renderHook(() => useAlphaAutoScroll(ref, false, 10, virtualizer, null, -1, "test-agent"));
 
     act(() => {
       el.dispatchEvent(new Event("wheel"));
@@ -152,7 +152,7 @@ describe("useAlphaAutoScroll", () => {
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
 
-    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-task"));
+    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-agent"));
 
     // Engaged via isStreaming effect
     expect(result.current.isEngaged).toBe(true);
@@ -176,7 +176,7 @@ describe("useAlphaAutoScroll", () => {
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
 
-    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-task"));
+    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-agent"));
 
     // Engage (from isStreaming effect, since we're at bottom)
     expect(result.current.isEngaged).toBe(true);
@@ -204,7 +204,7 @@ describe("useAlphaAutoScroll", () => {
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
 
-    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-task"));
+    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-agent"));
 
     // Engaged via isStreaming effect
     expect(result.current.isEngaged).toBe(true);
@@ -239,7 +239,7 @@ describe("useAlphaAutoScroll", () => {
     const virtualizer = createMockVirtualizer();
 
     const { result, rerender } = renderHook(
-      ({ isStreaming }) => useAlphaAutoScroll(ref, isStreaming, 10, virtualizer, null, -1, "test-task"),
+      ({ isStreaming }) => useAlphaAutoScroll(ref, isStreaming, 10, virtualizer, null, -1, "test-agent"),
       { initialProps: { isStreaming: true } },
     );
 
@@ -256,7 +256,7 @@ describe("useAlphaAutoScroll", () => {
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
 
-    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-task"));
+    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-agent"));
 
     act(() => {
       result.current.scrollToBottom();
@@ -271,7 +271,7 @@ describe("useAlphaAutoScroll", () => {
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
 
-    const { result } = renderHook(() => useAlphaAutoScroll(ref, false, 10, virtualizer, null, -1, "test-task"));
+    const { result } = renderHook(() => useAlphaAutoScroll(ref, false, 10, virtualizer, null, -1, "test-agent"));
 
     act(() => {
       result.current.scrollToBottom();
@@ -288,7 +288,7 @@ describe("useAlphaAutoScroll", () => {
 
     // Start not streaming, enable suppress, then start streaming
     const { result, rerender } = renderHook(
-      ({ isStreaming }) => useAlphaAutoScroll(ref, isStreaming, 10, virtualizer, null, -1, "test-task"),
+      ({ isStreaming }) => useAlphaAutoScroll(ref, isStreaming, 10, virtualizer, null, -1, "test-agent"),
       { initialProps: { isStreaming: false } },
     );
 
@@ -318,7 +318,7 @@ describe("useAlphaAutoScroll", () => {
 
     // Start with not streaming, user is at bottom
     const { result, rerender } = renderHook(
-      ({ isStreaming }) => useAlphaAutoScroll(ref, isStreaming, 10, virtualizer, null, -1, "test-task"),
+      ({ isStreaming }) => useAlphaAutoScroll(ref, isStreaming, 10, virtualizer, null, -1, "test-agent"),
       { initialProps: { isStreaming: false } },
     );
 
@@ -343,7 +343,7 @@ describe("useAlphaAutoScroll", () => {
     const virtualizer = createMockVirtualizer();
 
     const { result, rerender } = renderHook(
-      ({ isStreaming }) => useAlphaAutoScroll(ref, isStreaming, 10, virtualizer, null, -1, "test-task"),
+      ({ isStreaming }) => useAlphaAutoScroll(ref, isStreaming, 10, virtualizer, null, -1, "test-agent"),
       { initialProps: { isStreaming: false } },
     );
 
@@ -371,7 +371,7 @@ describe("useAlphaAutoScroll", () => {
     const virtualizer = createMockVirtualizer();
 
     const { rerender } = renderHook(
-      ({ messageCount }) => useAlphaAutoScroll(ref, false, messageCount, virtualizer, null, -1, "test-task"),
+      ({ messageCount }) => useAlphaAutoScroll(ref, false, messageCount, virtualizer, null, -1, "test-agent"),
       {
         initialProps: { messageCount: 10 },
       },
@@ -400,7 +400,7 @@ describe("useAlphaAutoScroll", () => {
     const virtualizer = createMockVirtualizer();
 
     const { rerender } = renderHook(
-      ({ messageCount }) => useAlphaAutoScroll(ref, false, messageCount, virtualizer, null, -1, "test-task"),
+      ({ messageCount }) => useAlphaAutoScroll(ref, false, messageCount, virtualizer, null, -1, "test-agent"),
       {
         initialProps: { messageCount: 10 },
       },
@@ -428,7 +428,7 @@ describe("useAlphaAutoScroll", () => {
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
 
-    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-task"));
+    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-agent"));
 
     // Auto-engaged via streaming-start effect (at bottom)
     expect(result.current.isEngaged).toBe(true);
@@ -451,7 +451,7 @@ describe("useAlphaAutoScroll", () => {
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
 
-    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-task"));
+    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-agent"));
 
     expect(result.current.isEngaged).toBe(true);
 
@@ -481,7 +481,7 @@ describe("useAlphaAutoScroll", () => {
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
 
-    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-task"));
+    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-agent"));
 
     // Engaged via isStreaming effect
     expect(result.current.isEngaged).toBe(true);
@@ -513,7 +513,7 @@ describe("useAlphaAutoScroll", () => {
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
 
-    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-task"));
+    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-agent"));
 
     // Engaged via isStreaming effect (at bottom)
     expect(result.current.isEngaged).toBe(true);
@@ -536,7 +536,7 @@ describe("useAlphaAutoScroll", () => {
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
 
-    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-task"));
+    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-agent"));
 
     // Engaged via isStreaming effect
     expect(result.current.isEngaged).toBe(true);
@@ -567,7 +567,7 @@ describe("useAlphaAutoScroll", () => {
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
 
-    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-task"));
+    const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-agent"));
 
     // Engaged via isStreaming effect
     expect(result.current.isEngaged).toBe(true);
@@ -596,7 +596,7 @@ describe("useAlphaAutoScroll", () => {
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
 
-    const { result } = renderHook(() => useAlphaAutoScroll(ref, false, 10, virtualizer, null, -1, "test-task"));
+    const { result } = renderHook(() => useAlphaAutoScroll(ref, false, 10, virtualizer, null, -1, "test-agent"));
 
     act(() => {
       el.dispatchEvent(new Event("wheel"));
@@ -613,7 +613,7 @@ describe("useAlphaAutoScroll", () => {
 
     // Start not streaming, then suppress, then start streaming — won't engage
     const { result, rerender } = renderHook(
-      ({ isStreaming }) => useAlphaAutoScroll(ref, isStreaming, 10, virtualizer, null, -1, "test-task"),
+      ({ isStreaming }) => useAlphaAutoScroll(ref, isStreaming, 10, virtualizer, null, -1, "test-agent"),
       { initialProps: { isStreaming: false } },
     );
 
@@ -656,7 +656,15 @@ describe("useAlphaAutoScroll", () => {
 
       const { result, rerender } = renderHook(
         ({ messageCount, lastMessageRole, lastUserMessageIndex }) =>
-          useAlphaAutoScroll(ref, false, messageCount, virtualizer, lastMessageRole, lastUserMessageIndex, "test-task"),
+          useAlphaAutoScroll(
+            ref,
+            false,
+            messageCount,
+            virtualizer,
+            lastMessageRole,
+            lastUserMessageIndex,
+            "test-agent",
+          ),
         {
           initialProps: {
             messageCount: 10,
@@ -683,7 +691,15 @@ describe("useAlphaAutoScroll", () => {
 
       const { rerender } = renderHook(
         ({ messageCount, lastMessageRole, lastUserMessageIndex }) =>
-          useAlphaAutoScroll(ref, false, messageCount, virtualizer, lastMessageRole, lastUserMessageIndex, "test-task"),
+          useAlphaAutoScroll(
+            ref,
+            false,
+            messageCount,
+            virtualizer,
+            lastMessageRole,
+            lastUserMessageIndex,
+            "test-agent",
+          ),
         {
           initialProps: {
             messageCount: 10,
@@ -712,7 +728,15 @@ describe("useAlphaAutoScroll", () => {
 
       const { result, rerender } = renderHook(
         ({ messageCount, lastMessageRole, lastUserMessageIndex }) =>
-          useAlphaAutoScroll(ref, false, messageCount, virtualizer, lastMessageRole, lastUserMessageIndex, "test-task"),
+          useAlphaAutoScroll(
+            ref,
+            false,
+            messageCount,
+            virtualizer,
+            lastMessageRole,
+            lastUserMessageIndex,
+            "test-agent",
+          ),
         {
           initialProps: {
             messageCount: 10,
@@ -748,7 +772,15 @@ describe("useAlphaAutoScroll", () => {
 
       const { rerender } = renderHook(
         ({ messageCount, lastMessageRole, lastUserMessageIndex }) =>
-          useAlphaAutoScroll(ref, false, messageCount, virtualizer, lastMessageRole, lastUserMessageIndex, "test-task"),
+          useAlphaAutoScroll(
+            ref,
+            false,
+            messageCount,
+            virtualizer,
+            lastMessageRole,
+            lastUserMessageIndex,
+            "test-agent",
+          ),
         {
           initialProps: {
             messageCount: 10,
@@ -790,7 +822,7 @@ describe("useAlphaAutoScroll", () => {
             virtualizer,
             lastMessageRole,
             lastUserMessageIndex,
-            "test-task",
+            "test-agent",
           ),
         {
           initialProps: {
@@ -837,7 +869,7 @@ describe("useAlphaAutoScroll", () => {
             virtualizer,
             lastMessageRole,
             lastUserMessageIndex,
-            "test-task",
+            "test-agent",
           ),
         {
           initialProps: {
@@ -911,7 +943,7 @@ describe("useAlphaAutoScroll", () => {
             virtualizer,
             lastMessageRole,
             lastUserMessageIndex,
-            "test-task",
+            "test-agent",
           ),
         {
           initialProps: {
@@ -968,7 +1000,7 @@ describe("useAlphaAutoScroll", () => {
             virtualizer,
             lastMessageRole,
             lastUserMessageIndex,
-            "test-task",
+            "test-agent",
           ),
         {
           initialProps: {
@@ -1032,7 +1064,7 @@ describe("useAlphaAutoScroll", () => {
             virtualizer,
             lastMessageRole,
             lastUserMessageIndex,
-            "test-task",
+            "test-agent",
           ),
         {
           initialProps: {
@@ -1088,7 +1120,7 @@ describe("useAlphaAutoScroll", () => {
             virtualizer,
             lastMessageRole,
             lastUserMessageIndex,
-            "test-task",
+            "test-agent",
           ),
         {
           initialProps: {
@@ -1150,7 +1182,7 @@ describe("useAlphaAutoScroll", () => {
       // lastMessageRole=USER so the on-mount pin-to-bottom bails (it only pins for
       // non-user messages), keeping this test's scrolled-up, not-engaged premise.
       const { result } = renderHook(() =>
-        useAlphaAutoScroll(ref, true, 10, virtualizer, ChatMessageRole.USER, -1, "test-task"),
+        useAlphaAutoScroll(ref, true, 10, virtualizer, ChatMessageRole.USER, -1, "test-agent"),
       );
 
       // Not engaged because too far from bottom when streaming started
@@ -1177,7 +1209,7 @@ describe("useAlphaAutoScroll", () => {
       const ref = { current: el };
       const virtualizer = createMockVirtualizerWithFilling(300, 100);
 
-      const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-task"));
+      const { result } = renderHook(() => useAlphaAutoScroll(ref, true, 10, virtualizer, null, -1, "test-agent"));
 
       // Engaged via isStreaming effect (at bottom)
       expect(result.current.isEngaged).toBe(true);
@@ -1216,7 +1248,7 @@ describe("useAlphaAutoScroll", () => {
             virtualizer,
             lastMessageRole,
             lastUserMessageIndex,
-            "test-task",
+            "test-agent",
           ),
         {
           initialProps: {
@@ -1299,7 +1331,7 @@ describe("useAlphaAutoScroll", () => {
             virtualizer,
             lastMessageRole,
             lastUserMessageIndex,
-            "test-task",
+            "test-agent",
           ),
         {
           initialProps: {
@@ -1370,7 +1402,7 @@ describe("useAlphaAutoScroll", () => {
             virtualizer,
             lastMessageRole,
             lastUserMessageIndex,
-            "test-task",
+            "test-agent",
           ),
         {
           initialProps: {
@@ -1428,7 +1460,7 @@ describe("useAlphaAutoScroll", () => {
             virtualizer,
             lastMessageRole,
             lastUserMessageIndex,
-            "test-task",
+            "test-agent",
           ),
         {
           initialProps: {
@@ -1479,7 +1511,7 @@ describe("useAlphaAutoScroll", () => {
             virtualizer,
             lastMessageRole,
             lastUserMessageIndex,
-            "test-task",
+            "test-agent",
           ),
         {
           initialProps: {
@@ -1568,7 +1600,7 @@ describe("useAlphaAutoScroll", () => {
         messageCount: number;
         lastUserIdx: number;
         lastRole: ChatMessageRole | null;
-      }) => useAlphaAutoScroll(ref, false, messageCount, virtualizer, lastRole, lastUserIdx, "test-task"),
+      }) => useAlphaAutoScroll(ref, false, messageCount, virtualizer, lastRole, lastUserIdx, "test-agent"),
       {
         initialProps: {
           messageCount: 2,
@@ -1602,18 +1634,18 @@ describe("useAlphaAutoScroll", () => {
     expect(contentEl.style.height).not.toBe("");
   });
 
-  describe("task switch resets scroll state", () => {
-    it("resets isAtBottom, isEngaged, and isJumpSuppressed on task switch", () => {
+  describe("agent switch resets scroll state", () => {
+    it("resets isAtBottom, isEngaged, and isJumpSuppressed on agent switch", () => {
       const el = createMockScrollContainer(1500, 2000, 500);
       const ref = { current: el };
       const virtualizer = createMockVirtualizer();
 
       const { result, rerender } = renderHook(
-        ({ taskId, isStreaming, messageCount, lastUserMessageIndex }) =>
-          useAlphaAutoScroll(ref, isStreaming, messageCount, virtualizer, null, lastUserMessageIndex, taskId),
+        ({ agentId, isStreaming, messageCount, lastUserMessageIndex }) =>
+          useAlphaAutoScroll(ref, isStreaming, messageCount, virtualizer, null, lastUserMessageIndex, agentId),
         {
           initialProps: {
-            taskId: "task-a",
+            agentId: "agent-a",
             isStreaming: true,
             messageCount: 10,
             lastUserMessageIndex: -1,
@@ -1621,32 +1653,40 @@ describe("useAlphaAutoScroll", () => {
         },
       );
 
-      // Establish engaged + at bottom on task A
+      // Establish engaged + at bottom on agent A
       expect(result.current.isEngaged).toBe(true);
 
-      // Switch to task B
+      // Switch to agent B
       rerender({
-        taskId: "task-b",
+        agentId: "agent-b",
         isStreaming: false,
         messageCount: 5,
         lastUserMessageIndex: -1,
       });
 
-      // Should NOT carry over isEngaged from task A
+      // Should NOT carry over isEngaged from agent A
       expect(result.current.isEngaged).toBe(false);
     });
 
-    it("does not trigger scroll-to-top on task switch when lastUserMessageIndex stays the same", () => {
+    it("does not trigger scroll-to-top on agent switch when lastUserMessageIndex stays the same", () => {
       const el = createMockScrollContainer(1500, 2000, 500);
       const ref = { current: el };
       const virtualizer = createMockVirtualizer();
 
       const { rerender } = renderHook(
-        ({ taskId, messageCount, lastUserMessageIndex }) =>
-          useAlphaAutoScroll(ref, false, messageCount, virtualizer, ChatMessageRole.USER, lastUserMessageIndex, taskId),
+        ({ agentId, messageCount, lastUserMessageIndex }) =>
+          useAlphaAutoScroll(
+            ref,
+            false,
+            messageCount,
+            virtualizer,
+            ChatMessageRole.USER,
+            lastUserMessageIndex,
+            agentId,
+          ),
         {
           initialProps: {
-            taskId: "task-a",
+            agentId: "agent-a",
             messageCount: 5,
             lastUserMessageIndex: 4,
           },
@@ -1655,14 +1695,14 @@ describe("useAlphaAutoScroll", () => {
 
       vi.mocked(virtualizer.scrollToIndex).mockClear();
 
-      // Switch to task B with same lastUserMessageIndex (different task, same index)
+      // Switch to agent B with same lastUserMessageIndex (different agent, same index)
       rerender({
-        taskId: "task-b",
+        agentId: "agent-b",
         messageCount: 5,
         lastUserMessageIndex: 4,
       });
 
-      // scrollToIndex should NOT be called with align: "start" — the task switch
+      // scrollToIndex should NOT be called with align: "start" — the agent switch
       // resets prevLastUserMessageIndexRef so index 4 is not "new"
       const startCalls = vi
         .mocked(virtualizer.scrollToIndex)
@@ -1670,33 +1710,33 @@ describe("useAlphaAutoScroll", () => {
       expect(startCalls).toHaveLength(0);
     });
 
-    it("does not trigger spurious pin-to-bottom on task switch", () => {
+    it("does not trigger spurious pin-to-bottom on agent switch", () => {
       const el = createMockScrollContainer(1500, 2000, 500); // distance=0
       const ref = { current: el };
       const virtualizer = createMockVirtualizer();
 
       const { rerender } = renderHook(
-        ({ taskId, messageCount }) =>
-          useAlphaAutoScroll(ref, false, messageCount, virtualizer, ChatMessageRole.ASSISTANT, -1, taskId),
+        ({ agentId, messageCount }) =>
+          useAlphaAutoScroll(ref, false, messageCount, virtualizer, ChatMessageRole.ASSISTANT, -1, agentId),
         {
           initialProps: {
-            taskId: "task-a",
+            agentId: "agent-a",
             messageCount: 10,
           },
         },
       );
 
-      // Establish at bottom on task A
+      // Establish at bottom on agent A
       act(() => {
         el.dispatchEvent(new Event("scroll"));
       });
 
       vi.mocked(virtualizer.scrollToIndex).mockClear();
 
-      // Switch to task B — the reset clears isAtBottomRef, so pin-to-bottom
+      // Switch to agent B — the reset clears isAtBottomRef, so pin-to-bottom
       // should NOT fire even though the previous isAtBottom state was true
       rerender({
-        taskId: "task-b",
+        agentId: "agent-b",
         messageCount: 3,
       });
 
@@ -1727,7 +1767,7 @@ describe("useAlphaAutoScroll", () => {
             virtualizer,
             ChatMessageRole.USER,
             lastUserMessageIndex,
-            "test-task",
+            "test-agent",
           ),
         {
           initialProps: {
@@ -1783,7 +1823,7 @@ describe("useAlphaAutoScroll", () => {
             virtualizer,
             ChatMessageRole.USER,
             lastUserMessageIndex,
-            "test-task",
+            "test-agent",
           ),
         {
           initialProps: {
@@ -1828,7 +1868,7 @@ describe("useAlphaAutoScroll", () => {
           virtualizer,
           ChatMessageRole.USER,
           lastUserMessageIndex,
-          "test-task",
+          "test-agent",
         ),
       {
         initialProps: {
@@ -1889,7 +1929,7 @@ describe("useAlphaAutoScroll", () => {
           virtualizer,
           ChatMessageRole.USER,
           lastUserMessageIndex,
-          "test-task",
+          "test-agent",
         ),
       {
         initialProps: {
@@ -1925,7 +1965,7 @@ describe("useAlphaAutoScroll", () => {
     const virtualizer = createMockVirtualizer();
 
     const { rerender } = renderHook(
-      ({ isStreaming }) => useAlphaAutoScroll(ref, isStreaming, 10, virtualizer, null, -1, "test-task"),
+      ({ isStreaming }) => useAlphaAutoScroll(ref, isStreaming, 10, virtualizer, null, -1, "test-agent"),
       { initialProps: { isStreaming: true } },
     );
 
@@ -1951,7 +1991,7 @@ describe("useAlphaAutoScroll", () => {
     const virtualizer = createMockVirtualizer();
 
     const { rerender } = renderHook(
-      ({ isStreaming }) => useAlphaAutoScroll(ref, isStreaming, 10, virtualizer, null, -1, "test-task"),
+      ({ isStreaming }) => useAlphaAutoScroll(ref, isStreaming, 10, virtualizer, null, -1, "test-agent"),
       { initialProps: { isStreaming: true } },
     );
 

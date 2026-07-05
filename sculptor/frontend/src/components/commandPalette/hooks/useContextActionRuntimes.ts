@@ -42,7 +42,7 @@ export const useContextActionRuntimes = (): {
       // mark-read from undoing the action) alongside the persisted update.
       markUnread: (agent): void => {
         if (agent.workspaceId == null) return;
-        markAgentUnread({ workspaceId: agent.workspaceId, taskId: agent.id });
+        markAgentUnread({ workspaceId: agent.workspaceId, agentId: agent.id });
       },
       beginDelete: (agent): void => setAgentDeleteTarget({ id: agent.id, name: agent.title ?? "" }),
     }),

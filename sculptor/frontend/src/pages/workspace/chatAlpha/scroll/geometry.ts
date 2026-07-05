@@ -19,10 +19,10 @@ export const PIN_BOTTOM_GAP = 64;
 export const TURN_END_SHRINK_SLACK = 64;
 
 /**
- * Floor for the virtualizer's dynamic `paddingEnd` while the task is idle.
+ * Floor for the virtualizer's dynamic `paddingEnd` while the agent is idle.
  * Equal to the pin gap, so at rest the pin position IS the end of the scroll
  * range: scrolling below the content can reveal exactly the visible gap and no
- * more — no shrink is pending on an idle task, so no extra slack is kept.
+ * more — no shrink is pending on an idle agent, so no extra slack is kept.
  */
 export const IDLE_TAIL_PADDING = PIN_BOTTOM_GAP;
 

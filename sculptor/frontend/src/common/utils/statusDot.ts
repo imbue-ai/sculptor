@@ -67,7 +67,7 @@ export const EMPTY_WORKSPACE_DOT_STATUS: WorkspaceDotStatus = {
   hasUnread: false,
 };
 
-type AgentTaskLike = {
+type AgentLike = {
   id: string;
   status: TaskStatus;
   lastReadAt: string | null;
@@ -76,30 +76,30 @@ type AgentTaskLike = {
   isArchived?: boolean;
 };
 
-// Per-task dot resolution used by the workspace aggregate. Injectable (and
-// generic over the caller's task type) so override-aware callers — the sidebar
+// Per-agent dot resolution used by the workspace aggregate. Injectable (and
+// generic over the caller's agent type) so override-aware callers — the sidebar
 // rows, matching the panel tabs' manual mark-as-unread — can substitute their
 // resolver without this pure leaf module importing override state.
-const resolveBaseDotStatus = (task: AgentTaskLike): AgentDotStatus =>
-  getAgentDotStatus(task.status, task.lastReadAt, task.updatedAt);
+const resolveBaseDotStatus = (agent: AgentLike): AgentDotStatus =>
+  getAgentDotStatus(agent.status, agent.lastReadAt, agent.updatedAt);
 
-export const computeWorkspaceDotStatus = <T extends AgentTaskLike>(
-  tasks: ReadonlyArray<T>,
-  resolveDotStatus: (task: T) => AgentDotStatus = resolveBaseDotStatus,
+export const computeWorkspaceDotStatus = <T extends AgentLike>(
+  agents: ReadonlyArray<T>,
+  resolveDotStatus: (agent: T) => AgentDotStatus = resolveBaseDotStatus,
 ): WorkspaceDotStatus => {
-  const activeTasks = tasks.filter((task) => !task.isDeleted && !task.isArchived);
+  const activeAgents = agents.filter((agent) => !agent.isDeleted && !agent.isArchived);
 
-  if (activeTasks.length === 0) {
+  if (activeAgents.length === 0) {
     return EMPTY_WORKSPACE_DOT_STATUS;
   }
 
-  const hasError = activeTasks.some((task) => resolveDotStatus(task) === "error");
-  const hasWaiting = activeTasks.some((task) => task.status === TaskStatus.WAITING);
-  const hasRunning = activeTasks.some(
-    (task) => task.status === TaskStatus.RUNNING || task.status === TaskStatus.BUILDING,
+  const hasError = activeAgents.some((agent) => resolveDotStatus(agent) === "error");
+  const hasWaiting = activeAgents.some((agent) => agent.status === TaskStatus.WAITING);
+  const hasRunning = activeAgents.some(
+    (agent) => agent.status === TaskStatus.RUNNING || agent.status === TaskStatus.BUILDING,
   );
-  const isAllError = activeTasks.every((task) => resolveDotStatus(task) === "error");
-  const hasUnread = activeTasks.some((task) => resolveDotStatus(task) === "unread");
+  const isAllError = activeAgents.every((agent) => resolveDotStatus(agent) === "error");
+  const hasUnread = activeAgents.some((agent) => resolveDotStatus(agent) === "unread");
 
   return { hasError, hasWaiting, hasRunning, isAllError, hasUnread };
 };

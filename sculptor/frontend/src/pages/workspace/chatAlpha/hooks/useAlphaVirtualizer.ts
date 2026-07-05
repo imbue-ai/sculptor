@@ -12,12 +12,12 @@ const ESTIMATED_MESSAGE_HEIGHT = 120;
 const OVERSCAN = 5;
 
 /**
- * Maximum number of tasks whose per-item heights and tail content heights
+ * Maximum number of agents whose per-item heights and tail content heights
  * are kept in the LRU cache.  When the cap is exceeded the least-recently
  * used entry is evicted.  This bounds memory usage for users who cycle
  * through many agent tabs without closing them.
  */
-const MAX_CACHED_TASKS = 20;
+const MAX_CACHED_AGENTS = 20;
 
 /**
  * Vertical padding above the virtualised list.
@@ -123,30 +123,30 @@ export const useAlphaVirtualizer = (
   scrollContainerRef: RefObject<HTMLDivElement | null>,
   messageCount: number,
   lastMessageRole: ChatMessageRole | null,
-  taskId: string,
+  agentId: string,
   machine: ScrollStateMachine,
   introPaddingStart: number = VIRTUAL_PADDING,
   // Set true when an item size change triggers a scrollTop adjustment,
   // so chat-level scroll listeners can distinguish it from a user scroll.
   isProgrammaticScrollRef?: MutableRefObject<boolean>,
-  // Whether the task is streaming — drives the paddingEnd floor (see
+  // Whether the agent is streaming — drives the paddingEnd floor (see
   // dynamicPaddingEnd below).
   isStreaming: boolean = false,
 ): Virtualizer<HTMLDivElement, Element> => {
   const [containerHeight, setContainerHeight] = useState(0);
   const [tailContentHeight, setTailContentHeight] = useState(0);
   const tailContentHeightRef = useRef(0);
-  const prevTaskIdRef = useRef(taskId);
+  const prevAgentIdRef = useRef(agentId);
 
-  // Per-task caches: item heights (for estimateSize) and tail content height.
-  // When switching away from a task we save these; when switching back we
+  // Per-agent caches: item heights (for estimateSize) and tail content height.
+  // When switching away from an agent we save these; when switching back we
   // restore them so items start at approximately-correct positions instead of
   // the generic 120px estimate and 64px padding fallback.
   const heightCacheRef = useRef<Map<string, Array<number>>>(new Map());
   const tailCacheRef = useRef<Map<string, number>>(new Map());
   const currentEstimatesRef = useRef<Array<number>>([]);
 
-  // The settle window (per-item scroll-adjustment suppression after a task
+  // The settle window (per-item scroll-adjustment suppression after an agent
   // switch) is owned by the scroll state machine's layout phase: `measuring`
   // while heights/paddingEnd reconverge, `stable` once they have. Without that
   // suppression, items partially visible at the viewport top whose real heights
@@ -154,7 +154,7 @@ export const useAlphaVirtualizer = (
   const settlingRafRef = useRef(0);
 
   // Counter incremented after settling clears to force a re-render.
-  // This guarantees the normal (non-task-switch) branch of the layout
+  // This guarantees the normal (non-agent-switch) branch of the layout
   // effect runs, which saves heights and recalculates tailContentHeight.
   // eslint-disable-next-line react/hook-use-state -- value unused; only the setter triggers re-renders
   const [, setSettleGeneration] = useState(0);
@@ -176,7 +176,7 @@ export const useAlphaVirtualizer = (
     return (): void => observer.disconnect();
   }, [scrollContainerRef]);
 
-  // Cancel any pending settle-suppression frame on unmount. The task-switch
+  // Cancel any pending settle-suppression frame on unmount. The agent-switch
   // branch schedules a requestAnimationFrame chain that ends in
   // bumpSettleGeneration() (a setState); without this cleanup it can fire
   // after the component is gone. Kept separate from the per-render layout
@@ -217,7 +217,7 @@ export const useAlphaVirtualizer = (
   // Only apply dynamic padding once we have both container dimensions AND
   // real item measurements.  Before measurements land (tailContentHeight === 0),
   // using containerHeight alone would create a huge temporary paddingEnd that
-  // destabilises scroll positions during view switches and task restoration.
+  // destabilises scroll positions during view switches and agent restoration.
   const dynamicPaddingEnd =
     containerHeight > 0 && tailContentHeight > 0
       ? Math.max(containerHeight - tailContentHeight, tailPaddingFloor)
@@ -226,8 +226,8 @@ export const useAlphaVirtualizer = (
   const virtualizer = useVirtualizer({
     count: messageCount,
     getScrollElement: () => scrollContainerRef.current,
-    // Read from the per-task height cache for unmeasured items.  After
-    // measure() invalidates the measurement cache on task switch, TanStack
+    // Read from the per-agent height cache for unmeasured items.  After
+    // measure() invalidates the measurement cache on agent switch, TanStack
     // Virtual calls estimateSize for each item — returning saved heights
     // from a previous visit gives approximately-correct positions instead
     // of the generic 120px fallback.
@@ -252,25 +252,25 @@ export const useAlphaVirtualizer = (
   // fires when the sum actually changes, preventing cascading re-renders.
   //
   // Height cache note: heights are saved in the NORMAL branch (not the
-  // task-switch branch) because by the time the layout effect runs during
-  // a task switch, measureElement ref callbacks have already fired for the
-  // INCOMING task's items, contaminating measurementsCache.  Saving during
-  // normal renders guarantees the cache holds the correct task's heights.
+  // agent-switch branch) because by the time the layout effect runs during
+  // an agent switch, measureElement ref callbacks have already fired for the
+  // INCOMING agent's items, contaminating measurementsCache.  Saving during
+  // normal renders guarantees the cache holds the correct agent's heights.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
-    if (prevTaskIdRef.current !== taskId) {
-      // Don't save outgoing task's heights here — measurementsCache is
-      // contaminated by the incoming task's ref callbacks.  The outgoing
-      // task's correct heights were already saved during its last normal
-      // (non-task-switch) render.
+    if (prevAgentIdRef.current !== agentId) {
+      // Don't save outgoing agent's heights here — measurementsCache is
+      // contaminated by the incoming agent's ref callbacks.  The outgoing
+      // agent's correct heights were already saved during its last normal
+      // (non-agent-switch) render.
 
-      // The outgoing task's settle hold is meaningless for the incoming task;
+      // The outgoing agent's settle hold is meaningless for the incoming agent;
       // its own isStreaming re-arms the hold if it is mid-stream.
       setIsTailSettling(false);
 
-      // Restore saved state for the incoming task.
-      currentEstimatesRef.current = heightCacheRef.current.get(taskId) ?? [];
-      const savedTail = tailCacheRef.current.get(taskId);
+      // Restore saved state for the incoming agent.
+      currentEstimatesRef.current = heightCacheRef.current.get(agentId) ?? [];
+      const savedTail = tailCacheRef.current.get(agentId);
 
       if (savedTail != null) {
         // Return visit: use the exact tail height from last time.
@@ -292,17 +292,17 @@ export const useAlphaVirtualizer = (
         }
       }
 
-      prevTaskIdRef.current = taskId;
+      prevAgentIdRef.current = agentId;
 
       // Always invalidate the measurement cache — it holds the outgoing
-      // task's heights which are stale for the incoming task.  estimateSize
-      // returns saved heights from the per-task cache, so the recalculated
+      // agent's heights which are stale for the incoming agent.  estimateSize
+      // returns saved heights from the per-agent cache, so the recalculated
       // positions are close to correct.
       virtualizer.measure();
 
       // Enter the `measuring` layout phase to suppress per-item scroll
       // adjustments until measurements settle.
-      machine.dispatchLayout({ kind: "invalidated", taskId });
+      machine.dispatchLayout({ kind: "invalidated", agentId });
       cancelAnimationFrame(settlingRafRef.current);
       settlingRafRef.current = requestAnimationFrame(() => {
         settlingRafRef.current = requestAnimationFrame(() => {
@@ -342,19 +342,19 @@ export const useAlphaVirtualizer = (
       setTailContentHeight(sum);
     }
 
-    // Save current task's heights after every stable render.  This
+    // Save current agent's heights after every stable render.  This
     // ensures the cache always has correct measurements from the last
-    // render where the task's own items were measured — never heights
-    // contaminated by another task's ref callbacks.
+    // render where the agent's own items were measured — never heights
+    // contaminated by another agent's ref callbacks.
     const heights: Array<number> = [];
     for (let i = 0; i < virtualizer.measurementsCache.length; i++) {
       const item = virtualizer.measurementsCache[i];
       if (item) heights[i] = item.size;
     }
-    heightCacheRef.current.set(taskId, heights);
-    tailCacheRef.current.set(taskId, tailContentHeightRef.current);
-    touchLRU(heightCacheRef.current, taskId, MAX_CACHED_TASKS);
-    touchLRU(tailCacheRef.current, taskId, MAX_CACHED_TASKS);
+    heightCacheRef.current.set(agentId, heights);
+    tailCacheRef.current.set(agentId, tailContentHeightRef.current);
+    touchLRU(heightCacheRef.current, agentId, MAX_CACHED_AGENTS);
+    touchLRU(tailCacheRef.current, agentId, MAX_CACHED_AGENTS);
   });
 
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = buildShouldAdjustScrollPositionOnItemSizeChange(

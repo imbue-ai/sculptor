@@ -11,18 +11,18 @@ import type {
   TaskListArtifact,
 } from "../../../api";
 
-// The artifacts accumulated for a task, keyed by artifact type. Lives here beside the
-// state that owns it (`TaskDetailState.artifacts`); artifact-sync and the panel data
+// The artifacts accumulated for an agent, keyed by artifact type. Lives here beside the
+// state that owns it (`AgentDetailState.artifacts`); artifact-sync and the panel data
 // hooks import it from this module.
 export type ArtifactsMap = {
   [ArtifactType.PLAN]?: TaskListArtifact;
 };
 
 /**
- * Complete state for a single task's detail view.
+ * Complete state for a single agent's detail view.
  * This is accumulated from incremental TaskUpdate messages.
  */
-export type TaskDetailState = {
+export type AgentDetailState = {
   completedChatMessages: Array<ChatMessage>;
   inProgressChatMessage: ChatMessage | null;
   queuedChatMessages: Array<ChatMessage>;
@@ -39,11 +39,11 @@ export type TaskDetailState = {
   error?: string;
 };
 
-export const taskDetailAtomFamily = atomFamily<string, PrimitiveAtom<TaskDetailState | null>>(() =>
-  atom<TaskDetailState | null>(null),
+export const agentDetailStateAtomFamily = atomFamily<string, PrimitiveAtom<AgentDetailState | null>>(() =>
+  atom<AgentDetailState | null>(null),
 );
 
-export const getEmptyTaskDetailState = (): TaskDetailState => {
+export const getEmptyAgentDetailState = (): AgentDetailState => {
   return {
     completedChatMessages: [],
     inProgressChatMessage: null,
@@ -57,43 +57,43 @@ export const getEmptyTaskDetailState = (): TaskDetailState => {
   };
 };
 
-export const updateTaskDetailAtom = atom(
+export const updateAgentDetailStateAtom = atom(
   null,
   (
     getAtom,
     setAtom,
-    update: { taskId: string; updater: (prev: TaskDetailState | null) => TaskDetailState | null },
+    update: { agentId: string; updater: (prev: AgentDetailState | null) => AgentDetailState | null },
   ): void => {
-    const currentState = getAtom(taskDetailAtomFamily(update.taskId));
+    const currentState = getAtom(agentDetailStateAtomFamily(update.agentId));
     const newState = update.updater(currentState);
     if (!isEqual(currentState, newState)) {
-      setAtom(taskDetailAtomFamily(update.taskId), newState);
+      setAtom(agentDetailStateAtomFamily(update.agentId), newState);
     }
   },
 );
 
-export const taskUpdatedArtifactsAtomFamily = atomFamily<string, PrimitiveAtom<Array<ArtifactType>>>(() =>
+export const agentUpdatedArtifactsAtomFamily = atomFamily<string, PrimitiveAtom<Array<ArtifactType>>>(() =>
   atom<Array<ArtifactType>>([]),
 );
 
-export const updateTaskUpdatedArtifactsAtom = atom(
+export const updateAgentUpdatedArtifactsAtom = atom(
   null,
-  (getAtom, setAtom, update: { taskId: string; artifactTypes: Array<ArtifactType> }): void => {
-    const existing = getAtom(taskUpdatedArtifactsAtomFamily(update.taskId));
+  (getAtom, setAtom, update: { agentId: string; artifactTypes: Array<ArtifactType> }): void => {
+    const existing = getAtom(agentUpdatedArtifactsAtomFamily(update.agentId));
     if (existing.length === 0) {
-      setAtom(taskUpdatedArtifactsAtomFamily(update.taskId), Array.from(new Set(update.artifactTypes)));
+      setAtom(agentUpdatedArtifactsAtomFamily(update.agentId), Array.from(new Set(update.artifactTypes)));
       return;
     }
 
     const mergedTypes = Array.from(new Set([...existing, ...update.artifactTypes]));
-    setAtom(taskUpdatedArtifactsAtomFamily(update.taskId), mergedTypes);
+    setAtom(agentUpdatedArtifactsAtomFamily(update.agentId), mergedTypes);
   },
 );
 
 /**
  * Draft state for the AskUserQuestion form.
  *
- * Stored in a separate atom family (keyed by taskId) so that in-progress
+ * Stored in a separate atom family (keyed by agentId) so that in-progress
  * selections and typed text survive component unmounts caused by navigation.
  */
 export type DraftQuestionState = {
@@ -118,10 +118,10 @@ export const draftQuestionStateAtomFamily = atomFamily<string, PrimitiveAtom<Dra
   atom<DraftQuestionState>(EMPTY_DRAFT_QUESTION_STATE),
 );
 
-export const clearTaskUpdatedArtifactsAtom = atom(
+export const clearAgentUpdatedArtifactsAtom = atom(
   null,
-  (getAtom, setAtom, update: { taskId: string; artifactTypes: Array<ArtifactType> }): void => {
-    const existing = getAtom(taskUpdatedArtifactsAtomFamily(update.taskId));
+  (getAtom, setAtom, update: { agentId: string; artifactTypes: Array<ArtifactType> }): void => {
+    const existing = getAtom(agentUpdatedArtifactsAtomFamily(update.agentId));
     if (existing.length === 0) {
       return;
     }
@@ -130,7 +130,7 @@ export const clearTaskUpdatedArtifactsAtom = atom(
     const remaining = existing.filter((artifactType) => !artifactsToClear.has(artifactType));
 
     if (remaining.length !== existing.length) {
-      setAtom(taskUpdatedArtifactsAtomFamily(update.taskId), remaining);
+      setAtom(agentUpdatedArtifactsAtomFamily(update.agentId), remaining);
     }
   },
 );

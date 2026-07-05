@@ -71,7 +71,7 @@ const useSearchSuppression = (
     virtualizer,
     null,
     -1,
-    "test-task",
+    "test-agent",
   );
   const { isSearchVisible } = useAlphaSearch(messages, virtualizer);
 

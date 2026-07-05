@@ -51,7 +51,7 @@ export type ScrollMachineState = {
   geometryAtBottom: boolean;
   /**
    * The most recent reading anchor sampled on a genuine user scroll, or null
-   * before the user has scrolled this task. Consulted only by `projectReflow`
+   * before the user has scrolled this agent. Consulted only by `projectReflow`
    * (for the scrolled-up `userControlled` phase); never drives a render. Cleared
    * on entering `following`/`anchoringTurn` (the scrolled-up position is abandoned).
    */

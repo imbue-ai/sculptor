@@ -6,12 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ElementIds } from "~/api";
 
 import { AlphaMarkdownBlock } from "./AlphaMarkdownBlock.tsx";
-import { ChatTaskProvider } from "./ChatTaskContext.tsx";
+import { ChatAgentProvider } from "./ChatAgentContext.tsx";
 
 const ThemeWrapper = ({ children }: { children: ReactNode }): ReactElement => (
-  <ChatTaskProvider workspaceId="test-ws" taskId="agent-1">
+  <ChatAgentProvider workspaceId="test-ws" agentId="agent-1">
     <Theme>{children}</Theme>
-  </ChatTaskProvider>
+  </ChatAgentProvider>
 );
 const render = (
   ui: ReactElement,

@@ -54,12 +54,12 @@ const buildAgentlessDefaultLayout = (terminalPanelId: PanelId): WorkspaceLayoutS
   return { ...layout, placement, activePanel, order: { ...layout.order, center: [] } };
 };
 
-// `taskId` is the route's agent id; it is undefined for a workspace with no agents,
+// `agentId` is the route's agent id; it is undefined for a workspace with no agents,
 // which renders the shell with an empty center instead of a blank page. Returns the
 // resolved "viewed agent" id so the workspace page can drive that agent's artifact
 // sync (a workspace-layer hook that `common/` must not import directly).
-export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId?: string }): string | undefined => {
-  const { workspaceId, taskId } = inputs;
+export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; agentId?: string }): string | undefined => {
+  const { workspaceId, agentId } = inputs;
 
   const store = useStore();
   const switchActiveWorkspace = useSetAtom(switchActiveWorkspaceAtom);
@@ -78,8 +78,8 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
   // single per-workspace mount that always has the add-panel actions in scope.
   useRegisterCommandAction("agent.create", createRecentAgent);
 
-  // This workspace's agent task ids, through the shallow-equal slice so streaming
-  // ticks (which rebuild tasksArrayAtom's array without changing the id list) neither
+  // This workspace's agent ids, through the shallow-equal slice so streaming
+  // ticks (which rebuild agentsArrayAtom's array without changing the id list) neither
   // re-render this host nor re-fire the reconcile effect below.
   const workspaceAgentIds = useAtomValue(workspaceAgentIdsAtomFamily(workspaceId));
 
@@ -97,14 +97,14 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
   // The panel-derived id is only trusted when it belongs to THIS workspace: on the
   // first commit of a workspace switch the layout atoms still describe the previous
   // workspace (the scope flip lands in the layout effect below), so a panel-derived
-  // id that isn't one of this workspace's agents falls back to the route's taskId
+  // id that isn't one of this workspace's agents falls back to the route's agentId
   // (which also covers the window before the layout settles) rather than pairing
   // this workspace with a foreign agent. Matches ChatInput's per-panel-agent
   // isolation.
   const panelAgentId = useAtomValue(viewedAgentIdAtom);
-  const viewedAgentId = panelAgentId !== null && workspaceAgentIds.includes(panelAgentId) ? panelAgentId : taskId;
+  const viewedAgentId = panelAgentId !== null && workspaceAgentIds.includes(panelAgentId) ? panelAgentId : agentId;
   // useMarkRead takes a required id; in an agentless workspace the empty id matches
-  // no task, so it is a safe no-op (its task lookup misses). The matching artifact
+  // no agent, so it is a safe no-op (its agent lookup misses). The matching artifact
   // sync runs from WorkspacePage off this hook's returned `viewedAgentId`.
   useMarkRead(workspaceId, viewedAgentId ?? "");
 
@@ -119,9 +119,9 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
       const terminalIndex = seedFirstVisitTerminal(store, workspaceId);
       const terminalPanelId = makeTerminalPanelId(workspaceId, terminalIndex);
       const defaultLayout =
-        taskId === undefined
+        agentId === undefined
           ? buildAgentlessDefaultLayout(terminalPanelId)
-          : buildDefaultWorkspaceLayout({ agentPanelId: makeAgentPanelId(taskId), terminalPanelId });
+          : buildDefaultWorkspaceLayout({ agentPanelId: makeAgentPanelId(agentId), terminalPanelId });
       switchActiveWorkspace({ workspaceId, defaultLayout });
     } else {
       switchActiveWorkspace({ workspaceId });
@@ -130,28 +130,28 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
     // popover's diff click) can only land once the layout scope points at this
     // workspace; apply it now that the scope has flipped and any seeding is done.
     consumePendingPanelReveal({ workspaceId });
-  }, [workspaceId, taskId, store, switchActiveWorkspace, consumePendingPanelReveal]);
+  }, [workspaceId, agentId, store, switchActiveWorkspace, consumePendingPanelReveal]);
 
   // Activate the ROUTE's agent (placing it in center if it has never been placed).
-  // Keyed strictly off the route — workspaceId/taskId — and NEVER off layout state:
+  // Keyed strictly off the route — workspaceId/agentId — and NEVER off layout state:
   // switching tabs writes activePanel without navigating, so a layout-keyed re-run
   // would snap focus straight back to the routed agent. A layout effect, so a
   // freshly-created agent's activation commits in the same pre-paint flush as its
-  // navigation. Agentless workspaces (no taskId) skip activation and keep the
+  // navigation. Agentless workspaces (no agentId) skip activation and keep the
   // center's empty state.
   useLayoutEffect(() => {
-    if (taskId === undefined) {
+    if (agentId === undefined) {
       return;
     }
-    activateAgentPanel(taskId);
-  }, [workspaceId, taskId, activateAgentPanel]);
+    activateAgentPanel(agentId);
+  }, [workspaceId, agentId, activateAgentPanel]);
 
   // Reconcile: every agent of this workspace owns a center panel tab. The activation
   // effect above only touches the route's agent; an agent that appears WITHOUT a
   // navigation (a CI-babysitter the backend spawns, or a second agent created from
   // the add-panel "+" / Cmd+K) surfaces here. The reconcile is additive-only and
   // idempotent — it never changes the active panel (a background agent's tab appears
-  // without stealing focus) and re-running it on every task tick cannot duplicate a
+  // without stealing focus) and re-running it on every agent tick cannot duplicate a
   // tab. Runs as a layout effect so a freshly-created agent's tab is committed in the
   // same pre-paint flush as its navigation.
   useLayoutEffect(() => {

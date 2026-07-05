@@ -9,7 +9,7 @@
 // workspace layout that has not been seeded yet). The id always comes from the
 // ACTIVE workspace's layout, and a stale layout entry (e.g. a just-deleted
 // agent's panel) can briefly name an agent that no longer exists — so consumers
-// scope/validate it against their own task lists (`task.id === viewedAgentId`),
+// scope/validate it against their own agent lists (`agent.id === viewedAgentId`),
 // which also leaves every other workspace's agents unaffected.
 //
 // This is the single source of truth for "which agent counts as viewed";

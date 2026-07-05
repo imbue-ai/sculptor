@@ -84,7 +84,7 @@ export type OverlayDefinition = {
  *
  * Like a panel (and unlike an app-global overlay) it is mounted inside the
  * host's `WorkspacePluginContext`, so the workspace SDK hooks
- * (`useCurrentWorkspace`, `useWorkspaceTasks`, per-workspace `usePluginSetting`
+ * (`useCurrentWorkspace`, `useWorkspaceAgents`, per-workspace `usePluginSetting`
  * keys) resolve to the workspace it is rendered for.
  */
 export type WorkspaceWidgetDefinition = {

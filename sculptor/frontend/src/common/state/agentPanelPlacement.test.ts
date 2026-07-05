@@ -14,7 +14,7 @@ import {
   workspaceAgentIdsAtomFamily,
   workspaceAgentIdsWhenLoadedAtomFamily,
 } from "./agentPanelPlacement.ts";
-import { taskAtomFamily, taskIdsAtom } from "./atoms/tasks.ts";
+import { agentAtomFamily, agentIdsAtom } from "./atoms/agents.ts";
 
 const storeWith = (layout: Partial<WorkspaceLayoutState>, workspaceId = "ws-test"): ReturnType<typeof createStore> => {
   const store = createStore();
@@ -23,7 +23,7 @@ const storeWith = (layout: Partial<WorkspaceLayoutState>, workspaceId = "ws-test
   return store;
 };
 
-const taskFor = (id: string, workspaceId: string, overrides: Partial<CodingAgentTaskView> = {}): CodingAgentTaskView =>
+const agentFor = (id: string, workspaceId: string, overrides: Partial<CodingAgentTaskView> = {}): CodingAgentTaskView =>
   ({ id, workspaceId, isDeleted: false, ...overrides }) as CodingAgentTaskView;
 
 beforeEach(() => {
@@ -117,7 +117,7 @@ describe("ensureAgentPanelsPlacedAtom", () => {
     expect(afterFirstRun.order.center).toEqual([a1, a2]);
   });
 
-  it("places an agent task id given twice exactly once", () => {
+  it("places an agent id given twice exactly once", () => {
     const a1 = makeAgentPanelId("1");
     const store = storeWith({});
 
@@ -152,7 +152,7 @@ describe("ensureAgentPanelsPlacedAtom", () => {
     expect(store.get(workspaceLayoutAtom).order.center).toEqual([a1, a2]);
   });
 
-  it("does not prune a placed agent panel whose task id is no longer listed", () => {
+  it("does not prune a placed agent panel whose agent id is no longer listed", () => {
     // Deleting an agent removes its panel through the agent close/delete flow;
     // the reconcile only ever adds.
     const ghost = makeAgentPanelId("ghost");
@@ -188,54 +188,54 @@ describe("ensureAgentPanelsPlacedAtom", () => {
 });
 
 describe("workspaceAgentIdsAtomFamily", () => {
-  it("lists only the workspace's task ids", () => {
+  it("lists only the workspace's agent ids", () => {
     const store = createStore();
-    store.set(taskIdsAtom, ["t1", "t2", "t3"]);
-    store.set(taskAtomFamily("t1"), taskFor("t1", "ws-a"));
-    store.set(taskAtomFamily("t2"), taskFor("t2", "ws-b"));
-    store.set(taskAtomFamily("t3"), taskFor("t3", "ws-a"));
+    store.set(agentIdsAtom, ["t1", "t2", "t3"]);
+    store.set(agentAtomFamily("t1"), agentFor("t1", "ws-a"));
+    store.set(agentAtomFamily("t2"), agentFor("t2", "ws-b"));
+    store.set(agentAtomFamily("t3"), agentFor("t3", "ws-a"));
 
     expect(store.get(workspaceAgentIdsAtomFamily("ws-a"))).toEqual(["t1", "t3"]);
     expect(store.get(workspaceAgentIdsAtomFamily("ws-b"))).toEqual(["t2"]);
   });
 
-  it("is reference-stable across a task tick that does not change the id list", () => {
-    // tasksArrayAtom rebuilds its array on every per-task write; the slice must
+  it("is reference-stable across an agent tick that does not change the id list", () => {
+    // agentsArrayAtom rebuilds its array on every per-agent write; the slice must
     // swallow that so the bootstrap does not re-render per streaming tick.
     const store = createStore();
-    store.set(taskIdsAtom, ["t1"]);
-    store.set(taskAtomFamily("t1"), taskFor("t1", "ws-a"));
+    store.set(agentIdsAtom, ["t1"]);
+    store.set(agentAtomFamily("t1"), agentFor("t1", "ws-a"));
 
     const first = store.get(workspaceAgentIdsAtomFamily("ws-a"));
-    store.set(taskAtomFamily("t1"), taskFor("t1", "ws-a", { title: "tick" }));
+    store.set(agentAtomFamily("t1"), agentFor("t1", "ws-a", { title: "tick" }));
 
     expect(store.get(workspaceAgentIdsAtomFamily("ws-a"))).toBe(first);
   });
 });
 
 describe("workspaceAgentIdsWhenLoadedAtomFamily", () => {
-  it("is undefined until the first task snapshot arrives", () => {
+  it("is undefined until the first agent snapshot arrives", () => {
     const store = createStore();
     expect(store.get(workspaceAgentIdsWhenLoadedAtomFamily("ws-a"))).toBeUndefined();
   });
 
   it("lists the workspace's ids — and [] for an agentless workspace — once loaded", () => {
     const store = createStore();
-    store.set(taskIdsAtom, ["t1", "t2"]);
-    store.set(taskAtomFamily("t1"), taskFor("t1", "ws-a"));
-    store.set(taskAtomFamily("t2"), taskFor("t2", "ws-b"));
+    store.set(agentIdsAtom, ["t1", "t2"]);
+    store.set(agentAtomFamily("t1"), agentFor("t1", "ws-a"));
+    store.set(agentAtomFamily("t2"), agentFor("t2", "ws-b"));
 
     expect(store.get(workspaceAgentIdsWhenLoadedAtomFamily("ws-a"))).toEqual(["t1"]);
     expect(store.get(workspaceAgentIdsWhenLoadedAtomFamily("ws-agentless"))).toEqual([]);
   });
 
-  it("is reference-stable across a task tick that does not change the id list", () => {
+  it("is reference-stable across an agent tick that does not change the id list", () => {
     const store = createStore();
-    store.set(taskIdsAtom, ["t1"]);
-    store.set(taskAtomFamily("t1"), taskFor("t1", "ws-a"));
+    store.set(agentIdsAtom, ["t1"]);
+    store.set(agentAtomFamily("t1"), agentFor("t1", "ws-a"));
 
     const first = store.get(workspaceAgentIdsWhenLoadedAtomFamily("ws-a"));
-    store.set(taskAtomFamily("t1"), taskFor("t1", "ws-a", { title: "tick" }));
+    store.set(agentAtomFamily("t1"), agentFor("t1", "ws-a", { title: "tick" }));
 
     expect(store.get(workspaceAgentIdsWhenLoadedAtomFamily("ws-a"))).toBe(first);
   });

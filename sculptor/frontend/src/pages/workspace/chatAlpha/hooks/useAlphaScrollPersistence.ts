@@ -21,12 +21,12 @@ type MessageRef = { id: string };
 export const useAlphaScrollPersistence = (
   scrollContainerRef: RefObject<HTMLDivElement | null>,
   virtualizer: Virtualizer<HTMLDivElement, Element>,
-  taskId: string,
+  agentId: string,
   filteredMessages: ReadonlyArray<MessageRef>,
   machine: ScrollStateMachine,
 ): void => {
-  const [scrollPosition, setScrollPosition] = useAtom(alphaScrollPositionAtomFamily(taskId));
-  const prevTaskIdRef = useRef(taskId);
+  const [scrollPosition, setScrollPosition] = useAtom(alphaScrollPositionAtomFamily(agentId));
+  const prevAgentIdRef = useRef(agentId);
   const pendingRafsRef = useRef(new Set<number>());
 
   // Save scroll position (rAF-debounced)
@@ -83,9 +83,9 @@ export const useAlphaScrollPersistence = (
 
     if (!scrollPosition) {
       // First visit: land at the very end of the padded scroll range. For a
-      // task whose last turn is short, the dynamic paddingEnd makes this the
+      // agent whose last turn is short, the dynamic paddingEnd makes this the
       // anchored-turn rest position (last user message at the viewport top) —
-      // the view the task's owner last saw.
+      // the view the agent's owner last saw.
       el.scrollTop = maxScrollOffset(el);
       return;
     }
@@ -119,7 +119,7 @@ export const useAlphaScrollPersistence = (
     }
   }, [scrollContainerRef, virtualizer, filteredMessages, scrollPosition]);
 
-  // Restore scroll position on task switch
+  // Restore scroll position on agent switch
   const restore = useCallback(() => {
     const el = scrollContainerRef.current;
     if (!el || filteredMessages.length === 0) return;
@@ -128,10 +128,10 @@ export const useAlphaScrollPersistence = (
     cancelPendingRafs(pendingRafsRef.current);
     // Enter `restoring`: the machine now owns "a restore is in flight", which
     // suppresses position saves and is reflected to the DOM as data-scroll-phase.
-    machine.dispatch({ kind: "taskSwitched", taskId });
+    machine.dispatch({ kind: "agentSwitched", agentId });
 
     // First apply: resolves the anchor against the virtualizer's *estimated*
-    // heights — on a task switch the virtualizer is mid-settle and the items
+    // heights — on an agent switch the virtualizer is mid-settle and the items
     // have not re-measured to their real sizes yet. This prevents a flash of
     // the outgoing scroll position.
     applyScrollPosition();
@@ -162,16 +162,16 @@ export const useAlphaScrollPersistence = (
       pendingRafsRef.current.add(id2);
     });
     pendingRafsRef.current.add(id1);
-  }, [scrollContainerRef, filteredMessages, applyScrollPosition, machine, taskId]);
+  }, [scrollContainerRef, filteredMessages, applyScrollPosition, machine, agentId]);
 
   // Restore scroll position synchronously before paint so the user never
   // sees the old scroll position flash before jumping to the saved one.
   useLayoutEffect(() => {
-    if (prevTaskIdRef.current !== taskId) {
-      prevTaskIdRef.current = taskId;
+    if (prevAgentIdRef.current !== agentId) {
+      prevAgentIdRef.current = agentId;
       restore();
     }
-  }, [taskId, restore]);
+  }, [agentId, restore]);
 
   // Initial restore on mount; cancel pending rAFs on unmount
   useEffect(() => {

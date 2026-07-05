@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage } from "~/api";
 import { useWorkspacePageParams } from "~/common/hooks/navigation.ts";
 import { isSmoothStreamingEnabledAtom } from "~/common/state/atoms/smoothStreaming.ts";
-import { useTask } from "~/common/state/hooks/useTaskHelpers.ts";
+import { useAgent } from "~/common/state/hooks/useAgentHelpers.ts";
 
 import { StreamingEngine } from "../utils/streamingEngine.ts";
 
@@ -46,12 +46,12 @@ const WORD_BOUNDARY_LOOKAHEAD_CHARS = 15;
 const WORD_BOUNDARY_PATTERN = /[\s\n.,;:!?)}\]"']/;
 
 /**
- * The currently animated message paired with the task it belongs to, so the
- * render path can discard text from a previous task without reading a ref.
+ * The currently animated message paired with the agent it belongs to, so the
+ * render path can discard text from a previous agent without reading a ref.
  */
 type RenderedState = {
   readonly message: ChatMessage | null;
-  readonly taskID: string;
+  readonly agentId: string;
 };
 
 /**
@@ -81,7 +81,7 @@ const snapToWordBoundary = (text: string, currentOffset: number, rawCharsToRevea
 };
 
 /**
- * Orchestrates a StreamingEngine against live task snapshots with smooth
+ * Orchestrates a StreamingEngine against live agent snapshots with smooth
  * time-based text draining via requestAnimationFrame.
  *
  * When smooth streaming is enabled:
@@ -94,22 +94,22 @@ const snapToWordBoundary = (text: string, currentOffset: number, rawCharsToRevea
  *   - The rendered text head never lags behind the received text by more
  *     than MAX_BUFFER_CHARS (~1500 ms equivalent).
  *
- * When disabled (user toggle OFF, viewport off-screen, or per-task flag):
+ * When disabled (user toggle OFF, viewport off-screen, or per-agent flag):
  *   - Text is flushed immediately (identical to previous ASAP behavior).
  *
- * Task switches and new-message transitions always flush immediately so
+ * Agent switches and new-message transitions always flush immediately so
  * accumulated background output is never animated.
  */
 export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMessage | null => {
   const { agentID } = useWorkspacePageParams();
-  const taskID = agentID ?? "";
-  const task = useTask(taskID);
-  const isSmoothStreamingEnabledForTask = task?.isSmoothStreamingSupported ?? false;
-  const isSmoothStreamingEnabled = useAtomValue(isSmoothStreamingEnabledAtom) && isSmoothStreamingEnabledForTask;
+  const agentId = agentID ?? "";
+  const agent = useAgent(agentId);
+  const isSmoothStreamingEnabledForAgent = agent?.isSmoothStreamingSupported ?? false;
+  const isSmoothStreamingEnabled = useAtomValue(isSmoothStreamingEnabledAtom) && isSmoothStreamingEnabledForAgent;
 
   const engineRef = useRef<StreamingEngine | null>(null);
   const activeMessageIdRef = useRef<string | null>(null);
-  const activeTaskIdRef = useRef<string | null>(null);
+  const activeAgentIdRef = useRef<string | null>(null);
   const rafIdRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef<number>(0);
   /** Exponential moving average of the interval (ms) between batch arrivals. */
@@ -122,7 +122,7 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
   const lastBatchArrivalTimeRef = useRef<number>(0);
   const [renderedState, setRenderedState] = useState<RenderedState>({
     message: chatMessage ?? null,
-    taskID,
+    agentId,
   });
 
   const ensureEngine = useCallback((): StreamingEngine => {
@@ -156,14 +156,14 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
       const bufferSize = engine.getBufferSize();
       if (bufferSize === 0) {
         rafIdRef.current = null;
-        setRenderedState({ message: engine.flush(), taskID });
+        setRenderedState({ message: engine.flush(), agentId });
         return;
       }
 
       // Enforce the hard max-latency cap.
       if (bufferSize > MAX_BUFFER_CHARS) {
         rafIdRef.current = null;
-        setRenderedState({ message: engine.flush(), taskID });
+        setRenderedState({ message: engine.flush(), agentId });
         return;
       }
 
@@ -189,12 +189,12 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
         }
       }
 
-      setRenderedState({ message: engine.advanceCursor(charsToReveal), taskID });
+      setRenderedState({ message: engine.advanceCursor(charsToReveal), agentId });
       rafIdRef.current = requestAnimationFrame(tick);
     };
 
     rafIdRef.current = requestAnimationFrame(tick);
-  }, [taskID]);
+  }, [agentId]);
 
   // Initialize the engine on mount; clean up on unmount.
   useEffect(() => {
@@ -211,16 +211,16 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
   const handleSnapshot = useCallback(
     (engine: StreamingEngine, snapshot: ChatMessage): void => {
       const isNewMessage = activeMessageIdRef.current !== snapshot.id;
-      const isTaskSwitch = activeTaskIdRef.current !== null && activeTaskIdRef.current !== taskID;
+      const isAgentSwitch = activeAgentIdRef.current !== null && activeAgentIdRef.current !== agentId;
 
       activeMessageIdRef.current = snapshot.id;
-      activeTaskIdRef.current = taskID;
+      activeAgentIdRef.current = agentId;
 
-      // New message or task switch: flush immediately, no animation.
-      if (isNewMessage || isTaskSwitch) {
+      // New message or agent switch: flush immediately, no animation.
+      if (isNewMessage || isAgentSwitch) {
         stopAnimationLoop();
         engine.updateLatestSnapshot(snapshot);
-        setRenderedState({ message: engine.flush(), taskID });
+        setRenderedState({ message: engine.flush(), agentId });
         deliveryIntervalEmaRef.current = null;
         lastBatchArrivalTimeRef.current = 0;
         return;
@@ -230,7 +230,7 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
       if (!isSmoothStreamingEnabled) {
         stopAnimationLoop();
         engine.updateLatestSnapshot(snapshot);
-        setRenderedState({ message: engine.flush(), taskID });
+        setRenderedState({ message: engine.flush(), agentId });
         return;
       }
 
@@ -260,7 +260,7 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
       // Start (or continue) the rAF drain loop.
       startAnimationLoop();
     },
-    [taskID, isSmoothStreamingEnabled, stopAnimationLoop, startAnimationLoop],
+    [agentId, isSmoothStreamingEnabled, stopAnimationLoop, startAnimationLoop],
   );
 
   // Reconcile each new snapshot from the backend.
@@ -276,7 +276,7 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
       stopAnimationLoop();
       engine.updateLatestSnapshot(null);
       activeMessageIdRef.current = null;
-      activeTaskIdRef.current = null;
+      activeAgentIdRef.current = null;
       return;
     }
 
@@ -289,9 +289,9 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
   useEffect(() => {
     if (!isSmoothStreamingEnabled && engineRef.current) {
       stopAnimationLoop();
-      setRenderedState({ message: engineRef.current.flush(), taskID });
+      setRenderedState({ message: engineRef.current.flush(), agentId });
     }
-  }, [isSmoothStreamingEnabled, stopAnimationLoop, taskID]);
+  }, [isSmoothStreamingEnabled, stopAnimationLoop, agentId]);
 
   return useMemo(() => {
     // Stream completed: derive the cleared value directly from the prop instead
@@ -300,13 +300,13 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
       return null;
     }
 
-    // Synchronous guard: if we switched to a different task, don't return stale
-    // animated text from the previous task. Comparing the task recorded
-    // alongside the rendered message against the current taskID keeps this a
+    // Synchronous guard: if we switched to a different agent, don't return stale
+    // animated text from the previous agent. Comparing the agent recorded
+    // alongside the rendered message against the current agentId keeps this a
     // pure render-time derivation (no ref read).
-    if (renderedState.taskID !== taskID) {
+    if (renderedState.agentId !== agentId) {
       return null;
     }
     return renderedState.message ?? null;
-  }, [chatMessage, renderedState, taskID]);
+  }, [chatMessage, renderedState, agentId]);
 };

@@ -12,10 +12,10 @@ import styles from "./ErrorInput.module.scss";
 
 type ErrorInputProps = {
   workspaceId: string;
-  taskId: string;
+  agentId: string;
 };
 
-export const ErrorInput = ({ workspaceId, taskId }: ErrorInputProps): ReactElement => {
+export const ErrorInput = ({ workspaceId, agentId }: ErrorInputProps): ReactElement => {
   const [toast, setToast] = useState<ToastContent | null>(null);
   const isWorkspaceDeleted = useIsWorkspaceDeleted(workspaceId);
   const dangerColor = useThemeDangerColor();
@@ -23,7 +23,7 @@ export const ErrorInput = ({ workspaceId, taskId }: ErrorInputProps): ReactEleme
   const handleRestore = async (): Promise<void> => {
     try {
       await restoreWorkspaceAgent({
-        path: { workspace_id: workspaceId, agent_id: taskId },
+        path: { workspace_id: workspaceId, agent_id: agentId },
       });
     } catch (error) {
       console.error("Failed to restore agent:", error);

@@ -42,12 +42,12 @@ const BINARY_NOT_FOUND_TOOLS: ReadonlyArray<BinaryNotFoundTool> = [
 export const AlphaErrorBlock = ({
   block,
   isLastMessage,
-  taskStatus,
+  agentStatus,
   onRetryRequest,
 }: {
   block: ErrorBlock;
   isLastMessage: boolean;
-  taskStatus: TaskStatus;
+  agentStatus: TaskStatus;
   onRetryRequest?: () => void;
 }): ReactElement => {
   const dependenciesStatus = useAtomValue(dependenciesStatusAtom);
@@ -56,7 +56,7 @@ export const AlphaErrorBlock = ({
   const openSettings = useOpenSettings();
   const binaryNotFoundTool = BINARY_NOT_FOUND_TOOLS.find((tool) => block.errorType?.endsWith(tool.errorSuffix));
   const errorLabel = block.errorType ? block.errorType.split(".").pop() : "Request Failed";
-  const showRetry = !binaryNotFoundTool && isLastMessage && taskStatus !== TaskStatus.ERROR && onRetryRequest;
+  const showRetry = !binaryNotFoundTool && isLastMessage && agentStatus !== TaskStatus.ERROR && onRetryRequest;
   // The pi adapter's provider-auth turn failure leads with this phrasing
   // (humanize_pi_failure_reason); offer a one-click route to authenticate.
   const isAuthFailure = block.message?.includes("require authentication") ?? false;

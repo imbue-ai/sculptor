@@ -19,7 +19,7 @@ type ModelSelectorProps = {
   /** The Claude per-turn change handler. Called when the harness sources no
    *  backend list (Claude); the selected model rides the next turn. */
   onModelChange: (model: LlmModel) => void;
-  /** The active task's `supports_model_selection` capability. When false the
+  /** The active agent's `supports_model_selection` capability. When false the
    *  switcher renders disabled-with-tooltip (the current model still shows). */
   capabilityValue?: boolean;
   /** A harness-supplied model list (pi). Options are keyed by model_id and

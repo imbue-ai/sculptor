@@ -7,9 +7,9 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 
 import { ElementIds } from "~/api";
 import { chatActionsAtom } from "~/common/state/atoms/chatActions";
+import { useAgentSupportsSkills } from "~/common/state/hooks/useAgentHelpers";
 import type { SkillEntry } from "~/common/state/hooks/useSkills";
 import { useSkills } from "~/common/state/hooks/useSkills";
-import { useTaskSupportsSkills } from "~/common/state/hooks/useTaskHelpers";
 import type { SkillType } from "~/common/utils/skillBadge";
 import { PanelHeader } from "~/components/panels/PanelHeader";
 import { SkillChip } from "~/components/skills/SkillChip";
@@ -87,13 +87,13 @@ export const SkillsPanel = (): ReactElement => {
   // land in), and the route's agent id goes stale when a different center
   // tab is activated.
   const workspaceID = useAtomValue(activeWorkspaceIdAtom) ?? "";
-  const taskID = useAtomValue(activeChatAgentIdAtomFamily(workspaceID));
+  const agentId = useAtomValue(activeChatAgentIdAtomFamily(workspaceID));
   const openFileViewTab = useSetAtom(openFileViewTabAtom);
   // A harness that doesn't support skills collapses the panel to an empty
   // state so the user sees a clear signal instead of stale skill content.
-  // `?? true` keeps the panel populated before the task's capabilities have
+  // `?? true` keeps the panel populated before the agent's capabilities have
   // loaded.
-  const canRenderSkills = useTaskSupportsSkills(taskID ?? "") ?? true;
+  const canRenderSkills = useAgentSupportsSkills(agentId ?? "") ?? true;
   const skills = useMemo(() => (canRenderSkills ? rawSkills : []), [canRenderSkills, rawSkills]);
 
   const [search, setSearch] = useState("");

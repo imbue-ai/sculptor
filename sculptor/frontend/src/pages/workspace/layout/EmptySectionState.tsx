@@ -44,7 +44,7 @@ const EmptySectionStateComponent = ({ subSection }: EmptySectionStateProps): Rea
   // Unlike the dropdown (whose content mounts on open), the quick-add list and the
   // "New {recent} agent" label render whenever the empty pane is visible, so this
   // component subscribes to the derived add-panel atoms itself. Both are
-  // equality-guarded, so layout writes / task ticks that change neither list nor
+  // equality-guarded, so layout writes / agent ticks that change neither list nor
   // type do not re-render the pane. It only mounts for EMPTY sub-sections, so the
   // registrations query gains at most a handful of observers.
   const recentAgentType = useAtomValue(recentAgentTypeAtom);

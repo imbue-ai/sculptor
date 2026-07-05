@@ -17,7 +17,7 @@ import { useWorkspaceCodePath } from "~/pages/workspace/hooks/useWorkspaceCodePa
 import { isDiffToolContent } from "~/pages/workspace/utils/blockGuards.ts";
 
 import styles from "./AlphaChipDiffPopover.module.scss";
-import { useChatTask } from "./ChatTaskContext.tsx";
+import { useChatAgent } from "./ChatAgentContext.tsx";
 import type { ChipData } from "./chipRow.types.ts";
 import { makeRelative } from "./toolPillUtils.ts";
 
@@ -55,7 +55,7 @@ export const AlphaChipDiffPopover = ({
   onNavigate,
   actionRef,
 }: AlphaChipDiffPopoverProps): ReactElement => {
-  const { workspaceId: workspaceID } = useChatTask();
+  const { workspaceId: workspaceID } = useChatAgent();
   const workspaceCodePath = useWorkspaceCodePath(workspaceID);
   const setOpenDiffTab = useSetAtom(openDiffTabAtom);
   const setOpenFileViewTab = useSetAtom(openFileViewTabAtom);

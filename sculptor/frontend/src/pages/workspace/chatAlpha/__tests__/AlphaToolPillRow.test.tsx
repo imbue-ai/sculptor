@@ -10,7 +10,7 @@ import { ElementIds } from "~/api";
 import { AlphaToolPillRow } from "../AlphaToolPillRow.tsx";
 import type * as AlphaToolPopoverModule from "../AlphaToolPopover.tsx";
 import { chatToolDensityAtom } from "../atoms/chatAlpha.ts";
-import { ChatTaskProvider } from "../ChatTaskContext.tsx";
+import { ChatAgentProvider } from "../ChatAgentContext.tsx";
 
 vi.mock("~/pages/workspace/hooks/useWorkspaceCodePath.ts", () => ({
   useWorkspaceCodePath: (): string => "/workspace/code",
@@ -79,13 +79,13 @@ const renderPillRow = (
   };
 
   // Expanded density renders the per-tool entries inline, and ReadEntry
-  // reads the owning chat panel's identity via `useChatTask` — provide it.
+  // reads the owning chat panel's identity via `useChatAgent` — provide it.
   const WrapperWithStore = ({ children }: { children: ReactNode }): ReactElement => (
     <Provider store={store}>
       <Theme>
-        <ChatTaskProvider workspaceId="test-workspace" taskId="agent-1">
+        <ChatAgentProvider workspaceId="test-workspace" agentId="agent-1">
           {children}
-        </ChatTaskProvider>
+        </ChatAgentProvider>
       </Theme>
     </Provider>
   );

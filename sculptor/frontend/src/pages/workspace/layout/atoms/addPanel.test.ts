@@ -102,9 +102,9 @@ describe("createAgentInLocation placement", () => {
     store.set(activeWorkspaceIdAtom, "ws-test");
     store.set(workspaceLayoutAtom, { ...EMPTY_WORKSPACE_LAYOUT });
 
-    const taskId = await createAgentInLocation(store, "right", { agentType: "claude" });
+    const agentId = await createAgentInLocation(store, "right", { agentType: "claude" });
 
-    expect(taskId).toBe("task-right");
+    expect(agentId).toBe("task-right");
     const panelId = makeAgentPanelId("task-right");
     const layout = store.get(workspaceLayoutAtom);
     expect(layout.placement[panelId]).toBe("right");

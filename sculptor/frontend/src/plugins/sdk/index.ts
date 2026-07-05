@@ -13,6 +13,7 @@ export {
   useNavigateToWorkspace,
   usePluginSetting,
   usePluginSettings,
+  useWorkspaceAgents,
   useWorkspaces,
   useWorkspaceTasks,
 } from "./hostHooks.ts";

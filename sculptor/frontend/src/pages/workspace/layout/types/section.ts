@@ -15,7 +15,7 @@ export type SectionId = "left" | "center" | "right" | "bottom";
 export type SubSectionId = SectionId | `${SectionId}:secondary`;
 
 // A panel id is either a static id (e.g. "files") or a dynamic id embedding the
-// task/terminal identity (e.g. "agent:<taskId>" / "terminal:<wsId>:<n>").
+// agent/terminal identity (e.g. "agent:<agentId>" / "terminal:<wsId>:<n>").
 export type PanelId = string;
 
 // A horizontal divider stacks the halves top/bottom; a vertical divider places

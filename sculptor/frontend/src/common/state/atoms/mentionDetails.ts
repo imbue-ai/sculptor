@@ -3,8 +3,8 @@ import { atom } from "jotai";
 import { atomFamily } from "jotai/utils";
 
 import type { CodingAgentTaskView, Project, TaskStatus, Workspace } from "../../../api";
+import { agentAtomFamily, agentsArrayAtom, agentStatusAtomFamily } from "./agents";
 import { projectAtomFamily } from "./projects";
-import { taskAtomFamily, tasksArrayAtom, taskStatusAtomFamily } from "./tasks";
 import { workspaceAtomFamily, workspacesArrayAtom } from "./workspaces";
 
 // Maximum agent / workspace titles surfaced by the detail pane. Keeps the
@@ -13,7 +13,7 @@ import { workspaceAtomFamily, workspacesArrayAtom } from "./workspaces";
 const DETAIL_PANE_PREVIEW_LIMIT = 3;
 
 export type AgentDetail = {
-  task: CodingAgentTaskView;
+  agent: CodingAgentTaskView;
   status: TaskStatus | undefined;
   workspace: Workspace | null;
 };
@@ -33,28 +33,28 @@ export type RepositoryDetail = {
 
 /**
  * Composite detail for an agent chip's hover card and the entity picker's
- * right-hand pane. Returns ``null`` when the task atom has no entry for
+ * right-hand pane. Returns ``null`` when the agent atom has no entry for
  * ``agentId`` (deleted or unknown) so consumers can render the deleted-state
  * fallback uniformly.
  */
 export const agentDetailAtomFamily = atomFamily<string, Atom<AgentDetail | null>>((agentId) =>
   atom<AgentDetail | null>((get) => {
-    const task = get(taskAtomFamily(agentId));
-    if (task === null) return null;
+    const agent = get(agentAtomFamily(agentId));
+    if (agent === null) return null;
     return {
-      task,
-      status: get(taskStatusAtomFamily(agentId)),
-      // Task may not yet be associated with a workspace (Phase 1 implicit
+      agent,
+      status: get(agentStatusAtomFamily(agentId)),
+      // Agent may not yet be associated with a workspace (Phase 1 implicit
       // 1:1 creation hasn't finished, or the link was cleared). Fall back
       // to null so the detail pane can skip the workspace-description row.
-      workspace: task.workspaceId === null ? null : get(workspaceAtomFamily(task.workspaceId)),
+      workspace: agent.workspaceId === null ? null : get(workspaceAtomFamily(agent.workspaceId)),
     };
   }),
 );
 
 /**
  * Composite detail for a workspace chip. ``agents`` is the list of
- * non-deleted tasks attached to this workspace, capped at
+ * non-deleted agents attached to this workspace, capped at
  * ``DETAIL_PANE_PREVIEW_LIMIT``; ``agentCount`` is the full count so the UI
  * can show "+N more" affordances.
  */
@@ -62,8 +62,8 @@ export const workspaceDetailAtomFamily = atomFamily<string, Atom<WorkspaceDetail
   atom<WorkspaceDetail | null>((get) => {
     const workspace = get(workspaceAtomFamily(workspaceId));
     if (workspace === null) return null;
-    const allTasks = get(tasksArrayAtom) ?? [];
-    const agents = allTasks.filter((t) => t.workspaceId === workspaceId);
+    const allAgents = get(agentsArrayAtom) ?? [];
+    const agents = allAgents.filter((agent) => agent.workspaceId === workspaceId);
     return {
       workspace,
       project: get(projectAtomFamily(workspace.projectId)),

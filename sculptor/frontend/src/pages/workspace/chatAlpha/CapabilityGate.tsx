@@ -6,7 +6,7 @@ import { useCapabilityGate } from "../../../common/hooks/useCapabilityGate.ts";
 import { neutral } from "../../../common/theme/neutralColor.ts";
 
 type CapabilityGateProps = {
-  /** The narrow capability value, e.g. `useTaskSupportsInterruption(taskId)`. */
+  /** The narrow capability value, e.g. `useAgentSupportsInterruption(agentId)`. */
   capabilityValue: boolean | undefined;
   /** Stable test hook for the disabled treatment. */
   elementId: ElementIds;
@@ -26,7 +26,7 @@ type CapabilityGateProps = {
 
 /**
  * Render an interactive affordance, replacing it with a disabled-with-tooltip
- * placeholder when the active task's harness lacks the underlying capability.
+ * placeholder when the active agent's harness lacks the underlying capability.
  *
  * The enabled branch renders `children` untouched. The disabled branch renders
  * a non-interactive `IconButton` wrapped in a `Tooltip` carrying the

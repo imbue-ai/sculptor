@@ -22,15 +22,15 @@ export type AgentStatusResult = {
 };
 
 export type UseAgentStatusProps = {
-  taskStatus: TaskStatus | null;
+  agentStatus: TaskStatus | null;
   isAutoCompacting: boolean;
   isStreaming: boolean;
   inProgressChatMessage: ChatMessage | null;
   workingUserMessageId: string | null;
-  isStoppingTask: boolean;
+  isStoppingAgent: boolean;
   // Number of background tasks (Bash / Agent / Task with run_in_background)
   // whose ``task_started`` arrived but whose ``task_notification`` has not.
-  // While this is non-zero AND the task is otherwise in an "active" state,
+  // While this is non-zero AND the agent is otherwise in an "active" state,
   // the harness is genuinely idle waiting for the bg notification — show a
   // "waiting" label instead of claiming the agent is thinking. See SCU-387.
   pendingBackgroundTaskCount?: number;
@@ -59,10 +59,10 @@ const ACTIVE_OVERRIDABLE_STATES: ReadonlySet<AgentState> = new Set(["thinking", 
 const deriveRawState = (props: UseAgentStatusProps): AgentState => {
   const {
     isAutoCompacting,
-    isStoppingTask,
+    isStoppingAgent,
     isStreaming,
     inProgressChatMessage,
-    taskStatus,
+    agentStatus,
     workingUserMessageId,
     pendingBackgroundTaskCount = 0,
   } = props;
@@ -71,17 +71,17 @@ const deriveRawState = (props: UseAgentStatusProps): AgentState => {
     return "compacting";
   }
 
-  if (isStoppingTask) {
+  if (isStoppingAgent) {
     return "stopping";
   }
 
-  // Suppress the indicator while the task is WAITING — i.e. an
+  // Suppress the indicator while the agent is WAITING — i.e. an
   // AskUserQuestion or ExitPlanMode panel is showing, or the agent is
   // sitting in plan mode. The held MCP `tools/call` keeps the request
   // alive (so `isStreaming` / inProgressChatMessage may still look
   // active), but the agent isn't actually doing anything until the user
   // responds, and the AUQ panel itself already conveys "needs input".
-  if (taskStatus === "WAITING") {
+  if (agentStatus === "WAITING") {
     return "idle";
   }
 
@@ -102,12 +102,12 @@ const deriveRawState = (props: UseAgentStatusProps): AgentState => {
     }
   } else if (isStreaming) {
     activeState = "thinking";
-  } else if (taskStatus === "RUNNING" && workingUserMessageId !== null) {
+  } else if (agentStatus === "RUNNING" && workingUserMessageId !== null) {
     activeState = "thinking";
   }
 
   // When a background task is in flight, the harness keeps the parent
-  // request alive (waiting for the eventual task_notification) — taskStatus
+  // request alive (waiting for the eventual task_notification) — agentStatus
   // stays RUNNING and the in-progress message stays set even though the
   // agent itself has finished its turn. Override the active lifecycle
   // states to a "waiting" label so the pill reflects what's actually

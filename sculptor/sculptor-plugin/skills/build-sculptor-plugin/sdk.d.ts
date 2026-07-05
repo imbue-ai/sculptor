@@ -83,7 +83,7 @@ export type OverlayDefinition = {
  *
  * Like a panel (and unlike an app-global overlay) it is mounted inside the
  * host's `WorkspacePluginContext`, so the workspace SDK hooks
- * (`useCurrentWorkspace`, `useWorkspaceTasks`, per-workspace `usePluginSetting`
+ * (`useCurrentWorkspace`, `useWorkspaceAgents`, per-workspace `usePluginSetting`
  * keys) resolve to the workspace it is rendered for.
  */
 export type WorkspaceWidgetDefinition = {
@@ -590,9 +590,11 @@ export declare const usePluginSetting: (key: string) => [
  */
 export declare const usePluginSettings: (keys: ReadonlyArray<string>) => ReadonlyMap<string, string>;
 /**
- * All non-deleted tasks for the workspace the plugin is mounted in. Returns
- * `undefined` until the host's task stream has produced its first batch.
+ * All non-deleted agents for the workspace the plugin is mounted in. Returns
+ * `undefined` until the host's agent stream has produced its first batch.
  */
+export declare const useWorkspaceAgents: () => ReadonlyArray<CodingAgentTaskView> | undefined;
+/** @deprecated Use {@link useWorkspaceAgents}; kept as an alias for the prior name. */
 export declare const useWorkspaceTasks: () => ReadonlyArray<CodingAgentTaskView> | undefined;
 /**
  * @deprecated Use {@link PluginPanelDefinition}. Kept as an alias so existing

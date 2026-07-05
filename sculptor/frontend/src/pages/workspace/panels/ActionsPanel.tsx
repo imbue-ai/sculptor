@@ -238,7 +238,7 @@ export const ActionsPanel = (): ReactElement => {
   } = useCustomActions();
   const [collapsedGroups, setCollapsedGroups] = useAtom(collapsedGroupsAtom);
   const chatActions = useAtomValue(chatActionsAtom);
-  const { task } = useWorkspacePanelData();
+  const { agent } = useWorkspacePanelData();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingAction, setEditingAction] = useState<CustomAction | undefined>(undefined);
@@ -275,7 +275,7 @@ export const ActionsPanel = (): ReactElement => {
     return getActionsInGroup(groupId);
   };
 
-  const isAgentRunning = task?.status === "RUNNING" || task?.status === "BUILDING";
+  const isAgentRunning = agent?.status === "RUNNING" || agent?.status === "BUILDING";
 
   const handleAddAction = (): void => {
     setEditingAction(undefined);

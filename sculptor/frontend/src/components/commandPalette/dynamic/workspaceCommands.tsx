@@ -2,7 +2,7 @@ import { useAtomValue } from "jotai";
 import { ArrowUpRight } from "lucide-react";
 import { type ReactElement, useMemo } from "react";
 
-import { tasksArrayAtom } from "../../../common/state/atoms/tasks.ts";
+import { agentsArrayAtom } from "../../../common/state/atoms/agents.ts";
 import { workspacesArrayAtom } from "../../../common/state/atoms/workspaces.ts";
 import { computeWorkspaceDotStatus } from "../../../common/utils/statusDot.ts";
 import { WorkspaceStatusDots } from "../../statusDot";
@@ -35,10 +35,10 @@ export const buildWorkspaceProvider = (runtime: CommandRuntime): DynamicProvider
     const cached = iconCache.get(workspaceId);
     if (cached) return cached;
     const Icon = (): ReactElement => {
-      const tasks = useAtomValue(tasksArrayAtom);
+      const agents = useAtomValue(agentsArrayAtom);
       const status = useMemo(
-        () => computeWorkspaceDotStatus((tasks ?? []).filter((t) => t.workspaceId === workspaceId)),
-        [tasks],
+        () => computeWorkspaceDotStatus((agents ?? []).filter((agent) => agent.workspaceId === workspaceId)),
+        [agents],
       );
       return <WorkspaceStatusDots status={status} />;
     };

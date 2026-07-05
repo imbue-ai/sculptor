@@ -10,12 +10,12 @@ const DEBOUNCE_MS = 500;
 const STOPPED_LINGER_MS = 1500;
 
 const defaultProps: UseAgentStatusProps = {
-  taskStatus: null,
+  agentStatus: null,
   isAutoCompacting: false,
   isStreaming: false,
   inProgressChatMessage: null,
   workingUserMessageId: null,
-  isStoppingTask: false,
+  isStoppingAgent: false,
 };
 
 const makeChatMessage = (content: ChatMessage["content"]): ChatMessage =>
@@ -51,8 +51,8 @@ describe("useAgentStatus", () => {
       expect(result.current.isVisible).toBe(true);
     });
 
-    it("returns stopping when isStoppingTask is true", () => {
-      const { result } = renderHook(() => useAgentStatus({ ...defaultProps, isStoppingTask: true }));
+    it("returns stopping when isStoppingAgent is true", () => {
+      const { result } = renderHook(() => useAgentStatus({ ...defaultProps, isStoppingAgent: true }));
       expect(result.current.state).toBe("stopping");
       expect(result.current.label).toBe("Stopping...");
       expect(result.current.isCancellable).toBe(false);
@@ -84,17 +84,17 @@ describe("useAgentStatus", () => {
       expect(result.current.isCancellable).toBe(true);
     });
 
-    it("returns thinking when task is running with a working message but not yet streaming", () => {
+    it("returns thinking when agent is running with a working message but not yet streaming", () => {
       const { result } = renderHook(() =>
-        useAgentStatus({ ...defaultProps, taskStatus: "RUNNING", workingUserMessageId: "msg-1" }),
+        useAgentStatus({ ...defaultProps, agentStatus: "RUNNING", workingUserMessageId: "msg-1" }),
       );
       expect(result.current.state).toBe("thinking");
       expect(result.current.label).toBe("Thinking...");
       expect(result.current.isCancellable).toBe(true);
     });
 
-    it("returns idle when task is running but no working message", () => {
-      const { result } = renderHook(() => useAgentStatus({ ...defaultProps, taskStatus: "RUNNING" }));
+    it("returns idle when agent is running but no working message", () => {
+      const { result } = renderHook(() => useAgentStatus({ ...defaultProps, agentStatus: "RUNNING" }));
       expect(result.current.state).toBe("idle");
     });
 
@@ -108,7 +108,7 @@ describe("useAgentStatus", () => {
           ...defaultProps,
           isStreaming: true,
           inProgressChatMessage: message,
-          taskStatus: "RUNNING",
+          agentStatus: "RUNNING",
           workingUserMessageId: "msg-1",
           pendingBackgroundTaskCount: 1,
         }),
@@ -145,7 +145,7 @@ describe("useAgentStatus", () => {
       expect(result.current.state).toBe("idle");
     });
 
-    it("returns idle when taskStatus is WAITING (AUQ / ExitPlanMode panel showing)", () => {
+    it("returns idle when agentStatus is WAITING (AUQ / ExitPlanMode panel showing)", () => {
       // The held MCP tools/call keeps the request alive, so isStreaming and
       // inProgressChatMessage may still indicate activity — but the agent is
       // blocked on user input and the AUQ panel itself conveys that, so the
@@ -154,7 +154,7 @@ describe("useAgentStatus", () => {
       const { result } = renderHook(() =>
         useAgentStatus({
           ...defaultProps,
-          taskStatus: "WAITING",
+          agentStatus: "WAITING",
           isStreaming: true,
           inProgressChatMessage: message,
           workingUserMessageId: "msg-1",
@@ -168,7 +168,7 @@ describe("useAgentStatus", () => {
   describe("priority ordering", () => {
     it("compacting takes priority over stopping", () => {
       const { result } = renderHook(() =>
-        useAgentStatus({ ...defaultProps, isAutoCompacting: true, isStoppingTask: true }),
+        useAgentStatus({ ...defaultProps, isAutoCompacting: true, isStoppingAgent: true }),
       );
       expect(result.current.state).toBe("compacting");
     });
@@ -178,7 +178,7 @@ describe("useAgentStatus", () => {
       const { result } = renderHook(() =>
         useAgentStatus({
           ...defaultProps,
-          isStoppingTask: true,
+          isStoppingAgent: true,
           isStreaming: true,
           inProgressChatMessage: message,
         }),
@@ -186,14 +186,14 @@ describe("useAgentStatus", () => {
       expect(result.current.state).toBe("stopping");
     });
 
-    it("streaming takes priority over running-task thinking", () => {
+    it("streaming takes priority over running-agent thinking", () => {
       const message = makeChatMessage([{ type: "text", text: "Hello" }]);
       const { result } = renderHook(() =>
         useAgentStatus({
           ...defaultProps,
           isStreaming: true,
           inProgressChatMessage: message,
-          taskStatus: "RUNNING",
+          agentStatus: "RUNNING",
           workingUserMessageId: "msg-1",
         }),
       );
@@ -311,12 +311,12 @@ describe("useAgentStatus", () => {
           observed.push(status.state);
           return status;
         },
-        { initialProps: { ...defaultProps, taskStatus: "RUNNING", workingUserMessageId: "msg-1" } },
+        { initialProps: { ...defaultProps, agentStatus: "RUNNING", workingUserMessageId: "msg-1" } },
       );
       expect(observed).toContain("thinking");
 
       // Compaction starts almost immediately, well within the debounce window.
-      rerender({ ...defaultProps, taskStatus: "RUNNING", workingUserMessageId: "msg-1", isAutoCompacting: true });
+      rerender({ ...defaultProps, agentStatus: "RUNNING", workingUserMessageId: "msg-1", isAutoCompacting: true });
 
       // It ends before DEBOUNCE_MS elapses: the agent resumes streaming.
       act(() => {
@@ -325,7 +325,7 @@ describe("useAgentStatus", () => {
       const summary = makeChatMessage([{ type: "text", text: "Summary of the conversation so far." }]);
       rerender({
         ...defaultProps,
-        taskStatus: "RUNNING",
+        agentStatus: "RUNNING",
         workingUserMessageId: "msg-1",
         isStreaming: true,
         inProgressChatMessage: summary,
@@ -344,11 +344,11 @@ describe("useAgentStatus", () => {
       // the very next render — the indicator should not lag the actual start
       // of compaction by up to DEBOUNCE_MS.
       const { result, rerender } = renderHook((props: UseAgentStatusProps) => useAgentStatus(props), {
-        initialProps: { ...defaultProps, taskStatus: "RUNNING", workingUserMessageId: "msg-1" },
+        initialProps: { ...defaultProps, agentStatus: "RUNNING", workingUserMessageId: "msg-1" },
       });
       expect(result.current.state).toBe("thinking");
 
-      rerender({ ...defaultProps, taskStatus: "RUNNING", workingUserMessageId: "msg-1", isAutoCompacting: true });
+      rerender({ ...defaultProps, agentStatus: "RUNNING", workingUserMessageId: "msg-1", isAutoCompacting: true });
       // No timer advance: compacting is shown synchronously.
       expect(result.current.state).toBe("compacting");
       expect(result.current.label).toBe("Compacting...");
@@ -359,11 +359,11 @@ describe("useAgentStatus", () => {
   describe("stopped state transition", () => {
     it("shows stopped briefly when transitioning from stopping to idle", () => {
       const { result, rerender } = renderHook((props: UseAgentStatusProps) => useAgentStatus(props), {
-        initialProps: { ...defaultProps, isStoppingTask: true },
+        initialProps: { ...defaultProps, isStoppingAgent: true },
       });
       expect(result.current.state).toBe("stopping");
 
-      // Stop completes — isStoppingTask goes false, raw state goes idle
+      // Stop completes — isStoppingAgent goes false, raw state goes idle
       rerender(defaultProps);
 
       // Should show "Stopped" not "idle"
@@ -375,7 +375,7 @@ describe("useAgentStatus", () => {
 
     it("stopped state lingers for STOPPED_LINGER_MS then goes idle", () => {
       const { result, rerender } = renderHook((props: UseAgentStatusProps) => useAgentStatus(props), {
-        initialProps: { ...defaultProps, isStoppingTask: true },
+        initialProps: { ...defaultProps, isStoppingAgent: true },
       });
 
       // Transition stopping → idle → stopped
@@ -398,7 +398,7 @@ describe("useAgentStatus", () => {
 
     it("stopped state is interrupted if a new active state arrives", () => {
       const { result, rerender } = renderHook((props: UseAgentStatusProps) => useAgentStatus(props), {
-        initialProps: { ...defaultProps, isStoppingTask: true },
+        initialProps: { ...defaultProps, isStoppingAgent: true },
       });
 
       // Go to stopped
@@ -442,8 +442,8 @@ describe("useAgentStatus", () => {
       const activeStates: Array<Partial<UseAgentStatusProps>> = [
         { isStreaming: true },
         { isAutoCompacting: true },
-        { isStoppingTask: true },
-        { taskStatus: "RUNNING", workingUserMessageId: "msg-1" },
+        { isStoppingAgent: true },
+        { agentStatus: "RUNNING", workingUserMessageId: "msg-1" },
       ];
 
       for (const overrides of activeStates) {

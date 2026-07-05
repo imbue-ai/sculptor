@@ -17,7 +17,7 @@ import { AlphaBlockquote } from "./AlphaBlockquote.tsx";
 import { AlphaCodeBlock } from "./AlphaCodeBlock.tsx";
 import styles from "./AlphaMarkdownBlock.module.scss";
 import { AlphaTable } from "./AlphaTable.tsx";
-import { useChatTask } from "./ChatTaskContext.tsx";
+import { useChatAgent } from "./ChatAgentContext.tsx";
 import { isFilePath, isPathInWorkspace, resolveNavPath, splitFilePathSegments } from "./filePathLinkify.ts";
 import type { HighlightState } from "./highlightTextMatches.tsx";
 import { highlightTextInTree } from "./highlightTextMatches.tsx";
@@ -222,7 +222,7 @@ export const AlphaMarkdownBlock = memo(
     activeOccurrenceIndex = -1,
     showCursor = false,
   }: AlphaMarkdownBlockProps): ReactElement => {
-    const { workspaceId: workspaceID } = useChatTask();
+    const { workspaceId: workspaceID } = useChatAgent();
     const workspaceCodePath = useWorkspaceCodePath(workspaceID);
     const openFileViewTab = useSetAtom(openFileViewTabAtom);
 

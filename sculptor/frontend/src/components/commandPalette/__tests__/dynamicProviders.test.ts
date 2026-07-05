@@ -8,8 +8,8 @@ import { panelRegistryAtom } from "~/pages/workspace/layout/registry/panelRegist
 import type { PanelId, SubSectionId } from "~/pages/workspace/layout/types/section.ts";
 
 import type { CodingAgentTaskView, UserConfig, Workspace } from "../../../api";
+import { agentAtomFamily, agentIdsAtom } from "../../../common/state/atoms/agents.ts";
 import { encodeRegisteredAgentType } from "../../../common/state/atoms/agentTabs.ts";
-import { taskAtomFamily, taskIdsAtom } from "../../../common/state/atoms/tasks.ts";
 import { userConfigAtom } from "../../../common/state/atoms/userConfig.ts";
 import { workspaceAtomFamily, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
 import { addPanelTargetSubSectionAtom } from "../contextActions/atoms/contextActions.ts";
@@ -79,35 +79,35 @@ const setWorkspaceIds = (ids: Array<string>): void => {
   getDefaultStore().set(workspaceIdsAtom, ids);
 };
 
-const setTasks = (
-  tasks: Array<{ id: string; title?: string; workspaceId: string; createdAt: string; initialPrompt?: string }>,
+const setAgents = (
+  agents: Array<{ id: string; title?: string; workspaceId: string; createdAt: string; initialPrompt?: string }>,
 ): void => {
-  // tasksArrayAtom is derived from taskIdsAtom + taskAtomFamily, so we
+  // agentsArrayAtom is derived from agentIdsAtom + agentAtomFamily, so we
   // seed those primitive atoms instead of trying to write the derived one.
   const store = getDefaultStore();
-  for (const t of tasks) {
+  for (const agent of agents) {
     store.set(
-      taskAtomFamily(t.id),
+      agentAtomFamily(agent.id),
       // The provider only reads these fields; cast the partial seed through
       // `unknown` rather than constructing a full CodingAgentTaskView.
       {
-        id: t.id,
-        title: t.title ?? null,
-        workspaceId: t.workspaceId,
-        createdAt: t.createdAt,
-        initialPrompt: t.initialPrompt ?? "",
+        id: agent.id,
+        title: agent.title ?? null,
+        workspaceId: agent.workspaceId,
+        createdAt: agent.createdAt,
+        initialPrompt: agent.initialPrompt ?? "",
       } as unknown as CodingAgentTaskView,
     );
   }
   store.set(
-    taskIdsAtom,
-    tasks.map((t) => t.id),
+    agentIdsAtom,
+    agents.map((agent) => agent.id),
   );
 };
 
 beforeEach(() => {
   setWorkspaceIds([]);
-  setTasks([]);
+  setAgents([]);
 });
 
 afterEach(() => {
@@ -202,7 +202,7 @@ describe("buildAgentProvider", () => {
     route: { ...ROOT_CTX.route, isWorkspace: true },
   };
 
-  it("emits a disabled 'Switch agent...' entry when there are no tasks", () => {
+  it("emits a disabled 'Switch agent...' entry when there are no agents", () => {
     const cmds = buildAgentProvider(makeRuntime()).produce(WS1_CTX);
     const opener = cmds.find((c) => c.id === "agents.switch");
     expect(opener).toBeDefined();
@@ -212,7 +212,7 @@ describe("buildAgentProvider", () => {
   });
 
   it("emits no commands when there is no active workspace", () => {
-    setTasks([
+    setAgents([
       { id: "t1", title: "A", workspaceId: "ws1", createdAt: "2024-01-01T00:00:00Z" },
       { id: "t2", title: "B", workspaceId: "ws1", createdAt: "2024-01-02T00:00:00Z" },
     ]);
@@ -221,7 +221,7 @@ describe("buildAgentProvider", () => {
   });
 
   it("emits a disabled 'Switch agent...' entry (and no agent rows) when only one agent exists", () => {
-    setTasks([{ id: "t1", title: "Lone task", workspaceId: "ws1", createdAt: "2024-01-01T00:00:00Z" }]);
+    setAgents([{ id: "t1", title: "Lone task", workspaceId: "ws1", createdAt: "2024-01-01T00:00:00Z" }]);
     const cmds = buildAgentProvider(makeRuntime()).produce(WS1_CTX);
     const opener = cmds.find((c) => c.id === "agents.switch");
     expect(opener).toBeDefined();
@@ -230,7 +230,7 @@ describe("buildAgentProvider", () => {
   });
 
   it("'Switch agent...' is enabled (not disabled) when 2+ agents exist", () => {
-    setTasks([
+    setAgents([
       { id: "t1", title: "A", workspaceId: "ws1", createdAt: "2024-01-01T00:00:00Z" },
       { id: "t2", title: "B", workspaceId: "ws1", createdAt: "2024-01-02T00:00:00Z" },
     ]);
@@ -240,7 +240,7 @@ describe("buildAgentProvider", () => {
   });
 
   it("emits the page-opener + agent rows with 2+ agents in the current workspace", () => {
-    setTasks([
+    setAgents([
       { id: "t1", title: "A", workspaceId: "ws1", createdAt: "2024-01-01T00:00:00Z" },
       { id: "t2", title: "B", workspaceId: "ws1", createdAt: "2024-01-02T00:00:00Z" },
     ]);
@@ -251,7 +251,7 @@ describe("buildAgentProvider", () => {
   });
 
   it("excludes agents that belong to other workspaces", () => {
-    setTasks([
+    setAgents([
       { id: "t1", title: "Mine 1", workspaceId: "ws1", createdAt: "2024-01-01T00:00:00Z" },
       { id: "t2", title: "Mine 2", workspaceId: "ws1", createdAt: "2024-01-02T00:00:00Z" },
       { id: "t3", title: "Other workspace", workspaceId: "ws2", createdAt: "2024-01-03T00:00:00Z" },
@@ -261,7 +261,7 @@ describe("buildAgentProvider", () => {
   });
 
   it("labels the current agent on its page-scoped entry", () => {
-    setTasks([
+    setAgents([
       { id: "t1", title: "A", workspaceId: "ws1", createdAt: "2024-01-01T00:00:00Z" },
       { id: "t2", title: "B", workspaceId: "ws1", createdAt: "2024-01-02T00:00:00Z" },
     ]);
@@ -271,7 +271,7 @@ describe("buildAgentProvider", () => {
   });
 
   it("falls back to the initial prompt when no title is set", () => {
-    setTasks([
+    setAgents([
       {
         id: "t1",
         workspaceId: "ws1",
@@ -292,7 +292,7 @@ describe("buildAgentProvider", () => {
   });
 
   it("page-scoped entries declare onPage = agents.switch", () => {
-    setTasks([
+    setAgents([
       { id: "t1", title: "A", workspaceId: "ws1", createdAt: "2024-01-01T00:00:00Z" },
       { id: "t2", title: "B", workspaceId: "ws1", createdAt: "2024-01-02T00:00:00Z" },
     ]);
@@ -304,7 +304,7 @@ describe("buildAgentProvider", () => {
 
   it("perform navigates to the current workspace + agent ids", () => {
     const runtime = makeRuntime();
-    setTasks([
+    setAgents([
       { id: "t1", title: "A", workspaceId: "ws1", createdAt: "2024-01-01T00:00:00Z" },
       { id: "t2", title: "B", workspaceId: "ws1", createdAt: "2024-01-02T00:00:00Z" },
     ]);
@@ -316,7 +316,7 @@ describe("buildAgentProvider", () => {
   });
 
   it("does NOT emit any `agents.go.*` ids (top-level cleanup regression-lock)", () => {
-    setTasks([
+    setAgents([
       { id: "t1", title: "A", workspaceId: "ws1", createdAt: "2024-01-01T00:00:00Z" },
       { id: "t2", title: "B", workspaceId: "ws1", createdAt: "2024-01-02T00:00:00Z" },
     ]);

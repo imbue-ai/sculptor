@@ -4,8 +4,8 @@ import { useContext, useEffect, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
 
 import type { CodingAgentTaskView } from "~/api";
+import { agentsArrayAtom } from "~/common/state/atoms/agents.ts";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus.ts";
-import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { workspaceBranchAtomFamily } from "~/common/state/atoms/workspaceBranch.ts";
 import { workspaceAtomFamily, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 import { useWorkspaceNavigation } from "~/common/state/hooks/useWorkspaceNavigation.ts";
@@ -201,14 +201,17 @@ export const usePluginSettings = (keys: ReadonlyArray<string>): ReadonlyMap<stri
 };
 
 /**
- * All non-deleted tasks for the workspace the plugin is mounted in. Returns
- * `undefined` until the host's task stream has produced its first batch.
+ * All non-deleted agents for the workspace the plugin is mounted in. Returns
+ * `undefined` until the host's agent stream has produced its first batch.
  */
-export const useWorkspaceTasks = (): ReadonlyArray<CodingAgentTaskView> | undefined => {
+export const useWorkspaceAgents = (): ReadonlyArray<CodingAgentTaskView> | undefined => {
   const { workspaceId } = useWorkspacePluginContext();
-  const tasks = useAtomValue(tasksArrayAtom);
+  const agents = useAtomValue(agentsArrayAtom);
   // Memoize so plugin authors get a stable array identity across renders (safe
-  // to use as an effect/memo dependency); recomputes only when the host task
+  // to use as an effect/memo dependency); recomputes only when the host agent
   // list or the workspace changes.
-  return useMemo(() => tasks?.filter((t) => t.workspaceId === workspaceId), [tasks, workspaceId]);
+  return useMemo(() => agents?.filter((a) => a.workspaceId === workspaceId), [agents, workspaceId]);
 };
+
+/** @deprecated Use {@link useWorkspaceAgents}; kept as an alias for the prior name. */
+export const useWorkspaceTasks = useWorkspaceAgents;

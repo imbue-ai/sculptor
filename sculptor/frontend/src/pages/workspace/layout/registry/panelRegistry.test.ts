@@ -21,7 +21,7 @@ import {
 } from "./panelRegistry.ts";
 
 // A minimal agent input with the fields the status dot + diagnostics derivation reads.
-const makeAgent = (overrides: Partial<DynamicAgentInput> & Pick<DynamicAgentInput, "taskId">): DynamicAgentInput => ({
+const makeAgent = (overrides: Partial<DynamicAgentInput> & Pick<DynamicAgentInput, "agentId">): DynamicAgentInput => ({
   displayName: "Agent 1",
   status: TaskStatus.READY,
   lastReadAt: "2024-01-01T00:00:00Z",
@@ -75,7 +75,7 @@ describe("static panel registry", () => {
 describe("dynamic panel derivation", () => {
   it("derives agent/terminal definitions with the right ids and defaults", () => {
     const defs = deriveDynamicPanels(
-      [makeAgent({ taskId: "t1", displayName: "Agent 1" })],
+      [makeAgent({ agentId: "t1", displayName: "Agent 1" })],
       [{ workspaceId: "ws1", index: 0, displayName: "Terminal 1" }],
     );
     expect(defs.map((d) => d.id)).toEqual(["agent:t1", "terminal:ws1:0"]);
@@ -87,7 +87,7 @@ describe("dynamic panel derivation", () => {
 
   it("gives an agent a status dot and diagnostics context actions", () => {
     const [agentDef] = deriveDynamicPanels(
-      [makeAgent({ taskId: "t1", displayName: "Agent 1", diagnostics: { sessionId: null } })],
+      [makeAgent({ agentId: "t1", displayName: "Agent 1", diagnostics: { sessionId: null } })],
       [],
     );
     // READY with lastReadAt == updatedAt derives the calm "read" dot.
@@ -103,7 +103,7 @@ describe("dynamic panel derivation", () => {
   it("wires the agent close button to the supplied delete callback", () => {
     let didRequestClose = false;
     const [agentDef] = deriveDynamicPanels(
-      [makeAgent({ taskId: "t1", onRequestClose: () => (didRequestClose = true) })],
+      [makeAgent({ agentId: "t1", onRequestClose: () => (didRequestClose = true) })],
       [],
     );
     agentDef.onRequestClose?.();
@@ -111,15 +111,15 @@ describe("dynamic panel derivation", () => {
   });
 
   it("caches the component reference per id across registry rebuilds", () => {
-    const first = deriveDynamicPanels([makeAgent({ taskId: "stable", displayName: "x" })], []);
-    const second = deriveDynamicPanels([makeAgent({ taskId: "stable", displayName: "x renamed" })], []);
+    const first = deriveDynamicPanels([makeAgent({ agentId: "stable", displayName: "x" })], []);
+    const second = deriveDynamicPanels([makeAgent({ agentId: "stable", displayName: "x renamed" })], []);
     expect(first[0].component).toBe(second[0].component);
   });
 
-  it("evicts the cached component when its task disappears", () => {
-    const first = deriveDynamicPanels([makeAgent({ taskId: "evict-me", displayName: "x" })], []);
-    deriveDynamicPanels([makeAgent({ taskId: "other", displayName: "y" })], []);
-    const recreated = deriveDynamicPanels([makeAgent({ taskId: "evict-me", displayName: "x" })], []);
+  it("evicts the cached component when its agent disappears", () => {
+    const first = deriveDynamicPanels([makeAgent({ agentId: "evict-me", displayName: "x" })], []);
+    deriveDynamicPanels([makeAgent({ agentId: "other", displayName: "y" })], []);
+    const recreated = deriveDynamicPanels([makeAgent({ agentId: "evict-me", displayName: "x" })], []);
     expect(first[0].component).not.toBe(recreated[0].component);
   });
 });
@@ -127,30 +127,30 @@ describe("dynamic panel derivation", () => {
 describe("panelRegistriesEqual", () => {
   it("treats a rebuilt registry with unchanged inputs as equal despite fresh objects", () => {
     const terminal = { workspaceId: "ws1", index: 0, displayName: "Terminal 1" };
-    const first = deriveDynamicPanels([makeAgent({ taskId: "t1" })], [terminal]);
+    const first = deriveDynamicPanels([makeAgent({ agentId: "t1" })], [terminal]);
     // A rebuild produces new definition objects and new callback closures; only the
     // render-relevant fields are compared, so the registries still count as equal.
-    const second = deriveDynamicPanels([makeAgent({ taskId: "t1" })], [terminal]);
+    const second = deriveDynamicPanels([makeAgent({ agentId: "t1" })], [terminal]);
     expect(second).not.toBe(first);
     expect(second[0].contextMenuActions).not.toBe(first[0].contextMenuActions);
     expect(panelRegistriesEqual(first, second)).toBe(true);
   });
 
   it("detects a dot-status change", () => {
-    const before = deriveDynamicPanels([makeAgent({ taskId: "t1" })], []);
-    const after = deriveDynamicPanels([makeAgent({ taskId: "t1", status: TaskStatus.RUNNING })], []);
+    const before = deriveDynamicPanels([makeAgent({ agentId: "t1" })], []);
+    const after = deriveDynamicPanels([makeAgent({ agentId: "t1", status: TaskStatus.RUNNING })], []);
     expect(panelRegistriesEqual(before, after)).toBe(false);
   });
 
   it("detects a rename", () => {
-    const before = deriveDynamicPanels([makeAgent({ taskId: "t1", displayName: "Agent 1" })], []);
-    const after = deriveDynamicPanels([makeAgent({ taskId: "t1", displayName: "Renamed" })], []);
+    const before = deriveDynamicPanels([makeAgent({ agentId: "t1", displayName: "Agent 1" })], []);
+    const after = deriveDynamicPanels([makeAgent({ agentId: "t1", displayName: "Renamed" })], []);
     expect(panelRegistriesEqual(before, after)).toBe(false);
   });
 
   it("detects an added panel", () => {
-    const before = deriveDynamicPanels([makeAgent({ taskId: "t1" })], []);
-    const after = deriveDynamicPanels([makeAgent({ taskId: "t1" }), makeAgent({ taskId: "t2" })], []);
+    const before = deriveDynamicPanels([makeAgent({ agentId: "t1" })], []);
+    const after = deriveDynamicPanels([makeAgent({ agentId: "t1" }), makeAgent({ agentId: "t2" })], []);
     expect(panelRegistriesEqual(before, after)).toBe(false);
   });
 });

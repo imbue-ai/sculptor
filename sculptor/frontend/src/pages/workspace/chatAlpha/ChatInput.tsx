@@ -55,23 +55,23 @@ import {
   lastUsedModelAtom,
   userConfigAtom,
 } from "../../../common/state/atoms/userConfig.ts";
+import { useAgentDetailWithDefaults } from "../../../common/state/hooks/useAgentDetail";
+import {
+  useAgentAvailableModels,
+  useAgentModel,
+  useAgentSelectedModelId,
+  useAgentSourcesBackendModels,
+  useAgentSupportsContextReset,
+  useAgentSupportsFastMode,
+  useAgentSupportsFileAttachments,
+  useAgentSupportsImageInput,
+  useAgentSupportsInteractiveBackchannel,
+  useAgentSupportsInterruption,
+  useAgentSupportsModelSelection,
+} from "../../../common/state/hooks/useAgentHelpers.ts";
 import { useDraftAttachedFiles } from "../../../common/state/hooks/useDraftAttachedFiles.ts";
 import { useInterruptAgent } from "../../../common/state/hooks/useInterruptAgent.ts";
 import { usePromptDraft } from "../../../common/state/hooks/usePromptDraft.ts";
-import { useTaskDetailWithDefaults } from "../../../common/state/hooks/useTaskDetail";
-import {
-  useTaskAvailableModels,
-  useTaskModel,
-  useTaskSelectedModelId,
-  useTaskSourcesBackendModels,
-  useTaskSupportsContextReset,
-  useTaskSupportsFastMode,
-  useTaskSupportsFileAttachments,
-  useTaskSupportsImageInput,
-  useTaskSupportsInteractiveBackchannel,
-  useTaskSupportsInterruption,
-  useTaskSupportsModelSelection,
-} from "../../../common/state/hooks/useTaskHelpers.ts";
 import { CHAT_INPUT_ELEMENT_ID } from "../../../common/utils/elementIds.ts";
 import { Editor } from "../../../components/editor/Editor.tsx";
 import { Toast } from "../../../components/Toast.tsx";
@@ -128,7 +128,7 @@ type ChatInputProps = {
   // without navigating), so reading the route here would bind the wrong agent and
   // leak one agent's settings into another (effort/fast-mode/model isolation).
   // Falls back to the route params when omitted to keep older callers working.
-  taskId?: string;
+  agentId?: string;
   workspaceId?: string;
 };
 
@@ -140,7 +140,7 @@ export const ChatInput = ({
   insertSkillRef,
   editorRef: externalEditorRef,
   showPromptNavHint = false,
-  taskId: taskIdProp,
+  agentId: agentIdProp,
   workspaceId: workspaceIdProp,
 }: ChatInputProps): ReactElement => {
   const internalEditorRef = useRef<TipTapEditor | null>(null);
@@ -148,28 +148,28 @@ export const ChatInput = ({
   const dragCounterRef = useRef<number>(0);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const { workspaceID: workspaceIDFromRoute, agentID: agentIDFromRoute } = useWorkspacePageParams();
-  const taskID = taskIdProp ?? agentIDFromRoute;
+  const agentId = agentIdProp ?? agentIDFromRoute;
   const workspaceID = workspaceIdProp ?? workspaceIDFromRoute;
   const { navigateToGlobalSettings } = useImbueNavigate();
-  const taskModel = useTaskModel(taskID ?? "");
+  const agentModel = useAgentModel(agentId ?? "");
   // Harness-supplied model list + selection (pi). hasBackendModelSource
-  // distinguishes a pi task from Claude, which falls back to its built-in list
+  // distinguishes a pi agent from Claude, which falls back to its built-in list
   // and localModel.
-  const backendModels = useTaskAvailableModels(taskID ?? "");
-  const selectedModelId = useTaskSelectedModelId(taskID ?? "");
-  const hasBackendModelSource = useTaskSourcesBackendModels(taskID ?? "");
+  const backendModels = useAgentAvailableModels(agentId ?? "");
+  const selectedModelId = useAgentSelectedModelId(agentId ?? "");
+  const hasBackendModelSource = useAgentSourcesBackendModels(agentId ?? "");
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
   const userConfig = useAtomValue(userConfigAtom);
-  const [storedModel, setStoredModel] = useAtom(modelAtomFamily(taskID ?? ""));
+  const [storedModel, setStoredModel] = useAtom(modelAtomFamily(agentId ?? ""));
   const setLastUsedModel = useSetAtom(lastUsedModelAtom);
-  const localModel = storedModel ?? (taskModel as LlmModel) ?? LlmModel.CLAUDE_4_OPUS_200K;
+  const localModel = storedModel ?? (agentModel as LlmModel) ?? LlmModel.CLAUDE_4_OPUS_200K;
   const [isPlanFirst, setIsPlanFirst] = useState<boolean>(false);
 
-  // Per-task fast-mode and effort preference, persisted in localStorage,
+  // Per-agent fast-mode and effort preference, persisted in localStorage,
   // seeded lazily from the user default once userConfig loads.
-  const [isStoredFastMode, setStoredFastMode] = useAtom(fastModeAtomFamily(taskID ?? ""));
-  const [storedEffort, setStoredEffort] = useAtom(effortAtomFamily(taskID ?? ""));
+  const [isStoredFastMode, setStoredFastMode] = useAtom(fastModeAtomFamily(agentId ?? ""));
+  const [storedEffort, setStoredEffort] = useAtom(effortAtomFamily(agentId ?? ""));
 
   const isFastMode = isStoredFastMode ?? isDefaultFastMode;
   const effort = storedEffort ?? (defaultEffortLevel as EffortLevel) ?? EffortLevel.XHIGH;
@@ -177,7 +177,7 @@ export const ChatInput = ({
   const setIsFastMode = useCallback((value: boolean) => setStoredFastMode(value), [setStoredFastMode]);
   const setEffort = useCallback((value: EffortLevel) => setStoredEffort(value), [setStoredEffort]);
 
-  // Switching the model both updates this task's preference and records the
+  // Switching the model both updates this agent's preference and records the
   // model as the user's most recently used. The MRU value is what new
   // workspaces default to when the "Default model" setting is "Most Recently
   // Used"; without recording it here the MRU default would never reflect the
@@ -209,13 +209,13 @@ export const ChatInput = ({
   const sendMessageBinding = useKeybinding("send_message");
   const sendHint = useKeybindingDisplayText("send_message");
   const interruptBinding = useKeybinding("interrupt_agent");
-  const isCancellable = useAtomValue(isCancellableAtomFamily(taskID ?? ""));
+  const isCancellable = useAtomValue(isCancellableAtomFamily(agentId ?? ""));
   const {
     interrupt: handleInterrupt,
     toast: interruptToast,
     setToast: setInterruptToast,
-  } = useInterruptAgent(workspaceID, taskID);
-  const [promptDraft, setPromptDraft] = usePromptDraft(taskID ?? "");
+  } = useInterruptAgent(workspaceID, agentId);
+  const [promptDraft, setPromptDraft] = usePromptDraft(agentId ?? "");
 
   // Stable callbacks so the memoized <Toast> instances below bail out instead
   // of re-rendering on every unrelated parent render. (SCU-1455)
@@ -228,27 +228,27 @@ export const ChatInput = ({
     },
     [setInterruptToast],
   );
-  const [attachedFiles, setAttachedFiles] = useDraftAttachedFiles(taskID ?? "");
-  const { isInPlanMode } = useTaskDetailWithDefaults(taskID ?? "");
+  const [attachedFiles, setAttachedFiles] = useDraftAttachedFiles(agentId ?? "");
+  const { isInPlanMode } = useAgentDetailWithDefaults(agentId ?? "");
   // Each gate subscribes only to its own narrow atom so the component
   // re-renders only when that capability changes.
-  // `?? true` keeps each affordance visible until the task loads — Claude
+  // `?? true` keeps each affordance visible until the agent loads — Claude
   // reports true, pi reports false.
-  const canEnterPlanMode = useTaskSupportsInteractiveBackchannel(taskID ?? "") ?? true;
+  const canEnterPlanMode = useAgentSupportsInteractiveBackchannel(agentId ?? "") ?? true;
   // Mirrors the StatusPill Stop button: a harness that can't honor a mid-turn
   // interrupt (pi) gets no Ctrl+C keybinding either, rather than a binding that
-  // silently no-ops. `?? true` keeps it armed until the task loads.
-  const canInterrupt = useTaskSupportsInterruption(taskID ?? "") ?? true;
-  const canUseFastMode = useTaskSupportsFastMode(taskID ?? "") ?? true;
+  // silently no-ops. `?? true` keeps it armed until the agent loads.
+  const canInterrupt = useAgentSupportsInterruption(agentId ?? "") ?? true;
+  const canUseFastMode = useAgentSupportsFastMode(agentId ?? "") ?? true;
   // `/clear` discards the session (context reset). A harness without it refuses
   // the pseudo-skill at execution time instead of calling the endpoint.
-  // `?? true` keeps it available until the task loads.
-  const canResetContext = useTaskSupportsContextReset(taskID ?? "") ?? true;
-  const canHarnessAttachFiles = useTaskSupportsFileAttachments(taskID ?? "") ?? true;
-  const canUseImageInput = useTaskSupportsImageInput(taskID ?? "") ?? true;
+  // `?? true` keeps it available until the agent loads.
+  const canResetContext = useAgentSupportsContextReset(agentId ?? "") ?? true;
+  const canHarnessAttachFiles = useAgentSupportsFileAttachments(agentId ?? "") ?? true;
+  const canUseImageInput = useAgentSupportsImageInput(agentId ?? "") ?? true;
   // Claude and pi both switch models; harnesses that can't (hello/terminal) get
-  // the disabled-with-tooltip switcher. `?? true` keeps it live until the task loads.
-  const canSelectModel = useTaskSupportsModelSelection(taskID ?? "") ?? true;
+  // the disabled-with-tooltip switcher. `?? true` keeps it live until the agent loads.
+  const canSelectModel = useAgentSupportsModelSelection(agentId ?? "") ?? true;
   // The `+` prefilter popover's "Images" category opens the same file
   // picker the toolbar's image button uses. Owning the ref here lets us
   // route both paths through one validated upload pipeline.
@@ -288,7 +288,7 @@ export const ChatInput = ({
 
           try {
             await clearWorkspaceAgentContext({
-              path: { workspace_id: workspaceID, agent_id: taskID! },
+              path: { workspace_id: workspaceID, agent_id: agentId! },
               meta: { wsTimeout: CLEAR_CONTEXT_TIMEOUT_MS },
             });
           } catch {
@@ -336,10 +336,10 @@ export const ChatInput = ({
             return;
           }
           const requestId = crypto.randomUUID();
-          openBtwPopup({ agentId: taskID!, question, requestId });
+          openBtwPopup({ agentId: agentId!, question, requestId });
           try {
             await btwAgent({
-              path: { workspace_id: workspaceID, agent_id: taskID! },
+              path: { workspace_id: workspaceID, agent_id: agentId! },
               body: { question, requestId },
             });
           } catch (error) {
@@ -358,11 +358,11 @@ export const ChatInput = ({
         }
       }
     },
-    [clearEditor, chatMessages, workspaceID, taskID, openBtwPopup, closeBtwPopup, canResetContext],
+    [clearEditor, chatMessages, workspaceID, agentId, openBtwPopup, closeBtwPopup, canResetContext],
   );
 
   const sendMessage = useCallback(async (): Promise<void> => {
-    if (!promptDraft?.trim() || !taskID) {
+    if (!promptDraft?.trim() || !agentId) {
       return;
     }
 
@@ -385,7 +385,7 @@ export const ChatInput = ({
     setLastSendError(null);
     try {
       await sendWorkspaceAgentMessages({
-        path: { workspace_id: workspaceID, agent_id: taskID },
+        path: { workspace_id: workspaceID, agent_id: agentId },
         body: {
           message: promptDraft?.replace(/\u200B/g, "\u00A0").replace(/(\n\n\u00A0)+$/, ""),
           model: localModel,
@@ -432,7 +432,7 @@ export const ChatInput = ({
   }, [
     promptDraft,
     workspaceID,
-    taskID,
+    agentId,
     localModel,
     attachedFiles,
     isPlanFirst,
@@ -461,19 +461,19 @@ export const ChatInput = ({
     // side-chat subprocess and must not disturb main's flow.
     // Other pseudo-skills (/clear, /copy) keep their existing interrupt
     // behavior on purpose.
-    if (!isBtwDraft && isAlwaysInterruptAndSend && isAgentBusy && taskID) {
-      await interruptWorkspaceAgent({ path: { workspace_id: workspaceID, agent_id: taskID } });
+    if (!isBtwDraft && isAlwaysInterruptAndSend && isAgentBusy && agentId) {
+      await interruptWorkspaceAgent({ path: { workspace_id: workspaceID, agent_id: agentId } });
     }
-  }, [isDisabled, promptDraft, sendMessage, isAlwaysInterruptAndSend, isAgentBusy, taskID, workspaceID]);
+  }, [isDisabled, promptDraft, sendMessage, isAlwaysInterruptAndSend, isAgentBusy, agentId, workspaceID]);
 
   const handleInterruptAndSend = useCallback(async (): Promise<void> => {
     if (isSendingRef.current) return;
-    if (!promptDraft?.trim() || !taskID) return;
+    if (!promptDraft?.trim() || !agentId) return;
     await sendMessage();
     if (isAgentBusy) {
-      await interruptWorkspaceAgent({ path: { workspace_id: workspaceID, agent_id: taskID } });
+      await interruptWorkspaceAgent({ path: { workspace_id: workspaceID, agent_id: agentId } });
     }
-  }, [promptDraft, taskID, sendMessage, isAgentBusy, workspaceID]);
+  }, [promptDraft, agentId, sendMessage, isAgentBusy, workspaceID]);
 
   // Out-of-band model switch for a harness with a backend model list (pi). The
   // value stays server-driven (selectedModelId), so on success the persisted
@@ -483,10 +483,10 @@ export const ChatInput = ({
   // (per-turn) instead and never reaches here.
   const handleBackendModelChange = useCallback(
     async (option: ModelOption): Promise<void> => {
-      if (!taskID) return;
+      if (!agentId) return;
       try {
         await setWorkspaceAgentModel({
-          path: { workspace_id: workspaceID, agent_id: taskID },
+          path: { workspace_id: workspaceID, agent_id: agentId },
           body: { provider: option.provider, modelId: option.modelId },
         });
       } catch (error) {
@@ -496,7 +496,7 @@ export const ChatInput = ({
         setToast({ title: `Failed to switch to ${option.displayName}`, description: detail, type: ToastType.ERROR });
       }
     },
-    [taskID, workspaceID],
+    [agentId, workspaceID],
   );
 
   // The no-providers prompt sends the user to pi settings to authenticate a provider.
@@ -536,7 +536,7 @@ export const ChatInput = ({
     if (interruptBinding == null) return;
     const listener = (e: KeyboardEvent): void => {
       if (!shouldHandleKeybinding(e, interruptBinding)) return;
-      if (!canInterrupt || !isCancellable || !taskID) return;
+      if (!canInterrupt || !isCancellable || !agentId) return;
       const chatInputEl = document.getElementById(CHAT_INPUT_ELEMENT_ID);
       if (!chatInputEl?.contains(document.activeElement)) return;
       e.preventDefault();
@@ -545,7 +545,7 @@ export const ChatInput = ({
     };
     window.addEventListener("keydown", listener);
     return (): void => window.removeEventListener("keydown", listener);
-  }, [interruptBinding, canInterrupt, isCancellable, taskID, handleInterrupt]);
+  }, [interruptBinding, canInterrupt, isCancellable, agentId, handleInterrupt]);
 
   const handleKeyPress = useModifiedEnter({
     onConfirm: handleSend,
@@ -655,12 +655,12 @@ export const ChatInput = ({
     };
   }, [insertSkillRef, editorRef]);
 
-  // Seed the per-task stored preferences from the user default the first
-  // time this task is seen after userConfig has loaded. Once set, user
-  // default changes do not retroactively affect tasks that already have a
+  // Seed the per-agent stored preferences from the user default the first
+  // time this agent is seen after userConfig has loaded. Once set, user
+  // default changes do not retroactively affect agents that already have a
   // stored value.
   useEffect(() => {
-    if (!taskID || userConfig === null) return;
+    if (!agentId || userConfig === null) return;
 
     if (isStoredFastMode === null) {
       setStoredFastMode(isDefaultFastMode);
@@ -670,7 +670,7 @@ export const ChatInput = ({
       setStoredEffort(defaultEffortLevel as EffortLevel);
     }
   }, [
-    taskID,
+    agentId,
     userConfig,
     isStoredFastMode,
     storedEffort,
@@ -680,7 +680,7 @@ export const ChatInput = ({
     setStoredEffort,
   ]);
 
-  if (!taskID) {
+  if (!agentId) {
     return <></>;
   }
 
@@ -710,7 +710,7 @@ export const ChatInput = ({
             }
             onError={canAttachFiles ? setToast : undefined}
             onTriggerImageUpload={canAttachFiles && canUseImageInput ? handleTriggerImageUpload : undefined}
-            key={`chat-input-${taskID}`}
+            key={`chat-input-${agentId}`}
             footer={
               attachedFiles.length > 0 ? (
                 <FilePreviewList

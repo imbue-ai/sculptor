@@ -1,11 +1,11 @@
 // Dynamic (multi-instance) panel derivation for the active workspace: one
-// agent:<taskId> panel per task and one terminal:<wsId>:<index> panel per terminal.
-// Source data comes from tasksArrayAtom (src/common/state/atoms/tasks.ts) and
+// agent:<agentId> panel per agent and one terminal:<wsId>:<index> panel per terminal.
+// Source data comes from agentsArrayAtom (src/common/state/atoms/agents.ts) and
 // terminalTabStateAtom (src/common/state/atoms/terminalTabs.ts), fed in by the sync
 // hook.
 //
 // The bound component per dynamic panel id is cached, so rebuilding the registry on
-// every task tick returns the SAME component reference per id and a live
+// every agent tick returns the SAME component reference per id and a live
 // agent/terminal panel never remounts (it stays mounted under SectionBody).
 // The base components are registered by registerPanels at app load and looked up at
 // render time, so a cached bound component picks up its base once it registers.
@@ -23,7 +23,7 @@ import type { PanelId } from "~/pages/workspace/layout/types/section.ts";
 import type { PanelContextMenuItem, PanelDefinition } from "./panelRegistry.ts";
 import { panelDefinitionByIdAtom } from "./panelRegistry.ts";
 
-export type AgentPanelBaseComponent = ComponentType<{ taskId: string }>;
+export type AgentPanelBaseComponent = ComponentType<{ agentId: string }>;
 export type TerminalPanelBaseComponent = ComponentType<{ workspaceId: string; index: number }>;
 
 let agentBaseComponent: AgentPanelBaseComponent | null = null;
@@ -43,8 +43,8 @@ export const registerTerminalPanelComponent = (component: TerminalPanelBaseCompo
 export const AGENT_PANEL_ID_PREFIX = "agent:";
 export const TERMINAL_PANEL_ID_PREFIX = "terminal:";
 
-export const makeAgentPanelId = (taskId: string): PanelId => {
-  return `${AGENT_PANEL_ID_PREFIX}${taskId}`;
+export const makeAgentPanelId = (agentId: string): PanelId => {
+  return `${AGENT_PANEL_ID_PREFIX}${agentId}`;
 };
 
 export const makeTerminalPanelId = (workspaceId: string, index: number): PanelId => {
@@ -59,12 +59,12 @@ export const isMultiInstancePanelId = (panelId: PanelId): boolean => {
 
 const componentCache = new Map<PanelId, ComponentType>();
 
-const getAgentComponent = (taskId: string): ComponentType => {
-  const id = makeAgentPanelId(taskId);
+const getAgentComponent = (agentId: string): ComponentType => {
+  const id = makeAgentPanelId(agentId);
   let cached = componentCache.get(id);
   if (cached === undefined) {
     const BoundAgentPanel: ComponentType = () =>
-      agentBaseComponent === null ? null : createElement(agentBaseComponent, { taskId });
+      agentBaseComponent === null ? null : createElement(agentBaseComponent, { agentId });
     cached = BoundAgentPanel;
     componentCache.set(id, cached);
   }
@@ -93,7 +93,7 @@ export type DynamicAgentDiagnostics = {
 };
 
 export type DynamicAgentInput = {
-  taskId: string;
+  agentId: string;
   // The agent's display name. Carries the backend's "Claude N" / "Agent N" title with
   // lowest-available-number reuse after deletions; the sync hook passes
   // agent.title through, so numbering stays in one place (the backend).
@@ -136,7 +136,7 @@ const buildAgentContextMenuActions = (agent: DynamicAgentInput): ReadonlyArray<P
   const { sessionId, claudeTranscriptPath, sculptorTranscriptPath } = agent.diagnostics ?? {};
   return [
     { label: "Mark as unread", action: () => agent.onMarkUnread?.(), testId: ElementIds.TAB_CONTEXT_MENU_MARK_UNREAD },
-    { label: "Copy agent id", action: () => void copyToClipboard(agent.taskId) },
+    { label: "Copy agent id", action: () => void copyToClipboard(agent.agentId) },
     { label: "Copy agent name", action: () => void copyToClipboard(agent.displayName) },
     {
       label: "Copy claude session id",
@@ -181,16 +181,16 @@ export const deriveDynamicPanels = (
   const definitions: Array<PanelDefinition> = [];
 
   for (const agent of agents) {
-    const id = makeAgentPanelId(agent.taskId);
+    const id = makeAgentPanelId(agent.agentId);
     liveIds.add(id);
-    const dotStatus = getAgentDotStatusWithUnreadOverride(agent.taskId, agent, agent.isViewed ?? false);
+    const dotStatus = getAgentDotStatusWithUnreadOverride(agent.agentId, agent, agent.isViewed ?? false);
     definitions.push({
       id,
       displayName: agent.displayName,
       icon: Bot,
       kind: "agent",
       defaultSection: "center",
-      component: getAgentComponent(agent.taskId),
+      component: getAgentComponent(agent.agentId),
       dotStatus,
       contextMenuActions: buildAgentContextMenuActions(agent),
       onRequestClose: agent.onRequestClose,
@@ -214,7 +214,7 @@ export const deriveDynamicPanels = (
     });
   }
 
-  // Evict cached components whose task/terminal no longer exists, dropping any
+  // Evict cached components whose agent/terminal no longer exists, dropping any
   // unread override for a deleted agent along with its component. The per-id
   // definition slice is evicted too — its family is keyed by panel id, so without
   // this it would grow one entry per agent/terminal forever.

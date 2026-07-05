@@ -3,9 +3,9 @@ import { useMemo } from "react";
 
 import type { ToolResultBlock, ToolUseBlock } from "~/api";
 import {
-  useTaskSupportsInteractiveBackchannel,
-  useTaskSupportsSubAgents,
-} from "~/common/state/hooks/useTaskHelpers.ts";
+  useAgentSupportsInteractiveBackchannel,
+  useAgentSupportsSubAgents,
+} from "~/common/state/hooks/useAgentHelpers.ts";
 import type { SubagentMetadata, SubagentTreeNode } from "~/pages/workspace/chatAlpha/utils/subagentTree.ts";
 import { SUBAGENT_TOOL_NAMES } from "~/pages/workspace/chatAlpha/utils/subagentTree.ts";
 import { isToolUseBlock } from "~/pages/workspace/utils/blockGuards";
@@ -15,7 +15,7 @@ import { AlphaAskUserQuestionBlock } from "./AlphaAskUserQuestionBlock.tsx";
 import { AlphaExitPlanModeBlock } from "./AlphaExitPlanModeBlock.tsx";
 import { AlphaSubagentPill } from "./AlphaSubagentPill.tsx";
 import { CompletedToolLine, ToolLine } from "./AlphaToolLines.tsx";
-import { useChatTask } from "./ChatTaskContext.tsx";
+import { useChatAgent } from "./ChatAgentContext.tsx";
 import { renderToolSegments } from "./renderToolSegments.tsx";
 import { ToolNavigationProvider } from "./ToolNavigationContext.tsx";
 
@@ -57,13 +57,13 @@ export const ToolBlockGroup = ({
 }): ReactElement => {
   // The owning chat panel's agent — the capability gates below must reflect
   // the harness whose transcript this panel renders, not the route's agent.
-  const { taskId: taskID } = useChatTask();
+  const { agentId } = useChatAgent();
   // Per-harness gates centralized here so the leaf components stay test-isolated:
   //   `supportsSubAgents` hides the AlphaSubagentPill
   //   `supportsInteractiveBackchannel` hides AlphaAskUserQuestionBlock + AlphaExitPlanModeBlock
-  // `?? true` preserves existing Claude behavior while the task is still loading.
-  const canRenderSubAgents = useTaskSupportsSubAgents(taskID) ?? true;
-  const canRenderInteractiveBackchannel = useTaskSupportsInteractiveBackchannel(taskID) ?? true;
+  // `?? true` preserves existing Claude behavior while the agent is still loading.
+  const canRenderSubAgents = useAgentSupportsSubAgents(agentId) ?? true;
+  const canRenderInteractiveBackchannel = useAgentSupportsInteractiveBackchannel(agentId) ?? true;
   // Separate blocks into subagent, top-level, special, and regular categories
   const { subagentBlocks, topLevelBlocks, specialBlocks, regularBlocks } = useMemo(() => {
     const subagent: Array<ToolUseBlock> = [];

@@ -15,15 +15,15 @@ import { atom } from "jotai";
 import { atomFamily } from "jotai/utils";
 
 import { LlmModel, postAgentTerminalInput, sendWorkspaceAgentMessages, TaskStatus } from "~/api";
-import { taskDetailAtomFamily } from "~/common/state/atoms/taskDetails.ts";
+import { agentDetailStateAtomFamily } from "~/common/state/atoms/agentDetails.ts";
 import {
-  taskAcceptsAutomatedPromptsAtomFamily,
-  taskAtomFamily,
-  taskModelAtomFamily,
-  tasksArrayAtom,
-  taskStatusAtomFamily,
-  taskSupportsChatInterfaceAtomFamily,
-} from "~/common/state/atoms/tasks.ts";
+  agentAcceptsAutomatedPromptsAtomFamily,
+  agentAtomFamily,
+  agentModelAtomFamily,
+  agentsArrayAtom,
+  agentStatusAtomFamily,
+  agentSupportsChatInterfaceAtomFamily,
+} from "~/common/state/atoms/agents.ts";
 import { commitPromptSendFailedToastAtom, terminalPromptRejectedToastAtom } from "~/common/state/atoms/toasts.ts";
 import { workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
 import type { WorkspaceLayoutState } from "~/pages/workspace/layout/persistence/snapshot.ts";
@@ -37,25 +37,25 @@ const SUB_SECTION_PREFERENCE: ReadonlyArray<SubSectionId> = (["center", "right",
   (section): Array<SubSectionId> => [section, toSecondary(section)],
 );
 
-const agentPanelTaskId = (panelId: string): string | undefined =>
+const agentIdFromPanelId = (panelId: string): string | undefined =>
   panelId.startsWith(AGENT_PANEL_ID_PREFIX) ? panelId.slice(AGENT_PANEL_ID_PREFIX.length) : undefined;
 
-// Open agent-panel task ids in a sub-section, in tab order (any placed but
+// Open agent-panel agent ids in a sub-section, in tab order (any placed but
 // unordered panel is appended so no open panel is dropped).
-const agentTaskIdsIn = (layout: WorkspaceLayoutState, subSection: SubSectionId): Array<string> => {
+const agentIdsIn = (layout: WorkspaceLayoutState, subSection: SubSectionId): Array<string> => {
   const placed = Object.keys(layout.placement).filter((panelId) => layout.placement[panelId] === subSection);
   const placedSet = new Set(placed);
   const ordered = (layout.order[subSection] ?? []).filter((panelId) => placedSet.has(panelId));
   const orderedSet = new Set(ordered);
   return [...ordered, ...placed.filter((panelId) => !orderedSet.has(panelId))]
-    .map(agentPanelTaskId)
-    .filter((taskId): taskId is string => taskId !== undefined);
+    .map(agentIdFromPanelId)
+    .filter((agentId): agentId is string => agentId !== undefined);
 };
 
 // Whether the agent's panel is the active tab of the sub-section it lives in,
 // i.e. the agent is actually on screen.
-const isAgentTabVisible = (layout: WorkspaceLayoutState, taskId: string): boolean => {
-  const panelId = makeAgentPanelId(taskId);
+const isAgentTabVisible = (layout: WorkspaceLayoutState, agentId: string): boolean => {
+  const panelId = makeAgentPanelId(agentId);
   const subSection = layout.placement[panelId];
   return subSection !== undefined && layout.activePanel[subSection] === panelId;
 };
@@ -75,10 +75,10 @@ const lastFocusedChatAgentBaseAtomFamily = atomFamily((_workspaceId: string) => 
 export const lastFocusedChatAgentAtomFamily = atomFamily((workspaceId: string) =>
   atom(
     (get) => get(lastFocusedChatAgentBaseAtomFamily(workspaceId)),
-    (get, set, taskId: string) => {
+    (get, set, agentId: string) => {
       const baseAtom = lastFocusedChatAgentBaseAtomFamily(workspaceId);
-      if (get(baseAtom) !== taskId) {
-        set(baseAtom, taskId);
+      if (get(baseAtom) !== agentId) {
+        set(baseAtom, agentId);
       }
     },
   ),
@@ -94,7 +94,7 @@ export const lastFocusedChatAgentAtomFamily = atomFamily((workspaceId: string) =
  *      user's focus rather than the section ranking below),
  *   2. an agent panel that is its sub-section's active tab (a visible chat),
  *   3. any open agent panel, in tab order,
- *   4. the workspace's first chat-capable task (layout not seeded yet).
+ *   4. the workspace's first chat-capable agent (layout not seeded yet).
  *
  * Terminal-harness agents (`supports_chat_interface` false) are skipped —
  * they have no chat composer, so composer-draft writes aimed at them would
@@ -106,10 +106,10 @@ export const lastFocusedChatAgentAtomFamily = atomFamily((workspaceId: string) =
  */
 export const activeChatAgentIdAtomFamily = atomFamily((workspaceId: string) =>
   atom<string | undefined>((get) => {
-    // A candidate must have loaded task data (a stale layout can reference a
+    // A candidate must have loaded agent data (a stale layout can reference a
     // deleted agent) and must not be a terminal-only harness.
-    const isValidTarget = (taskId: string): boolean =>
-      get(taskAtomFamily(taskId)) !== null && get(taskSupportsChatInterfaceAtomFamily(taskId)) !== false;
+    const isValidTarget = (agentId: string): boolean =>
+      get(agentAtomFamily(agentId)) !== null && get(agentSupportsChatInterfaceAtomFamily(agentId)) !== false;
 
     const layout = get(workspaceLayoutFamily(workspaceId));
 
@@ -125,16 +125,16 @@ export const activeChatAgentIdAtomFamily = atomFamily((workspaceId: string) =>
     for (const subSection of SUB_SECTION_PREFERENCE) {
       const activePanelId = layout.activePanel[subSection];
       if (activePanelId === undefined || layout.placement[activePanelId] !== subSection) continue;
-      const taskId = agentPanelTaskId(activePanelId);
-      if (taskId !== undefined && isValidTarget(taskId)) return taskId;
+      const agentId = agentIdFromPanelId(activePanelId);
+      if (agentId !== undefined && isValidTarget(agentId)) return agentId;
     }
 
     for (const subSection of SUB_SECTION_PREFERENCE) {
-      for (const taskId of agentTaskIdsIn(layout, subSection)) {
-        if (isValidTarget(taskId)) return taskId;
+      for (const agentId of agentIdsIn(layout, subSection)) {
+        if (isValidTarget(agentId)) return agentId;
       }
     }
-    return get(tasksArrayAtom)?.find((task) => task.workspaceId === workspaceId && isValidTarget(task.id))?.id;
+    return get(agentsArrayAtom)?.find((agent) => agent.workspaceId === workspaceId && isValidTarget(agent.id))?.id;
   }),
 );
 
@@ -158,16 +158,16 @@ export const activeChatAgentIdAtomFamily = atomFamily((workspaceId: string) =>
  *      everywhere): any open chat-capable agent panel, in tab order — chat
  *      messages queue and surface when the chat is re-shown, whereas typing
  *      into a hidden terminal's PTY would not be seen,
- *   4. the workspace's first chat-capable task (layout not seeded yet).
+ *   4. the workspace's first chat-capable agent (layout not seeded yet).
  *
- * `undefined` when nothing resolves; candidates must have loaded task data
+ * `undefined` when nothing resolves; candidates must have loaded agent data
  * (a stale layout can reference a deleted agent).
  */
 export const activeAgentIdAtomFamily = atomFamily((workspaceId: string) =>
   atom<string | undefined>((get) => {
-    const isLoaded = (taskId: string): boolean => get(taskAtomFamily(taskId)) !== null;
-    const isHiddenFallbackTarget = (taskId: string): boolean =>
-      isLoaded(taskId) && get(taskSupportsChatInterfaceAtomFamily(taskId)) !== false;
+    const isLoaded = (agentId: string): boolean => get(agentAtomFamily(agentId)) !== null;
+    const isHiddenFallbackTarget = (agentId: string): boolean =>
+      isLoaded(agentId) && get(agentSupportsChatInterfaceAtomFamily(agentId)) !== false;
 
     const layout = get(workspaceLayoutFamily(workspaceId));
 
@@ -179,28 +179,29 @@ export const activeAgentIdAtomFamily = atomFamily((workspaceId: string) =>
     for (const subSection of SUB_SECTION_PREFERENCE) {
       const activePanelId = layout.activePanel[subSection];
       if (activePanelId === undefined || layout.placement[activePanelId] !== subSection) continue;
-      const taskId = agentPanelTaskId(activePanelId);
-      if (taskId !== undefined && isLoaded(taskId)) return taskId;
+      const agentId = agentIdFromPanelId(activePanelId);
+      if (agentId !== undefined && isLoaded(agentId)) return agentId;
     }
 
     for (const subSection of SUB_SECTION_PREFERENCE) {
-      for (const taskId of agentTaskIdsIn(layout, subSection)) {
-        if (isHiddenFallbackTarget(taskId)) return taskId;
+      for (const agentId of agentIdsIn(layout, subSection)) {
+        if (isHiddenFallbackTarget(agentId)) return agentId;
       }
     }
-    return get(tasksArrayAtom)?.find((task) => task.workspaceId === workspaceId && isHiddenFallbackTarget(task.id))?.id;
+    return get(agentsArrayAtom)?.find((agent) => agent.workspaceId === workspaceId && isHiddenFallbackTarget(agent.id))
+      ?.id;
   }),
 );
 
-// How a workspace-scoped automated prompt reaches the task, if it can at all:
+// How a workspace-scoped automated prompt reaches the agent, if it can at all:
 // chat-capable agents take chat messages; terminal agents take PTY input, but
 // only when their registration opted in via `accepts_automated_prompts` —
 // plain terminals and non-opt-in registrations take nothing (`undefined`).
 // `supports_chat_interface` defaults to the chat route while capabilities are
 // still loading, mirroring the chat resolver's `!== false` check.
-const promptRouteFor = (get: Getter, taskId: string): "chat" | "terminal" | undefined => {
-  if (get(taskSupportsChatInterfaceAtomFamily(taskId)) !== false) return "chat";
-  return get(taskAcceptsAutomatedPromptsAtomFamily(taskId)) === true ? "terminal" : undefined;
+const promptRouteFor = (get: Getter, agentId: string): "chat" | "terminal" | undefined => {
+  if (get(agentSupportsChatInterfaceAtomFamily(agentId)) !== false) return "chat";
+  return get(agentAcceptsAutomatedPromptsAtomFamily(agentId)) === true ? "terminal" : undefined;
 };
 
 /**
@@ -212,15 +213,15 @@ const promptRouteFor = (get: Getter, taskId: string): "chat" | "terminal" | unde
  */
 export const canCommitAtomFamily = atomFamily((workspaceId: string) =>
   atom<boolean>((get) => {
-    const taskId = get(activeAgentIdAtomFamily(workspaceId));
-    if (taskId === undefined) return false;
-    const route = promptRouteFor(get, taskId);
+    const agentId = get(activeAgentIdAtomFamily(workspaceId));
+    if (agentId === undefined) return false;
+    const route = promptRouteFor(get, agentId);
     if (route === undefined) return false;
     if (route === "terminal") {
-      const status = get(taskStatusAtomFamily(taskId));
+      const status = get(agentStatusAtomFamily(agentId));
       return status === TaskStatus.READY || status === TaskStatus.WAITING;
     }
-    return (get(taskDetailAtomFamily(taskId))?.queuedChatMessages.length ?? 0) === 0;
+    return (get(agentDetailStateAtomFamily(agentId))?.queuedChatMessages.length ?? 0) === 0;
   }),
 );
 
@@ -232,13 +233,13 @@ export const canCommitAtomFamily = atomFamily((workspaceId: string) =>
  */
 export const commitActionAtomFamily = atomFamily((workspaceId: string) =>
   atom(null, async (get, set, message: string): Promise<void> => {
-    const taskId = get(activeAgentIdAtomFamily(workspaceId));
-    if (taskId === undefined) return;
-    const route = promptRouteFor(get, taskId);
+    const agentId = get(activeAgentIdAtomFamily(workspaceId));
+    if (agentId === undefined) return;
+    const route = promptRouteFor(get, agentId);
     if (route === undefined) return;
     if (route === "terminal") {
       try {
-        await postAgentTerminalInput({ path: { agent_id: taskId }, body: { text: message, submit: true } });
+        await postAgentTerminalInput({ path: { agent_id: agentId }, body: { text: message, submit: true } });
       } catch {
         // The endpoint's authoritative guard fired: the program went busy (or
         // its hooks are silent) between the click and the write. Surface it;
@@ -250,10 +251,10 @@ export const commitActionAtomFamily = atomFamily((workspaceId: string) =>
       }
       return;
     }
-    const model = get(taskModelAtomFamily(taskId));
+    const model = get(agentModelAtomFamily(agentId));
     try {
       await sendWorkspaceAgentMessages({
-        path: { workspace_id: workspaceId, agent_id: taskId },
+        path: { workspace_id: workspaceId, agent_id: agentId },
         body: { message, model: (model as LlmModel) || LlmModel.CLAUDE_4_OPUS_200K },
       });
     } catch {

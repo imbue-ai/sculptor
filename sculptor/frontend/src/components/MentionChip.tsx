@@ -8,8 +8,8 @@ import { useParams } from "react-router-dom";
 
 import { ElementIds } from "~/api";
 import { useImbueNavigate } from "~/common/hooks/navigation";
+import { agentAtomFamily } from "~/common/state/atoms/agents";
 import { projectAtomFamily } from "~/common/state/atoms/projects";
-import { taskAtomFamily } from "~/common/state/atoms/tasks";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces";
 import { openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms/diffPanel";
 import { revealFolderAtom } from "~/pages/workspace/panels/fileBrowser/atoms/fileBrowser";
@@ -286,10 +286,10 @@ const EntityMentionChip = ({
   // gated to "" so Jotai's atomFamily doesn't create new instances per id.
   const project = useAtomValue(projectAtomFamily(entityType === "repository" ? entityId : ""));
   const workspace = useAtomValue(workspaceAtomFamily(entityType === "workspace" ? entityId : ""));
-  const task = useAtomValue(taskAtomFamily(entityType === "agent" ? entityId : ""));
+  const agent = useAtomValue(agentAtomFamily(entityType === "agent" ? entityId : ""));
 
   const isDeleted =
-    entityType === "repository" ? project === null : entityType === "workspace" ? workspace === null : task === null;
+    entityType === "repository" ? project === null : entityType === "workspace" ? workspace === null : agent === null;
 
   const { navigateToWorkspace, navigateToAgent } = useImbueNavigate();
   // Repository chips and deleted entities never navigate. They render as inert
@@ -305,11 +305,11 @@ const EntityMentionChip = ({
       e.preventDefault();
       if (entityType === "workspace") {
         navigateToWorkspace(entityId);
-      } else if (entityType === "agent" && task?.workspaceId != null) {
-        navigateToAgent(task.workspaceId, entityId);
+      } else if (entityType === "agent" && agent?.workspaceId != null) {
+        navigateToAgent(agent.workspaceId, entityId);
       }
     },
-    [entityType, entityId, navigateToWorkspace, navigateToAgent, task?.workspaceId],
+    [entityType, entityId, navigateToWorkspace, navigateToAgent, agent?.workspaceId],
   );
 
   return (

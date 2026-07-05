@@ -3,27 +3,27 @@ import { useCallback, useEffect, useRef } from "react";
 
 import { ArtifactType, getWorkspaceAgentArtifact, type GetWorkspaceAgentArtifactResponse } from "../../../api";
 import {
+  agentUpdatedArtifactsAtomFamily,
   type ArtifactsMap,
-  clearTaskUpdatedArtifactsAtom,
-  taskUpdatedArtifactsAtomFamily,
-  updateTaskDetailAtom,
-  updateTaskUpdatedArtifactsAtom,
-} from "../../../common/state/atoms/taskDetails";
+  clearAgentUpdatedArtifactsAtom,
+  updateAgentDetailStateAtom,
+  updateAgentUpdatedArtifactsAtom,
+} from "../../../common/state/atoms/agentDetails";
 import { isTaskListArtifact } from "../utils/blockGuards";
 
 /**
- * Hook that watches for artifact updates in the task detail stream
+ * Hook that watches for artifact updates in the agent detail stream
  * and fetches them via HTTP.
  *
  * This is separated from the main stream processing because:
- * 1. Artifacts are large and shouldn't be fetched for background tasks
+ * 1. Artifacts are large and shouldn't be fetched for background agents
  * 2. HTTP fetching is async and separate from the WebSocket stream
  */
-export const useArtifactSync = (workspaceId: string, taskId: string): void => {
-  const updateTaskDetail = useSetAtom(updateTaskDetailAtom);
-  const clearTaskUpdatedArtifacts = useSetAtom(clearTaskUpdatedArtifactsAtom);
-  const updateTaskUpdatedArtifacts = useSetAtom(updateTaskUpdatedArtifactsAtom);
-  const updatedArtifacts = useAtomValue(taskUpdatedArtifactsAtomFamily(taskId));
+export const useArtifactSync = (workspaceId: string, agentId: string): void => {
+  const updateAgentDetailState = useSetAtom(updateAgentDetailStateAtom);
+  const clearAgentUpdatedArtifacts = useSetAtom(clearAgentUpdatedArtifactsAtom);
+  const updateAgentUpdatedArtifacts = useSetAtom(updateAgentUpdatedArtifactsAtom);
+  const updatedArtifacts = useAtomValue(agentUpdatedArtifactsAtomFamily(agentId));
 
   // Track which artifacts are currently being fetched to avoid duplicate requests
   const inFlightArtifacts = useRef<Set<ArtifactType>>(new Set());
@@ -41,7 +41,7 @@ export const useArtifactSync = (workspaceId: string, taskId: string): void => {
 
       try {
         const { data } = await getWorkspaceAgentArtifact({
-          path: { workspace_id: workspaceId, agent_id: taskId, artifact_name: artifactType },
+          path: { workspace_id: workspaceId, agent_id: agentId, artifact_name: artifactType },
         });
 
         if (!data) {
@@ -51,12 +51,12 @@ export const useArtifactSync = (workspaceId: string, taskId: string): void => {
 
         const processedData = processArtifactResponse(data, artifactType);
 
-        updateTaskDetail({
-          taskId,
+        updateAgentDetailState({
+          agentId,
           updater: (currentState) => {
             if (!currentState) {
               // If no state exists, skip artifact update (shouldn't happen in practice)
-              console.warn(`No task detail state found for task ${taskId}, skipping artifact update`);
+              console.warn(`No agent detail state found for agent ${agentId}, skipping artifact update`);
               return currentState;
             }
             return {
@@ -72,17 +72,17 @@ export const useArtifactSync = (workspaceId: string, taskId: string): void => {
         console.error(`Error fetching artifact ${artifactType}:`, error);
       } finally {
         inFlightArtifacts.current.delete(artifactType);
-        clearTaskUpdatedArtifacts({ taskId, artifactTypes: [artifactType] });
+        clearAgentUpdatedArtifacts({ agentId, artifactTypes: [artifactType] });
 
         // If an update arrived while we were fetching, re-enqueue via the atom
         // so the useEffect triggers a new non-recursive fetch
         if (needsRefetch.current.has(artifactType)) {
           needsRefetch.current.delete(artifactType);
-          updateTaskUpdatedArtifacts({ taskId, artifactTypes: [artifactType] });
+          updateAgentUpdatedArtifacts({ agentId, artifactTypes: [artifactType] });
         }
       }
     },
-    [workspaceId, taskId, updateTaskDetail, clearTaskUpdatedArtifacts, updateTaskUpdatedArtifacts],
+    [workspaceId, agentId, updateAgentDetailState, clearAgentUpdatedArtifacts, updateAgentUpdatedArtifacts],
   );
 
   // Watch for updated artifacts and fetch them
@@ -94,11 +94,11 @@ export const useArtifactSync = (workspaceId: string, taskId: string): void => {
     }
   }, [updatedArtifacts, fetchArtifact]);
 
-  // Reset requested artifacts when task changes
+  // Reset requested artifacts when agent changes
   useEffect(() => {
     inFlightArtifacts.current.clear();
     needsRefetch.current.clear();
-  }, [taskId]);
+  }, [agentId]);
 };
 
 const processArtifactResponse = (

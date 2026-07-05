@@ -13,7 +13,7 @@ describe("useScrollStateMachine", () => {
 
     expect(el.getAttribute(SCROLL_PHASE_ATTR)).toBe("userControlled");
 
-    act(() => result.current.dispatch({ kind: "taskSwitched", taskId: "t1" }));
+    act(() => result.current.dispatch({ kind: "agentSwitched", agentId: "t1" }));
     expect(el.getAttribute(SCROLL_PHASE_ATTR)).toBe("restoring");
   });
 
@@ -22,7 +22,7 @@ describe("useScrollStateMachine", () => {
     const ref = { current: el };
 
     const { result } = renderHook(() => useScrollStateMachine(ref));
-    act(() => result.current.dispatch({ kind: "taskSwitched", taskId: "t1" }));
+    act(() => result.current.dispatch({ kind: "agentSwitched", agentId: "t1" }));
     expect(result.current.getState().authority.kind).toBe("restoring");
 
     act(() => {

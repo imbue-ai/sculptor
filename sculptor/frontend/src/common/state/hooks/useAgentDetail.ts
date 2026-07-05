@@ -2,19 +2,19 @@ import { useAtomValue } from "jotai";
 import { useMemo } from "react";
 
 import type { ChatMessage } from "../../../api";
-import { getEmptyTaskDetailState, taskDetailAtomFamily, type TaskDetailState } from "../atoms/taskDetails";
+import { type AgentDetailState, agentDetailStateAtomFamily, getEmptyAgentDetailState } from "../atoms/agentDetails";
 
-export const useTaskDetail = (taskId: string): TaskDetailState | null => {
-  return useAtomValue(taskDetailAtomFamily(taskId));
+export const useAgentDetail = (agentId: string): AgentDetailState | null => {
+  return useAtomValue(agentDetailStateAtomFamily(agentId));
 };
 
-export const useTaskDetailWithDefaults = (taskId: string): TaskDetailState => {
-  const detail = useTaskDetail(taskId);
-  return detail ?? getEmptyTaskDetailState();
+export const useAgentDetailWithDefaults = (agentId: string): AgentDetailState => {
+  const detail = useAgentDetail(agentId);
+  return detail ?? getEmptyAgentDetailState();
 };
 
-export const useTaskChatMessages = (
-  taskId: string,
+export const useAgentChatMessages = (
+  agentId: string,
 ): {
   chatMessages: Array<ChatMessage>;
   inProgressChatMessage: ChatMessage | null;
@@ -22,7 +22,7 @@ export const useTaskChatMessages = (
   workingUserMessageId: string | null;
   pendingBackgroundTaskIds: Array<string>;
 } => {
-  const detail = useTaskDetailWithDefaults(taskId);
+  const detail = useAgentDetailWithDefaults(agentId);
 
   const chatMessages = useMemo(() => {
     if (detail.inProgressChatMessage) {

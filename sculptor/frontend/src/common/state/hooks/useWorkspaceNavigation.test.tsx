@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as api from "../../../api";
 import type { CodingAgentTaskView } from "../../../api";
-import { taskAtomFamily, taskIdsAtom } from "../atoms/tasks";
+import { agentAtomFamily, agentIdsAtom } from "../atoms/agents";
 import type { TabsState } from "../atoms/workspaces";
 import { INVALID_ACTIVE_INDEX } from "../atoms/workspaces";
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
@@ -64,24 +64,24 @@ const createWrapper = (initialValues: AtomInitialValues = []) => {
   );
 };
 
-const createMockTask = (overrides: Partial<CodingAgentTaskView> = {}): CodingAgentTaskView =>
+const createMockAgent = (overrides: Partial<CodingAgentTaskView> = {}): CodingAgentTaskView =>
   ({
-    id: "task-1",
+    id: "agent-1",
     projectId: "proj-1",
     createdAt: "2024-01-01T00:00:00Z",
     updatedAt: "2024-01-01T00:00:00Z",
-    taskStatus: "RUNNING",
+    agentStatus: "RUNNING",
     isAutoCompacting: false,
     artifactNames: [],
     initialPrompt: "Test prompt",
-    titleOrSomethingLikeIt: "Test task",
+    titleOrSomethingLikeIt: "Test agent",
     interface: "API",
     systemPrompt: null,
     model: "CLAUDE_4_SONNET",
     isSmoothStreamingSupported: true,
     isArchived: false,
     isDeleted: false,
-    title: "Test task",
+    title: "Test agent",
     status: "RUNNING",
     goal: "Test goal",
     workspaceId: null,
@@ -115,11 +115,11 @@ describe("useWorkspaceNavigation", () => {
     expect(mockNavigateToWorkspace).not.toHaveBeenCalled();
   });
 
-  it("navigates to workspace URL (not first task) when no saved agent is recorded", () => {
-    // Simulate fresh state: workspace tab has no saved agent yet, but tasks
-    // exist. The first task is NOT the MRU agent.
-    const task1 = createMockTask({ id: "agent-first", workspaceId: "ws_1" });
-    const task2 = createMockTask({ id: "agent-mru", workspaceId: "ws_1" });
+  it("navigates to workspace URL (not first agent) when no saved agent is recorded", () => {
+    // Simulate fresh state: workspace tab has no saved agent yet, but agents
+    // exist. The first agent is NOT the MRU agent.
+    const agent1 = createMockAgent({ id: "agent-first", workspaceId: "ws_1" });
+    const agent2 = createMockAgent({ id: "agent-mru", workspaceId: "ws_1" });
     seedTabsLocalStorage({
       order: [{ tabId: "ws_1", agentId: null }],
       activeIndex: INVALID_ACTIVE_INDEX,
@@ -127,15 +127,15 @@ describe("useWorkspaceNavigation", () => {
 
     const { result } = renderHook(() => useWorkspaceNavigation(), {
       wrapper: createWrapper([
-        [taskIdsAtom, ["agent-first", "agent-mru"]],
-        [taskAtomFamily("agent-first"), task1],
-        [taskAtomFamily("agent-mru"), task2],
+        [agentIdsAtom, ["agent-first", "agent-mru"]],
+        [agentAtomFamily("agent-first"), agent1],
+        [agentAtomFamily("agent-mru"), agent2],
       ]),
     });
 
     result.current.handleWorkspaceClick({ objectId: "ws_1", isOpen: true } as never);
 
-    // Should NOT navigate to the first task — that would pick the wrong agent.
+    // Should NOT navigate to the first agent — that would pick the wrong agent.
     // Instead, should navigate to the workspace URL so WorkspacePage's
     // validation effect resolves the right agent.
     expect(mockNavigateToAgent).not.toHaveBeenCalled();

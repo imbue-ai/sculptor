@@ -15,14 +15,14 @@ import {
   liveTaskTurnIdAtomFamily,
   tasksPhaseAtomFamily,
 } from "~/common/state/atoms/statusPillTasks.ts";
+import { useAgentDetailWithDefaults } from "~/common/state/hooks/useAgentDetail.ts";
+import { useAgentSupportsInterruption } from "~/common/state/hooks/useAgentHelpers.ts";
 import { useInterruptAgent } from "~/common/state/hooks/useInterruptAgent.ts";
-import { useTaskDetailWithDefaults } from "~/common/state/hooks/useTaskDetail.ts";
-import { useTaskSupportsInterruption } from "~/common/state/hooks/useTaskHelpers.ts";
 import { useThemeSuccessColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { Toast } from "~/components/Toast.tsx";
 
 import { AgentTasksPanel } from "./AgentTasksPanel.tsx";
-import { useChatTask } from "./ChatTaskContext.tsx";
+import { useChatAgent } from "./ChatAgentContext.tsx";
 import type { AnimationProps } from "./pillAnimations";
 import { ANIMATION_POOL, pickAnimationIndex, SpinnerAnimation } from "./pillAnimations";
 import styles from "./StatusPill.module.scss";
@@ -31,7 +31,7 @@ import { useAgentStatus } from "./useAgentStatus.ts";
 import { useElapsedTime } from "./useElapsedTime.ts";
 
 type StatusPillProps = {
-  taskStatus: TaskStatus | null;
+  agentStatus: TaskStatus | null;
   // `isAutoCompacting` drives the "Compacting" pill state, fed by the
   // AutoCompacting* message pair via the `is_auto_compacting` derivation. Every
   // harness that compacts (Claude and pi) feeds it.
@@ -68,7 +68,7 @@ const truncateTaskName = (text: string): string =>
   text.length > PILL_TASK_NAME_MAX_LENGTH ? `${text.slice(0, PILL_TASK_NAME_MAX_LENGTH - 1).trimEnd()}\u2026` : text;
 
 export const StatusPill = ({
-  taskStatus,
+  agentStatus,
   isAutoCompacting,
   isStreaming,
   inProgressChatMessage,
@@ -77,8 +77,8 @@ export const StatusPill = ({
 }: StatusPillProps): ReactElement | null => {
   // The owning chat panel's agent — Stop and the PLAN-artifact tasks below
   // must follow the panel, not the route.
-  const { workspaceId: workspaceID, taskId: taskID } = useChatTask();
-  const { isInterrupting: isStoppingTask, interrupt, toast, setToast } = useInterruptAgent(workspaceID, taskID);
+  const { workspaceId: workspaceID, agentId } = useChatAgent();
+  const { isInterrupting: isStoppingAgent, interrupt, toast, setToast } = useInterruptAgent(workspaceID, agentId);
   // Stable callback so the memoized <Toast> below bails out instead of
   // re-rendering on every unrelated parent render. (SCU-1455)
   const handleToastOpenChange = useCallback(
@@ -101,22 +101,22 @@ export const StatusPill = ({
     isCancellable,
     isVisible: isAgentActive,
   } = useAgentStatus({
-    taskStatus,
+    agentStatus,
     isAutoCompacting,
     isStreaming,
     inProgressChatMessage,
     workingUserMessageId,
-    isStoppingTask,
+    isStoppingAgent,
     pendingBackgroundTaskCount,
   });
 
   // Hide the Stop affordance entirely when the harness can't honor a mid-turn
   // interrupt (pi drops InterruptProcessUserMessage) — a dead Stop button is
-  // worse than none. `?? true` keeps it visible until the task loads; Claude
+  // worse than none. `?? true` keeps it visible until the agent loads; Claude
   // reports true, pi false. `canStop` gates both the clickable button and the
   // `isCancellable` mirror that arms the Ctrl+C keybinding, so neither path
   // fires for a non-interruptible harness.
-  const canBeInterrupted = useTaskSupportsInterruption(taskID) ?? true;
+  const canBeInterrupted = useAgentSupportsInterruption(agentId) ?? true;
   const canStop = isCancellable && canBeInterrupted;
   // When the agent is cancellable but the harness can't honor a mid-turn
   // interrupt, the Stop control is shown disabled-with-tooltip rather than hidden.
@@ -125,7 +125,7 @@ export const StatusPill = ({
   // Pull tasks from the PLAN artifact. When tasks exist and the pill is
   // in an active state, the pill's label is replaced with the current
   // in-progress task, and hover/click reveals a popover with the full list.
-  const { artifacts } = useTaskDetailWithDefaults(taskID);
+  const { artifacts } = useAgentDetailWithDefaults(agentId);
   const successColor = useThemeSuccessColor();
   const tasks = artifacts[ArtifactType.PLAN]?.tasks ?? null;
   const hasTasks = tasks !== null && tasks.length > 0;
@@ -138,9 +138,9 @@ export const StatusPill = ({
   // — also used downstream to key the elapsed timer). This is the right
   // identity to test artifact freshness against, because we want carryover to
   // count as stale once a new turn starts, even after that new turn finishes
-  // and `workingUserMessageId` goes back to null. Persisted per-task so the
+  // and `workingUserMessageId` goes back to null. Persisted per-agent so the
   // staleness verdict survives tab switches and app restarts.
-  const [activeTurnId, setActiveTurnId] = useAtom(activeTurnIdAtomFamily(taskID));
+  const [activeTurnId, setActiveTurnId] = useAtom(activeTurnIdAtomFamily(agentId));
   useEffect(() => {
     if (workingUserMessageId !== null && workingUserMessageId !== activeTurnId) {
       setActiveTurnId(workingUserMessageId);
@@ -152,7 +152,7 @@ export const StatusPill = ({
   // carried-over all-complete artifact is stale — showing "X of N done" for it
   // would misleadingly imply it belongs to the new turn. Persisted alongside
   // activeTurnId so the comparison is stable across remounts and restarts.
-  const [liveTaskTurnId, setLiveTaskTurnId] = useAtom(liveTaskTurnIdAtomFamily(taskID));
+  const [liveTaskTurnId, setLiveTaskTurnId] = useAtom(liveTaskTurnIdAtomFamily(agentId));
   useEffect(() => {
     if (hasInProgress && activeTurnId !== null && liveTaskTurnId !== activeTurnId) {
       setLiveTaskTurnId(activeTurnId);
@@ -177,7 +177,7 @@ export const StatusPill = ({
   // Survives workspace-tab switches (Jotai atom outlives component unmount).
   // Not persisted to localStorage: re-derives correctly on restart from the
   // artifact + persisted turn ids via the effects below.
-  const [tasksPhase, setTasksPhase] = useAtom(tasksPhaseAtomFamily(taskID));
+  const [tasksPhase, setTasksPhase] = useAtom(tasksPhaseAtomFamily(agentId));
 
   // Reset to `idle` when a new user turn begins (a new non-null
   // workingUserMessageId), so a stale completed list from the previous turn
@@ -224,17 +224,17 @@ export const StatusPill = ({
   const shouldShowTasks = tasksPhase !== "idle" && TASKS_OVERRIDE_STATES.has(state);
   const isPopoverEnabled = isVisible;
 
-  // Mirror `isCancellable` into a per-task atom so the Ctrl+C keybinding in
+  // Mirror `isCancellable` into a per-agent atom so the Ctrl+C keybinding in
   // ChatInput fires under exactly the same conditions that render the
   // clickable Stop button below. Cleared on unmount so the keybinding
   // doesn't fire when the pill isn't on screen.
   useEffect(() => {
-    const a = isCancellableAtomFamily(taskID);
+    const a = isCancellableAtomFamily(agentId);
     store.set(a, canStop);
     return (): void => {
       store.set(a, false);
     };
-  }, [store, taskID, canStop]);
+  }, [store, agentId, canStop]);
 
   // Pick a new animation each time the pill becomes visible. Adjusting state
   // during render (guarded by the previous-visibility value) re-renders
@@ -256,7 +256,7 @@ export const StatusPill = ({
   // (post-turn idle) we keep the previous turn's key so the frozen value
   // remains on display; a new non-null id rotates the key, which
   // `useElapsedTime` treats as a fresh session.
-  const elapsedKey = `${taskID}-${activeTurnId ?? "init"}`;
+  const elapsedKey = `${agentId}-${activeTurnId ?? "init"}`;
   const { elapsed } = useElapsedTime(isVisible, isTicking, elapsedKey);
 
   // Hover + click-to-pin popover state for the tasks view.
@@ -382,7 +382,7 @@ export const StatusPill = ({
               }}
               onPointerEnter={(): void => setIsHoveringStop(true)}
               onPointerLeave={(): void => setIsHoveringStop(false)}
-              disabled={isStoppingTask}
+              disabled={isStoppingAgent}
               data-testid={ElementIds.STATUS_PILL_STOP}
             >
               <Square size={4} fill="currentColor" />

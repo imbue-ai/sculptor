@@ -13,13 +13,13 @@ import {
   tasksPhaseAtomFamily,
 } from "~/common/state/atoms/statusPillTasks.ts";
 
-import { ChatTaskProvider } from "./ChatTaskContext.tsx";
+import { ChatAgentProvider } from "./ChatAgentContext.tsx";
 import { StatusPill } from "./StatusPill.tsx";
 
-const { mockUseAgentStatus, mockUseElapsedTime, mockUseTaskDetailWithDefaults } = vi.hoisted(() => ({
+const { mockUseAgentStatus, mockUseElapsedTime, mockUseAgentDetailWithDefaults } = vi.hoisted(() => ({
   mockUseAgentStatus: vi.fn(),
   mockUseElapsedTime: vi.fn(),
-  mockUseTaskDetailWithDefaults: vi.fn(),
+  mockUseAgentDetailWithDefaults: vi.fn(),
 }));
 
 vi.mock("./useAgentStatus.ts", () => ({
@@ -30,8 +30,8 @@ vi.mock("./useElapsedTime.ts", () => ({
   useElapsedTime: mockUseElapsedTime,
 }));
 
-vi.mock("~/common/state/hooks/useTaskDetail.ts", () => ({
-  useTaskDetailWithDefaults: mockUseTaskDetailWithDefaults,
+vi.mock("~/common/state/hooks/useAgentDetail.ts", () => ({
+  useAgentDetailWithDefaults: mockUseAgentDetailWithDefaults,
 }));
 
 vi.mock("~/electron/platform.ts", () => ({
@@ -40,28 +40,28 @@ vi.mock("~/electron/platform.ts", () => ({
   isMac: (): boolean => true,
 }));
 
-// Each test gets a fresh Jotai store so persisted per-task atoms (active
+// Each test gets a fresh Jotai store so persisted per-agent atoms (active
 // turn id, live-task turn id, phase) don't leak between tests. localStorage
 // is cleared in beforeEach for the same reason — atomWithStorage reads it.
 let testStore = createStore();
 
 const Wrapper = ({ children }: { children: ReactNode }): ReactElement => (
   <Provider store={testStore}>
-    <ChatTaskProvider workspaceId="ws-1" taskId="agent-1">
+    <ChatAgentProvider workspaceId="ws-1" agentId="agent-1">
       <Theme>{children}</Theme>
-    </ChatTaskProvider>
+    </ChatAgentProvider>
   </Provider>
 );
 
 const defaultProps = {
-  taskStatus: null as null,
+  agentStatus: null as null,
   isAutoCompacting: false,
   isStreaming: false,
   inProgressChatMessage: null as ChatMessage | null,
   workingUserMessageId: null as string | null,
 };
 
-const emptyTaskDetail = {
+const emptyAgentDetail = {
   completedChatMessages: [],
   inProgressChatMessage: null,
   queuedChatMessages: [],
@@ -72,14 +72,14 @@ const emptyTaskDetail = {
   isInPlanMode: false,
 };
 
-const taskDetailWithTasks = (tasks: Array<Task>): typeof emptyTaskDetail => ({
-  ...emptyTaskDetail,
+const agentDetailWithTasks = (tasks: Array<Task>): typeof emptyAgentDetail => ({
+  ...emptyAgentDetail,
   artifacts: { [ArtifactType.PLAN]: { tasks, version: 2, objectType: "TaskListArtifact" } },
 });
 
 beforeEach(() => {
   mockUseElapsedTime.mockReturnValue({ elapsed: "3.2s" });
-  mockUseTaskDetailWithDefaults.mockReturnValue(emptyTaskDetail);
+  mockUseAgentDetailWithDefaults.mockReturnValue(emptyAgentDetail);
   // jsdom doesn't implement scrollIntoView, which AgentTasksPanel calls in an
   // effect when the popover mounts. Stub it so popover-open tests don't error.
   Element.prototype.scrollIntoView = vi.fn();
@@ -324,7 +324,7 @@ describe("StatusPill", () => {
       // pre-completed artifact must never light the pill up with the count
       // summary while the agent is still working.
       mockUseAgentStatus.mockReturnValue(thinkingStatus);
-      mockUseTaskDetailWithDefaults.mockReturnValue(taskDetailWithTasks([completedTask]));
+      mockUseAgentDetailWithDefaults.mockReturnValue(agentDetailWithTasks([completedTask]));
 
       render(<StatusPill {...defaultProps} isStreaming={true} />, { wrapper: Wrapper });
       expect(screen.getByTestId(ElementIds.STATUS_PILL_LABEL).textContent).toBe("Thinking...");
@@ -334,13 +334,13 @@ describe("StatusPill", () => {
       vi.useFakeTimers();
       try {
         mockUseAgentStatus.mockReturnValue(thinkingStatus);
-        mockUseTaskDetailWithDefaults.mockReturnValue(taskDetailWithTasks([inProgressTask]));
+        mockUseAgentDetailWithDefaults.mockReturnValue(agentDetailWithTasks([inProgressTask]));
 
         const { rerender } = render(<StatusPill {...defaultProps} isStreaming={true} />, { wrapper: Wrapper });
         expect(screen.getByTestId(ElementIds.STATUS_PILL_LABEL).textContent).toBe("1 / 1 \u00b7 Doing the thing");
 
         // Task completes → the count summary appears (phase: active → lingering).
-        mockUseTaskDetailWithDefaults.mockReturnValue(taskDetailWithTasks([completedTask]));
+        mockUseAgentDetailWithDefaults.mockReturnValue(agentDetailWithTasks([completedTask]));
         rerender(<StatusPill {...defaultProps} isStreaming={true} />);
         expect(screen.getByTestId(ElementIds.STATUS_PILL_LABEL).textContent).toBe("1 of 1 done");
 
@@ -361,14 +361,14 @@ describe("StatusPill", () => {
       vi.useFakeTimers();
       try {
         mockUseAgentStatus.mockReturnValue(thinkingStatus);
-        mockUseTaskDetailWithDefaults.mockReturnValue(taskDetailWithTasks([inProgressTask]));
+        mockUseAgentDetailWithDefaults.mockReturnValue(agentDetailWithTasks([inProgressTask]));
 
         const { rerender } = render(<StatusPill {...defaultProps} isStreaming={true} workingUserMessageId="turn-1" />, {
           wrapper: Wrapper,
         });
 
         // Drive into the lingering phase.
-        mockUseTaskDetailWithDefaults.mockReturnValue(taskDetailWithTasks([completedTask]));
+        mockUseAgentDetailWithDefaults.mockReturnValue(agentDetailWithTasks([completedTask]));
         rerender(<StatusPill {...defaultProps} isStreaming={true} workingUserMessageId="turn-1" />);
         expect(screen.getByTestId(ElementIds.STATUS_PILL_LABEL).textContent).toBe("1 of 1 done");
 
@@ -388,8 +388,8 @@ describe("StatusPill", () => {
 
     it("keeps the pill visible after the turn ends, showing a count summary", () => {
       mockUseAgentStatus.mockReturnValue(thinkingStatus);
-      mockUseTaskDetailWithDefaults.mockReturnValue(
-        taskDetailWithTasks([
+      mockUseAgentDetailWithDefaults.mockReturnValue(
+        agentDetailWithTasks([
           { id: "1", subject: "a", status: AgentTaskStatus.COMPLETED },
           { id: "2", subject: "b", status: AgentTaskStatus.COMPLETED },
           { id: "3", subject: "c", status: AgentTaskStatus.PENDING },
@@ -408,14 +408,14 @@ describe("StatusPill", () => {
     it("treats an all-complete carryover artifact as stale once a new turn starts without new tasks", () => {
       // Turn 1: agent starts with an in-progress task → completes it.
       mockUseAgentStatus.mockReturnValue(thinkingStatus);
-      mockUseTaskDetailWithDefaults.mockReturnValue(taskDetailWithTasks([inProgressTask]));
+      mockUseAgentDetailWithDefaults.mockReturnValue(agentDetailWithTasks([inProgressTask]));
 
       const { container, rerender } = render(
         <StatusPill {...defaultProps} isStreaming={true} workingUserMessageId="turn-1" />,
         { wrapper: Wrapper },
       );
 
-      mockUseTaskDetailWithDefaults.mockReturnValue(taskDetailWithTasks([completedTask]));
+      mockUseAgentDetailWithDefaults.mockReturnValue(agentDetailWithTasks([completedTask]));
       rerender(<StatusPill {...defaultProps} isStreaming={true} workingUserMessageId="turn-1" />);
       // Sanity: count summary visible while artifact still belongs to turn 1.
       expect(screen.getByTestId(ElementIds.STATUS_PILL_LABEL).textContent).toBe("1 of 1 done");
@@ -441,7 +441,7 @@ describe("StatusPill", () => {
 
     it("hides the pill when the agent is idle and there are no tasks", () => {
       mockUseAgentStatus.mockReturnValue(idleStatus);
-      mockUseTaskDetailWithDefaults.mockReturnValue(emptyTaskDetail);
+      mockUseAgentDetailWithDefaults.mockReturnValue(emptyAgentDetail);
 
       const { container } = render(<StatusPill {...defaultProps} />, { wrapper: Wrapper });
       expect(container.querySelector(`[data-testid="${ElementIds.STATUS_PILL}"]`)).toBeNull();
@@ -450,7 +450,7 @@ describe("StatusPill", () => {
     it("pins on pill click and closes on outside click", async () => {
       const user = userEvent.setup();
       mockUseAgentStatus.mockReturnValue(thinkingStatus);
-      mockUseTaskDetailWithDefaults.mockReturnValue(taskDetailWithTasks([inProgressTask]));
+      mockUseAgentDetailWithDefaults.mockReturnValue(agentDetailWithTasks([inProgressTask]));
 
       render(
         <Wrapper>
@@ -475,7 +475,7 @@ describe("StatusPill", () => {
       const user = userEvent.setup();
       mockUseAgentStatus.mockReturnValue(thinkingStatus);
       // No artifacts → tasks is null.
-      mockUseTaskDetailWithDefaults.mockReturnValue(emptyTaskDetail);
+      mockUseAgentDetailWithDefaults.mockReturnValue(emptyAgentDetail);
 
       render(<StatusPill {...defaultProps} isStreaming={true} />, { wrapper: Wrapper });
 
@@ -487,8 +487,8 @@ describe("StatusPill", () => {
     it('shows "Working on N tasks..." when multiple tasks are in_progress', () => {
       // Rare TodoWrite payload — fallback label from the legacy SpotlightCard.
       mockUseAgentStatus.mockReturnValue(thinkingStatus);
-      mockUseTaskDetailWithDefaults.mockReturnValue(
-        taskDetailWithTasks([
+      mockUseAgentDetailWithDefaults.mockReturnValue(
+        agentDetailWithTasks([
           { id: "1", subject: "First", status: AgentTaskStatus.IN_PROGRESS },
           { id: "2", subject: "Second", status: AgentTaskStatus.IN_PROGRESS },
           { id: "3", subject: "Third", status: AgentTaskStatus.PENDING },
@@ -504,8 +504,8 @@ describe("StatusPill", () => {
       // the pill caps the label so it can't blow out the chat column.
       const longContent = "A".repeat(80);
       mockUseAgentStatus.mockReturnValue(thinkingStatus);
-      mockUseTaskDetailWithDefaults.mockReturnValue(
-        taskDetailWithTasks([{ id: "1", subject: longContent, status: AgentTaskStatus.IN_PROGRESS }]),
+      mockUseAgentDetailWithDefaults.mockReturnValue(
+        agentDetailWithTasks([{ id: "1", subject: longContent, status: AgentTaskStatus.IN_PROGRESS }]),
       );
 
       render(<StatusPill {...defaultProps} isStreaming={true} />, { wrapper: Wrapper });
@@ -524,8 +524,8 @@ describe("StatusPill", () => {
         isCancellable: false,
         isVisible: false,
       });
-      mockUseTaskDetailWithDefaults.mockReturnValue(
-        taskDetailWithTasks([
+      mockUseAgentDetailWithDefaults.mockReturnValue(
+        agentDetailWithTasks([
           { id: "1", subject: "a", status: AgentTaskStatus.COMPLETED },
           { id: "2", subject: "b", status: AgentTaskStatus.PENDING },
         ]),
@@ -551,8 +551,8 @@ describe("StatusPill", () => {
         isCancellable: false,
         isVisible: false,
       });
-      mockUseTaskDetailWithDefaults.mockReturnValue(
-        taskDetailWithTasks([
+      mockUseAgentDetailWithDefaults.mockReturnValue(
+        agentDetailWithTasks([
           { id: "1", subject: "Step 1", status: AgentTaskStatus.COMPLETED },
           { id: "2", subject: "Step 2", status: AgentTaskStatus.COMPLETED },
         ]),
@@ -579,8 +579,8 @@ describe("StatusPill", () => {
         isCancellable: true,
         isVisible: true,
       });
-      mockUseTaskDetailWithDefaults.mockReturnValue(
-        taskDetailWithTasks([
+      mockUseAgentDetailWithDefaults.mockReturnValue(
+        agentDetailWithTasks([
           { id: "1", subject: "Step 1", status: AgentTaskStatus.COMPLETED },
           { id: "2", subject: "Step 2", status: AgentTaskStatus.COMPLETED },
         ]),
@@ -601,7 +601,7 @@ describe("StatusPill", () => {
         isCancellable: false,
         isVisible: true,
       });
-      mockUseTaskDetailWithDefaults.mockReturnValue(taskDetailWithTasks([inProgressTask]));
+      mockUseAgentDetailWithDefaults.mockReturnValue(agentDetailWithTasks([inProgressTask]));
 
       render(<StatusPill {...defaultProps} isAutoCompacting={true} />, { wrapper: Wrapper });
       expect(screen.getByTestId(ElementIds.STATUS_PILL_LABEL).textContent).toBe("Compacting...");

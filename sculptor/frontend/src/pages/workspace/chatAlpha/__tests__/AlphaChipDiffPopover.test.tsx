@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ElementIds } from "~/api";
 
 import { AlphaChipDiffPopover } from "../AlphaChipDiffPopover.tsx";
-import { ChatTaskProvider } from "../ChatTaskContext.tsx";
+import { ChatAgentProvider } from "../ChatAgentContext.tsx";
 import type { ChipData } from "../chipRow.types.ts";
 
 const WORKSPACE_PATH = "/repo/workspace";
@@ -78,11 +78,11 @@ const makeChipData = (overrides: Partial<ChipData> = {}): ChipData => ({
 });
 
 const renderPopover = (chipData: ChipData): ReactElement => (
-  <ChatTaskProvider workspaceId="ws-test" taskId="agent-1">
+  <ChatAgentProvider workspaceId="ws-test" agentId="agent-1">
     <Theme>
       <AlphaChipDiffPopover chipData={chipData} onClose={(): void => {}} onNavigate={(): void => {}} />
     </Theme>
-  </ChatTaskProvider>
+  </ChatAgentProvider>
 );
 
 beforeEach(() => {

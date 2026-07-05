@@ -31,7 +31,7 @@ const makeErrorBlock = (overrides: Partial<ErrorBlock> = {}): ErrorBlock => ({
 const renderErrorBlock = (props: {
   block: ErrorBlock;
   isLastMessage?: boolean;
-  taskStatus?: TaskStatus;
+  agentStatus?: TaskStatus;
   onRetryRequest?: () => void;
   dependenciesStatus?: DependenciesStatus | null;
 }): ReturnType<typeof render> => {
@@ -48,7 +48,7 @@ const renderErrorBlock = (props: {
     <AlphaErrorBlock
       block={props.block}
       isLastMessage={props.isLastMessage ?? true}
-      taskStatus={props.taskStatus ?? TaskStatus.RUNNING}
+      agentStatus={props.agentStatus ?? TaskStatus.RUNNING}
       onRetryRequest={props.onRetryRequest}
     />,
     { wrapper: Wrapper },

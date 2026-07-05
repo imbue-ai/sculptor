@@ -37,15 +37,18 @@ export const useSmoothStreamingViewportObserver = (): MutableRefObject<HTMLDivEl
 };
 
 /**
- * Hook that synchronizes smooth streaming state when switching tasks.
+ * Hook that synchronizes smooth streaming state when switching agents.
  * This complements useSmoothStreamingViewportObserver by handling the case where
- * switching tasks lands you on a page where the sentinel is already in view
+ * switching agents lands you on a page where the sentinel is already in view
  * (no intersection event fires in that case).
  *
- * @param taskID - The current task ID to react to changes
+ * @param agentId - The current agent ID to react to changes
  * @param sentinelRef - Ref to the bottom sentinel element
  */
-export const useSmoothStreamingOnTaskSwitch = (taskID: string, sentinelRef: RefObject<HTMLDivElement | null>): void => {
+export const useSmoothStreamingOnAgentSwitch = (
+  agentId: string,
+  sentinelRef: RefObject<HTMLDivElement | null>,
+): void => {
   const setIsViewportVisible = useSetAtom(isSmoothStreamingViewportVisibleAtom);
 
   useEffect(() => {
@@ -57,7 +60,7 @@ export const useSmoothStreamingOnTaskSwitch = (taskID: string, sentinelRef: RefO
     // Check if the sentinel is currently in the viewport and set visibility accordingly
     const isInView = isElementInViewport(node);
     setIsViewportVisible(isInView);
-  }, [taskID, sentinelRef, setIsViewportVisible]);
+  }, [agentId, sentinelRef, setIsViewportVisible]);
 };
 
 const isElementInViewport = (element: HTMLElement): boolean => {

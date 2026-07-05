@@ -9,7 +9,7 @@ import { openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms/diffPanel
 import { isGenericToolContent } from "~/pages/workspace/utils/blockGuards.ts";
 
 import styles from "./AlphaToolPopover.module.scss";
-import { useChatTask } from "./ChatTaskContext.tsx";
+import { useChatAgent } from "./ChatAgentContext.tsx";
 import { OutsideWorkspaceIcon } from "./OutsideWorkspaceIcon.tsx";
 import headerStyles from "./PopoverHeader.module.scss";
 import { PopoverHeader } from "./PopoverHeader.tsx";
@@ -70,7 +70,7 @@ const ReadEntry = ({
   const text = getResultText(result);
   const lineCount = text ? text.trimEnd().split("\n").length : null;
 
-  const { workspaceId: workspaceID } = useChatTask();
+  const { workspaceId: workspaceID } = useChatAgent();
   const openFileViewTab = useSetAtom(openFileViewTabAtom);
   const [isCopied, setIsCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);

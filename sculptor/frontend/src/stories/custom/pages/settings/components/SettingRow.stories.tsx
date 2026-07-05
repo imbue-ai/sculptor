@@ -71,7 +71,7 @@ export const WithTextField: Story = {
 export const WithNumberField: Story = {
   args: {
     title: "Minimum free disk space",
-    description: "Sculptor stops allowing new tasks below this threshold.",
+    description: "Sculptor stops allowing new agents below this threshold.",
     children: (
       <Flex align="center" gap="2">
         <TextField.Root type="number" defaultValue="2" min={1} max={100} step={1} style={{ width: 80 }} />

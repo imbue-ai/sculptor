@@ -115,7 +115,7 @@ describe("buildShouldAdjustScrollPositionOnItemSizeChange", () => {
     expect(isProgrammaticScrollRef.current).toBe(false);
   });
 
-  it("returns false (and skips the flag) while the layout is measuring after a task switch", () => {
+  it("returns false (and skips the flag) while the layout is measuring after an agent switch", () => {
     const isProgrammaticScrollRef = { current: false };
     const adjust = buildShouldAdjustScrollPositionOnItemSizeChange(measuring, isProgrammaticScrollRef);
 
@@ -221,17 +221,17 @@ describe("streaming paddingEnd floor latch", () => {
     vi.unstubAllGlobals();
   });
 
-  type FloorLatchProps = { taskId: string; isStreaming: boolean };
+  type FloorLatchProps = { agentId: string; isStreaming: boolean };
 
   // A null scroll container keeps containerHeight/tailContentHeight at 0, so
   // dynamicPaddingEnd IS the floor — the latch is observable directly through
   // options.paddingEnd.
   const renderFloorLatch = (): RenderHookResult<Virtualizer<HTMLDivElement, Element>, FloorLatchProps> => {
     const machine = createScrollStateMachine();
-    const initialProps: FloorLatchProps = { taskId: "task-1", isStreaming: false };
+    const initialProps: FloorLatchProps = { agentId: "agent-1", isStreaming: false };
     return renderHook(
-      ({ taskId, isStreaming }: FloorLatchProps) =>
-        useAlphaVirtualizer({ current: null }, 0, null, taskId, machine, 64, undefined, isStreaming),
+      ({ agentId, isStreaming }: FloorLatchProps) =>
+        useAlphaVirtualizer({ current: null }, 0, null, agentId, machine, 64, undefined, isStreaming),
       { initialProps },
     );
   };
@@ -243,14 +243,14 @@ describe("streaming paddingEnd floor latch", () => {
 
   it("uses the streaming floor while a stream is active", () => {
     const { result, rerender } = renderFloorLatch();
-    rerender({ taskId: "task-1", isStreaming: true });
+    rerender({ agentId: "agent-1", isStreaming: true });
     expect(result.current.options.paddingEnd).toBe(STREAMING_TAIL_PADDING);
   });
 
   it("holds the streaming floor through the settle window, then drops to idle", () => {
     const { result, rerender } = renderFloorLatch();
-    rerender({ taskId: "task-1", isStreaming: true });
-    rerender({ taskId: "task-1", isStreaming: false });
+    rerender({ agentId: "agent-1", isStreaming: true });
+    rerender({ agentId: "agent-1", isStreaming: false });
 
     // Still held: the turn-end shrink can land within the settle window.
     expect(result.current.options.paddingEnd).toBe(STREAMING_TAIL_PADDING);
@@ -263,13 +263,13 @@ describe("streaming paddingEnd floor latch", () => {
 
   it("re-arms the hold when a new stream starts inside the settle window", () => {
     const { result, rerender } = renderFloorLatch();
-    rerender({ taskId: "task-1", isStreaming: true });
-    rerender({ taskId: "task-1", isStreaming: false });
+    rerender({ agentId: "agent-1", isStreaming: true });
+    rerender({ agentId: "agent-1", isStreaming: false });
     act(() => {
       vi.advanceTimersByTime(FOOTER_REVEAL_WINDOW_MS / 2);
     });
 
-    rerender({ taskId: "task-1", isStreaming: true });
+    rerender({ agentId: "agent-1", isStreaming: true });
     // The pending drop from the previous turn must not fire mid-stream.
     act(() => {
       vi.advanceTimersByTime(FOOTER_REVEAL_WINDOW_MS * 2);
@@ -277,18 +277,18 @@ describe("streaming paddingEnd floor latch", () => {
     expect(result.current.options.paddingEnd).toBe(STREAMING_TAIL_PADDING);
   });
 
-  it("drops the outgoing task's hold on task switch", () => {
+  it("drops the outgoing agent's hold on agent switch", () => {
     const { result, rerender } = renderFloorLatch();
-    rerender({ taskId: "task-1", isStreaming: true });
-    rerender({ taskId: "task-1", isStreaming: false });
+    rerender({ agentId: "agent-1", isStreaming: true });
+    rerender({ agentId: "agent-1", isStreaming: false });
     expect(result.current.options.paddingEnd).toBe(STREAMING_TAIL_PADDING);
 
-    // The incoming idle task gets the idle floor immediately — the outgoing
-    // task's settle window is meaningless for it.
-    rerender({ taskId: "task-2", isStreaming: false });
+    // The incoming idle agent gets the idle floor immediately — the outgoing
+    // agent's settle window is meaningless for it.
+    rerender({ agentId: "agent-2", isStreaming: false });
     expect(result.current.options.paddingEnd).toBe(IDLE_TAIL_PADDING);
 
-    // Drain the task-switch settle rAF chain so no state updates fire after
+    // Drain the agent-switch settle rAF chain so no state updates fire after
     // the test ends.
     act(() => {
       vi.advanceTimersByTime(48);

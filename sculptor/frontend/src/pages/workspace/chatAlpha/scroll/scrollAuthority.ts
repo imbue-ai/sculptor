@@ -15,8 +15,8 @@
 export type ScrollAuthority =
   // Settled: the user owns scrollTop and nothing programmatic is in flight.
   | { kind: "userControlled" }
-  // A task/agent switch is restoring the saved scroll position.
-  | { kind: "restoring"; taskId: string }
+  // An agent switch is restoring the saved scroll position.
+  | { kind: "restoring"; agentId: string }
   // A new user message is being animated/placed at the top of the viewport.
   | { kind: "anchoringTurn"; anchorIndex: number }
   // Pinned to the bottom, following streaming output.
@@ -29,7 +29,7 @@ export type ScrollAuthority =
  * reducer is the single place that decides what each cause does in each state.
  */
 export type ScrollEvent =
-  | { kind: "taskSwitched"; taskId: string }
+  | { kind: "agentSwitched"; agentId: string }
   | { kind: "restoreSettled" }
   | { kind: "userScrolled" }
   | { kind: "newUserTurn"; index: number }
@@ -56,13 +56,13 @@ const assertNever = (value: never): never => {
 export const nextAuthority = (state: ScrollAuthority, event: ScrollEvent): ScrollAuthority => {
   // Two transitions are global, valid from every state:
   //  - a genuine user scroll always returns control to the user;
-  //  - a task switch always begins restoring the incoming task.
+  //  - an agent switch always begins restoring the incoming agent.
   if (event.kind === "userScrolled") {
     return state.kind === "userControlled" ? state : { kind: "userControlled" };
   }
 
-  if (event.kind === "taskSwitched") {
-    return { kind: "restoring", taskId: event.taskId };
+  if (event.kind === "agentSwitched") {
+    return { kind: "restoring", agentId: event.agentId };
   }
 
   switch (state.kind) {

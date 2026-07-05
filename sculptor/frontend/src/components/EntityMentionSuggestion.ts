@@ -110,8 +110,8 @@ const formatAgentCount = (count: number): string => {
   return `${count} agents`;
 };
 
-const getAgentDisplayName = (task: CodingAgentTaskView): string =>
-  task.title ?? (task.goal ? task.goal.slice(0, AGENT_GOAL_PREVIEW_LENGTH) : "Untitled");
+const getAgentDisplayName = (agent: CodingAgentTaskView): string =>
+  agent.title ?? (agent.goal ? agent.goal.slice(0, AGENT_GOAL_PREVIEW_LENGTH) : "Untitled");
 
 export const createEntitySuggestion = (entityDataRef: EntityDataRef): Omit<SuggestionOptions, "editor"> => ({
   pluginKey: new PluginKey("entityMention"),
@@ -190,14 +190,14 @@ export const createEntitySuggestion = (entityDataRef: EntityDataRef): Omit<Sugge
     // surfacing it on every row would be redundant noise.
     const agentItems: Array<EntityMentionItem> = [...agents]
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .filter((task) => matchesQuery(getAgentDisplayName(task), ""))
-      .map((task) =>
+      .filter((agent) => matchesQuery(getAgentDisplayName(agent), ""))
+      .map((agent) =>
         makeEntityItem({
           entityType: "agent",
-          entityId: task.id,
-          entityDisplayName: getAgentDisplayName(task),
-          subtitle: formatRelativeTime(task.createdAt),
-          parentId: task.workspaceId ?? undefined,
+          entityId: agent.id,
+          entityDisplayName: getAgentDisplayName(agent),
+          subtitle: formatRelativeTime(agent.createdAt),
+          parentId: agent.workspaceId ?? undefined,
         }),
       );
 

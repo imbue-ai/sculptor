@@ -20,6 +20,7 @@ import type { useStore } from "jotai/react";
 import { selectAtom } from "jotai/utils";
 
 import { type AgentTypeName, createWorkspaceAgent, type TerminalAgentRegistration } from "~/api";
+import { agentsArrayAtom } from "~/common/state/atoms/agents.ts";
 import {
   AGENT_TYPE_LABELS,
   encodeRegisteredAgentType,
@@ -28,7 +29,6 @@ import {
   REGISTERED_AGENT_TYPE_PREFIX,
   type StoredAgentType,
 } from "~/common/state/atoms/agentTabs.ts";
-import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { terminalNextIndexAtom, terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
 import { createAgentErrorToastAtom, ToastType } from "~/common/state/atoms/toasts.ts";
 import { isPiAgentEnabledAtom, userConfigAtom } from "~/common/state/atoms/userConfig.ts";
@@ -153,7 +153,7 @@ export const recentAgentLabel = (
 // imperatively per produce — so the always-mounted shell (section headers,
 // shortcuts, bootstrap) carries no layout/registry subscription for the add-panel
 // feature. Each atom carries an equality guard so an OPEN menu does not re-render
-// when an unrelated layout write (split-ratio drag) or a registry rebuild (task
+// when an unrelated layout write (split-ratio drag) or a registry rebuild (agent
 // tick) recomputes an identical list.
 
 // The stored recent agent type, normalized (bare "terminal" / disabled "pi" fall
@@ -255,9 +255,9 @@ export const buildAgentTypeOptions = (inputs: {
 type CreateAgentInputs = { agentType: AgentTypeName; registrationId?: string; activeAgentId?: string };
 
 // Create an agent of the given type and place its panel in the requesting sub-section.
-// Returns the new task id (or undefined on failure) so callers can navigate to it. The
+// Returns the new agent id (or undefined on failure) so callers can navigate to it. The
 // placement is just an id reference; the registry sync derives the panel def once the
-// task loads. Placing the panel here (before the caller navigates) means the shell's
+// agent loads. Placing the panel here (before the caller navigates) means the shell's
 // active-agent effect sees an existing placement and leaves the agent in this section
 // rather than pulling it into center.
 export const createAgentInLocation = async (
@@ -280,8 +280,8 @@ export const createAgentInLocation = async (
 
   // Inherit the model from the currently viewed agent so the new agent starts with
   // the same model selection. Terminal agents never read it.
-  const tasks = store.get(tasksArrayAtom);
-  const currentAgent = inputs.activeAgentId ? tasks?.find((task) => task.id === inputs.activeAgentId) : undefined;
+  const agents = store.get(agentsArrayAtom);
+  const currentAgent = inputs.activeAgentId ? agents?.find((agent) => agent.id === inputs.activeAgentId) : undefined;
   const model = currentAgent?.model;
 
   const workspaceId = store.get(activeWorkspaceIdAtom);
@@ -316,12 +316,12 @@ export const createAgentAndNavigate = async (
   store: AppStore,
   subSection: SubSectionId,
   inputs: CreateAgentInputs,
-  navigateToAgent: (workspaceId: string, taskId: string) => void,
+  navigateToAgent: (workspaceId: string, agentId: string) => void,
 ): Promise<void> => {
   const workspaceId = store.get(activeWorkspaceIdAtom);
-  const taskId = await createAgentInLocation(store, subSection, inputs);
-  if (taskId !== undefined && workspaceId !== null) {
-    navigateToAgent(workspaceId, taskId);
+  const agentId = await createAgentInLocation(store, subSection, inputs);
+  if (agentId !== undefined && workspaceId !== null) {
+    navigateToAgent(workspaceId, agentId);
     return;
   }
   store.set(createAgentErrorToastAtom, {

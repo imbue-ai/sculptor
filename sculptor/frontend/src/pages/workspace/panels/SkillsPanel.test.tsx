@@ -13,9 +13,9 @@ import { SkillsPanel } from "./SkillsPanel";
 
 // `vi.mock` is hoisted to the top of the file, so the spy bindings have to
 // live inside `vi.hoisted` to be available when the mock factories run.
-const { mockUseSkills, mockUseTaskSupportsSkills } = vi.hoisted(() => ({
+const { mockUseSkills, mockUseAgentSupportsSkills } = vi.hoisted(() => ({
   mockUseSkills: vi.fn<() => { skills: ReadonlyArray<SkillEntry>; isLoading: boolean; error: string | null }>(),
-  mockUseTaskSupportsSkills: vi.fn<() => boolean | undefined>(),
+  mockUseAgentSupportsSkills: vi.fn<() => boolean | undefined>(),
 }));
 
 // Mock the data hook so we can drive the panel from tests without an HTTP
@@ -25,8 +25,8 @@ vi.mock("~/common/state/hooks/useSkills", () => ({
 }));
 
 // Mock the capability hook so a test can drive the skills gate directly.
-vi.mock("~/common/state/hooks/useTaskHelpers", () => ({
-  useTaskSupportsSkills: (): boolean | undefined => mockUseTaskSupportsSkills(),
+vi.mock("~/common/state/hooks/useAgentHelpers", () => ({
+  useAgentSupportsSkills: (): boolean | undefined => mockUseAgentSupportsSkills(),
 }));
 
 const customSkill = (overrides: Partial<SkillEntry> = {}): SkillEntry => ({
@@ -85,7 +85,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Default to a skills-supporting harness so the listing/search/insert tests
   // render the skills they pass in; the gated-off test overrides this.
-  mockUseTaskSupportsSkills.mockReturnValue(true);
+  mockUseAgentSupportsSkills.mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -112,7 +112,7 @@ describe("SkillsPanel — render states", () => {
   });
 
   it("collapses to the unavailable empty state when the harness does not support skills", () => {
-    mockUseTaskSupportsSkills.mockReturnValue(false);
+    mockUseAgentSupportsSkills.mockReturnValue(false);
     renderSkillsPanel({ skills: [customSkill(), builtinSkill()] });
     expect(document.querySelectorAll('[data-testid="SKILL_CHIP"]')).toHaveLength(0);
     expect(screen.getByText("Skills unavailable")).toBeInTheDocument();

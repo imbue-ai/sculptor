@@ -7,7 +7,7 @@ import styles from "./AgentTerminalPanel.module.scss";
 import { useTerminalChatActions } from "./hooks/useTerminalChatActions.ts";
 
 type AgentTerminalPanelProps = {
-  taskId: string;
+  agentId: string;
 };
 
 /**
@@ -19,10 +19,10 @@ type AgentTerminalPanelProps = {
  * not from keeping xterm mounted. useTerminal's 4404 retry covers the
  * agent-still-BUILDING window before the backend handler registers the PTY.
  */
-export const AgentTerminalPanel = ({ taskId }: AgentTerminalPanelProps): ReactElement => {
-  useTerminalChatActions(taskId);
+export const AgentTerminalPanel = ({ agentId }: AgentTerminalPanelProps): ReactElement => {
+  useTerminalChatActions(agentId);
   const { terminalContainerRef } = useTerminal({
-    terminalPath: `/api/v1/agents/${taskId}/terminal/ws`,
+    terminalPath: `/api/v1/agents/${agentId}/terminal/ws`,
     isVisible: true,
     fontSize: 13,
     lineHeight: 1.1,

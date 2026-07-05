@@ -113,7 +113,7 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
 
         // Only Claude consumes a creation-time prompt, model, and the per-prompt
         // agent settings (effort / fast / plan): terminal/registered agents have
-        // no model concept, and pi selects from its own catalog in-task, so it
+        // no model concept, and pi selects from its own catalog in-agent, so it
         // starts on pi's defaults rather than Claude settings it would ignore.
         // The prompt gate mirrors the backend, which rejects a prompt for
         // terminal/registered agents and requires a model alongside any prompt —

@@ -18,7 +18,7 @@ export const useWorkspace = (workspaceId: string | null | undefined): Workspace 
 };
 
 /**
- * Hook to detect whether a task's workspace has been deleted.
+ * Hook to detect whether an agent's workspace has been deleted.
  * Returns false while workspaces are still loading (avoids false positives on initial page load).
  */
 export const useIsWorkspaceDeleted = (workspaceId: string | null): boolean => {

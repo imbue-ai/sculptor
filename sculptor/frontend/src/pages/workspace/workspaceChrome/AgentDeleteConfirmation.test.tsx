@@ -10,10 +10,10 @@ import { makeAgentPanelId } from "~/pages/workspace/layout/registry/dynamicPanel
 
 import { AgentDeleteConfirmation } from "./AgentDeleteConfirmation.tsx";
 
-// The delete side effects (backend call, optimistic task removal, route navigation) are
+// The delete side effects (backend call, optimistic agent removal, route navigation) are
 // exercised elsewhere; here we only assert that confirming reconciles the section layout.
-vi.mock("~/common/state/hooks/useOptimisticTaskDelete.ts", () => ({
-  useOptimisticTaskDelete: (): { execute: () => void } => ({ execute: vi.fn() }),
+vi.mock("~/common/state/hooks/useOptimisticAgentDelete.ts", () => ({
+  useOptimisticAgentDelete: (): { execute: () => void } => ({ execute: vi.fn() }),
 }));
 
 afterEach(cleanup);

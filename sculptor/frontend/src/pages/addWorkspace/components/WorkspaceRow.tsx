@@ -6,7 +6,7 @@ import { useMemo } from "react";
 
 import type { RecentWorkspaceResponse } from "~/api";
 import { ElementIds } from "~/api";
-import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
+import { agentsArrayAtom } from "~/common/state/atoms/agents.ts";
 import { prDefaultTargetBranchAtom } from "~/common/state/atoms/userConfig.ts";
 import { useGitProvider } from "~/common/state/hooks/useGitProvider.ts";
 import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch.ts";
@@ -26,15 +26,15 @@ type WorkspaceRowProps = {
 };
 
 const StatusDot = ({ workspace }: { workspace: WorkspaceRowProps["workspace"] }): ReactElement => {
-  const tasks = useAtomValue(tasksArrayAtom);
+  const agents = useAtomValue(agentsArrayAtom);
 
   const status = useMemo(() => {
     if (!workspace.isOpen) {
       return EMPTY_WORKSPACE_DOT_STATUS;
     }
-    const workspaceTasks = (tasks ?? []).filter((task) => task.workspaceId === workspace.objectId);
-    return computeWorkspaceDotStatus(workspaceTasks);
-  }, [tasks, workspace.objectId, workspace.isOpen]);
+    const workspaceAgents = (agents ?? []).filter((agent) => agent.workspaceId === workspace.objectId);
+    return computeWorkspaceDotStatus(workspaceAgents);
+  }, [agents, workspace.objectId, workspace.isOpen]);
 
   return <WorkspaceStatusDots status={status} size={8} />;
 };

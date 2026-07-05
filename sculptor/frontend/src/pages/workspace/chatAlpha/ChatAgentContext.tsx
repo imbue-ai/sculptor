@@ -2,7 +2,7 @@ import type { ReactElement, ReactNode } from "react";
 import { createContext, useContext, useMemo } from "react";
 
 /**
- * The agent (task) + workspace identity a chat panel renders. Provided at the
+ * The agent + workspace identity a chat panel renders. Provided at the
  * chat panel root and read by every component inside the chat surface.
  *
  * Components inside a chat panel must NOT read the agent from the route
@@ -13,18 +13,18 @@ import { createContext, useContext, useMemo } from "react";
  * the route would aim actions (interrupt, queued-message edit/delete) and
  * lookups (PLAN artifact, capability gates) at the wrong agent.
  */
-export type ChatTaskIdentity = {
+export type ChatAgentIdentity = {
   workspaceId: string;
-  taskId: string;
+  agentId: string;
 };
 
-const ChatTaskContext = createContext<ChatTaskIdentity | null>(null);
+const ChatAgentContext = createContext<ChatAgentIdentity | null>(null);
 
-type ChatTaskProviderProps = ChatTaskIdentity & { children: ReactNode };
+type ChatAgentProviderProps = ChatAgentIdentity & { children: ReactNode };
 
-export const ChatTaskProvider = ({ workspaceId, taskId, children }: ChatTaskProviderProps): ReactElement => {
-  const identity = useMemo(() => ({ workspaceId, taskId }), [workspaceId, taskId]);
-  return <ChatTaskContext.Provider value={identity}>{children}</ChatTaskContext.Provider>;
+export const ChatAgentProvider = ({ workspaceId, agentId, children }: ChatAgentProviderProps): ReactElement => {
+  const identity = useMemo(() => ({ workspaceId, agentId }), [workspaceId, agentId]);
+  return <ChatAgentContext.Provider value={identity}>{children}</ChatAgentContext.Provider>;
 };
 
 /**
@@ -34,10 +34,10 @@ export const ChatTaskProvider = ({ workspaceId, taskId, children }: ChatTaskProv
  * exists to prevent).
  */
 // eslint-disable-next-line react-refresh/only-export-components -- the hook must live alongside the provider
-export const useChatTask = (): ChatTaskIdentity => {
-  const identity = useContext(ChatTaskContext);
+export const useChatAgent = (): ChatAgentIdentity => {
+  const identity = useContext(ChatAgentContext);
   if (identity === null) {
-    throw new Error("useChatTask requires a ChatTaskProvider ancestor (mounted at the chat panel root)");
+    throw new Error("useChatAgent requires a ChatAgentProvider ancestor (mounted at the chat panel root)");
   }
   return identity;
 };

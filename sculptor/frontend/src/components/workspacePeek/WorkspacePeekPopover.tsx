@@ -5,8 +5,8 @@ import { type CSSProperties, type ReactElement, useCallback, useEffect, useMemo,
 
 import type { CodingAgentTaskView, PrStatusInfo } from "~/api";
 import { ElementIds, WorkspacePeekAgentStatus } from "~/api";
+import { agentsArrayAtom } from "~/common/state/atoms/agents";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus";
-import { tasksArrayAtom } from "~/common/state/atoms/tasks";
 import { useProject, useProjects } from "~/common/state/hooks/useProjects";
 import { useThemeDangerColor, useThemeSuccessColor, useThemeWarningColor } from "~/common/state/hooks/useThemeBuilder";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
@@ -175,7 +175,7 @@ const AgentRow = ({
       onKeyDown={(e) => e.key === "Enter" && onClick()}
     >
       <div className={styles.agentNameLine}>
-        <PeekAgentStatusDot taskId={agent.id} workspaceCreatedAt={undefined} />
+        <PeekAgentStatusDot agentId={agent.id} workspaceCreatedAt={undefined} />
         <span className={styles.agentName}>{agent.title ?? "Agent"}</span>
       </div>
       <div className={styles.agentDescription} data-status={status}>
@@ -336,7 +336,7 @@ export const WorkspacePeekPopover = ({
   const workspace = useWorkspace(workspaceId);
   const project = useProject(workspace?.projectId ?? "");
   const projects = useProjects();
-  const allTasks = useAtomValue(tasksArrayAtom);
+  const allAgents = useAtomValue(agentsArrayAtom);
   const branchInfo = useWorkspaceBranch(workspaceId);
   const prStatus = useAtomValue(prStatusAtomFamily(workspaceId));
   const { data: diff, isFetching } = useWorkspaceDiff(workspaceId);
@@ -377,8 +377,8 @@ export const WorkspacePeekPopover = ({
   );
 
   const agents = useMemo(
-    () => (allTasks ?? []).filter((t) => t.workspaceId === workspaceId && !t.isDeleted),
-    [allTasks, workspaceId],
+    () => (allAgents ?? []).filter((agent) => agent.workspaceId === workspaceId && !agent.isDeleted),
+    [allAgents, workspaceId],
   );
 
   const sortedAgents = useMemo(

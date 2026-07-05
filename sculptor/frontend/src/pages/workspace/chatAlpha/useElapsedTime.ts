@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 /**
  * Module-level store that preserves timer origins across component remounts.
- * Keyed by a caller-supplied string (typically the task ID). This allows the
+ * Keyed by a caller-supplied string (typically the agent ID). This allows the
  * timer to resume from where it left off when the component unmounts and
  * remounts — e.g. when switching workspace tabs.
  *
@@ -23,7 +23,7 @@ const formatElapsedSeconds = (elapsedMs: number): string => `${(elapsedMs / MILL
  * - `isVisible`: when true the timer is shown; when it transitions from false→true the timer resets.
  *   When it goes false the display resets to "0.0s".
  * - `isTicking`: when true the counter advances; when false the counter freezes at its current value.
- * - `persistKey`: key (e.g. task ID or tool use ID) to preserve the timer origin across
+ * - `persistKey`: key (e.g. agent ID or tool use ID) to preserve the timer origin across
  *   remounts. The timer resumes from the stored origin instead of resetting to 0.
  *
  * Uses a 100ms interval instead of requestAnimationFrame to avoid unnecessary

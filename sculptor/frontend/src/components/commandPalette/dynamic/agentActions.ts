@@ -1,12 +1,12 @@
 import { SettingsIcon } from "lucide-react";
 
-import { tasksArrayAtom } from "../../../common/state/atoms/tasks.ts";
+import { agentsArrayAtom } from "../../../common/state/atoms/agents.ts";
 import { buildAgentActions } from "../contextActions/agentActions.ts";
 import { agentActionsTargetAtom } from "../contextActions/atoms/contextActions.ts";
 import type { AgentActionRuntime } from "../contextActions/types/contextActions.ts";
 import type { Command, DynamicProvider } from "../types/commandPalette.ts";
 import type { CommandRuntime } from "../utils/runtime.ts";
-import { taskDisplayTitle } from "./agentTitle.ts";
+import { agentDisplayTitle } from "./agentTitle.ts";
 
 /**
  * Surfaces the right-click menu actions for the CURRENT agent in Cmd+K.
@@ -31,11 +31,11 @@ export const buildAgentActionsProvider = (
     // back to `string | null` there, forcing a type assertion).
     const { activeAgentId, activeWorkspaceId } = ctx;
     if (activeAgentId == null || activeWorkspaceId == null) return [];
-    const tasks = runtime.store.get(tasksArrayAtom) ?? [];
-    const target = tasks.find((t) => t.id === activeAgentId);
+    const agents = runtime.store.get(agentsArrayAtom) ?? [];
+    const target = agents.find((agent) => agent.id === activeAgentId);
     if (target == null) return [];
 
-    const display = taskDisplayTitle(target);
+    const display = agentDisplayTitle(target);
     const actions = buildAgentActions(actionRuntime);
     const out: Array<Command> = [];
 

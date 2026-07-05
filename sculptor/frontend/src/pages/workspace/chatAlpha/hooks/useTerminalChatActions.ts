@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { postAgentTerminalInput, TaskStatus } from "~/api";
 import { chatActionsAtom } from "~/common/state/atoms/chatActions.ts";
 import { terminalPromptRejectedToastAtom } from "~/common/state/atoms/toasts.ts";
-import { useTaskAcceptsAutomatedPrompts, useTaskStatus } from "~/common/state/hooks/useTaskHelpers.ts";
+import { useAgentAcceptsAutomatedPrompts, useAgentStatusField } from "~/common/state/hooks/useAgentHelpers.ts";
 
 /**
  * Terminal-panel counterpart of useChatData's chatActions registration: the
@@ -18,9 +18,9 @@ import { useTaskAcceptsAutomatedPrompts, useTaskStatus } from "~/common/state/ho
  * stays disabled by default. Consumers are untouched — the routing decision
  * lives entirely in which hook registered the actions.
  */
-export const useTerminalChatActions = (taskId: string): void => {
-  const doesAcceptAutomatedPrompts = useTaskAcceptsAutomatedPrompts(taskId);
-  const status = useTaskStatus(taskId);
+export const useTerminalChatActions = (agentId: string): void => {
+  const doesAcceptAutomatedPrompts = useAgentAcceptsAutomatedPrompts(agentId);
+  const status = useAgentStatusField(agentId);
   const setChatActions = useSetAtom(chatActionsAtom);
   const setPromptRejectedToast = useSetAtom(terminalPromptRejectedToastAtom);
 
@@ -39,7 +39,7 @@ export const useTerminalChatActions = (taskId: string): void => {
     // counterpart of appendText populating a rich-chat composer.
     const writePrompt = async (text: string, submit: boolean): Promise<void> => {
       try {
-        await postAgentTerminalInput({ path: { agent_id: taskId }, body: { text, submit } });
+        await postAgentTerminalInput({ path: { agent_id: agentId }, body: { text, submit } });
       } catch {
         // The endpoint's authoritative guard fired: the program went busy
         // (or its hooks are silent) between the click and the write.
@@ -57,7 +57,7 @@ export const useTerminalChatActions = (taskId: string): void => {
       },
       sendMessage: (message: string): Promise<void> => writePrompt(message, true),
     }));
-  }, [setChatActions, setPromptRejectedToast, doesAcceptAutomatedPrompts, taskId]);
+  }, [setChatActions, setPromptRejectedToast, doesAcceptAutomatedPrompts, agentId]);
 
   // Track `isDisabled` separately (mirrors useChatData) so status flips don't
   // re-bind the send closure. READY can also mean "no signals yet" — the

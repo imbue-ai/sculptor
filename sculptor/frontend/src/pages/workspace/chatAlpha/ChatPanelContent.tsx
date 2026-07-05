@@ -2,25 +2,25 @@ import type { Editor as TipTapEditor } from "@tiptap/react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { type ReactElement, useEffect, useRef } from "react";
 
+import { agentWorkspaceIdAtomFamily } from "~/common/state/atoms/agents.ts";
 import { closeBtwPopupIfNotForAgentAtom, isBtwPopupOpenAtom } from "~/common/state/atoms/btwPopup.ts";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
 import { chatPanelMountedAtom } from "~/common/state/atoms/panelMounts.ts";
-import { taskWorkspaceIdAtomFamily } from "~/common/state/atoms/tasks.ts";
-import { useTaskSupportsChatInterface } from "~/common/state/hooks/useTaskHelpers.ts";
+import { useAgentSupportsChatInterface } from "~/common/state/hooks/useAgentHelpers.ts";
 import { lastFocusedChatAgentAtomFamily } from "~/pages/workspace/panels/workspaceAgentActions.ts";
 
 import { AgentTerminalPanel } from "./AgentTerminalPanel.tsx";
 import { AlphaChatInterface } from "./AlphaChatInterface.tsx";
 import { BtwPopup } from "./BtwPopup.tsx";
+import { ChatAgentProvider } from "./ChatAgentContext.tsx";
 import styles from "./ChatPanelContent.module.scss";
-import { ChatTaskProvider } from "./ChatTaskContext.tsx";
 import { useChatData } from "./hooks/useChatData.ts";
 
 type ChatPanelContentProps = {
-  // The task this panel renders. Supplied as a prop (not read from the route) so each
+  // The agent this panel renders. Supplied as a prop (not read from the route) so each
   // agent panel renders its OWN agent — one in center and another in right at once,
   // two streaming concurrently.
-  taskId: string;
+  agentId: string;
 };
 
 /**
@@ -33,16 +33,16 @@ type ChatPanelContentProps = {
  * is exactly what keeps Commit / Create PR / custom actions disabled for
  * them (the load-bearing gate).
  */
-export const ChatPanelContent = ({ taskId }: ChatPanelContentProps): ReactElement | null => {
-  const isChatInterfaceSupported = useTaskSupportsChatInterface(taskId);
+export const ChatPanelContent = ({ agentId }: ChatPanelContentProps): ReactElement | null => {
+  const isChatInterfaceSupported = useAgentSupportsChatInterface(agentId);
 
   if (isChatInterfaceSupported === false) {
-    // Keyed by task id: a direct terminal->terminal tab switch must remount
+    // Keyed by agent id: a direct terminal->terminal tab switch must remount
     // the panel so each agent gets its own xterm instance. Without the key,
     // React reuses the component and the previous agent's scrollback stays
     // in the (single) xterm buffer when the WebSocket reconnects to the new
     // agent's PTY — leaking one tab's content into another.
-    return <AgentTerminalPanel key={taskId} taskId={taskId} />;
+    return <AgentTerminalPanel key={agentId} agentId={agentId} />;
   }
 
   // While capabilities are loading, render nothing rather than the chat —
@@ -52,16 +52,16 @@ export const ChatPanelContent = ({ taskId }: ChatPanelContentProps): ReactElemen
   if (isChatInterfaceSupported === undefined) {
     return null;
   }
-  return <ChatPanelInner taskId={taskId} />;
+  return <ChatPanelInner agentId={agentId} />;
 };
 
-const ChatPanelInner = ({ taskId }: ChatPanelContentProps): ReactElement => {
-  // The chat data hook needs the task's workspace id; derive it from the task
+const ChatPanelInner = ({ agentId }: ChatPanelContentProps): ReactElement => {
+  // The chat data hook needs the agent's workspace id; derive it from the agent
   // atom rather than the route — the panel's agent can differ from the routed
   // one (any placed agent panel renders this component). The narrow derived
-  // atom keeps unrelated task churn (status, timestamps) from re-rendering
+  // atom keeps unrelated agent churn (status, timestamps) from re-rendering
   // the whole chat surface.
-  const workspaceID = useAtomValue(taskWorkspaceIdAtomFamily(taskId)) ?? "";
+  const workspaceID = useAtomValue(agentWorkspaceIdAtomFamily(agentId)) ?? "";
 
   // Registration seams tying this panel's composer to the workspace-scoped
   // consumers: useChatData registers the chatActions append/insert closures
@@ -75,15 +75,15 @@ const ChatPanelInner = ({ taskId }: ChatPanelContentProps): ReactElement => {
   const setChatPanelMounted = useSetAtom(chatPanelMountedAtom);
   const recordChatAgentFocus = useSetAtom(lastFocusedChatAgentAtomFamily(workspaceID));
 
-  const chatData = useChatData({ taskID: taskId, workspaceID, appendTextRef, insertSkillRef });
+  const chatData = useChatData({ agentId, workspaceID, appendTextRef, insertSkillRef });
 
   // /btw popups are scoped to the agent that opened them. Whenever the
   // active agent changes (tab switch, workspace switch, navigation), the
   // popup atom may still hold the previous agent's question/answer; close
   // it so it doesn't float above an unrelated chat pane.
   useEffect(() => {
-    closeBtwPopupIfNotForAgent(taskId);
-  }, [taskId, closeBtwPopupIfNotForAgent]);
+    closeBtwPopupIfNotForAgent(agentId);
+  }, [agentId, closeBtwPopupIfNotForAgent]);
 
   // Reactive signal for "is a chat panel currently rendered?" — read by the
   // command palette (via `chatPanelMountedAtom`) instead of poking the DOM.
@@ -102,11 +102,11 @@ const ChatPanelInner = ({ taskId }: ChatPanelContentProps): ReactElement => {
   // panel marks its agent as that target. Capture-phase handlers see events
   // that inner components swallow; the atom setter is equality-guarded, so
   // recording on every interaction stays cheap. The workspace id is briefly
-  // "" while the task atom loads — skip recording rather than key a family
+  // "" while the agent atom loads — skip recording rather than key a family
   // entry on a placeholder id.
   const handleChatInteraction = (): void => {
     if (workspaceID !== "") {
-      recordChatAgentFocus(taskId);
+      recordChatAgentFocus(agentId);
     }
   };
 
@@ -117,7 +117,7 @@ const ChatPanelInner = ({ taskId }: ChatPanelContentProps): ReactElement => {
   // Mount it only while the popup is open so close→reopen produces a fresh
   // component instance with no carry-over local state (e.g. drag position).
   //
-  // ChatTaskProvider seeds the chat surface with this PANEL's agent identity;
+  // ChatAgentProvider seeds the chat surface with this PANEL's agent identity;
   // every component underneath reads it from context rather than the route,
   // so a panel showing a non-route agent still targets its own agent.
   //
@@ -125,7 +125,7 @@ const ChatPanelInner = ({ taskId }: ChatPanelContentProps): ReactElement => {
   // sizes itself against the panel container (height: 100%), so the wrapper
   // must not introduce a layout box of its own.
   return (
-    <ChatTaskProvider workspaceId={workspaceID} taskId={taskId}>
+    <ChatAgentProvider workspaceId={workspaceID} agentId={agentId}>
       <div
         className={styles.focusRecorder}
         onFocusCapture={handleChatInteraction}
@@ -139,6 +139,6 @@ const ChatPanelInner = ({ taskId }: ChatPanelContentProps): ReactElement => {
         />
         {isBtwPopupOpen && <BtwPopup />}
       </div>
-    </ChatTaskProvider>
+    </ChatAgentProvider>
   );
 };

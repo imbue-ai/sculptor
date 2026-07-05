@@ -3,8 +3,8 @@ import { posthog } from "posthog-js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 
 import { useImbueLocation } from "~/common/hooks/navigation.ts";
+import { agentsArrayAtom } from "~/common/state/atoms/agents.ts";
 import { chatPanelMountedAtom, terminalPanelMountedAtom } from "~/common/state/atoms/panelMounts.ts";
-import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { effectiveOpenTabIdsAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 import { recentAgentTypeAtom } from "~/pages/workspace/layout/atoms/addPanel.ts";
 import { workspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
@@ -221,7 +221,7 @@ const useRegistrySize = (): number => {
  *  - While CLOSED, the read function returns before touching any input, so
  *    the only tracked dependency is `commandPaletteOpenAtom`. The palette
  *    host stays mounted for the whole session and several inputs churn
- *    constantly (every task streaming tick rebuilds `tasksArrayAtom`, every
+ *    constantly (every agent streaming tick rebuilds `agentsArrayAtom`, every
  *    layout write bumps `workspaceLayoutAtom`) — the gate keeps that churn
  *    from re-rendering the host. First-open contents stay correct because
  *    the open transition itself recomputes this atom from current state.
@@ -237,7 +237,7 @@ const dynamicProviderInputsAtom = atom((get) => {
   }
   return {
     workspaces: get(workspacesArrayAtom),
-    tasks: get(tasksArrayAtom),
+    agents: get(agentsArrayAtom),
     openTabIds: get(effectiveOpenTabIdsAtom),
     panelRegistry: get(panelRegistryAtom),
     // The panel-toggle provider reads the layout's placement to list only

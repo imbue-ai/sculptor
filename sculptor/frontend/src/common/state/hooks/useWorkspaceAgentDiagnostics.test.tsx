@@ -28,7 +28,7 @@ const sessionDiagnostics = {
   data: {
     sessionId: "session-1",
     transcriptFilePath: "/home/dev/.claude/projects/ws/session-1.jsonl",
-    sculptorTranscriptFilePath: "/env/artifacts/tasks/task-1/transcript.jsonl",
+    sculptorTranscriptFilePath: "/env/artifacts/tasks/agent-1/transcript.jsonl",
   },
 };
 
@@ -59,51 +59,51 @@ afterEach(() => {
 });
 
 describe("useWorkspaceAgentDiagnostics", () => {
-  it("maps fetched diagnostics by task id", async () => {
+  it("maps fetched diagnostics by agent id", async () => {
     mockGetWorkspaceAgentDiagnostics.mockResolvedValue(sessionDiagnostics);
-    const { result } = renderDiagnostics([{ taskId: "task-1", status: TaskStatus.READY }]);
+    const { result } = renderDiagnostics([{ agentId: "agent-1", status: TaskStatus.READY }]);
 
-    await waitFor(() => expect(result.current["task-1"]).toBeDefined());
-    expect(result.current["task-1"]).toEqual({
+    await waitFor(() => expect(result.current["agent-1"]).toBeDefined());
+    expect(result.current["agent-1"]).toEqual({
       sessionId: "session-1",
       claudeTranscriptPath: "/home/dev/.claude/projects/ws/session-1.jsonl",
-      sculptorTranscriptPath: "/env/artifacts/tasks/task-1/transcript.jsonl",
+      sculptorTranscriptPath: "/env/artifacts/tasks/agent-1/transcript.jsonl",
     });
   });
 
   it("refetches on a status change — including back to an already-seen status", async () => {
-    // Regression: a task view can transiently derive READY before its messages load, so
-    // the first fetch may cache (task, READY) with empty diagnostics. When the run
+    // Regression: an agent view can transiently derive READY before its messages load, so
+    // the first fetch may cache (agent, READY) with empty diagnostics. When the run
     // completes and status returns to READY, the hook must hit the network again — a
     // status-keyed cache would serve the stale empty entry forever (focus/reconnect
     // refetches are disabled client-wide).
     mockGetWorkspaceAgentDiagnostics.mockResolvedValue(emptyDiagnostics);
-    const { result, rerender } = renderDiagnostics([{ taskId: "task-1", status: TaskStatus.READY }]);
-    await waitFor(() => expect(result.current["task-1"]).toBeDefined());
-    expect(result.current["task-1"]?.sessionId).toBeNull();
+    const { result, rerender } = renderDiagnostics([{ agentId: "agent-1", status: TaskStatus.READY }]);
+    await waitFor(() => expect(result.current["agent-1"]).toBeDefined());
+    expect(result.current["agent-1"]?.sessionId).toBeNull();
 
-    rerender({ targets: [{ taskId: "task-1", status: TaskStatus.RUNNING }] });
+    rerender({ targets: [{ agentId: "agent-1", status: TaskStatus.RUNNING }] });
     await waitFor(() => expect(mockGetWorkspaceAgentDiagnostics).toHaveBeenCalledTimes(2));
 
     mockGetWorkspaceAgentDiagnostics.mockResolvedValue(sessionDiagnostics);
-    rerender({ targets: [{ taskId: "task-1", status: TaskStatus.READY }] });
-    await waitFor(() => expect(result.current["task-1"]?.sessionId).toBe("session-1"));
+    rerender({ targets: [{ agentId: "agent-1", status: TaskStatus.READY }] });
+    await waitFor(() => expect(result.current["agent-1"]?.sessionId).toBe("session-1"));
     expect(mockGetWorkspaceAgentDiagnostics).toHaveBeenCalledTimes(3);
   });
 
-  it("only refetches the task whose status changed", async () => {
+  it("only refetches the agent whose status changed", async () => {
     mockGetWorkspaceAgentDiagnostics.mockResolvedValue(emptyDiagnostics);
     const { result, rerender } = renderDiagnostics([
-      { taskId: "task-1", status: TaskStatus.RUNNING },
-      { taskId: "task-2", status: TaskStatus.READY },
+      { agentId: "agent-1", status: TaskStatus.RUNNING },
+      { agentId: "agent-2", status: TaskStatus.READY },
     ]);
     await waitFor(() => expect(Object.keys(result.current)).toHaveLength(2));
     expect(mockGetWorkspaceAgentDiagnostics).toHaveBeenCalledTimes(2);
 
     rerender({
       targets: [
-        { taskId: "task-1", status: TaskStatus.READY },
-        { taskId: "task-2", status: TaskStatus.READY },
+        { agentId: "agent-1", status: TaskStatus.READY },
+        { agentId: "agent-2", status: TaskStatus.READY },
       ],
     });
     await waitFor(() => expect(mockGetWorkspaceAgentDiagnostics).toHaveBeenCalledTimes(3));
@@ -111,17 +111,17 @@ describe("useWorkspaceAgentDiagnostics", () => {
     expect(mockGetWorkspaceAgentDiagnostics).toHaveBeenCalledTimes(3);
     expect(mockGetWorkspaceAgentDiagnostics.mock.calls[2]?.[0]?.path).toEqual({
       workspace_id: "ws-1",
-      agent_id: "task-1",
+      agent_id: "agent-1",
     });
   });
 
   it("does not refetch when targets re-render with unchanged statuses", async () => {
     mockGetWorkspaceAgentDiagnostics.mockResolvedValue(emptyDiagnostics);
-    const { result, rerender } = renderDiagnostics([{ taskId: "task-1", status: TaskStatus.RUNNING }]);
-    await waitFor(() => expect(result.current["task-1"]).toBeDefined());
+    const { result, rerender } = renderDiagnostics([{ agentId: "agent-1", status: TaskStatus.RUNNING }]);
+    await waitFor(() => expect(result.current["agent-1"]).toBeDefined());
 
-    // A fresh targets array with identical contents — the task-tick shape.
-    rerender({ targets: [{ taskId: "task-1", status: TaskStatus.RUNNING }] });
+    // A fresh targets array with identical contents — the agent-tick shape.
+    rerender({ targets: [{ agentId: "agent-1", status: TaskStatus.RUNNING }] });
     await flushAsync();
     expect(mockGetWorkspaceAgentDiagnostics).toHaveBeenCalledTimes(1);
   });
@@ -131,12 +131,12 @@ describe("useWorkspaceAgentDiagnostics", () => {
     // blank out an agent's entry (briefly disabling its copy items) while the refetch
     // is pending.
     mockGetWorkspaceAgentDiagnostics.mockResolvedValueOnce(sessionDiagnostics);
-    const { result, rerender } = renderDiagnostics([{ taskId: "task-1", status: TaskStatus.RUNNING }]);
-    await waitFor(() => expect(result.current["task-1"]?.sessionId).toBe("session-1"));
+    const { result, rerender } = renderDiagnostics([{ agentId: "agent-1", status: TaskStatus.RUNNING }]);
+    await waitFor(() => expect(result.current["agent-1"]?.sessionId).toBe("session-1"));
 
     mockGetWorkspaceAgentDiagnostics.mockReturnValue(new Promise(() => {}));
-    rerender({ targets: [{ taskId: "task-1", status: TaskStatus.READY }] });
+    rerender({ targets: [{ agentId: "agent-1", status: TaskStatus.READY }] });
     await waitFor(() => expect(mockGetWorkspaceAgentDiagnostics).toHaveBeenCalledTimes(2));
-    expect(result.current["task-1"]?.sessionId).toBe("session-1");
+    expect(result.current["agent-1"]?.sessionId).toBe("session-1");
   });
 });

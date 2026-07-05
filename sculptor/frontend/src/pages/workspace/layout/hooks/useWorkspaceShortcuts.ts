@@ -51,7 +51,7 @@ const stepIndex = (length: number, current: number, direction: CycleDirection): 
 
 // The next panel to activate when cycling within a sub-section. Cycles only over panels
 // that currently RENDER — i.e. have a registry definition. An open panel without one
-// (an agent whose task is mid-load or was just deleted) shows as the empty-section
+// (an agent whose data is mid-load or was just deleted) shows as the empty-section
 // state, so including it would let a cycle land on "nothing selected" between two real
 // panels. Returns undefined (a no-op) for an empty or single renderable-panel section.
 export const nextCyclablePanel = (

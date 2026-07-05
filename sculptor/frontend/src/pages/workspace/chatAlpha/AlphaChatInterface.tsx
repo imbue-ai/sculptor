@@ -41,8 +41,8 @@ import { AlphaPromptNavigator } from "./AlphaPromptNavigator.tsx";
 import { AlphaSearchBar } from "./AlphaSearchBar.tsx";
 import { AskUserQuestion } from "./AskUserQuestion";
 import { chatToolDensityAtom } from "./atoms/chatAlpha.ts";
+import { useChatAgent } from "./ChatAgentContext.tsx";
 import { ChatInput } from "./ChatInput";
-import { useChatTask } from "./ChatTaskContext.tsx";
 import { ErrorInput } from "./ErrorInput.tsx";
 import { useAlphaActivePromptIndex } from "./hooks/useAlphaActivePromptIndex.ts";
 import { useAlphaAutoScroll } from "./hooks/useAlphaAutoScroll.ts";
@@ -72,15 +72,15 @@ export const AlphaChatInterface = ({
   isStreaming,
   workingUserMessageId,
   queuedChatMessages,
-  taskStatus,
-  taskModel,
+  agentStatus,
+  agentModel,
   isAutoCompacting,
   pendingUserQuestion,
   pendingBackgroundTaskCount,
   bottomSentinelRef,
 }: AlphaChatInterfaceProps): ReactElement => {
   // The PANEL's agent identity, seeded by ChatPanelContent — never the route's.
-  const { workspaceId: workspaceID, taskId: taskID } = useChatTask();
+  const { workspaceId: workspaceID, agentId } = useChatAgent();
   const [toast, setToast] = useState<ToastContent | null>(null);
   // Stable callback so the memoized <Toast> below bails out instead of
   // re-rendering on every unrelated parent render. (SCU-1455)
@@ -92,7 +92,7 @@ export const AlphaChatInterface = ({
   // Queued message promotion logic. The agent holds queued messages whenever
   // it is mid-turn — either actively running, or paused on an AskUserQuestion /
   // ExitPlanMode panel waiting for the user (`pendingUserQuestion`). A pending
-  // question flips the derived task status to WAITING (see
+  // question flips the derived agent status to WAITING (see
   // web/derived.py:_ready_or_waiting) with `workingUserMessageId` no longer
   // tracking a live turn, so without the `pendingUserQuestion` arm a message
   // queued while the agent was running would be flushed into the transcript as
@@ -100,7 +100,7 @@ export const AlphaChatInterface = ({
   // This arm cannot change ChatInput's behaviour: ChatInput only renders when
   // `pendingUserQuestion` is null (see below), so the value it sees is unchanged.
   const isAgentBusy =
-    (taskStatus === TaskStatus.RUNNING && workingUserMessageId !== null) || pendingUserQuestion !== null;
+    (agentStatus === TaskStatus.RUNNING && workingUserMessageId !== null) || pendingUserQuestion !== null;
   const effectiveQueuedMessages = useMemo(
     () => (isAgentBusy ? omitMessagesAlreadyInChat(queuedChatMessages, chatMessages) : []),
     [chatMessages, isAgentBusy, queuedChatMessages],
@@ -156,7 +156,7 @@ export const AlphaChatInterface = ({
   // useLayoutEffect for the initial read: the height must be available
   // before the first paint so paddingStart is correct on mount and avoids
   // a 0→real transition that shifts virtual items and causes scroll drift
-  // during task switches.  ResizeObserver in a regular useEffect handles
+  // during agent switches.  ResizeObserver in a regular useEffect handles
   // subsequent size changes (e.g. viewport resize).
   const introRef = useRef<HTMLDivElement>(null);
   const [introHeight, setIntroHeight] = useState(0);
@@ -186,7 +186,7 @@ export const AlphaChatInterface = ({
     scrollContainerRef,
     filteredNodes.length,
     lastMessageRole,
-    taskID,
+    agentId,
     scrollMachine,
     introHeight,
     isProgrammaticScrollRef,
@@ -205,14 +205,14 @@ export const AlphaChatInterface = ({
     virtualizer,
     lastMessageRole,
     lastUserMessageIndex,
-    taskID,
+    agentId,
     scrollMachine,
     isProgrammaticScrollRef,
   );
 
-  // Scroll position persistence per task
+  // Scroll position persistence per agent
   const filteredMessageRefs = useMemo(() => filteredNodes.map((n) => ({ id: n.message.id })), [filteredNodes]);
-  useAlphaScrollPersistence(scrollContainerRef, virtualizer, taskID, filteredMessageRefs, scrollMachine);
+  useAlphaScrollPersistence(scrollContainerRef, virtualizer, agentId, filteredMessageRefs, scrollMachine);
 
   // Prompt navigation: ArrowUp/Down to cycle through user prompts
   const filteredChatMessages = useMemo(() => filteredNodes.map((n) => n.message), [filteredNodes]);
@@ -373,11 +373,11 @@ export const AlphaChatInterface = ({
     return count;
   }, [searchMatches, searchActiveIndex, activeMatch]);
 
-  // Close search on task switch
+  // Close search on agent switch
   const setSearchVisible = useSetAtom(chatSearchVisibleAtom);
   useEffect(() => {
     setSearchVisible(false);
-  }, [taskID, setSearchVisible]);
+  }, [agentId, setSearchVisible]);
 
   // Suppress auto-scroll while search is open so streaming doesn't fight with
   // search navigation. Exit prompt navigation when search opens (it has its own
@@ -412,19 +412,19 @@ export const AlphaChatInterface = ({
   });
 
   useEffect(() => {
-    if (!taskID) return;
+    if (!agentId) return;
 
     const handleGlobalInterruptAndSend = (e: KeyboardEvent): void => {
       if (!hasQueuedMessagesRef.current) return;
       if (e.key === "Enter" && e.shiftKey && isModifierPressed(e)) {
         e.preventDefault();
-        void interruptWorkspaceAgent({ path: { workspace_id: workspaceID, agent_id: taskID } });
+        void interruptWorkspaceAgent({ path: { workspace_id: workspaceID, agent_id: agentId } });
       }
     };
 
     window.addEventListener("keydown", handleGlobalInterruptAndSend);
     return (): void => window.removeEventListener("keydown", handleGlobalInterruptAndSend);
-  }, [taskID, workspaceID]);
+  }, [agentId, workspaceID]);
 
   // Expose the jump-to-bottom callback to the command palette so Cmd+K →
   // Jump to bottom invokes it directly instead of synthesizing a key event.
@@ -437,7 +437,7 @@ export const AlphaChatInterface = ({
   const handleRetryLastUserMessage = useCallback(async (): Promise<void> => {
     const userMessages = chatMessages.filter((msg) => msg.role === ChatMessageRole.USER);
     const lastUserMsg = userMessages[userMessages.length - 1];
-    if (!lastUserMsg || !taskID) return;
+    if (!lastUserMsg || !agentId) return;
 
     const messageText = lastUserMsg.content
       .filter((block) => block.type === "text")
@@ -447,19 +447,19 @@ export const AlphaChatInterface = ({
     if (messageText) {
       try {
         await sendWorkspaceAgentMessages({
-          path: { workspace_id: workspaceID, agent_id: taskID },
-          body: { message: messageText, model: (taskModel as LlmModel) || LlmModel.CLAUDE_4_OPUS_200K },
+          path: { workspace_id: workspaceID, agent_id: agentId },
+          body: { message: messageText, model: (agentModel as LlmModel) || LlmModel.CLAUDE_4_OPUS_200K },
         });
         posthog.capture("agent.message_retried", {
           workspace_id: workspaceID,
-          agent_id: taskID,
+          agent_id: agentId,
         });
       } catch (error) {
         console.error("Failed to retry message:", error);
         setToast({ title: "Failed to retry message", type: ToastType.ERROR });
       }
     }
-  }, [chatMessages, taskID, taskModel, workspaceID]);
+  }, [chatMessages, agentId, agentModel, workspaceID]);
 
   const openDiffTab = useSetAtom(openDiffTabAtom);
   const handleOpenDiffFile = useCallback(
@@ -471,16 +471,16 @@ export const AlphaChatInterface = ({
 
   const submitAnswersToBackend = useCallback(
     async (answers: Record<string, string>, notes: Record<string, string>): Promise<void> => {
-      if (!pendingUserQuestion || !taskID) return;
+      if (!pendingUserQuestion || !agentId) return;
       try {
         await answerWorkspaceAgentQuestion({
-          path: { workspace_id: workspaceID, agent_id: taskID },
+          path: { workspace_id: workspaceID, agent_id: agentId },
           body: {
             answers,
             notes,
             questionData: pendingUserQuestion,
             toolUseId: pendingUserQuestion.toolUseId,
-            model: (taskModel as LlmModel) || LlmModel.CLAUDE_4_OPUS_200K,
+            model: (agentModel as LlmModel) || LlmModel.CLAUDE_4_OPUS_200K,
           },
         });
       } catch (error) {
@@ -488,38 +488,38 @@ export const AlphaChatInterface = ({
         setToast({ title: "Failed to submit answers", type: ToastType.ERROR });
       }
     },
-    [pendingUserQuestion, taskID, taskModel, workspaceID],
+    [pendingUserQuestion, agentId, agentModel, workspaceID],
   );
 
   const handleSubmitAnswers = useCallback(
     async (answers: Record<string, string>, notes: Record<string, string> = {}): Promise<void> => {
-      if (!pendingUserQuestion || !taskID) return;
+      if (!pendingUserQuestion || !agentId) return;
       posthog.capture("agent.question_answered", {
         workspace_id: workspaceID,
-        agent_id: taskID,
+        agent_id: agentId,
         question_count: pendingUserQuestion.questions.length,
       });
       await submitAnswersToBackend(answers, notes);
     },
-    [submitAnswersToBackend, pendingUserQuestion, taskID, workspaceID],
+    [submitAnswersToBackend, pendingUserQuestion, agentId, workspaceID],
   );
 
   const handleDismissQuestion = useCallback(async (): Promise<void> => {
-    if (!pendingUserQuestion || !taskID) return;
+    if (!pendingUserQuestion || !agentId) return;
     const dismissedAnswers: Record<string, string> = {};
     for (const question of pendingUserQuestion.questions) {
       dismissedAnswers[question.question] = "[Dismissed]";
     }
     posthog.capture("agent.question_dismissed", {
       workspace_id: workspaceID,
-      agent_id: taskID,
+      agent_id: agentId,
       question_count: pendingUserQuestion.questions.length,
     });
     await submitAnswersToBackend(dismissedAnswers, {});
-  }, [submitAnswersToBackend, pendingUserQuestion, taskID, workspaceID]);
+  }, [submitAnswersToBackend, pendingUserQuestion, agentId, workspaceID]);
 
   return (
-    <AgentLightboxProvider taskId={taskID}>
+    <AgentLightboxProvider agentId={agentId}>
       <ChatScrollProvider scrollContainerRef={scrollContainerRef} isUserScrollingRef={isUserScrollingRef}>
         <Flex
           direction="column"
@@ -527,7 +527,7 @@ export const AlphaChatInterface = ({
           width="100%"
           position="relative"
           data-testid={ElementIds.CHAT_PANEL}
-          data-taskid={taskID}
+          data-taskid={agentId}
         >
           {isSearchVisible && (
             <AlphaSearchBar
@@ -581,7 +581,7 @@ export const AlphaChatInterface = ({
                         activeSearchOccurrence={activeMatchMessageId === node.message.id ? activeOccurrenceInBlock : -1}
                         isLastMessage={virtualItem.index === filteredNodes.length - 1}
                         isStreaming={isStreaming && isLastMessage && isAssistant}
-                        taskStatus={taskStatus ?? TaskStatus.RUNNING}
+                        agentStatus={agentStatus ?? TaskStatus.RUNNING}
                         onRetryRequest={handleRetryLastUserMessage}
                         onOpenDiffFile={handleOpenDiffFile}
                         messageIndex={virtualItem.index}
@@ -614,7 +614,7 @@ export const AlphaChatInterface = ({
                 scrollContainerRef={scrollContainerRef}
               />
               <StatusPill
-                taskStatus={taskStatus ?? null}
+                agentStatus={agentStatus ?? null}
                 isAutoCompacting={isAutoCompacting}
                 isStreaming={isStreaming}
                 inProgressChatMessage={smoothInProgressChatMessage}
@@ -634,11 +634,11 @@ export const AlphaChatInterface = ({
             onNavigate={handlePromptNavigate}
           />
           <QueuedMessages messages={effectiveQueuedMessages} />
-          {taskStatus !== TaskStatus.ERROR &&
+          {agentStatus !== TaskStatus.ERROR &&
             (pendingUserQuestion ? (
               <AskUserQuestion
                 key={pendingUserQuestion.toolUseId}
-                taskId={taskID}
+                agentId={agentId}
                 questionData={pendingUserQuestion}
                 onSubmit={handleSubmitAnswers}
                 onDismiss={handleDismissQuestion}
@@ -651,12 +651,12 @@ export const AlphaChatInterface = ({
                 appendTextRef={appendTextRef}
                 insertSkillRef={insertSkillRef}
                 editorRef={editorRef}
-                taskId={taskID}
+                agentId={agentId}
                 workspaceId={workspaceID}
                 showPromptNavHint
               />
             ))}
-          {taskStatus === TaskStatus.ERROR && <ErrorInput workspaceId={workspaceID} taskId={taskID} />}
+          {agentStatus === TaskStatus.ERROR && <ErrorInput workspaceId={workspaceID} agentId={agentId} />}
         </Flex>
       </ChatScrollProvider>
       <Toast open={!!toast} onOpenChange={handleToastOpenChange} title={toast?.title} type={toast?.type} />

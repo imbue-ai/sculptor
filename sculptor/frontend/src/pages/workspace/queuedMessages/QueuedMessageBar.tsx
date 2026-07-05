@@ -6,14 +6,14 @@ import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 
 import type { ChatMessage, FileBlock, TextBlock } from "../../../api";
 import { deleteWorkspaceAgentMessage, ElementIds } from "../../../api";
+import { useAgentSupportsInterruption } from "../../../common/state/hooks/useAgentHelpers.ts";
 import { useDraftAttachedFiles } from "../../../common/state/hooks/useDraftAttachedFiles.ts";
 import { useInterruptAgent } from "../../../common/state/hooks/useInterruptAgent.ts";
 import { usePromptDraft } from "../../../common/state/hooks/usePromptDraft.ts";
-import { useTaskSupportsInterruption } from "../../../common/state/hooks/useTaskHelpers.ts";
 import { Toast } from "../../../components/Toast.tsx";
 import { getMetaKey } from "../../../electron/platform.ts";
 import { CapabilityGate } from "../chatAlpha/CapabilityGate.tsx";
-import { useChatTask } from "../chatAlpha/ChatTaskContext.tsx";
+import { useChatAgent } from "../chatAlpha/ChatAgentContext.tsx";
 import type { BlockUnion } from "../utils/blockGuards.ts";
 import { isFileBlock, isTextBlock } from "../utils/blockGuards.ts";
 import { stripHtml } from "../utils/stripHtml.ts";
@@ -33,16 +33,16 @@ type QueuedMessageBarProps = {
 export const QueuedMessageBar = ({ message, onEditConflict }: QueuedMessageBarProps): ReactElement => {
   // The owning chat panel's agent — `message.id` belongs to that agent's
   // queue, so delete/interrupt must target it rather than the route's agent.
-  const { workspaceId: workspaceID, taskId: taskID } = useChatTask();
+  const { workspaceId: workspaceID, agentId } = useChatAgent();
   const [toast, setToast] = useState<ToastContent | null>(null);
   const {
     isInterrupting,
     interrupt: handleInterruptAndSend,
     toast: interruptToast,
     setToast: setInterruptToast,
-  } = useInterruptAgent(workspaceID, taskID);
-  const [promptDraft, setPromptDraft] = usePromptDraft(taskID);
-  const [, setAttachedFiles] = useDraftAttachedFiles(taskID);
+  } = useInterruptAgent(workspaceID, agentId);
+  const [promptDraft, setPromptDraft] = usePromptDraft(agentId);
+  const [, setAttachedFiles] = useDraftAttachedFiles(agentId);
 
   // Stable callbacks so the memoized <Toast> instances below bail out instead
   // of re-rendering on every unrelated parent render. (SCU-1455)
@@ -58,8 +58,8 @@ export const QueuedMessageBar = ({ message, onEditConflict }: QueuedMessageBarPr
   // Interrupt-and-send halts the running turn to promote this queued message.
   // A harness that can't be interrupted (pi) hides the button entirely; the
   // message simply stays queued until the turn ends. `?? true` keeps it shown
-  // until the task loads — Claude reports true, pi false.
-  const canInterrupt = useTaskSupportsInterruption(taskID) ?? true;
+  // until the agent loads — Claude reports true, pi false.
+  const canInterrupt = useAgentSupportsInterruption(agentId) ?? true;
 
   const textBlocks = message.content.filter((block: BlockUnion): block is TextBlock => isTextBlock(block));
   const fileBlocks = message.content.filter((block: BlockUnion): block is FileBlock => isFileBlock(block));
@@ -71,7 +71,7 @@ export const QueuedMessageBar = ({ message, onEditConflict }: QueuedMessageBarPr
   const handleDelete = async (): Promise<void> => {
     try {
       await deleteWorkspaceAgentMessage({
-        path: { workspace_id: workspaceID, agent_id: taskID, message_id: message.id },
+        path: { workspace_id: workspaceID, agent_id: agentId, message_id: message.id },
       });
     } catch (error) {
       console.error("Failed to delete queued message:", error);

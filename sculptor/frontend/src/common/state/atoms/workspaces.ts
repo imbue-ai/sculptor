@@ -10,7 +10,7 @@ import { batchUpdateOpenState, updateWorkspace as updateWorkspaceApi } from "../
 import type { WorkspaceDotStatus } from "../../utils/statusDot.ts";
 import { computeWorkspaceDotStatus } from "../../utils/statusDot.ts";
 import { invalidateWorkspaceGitQueries, removeWorkspaceQueriesCache } from "../queryClient.ts";
-import { tasksArrayAtom } from "./tasks.ts";
+import { agentsArrayAtom } from "./agents.ts";
 import { workspaceOpenCloseErrorToastAtom } from "./toasts";
 import { getAgentDotStatusWithUnreadOverride } from "./unreadOverrides.ts";
 import { viewedAgentIdAtom } from "./viewedAgent.ts";
@@ -62,30 +62,30 @@ const areWorkspaceDotStatusesEqual = (a: WorkspaceDotStatus, b: WorkspaceDotStat
   a.hasUnread === b.hasUnread;
 
 /**
- * The aggregated status-dot state of one workspace's agent tasks.
- * `tasksArrayAtom` rebuilds its array on EVERY per-task update (streaming
+ * The aggregated status-dot state of one workspace's agents.
+ * `agentsArrayAtom` rebuilds its array on EVERY per-agent update (streaming
  * ticks included), so the slice is equality-guarded: subscribers — one
  * sidebar workspace row each — re-render only when their workspace's
  * aggregate flags actually flip.
  */
 export const workspaceDotStatusAtomFamily = atomFamily((workspaceId: string) =>
   selectAtom(
-    // Pair the tasks with the viewed agent id so the aggregate re-derives when
+    // Pair the agents with the viewed agent id so the aggregate re-derives when
     // either changes. viewedAgentIdAtom resolves to a primitive, so layout
     // writes that don't change WHICH agent is viewed never reach the selector,
     // and the equality guard below still stops propagation unless a flag flips.
-    atom((get) => ({ tasks: get(tasksArrayAtom), viewedAgentId: get(viewedAgentIdAtom) })),
-    ({ tasks, viewedAgentId }): WorkspaceDotStatus =>
+    atom((get) => ({ agents: get(agentsArrayAtom), viewedAgentId: get(viewedAgentIdAtom) })),
+    ({ agents, viewedAgentId }): WorkspaceDotStatus =>
       computeWorkspaceDotStatus(
-        (tasks ?? []).filter((task) => task.workspaceId === workspaceId),
-        // Override-aware per-task resolution so a manual "Mark as unread"
+        (agents ?? []).filter((agent) => agent.workspaceId === workspaceId),
+        // Override-aware per-agent resolution so a manual "Mark as unread"
         // lights the workspace row exactly like the agent's panel tab. The
-        // viewed agent — necessarily one of the ACTIVE workspace's tasks, so
+        // viewed agent — necessarily one of the ACTIVE workspace's agents, so
         // the id match scopes it for free — counts as focused: its content is
         // on screen, so it must not light the row as unread while the debounced
         // mark-read lags (an explicit mark-unread override still wins inside
         // the helper).
-        (task) => getAgentDotStatusWithUnreadOverride(task.id, task, task.id === viewedAgentId),
+        (agent) => getAgentDotStatusWithUnreadOverride(agent.id, agent, agent.id === viewedAgentId),
       ),
     areWorkspaceDotStatusesEqual,
   ),
@@ -481,7 +481,7 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
 
   workspaces.forEach((incoming) => {
     if (incoming.isDeleted) {
-      // Mirror task deletion pattern: remove from IDs and null out atom
+      // Mirror agent deletion pattern: remove from IDs and null out atom
       currentWorkspaceIds.delete(incoming.objectId);
       set(workspaceAtomFamily(incoming.objectId), null);
       newlyDeletedIds.add(incoming.objectId);

@@ -70,7 +70,7 @@ type ImbueLocationType = {
   isSettingsRoute: boolean;
   /** Parsed `workspaceId` from the current pathname, or null when not on a workspace/agent route. */
   workspaceId: string | null;
-  /** Parsed agent (task) id from the current pathname, or null when not on an agent route. */
+  /** Parsed agent id from the current pathname, or null when not on an agent route. */
   agentId: string | null;
 };
 
@@ -144,14 +144,14 @@ export const useActiveProjectID = (): string | null => {
 };
 
 /**
- * Returns the current project ID and task (agent) ID from URL params.
+ * Returns the current project ID and agent ID from URL params.
  *
  * On workspace routes (/ws/:workspaceID/agent/:id), derives projectID from
- * the workspace atom and maps the agent :id param to taskID.
+ * the workspace atom and maps the agent :id param to agentId.
  */
 export type ImbueParams = {
   projectID?: string;
-  taskID?: string;
+  agentId?: string;
 };
 
 export const useImbueParams = (): ImbueParams => {
@@ -159,6 +159,6 @@ export const useImbueParams = (): ImbueParams => {
   const workspace = useAtomValue(workspaceAtomFamily(params.workspaceID ?? ""));
   return {
     projectID: workspace?.projectId,
-    taskID: params.id,
+    agentId: params.id,
   };
 };

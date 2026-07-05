@@ -7,8 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CodingAgentTaskView, Project, Workspace } from "~/api";
 import { ElementIds } from "~/api";
+import { agentAtomFamily } from "~/common/state/atoms/agents.ts";
 import { projectAtomFamily } from "~/common/state/atoms/projects.ts";
-import { taskAtomFamily } from "~/common/state/atoms/tasks.ts";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { diffPanelStateAtomFamily } from "~/pages/workspace/diffPanel/atoms/diffPanel.ts";
 import { FILE_VIEW_PREFIX } from "~/pages/workspace/diffPanel/types/diffPanel.ts";
@@ -297,13 +297,13 @@ describe("MentionChip", () => {
   });
 });
 
-const makeTask = (overrides: Partial<CodingAgentTaskView>): CodingAgentTaskView =>
+const makeAgent = (overrides: Partial<CodingAgentTaskView>): CodingAgentTaskView =>
   ({
     id: "task-1",
     projectId: "proj-1",
     createdAt: "2024-01-01T00:00:00Z",
     updatedAt: "2024-01-01T00:00:00Z",
-    taskStatus: "RUNNING",
+    agentStatus: "RUNNING",
     isAutoCompacting: false,
     artifactNames: [],
     initialPrompt: "Test prompt",
@@ -451,9 +451,9 @@ describe("MentionChip — entity mention", () => {
   });
 
   describe("agent", () => {
-    it("renders with agent data attribute and clickable styling when the task resolves", () => {
+    it("renders with agent data attribute and clickable styling when the agent resolves", () => {
       const store = createStore();
-      store.set(taskAtomFamily("task-1"), makeTask({}));
+      store.set(agentAtomFamily("task-1"), makeAgent({}));
       renderEntityChip(
         { kind: "entity", entityType: "agent", entityId: "task-1", entityDisplayName: "Task" },
         { store },
@@ -463,9 +463,9 @@ describe("MentionChip — entity mention", () => {
       expect(chip.className).toMatch(/clickable/);
     });
 
-    it("click calls navigateToAgent with the task's workspaceId and entity id", () => {
+    it("click calls navigateToAgent with the agent's workspaceId and entity id", () => {
       const store = createStore();
-      store.set(taskAtomFamily("task-1"), makeTask({ workspaceId: "ws-parent" }));
+      store.set(agentAtomFamily("task-1"), makeAgent({ workspaceId: "ws-parent" }));
       renderEntityChip(
         { kind: "entity", entityType: "agent", entityId: "task-1", entityDisplayName: "Task" },
         { store },
@@ -475,9 +475,9 @@ describe("MentionChip — entity mention", () => {
       expect(navigateToWorkspaceSpy).not.toHaveBeenCalled();
     });
 
-    it("click is a no-op when the task has no workspaceId", () => {
+    it("click is a no-op when the agent has no workspaceId", () => {
       const store = createStore();
-      store.set(taskAtomFamily("task-1"), makeTask({ workspaceId: null }));
+      store.set(agentAtomFamily("task-1"), makeAgent({ workspaceId: null }));
       renderEntityChip(
         { kind: "entity", entityType: "agent", entityId: "task-1", entityDisplayName: "Task" },
         { store },

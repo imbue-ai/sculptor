@@ -25,7 +25,7 @@ export const AssistantMessageContent = ({
   inProgressMessageId,
   isLastMessage,
   isStreaming,
-  taskStatus,
+  agentStatus,
   onRetryRequest,
   searchQuery,
   activeSearchBlockIndex = -1,
@@ -39,7 +39,7 @@ export const AssistantMessageContent = ({
   inProgressMessageId?: string | null;
   isLastMessage: boolean;
   isStreaming: boolean;
-  taskStatus: TaskStatus;
+  agentStatus: TaskStatus;
   onRetryRequest?: () => void;
   searchQuery?: string;
   activeSearchBlockIndex?: number;
@@ -48,7 +48,7 @@ export const AssistantMessageContent = ({
 }): ReactElement => {
   const groups = useMemo(() => buildRenderGroups(message.content, node.children), [message.content, node.children]);
 
-  const isTurnActive = isLastMessage && taskStatus === TaskStatus.RUNNING;
+  const isTurnActive = isLastMessage && agentStatus === TaskStatus.RUNNING;
   const lastGroupType = groups.length > 0 ? groups[groups.length - 1].type : null;
 
   return (
@@ -91,7 +91,7 @@ export const AssistantMessageContent = ({
               key={`error-${groupIndex}`}
               block={group.block}
               isLastMessage={isLastMessage && isLastGroup}
-              taskStatus={taskStatus}
+              agentStatus={agentStatus}
               onRetryRequest={onRetryRequest}
             />
           );

@@ -22,7 +22,7 @@ type AgentSettingsControlsProps = {
   /**
    * Hide the plan-mode toggle when the active harness can't honor a
    * mid-turn interactive backchannel (pi). Defaults to `true` so callsites
-   * without a task yet (e.g. the new-workspace modal) show it.
+   * without an agent yet (e.g. the new-workspace modal) show it.
    */
   canEnterPlanMode?: boolean;
   /**
