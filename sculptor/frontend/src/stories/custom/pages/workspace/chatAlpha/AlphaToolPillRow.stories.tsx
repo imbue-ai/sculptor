@@ -9,7 +9,7 @@ import { workspaceAtomFamily } from "~/common/state/atoms/workspaces";
 import { AlphaToolPillRow } from "~/pages/workspace/chatAlpha/AlphaToolPillRow.tsx";
 import { chatToolDensityAtom } from "~/pages/workspace/chatAlpha/atoms/chatAlpha.ts";
 
-import { toolResult, toolUse } from "./fixtures.ts";
+import { toolResult, toolUse } from "./fixtures/tools.ts";
 
 const STORYBOOK_WORKSPACE_ID = "storybook-ws";
 // `useWorkspaceCodePath` returns `${environmentId}/code` for CLONE workspaces,

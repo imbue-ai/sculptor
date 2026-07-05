@@ -18,7 +18,7 @@ import {
   completedWebSearchPill,
   errorReadPill,
   executingGrepPill,
-} from "./fixtures.ts";
+} from "./fixtures/tools.ts";
 
 const InteractivePill = ({ pillData }: { pillData: PillData }): ReactElement => {
   const [isOpen, setIsOpen] = useState(false);

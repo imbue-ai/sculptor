@@ -4,7 +4,10 @@ import { describe, expect, it } from "vitest";
 import type { ChatMessage, DiffToolContent, ToolResultBlock, ToolUseBlock, TurnMetrics } from "~/api";
 import { ChatMessageRole } from "~/api";
 import type { SubagentTreeNode } from "~/pages/workspace/chatAlpha/utils/subagentTree";
-import { DIFF_PAGINATION_FIX, DIFF_VALIDATORS_NEW } from "~/stories/custom/chat-alpha/fixtures/diffData.ts";
+import {
+  DIFF_PAGINATION_FIX,
+  DIFF_VALIDATORS_NEW,
+} from "~/stories/custom/pages/workspace/chatAlpha/fixtures/diffData.ts";
 
 import type { TurnFile } from "./useTurnSummaryData";
 import { useTurnSummaryData } from "./useTurnSummaryData";

@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import { AlphaSubagentPopover } from "~/pages/workspace/chatAlpha/AlphaSubagentPopover.tsx";
 
-import { completedSubagent, noToolsSubagent, thinkingSubagent } from "../tools/fixtures.ts";
+import { completedSubagent, noToolsSubagent, thinkingSubagent } from "./fixtures/tools.ts";
 
 const meta = {
   title: "Chat Alpha/Subagents/AlphaSubagentPopover",

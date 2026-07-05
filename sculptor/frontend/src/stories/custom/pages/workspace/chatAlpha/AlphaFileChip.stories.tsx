@@ -59,8 +59,8 @@ const newFileChip: ChipData = {
 
 const largeStatsChip: ChipData = {
   id: "tool-005",
-  filePath: "src/pages/workspace/components/chat-alpha/AlphaChatView.tsx",
-  displayName: "chat-alpha/AlphaChatView.tsx",
+  filePath: "src/pages/workspace/chatAlpha/AlphaChatView.tsx",
+  displayName: "chatAlpha/AlphaChatView.tsx",
   state: "completed",
   stats: { added: 247, removed: 89 },
   isNewFile: false,

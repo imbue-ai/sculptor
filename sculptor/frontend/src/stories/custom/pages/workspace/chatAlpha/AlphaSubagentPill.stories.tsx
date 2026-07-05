@@ -10,7 +10,7 @@ import {
   completedSubagent,
   noToolsSubagent,
   thinkingSubagent,
-} from "../tools/fixtures.ts";
+} from "./fixtures/tools.ts";
 
 const meta = {
   title: "Chat Alpha/Subagents/AlphaSubagentPill",

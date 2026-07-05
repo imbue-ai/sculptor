@@ -101,15 +101,13 @@ const diffErrorChip: ChipData = {
 
 const longPathChip: ChipData = {
   id: "tool-005",
-  filePath: "sculptor/frontend/src/pages/workspace/components/chat-alpha/AlphaChipDiffPopover.tsx",
+  filePath: "sculptor/frontend/src/pages/workspace/chatAlpha/AlphaChipDiffPopover.tsx",
   displayName: "AlphaChipDiffPopover.tsx",
   state: "completed",
   stats: { added: 155, removed: 0 },
   isNewFile: true,
   blocks: [{ type: "tool_use", id: "tool-005", name: "Write", input: {} }],
-  results: [
-    makeResult(newFileDiff, "sculptor/frontend/src/pages/workspace/components/chat-alpha/AlphaChipDiffPopover.tsx"),
-  ],
+  results: [makeResult(newFileDiff, "sculptor/frontend/src/pages/workspace/chatAlpha/AlphaChipDiffPopover.tsx")],
   errorDetail: null,
   errorContentType: null,
 };

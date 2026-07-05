@@ -13,7 +13,7 @@ import {
   executingGrepPill,
   toolResult,
   toolUse,
-} from "./fixtures.ts";
+} from "./fixtures/tools.ts";
 
 const WORKSPACE_CODE_PATH = "/Users/dev/work/this-project";
 
