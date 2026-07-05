@@ -1,8 +1,8 @@
 import { useAtom } from "jotai";
 import { useEffect, useRef } from "react";
 
-import { clampZoomLevel, factorForZoomLevel, zoomLevelAtom } from "../common/state/atoms/zoom.ts";
-import type { ZoomCommand } from "../shared/types.ts";
+import { clampZoomLevel, factorForZoomLevel, zoomLevelAtom } from "../../common/state/atoms/zoom.ts";
+import type { ZoomCommand } from "../../shared/types.ts";
 
 // Page zoom is owned by the renderer so the Chromium repaint
 // (webFrame.setZoomFactor) and the --app-zoom CSS variable update happen in

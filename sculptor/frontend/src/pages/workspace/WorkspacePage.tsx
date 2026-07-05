@@ -2,7 +2,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useEffect } from "react";
 
-import { useWorkspaceTabActions } from "~/components/useWorkspaceTabActions.ts";
+import { useWorkspaceTabActions } from "~/common/state/hooks/useWorkspaceTabActions.ts";
 
 import { useIsMobile } from "../../common/hooks/useLayoutMode.ts";
 import { useImbueNavigate, useWorkspacePageParams } from "../../common/NavigateUtils.ts";

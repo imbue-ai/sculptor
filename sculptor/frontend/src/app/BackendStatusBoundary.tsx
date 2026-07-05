@@ -12,10 +12,10 @@ import {
   hasBackendStartedSuccessfullyAtom,
   healthCheckDataAtom,
 } from "../common/state/atoms/backend.ts";
+import { TitleBar } from "../components/TitleBar.tsx";
 import { ErrorPage } from "../pages/error/ErrorPage.tsx";
 import type { AnyBackendStatus, BackendStatus } from "../shared/types.ts";
 import styles from "./BackendStatusBoundary.module.scss";
-import { TitleBar } from "./TitleBar.tsx";
 
 // Once the renderer enters ``shutting_down``, the boundary locks the state
 // (see ``maybeSetBackendStatus``). If the Electron main process never

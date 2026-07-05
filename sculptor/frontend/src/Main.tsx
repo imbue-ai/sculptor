@@ -4,8 +4,8 @@ import "./index.css";
 import React from "react";
 import ReactDOM from "react-dom/client";
 
-import { baseUrl, configureClient } from "./apiClient.ts";
-import { App } from "./App.tsx";
+import { App } from "./app/App.tsx";
+import { baseUrl, configureClient } from "./common/apiClient.ts";
 import { initializeSessionToken } from "./common/Auth.ts";
 import { initializeKeyboardLayoutMap } from "./common/ShortcutUtils.ts";
 import { initializeTelemetry } from "./common/Telemetry.ts";

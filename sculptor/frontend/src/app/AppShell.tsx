@@ -14,6 +14,16 @@ import type { ReactElement } from "react";
 import { useState } from "react";
 import { Outlet } from "react-router-dom";
 
+import type { AtomToastAtom } from "~/app/AtomToast.tsx";
+import { AtomToast } from "~/app/AtomToast.tsx";
+import { useGlobalKeyboardShortcuts } from "~/app/hooks/useGlobalKeyboardShortcuts.ts";
+import { useWorkspaceCycleShortcuts } from "~/app/hooks/useWorkspaceCycleShortcuts.ts";
+import { KeyboardShortcutsDialog } from "~/app/KeyboardShortcutsDialog.tsx";
+import { CollapsedSidebarToggle } from "~/app/nav/CollapsedSidebarToggle.tsx";
+import { WorkspaceSidebar } from "~/app/nav/WorkspaceSidebar.tsx";
+import { NotificationToasts } from "~/app/NotificationToasts.tsx";
+import { RepoPathDialog } from "~/app/RepoPathDialog.tsx";
+import { WarningStatusBanner } from "~/app/WarningStatusBanner.tsx";
 import { useSyncActiveTabFromRoute } from "~/common/hooks/useSyncActiveTabFromRoute.ts";
 import { useActiveProjectID } from "~/common/NavigateUtils.ts";
 import { backendStatusAtom } from "~/common/state/atoms/backend.ts";
@@ -30,20 +40,10 @@ import {
 } from "~/common/state/atoms/toasts.ts";
 import { useProject } from "~/common/state/hooks/useProjects.ts";
 import { useUnifiedStream } from "~/common/state/hooks/useUnifiedStream";
-import type { AtomToastAtom } from "~/components/AtomToast.tsx";
-import { AtomToast } from "~/components/AtomToast.tsx";
 import { CommandPalette } from "~/components/CommandPalette";
 import { CommandRegistrations } from "~/components/CommandPalette/CommandRegistrations.tsx";
-import { KeyboardShortcutsDialog } from "~/components/KeyboardShortcutsDialog.tsx";
 import { sidebarCollapsedAtom } from "~/components/layout/sidebarAtoms.ts";
-import { CollapsedSidebarToggle } from "~/components/nav/CollapsedSidebarToggle.tsx";
-import { WorkspaceSidebar } from "~/components/nav/WorkspaceSidebar.tsx";
 import { NewWorkspaceDialog } from "~/components/newWorkspace/NewWorkspaceDialog.tsx";
-import { NotificationToasts } from "~/components/NotificationToasts.tsx";
-import { RepoPathDialog } from "~/components/RepoPathDialog.tsx";
-import { WarningStatusBanner } from "~/components/WarningStatusBanner.tsx";
-import { useGlobalKeyboardShortcuts } from "~/layouts/hooks/useGlobalKeyboardShortcuts.ts";
-import { useWorkspaceCycleShortcuts } from "~/layouts/hooks/useWorkspaceCycleShortcuts.ts";
 import { PluginLoader } from "~/plugins/PluginLoader.tsx";
 import { PluginOverlays } from "~/plugins/PluginOverlays.tsx";
 

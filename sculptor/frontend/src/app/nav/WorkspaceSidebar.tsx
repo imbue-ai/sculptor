@@ -11,6 +11,8 @@ import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { projectsArrayAtom } from "~/common/state/atoms/projects.ts";
 import { agentIdsByWorkspaceAtom, ensurePseudoTabAtom } from "~/common/state/atoms/workspaces.ts";
 import { useOptimisticWorkspaceDelete } from "~/common/state/hooks/useOptimisticWorkspaceDelete.ts";
+import { useWorkspaceTabActions } from "~/common/state/hooks/useWorkspaceTabActions.ts";
+import { HOME_TAB_ID, SETTINGS_TAB_ID } from "~/common/utils/workspaceTabIds.ts";
 import { AddRepoDialog } from "~/components/add-repo/AddRepoDialog.tsx";
 import { useCommandPalette } from "~/components/CommandPalette";
 import { renamingWorkspaceIdAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
@@ -26,9 +28,7 @@ import { ReportProblemPopover } from "~/components/ReportProblemPopover.tsx";
 import { layoutPersistenceAdapter } from "~/components/sections/persistence/LocalStorageLayoutAdapter.ts";
 import { ResizeHandle } from "~/components/sections/ResizeHandle.tsx";
 import { Toast, type ToastContent } from "~/components/Toast.tsx";
-import { useWorkspaceTabActions } from "~/components/useWorkspaceTabActions.ts";
 import { VersionPopover } from "~/components/VersionPopover.tsx";
-import { HOME_TAB_ID, SETTINGS_TAB_ID } from "~/components/workspaceTabIds.ts";
 import { getTitleBarLeftPadding } from "~/electron/utils.ts";
 import { WorkspacePeekOverlay } from "~/pages/workspace/components/WorkspacePeekOverlay.tsx";
 

@@ -6,7 +6,7 @@ import type { Notification } from "../api";
 import { NotificationImportance } from "../api";
 import { useImbueParams } from "../common/NavigateUtils";
 import { notificationsAtom } from "../common/state/atoms/notifications";
-import { Toast, ToastType } from "./Toast";
+import { Toast, ToastType } from "../components/Toast";
 
 // How long a toast stays on screen before auto-dismissing, keyed by importance.
 const CRITICAL_TOAST_DURATION_MS = 10_000;

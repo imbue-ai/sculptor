@@ -6,8 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ElementIds } from "../api";
 import type { ErrorToastData } from "../common/state/atoms/toasts.ts";
+import { ToastProvider, ToastType } from "../components/Toast.tsx";
 import { AtomToast } from "./AtomToast.tsx";
-import { ToastProvider, ToastType } from "./Toast.tsx";
 
 afterEach(cleanup);
 

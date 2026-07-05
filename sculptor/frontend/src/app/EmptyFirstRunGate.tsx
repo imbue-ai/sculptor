@@ -2,11 +2,11 @@ import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 import { Outlet } from "react-router-dom";
 
-import { useImbueLocation } from "./common/NavigateUtils.ts";
-import { AutoUpdateToasts } from "./components/AutoUpdateToasts.tsx";
-import { isWorkspaceListEmptyAtom } from "./components/newWorkspace/newWorkspaceAtoms.ts";
+import { useImbueLocation } from "../common/NavigateUtils.ts";
+import { isWorkspaceListEmptyAtom } from "../components/newWorkspace/newWorkspaceAtoms.ts";
+import { EmptyFirstRunPage } from "../pages/workspace/EmptyFirstRunPage.tsx";
+import { AutoUpdateToasts } from "./AutoUpdateToasts.tsx";
 import { useAutoUpdateListener } from "./hooks/useAutoUpdateListener.ts";
-import { EmptyFirstRunPage } from "./pages/workspace/EmptyFirstRunPage.tsx";
 
 /**
  * App gate for the empty first-run experience. Wraps every

@@ -11,8 +11,8 @@ import { useCallback } from "react";
 
 import { useImbueLocation } from "~/common/NavigateUtils.ts";
 import { useOptimisticWorkspaceDelete } from "~/common/state/hooks/useOptimisticWorkspaceDelete.ts";
+import { useWorkspaceTabActions } from "~/common/state/hooks/useWorkspaceTabActions.ts";
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
-import { useWorkspaceTabActions } from "~/components/useWorkspaceTabActions.ts";
 
 import { workspaceDeleteTargetAtom } from "./atoms.ts";
 

@@ -1,11 +1,10 @@
-import { HTTPException, RequestTimeoutError, ValidationError } from "~/common/Errors.ts";
-
-import { client } from "./api/client.gen";
-import { setupAuthHeaders } from "./common/Auth.ts";
-import { initBackendCapabilities } from "./common/state/atoms/backendCapabilities.ts";
-import { createRequestTracker } from "./common/state/requestTracking.ts";
-import { makeRequestId } from "./common/Utils.ts";
-import { isElectron } from "./electron/utils.ts";
+import { client } from "../api/client.gen";
+import { isElectron } from "../electron/utils.ts";
+import { setupAuthHeaders } from "./Auth.ts";
+import { HTTPException, RequestTimeoutError, ValidationError } from "./Errors.ts";
+import { initBackendCapabilities } from "./state/atoms/backendCapabilities.ts";
+import { createRequestTracker } from "./state/requestTracking.ts";
+import { makeRequestId } from "./Utils.ts";
 
 type TrackingConfig = {
   /** Custom timeout in milliseconds for WebSocket acknowledgment */

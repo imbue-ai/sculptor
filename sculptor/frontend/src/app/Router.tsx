@@ -2,22 +2,22 @@ import type { ReactElement } from "react";
 import { redirect } from "react-router-dom";
 import { createHashRouter, RouterProvider } from "react-router-dom";
 
-import type { TabEntry, TabsState } from "./common/state/atoms/workspaces.ts";
+import type { TabEntry, TabsState } from "../common/state/atoms/workspaces.ts";
 import {
   INVALID_ACTIVE_INDEX,
   isValidTabsState,
   parseDraftIdFromTabId,
   SCULPTOR_TABS_STORAGE_KEY,
   WORKSPACE_TAB_ID_PREFIX,
-} from "./common/state/atoms/workspaces.ts";
-import { HOME_TAB_ID, SETTINGS_TAB_ID } from "./components/workspaceTabIds.ts";
+} from "../common/state/atoms/workspaces.ts";
+import { HOME_TAB_ID, SETTINGS_TAB_ID } from "../common/utils/workspaceTabIds.ts";
+import { NotFoundErrorPage } from "../pages/error/NotFound.tsx";
+import { RouteErrorPage } from "../pages/error/RouteErrorPage.tsx";
+import { HomePage } from "../pages/home/HomePage.tsx";
+import { SettingsPage } from "../pages/settings/SettingsPage.tsx";
+import { WorkspacePage } from "../pages/workspace/WorkspacePage";
+import { AppShell } from "./AppShell";
 import { EmptyFirstRunGate } from "./EmptyFirstRunGate.tsx";
-import { AppShell } from "./layouts/AppShell";
-import { NotFoundErrorPage } from "./pages/error/NotFound.tsx";
-import { RouteErrorPage } from "./pages/error/RouteErrorPage.tsx";
-import { HomePage } from "./pages/home/HomePage.tsx";
-import { SettingsPage } from "./pages/settings/SettingsPage.tsx";
-import { WorkspacePage } from "./pages/workspace/WorkspacePage";
 
 const DEFAULT_TABS_STATE: TabsState = { order: [], activeIndex: INVALID_ACTIVE_INDEX };
 

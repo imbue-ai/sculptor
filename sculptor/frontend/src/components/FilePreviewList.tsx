@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
-import { baseUrl } from "~/apiClient.ts";
+import { baseUrl } from "~/common/apiClient.ts";
 import { setupAuthHeaders } from "~/common/Auth.ts";
 
 import { useAgentLightbox } from "./AgentLightboxContext.tsx";

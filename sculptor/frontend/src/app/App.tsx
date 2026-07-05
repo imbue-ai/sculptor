@@ -10,16 +10,16 @@ import { getTelemetryInfo } from "~/api";
 import { queryClient } from "~/common/queryClient.ts";
 import { applyTelemetryInfo } from "~/common/Telemetry.ts";
 
-import { BackendStatusBoundary } from "./components/BackendStatusBoundary.tsx";
-import { ConfigLoader } from "./components/ConfigLoader.tsx";
-import { TanstackDevtoolsMount } from "./components/DevPanel/TanstackDevtoolsMount.tsx";
-import { RequireOnboarding } from "./components/RequireOnboarding.tsx";
-import { ThemeProvider } from "./components/ThemeProvider.tsx";
-import { ToastProvider } from "./components/Toast.tsx";
+import { TanstackDevtoolsMount } from "../components/DevPanel/TanstackDevtoolsMount.tsx";
+import { ToastProvider } from "../components/Toast.tsx";
+import { ErrorPage } from "../pages/error/ErrorPage.tsx";
+import { BrowserViewHost } from "../pages/workspace/panels/browser/BrowserViewHost.tsx";
+import { BackendStatusBoundary } from "./BackendStatusBoundary.tsx";
+import { ConfigLoader } from "./ConfigLoader.tsx";
 import { useAppZoom } from "./hooks/useAppZoom.ts";
-import { ErrorPage } from "./pages/error/ErrorPage.tsx";
-import { BrowserViewHost } from "./pages/workspace/panels/browser/BrowserViewHost.tsx";
+import { RequireOnboarding } from "./RequireOnboarding.tsx";
 import { Router } from "./Router.tsx";
+import { ThemeProvider } from "./ThemeProvider.tsx";
 
 const isDebugRoute = (): boolean => window.location.hash.startsWith("#/debug/");
 

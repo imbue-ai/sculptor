@@ -4,11 +4,11 @@ import { X } from "lucide-react";
 import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
+import { useInstallUpdate } from "~/app/hooks/useInstallUpdate.ts";
 import { getUpdateChannelDisplayName, getUpdateStatusText } from "~/common/autoUpdateUtils.ts";
 import { autoUpdateStatusAtom, updateChannelAtom } from "~/common/state/atoms/autoUpdate.ts";
 import { healthCheckDataAtom } from "~/common/state/atoms/backend.ts";
 import { useDevPanel } from "~/common/state/hooks/useDevPanel.ts";
-import { useInstallUpdate } from "~/hooks/useInstallUpdate.ts";
 
 import { useReactGrab } from "./DevPanel/useReactGrab.ts";
 import { useTanstackDevtools } from "./DevPanel/useTanstackDevtools.ts";

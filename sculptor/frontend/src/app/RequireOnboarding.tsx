@@ -3,7 +3,7 @@ import type { ReactElement, ReactNode } from "react";
 import { useEffect, useState } from "react";
 
 import { getConfigStatus } from "../api";
-import { OnboardingStep, OnboardingWizard } from "./onboarding-wizard";
+import { OnboardingStep, OnboardingWizard } from "../components/onboarding-wizard";
 
 type RequireOnboardingProps = {
   children: ReactNode;

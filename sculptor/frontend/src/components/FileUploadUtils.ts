@@ -1,4 +1,4 @@
-import { baseUrl } from "~/apiClient.ts";
+import { baseUrl } from "~/common/apiClient.ts";
 import { setupAuthHeaders } from "~/common/Auth.ts";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB

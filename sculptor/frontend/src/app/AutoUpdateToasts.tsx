@@ -2,11 +2,11 @@ import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useMemo, useState } from "react";
 
+import { useInstallUpdate } from "~/app/hooks/useInstallUpdate.ts";
 import { autoUpdateStatusAtom } from "~/common/state/atoms/autoUpdate.ts";
-import { useInstallUpdate } from "~/hooks/useInstallUpdate.ts";
 import type { AutoUpdateStatus } from "~/shared/types.ts";
 
-import { Toast, ToastType } from "./Toast.tsx";
+import { Toast, ToastType } from "../components/Toast.tsx";
 
 type OpenToast = "download" | "ready" | "error" | null;
 

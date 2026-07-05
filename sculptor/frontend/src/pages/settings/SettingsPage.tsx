@@ -5,12 +5,12 @@ import { Monitor, Moon, Sun } from "lucide-react";
 import { type ReactElement, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
+import { useInstallUpdate } from "~/app/hooks/useInstallUpdate.ts";
 import { getUpdateStatusText } from "~/common/autoUpdateUtils.ts";
 import { autoUpdateStatusAtom, updateChannelAtom } from "~/common/state/atoms/autoUpdate.ts";
 import { healthCheckDataAtom } from "~/common/state/atoms/backend.ts";
 import { themeBuilderSettingsAtom } from "~/common/state/atoms/themeBuilder.ts";
 import { ModelSelectOptions } from "~/components/ModelSelectOptions.tsx";
-import { useInstallUpdate } from "~/hooks/useInstallUpdate.ts";
 import type { UpdateChannel } from "~/shared/types.ts";
 
 import { ElementIds, UserConfigField } from "../../api";

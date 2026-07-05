@@ -8,7 +8,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { baseUrl } from "~/apiClient.ts";
+import { baseUrl } from "~/common/apiClient.ts";
 import { getSessionToken, SESSION_TOKEN_HEADER_NAME } from "~/common/Auth.ts";
 import { keybindingsMapAtom } from "~/common/keybindings/atoms.ts";
 import { shouldHandleKeybinding } from "~/common/ShortcutUtils.ts";

@@ -8,7 +8,7 @@ import {
   parseDraftIdFromTabId,
 } from "~/common/state/atoms/workspaces.ts";
 
-import { HOME_TAB_ID, SETTINGS_TAB_ID } from "./workspaceTabIds.ts";
+import { HOME_TAB_ID, SETTINGS_TAB_ID } from "../../utils/workspaceTabIds.ts";
 
 /**
  * `navigateToNextTab` — the shared "this tab is going away, move to a sensible

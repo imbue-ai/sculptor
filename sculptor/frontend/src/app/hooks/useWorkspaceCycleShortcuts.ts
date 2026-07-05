@@ -11,11 +11,11 @@
 import { useSetAtom, useStore } from "jotai";
 import { useCallback } from "react";
 
+import { sidebarOrderedWorkspacesAtom } from "~/app/nav/sidebarWorkspaceOrder.ts";
 import { useKeybindingHandler } from "~/common/keybindings";
 import { useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { openWorkspaceTabAtom } from "~/common/state/atoms/workspaces.ts";
 import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
-import { sidebarOrderedWorkspacesAtom } from "~/components/nav/sidebarWorkspaceOrder.ts";
 import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 
 type CycleDirection = 1 | -1;
