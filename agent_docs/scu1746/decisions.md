@@ -20,9 +20,10 @@ principles didn't fully determine. Flip any of them and I'll rework.
 5. **`sections/persistence/types.ts` → `persistence/snapshot.ts`** (generic
    basename ban applies inside subfeatures too; the file is the snapshot
    schema).
-6. **`useWorkspaceTabActions` (SCU-1748) → `app/hooks/`.** It's shell tab
-   navigation shared by sidebar, command palette, and workspace page — the app
-   shell is its lowest common home.
+6. **`useWorkspaceTabActions` (SCU-1748) → `common/state/hooks/`.**
+   (Superseded my earlier `app/hooks/` call: commandPalette imports it, and
+   components/ must not import app/ — the hook fronts tab state, so the state
+   mirror is its home. See execution-plan.md ruling 2.)
 7. **`NewWorkspaceModal` → `NewWorkspaceDialog`** executed as part of the
    suffix-glossary cleanup (Modal suffix retired), per the approved glossary.
 8. **Stories mirror is realigned in PR1** (cheap renames) even though PR3
