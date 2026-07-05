@@ -35,8 +35,7 @@ const REENGAGE_THRESHOLD = 5;
 // bottomPinOffset exactly when the tail has filled the viewport to within
 // PIN_BOTTOM_GAP of its bottom edge, so entering `following` is a zero-px
 // handoff — the view is already at the pin. Any larger value starts
-// `following` above the pin, in violation of its invariant, and forces an
-// immediate upward correction.
+// `following` above the pin and forces an immediate upward correction.
 const FILLING_OVERFLOW_BUFFER = PIN_BOTTOM_GAP;
 
 // Upward pin corrections chase genuine tail shrinks (a collapsed text line
@@ -164,9 +163,8 @@ export const useAlphaAutoScroll = (
   // pin gap: a mid-stream tail shrink (e.g. the standalone streaming cursor
   // collapsing into the first text line) moves the target back up, and leaving
   // scrollTop stranded past it shows oversized breathing room below the newest
-  // line until growth overtakes the difference — on slow machines for long
-  // enough that the pin-gap tests fail. In every other phase an upward move
-  // would only chase a turn-end shrink, which we leave in place.
+  // line until growth overtakes the difference. In every other phase an upward
+  // move would only chase a turn-end shrink, which we leave in place.
   const pinToBottom = useCallback((): void => {
     const el = scrollContainerRef.current;
     if (!el || messageCount === 0) return;
