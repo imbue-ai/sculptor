@@ -3,8 +3,8 @@
 // sub-section it was opened from. Items, in order:
 //   1. "New {recent} agent" — the recently-used agent type (Claude by default),
 //      with its new-agent keybinding shown. Lands the agent in THIS sub-section.
-//   2. Agent-type sub-menu — create an agent of a different type: Claude, pi
-//      (gated), and each registered terminal-agent program. No bare "Terminal"
+//   2. Agent-type sub-menu — create an agent of a different type: Claude, pi,
+//      and each registered terminal-agent program. No bare "Terminal"
 //      agent type. Also lands in THIS sub-section.
 //   3. "New terminal" — creates a terminal in THIS sub-section.
 //   4. Every single-instance panel not currently open anywhere — opens in THIS
@@ -19,7 +19,6 @@ import { useRef } from "react";
 
 import { type AgentTypeName, ElementIds } from "~/api";
 import { useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
-import { isPiAgentEnabledAtom } from "~/common/state/atoms/userConfig.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 
 import {
@@ -89,14 +88,13 @@ const AddPanelMenuItems = ({
   const newAgentShortcut = useKeybindingDisplayText("new_agent");
   const recentAgentType = useAtomValue(recentAgentTypeAtom);
   const availableStaticPanels = useAtomValue(availableStaticPanelsAtom);
-  const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
   // Mounting on menu open re-fetches the registrations (staleTime 0 +
   // refetchOnMount), so the agent-type sub-menu tracks the registrations
   // directory without a restart or an explicit refetch call.
   const { registrations } = useTerminalAgentRegistrations();
 
   // rendering / derived data
-  const agentTypeOptions = buildAgentTypeOptions({ isPiAgentEnabled, registrations });
+  const agentTypeOptions = buildAgentTypeOptions({ registrations });
 
   return (
     <>

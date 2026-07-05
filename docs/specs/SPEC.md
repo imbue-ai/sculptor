@@ -291,7 +291,7 @@ isolated copy of it for agents to work in, rather than touching your own checkou
 from the **Add Workspace** form (titled "Name your workspace") — choosing the repo, the source branch
 to start from, a workspace name, the name for the workspace's new branch (with a live preview and a
 warning if that branch already exists), and the **type of the first agent** to create (Claude, a
-terminal agent, Pi where enabled, or a registered agent → §7.4). By default
+terminal agent, Pi, or a registered agent → §7.4). By default
 the workspace is a **worktree**: it shares your repo's history but gets its own branch, so the
 agent's commits show up in your repo right away and you can push them yourself. (The older **clone**
 mode and the unisolated **in-place** mode are experimental opt-ins that, once enabled in Settings,
@@ -445,8 +445,8 @@ the next/previous-agent keybinding) to switch between them.
 
 Create a new agent with the **+** button at the end of the tab bar (or the new-agent keybinding); it
 creates an agent of your last-used **type**. Next to it, a small **chevron** opens a menu of the types
-you can create: the built-in **Claude** rich-chat agent (and the experimental **Pi** chat agent where
-enabled → §7.12), a plain **Terminal**, and then each **registered terminal agent** by its display
+you can create: the built-in **Claude** rich-chat agent, the **Pi** chat agent, a plain **Terminal**,
+and then each **registered terminal agent** by its display
 name — out of the box that's **"Claude CLI"**, which runs the Claude Code TUI in the workspace (→ §7.3
 Chat). The menu marks your last-used type with a check, Sculptor remembers it, and a plain **+** click
 re-creates that type without opening the menu. **Double-click** a tab to rename it (Enter saves, Escape cancels), drag tabs to **reorder**
@@ -685,7 +685,7 @@ conflicts.
 
 The remaining sections cover the environment and account. **Dependencies** manages the Claude CLI and
 git binaries Sculptor uses — switching between a managed install and a custom path, showing each one's
-version and health. **Pi (experimental)** is the parallel dependency manager for the experimental Pi
+version and health. **Pi** is the parallel dependency manager for the Pi
 agent harness — its binary (managed or custom path), version, and the API-key environment variable it
 needs. **Environment Variables** surfaces the global and per-repo `.sculptor/.env` files (which you edit
 directly) and controls whether they override existing variables. **Privacy** shows your (read-only) email address and
@@ -744,8 +744,6 @@ product makes no finer distinction than that: a feature is either generally avai
   (→ §7.11).
 - **Rich markdown rendering** — render `.md` / `.markdown` files as formatted HTML in the file
   viewer, toggled by the eye icon in the diff toolbar.
-- **Pi agent** — offer the experimental **Pi** agent as a choice when creating an agent (→ §7.4); an
-  already-running Pi agent keeps going regardless of the toggle.
 - **Custom backend command** — the entry point for the container / remote backend described below.
 
 The **CI babysitter** (→ §7.6, §7.10) is likewise experimental and off by default.

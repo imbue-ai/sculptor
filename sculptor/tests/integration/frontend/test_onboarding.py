@@ -36,7 +36,11 @@ def _populate_with_path_mode(path: Path) -> None:
         user_id="onboarding-test",
         organization_id="onboarding-test",
         instance_id="onboarding-test",
-        dependency_paths=DependencyPaths(claude="claude"),
+        # Pin pi to CUSTOM ("pi") so startup auto-install skips the managed pi
+        # download and the backend stays offline — mirroring the default test
+        # config (resources.py _make_test_user_config). This test exercises the
+        # Claude card and must not trigger an unrelated pi download.
+        dependency_paths=DependencyPaths(claude="claude", pi="pi"),
     )
     save_config(config, internal_dir / "config.toml")
 
@@ -402,7 +406,9 @@ def _populate_with_email_no_privacy(path: Path) -> None:
         user_id="returning-user-test",
         organization_id="returning-user-test-org",
         instance_id="returning-user-test-instance",
-        dependency_paths=DependencyPaths(claude="claude"),
+        # Pin pi to CUSTOM ("pi") so startup auto-install skips the managed pi
+        # download and the backend stays offline (see _populate_with_path_mode).
+        dependency_paths=DependencyPaths(claude="claude", pi="pi"),
     )
     save_config(config, internal_dir / "config.toml")
 

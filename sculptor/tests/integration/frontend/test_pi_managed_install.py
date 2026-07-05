@@ -14,8 +14,8 @@ test drives a deterministic, network-free state:
   ``version-<pin>/pi/pi`` before the backend starts. Startup auto-install then
   sees an installed+in-range binary and skips the download entirely (no
   network); FakePi answers ``--version`` for the activation gate.
-- CUSTOM / banner states: a CUSTOM pi value never triggers auto-install, so the
-  backend stays offline.
+- CUSTOM state: a CUSTOM pi value never triggers auto-install, so the backend
+  stays offline.
 - Install *failure*: start in CUSTOM (no startup auto-install), switch to MANAGED
   in the UI to reveal the Install button, and intercept the install POST at the
   browser so the click exercises the ``install_managed(PI)`` wiring and surfaces
@@ -55,7 +55,7 @@ def _factory_sculptor_folder(factory: SculptorInstanceFactory) -> Path:
     return factory._delegate.sculptor_folder
 
 
-def _set_pi_config(factory: SculptorInstanceFactory, pi_value: str, enable_pi_agent: bool = False) -> None:
+def _set_pi_config(factory: SculptorInstanceFactory, pi_value: str) -> None:
     """Rewrite the factory's pre-created config to a given pi binary-source value.
 
     Preserves the factory's healthy claude setup (resolved from the default stub
@@ -65,10 +65,7 @@ def _set_pi_config(factory: SculptorInstanceFactory, pi_value: str, enable_pi_ag
     config_path = _factory_sculptor_folder(factory) / "internal" / "config.toml"
     config = load_config(config_path)
     new_dependency_paths = config.dependency_paths.model_copy(update={"pi": pi_value})
-    updates: dict[str, object] = {"dependency_paths": new_dependency_paths}
-    if enable_pi_agent:
-        updates["enable_pi_agent"] = True
-    save_config(config.model_copy(update=updates), config_path)
+    save_config(config.model_copy(update={"dependency_paths": new_dependency_paths}), config_path)
 
 
 def _stage_fake_pi_managed_binary(factory: SculptorInstanceFactory) -> None:
@@ -139,22 +136,6 @@ def test_pi_settings_custom_shows_binary_path_and_manual_install(
         expect(pi_section.get_install_commands_block()).to_be_visible()
 
 
-@user_story("to configure pi from Settings even before enabling the experimental harness")
-def test_pi_settings_section_visible_with_pi_agent_disabled(
-    sculptor_instance_factory_: SculptorInstanceFactory,
-) -> None:
-    """With enable_pi_agent OFF (the default) the section is still usable —
-    it shows the disabled banner alongside the working Binary-Source selector."""
-    _set_pi_config(sculptor_instance_factory_, "CUSTOM")
-
-    with sculptor_instance_factory_.spawn_instance() as instance:
-        settings_page = navigate_to_settings_page(page=instance.page)
-        pi_section = settings_page.click_on_pi()
-
-        expect(pi_section.get_disabled_banner()).to_be_visible()
-        expect(pi_section.get_mode_selector()).to_be_visible()
-
-
 @user_story("to retry a managed pi install after a checksum failure")
 def test_pi_settings_install_button_invokes_managed_install_and_surfaces_error(
     sculptor_instance_factory_: SculptorInstanceFactory,
@@ -223,7 +204,6 @@ def test_pi_workspace_surfaces_structured_failure_when_pi_unavailable(
     _set_pi_config(sculptor_instance_factory_, "CUSTOM")
 
     with sculptor_instance_factory_.spawn_instance() as instance:
-        # start_task_and_wait_for_ready enables the pi-agent picker for us.
         task_page = start_task_and_wait_for_ready(
             sculptor_page=instance.page,
             workspace_name="Pi Not Ready",

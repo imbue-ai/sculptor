@@ -94,9 +94,7 @@ class BabysitterAgentClaude(SerializableModel):
 
 
 class BabysitterAgentPi(SerializableModel):
-    """Always use a Pi chat agent. Only valid when the pi agent is enabled;
-    that validity is enforced by the resolver, not this model.
-    """
+    """Always use a Pi chat agent."""
 
     object_type: str = "pi"
 
@@ -270,10 +268,6 @@ class UserConfig(SerializableModel):
     enable_entity_mentions: bool = Field(
         default=False,
         description="When enabled, typing % in the chat input opens entity mention completions for repositories, workspaces, and agents",
-    )
-    enable_pi_agent: bool = Field(
-        default=False,
-        description="When enabled, the agent-type menus offer the experimental pi agent. Off by default. Gates only the creation entry point — an existing pi agent keeps running regardless.",
     )
     enable_frontend_plugins: bool = Field(
         default=True,

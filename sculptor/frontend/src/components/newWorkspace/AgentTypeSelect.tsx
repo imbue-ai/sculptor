@@ -1,5 +1,4 @@
 import { Flex, Select, Text } from "@radix-ui/themes";
-import { useAtomValue } from "jotai";
 import { BotIcon } from "lucide-react";
 import type { ReactElement } from "react";
 
@@ -10,7 +9,6 @@ import {
   parseStoredAgentType,
   type StoredAgentType,
 } from "~/common/state/atoms/agentTabs.ts";
-import { isPiAgentEnabledAtom } from "~/common/state/atoms/userConfig.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 
 type AgentTypeSelectProps = {
@@ -22,12 +20,11 @@ type AgentTypeSelectProps = {
 
 /**
  * The first-agent type picker — the same per-agent choice as the tab bar's `+`
- * menu. Only the pi option is gated behind the experimental pi-agent flag;
- * Claude, Terminal, and any registered terminal agents are available to everyone.
+ * menu. Claude, Pi, Terminal, and any registered terminal agents are all
+ * available to everyone.
  */
 export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectProps): ReactElement => {
   // State and hooks
-  const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
   const { registrations, refetch: refreshRegistrations } = useTerminalAgentRegistrations();
 
   // JSX and rendering logic
@@ -63,11 +60,9 @@ export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectP
         <Select.Item value="claude" data-testid={ElementIds.AGENT_TYPE_OPTION_CLAUDE}>
           {AGENT_TYPE_LABELS.claude}
         </Select.Item>
-        {isPiAgentEnabled && (
-          <Select.Item value="pi" data-testid={ElementIds.AGENT_TYPE_OPTION_PI}>
-            {AGENT_TYPE_LABELS.pi}
-          </Select.Item>
-        )}
+        <Select.Item value="pi" data-testid={ElementIds.AGENT_TYPE_OPTION_PI}>
+          {AGENT_TYPE_LABELS.pi}
+        </Select.Item>
         <Select.Item value="terminal" data-testid={ElementIds.AGENT_TYPE_OPTION_TERMINAL}>
           {AGENT_TYPE_LABELS.terminal}
         </Select.Item>

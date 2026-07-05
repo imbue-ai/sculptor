@@ -52,7 +52,7 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
         return PlaywrightKeybindingsSettingsElement(locator=self._get_settings_content(), page=self._page)
 
     def click_on_pi(self) -> PlaywrightPiSettingsElement:
-        """Navigate to Pi (experimental) settings and return the section element."""
+        """Navigate to Pi settings and return the section element."""
         self._get_pi_nav().click()
         return PlaywrightPiSettingsElement(locator=self._get_settings_content(), page=self._page)
 
@@ -130,7 +130,7 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
         return self.get_by_test_id(ElementIDs.SETTINGS_NAV_PLUGINS)
 
     def _get_pi_nav(self) -> Locator:
-        """Get the Pi (experimental) navigation item."""
+        """Get the Pi navigation item."""
         return self.get_by_test_id(ElementIDs.SETTINGS_NAV_PI)
 
     def _get_privacy_nav(self) -> Locator:

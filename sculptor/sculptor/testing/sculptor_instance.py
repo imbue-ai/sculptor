@@ -405,13 +405,9 @@ class SculptorInstance:
         config = response.json()
         # Persistent flags that tests can mutate. Each must be reset between
         # tests because the user config lives on disk in the shared instance.
-        # enablePiAgent is included because it gates harness resolution: a
-        # leaked "pi" most-recently-used type only resolves to Pi while it is
-        # on, so clearing it keeps an omitted agent_type defaulting to Claude.
         flags_to_reset_to_false = (
             "enableInPlaceWorkspaces",
             "enableCloneWorkspaces",
-            "enablePiAgent",
         )
         # The recorded most-recently-used harness (see the docstring); reset to
         # None so an agent-type-less create defaults to Claude.

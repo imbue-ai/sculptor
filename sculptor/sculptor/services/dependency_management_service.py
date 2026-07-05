@@ -375,11 +375,8 @@ class DependencyManagementService(Service):
         """Auto-install each managed tool whose pinned binary is missing or out of range.
 
         Loops the ManagedTool registry; for every tool with a MANAGED binary mode that
-        is not already installed-and-in-range, it spawns an install. Claude always
-        auto-installs when MANAGED. pi additionally requires the ``enable_pi_agent``
-        experiment to be on, so a Claude-only user (the default) never auto-downloads pi.
-        They can still trigger a manual install from the Pi settings section, which routes
-        through ``install_managed`` and is not gated here.
+        is not already installed-and-in-range, it spawns an install. Both Claude and pi
+        auto-install when MANAGED.
         """
         try:
             config = get_user_config_instance()
@@ -394,11 +391,6 @@ class DependencyManagementService(Service):
             if tool == Dependency.CLAUDE:
                 mode, _ = _parse_dependency_config(config.dependency_paths.claude)
             elif tool == Dependency.PI:
-                # pi is dark-launched: only auto-provision it for users who opted into
-                # the pi-agent experiment. Without this gate every Claude-only user
-                # would download the pinned pi build on startup.
-                if not config.enable_pi_agent:
-                    continue
                 mode, _ = _parse_dependency_config(config.dependency_paths.pi)
             else:
                 continue

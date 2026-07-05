@@ -2,14 +2,14 @@
 
 The dropdown is the single creation surface for agents, terminals, and single-instance
 panels (co-owned with Sections). Its rows, in order: the pinned "New {recent} agent"
-(with the new-agent keybinding shown), an agent-type sub-menu (Claude / pi-gated /
+(with the new-agent keybinding shown), an agent-type sub-menu (Claude / pi /
 registered — NO bare "Terminal" type), "New terminal", then a separator
 and every single-instance panel not currently open. A new agent lands in the
 sub-section whose `+` opened the dropdown; only the non-scoped surfaces (the new-agent
 keybinding and the Cmd+K "New agent" command) fall back to center. Cmd+K offers the
 same flow.
 
-These cases absorb the retired `test_agent_type_menu.py` (sub-menu + pi gating +
+These cases absorb the retired `test_agent_type_menu.py` (sub-menu + pi option +
 registered-without-restart).
 """
 
@@ -21,8 +21,6 @@ from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropdownElement
 from sculptor.testing.elements.add_panel_dropdown import close_seeded_panel
 from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
-from sculptor.testing.elements.user_config import disable_pi_agent
-from sculptor.testing.elements.user_config import enable_pi_agent
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -84,30 +82,19 @@ def test_agent_type_submenu_offers_claude_no_bare_terminal(sculptor_instance_: S
     expect(dropdown.get_agent_type_item_terminal()).to_have_count(0)
 
 
-@user_story("to only see the pi agent type when pi-agent is enabled")
-def test_agent_type_submenu_gates_pi(sculptor_instance_: SculptorInstance) -> None:
-    """The pi agent type appears in the sub-menu only when pi-agent is enabled."""
+@user_story("to choose the pi agent type from the agent-type sub-menu")
+def test_agent_type_submenu_offers_pi(sculptor_instance_: SculptorInstance) -> None:
+    """The pi agent type is always offered in the agent-type sub-menu."""
     page = sculptor_instance_.page
     dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
 
-    # The flag is sticky on the shared instance — reset it defensively.
-    disable_pi_agent(page)
-    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Pi Gate Dropdown WS")
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Pi Submenu WS")
 
     dropdown.open()
     dropdown.open_agent_type_submenu()
     expect(dropdown.get_agent_type_item_claude()).to_be_visible()
-    expect(dropdown.get_agent_type_item_pi()).to_have_count(0)
+    expect(dropdown.get_agent_type_item_pi()).to_be_visible()
     page.keyboard.press("Escape")
-
-    try:
-        enable_pi_agent(page)
-        dropdown.open()
-        dropdown.open_agent_type_submenu()
-        expect(dropdown.get_agent_type_item_pi()).to_be_visible()
-        page.keyboard.press("Escape")
-    finally:
-        disable_pi_agent(page)
 
 
 @user_story("to see a registered terminal agent in the sub-menu without restarting")

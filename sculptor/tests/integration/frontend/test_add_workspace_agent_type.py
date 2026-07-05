@@ -2,8 +2,7 @@
 
 Agent type is per-agent, so the form's picker chooses the type of the
 workspace's *first agent* via createWorkspaceAgent. The select is always
-visible (Terminal is available to everyone); only the pi option is gated
-behind the experimental pi-agent flag.
+visible and lists every agent type (Claude, Pi, Terminal).
 """
 
 from playwright.sync_api import expect
@@ -12,8 +11,6 @@ from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropdownElement
 from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.terminal import expect_terminal_panel_replaces_chat
-from sculptor.testing.elements.user_config import disable_pi_agent
-from sculptor.testing.elements.user_config import enable_pi_agent
 from sculptor.testing.fake_pi import install_fake_pi_binary
 from sculptor.testing.playwright_utils import open_new_workspace_form
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -27,38 +24,25 @@ def test_agent_type_select_visible_with_claude_default(
 ) -> None:
     page = sculptor_instance_.page
 
-    # The agent-type picker is visible for everyone; it is not flag-gated.
-    disable_pi_agent(page)
     open_new_workspace_form(page)
     picker = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_AGENT_TYPE_SELECT)
     expect(picker).to_be_visible()
     expect(picker).to_contain_text("Claude")
 
 
-@user_story("to only see the pi agent type in the form when pi-agent is enabled")
-def test_pi_option_gated_behind_pi_agent_flag(
+@user_story("to always see the pi agent type in the Add Workspace form")
+def test_pi_option_always_listed(
     sculptor_instance_: SculptorInstance,
 ) -> None:
     page = sculptor_instance_.page
 
-    # The flag is sticky on the shared instance — reset it defensively.
-    disable_pi_agent(page)
     open_new_workspace_form(page)
     picker = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_AGENT_TYPE_SELECT)
     picker.click()
     expect(page.get_by_test_id(ElementIDs.AGENT_TYPE_OPTION_CLAUDE)).to_be_visible()
     expect(page.get_by_test_id(ElementIDs.AGENT_TYPE_OPTION_TERMINAL)).to_be_visible()
-    expect(page.get_by_test_id(ElementIDs.AGENT_TYPE_OPTION_PI)).to_have_count(0)
+    expect(page.get_by_test_id(ElementIDs.AGENT_TYPE_OPTION_PI)).to_be_visible()
     page.keyboard.press("Escape")
-
-    try:
-        enable_pi_agent(page)
-        open_new_workspace_form(page)
-        picker.click()
-        expect(page.get_by_test_id(ElementIDs.AGENT_TYPE_OPTION_PI)).to_be_visible()
-        page.keyboard.press("Escape")
-    finally:
-        disable_pi_agent(page)
 
 
 @user_story("to start a workspace whose first agent is a Terminal agent")
@@ -133,21 +117,15 @@ def test_first_agent_type_defaults_to_shared_last_used(
     # surfaces: a pi-first workspace makes the pinned row read "New pi agent"
     # AND presets the next new-workspace form to pi.
     install_fake_pi_binary(sculptor_instance_.fake_bin_dir)
-    try:
-        start_task_and_wait_for_ready(
-            sculptor_page=page,
-            workspace_name="MRU Pi WS",
-            model_name=None,
-            agent_type="pi",
-        )
-        dropdown.open()
-        expect(dropdown.get_new_agent_item()).to_contain_text("New pi agent")
-        page.keyboard.press("Escape")
+    start_task_and_wait_for_ready(
+        sculptor_page=page,
+        workspace_name="MRU Pi WS",
+        model_name=None,
+        agent_type="pi",
+    )
+    dropdown.open()
+    expect(dropdown.get_new_agent_item()).to_contain_text("New pi agent")
+    page.keyboard.press("Escape")
 
-        open_new_workspace_form(page)
-        expect(picker).to_contain_text("pi")
-    finally:
-        # start_task_and_wait_for_ready enabled the sticky pi flag — reset it.
-        # Leaving the MRU as "pi" is benign: with the flag off, both surfaces
-        # fall back to Claude.
-        disable_pi_agent(page)
+    open_new_workspace_form(page)
+    expect(picker).to_contain_text("pi")

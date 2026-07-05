@@ -100,17 +100,6 @@ def test_persisted_bare_pi_value_is_not_migrated() -> None:
     assert config.dependency_paths.pi == "pi"
 
 
-def test_enable_pi_agent_defaults_off() -> None:
-    config = UserConfig(
-        user_email="test@example.com",
-        user_id="user123",
-        organization_id="org123",
-        instance_id="inst123",
-    )
-    assert config.enable_pi_agent is False
-    assert UserConfigField["ENABLE_PI_AGENT"].value == "enablePiAgent"
-
-
 def test_pi_config_round_trips_through_serialization() -> None:
     original = PiConfig(api_key_env_var_names=("ANTHROPIC_API_KEY", "PI_API_KEY"))
     restored = PiConfig.model_validate_json(original.model_dump_json())

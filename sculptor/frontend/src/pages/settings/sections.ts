@@ -63,6 +63,14 @@ export type SettingsSectionDescriptor = {
   icon: LucideIconType;
   /** Sidebar test id (also used by the palette row when emitted). */
   testId: string;
+  /**
+   * When set, this section belongs to a visually-grouped run of sections that
+   * share this label. A consecutive run of sections with the same `group`
+   * renders under a single non-clickable header (the label), is indented, and
+   * is closed by a divider after the last member — in both the sidebar and the
+   * mobile nav. It is display-only and never becomes a command-palette row.
+   */
+  group?: string;
 };
 
 export const SETTINGS_SECTIONS: ReadonlyArray<SettingsSectionDescriptor> = [
@@ -73,22 +81,6 @@ export const SETTINGS_SECTIONS: ReadonlyArray<SettingsSectionDescriptor> = [
     paletteKeywords: ["theme", "updates"],
     icon: CogIcon,
     testId: ElementIds.SETTINGS_NAV_GENERAL,
-  },
-  {
-    id: SettingsSection.AGENT,
-    displayName: "Agent",
-    paletteSubtitle: "Default model and effort",
-    paletteKeywords: ["model", "llm", "claude"],
-    icon: PlayIcon,
-    testId: ElementIds.SETTINGS_NAV_AGENT,
-  },
-  {
-    id: SettingsSection.KEYBINDINGS,
-    displayName: "Keybindings",
-    paletteSubtitle: "Customize keyboard shortcuts",
-    paletteKeywords: ["shortcuts", "hotkeys"],
-    icon: KeyboardIcon,
-    testId: ElementIds.SETTINGS_NAV_KEYBINDINGS,
   },
   // The Plugins section is always visible: it hosts the frontend-plugins
   // master switch, so it must stay reachable even when the system is off (to
@@ -110,16 +102,45 @@ export const SETTINGS_SECTIONS: ReadonlyArray<SettingsSectionDescriptor> = [
     testId: ElementIds.SETTINGS_NAV_DEPENDENCIES,
   },
   {
+    id: SettingsSection.AGENT,
+    displayName: "Claude",
+    group: "Harnesses",
+    paletteSubtitle: "Default model and effort",
+    paletteKeywords: ["model", "llm", "claude"],
+    icon: PlayIcon,
+    testId: ElementIds.SETTINGS_NAV_AGENT,
+  },
+  {
     id: SettingsSection.PI,
-    displayName: "Pi (experimental)",
+    displayName: "Pi",
+    group: "Harnesses",
     paletteSubtitle: "Pi agent harness configuration",
     paletteKeywords: ["pi", "harness", "agent"],
     icon: PlayIcon,
     testId: ElementIds.SETTINGS_NAV_PI,
   },
   {
+    id: SettingsSection.KEYBINDINGS,
+    displayName: "Keybindings",
+    group: "Interface",
+    paletteSubtitle: "Customize keyboard shortcuts",
+    paletteKeywords: ["shortcuts", "hotkeys"],
+    icon: KeyboardIcon,
+    testId: ElementIds.SETTINGS_NAV_KEYBINDINGS,
+  },
+  {
+    id: SettingsSection.THEME_BUILDER,
+    displayName: "Theme builder",
+    group: "Interface",
+    paletteSubtitle: "Tweak appearance",
+    paletteKeywords: ["colors", "appearance"],
+    icon: PaintbrushIcon,
+    testId: ElementIds.SETTINGS_NAV_THEME_BUILDER,
+  },
+  {
     id: SettingsSection.REPOSITORIES,
     displayName: "Repositories",
+    group: "Project",
     paletteSubtitle: "Manage repos",
     paletteKeywords: ["repos", "projects"],
     icon: GitBranchIcon,
@@ -128,6 +149,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<SettingsSectionDescriptor> = [
   {
     id: SettingsSection.GIT,
     displayName: "Git",
+    group: "Project",
     paletteSubtitle: "Git provider configuration",
     paletteKeywords: ["github", "pr", "pull request"],
     icon: GitBranchIcon,
@@ -136,6 +158,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<SettingsSectionDescriptor> = [
   {
     id: SettingsSection.CI,
     displayName: "CI",
+    group: "Project",
     paletteSubtitle: "CI Babysitter and CI integrations",
     paletteKeywords: ["pipeline", "babysitter", "ci"],
     icon: ShieldIcon,
@@ -144,6 +167,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<SettingsSectionDescriptor> = [
   {
     id: SettingsSection.FILE_BROWSER,
     displayName: "File browser",
+    group: "Project",
     paletteSubtitle: "Diff views and tab behavior",
     paletteKeywords: ["diff", "files"],
     icon: FolderTreeIcon,
@@ -152,6 +176,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<SettingsSectionDescriptor> = [
   {
     id: SettingsSection.PROJECT_ENV_VARS,
     displayName: "Environment variables",
+    group: "Project",
     paletteSubtitle: "Per-project env",
     paletteKeywords: ["env", "vars"],
     icon: TerminalIcon,
@@ -180,13 +205,5 @@ export const SETTINGS_SECTIONS: ReadonlyArray<SettingsSectionDescriptor> = [
     paletteKeywords: ["custom"],
     icon: CodeIcon,
     testId: ElementIds.SETTINGS_NAV_ACTIONS,
-  },
-  {
-    id: SettingsSection.THEME_BUILDER,
-    displayName: "Theme builder",
-    paletteSubtitle: "Tweak appearance",
-    paletteKeywords: ["colors", "appearance"],
-    icon: PaintbrushIcon,
-    testId: ElementIds.SETTINGS_NAV_THEME_BUILDER,
   },
 ];
