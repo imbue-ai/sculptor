@@ -11,13 +11,13 @@ import type { SkillEntry } from "~/common/state/hooks/useSkills";
 import { useSkills } from "~/common/state/hooks/useSkills";
 import { useTaskSupportsSkills } from "~/common/state/hooks/useTaskHelpers";
 import { PanelHeader } from "~/components/panels/PanelHeader";
-import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
-import { draggedPanelIdAtom } from "~/components/sections/transientAtoms.ts";
 import type { SkillType } from "~/components/skillBadge";
 import { SkillChip } from "~/components/skills/SkillChip";
 import { SkillHoverContent } from "~/components/skills/SkillHoverContent";
 import { TooltipIconButton } from "~/components/TooltipIconButton";
 import { openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atoms";
+import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
+import { draggedPanelIdAtom } from "~/pages/workspace/layout/atoms/transient.ts";
 
 import styles from "./SkillsPanel.module.scss";
 import { SkillsSearch } from "./SkillsSearch";

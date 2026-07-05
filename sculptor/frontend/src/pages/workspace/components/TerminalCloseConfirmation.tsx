@@ -15,7 +15,7 @@ import { closeWorkspaceTerminal } from "~/api";
 import { terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
 import { terminalCloseTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
-import { closePanelAtom } from "~/components/sections/sectionActions.ts";
+import { closePanelAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
 
 export const TerminalCloseConfirmation = (): ReactElement => {
   const [target, setTarget] = useAtom(terminalCloseTargetAtom);

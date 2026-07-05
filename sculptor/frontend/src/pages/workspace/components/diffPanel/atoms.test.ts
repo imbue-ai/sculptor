@@ -1,9 +1,9 @@
 import { createStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import type { WorkspaceLayoutState } from "~/components/sections/persistence/types.ts";
-import { EMPTY_WORKSPACE_LAYOUT } from "~/components/sections/persistence/types.ts";
-import { activeWorkspaceIdAtom, workspaceLayoutFamily } from "~/components/sections/sectionAtoms.ts";
+import { activeWorkspaceIdAtom, workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
+import type { WorkspaceLayoutState } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { EMPTY_WORKSPACE_LAYOUT } from "~/pages/workspace/layout/persistence/snapshot.ts";
 
 import {
   activeDiffTabAtomFamily,

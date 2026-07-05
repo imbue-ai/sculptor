@@ -20,9 +20,9 @@ import { ElementIds } from "~/api";
 import { CollapsedSidebarToggle } from "~/app/nav/CollapsedSidebarToggle.tsx";
 import { WorkspaceSidebar } from "~/app/nav/WorkspaceSidebar.tsx";
 import { useUnifiedStream } from "~/common/state/hooks/useUnifiedStream";
-import { sidebarCollapsedAtom } from "~/components/layout/sidebarAtoms.ts";
 import { HOME_PROMPT_PREFILL } from "~/components/newWorkspace/homePromptPrefill.ts";
 import { NewWorkspaceForm } from "~/components/newWorkspace/NewWorkspaceForm.tsx";
+import { sidebarCollapsedAtom } from "~/pages/workspace/layout/atoms/sidebar.ts";
 
 import styles from "./EmptyFirstRunPage.module.scss";
 

@@ -3,9 +3,9 @@ import { PanelLeftOpen } from "lucide-react";
 import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
-import { sidebarCollapsedAtom } from "~/components/layout/sidebarAtoms.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 import { getTitleBarLeftPadding } from "~/electron/utils.ts";
+import { sidebarCollapsedAtom } from "~/pages/workspace/layout/atoms/sidebar.ts";
 
 import styles from "./CollapsedSidebarToggle.module.scss";
 

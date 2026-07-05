@@ -23,12 +23,12 @@ import { atom } from "jotai";
 import { atomFamily, selectAtom } from "jotai/utils";
 
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
-import type { WorkspaceLayoutState } from "~/components/sections/persistence/types.ts";
-import { makeAgentPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
-import { openPanelAtom, setActivePanelAtom } from "~/components/sections/sectionActions.ts";
-import { workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
-import type { PanelId, SubSectionId } from "~/components/sections/sectionTypes.ts";
-import { shallowArrayEqual } from "~/components/sections/shallowArrayEqual.ts";
+import { shallowArrayEqual } from "~/common/utils/shallowArrayEqual.ts";
+import { workspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
+import { openPanelAtom, setActivePanelAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
+import type { WorkspaceLayoutState } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { makeAgentPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
+import type { PanelId, SubSectionId } from "~/pages/workspace/layout/types/section.ts";
 
 // New agent panels land in the center section's primary sub-section, mirroring the
 // manual create path (useAddPanelActions defaults its target sub-section to center).

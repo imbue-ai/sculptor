@@ -41,7 +41,7 @@ that the rest of the UI consumes. Examples:
 - `~/pages/settings/sections.ts` exports `SETTINGS_SECTIONS`. The
   Settings page sidebar AND `builtinCommands/settings.ts` read from it,
   so reordering / renaming a section happens in one place.
-- `~/components/sections/registry/panelRegistry.ts`'s `panelRegistryAtom`
+- `~/pages/workspace/layout/registry/panelRegistry.ts`'s `panelRegistryAtom`
   is the source of truth for IDE panels. `dynamic/panels.ts` reads it at
   produce time.
 

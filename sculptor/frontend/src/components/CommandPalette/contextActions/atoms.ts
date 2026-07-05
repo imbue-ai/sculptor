@@ -1,6 +1,6 @@
 import { atom } from "jotai";
 
-import type { SubSectionId } from "~/components/sections/sectionTypes.ts";
+import type { SubSectionId } from "~/pages/workspace/layout/types/section.ts";
 
 /**
  * Atoms for state shared by right-click context menus and the command palette.

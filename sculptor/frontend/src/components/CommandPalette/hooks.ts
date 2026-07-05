@@ -5,11 +5,11 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSyncExtern
 import { useImbueLocation } from "~/common/NavigateUtils.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { effectiveOpenTabIdsAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
-import { recentAgentTypeAtom } from "~/components/sections/addPanelCore.ts";
-import { panelRegistryAtom } from "~/components/sections/registry/panelRegistry.ts";
-import { workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
-import { maximizedSectionAtom } from "~/components/sections/transientAtoms.ts";
 import { chatPanelMountedAtom, terminalPanelMountedAtom } from "~/pages/workspace/atoms.ts";
+import { recentAgentTypeAtom } from "~/pages/workspace/layout/atoms/addPanel.ts";
+import { workspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
+import { maximizedSectionAtom } from "~/pages/workspace/layout/atoms/transient.ts";
+import { panelRegistryAtom } from "~/pages/workspace/layout/registry/panelRegistry.ts";
 
 import { areGlobalShortcutsDisabledAtom } from "../newWorkspace/newWorkspaceAtoms.ts";
 import {

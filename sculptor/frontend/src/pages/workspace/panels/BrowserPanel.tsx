@@ -6,8 +6,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { useWorkspacePageParams } from "~/common/NavigateUtils";
-import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 import { isElectron } from "~/electron/utils";
+import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 
 import { browserPanelStateAtomFamily } from "./browser/atoms";
 import { browserViewStatusAtomFamily, getBrowserViewController } from "./browser/browserViewRegistry";

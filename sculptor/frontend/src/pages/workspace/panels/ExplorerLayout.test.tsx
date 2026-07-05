@@ -8,7 +8,7 @@ import {
   EXPLORER_LIST_MAX_WIDTH_PX,
   EXPLORER_LIST_MIN_WIDTH_PX,
   explorerListWidthAtom,
-} from "~/components/sections/sectionAtoms.ts";
+} from "~/pages/workspace/layout/atoms/section.ts";
 
 import { ExplorerLayout } from "./ExplorerLayout";
 

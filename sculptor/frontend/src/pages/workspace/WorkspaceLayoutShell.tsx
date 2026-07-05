@@ -10,13 +10,13 @@ import "./panels/registerPanels.ts";
 import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 
-import { PanelDndProvider } from "~/components/sections/PanelDndProvider.tsx";
-import { useOrphanedLayoutGc } from "~/components/sections/persistence/orphanedLayoutGc.ts";
-import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
-import { SectionGrid } from "~/components/sections/SectionGrid.tsx";
-import { isAnySectionMaximizedAtom } from "~/components/sections/transientAtoms.ts";
-import { useActiveSectionRing } from "~/components/sections/useActiveSectionRing.ts";
-import { useWorkspaceShortcuts } from "~/components/sections/useWorkspaceShortcuts.ts";
+import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
+import { isAnySectionMaximizedAtom } from "~/pages/workspace/layout/atoms/transient.ts";
+import { useActiveSectionRing } from "~/pages/workspace/layout/hooks/useActiveSectionRing.ts";
+import { useWorkspaceShortcuts } from "~/pages/workspace/layout/hooks/useWorkspaceShortcuts.ts";
+import { PanelDndProvider } from "~/pages/workspace/layout/PanelDndProvider.tsx";
+import { useOrphanedLayoutGc } from "~/pages/workspace/layout/persistence/orphanedLayoutGc.ts";
+import { SectionGrid } from "~/pages/workspace/layout/SectionGrid.tsx";
 
 import { AgentDeleteConfirmation } from "./components/AgentDeleteConfirmation.tsx";
 import { TerminalCloseConfirmation } from "./components/TerminalCloseConfirmation.tsx";

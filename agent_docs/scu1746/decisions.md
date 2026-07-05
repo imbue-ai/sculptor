@@ -38,6 +38,17 @@ principles didn't fully determine. Flip any of them and I'll rework.
   are pending — the work itself proceeded. A workspace restart or env re-sync
   should fix it.
 
+9. **Layout state stayed feature-side (ruling 4 fallback).** Global and
+   per-workspace layout snapshots share one persistence adapter (one debounce
+   map, one flush path); splitting the global slice into `common/state` would
+   mean carving that adapter in half or moving it wholesale to `common/`. So
+   all layout state lives in `pages/workspace/layout/atoms/`, and the Stage H
+   boundaries lint carries explicit exceptions for its commandPalette/app/
+   common readers. The real fix is a follow-up: either promote the whole
+   layout-state module to `common/state`, or invert the palette's workspace
+   commands into a registration pattern (features register commands, like
+   panels register components).
+
 ## Follow-up candidates surfaced during the work (not executed)
 
 - Merge `diffPanel/` + `diffViewer/` into one `diff/` feature (see 3).

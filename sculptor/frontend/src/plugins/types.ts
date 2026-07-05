@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 
-import type { SectionId } from "~/components/sections/sectionTypes.ts";
+import type { SectionId } from "~/pages/workspace/layout/types/section.ts";
 
 /**
  * A panel a plugin contributes via `registerPanel`. The host renders the

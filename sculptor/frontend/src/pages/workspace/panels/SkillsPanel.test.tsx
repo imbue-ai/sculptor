@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { chatActionsAtom } from "~/common/state/atoms/chatActions";
 import type { SkillEntry } from "~/common/state/hooks/useSkills";
-import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
-import { panelDragStateAtom } from "~/components/sections/transientAtoms.ts";
+import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
+import { panelDragStateAtom } from "~/pages/workspace/layout/atoms/transient.ts";
 
 import { SkillsPanel } from "./SkillsPanel";
 

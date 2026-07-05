@@ -1,7 +1,7 @@
-import type { PanelDefinition } from "~/components/sections/registry/panelRegistry.ts";
-import { panelRegistryAtom } from "~/components/sections/registry/panelRegistry.ts";
-import { jumpToSectionAtom, openPanelAtom } from "~/components/sections/sectionActions.ts";
-import { workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
+import { workspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
+import { jumpToSectionAtom, openPanelAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
+import type { PanelDefinition } from "~/pages/workspace/layout/registry/panelRegistry.ts";
+import { panelRegistryAtom } from "~/pages/workspace/layout/registry/panelRegistry.ts";
 
 import type { CommandRuntime } from "../runtime.ts";
 import type { Command, DynamicProvider } from "../types.ts";

@@ -6,10 +6,10 @@ import { LlmModel, TaskStatus } from "~/api";
 import { getEmptyTaskDetailState, taskDetailAtomFamily } from "~/common/state/atoms/taskDetails.ts";
 import { taskAtomFamily, taskIdsAtom } from "~/common/state/atoms/tasks.ts";
 import { commitPromptSendFailedToastAtom, terminalPromptRejectedToastAtom } from "~/common/state/atoms/toasts.ts";
-import type { WorkspaceLayoutState } from "~/components/sections/persistence/types.ts";
-import { EMPTY_WORKSPACE_LAYOUT } from "~/components/sections/persistence/types.ts";
-import { makeAgentPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
-import { workspaceLayoutFamily } from "~/components/sections/sectionAtoms.ts";
+import { workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
+import type { WorkspaceLayoutState } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { EMPTY_WORKSPACE_LAYOUT } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { makeAgentPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
 
 import {
   activeAgentIdAtomFamily,

@@ -18,9 +18,9 @@ import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { useOptimisticTaskDelete } from "~/common/state/hooks/useOptimisticTaskDelete.ts";
 import { agentDeleteTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
-import { makeAgentPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
-import { closePanelAtom } from "~/components/sections/sectionActions.ts";
-import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
+import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
+import { closePanelAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
+import { makeAgentPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
 
 export const AgentDeleteConfirmation = (): ReactElement | null => {
   const [target, setTarget] = useAtom(agentDeleteTargetAtom);

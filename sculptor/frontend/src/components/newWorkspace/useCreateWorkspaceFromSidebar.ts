@@ -11,8 +11,8 @@ import {
   lastWorkspaceCreationSettingsAtom,
   newWorkspaceDialogAtom,
 } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
-import { resolveStoredAgentType } from "~/components/sections/addPanelCore.ts";
 import { ToastType } from "~/components/Toast.tsx";
+import { resolveStoredAgentType } from "~/pages/workspace/layout/atoms/addPanel.ts";
 
 type UseCreateWorkspaceFromSidebarReturn = {
   /** True while a direct-create is in flight. */

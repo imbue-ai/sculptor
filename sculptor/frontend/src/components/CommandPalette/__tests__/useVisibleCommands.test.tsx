@@ -11,8 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CodingAgentTaskView } from "~/api";
 import { taskAtomFamily, taskIdsAtom, tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { renderWithProviders } from "~/common/testUtils.tsx";
-import { EMPTY_WORKSPACE_LAYOUT } from "~/components/sections/persistence/types.ts";
-import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
+import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
+import { EMPTY_WORKSPACE_LAYOUT } from "~/pages/workspace/layout/persistence/snapshot.ts";
 
 import { commandPaletteOpenAtom } from "../atoms.ts";
 import { usePaletteContext, useVisibleCommands } from "../hooks.ts";

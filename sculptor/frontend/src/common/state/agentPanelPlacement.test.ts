@@ -2,11 +2,11 @@ import { createStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CodingAgentTaskView } from "~/api";
-import { layoutPersistenceAdapter } from "~/components/sections/persistence/LocalStorageLayoutAdapter.ts";
-import type { WorkspaceLayoutState } from "~/components/sections/persistence/types.ts";
-import { EMPTY_WORKSPACE_LAYOUT } from "~/components/sections/persistence/types.ts";
-import { makeAgentPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
-import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
+import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
+import { layoutPersistenceAdapter } from "~/pages/workspace/layout/persistence/LocalStorageLayoutAdapter.ts";
+import type { WorkspaceLayoutState } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { EMPTY_WORKSPACE_LAYOUT } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { makeAgentPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
 
 import {
   activateAgentPanelAtom,

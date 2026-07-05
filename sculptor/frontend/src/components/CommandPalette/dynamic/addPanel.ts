@@ -22,7 +22,7 @@ import {
   openStaticPanelInLocation,
   recentAgentLabel,
   recentAgentTypeAtom,
-} from "~/components/sections/addPanelCore.ts";
+} from "~/pages/workspace/layout/atoms/addPanel.ts";
 
 import { addPanelTargetSubSectionAtom } from "../contextActions/atoms.ts";
 import type { CommandRuntime } from "../runtime.ts";

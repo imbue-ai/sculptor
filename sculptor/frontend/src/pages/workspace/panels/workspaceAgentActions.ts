@@ -25,11 +25,11 @@ import {
   taskSupportsChatInterfaceAtomFamily,
 } from "~/common/state/atoms/tasks.ts";
 import { commitPromptSendFailedToastAtom, terminalPromptRejectedToastAtom } from "~/common/state/atoms/toasts.ts";
-import type { WorkspaceLayoutState } from "~/components/sections/persistence/types.ts";
-import { AGENT_PANEL_ID_PREFIX, makeAgentPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
-import { workspaceLayoutFamily } from "~/components/sections/sectionAtoms.ts";
-import type { SubSectionId } from "~/components/sections/sectionTypes.ts";
-import { toSecondary } from "~/components/sections/sectionTypes.ts";
+import { workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
+import type { WorkspaceLayoutState } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { AGENT_PANEL_ID_PREFIX, makeAgentPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
+import type { SubSectionId } from "~/pages/workspace/layout/types/section.ts";
+import { toSecondary } from "~/pages/workspace/layout/types/section.ts";
 
 // Where to look for agent panels first. Center is the primary chat surface;
 // the side/bottom sections host chats the user has deliberately moved there.

@@ -16,14 +16,14 @@ import { terminalConnectionStatusesAtom, terminalTabStateAtom } from "~/common/s
 import { markAgentUnreadAtom } from "~/common/state/atoms/unreadOverrides.ts";
 import { viewedAgentIdAtom } from "~/common/state/atoms/viewedAgent.ts";
 import { agentDeleteTargetAtom, terminalCloseTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
-import type { DynamicAgentInput, DynamicTerminalInput } from "~/components/sections/registry/dynamicPanels.tsx";
-import { deriveDynamicPanels, makeTerminalPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
+import type { DynamicAgentInput, DynamicTerminalInput } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
+import { deriveDynamicPanels, makeTerminalPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
 import {
   buildPluginPanelDefinitions,
   buildStaticPanelDefinitions,
   panelRegistriesEqual,
   panelRegistryAtom,
-} from "~/components/sections/registry/panelRegistry.ts";
+} from "~/pages/workspace/layout/registry/panelRegistry.ts";
 import { pluginPanelsAtom } from "~/plugins/pluginRegistry.ts";
 
 import type { AgentDiagnosticsByTaskId } from "./useWorkspaceAgentDiagnostics.ts";

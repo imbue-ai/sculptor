@@ -9,8 +9,8 @@ import { notesDraftAtomFamily } from "~/common/state/atoms/notesDrafts.ts";
 import { usePromptDraft } from "~/common/state/hooks/usePromptDraft.ts";
 import { Editor } from "~/components/Editor.tsx";
 import { PanelHeader } from "~/components/panels/PanelHeader.tsx";
-import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
+import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 
 import { UndoQueuedMessageDialog } from "../components/UndoQueuedMessageDialog.tsx";
 import styles from "./NotesPanel.module.scss";

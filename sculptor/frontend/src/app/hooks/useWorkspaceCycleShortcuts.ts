@@ -16,7 +16,7 @@ import { useKeybindingHandler } from "~/common/keybindings";
 import { useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { openWorkspaceTabAtom } from "~/common/state/atoms/workspaces.ts";
 import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
-import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
+import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 
 type CycleDirection = 1 | -1;
 

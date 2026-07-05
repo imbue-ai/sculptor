@@ -1,6 +1,8 @@
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useEffect, useRef } from "react";
 
+import { sidebarCollapsedAtom } from "~/pages/workspace/layout/atoms/sidebar.ts";
+
 import { ElementIds } from "../../api";
 import { CHAT_INPUT_ELEMENT_ID } from "../../common/Constants.ts";
 import { keybindingsMapAtom } from "../../common/keybindings/atoms.ts";
@@ -15,7 +17,6 @@ import { useHelpDialog } from "../../common/state/hooks/useHelpDialog.ts";
 import { useOpenSettings } from "../../common/state/hooks/useOpenSettings.ts";
 import { useResolvedTheme } from "../../common/Utils.ts";
 import { useCommandPalette } from "../../components/CommandPalette";
-import { sidebarCollapsedAtom } from "../../components/layout/sidebarAtoms.ts";
 import {
   areGlobalShortcutsDisabledAtom,
   newWorkspaceDialogAtom,

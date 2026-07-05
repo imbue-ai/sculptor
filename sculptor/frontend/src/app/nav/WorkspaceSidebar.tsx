@@ -22,15 +22,15 @@ import { useGitAndOpenInRuntime } from "~/components/CommandPalette/contextActio
 import { buildWorkspaceActions } from "~/components/CommandPalette/contextActions/workspaceActions.ts";
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
 import { DevModeIndicator } from "~/components/DevModeIndicator.tsx";
-import { sidebarCollapsedAtom, sidebarWidthAtom } from "~/components/layout/sidebarAtoms.ts";
 import { isWorkspaceListEmptyAtom, newWorkspaceDialogAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { ReportProblemPopover } from "~/components/ReportProblemPopover.tsx";
-import { layoutPersistenceAdapter } from "~/components/sections/persistence/LocalStorageLayoutAdapter.ts";
-import { ResizeHandle } from "~/components/sections/ResizeHandle.tsx";
 import { Toast, type ToastContent } from "~/components/Toast.tsx";
 import { VersionPopover } from "~/components/VersionPopover.tsx";
 import { getTitleBarLeftPadding } from "~/electron/utils.ts";
 import { WorkspacePeekOverlay } from "~/pages/workspace/components/WorkspacePeekOverlay.tsx";
+import { sidebarCollapsedAtom, sidebarWidthAtom } from "~/pages/workspace/layout/atoms/sidebar.ts";
+import { layoutPersistenceAdapter } from "~/pages/workspace/layout/persistence/LocalStorageLayoutAdapter.ts";
+import { ResizeHandle } from "~/pages/workspace/layout/ResizeHandle.tsx";
 
 import navItemStyles from "./NavItem.module.scss";
 import { NavItem } from "./NavItem.tsx";

@@ -42,8 +42,8 @@ import { useProject } from "~/common/state/hooks/useProjects.ts";
 import { useUnifiedStream } from "~/common/state/hooks/useUnifiedStream";
 import { CommandPalette } from "~/components/CommandPalette";
 import { CommandRegistrations } from "~/components/CommandPalette/CommandRegistrations.tsx";
-import { sidebarCollapsedAtom } from "~/components/layout/sidebarAtoms.ts";
 import { NewWorkspaceDialog } from "~/components/newWorkspace/NewWorkspaceDialog.tsx";
+import { sidebarCollapsedAtom } from "~/pages/workspace/layout/atoms/sidebar.ts";
 import { PluginLoader } from "~/plugins/PluginLoader.tsx";
 import { PluginOverlays } from "~/plugins/PluginOverlays.tsx";
 

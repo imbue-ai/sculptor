@@ -13,7 +13,7 @@ import { useThemeDangerColor, useThemeSuccessColor, useThemeWarningColor } from 
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
 import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch";
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff";
-import { revealPanelInWorkspaceAtom } from "~/components/sections/sectionActions.ts";
+import { revealPanelInWorkspaceAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
 
 import { changesScopeAtomFamily } from "../panels/fileBrowser/atoms";
 import { parseDiffStats } from "../utils/parseDiffStats";

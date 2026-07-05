@@ -3,9 +3,9 @@ import { atomFamily, atomWithStorage, selectAtom } from "jotai/utils";
 
 import { getCachedWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
 import { parseDiff } from "~/components/DiffUtils.ts";
-import { jumpToSectionAtom, openPanelAtom } from "~/components/sections/sectionActions.ts";
-import { activeWorkspaceIdAtom, workspaceLayoutFamily } from "~/components/sections/sectionAtoms.ts";
 import type { DiffScope } from "~/pages/workspace/components/diffPanel/types.ts";
+import { activeWorkspaceIdAtom, workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
+import { jumpToSectionAtom, openPanelAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
 
 import type { FileBrowserState, FileStatus, ViewMode } from "./types.ts";
 import { determineFileStatus } from "./utils.ts";

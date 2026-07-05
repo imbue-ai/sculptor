@@ -1,16 +1,17 @@
 import { getDefaultStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
+import { EMPTY_WORKSPACE_LAYOUT } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import type { PanelDefinition } from "~/pages/workspace/layout/registry/panelRegistry.ts";
+import { panelRegistryAtom } from "~/pages/workspace/layout/registry/panelRegistry.ts";
+import type { PanelId, SubSectionId } from "~/pages/workspace/layout/types/section.ts";
+
 import type { CodingAgentTaskView, UserConfig, Workspace } from "../../../api";
 import { encodeRegisteredAgentType } from "../../../common/state/atoms/agentTabs.ts";
 import { taskAtomFamily, taskIdsAtom } from "../../../common/state/atoms/tasks.ts";
 import { userConfigAtom } from "../../../common/state/atoms/userConfig.ts";
 import { workspaceAtomFamily, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
-import { EMPTY_WORKSPACE_LAYOUT } from "../../sections/persistence/types.ts";
-import type { PanelDefinition } from "../../sections/registry/panelRegistry.ts";
-import { panelRegistryAtom } from "../../sections/registry/panelRegistry.ts";
-import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "../../sections/sectionAtoms.ts";
-import type { PanelId, SubSectionId } from "../../sections/sectionTypes.ts";
 import { addPanelTargetSubSectionAtom } from "../contextActions/atoms.ts";
 import { buildAddPanelProvider } from "../dynamic/addPanel.ts";
 import { buildAgentProvider } from "../dynamic/agentCommands.ts";

@@ -24,16 +24,20 @@ import {
 import { viewedAgentIdAtom } from "~/common/state/atoms/viewedAgent.ts";
 import { useMarkRead } from "~/common/state/hooks/useMarkRead";
 import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
-import { seedFirstVisitTerminal } from "~/components/sections/addPanelCore.ts";
-import { buildDefaultWorkspaceLayout } from "~/components/sections/persistence/defaultLayout.ts";
-import type { WorkspaceLayoutState } from "~/components/sections/persistence/types.ts";
-import { makeAgentPanelId, makeTerminalPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
-import { consumePendingPanelRevealAtom } from "~/components/sections/sectionActions.ts";
-import { isEmptyLayout, switchActiveWorkspaceAtom, workspaceLayoutFamily } from "~/components/sections/sectionAtoms.ts";
-import type { PanelId } from "~/components/sections/sectionTypes.ts";
-import { activeSectionRingNonceAtom } from "~/components/sections/transientAtoms.ts";
-import { useAddPanelActions } from "~/components/sections/useAddPanelActions.ts";
 import { useArtifactSync } from "~/pages/workspace/hooks/useArtifactSync";
+import { seedFirstVisitTerminal } from "~/pages/workspace/layout/atoms/addPanel.ts";
+import {
+  isEmptyLayout,
+  switchActiveWorkspaceAtom,
+  workspaceLayoutFamily,
+} from "~/pages/workspace/layout/atoms/section.ts";
+import { consumePendingPanelRevealAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
+import { activeSectionRingNonceAtom } from "~/pages/workspace/layout/atoms/transient.ts";
+import { useAddPanelActions } from "~/pages/workspace/layout/hooks/useAddPanelActions.ts";
+import { buildDefaultWorkspaceLayout } from "~/pages/workspace/layout/persistence/defaultLayout.ts";
+import type { WorkspaceLayoutState } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { makeAgentPanelId, makeTerminalPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
+import type { PanelId } from "~/pages/workspace/layout/types/section.ts";
 
 import { useWorkspaceDynamicPanels } from "./useWorkspaceDynamicPanels.ts";
 

@@ -2,10 +2,10 @@ import { atom } from "jotai";
 import { atomFamily, atomWithStorage } from "jotai/utils";
 
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
-import { jumpToSectionAtom, openPanelAtom } from "~/components/sections/sectionActions.ts";
-import { activeWorkspaceIdAtom, isEmptyLayout, workspaceLayoutFamily } from "~/components/sections/sectionAtoms.ts";
-import type { PanelId, SubSectionId } from "~/components/sections/sectionTypes.ts";
 import type { DiffSelection } from "~/pages/workspace/components/diffViewer/types.ts";
+import { activeWorkspaceIdAtom, isEmptyLayout, workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
+import { jumpToSectionAtom, openPanelAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
+import type { PanelId, SubSectionId } from "~/pages/workspace/layout/types/section.ts";
 import { getUncommittedFileStatusMap } from "~/pages/workspace/panels/fileBrowser/atoms.ts";
 import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
 

@@ -25,7 +25,7 @@ import { DeleteActionDialog } from "~/components/actions/DeleteActionDialog";
 import { DeleteGroupDialog } from "~/components/actions/DeleteGroupDialog";
 import { GroupContextMenu } from "~/components/actions/GroupContextMenu";
 import { PanelHeader } from "~/components/panels/PanelHeader";
-import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
+import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 
 import styles from "./ActionsPanel.module.scss";
 import { useWorkspacePanelData } from "./useWorkspacePanelData";

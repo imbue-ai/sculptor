@@ -6,7 +6,7 @@ import { useMemo } from "react";
 import { ElementIds } from "~/api";
 import { useTimedLatch } from "~/common/Hooks.ts";
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff";
-import { jumpToSectionAtom, openPanelAtom } from "~/components/sections/sectionActions.ts";
+import { jumpToSectionAtom, openPanelAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
 
 import { changesScopeAtomFamily } from "../panels/fileBrowser/atoms";
 import { parseDiffStats } from "../utils/parseDiffStats";

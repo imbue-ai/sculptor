@@ -10,8 +10,8 @@ import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
 import { fileBrowserDiffViewTypeAtom } from "~/common/state/atoms/userConfig.ts";
-import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 import { CombinedDiffView } from "~/pages/workspace/components/diffPanel/CombinedDiffView.tsx";
+import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 
 const ReviewAllPanelContent = ({ workspaceId }: { workspaceId: string }): ReactElement => {
   // The unified/split preference is shared with the single-file diff viewer.

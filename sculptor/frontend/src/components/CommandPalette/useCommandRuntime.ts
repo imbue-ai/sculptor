@@ -2,6 +2,12 @@ import { useSetAtom } from "jotai";
 import { useStore } from "jotai/react";
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 
+import { workspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
+import { toggleSectionAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
+import { sidebarCollapsedAtom } from "~/pages/workspace/layout/atoms/sidebar.ts";
+import { maximizedSectionAtom } from "~/pages/workspace/layout/atoms/transient.ts";
+import { toSection } from "~/pages/workspace/layout/types/section.ts";
+
 import type { UserConfigField } from "../../api";
 import { CHAT_INPUT_ELEMENT_ID } from "../../common/Constants.ts";
 import { useImbueNavigate } from "../../common/NavigateUtils.ts";
@@ -14,12 +20,7 @@ import { useHelpDialog } from "../../common/state/hooks/useHelpDialog.ts";
 import { useOpenSettings } from "../../common/state/hooks/useOpenSettings.ts";
 import { useUserConfig } from "../../common/state/hooks/useUserConfig.ts";
 import type { AppearanceMode } from "../../common/theme/appearanceModes.ts";
-import { sidebarCollapsedAtom } from "../layout/sidebarAtoms.ts";
 import { newWorkspaceDialogAtom } from "../newWorkspace/newWorkspaceAtoms.ts";
-import { toggleSectionAtom } from "../sections/sectionActions.ts";
-import { workspaceLayoutAtom } from "../sections/sectionAtoms.ts";
-import { toSection } from "../sections/sectionTypes.ts";
-import { maximizedSectionAtom } from "../sections/transientAtoms.ts";
 import { type CommandActionId, commandActionsAtom } from "./commandActions.ts";
 import type { AppStore, CommandRuntime } from "./runtime.ts";
 
