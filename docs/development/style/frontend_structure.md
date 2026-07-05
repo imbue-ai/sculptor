@@ -38,7 +38,7 @@ src/
 ├── plugins/      # plugin SDK and runtime
 ├── electron/     # main-process bridge
 ├── styles/       # global styles and design tokens
-└── stories/      # Storybook stories, mirroring src/ paths
+└── stories/      # Radix catalog + Storybook intro (component stories sit beside their component)
 ```
 
 Import layering follows the same shape and is lint-enforced: `app/` is the
@@ -133,9 +133,12 @@ A helper's default home is no file at all:
 
 ## Stories and tests
 
-Unit tests colocate with source. Storybook stories live centrally in `stories/`,
-mirroring `src/` paths (`stories/custom/<mirrored path>`); when a component
-moves, its story moves to the mirrored path in the same change.
+Unit tests and Storybook stories both colocate with source: a component's
+`.test.tsx` and `.stories.tsx` sit beside its `.tsx`, and move with it when it
+moves. The exception is `stories/radix/`, the central catalog of Radix UI
+primitives — those stories render library components that have no source file in
+`src/` to sit beside, so they live together under `stories/`, alongside the
+Storybook intro (`Welcome.stories.tsx`).
 
 ## Keeping the tree healthy
 
@@ -153,8 +156,6 @@ lands._
 - **Structure moves**: `components/sections` → `pages/workspace/layout`, the
   `app/` shell directory, kind-dir adoption in existing features, and the
   camelCase directory renames are being applied on the UI-refresh stack.
-- **Stories**: the central mirror is the current rule; colocating stories next
-  to components is a candidate future step.
 - **task → agent rename (SCU-1736)**: hand-written frontend code says "agent"
   for agent runs; only the generated `api/` keeps the wire's `task` vocabulary.
   Wire-shaped field names (`task_id`) persist inside the state layer until the
