@@ -1,7 +1,7 @@
 /**
  * Utility functions for handling keyboard shortcuts
  */
-import { isMac } from "~/electron/utils.ts";
+import { isMac } from "~/electron/platform.ts";
 
 export type ShortcutParsed = {
   meta: boolean;

@@ -26,7 +26,7 @@ import {
   WorkspaceContextMenuContent,
   WorkspaceDropdownMenuContent,
 } from "~/components/commandPalette/contextActions/menu.tsx";
-import type { WorkspaceAction } from "~/components/commandPalette/contextActions/types.ts";
+import type { WorkspaceAction } from "~/components/commandPalette/contextActions/types/contextActions.ts";
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCreateWorkspaceFromSidebar.ts";
 import { WorkspaceStatusDots } from "~/components/statusDot";

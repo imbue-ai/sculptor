@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactElement } from "react";
 
 import { formatShortcutForDisplay } from "~/common/keybindings/format";
-import { getMetaKey } from "~/electron/utils";
+import { getMetaKey } from "~/electron/platform";
 
 type ShortcutEntry = {
   raw: string;

@@ -13,6 +13,17 @@ import { useWorkspacePageParams } from "~/common/hooks/navigation.ts";
 import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "~/common/state/queryClient.ts";
 import { BUILTIN_HOME_VIEW_ID } from "~/pages/home/homeViews.ts";
 
+import type {
+  HomeViewDefinition,
+  LoadedPlugin,
+  OverlayDefinition,
+  PluginHostApi,
+  PluginLoadError,
+  PluginManifest,
+  PluginModule,
+  PluginPanelDefinition,
+  WorkspaceWidgetDefinition,
+} from "./contract.ts";
 import { installHostRuntime } from "./hostRuntime.ts";
 import { PluginContext } from "./PluginContext.tsx";
 import { PluginErrorBoundary } from "./PluginErrorBoundary.tsx";
@@ -30,17 +41,6 @@ import {
   pluginWorkspaceWidgetsAtom,
 } from "./pluginRegistry.ts";
 import { getRendererIdentity } from "./rendererIdentity.ts";
-import type {
-  HomeViewDefinition,
-  LoadedPlugin,
-  OverlayDefinition,
-  PluginHostApi,
-  PluginLoadError,
-  PluginManifest,
-  PluginModule,
-  PluginPanelDefinition,
-  WorkspaceWidgetDefinition,
-} from "./types.ts";
 import { WorkspacePluginContext } from "./WorkspaceContext.tsx";
 
 type JotaiStore = ReturnType<typeof createStore>;

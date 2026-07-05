@@ -7,7 +7,7 @@ import { ElementIds, type ExternalApp, type Workspace } from "../../../api";
 import { getOpenWithItems } from "../../../common/openInApp/items.tsx";
 import type { AccentColor } from "../../../common/state/atoms/themeBuilder";
 import { useWorkspaceBranch } from "../../../common/state/hooks/useWorkspaceBranch.ts";
-import type { WorkspaceAction } from "./types.ts";
+import type { WorkspaceAction } from "./types/contextActions.ts";
 
 /** Pixel size shared by every icon rendered in these context menus. */
 const ICON_SIZE = 14;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { filterFilesBySubstring } from "./utils.ts";
+import { filterFilesBySubstring } from "./fileTree.ts";
 
 describe("filterFilesBySubstring", () => {
   const files = [

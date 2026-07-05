@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 
 import { ElementIds } from "~/api";
 
-import { splitDiffColumnRatioAtom } from "./atoms.ts";
+import { splitDiffColumnRatioAtom } from "./atoms/diffPanel.ts";
 import styles from "./SplitDiffHandle.module.scss";
 
 const MIN_SPLIT_RATIO = 20;

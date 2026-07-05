@@ -10,9 +10,9 @@ import { ElementIds } from "~/api";
 import { projectAtomFamily } from "~/common/state/atoms/projects.ts";
 import { taskAtomFamily } from "~/common/state/atoms/tasks.ts";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
-import { diffPanelStateAtomFamily } from "~/pages/workspace/diffPanel/atoms.ts";
-import { FILE_VIEW_PREFIX } from "~/pages/workspace/diffPanel/types.ts";
-import { fileBrowserStateAtomFamily, focusFolderAtom } from "~/pages/workspace/panels/fileBrowser/atoms.ts";
+import { diffPanelStateAtomFamily } from "~/pages/workspace/diffPanel/atoms/diffPanel.ts";
+import { FILE_VIEW_PREFIX } from "~/pages/workspace/diffPanel/types/diffPanel.ts";
+import { fileBrowserStateAtomFamily, focusFolderAtom } from "~/pages/workspace/panels/fileBrowser/atoms/fileBrowser.ts";
 
 import { MentionChip, type MentionChipProps } from "./MentionChip.tsx";
 

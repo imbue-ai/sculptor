@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ExternalApp, Workspace } from "../../../api";
 import { workspaceAtomFamily, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
-import type { WorkspaceActionRuntime } from "../contextActions/types.ts";
+import type { WorkspaceActionRuntime } from "../contextActions/types/contextActions.ts";
 import type { PaletteContext } from "../types/commandPalette.ts";
 import type { CommandRuntime } from "../utils/runtime.ts";
 

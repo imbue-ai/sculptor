@@ -14,7 +14,7 @@ import { AlphaExpandedToolRow } from "./AlphaExpandedToolRow.tsx";
 import { AlphaToolPill } from "./AlphaToolPill.tsx";
 import styles from "./AlphaToolPillRow.module.scss";
 import { AlphaToolPopover } from "./AlphaToolPopover.tsx";
-import { chatToolDensityAtom } from "./atoms.ts";
+import { chatToolDensityAtom } from "./atoms/chatAlpha.ts";
 import { useCloseOnChatScroll } from "./hooks/useChatScroll.tsx";
 import { usePillHoverDelay } from "./hooks/usePillHoverDelay.ts";
 import { useToolNavigation } from "./ToolNavigationContext.tsx";

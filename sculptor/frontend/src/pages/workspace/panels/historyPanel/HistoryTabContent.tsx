@@ -5,10 +5,10 @@ import { useCallback, useMemo } from "react";
 
 import { ElementIds } from "~/api";
 import { useWorkspaceCommits } from "~/common/state/hooks/useWorkspaceCommits.ts";
-import { openCommitDiffTabAtom } from "~/pages/workspace/diffPanel/atoms.ts";
-import type { ViewMode } from "~/pages/workspace/panels/fileBrowser/types.ts";
+import { openCommitDiffTabAtom } from "~/pages/workspace/diffPanel/atoms/diffPanel.ts";
+import type { ViewMode } from "~/pages/workspace/panels/fileBrowser/types/fileBrowser.ts";
 
-import { expandedCommitsAtomFamily, toggleCommitExpandedAtom } from "./atoms.ts";
+import { expandedCommitsAtomFamily, toggleCommitExpandedAtom } from "./atoms/historyPanel.ts";
 import { CommitEntry } from "./CommitEntry.tsx";
 import { buildCommitGraph } from "./commitGraph.ts";
 import styles from "./HistoryPanel.module.scss";

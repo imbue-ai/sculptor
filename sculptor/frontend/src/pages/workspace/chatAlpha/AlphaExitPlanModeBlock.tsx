@@ -8,7 +8,7 @@ import type { ToolUseBlock } from "~/api";
 import { ElementIds } from "~/api";
 import { useTaskDetailWithDefaults } from "~/common/state/hooks/useTaskDetail";
 import { MarkdownBlock } from "~/components/MarkdownBlock";
-import { openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms.ts";
+import { openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms/diffPanel.ts";
 
 import styles from "./AlphaChatView.module.scss";
 import { useChatTask } from "./ChatTaskContext.tsx";

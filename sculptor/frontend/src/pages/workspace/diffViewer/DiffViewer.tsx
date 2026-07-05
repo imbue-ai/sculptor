@@ -14,13 +14,13 @@ import { useUserConfig } from "~/common/state/hooks/useUserConfig.ts";
 import { invalidateWorkspaceCommitDiff, useWorkspaceCommitDiff } from "~/common/state/hooks/useWorkspaceCommitDiff.ts";
 import { useForceRefreshWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
 import { invalidateWorkspaceGitQueries } from "~/common/state/queryClient.ts";
-import type { MarkdownRenderMode } from "~/pages/workspace/diffPanel/atoms.ts";
+import type { MarkdownRenderMode } from "~/pages/workspace/diffPanel/atoms/diffPanel.ts";
 import {
   closeDiffTabAtom,
   isMarkdownPath,
   markdownRenderModeAtom,
   openFileViewTabAtom,
-} from "~/pages/workspace/diffPanel/atoms.ts";
+} from "~/pages/workspace/diffPanel/atoms/diffPanel.ts";
 import { BinaryPreview } from "~/pages/workspace/diffPanel/BinaryPreview.tsx";
 import { DeletedFileBanner } from "~/pages/workspace/diffPanel/DeletedFileBanner.tsx";
 import { DiffErrorBanner } from "~/pages/workspace/diffPanel/DiffErrorBanner.tsx";
@@ -29,20 +29,20 @@ import { LargeDiffGate } from "~/pages/workspace/diffPanel/LargeDiffGate.tsx";
 import { PierreDiffView } from "~/pages/workspace/diffPanel/PierreDiffView.tsx";
 import { ReadOnlyPreview } from "~/pages/workspace/diffPanel/ReadOnlyPreview.tsx";
 import { RenameBanner } from "~/pages/workspace/diffPanel/RenameBanner.tsx";
-import type { DiffViewType } from "~/pages/workspace/diffPanel/types.ts";
+import type { DiffViewType } from "~/pages/workspace/diffPanel/types/diffPanel.ts";
 import { useFileLines } from "~/pages/workspace/diffPanel/useFileLines.ts";
 import { useInFileSearch } from "~/pages/workspace/diffPanel/useInFileSearch.ts";
 import { useScrollPreservation } from "~/pages/workspace/diffPanel/useScrollPreservation.ts";
 import { IndeterminateProgress } from "~/pages/workspace/diffViewer/IndeterminateProgress.tsx";
 import { useTimedLatch } from "~/pages/workspace/hooks/useTimedLatch.ts";
-import { determineFileStatus } from "~/pages/workspace/panels/fileBrowser/utils.ts";
+import { determineFileStatus } from "~/pages/workspace/panels/fileBrowser/utils/fileTree.ts";
 import { getLineCounts, parseDiff } from "~/pages/workspace/utils/diff.ts";
 
 import styles from "./DiffViewer.module.scss";
 import { DiffViewerHeader } from "./DiffViewerHeader.tsx";
 import { DiffViewerMenu } from "./DiffViewerMenu.tsx";
 import type { RecentFilesScope } from "./FilePathSelect.tsx";
-import type { DiffSelection, DiffViewOptions, TreeViewOptions } from "./types.ts";
+import type { DiffSelection, DiffViewOptions, TreeViewOptions } from "./types/diffViewer.ts";
 import { useDiffViewerContent } from "./useDiffViewerContent.ts";
 
 // Wait this long before showing the top progress bar; fetches that finish

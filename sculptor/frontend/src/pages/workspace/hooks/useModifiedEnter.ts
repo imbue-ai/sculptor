@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 
 import { shouldHandleKeybinding } from "~/common/keybindings/matching.ts";
-import { isModifierPressed } from "~/electron/utils.ts";
+import { isModifierPressed } from "~/electron/platform.ts";
 
 type UseModifiedEnterOptions = {
   onConfirm: () => void;

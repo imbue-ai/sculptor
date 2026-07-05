@@ -11,17 +11,18 @@ import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 import { CommitButton } from "~/pages/workspace/panels/fileBrowser/CommitButton.tsx";
 import { FileDropdownMenu } from "~/pages/workspace/panels/fileBrowser/FileDropdownMenu.tsx";
-import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
-import { determineFileStatus, isBinaryFile } from "~/pages/workspace/panels/fileBrowser/utils.ts";
+import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types/fileBrowser.ts";
+import { determineFileStatus } from "~/pages/workspace/panels/fileBrowser/utils/fileTree.ts";
+import { isBinaryFile } from "~/pages/workspace/panels/fileBrowser/utils/fileType.ts";
 import type { DiffData } from "~/pages/workspace/utils/diff.ts";
 import { parseDiff } from "~/pages/workspace/utils/diff.ts";
 
-import { diffScopeAtomFamily } from "./atoms.ts";
+import { diffScopeAtomFamily } from "./atoms/diffPanel.ts";
 import styles from "./CombinedDiffView.module.scss";
 import { DiffScopePicker } from "./DiffScopePicker.tsx";
 import { LargeDiffGate } from "./LargeDiffGate.tsx";
 import { PierreDiffView } from "./PierreDiffView.tsx";
-import type { DiffScope, DiffViewType } from "./types.ts";
+import type { DiffScope, DiffViewType } from "./types/diffPanel.ts";
 import { useFileLines } from "./useFileLines.ts";
 
 type FileChangeEntry = DiffData["fileChanges"][number];

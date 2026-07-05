@@ -15,7 +15,7 @@ import {
   recordRecentDiffFileAtom,
   resetReviewAllScopeAtom,
   setActiveDiffTabAtom,
-} from "./atoms.ts";
+} from "./diffPanel.ts";
 
 const WORKSPACE_ID = "ws-1";
 

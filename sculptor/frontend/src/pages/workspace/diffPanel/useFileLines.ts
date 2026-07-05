@@ -2,7 +2,7 @@ import { useMemo } from "react";
 
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 import { useWorkspaceFileContent } from "~/common/state/hooks/useWorkspaceFileContent.ts";
-import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
+import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types/fileBrowser.ts";
 
 /**
  * Pierre expects lines split so each element retains its trailing newline.

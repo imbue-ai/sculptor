@@ -6,9 +6,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { mentionChipUnreachableToastAtom } from "~/common/state/atoms/toasts.ts";
 
-import { focusFolderAtom } from "./atoms.ts";
+import { focusFolderAtom } from "./atoms/fileBrowser.ts";
 import { useFocusFolderHighlight } from "./useFocusFolderHighlight.ts";
-import type { FlatRowEntry } from "./utils.ts";
+import type { FlatRowEntry } from "./utils/fileTree.ts";
 
 const HIGHLIGHT_CLASS = "promptNavigatorHighlight";
 

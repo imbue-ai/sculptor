@@ -20,12 +20,12 @@ import { chatSearchVisibleAtom } from "~/common/state/atoms/chatSearch.ts";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { useRegisterCommandAction } from "~/components/commandPalette/utils/commandActions.ts";
 import { Toast } from "~/components/Toast.tsx";
-import { isModifierPressed } from "~/electron/utils.ts";
+import { isModifierPressed } from "~/electron/platform.ts";
 import { buildSubagentMetadataMap, buildSubagentTree } from "~/pages/workspace/chatAlpha/utils/subagentTree.ts";
 import { AgentLightboxProvider } from "~/pages/workspace/filePreview/AgentLightboxContext.tsx";
 import { VerticalOverlayScrollbar } from "~/pages/workspace/VerticalOverlayScrollbar.tsx";
 
-import { openDiffTabAtom } from "../diffPanel/atoms.ts";
+import { openDiffTabAtom } from "../diffPanel/atoms/diffPanel.ts";
 import { QueuedMessages } from "../queuedMessages/QueuedMessages.tsx";
 import styles from "./AlphaChatInterface.module.scss";
 import { AlphaChatIntro } from "./AlphaChatIntro.tsx";
@@ -40,7 +40,7 @@ import {
 import { AlphaPromptNavigator } from "./AlphaPromptNavigator.tsx";
 import { AlphaSearchBar } from "./AlphaSearchBar.tsx";
 import { AskUserQuestion } from "./AskUserQuestion";
-import { chatToolDensityAtom } from "./atoms.ts";
+import { chatToolDensityAtom } from "./atoms/chatAlpha.ts";
 import { ChatInput } from "./ChatInput";
 import { useChatTask } from "./ChatTaskContext.tsx";
 import { ErrorInput } from "./ErrorInput.tsx";

@@ -1,7 +1,7 @@
 import { ExternalLink, GitCommitVertical, GitPullRequestArrow, Pencil, Trash2 } from "lucide-react";
 
 import { ElementIds } from "../../../api";
-import type { WorkspaceAction, WorkspaceActionRuntime } from "./types.ts";
+import type { WorkspaceAction, WorkspaceActionRuntime } from "./types/contextActions.ts";
 
 /**
  * Single source of truth for workspace context actions. Both the

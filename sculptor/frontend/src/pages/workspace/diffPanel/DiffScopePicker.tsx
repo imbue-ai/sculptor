@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import { ElementIds } from "~/api";
 
 import styles from "./DiffScopePicker.module.scss";
-import type { DiffScope } from "./types.ts";
+import type { DiffScope } from "./types/diffPanel.ts";
 
 type DiffScopePickerProps = {
   scope: DiffScope;

@@ -20,7 +20,7 @@ import { memo, useState } from "react";
 import { ElementIds } from "~/api";
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { AgentStatusDot } from "~/components/statusDot";
-import { getCollapsedSidebarToggleClearance } from "~/electron/utils.ts";
+import { getCollapsedSidebarToggleClearance } from "~/electron/platform.ts";
 import { sectionSplitForSectionAtom } from "~/pages/workspace/layout/atoms/section.ts";
 import { closePanelAtom, setActivePanelAtom, splitSectionAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
 import { sidebarCollapsedAtom } from "~/pages/workspace/layout/atoms/sidebar.ts";

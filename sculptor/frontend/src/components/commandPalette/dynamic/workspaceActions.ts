@@ -3,7 +3,7 @@ import { FolderOpenIcon, SettingsIcon } from "lucide-react";
 import { getOpenWithItems, getPreferredApp } from "../../../common/openInApp/items.tsx";
 import { workspacesArrayAtom } from "../../../common/state/atoms/workspaces.ts";
 import { workspaceActionsTargetAtom } from "../contextActions/atoms/contextActions.ts";
-import type { WorkspaceActionRuntime } from "../contextActions/types.ts";
+import type { WorkspaceActionRuntime } from "../contextActions/types/contextActions.ts";
 import { buildWorkspaceActions } from "../contextActions/workspaceActions.ts";
 import type { Command, DynamicProvider } from "../types/commandPalette.ts";
 import type { CommandRuntime } from "../utils/runtime.ts";

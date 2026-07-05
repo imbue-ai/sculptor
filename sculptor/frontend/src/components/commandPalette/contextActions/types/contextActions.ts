@@ -1,7 +1,7 @@
 import type { KeybindingId } from "~/common/keybindings/model.ts";
 
-import type { CodingAgentTaskView, ExternalApp, Workspace } from "../../../api";
-import type { CommandIcon } from "../types/commandPalette.ts";
+import type { CodingAgentTaskView, ExternalApp, Workspace } from "../../../../api";
+import type { CommandIcon } from "../../types/commandPalette.ts";
 
 /** Convenience alias — agents are surfaced as `CodingAgentTaskView` rows. */
 export type Agent = CodingAgentTaskView;

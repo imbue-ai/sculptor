@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { type CommitInfo, ElementIds } from "~/api";
 import { formatRelativeTime } from "~/common/utils/formatRelativeTime.ts";
-import type { FileStatus, ViewMode } from "~/pages/workspace/panels/fileBrowser/types.ts";
+import type { FileStatus, ViewMode } from "~/pages/workspace/panels/fileBrowser/types/fileBrowser.ts";
 
 import { CommitGraph } from "./CommitGraph.tsx";
 import { HistoryFileList } from "./HistoryFileList.tsx";

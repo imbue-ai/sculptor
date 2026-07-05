@@ -3,7 +3,7 @@ import { SettingsIcon } from "lucide-react";
 import { tasksArrayAtom } from "../../../common/state/atoms/tasks.ts";
 import { buildAgentActions } from "../contextActions/agentActions.ts";
 import { agentActionsTargetAtom } from "../contextActions/atoms/contextActions.ts";
-import type { AgentActionRuntime } from "../contextActions/types.ts";
+import type { AgentActionRuntime } from "../contextActions/types/contextActions.ts";
 import type { Command, DynamicProvider } from "../types/commandPalette.ts";
 import type { CommandRuntime } from "../utils/runtime.ts";
 import { taskDisplayTitle } from "./agentTitle.ts";

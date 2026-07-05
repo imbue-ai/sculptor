@@ -7,7 +7,7 @@ import { ElementIds } from "~/api";
 import { getBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
 import { useDirectoryListing } from "~/components/pathAutocomplete/hooks/useDirectoryListing.ts";
 import { PathAutocomplete } from "~/components/pathAutocomplete/PathAutocomplete.tsx";
-import { isElectron, selectProjectDirectory } from "~/electron/utils.ts";
+import { isElectron, selectProjectDirectory } from "~/electron/platform.ts";
 
 import { useCloneDefaults } from "./hooks/useCloneDefaults.ts";
 import { NotConfiguredSection } from "./NotConfiguredSection.tsx";

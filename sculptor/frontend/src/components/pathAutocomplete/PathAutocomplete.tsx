@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DirectoryEntry } from "~/api";
 import { ElementIds } from "~/api";
 import { KeyboardHint } from "~/components/KeyboardHint.tsx";
-import { getMetaKey, isModifierPressed } from "~/electron/utils.ts";
+import { getMetaKey, isModifierPressed } from "~/electron/platform.ts";
 
 import styles from "./PathAutocomplete.module.scss";
 import { detectHomeDirPrefix } from "./utils/detectHomeDirPrefix.ts";

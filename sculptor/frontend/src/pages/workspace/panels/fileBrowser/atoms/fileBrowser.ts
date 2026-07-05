@@ -2,13 +2,13 @@ import { atom } from "jotai";
 import { atomFamily, atomWithStorage, selectAtom } from "jotai/utils";
 
 import { getCachedWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
-import type { DiffScope } from "~/pages/workspace/diffPanel/types.ts";
+import type { DiffScope } from "~/pages/workspace/diffPanel/types/diffPanel.ts";
 import { activeWorkspaceIdAtom, workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
 import { jumpToSectionAtom, openPanelAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
 import { parseDiff } from "~/pages/workspace/utils/diff.ts";
 
-import type { FileBrowserState, FileStatus, ViewMode } from "./types.ts";
-import { determineFileStatus } from "./utils.ts";
+import type { FileBrowserState, FileStatus, ViewMode } from "../types/fileBrowser.ts";
+import { determineFileStatus } from "../utils/fileTree.ts";
 
 const FILE_BROWSER_PANEL_ID = "files";
 

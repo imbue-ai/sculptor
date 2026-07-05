@@ -1,7 +1,7 @@
 import { ContextMenu } from "@radix-ui/themes";
 import type { ReactElement, ReactNode } from "react";
 
-import type { FileContextMenuContext } from "./types.ts";
+import type { FileContextMenuContext } from "./types/fileBrowser.ts";
 import { useFileMenuGroups } from "./useFileMenuGroups.tsx";
 
 type FileContextMenuProps = {

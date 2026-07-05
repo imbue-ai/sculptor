@@ -20,8 +20,8 @@ import {
   safeUrlTransform,
 } from "~/pages/workspace/diffPanel/markdownDiff/utils/markdownPlugins.ts";
 
-import type { MarkdownRenderMode } from "./atoms.ts";
-import { isMarkdownPath, markdownRenderModeAtom } from "./atoms.ts";
+import type { MarkdownRenderMode } from "./atoms/diffPanel.ts";
+import { isMarkdownPath, markdownRenderModeAtom } from "./atoms/diffPanel.ts";
 import {
   adoptPierreOverrideSheet,
   createPierreOverrideSheet,

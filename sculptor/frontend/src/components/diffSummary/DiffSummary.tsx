@@ -9,7 +9,7 @@ import { useTimedLatch } from "~/pages/workspace/hooks/useTimedLatch.ts";
 import { jumpToSectionAtom, openPanelAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
 
 import { parseDiffStats } from "../../common/utils/parseDiffStats";
-import { changesScopeAtomFamily } from "../../pages/workspace/panels/fileBrowser/atoms";
+import { changesScopeAtomFamily } from "../../pages/workspace/panels/fileBrowser/atoms/fileBrowser";
 import styles from "./DiffSummary.module.scss";
 
 // Holds the shimmer on long enough to complete one full pulse cycle even when

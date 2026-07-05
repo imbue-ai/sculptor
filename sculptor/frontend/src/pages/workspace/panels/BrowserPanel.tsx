@@ -6,10 +6,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { useWorkspacePageParams } from "~/common/hooks/navigation";
-import { isElectron } from "~/electron/utils";
+import { isElectron } from "~/electron/platform";
 import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 
-import { browserPanelStateAtomFamily } from "./browser/atoms";
+import { browserPanelStateAtomFamily } from "./browser/atoms/browser";
 import { browserViewStatusAtomFamily, getBrowserViewController } from "./browser/browserViewRegistry";
 import { normalizeUrlInput } from "./browser/url";
 import { useBrowserPanelPlacement } from "./browser/useBrowserPanelPlacement";

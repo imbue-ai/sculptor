@@ -4,17 +4,17 @@ import type { ReactElement } from "react";
 import { useEffect, useMemo } from "react";
 
 import { ElementIds } from "~/api";
-import type { RecentDiffFile } from "~/pages/workspace/diffPanel/atoms.ts";
+import type { RecentDiffFile } from "~/pages/workspace/diffPanel/atoms/diffPanel.ts";
 import {
   getRecentDiffFilesAtom,
   openCommitDiffTabAtom,
   openDiffTabAtom,
   openFileViewTabAtom,
   recordRecentDiffFileAtom,
-} from "~/pages/workspace/diffPanel/atoms.ts";
-import type { DiffScope } from "~/pages/workspace/diffPanel/types.ts";
-import { changesScopeAtomFamily } from "~/pages/workspace/panels/fileBrowser/atoms.ts";
-import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
+} from "~/pages/workspace/diffPanel/atoms/diffPanel.ts";
+import type { DiffScope } from "~/pages/workspace/diffPanel/types/diffPanel.ts";
+import { changesScopeAtomFamily } from "~/pages/workspace/panels/fileBrowser/atoms/fileBrowser.ts";
+import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types/fileBrowser.ts";
 
 import styles from "./FilePathSelect.module.scss";
 

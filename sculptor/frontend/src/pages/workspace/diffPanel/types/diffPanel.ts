@@ -1,4 +1,4 @@
-import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
+import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types/fileBrowser.ts";
 
 export const FILE_VIEW_PREFIX = "__file_view__:";
 export const COMMIT_DIFF_PREFIX = "__commit_diff__:";

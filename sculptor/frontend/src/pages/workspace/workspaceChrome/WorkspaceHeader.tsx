@@ -12,7 +12,7 @@ import { useGitProvider } from "~/common/state/hooks/useGitProvider";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
 import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
-import { getCollapsedSidebarToggleClearance } from "~/electron/utils.ts";
+import { getCollapsedSidebarToggleClearance } from "~/electron/platform.ts";
 import { isSectionExpandedAtom } from "~/pages/workspace/layout/atoms/section.ts";
 import { toggleSectionAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
 import { sidebarCollapsedAtom } from "~/pages/workspace/layout/atoms/sidebar.ts";

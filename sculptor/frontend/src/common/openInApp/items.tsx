@@ -8,7 +8,7 @@ import itermIcon from "~/assets/app-icons/iterm.png";
 import pycharmIcon from "~/assets/app-icons/pycharm.png";
 import terminalIcon from "~/assets/app-icons/terminal.png";
 import vscodeIcon from "~/assets/app-icons/vscode.png";
-import { isMac } from "~/electron/utils";
+import { isMac } from "~/electron/platform";
 
 export type OpenWithItem = {
   app: ExternalApp;

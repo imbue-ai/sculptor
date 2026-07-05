@@ -7,9 +7,9 @@ import { getBackendCapabilities } from "~/common/state/atoms/backendCapabilities
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 import type { WorkspaceFilePayload } from "~/common/state/hooks/useWorkspaceFileContent.ts";
 import { useWorkspaceFilePayload } from "~/common/state/hooks/useWorkspaceFileContent.ts";
-import { isSupportedImageFormat } from "~/pages/workspace/panels/fileBrowser/utils.ts";
+import { isSupportedImageFormat } from "~/pages/workspace/panels/fileBrowser/utils/fileType.ts";
 
-import { openInOs } from "../panels/fileBrowser/hooks.ts";
+import { openInOs } from "../panels/fileBrowser/openInOs.ts";
 import styles from "./BinaryPreview.module.scss";
 
 const IMAGE_MIME_TYPES: Record<string, string> = {

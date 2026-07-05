@@ -26,7 +26,7 @@ vi.mock("~/pages/workspace/diffPanel/usePierreHighlighterReady.ts", () => ({
 // jotai mock below can route reads/writes per-atom. Returning a blanket null
 // from `useAtomValue` would silently keep passing if the routing logic later
 // starts depending on a real atom value.
-vi.mock("~/pages/workspace/diffPanel/atoms.ts", () => ({
+vi.mock("~/pages/workspace/diffPanel/atoms/diffPanel.ts", () => ({
   openDiffTabAtom: { __label: "diff" },
   openFileViewTabAtom: { __label: "fileView" },
 }));

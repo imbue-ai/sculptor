@@ -10,7 +10,7 @@ import { prStatusAtomFamily } from "../../../common/state/atoms/prStatus.ts";
 import { repoInfoAtomFamily } from "../../../common/state/atoms/repoInfo.ts";
 import { commitPromptAtom, prCreationPromptAtom } from "../../../common/state/atoms/userConfig.ts";
 import { getCachedWorkspaceDiff } from "../../../common/state/hooks/useWorkspaceDiff.ts";
-import { isMac } from "../../../electron/utils.ts";
+import { isMac } from "../../../electron/platform.ts";
 
 /**
  * Slice of `WorkspaceActionRuntime` covering the git / external-app

@@ -7,7 +7,7 @@ import {
   renamingWorkspaceIdAtom,
   workspaceDeleteTargetAtom,
 } from "../contextActions/atoms/contextActions.ts";
-import type { AgentActionRuntime, WorkspaceActionRuntime } from "../contextActions/types.ts";
+import type { AgentActionRuntime, WorkspaceActionRuntime } from "../contextActions/types/contextActions.ts";
 import { useGitAndOpenInRuntime } from "../contextActions/useGitAndOpenInRuntime.ts";
 
 /**

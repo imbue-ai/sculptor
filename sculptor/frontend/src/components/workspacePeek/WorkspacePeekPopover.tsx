@@ -16,7 +16,7 @@ import { useTimedLatch } from "~/pages/workspace/hooks/useTimedLatch.ts";
 import { revealPanelInWorkspaceAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
 
 import { parseDiffStats } from "../../common/utils/parseDiffStats";
-import { changesScopeAtomFamily } from "../../pages/workspace/panels/fileBrowser/atoms";
+import { changesScopeAtomFamily } from "../../pages/workspace/panels/fileBrowser/atoms/fileBrowser";
 import { PeekAgentStatusDot } from "./PeekAgentStatusDot";
 import styles from "./WorkspacePeekPopover.module.scss";
 

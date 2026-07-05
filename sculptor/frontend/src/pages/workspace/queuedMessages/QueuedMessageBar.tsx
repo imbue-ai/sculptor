@@ -11,7 +11,7 @@ import { useInterruptAgent } from "../../../common/state/hooks/useInterruptAgent
 import { usePromptDraft } from "../../../common/state/hooks/usePromptDraft.ts";
 import { useTaskSupportsInterruption } from "../../../common/state/hooks/useTaskHelpers.ts";
 import { Toast } from "../../../components/Toast.tsx";
-import { getMetaKey } from "../../../electron/utils.ts";
+import { getMetaKey } from "../../../electron/platform.ts";
 import { CapabilityGate } from "../chatAlpha/CapabilityGate.tsx";
 import { useChatTask } from "../chatAlpha/ChatTaskContext.tsx";
 import type { BlockUnion } from "../utils/blockGuards.ts";

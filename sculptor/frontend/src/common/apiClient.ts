@@ -1,7 +1,7 @@
 import { typeid } from "typeid-js";
 
 import { client } from "../api/client.gen";
-import { isElectron } from "../electron/utils.ts";
+import { isElectron } from "../electron/platform.ts";
 import { initBackendCapabilities } from "./state/atoms/backendCapabilities.ts";
 import { createRequestTracker } from "./state/requestTracking.ts";
 import { HTTPException, RequestTimeoutError, ValidationError } from "./utils/errors.ts";

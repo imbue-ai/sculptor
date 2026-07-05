@@ -16,10 +16,10 @@ import type { ReactElement } from "react";
 import { Fragment } from "react";
 
 import { ElementIds } from "~/api";
-import type { FileContextMenuContext } from "~/pages/workspace/panels/fileBrowser/types.ts";
+import type { FileContextMenuContext } from "~/pages/workspace/panels/fileBrowser/types/fileBrowser.ts";
 import { useFileMenuGroups } from "~/pages/workspace/panels/fileBrowser/useFileMenuGroups.tsx";
 
-import type { DiffViewOptions, TreeViewOptions } from "./types.ts";
+import type { DiffViewOptions, TreeViewOptions } from "./types/diffViewer.ts";
 
 /** The tree (list) view controls — flat/tree + collapse-all. */
 const TreeOptionItems = ({ options }: { options: TreeViewOptions }): ReactElement => (

@@ -11,8 +11,8 @@ import { useImbueNavigate } from "~/common/hooks/navigation";
 import { projectAtomFamily } from "~/common/state/atoms/projects";
 import { taskAtomFamily } from "~/common/state/atoms/tasks";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces";
-import { openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms";
-import { revealFolderAtom } from "~/pages/workspace/panels/fileBrowser/atoms";
+import { openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms/diffPanel";
+import { revealFolderAtom } from "~/pages/workspace/panels/fileBrowser/atoms/fileBrowser";
 import { getFileIcon } from "~/pages/workspace/panels/fileBrowser/fileIcons";
 
 import { type SkillType } from "../common/utils/skillBadge";

@@ -1,4 +1,4 @@
-import { isMac } from "~/electron/utils.ts";
+import { isMac } from "~/electron/platform.ts";
 
 /**
  * Convert shortcut modifiers to platform-specific symbols

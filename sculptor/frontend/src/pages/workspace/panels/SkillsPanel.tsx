@@ -15,7 +15,7 @@ import { PanelHeader } from "~/components/panels/PanelHeader";
 import { SkillChip } from "~/components/skills/SkillChip";
 import { SkillHoverContent } from "~/components/skills/SkillHoverContent";
 import { TooltipIconButton } from "~/components/TooltipIconButton";
-import { openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms";
+import { openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms/diffPanel";
 import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 import { draggedPanelIdAtom } from "~/pages/workspace/layout/atoms/transient.ts";
 

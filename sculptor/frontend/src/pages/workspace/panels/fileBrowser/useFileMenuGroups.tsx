@@ -4,12 +4,12 @@ import type { ReactElement } from "react";
 import { useCallback, useMemo } from "react";
 
 import { getBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
-import { openDiffTabAtom, openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms.ts";
+import { openDiffTabAtom, openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms/diffPanel.ts";
 import { useWorkspaceCodePath } from "~/pages/workspace/hooks/useWorkspaceCodePath.ts";
 
-import { expandFoldersAtom } from "./atoms.ts";
-import { openInOs } from "./hooks.ts";
-import type { FileContextMenuContext } from "./types.ts";
+import { expandFoldersAtom } from "./atoms/fileBrowser.ts";
+import { openInOs } from "./openInOs.ts";
+import type { FileContextMenuContext } from "./types/fileBrowser.ts";
 
 export type MenuItem = {
   key: string;

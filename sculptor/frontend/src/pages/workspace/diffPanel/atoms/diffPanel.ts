@@ -2,15 +2,15 @@ import { atom } from "jotai";
 import { atomFamily, atomWithStorage } from "jotai/utils";
 
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
-import type { DiffSelection } from "~/pages/workspace/diffViewer/types.ts";
+import type { DiffSelection } from "~/pages/workspace/diffViewer/types/diffViewer.ts";
 import { activeWorkspaceIdAtom, isEmptyLayout, workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
 import { jumpToSectionAtom, openPanelAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
 import type { PanelId, SubSectionId } from "~/pages/workspace/layout/types/section.ts";
-import { getUncommittedFileStatusMap } from "~/pages/workspace/panels/fileBrowser/atoms.ts";
-import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
+import { getUncommittedFileStatusMap } from "~/pages/workspace/panels/fileBrowser/atoms/fileBrowser.ts";
+import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types/fileBrowser.ts";
 
-import type { DiffPanelTabState, DiffScope, DiffTab, SingleFileDiffTab } from "./types.ts";
-import { COMMIT_DIFF_PREFIX, FILE_VIEW_PREFIX, TARGET_BRANCH_DIFF_PREFIX } from "./types.ts";
+import type { DiffPanelTabState, DiffScope, DiffTab, SingleFileDiffTab } from "../types/diffPanel.ts";
+import { COMMIT_DIFF_PREFIX, FILE_VIEW_PREFIX, TARGET_BRANCH_DIFF_PREFIX } from "../types/diffPanel.ts";
 
 // The single-instance panel (and its default section) that hosts the active diff/
 // file-view tab in the section shell. file-view tabs surface in the Files panel;

@@ -1,8 +1,6 @@
-import type { CSSProperties } from "react";
-
 import type { DiffData } from "~/pages/workspace/utils/diff.ts";
 
-import type { FileStatus, FlatFileEntry, TreeNode } from "./types.ts";
+import type { FileStatus, FlatFileEntry, TreeNode } from "../types/fileBrowser.ts";
 
 /** Row height (px) used by virtualizer across all file browser views. */
 export const FILE_TREE_ROW_HEIGHT = 28;
@@ -30,22 +28,6 @@ export const determineFileStatus = (fileChange: DiffData["fileChanges"][number])
 /** Number of extra rows to render outside the viewport for smoother scrolling. */
 export const FILE_TREE_OVERSCAN = 10;
 
-/** Maps file status to its design-system color token (text level). */
-const STATUS_COLORS: Record<FileStatus, string> = {
-  M: "var(--amber-11)",
-  A: "var(--green-11)",
-  D: "var(--red-11)",
-  R: "var(--purple-11)",
-};
-
-/** Pre-computed style objects for status colors, avoiding inline object creation on each render. */
-export const STATUS_COLOR_STYLES: Record<FileStatus, CSSProperties> = {
-  M: { color: STATUS_COLORS.M },
-  A: { color: STATUS_COLORS.A },
-  D: { color: STATUS_COLORS.D },
-  R: { color: STATUS_COLORS.R },
-};
-
 /** Recursively collects all descendant folder paths from a tree node. */
 export const collectDescendantFolderPaths = (node: TreeNode): Array<string> => {
   const paths: Array<string> = [];
@@ -57,42 +39,6 @@ export const collectDescendantFolderPaths = (node: TreeNode): Array<string> => {
   }
   return paths;
 };
-
-const BINARY_EXTENSIONS = new Set([
-  // Images
-  "png",
-  "jpg",
-  "jpeg",
-  "gif",
-  "webp",
-  "svg",
-  "ico",
-  "bmp",
-  "tiff",
-  // Fonts
-  "woff",
-  "woff2",
-  "ttf",
-  "otf",
-  "eot",
-  // Documents
-  "pdf",
-  // Archives
-  "zip",
-  "tar",
-  "gz",
-  // Compiled
-  "wasm",
-  "pyc",
-  "class",
-  // Media
-  "mp3",
-  "mp4",
-  "avi",
-  "mov",
-]);
-
-const SUPPORTED_IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg"]);
 
 export const buildFileTree = ({
   files,
@@ -430,37 +376,4 @@ export const getChangedFiles = (roots: Array<TreeNode>): Array<FlatFileEntry> =>
   });
 
   return entries;
-};
-
-const getExtension = (fileName: string): string => {
-  const lastDot = fileName.lastIndexOf(".");
-  if (lastDot < 0) {
-    return "";
-  }
-  return fileName.slice(lastDot + 1).toLowerCase();
-};
-
-export const isBinaryFile = (fileName: string): boolean => {
-  return BINARY_EXTENSIONS.has(getExtension(fileName));
-};
-
-export const isSupportedImageFormat = (fileName: string): boolean => {
-  return SUPPORTED_IMAGE_EXTENSIONS.has(getExtension(fileName));
-};
-
-/**
- * Truncate a directory path for display by keeping the first and last segments
- * and replacing the middle with "…". Prioritises showing the last segment
- * (closest parent) since it provides the most context about where a file lives.
- *
- *   "sculptor/frontend/src/components" → "sculptor/…/components"
- *   "imbue_core/imbue_core"            → "imbue_core/imbue_core" (unchanged)
- */
-export const truncateMiddlePath = (dirPath: string, maxSegments: number = 3): string => {
-  const segments = dirPath.split("/");
-  if (segments.length <= maxSegments) return dirPath;
-
-  const first = segments[0];
-  const last = segments[segments.length - 1];
-  return `${first}/\u2026/${last}`;
 };

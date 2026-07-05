@@ -10,7 +10,7 @@ import { ElementIds } from "~/api";
 import { themeCodeThemeAtom } from "~/common/state/atoms/themeBuilder.ts";
 import { appThemeAtom } from "~/common/state/atoms/userConfig.ts";
 import { getShikiThemes } from "~/common/theme/shikiThemes.ts";
-import { openDiffTabAtom, openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms.ts";
+import { openDiffTabAtom, openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms/diffPanel.ts";
 import { adoptPierreOverrideSheet, createPierreOverrideSheet } from "~/pages/workspace/diffPanel/pierreShadowStyles.ts";
 import { usePierreHighlighterReady } from "~/pages/workspace/diffPanel/usePierreHighlighterReady.ts";
 import { useWorkspaceCodePath } from "~/pages/workspace/hooks/useWorkspaceCodePath.ts";

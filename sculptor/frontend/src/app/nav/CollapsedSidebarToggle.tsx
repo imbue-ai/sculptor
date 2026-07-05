@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
-import { getTitleBarLeftPadding } from "~/electron/utils.ts";
+import { getTitleBarLeftPadding } from "~/electron/platform.ts";
 import { sidebarCollapsedAtom } from "~/pages/workspace/layout/atoms/sidebar.ts";
 
 import styles from "./CollapsedSidebarToggle.module.scss";

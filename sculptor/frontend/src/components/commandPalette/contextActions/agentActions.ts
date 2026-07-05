@@ -1,7 +1,7 @@
 import { CircleDot, Trash2 } from "lucide-react";
 
 import { ElementIds } from "../../../api";
-import type { AgentAction, AgentActionRuntime } from "./types.ts";
+import type { AgentAction, AgentActionRuntime } from "./types/contextActions.ts";
 
 /**
  * Single source of truth for the command palette's agent actions, consumed by

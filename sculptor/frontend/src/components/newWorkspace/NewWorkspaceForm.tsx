@@ -37,7 +37,7 @@ import {
 } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { RepoSelector } from "~/components/newWorkspace/RepoSelector.tsx";
 import { Toast } from "~/components/Toast.tsx";
-import { getMetaKey, isModifierPressed } from "~/electron/utils.ts";
+import { getMetaKey, isModifierPressed } from "~/electron/platform.ts";
 import { resolveStoredAgentType } from "~/pages/workspace/layout/atoms/addPanel.ts";
 
 import styles from "./NewWorkspaceForm.module.scss";

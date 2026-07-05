@@ -1,5 +1,5 @@
-import type { DiffScope, DiffViewType } from "~/pages/workspace/diffPanel/types.ts";
-import type { FileStatus, ViewMode } from "~/pages/workspace/panels/fileBrowser/types.ts";
+import type { DiffScope, DiffViewType } from "~/pages/workspace/diffPanel/types/diffPanel.ts";
+import type { FileStatus, ViewMode } from "~/pages/workspace/panels/fileBrowser/types/fileBrowser.ts";
 
 /**
  * What a single embedded {@link DiffViewer} instance is currently showing. Each

@@ -9,7 +9,7 @@ import { ElementIds } from "~/api";
 import { themeCodeThemeAtom } from "~/common/state/atoms/themeBuilder.ts";
 import { getShikiThemes } from "~/common/theme/shikiThemes.ts";
 
-import { splitDiffColumnRatioAtom } from "./atoms.ts";
+import { splitDiffColumnRatioAtom } from "./atoms/diffPanel.ts";
 import styles from "./PierreDiffView.module.scss";
 import {
   adoptPierreOverrideSheet,
@@ -18,7 +18,7 @@ import {
 } from "./pierreShadowStyles.ts";
 import { SplitDiffHandle } from "./SplitDiffHandle.tsx";
 import { StickyHorizontalScrollbar } from "./StickyHorizontalScrollbar.tsx";
-import type { DiffViewType } from "./types.ts";
+import type { DiffViewType } from "./types/diffPanel.ts";
 import { usePierreHighlighterReady } from "./usePierreHighlighterReady.ts";
 
 type PierreDiffViewProps = {

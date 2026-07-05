@@ -1,7 +1,7 @@
 import { createStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { browserPanelStateAtomFamily, DEFAULT_BROWSER_PANEL_STATE } from "./atoms";
+import { browserPanelStateAtomFamily, DEFAULT_BROWSER_PANEL_STATE } from "./browser";
 
 beforeEach(() => localStorage.clear());
 afterEach(() => {

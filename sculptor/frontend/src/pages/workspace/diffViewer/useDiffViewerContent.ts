@@ -1,12 +1,13 @@
 import { useMemo } from "react";
 
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
-import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
-import { determineFileStatus, isBinaryFile } from "~/pages/workspace/panels/fileBrowser/utils.ts";
+import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types/fileBrowser.ts";
+import { determineFileStatus } from "~/pages/workspace/panels/fileBrowser/utils/fileTree.ts";
+import { isBinaryFile } from "~/pages/workspace/panels/fileBrowser/utils/fileType.ts";
 import type { DiffData } from "~/pages/workspace/utils/diff.ts";
 import { getLineCounts, parseDiff } from "~/pages/workspace/utils/diff.ts";
 
-import type { DiffSelection } from "./types.ts";
+import type { DiffSelection } from "./types/diffViewer.ts";
 
 /**
  * The resolved content the {@link DiffViewer} renders for the current

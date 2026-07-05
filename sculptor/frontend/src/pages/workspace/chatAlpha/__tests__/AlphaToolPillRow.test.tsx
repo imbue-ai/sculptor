@@ -9,7 +9,7 @@ import { ElementIds } from "~/api";
 
 import { AlphaToolPillRow } from "../AlphaToolPillRow.tsx";
 import type * as AlphaToolPopoverModule from "../AlphaToolPopover.tsx";
-import { chatToolDensityAtom } from "../atoms.ts";
+import { chatToolDensityAtom } from "../atoms/chatAlpha.ts";
 import { ChatTaskProvider } from "../ChatTaskContext.tsx";
 
 vi.mock("~/pages/workspace/hooks/useWorkspaceCodePath.ts", () => ({

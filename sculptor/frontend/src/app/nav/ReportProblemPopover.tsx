@@ -14,7 +14,7 @@ import {
   updateReportProblemAtom,
 } from "~/common/state/atoms/reportProblem.ts";
 import { isTelemetryEnabledAtom } from "~/common/state/atoms/userConfig.ts";
-import { isElectron } from "~/electron/utils.ts";
+import { isElectron } from "~/electron/platform.ts";
 
 import { ElementIds } from "../../api";
 import styles from "./ReportProblemPopover.module.scss";

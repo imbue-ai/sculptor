@@ -10,7 +10,7 @@ import { ElementIds } from "~/api";
 import type { SkillType } from "~/common/utils/skillBadge";
 import type { EntityType } from "~/components/EntityMentionSuggestion";
 import { MentionChip } from "~/components/MentionChip";
-import { openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms.ts";
+import { openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms/diffPanel.ts";
 import { useWorkspaceCodePath } from "~/pages/workspace/hooks/useWorkspaceCodePath.ts";
 
 import { AlphaBlockquote } from "./AlphaBlockquote.tsx";

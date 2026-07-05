@@ -13,7 +13,7 @@ import { buildTerminalCommands } from "../builtinCommands/terminal.ts";
 import { buildThemeCommands } from "../builtinCommands/theme.ts";
 import { buildWorkspaceActionCommands } from "../builtinCommands/workspaces.ts";
 import { buildAgentActions } from "../contextActions/agentActions.ts";
-import type { AgentActionRuntime, WorkspaceActionRuntime } from "../contextActions/types.ts";
+import type { AgentActionRuntime, WorkspaceActionRuntime } from "../contextActions/types/contextActions.ts";
 import { buildWorkspaceActions } from "../contextActions/workspaceActions.ts";
 import { buildWorkspaceProvider } from "../dynamic/workspaceCommands.tsx";
 import type { Command, PaletteContext } from "../types/commandPalette.ts";

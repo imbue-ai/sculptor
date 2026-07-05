@@ -9,7 +9,7 @@ import { optional } from "~/common/utils/optional";
 
 import { AgentTasksGraph } from "./AgentTasksGraph.tsx";
 import styles from "./AgentTasksPanel.module.scss";
-import { agentTasksGraphOpenAtom } from "./atoms.ts";
+import { agentTasksGraphOpenAtom } from "./atoms/chatAlpha.ts";
 import { useTaskTiers } from "./useTaskTiers.ts";
 
 const MAX_INLINE_BLOCKED_BY = 2;

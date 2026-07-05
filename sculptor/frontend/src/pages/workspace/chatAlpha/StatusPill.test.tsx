@@ -34,7 +34,7 @@ vi.mock("~/common/state/hooks/useTaskDetail.ts", () => ({
   useTaskDetailWithDefaults: mockUseTaskDetailWithDefaults,
 }));
 
-vi.mock("~/electron/utils.ts", () => ({
+vi.mock("~/electron/platform.ts", () => ({
   getMetaKey: (): string => "⌘",
   isModifierPressed: (): boolean => false,
   isMac: (): boolean => true,

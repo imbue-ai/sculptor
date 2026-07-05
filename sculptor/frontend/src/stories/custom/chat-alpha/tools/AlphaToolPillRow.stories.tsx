@@ -7,7 +7,7 @@ import type { ToolResultBlock, ToolUseBlock, Workspace } from "~/api";
 import { WorkspaceInitializationStrategy } from "~/api";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces";
 import { AlphaToolPillRow } from "~/pages/workspace/chatAlpha/AlphaToolPillRow.tsx";
-import { chatToolDensityAtom } from "~/pages/workspace/chatAlpha/atoms.ts";
+import { chatToolDensityAtom } from "~/pages/workspace/chatAlpha/atoms/chatAlpha.ts";
 
 import { toolResult, toolUse } from "./fixtures.ts";
 

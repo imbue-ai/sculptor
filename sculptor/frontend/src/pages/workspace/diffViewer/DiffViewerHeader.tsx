@@ -4,14 +4,14 @@ import type { ReactElement, ReactNode } from "react";
 import { useMemo } from "react";
 
 import { ElementIds } from "~/api";
-import type { FileContextMenuContext, FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
-import { isBinaryFile } from "~/pages/workspace/panels/fileBrowser/utils.ts";
+import type { FileContextMenuContext, FileStatus } from "~/pages/workspace/panels/fileBrowser/types/fileBrowser.ts";
+import { isBinaryFile } from "~/pages/workspace/panels/fileBrowser/utils/fileType.ts";
 
 import styles from "./DiffViewerHeader.module.scss";
 import { DiffViewerMenu } from "./DiffViewerMenu.tsx";
 import type { RecentFilesScope } from "./FilePathSelect.tsx";
 import { FilePathSelect } from "./FilePathSelect.tsx";
-import type { DiffViewOptions, TreeViewOptions } from "./types.ts";
+import type { DiffViewOptions, TreeViewOptions } from "./types/diffViewer.ts";
 
 type DiffViewerHeaderProps = {
   workspaceId: string;

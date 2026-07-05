@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Workspace } from "../../../api";
 import { buildAgentActions } from "../contextActions/agentActions.ts";
-import type { Agent, AgentActionRuntime, WorkspaceAction, WorkspaceActionRuntime } from "../contextActions/types.ts";
+import type {
+  Agent,
+  AgentActionRuntime,
+  WorkspaceAction,
+  WorkspaceActionRuntime,
+} from "../contextActions/types/contextActions.ts";
 import { buildWorkspaceActions } from "../contextActions/workspaceActions.ts";
 
 const fakeWorkspace = (id: string): Workspace => ({ objectId: id, description: `ws-${id}` }) as unknown as Workspace;

@@ -4,7 +4,7 @@ import { type ReactElement, useCallback, useEffect, useRef, useState } from "rea
 
 import { ElementIds } from "../../../api";
 import { formatShortcutForDisplay } from "../../../common/keybindings/format.ts";
-import { isMac } from "../../../electron/utils.ts";
+import { isMac } from "../../../electron/platform.ts";
 import styles from "./HotkeyChip.module.scss";
 
 type HotkeyState = "idle" | "recording" | "set";

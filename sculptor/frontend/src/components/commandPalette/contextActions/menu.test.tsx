@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ElementIds, type Workspace } from "../../../api";
 import type { OpenInRuntime } from "./menu.tsx";
 import { WorkspaceContextMenuContent, WorkspaceDropdownMenuContent } from "./menu.tsx";
-import type { WorkspaceAction } from "./types.ts";
+import type { WorkspaceAction } from "./types/contextActions.ts";
 
 afterEach(() => {
   cleanup();

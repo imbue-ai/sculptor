@@ -2,8 +2,8 @@ import { useSetAtom, useStore } from "jotai";
 import { useCallback } from "react";
 
 import { type PluginCommandResult, type PluginCommandUiAction, postPluginCommandResult } from "~/api";
-import { openFileFromUiEventAtom } from "~/pages/workspace/diffPanel/atoms.ts";
-import { agentWebviewStateAtomFamily } from "~/pages/workspace/panels/browser/atoms.ts";
+import { openFileFromUiEventAtom } from "~/pages/workspace/diffPanel/atoms/diffPanel.ts";
+import { agentWebviewStateAtomFamily } from "~/pages/workspace/panels/browser/atoms/browser.ts";
 import { pluginManager } from "~/plugins/pluginManager.tsx";
 import { getRendererIdentity } from "~/plugins/rendererIdentity.ts";
 
