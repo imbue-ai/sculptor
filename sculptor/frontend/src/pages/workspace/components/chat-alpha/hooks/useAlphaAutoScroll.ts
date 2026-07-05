@@ -10,7 +10,12 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExter
 
 import { ChatMessageRole } from "~/api";
 
-import { bottomPinOffset, distanceFromContentBottom, FOOTER_REVEAL_WINDOW_MS } from "../scroll/geometry.ts";
+import {
+  bottomPinOffset,
+  distanceFromContentBottom,
+  FOOTER_REVEAL_WINDOW_MS,
+  PIN_BOTTOM_GAP,
+} from "../scroll/geometry.ts";
 import type { ReadingAnchor } from "../scroll/scrollStateMachine.ts";
 import {
   createScrollStateMachine,
@@ -24,9 +29,19 @@ const BOTTOM_THRESHOLD = 200;
 // essentially the very bottom — not just "near" it — to opt back in.
 const REENGAGE_THRESHOLD = 5;
 // How many px before the viewport edge to transition from filling phase to
-// pin-to-bottom.  The ResizeObserver fires after content grows, so without
-// this buffer the content briefly overshoots the viewport before locking.
-const FILLING_OVERFLOW_BUFFER = 100;
+// pin-to-bottom.  Firing early keeps the growing content from visibly
+// overshooting the viewport while the ResizeObserver lags a beat behind.
+// Must equal the pin gap: the anchored rest position coincides with
+// bottomPinOffset exactly when the tail has filled the viewport to within
+// PIN_BOTTOM_GAP of its bottom edge, so entering `following` is a zero-px
+// handoff — the view is already at the pin. Any larger value starts
+// `following` above the pin, in violation of its invariant, and forces an
+// immediate upward correction.
+const FILLING_OVERFLOW_BUFFER = PIN_BOTTOM_GAP;
+
+// Upward pin corrections chase genuine tail shrinks (a collapsed text line
+// is ~20px+), never sub-line measurement wobble.
+const PIN_UPWARD_DEADBAND = 8;
 
 // Fixed duration for the scroll-to-top animation (ms). Same speed
 // regardless of distance so short and long scrolls feel consistent.
@@ -144,17 +159,23 @@ export const useAlphaAutoScroll = (
 
   // The single "scroll to the bottom" primitive: land the content bottom
   // PIN_BOTTOM_GAP above the viewport bottom, keeping the rest of paddingEnd as
-  // slack below scrollTop (see bottomPinOffset). Down-only — callers reach the
-  // bottom from above, so an upward move would only chase a turn-end shrink,
-  // which we leave in place.
+  // slack below scrollTop (see bottomPinOffset). Downward moves always apply.
+  // Upward moves apply only while `following`, whose per-frame invariant IS the
+  // pin gap: a mid-stream tail shrink (e.g. the standalone streaming cursor
+  // collapsing into the first text line) moves the target back up, and leaving
+  // scrollTop stranded past it shows oversized breathing room below the newest
+  // line until growth overtakes the difference — on slow machines for long
+  // enough that the pin-gap tests fail. In every other phase an upward move
+  // would only chase a turn-end shrink, which we leave in place.
   const pinToBottom = useCallback((): void => {
     const el = scrollContainerRef.current;
     if (!el || messageCount === 0) return;
     const desired = bottomPinOffset(el, virtualizer);
-    if (desired <= el.scrollTop + 1) return;
+    const isUpwardMove = desired <= el.scrollTop + 1;
+    if (isUpwardMove && !(isFollowing() && el.scrollTop - desired > PIN_UPWARD_DEADBAND)) return;
     isProgrammaticScroll.current = true;
     el.scrollTop = desired;
-  }, [scrollContainerRef, virtualizer, messageCount, isProgrammaticScroll]);
+  }, [scrollContainerRef, virtualizer, messageCount, isProgrammaticScroll, isFollowing]);
 
   // Suppress the jump-to-bottom button between message send and response arrival.
   const [isJumpSuppressed, setIsJumpSuppressed] = useState(false);
