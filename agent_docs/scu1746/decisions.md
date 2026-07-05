@@ -1,5 +1,20 @@
 # SCU-1746 structure pass — decisions made autonomously (for Bryden's review)
 
+## Inferability test: before 8/10 → after 7/10 (honest read: a wash on the headline)
+
+Same 10 names-only navigation prompts, fresh agent each time. Improvements: the
+new-workspace submit flow went partial→correct (`useCreateWorkspace` findable);
+sidebar empty state and fuzzy scorer stayed one-guess hits at their new homes.
+Regressions: more well-named directories means more *plausible* candidates —
+"recently closed panels" now reads as `layout/atoms/addPanel.ts` (it lives in
+`transient.ts`), and the workspace-delete dialog loses to the better-named-but-
+wrong `workspaceChrome/AgentDeleteConfirmation`. Both remaining root causes
+predate the pass and are catalogued follow-ups: the diff split/unified toggle
+living in `common/state/atoms/userConfig.ts` (missed in BOTH runs), and the
+delete-dialog proliferation. Conclusion: structure moves alone don't lift the
+number until those two content-level fixes land; the navigation *depth* cost is
+visible too (4-5 listings vs 2-4 at baseline).
+
 Working log of judgment calls made while executing the agreed plan without you.
 Nothing here changes the agreed principles; these are placements/namings the
 principles didn't fully determine. Flip any of them and I'll rework.
