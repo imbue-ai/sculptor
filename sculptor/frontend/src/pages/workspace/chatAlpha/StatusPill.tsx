@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ChatMessage, TaskStatus } from "~/api";
 import { AgentTaskStatus, ArtifactType, ElementIds } from "~/api";
+import { useCapabilityGate } from "~/common/hooks/useCapabilityGate.ts";
 import { useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
 import { isCancellableAtomFamily } from "~/common/state/atoms/interruptState.ts";
 import {
@@ -19,7 +20,6 @@ import { useTaskDetailWithDefaults } from "~/common/state/hooks/useTaskDetail.ts
 import { useTaskSupportsInterruption } from "~/common/state/hooks/useTaskHelpers.ts";
 import { useThemeSuccessColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { Toast } from "~/components/Toast.tsx";
-import { useCapabilityGate } from "~/components/useCapabilityGate.ts";
 
 import { AgentTasksPanel } from "./AgentTasksPanel.tsx";
 import { useChatTask } from "./ChatTaskContext.tsx";

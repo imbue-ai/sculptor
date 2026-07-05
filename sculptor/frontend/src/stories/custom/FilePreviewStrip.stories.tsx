@@ -2,7 +2,7 @@ import { Flex } from "@radix-ui/themes";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactElement } from "react";
 
-import { FilePreview } from "~/components/FilePreview";
+import { FilePreview } from "~/pages/workspace/filePreview/FilePreview";
 
 // Placeholder images at various aspect ratios via picsum
 const LANDSCAPE_URL = "https://picsum.photos/seed/landscape/800/500";

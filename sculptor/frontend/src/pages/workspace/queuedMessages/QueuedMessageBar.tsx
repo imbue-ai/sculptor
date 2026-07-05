@@ -2,6 +2,8 @@ import { Flex, IconButton, Spinner, Text, Tooltip } from "@radix-ui/themes";
 import { ArrowUpIcon, PencilIcon, Trash2Icon } from "lucide-react";
 import { type ReactElement, useCallback, useState } from "react";
 
+import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
+
 import type { ChatMessage, FileBlock, TextBlock } from "../../../api";
 import { deleteWorkspaceAgentMessage, ElementIds } from "../../../api";
 import type { BlockUnion } from "../../../common/Guards.ts";
@@ -10,7 +12,7 @@ import { useDraftAttachedFiles } from "../../../common/state/hooks/useDraftAttac
 import { useInterruptAgent } from "../../../common/state/hooks/useInterruptAgent.ts";
 import { usePromptDraft } from "../../../common/state/hooks/usePromptDraft.ts";
 import { useTaskSupportsInterruption } from "../../../common/state/hooks/useTaskHelpers.ts";
-import { Toast, type ToastContent, ToastType } from "../../../components/Toast.tsx";
+import { Toast } from "../../../components/Toast.tsx";
 import { getMetaKey } from "../../../electron/utils.ts";
 import { CapabilityGate } from "../chatAlpha/CapabilityGate.tsx";
 import { useChatTask } from "../chatAlpha/ChatTaskContext.tsx";

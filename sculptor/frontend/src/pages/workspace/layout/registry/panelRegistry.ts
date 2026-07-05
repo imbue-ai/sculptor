@@ -13,7 +13,7 @@ import { FileText, GitBranch, GitCommitVertical, Globe, ListChecks, NotebookPen,
 import type { ComponentType } from "react";
 
 import type { TerminalConnectionStatus } from "~/common/state/atoms/terminalTabs.ts";
-import type { AgentDotStatus } from "~/components/statusDot/statusUtils.ts";
+import type { AgentDotStatus } from "~/common/utils/statusDot.ts";
 import { activePanelIdInSubSectionAtom, panelsInSubSectionAtom } from "~/pages/workspace/layout/atoms/section.ts";
 import type { PanelId, SubSectionId } from "~/pages/workspace/layout/types/section.ts";
 

@@ -9,19 +9,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { HTTPException } from "~/common/Errors.ts";
 import { isTextBlock } from "~/common/Guards.ts";
 import { useTimedLatch } from "~/common/Hooks.ts";
+import { CAPABILITY_UNSUPPORTED_COPY } from "~/common/hooks/useCapabilityGate.ts";
 import { useKeybinding, useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
 import { getModelCapabilities } from "~/common/modelCapabilities.ts";
 import { type ParsedPseudoSkillCommand, parsePseudoSkillCommand } from "~/common/pseudoSkills.ts";
+import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { mergeClasses, optional } from "~/common/Utils.ts";
+import { processAndValidateFiles, saveFiles } from "~/common/utils/fileUpload.ts";
 import { EffortSelector } from "~/components/EffortSelector.tsx";
 import { FastModeToggle } from "~/components/FastModeToggle.tsx";
-import { FilePreviewList } from "~/components/FilePreviewList.tsx";
-import { processAndValidateFiles, saveFiles } from "~/components/FileUploadUtils.ts";
 import { KeyboardHint } from "~/components/KeyboardHint.tsx";
 import { ModelSelector } from "~/components/ModelSelector.tsx";
-import { CAPABILITY_UNSUPPORTED_COPY } from "~/components/useCapabilityGate.ts";
 import { CapabilityGate } from "~/pages/workspace/chatAlpha/CapabilityGate.tsx";
 import { SendButton } from "~/pages/workspace/chatAlpha/SendButton.tsx";
+import { FilePreviewList } from "~/pages/workspace/filePreview/FilePreviewList.tsx";
 
 import {
   btwAgent,
@@ -71,8 +72,8 @@ import {
   useTaskSupportsInterruption,
   useTaskSupportsModelSelection,
 } from "../../../common/state/hooks/useTaskHelpers.ts";
-import { Editor } from "../../../components/Editor.tsx";
-import { Toast, type ToastContent, ToastType } from "../../../components/Toast.tsx";
+import { Editor } from "../../../components/editor/Editor.tsx";
+import { Toast } from "../../../components/Toast.tsx";
 import { TooltipIconButton } from "../../../components/TooltipIconButton.tsx";
 import { SettingsSection } from "../../settings/sections.ts";
 import { stripHtml } from "../utils/stripHtml.ts";

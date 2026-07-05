@@ -10,7 +10,7 @@ import { getTelemetryInfo } from "~/api";
 import { queryClient } from "~/common/queryClient.ts";
 import { applyTelemetryInfo } from "~/common/Telemetry.ts";
 
-import { TanstackDevtoolsMount } from "../components/DevPanel/TanstackDevtoolsMount.tsx";
+import { TanstackDevtoolsMount } from "../components/devPanel/TanstackDevtoolsMount.tsx";
 import { ToastProvider } from "../components/Toast.tsx";
 import { ErrorPage } from "../pages/error/ErrorPage.tsx";
 import { BrowserViewHost } from "../pages/workspace/panels/browser/BrowserViewHost.tsx";

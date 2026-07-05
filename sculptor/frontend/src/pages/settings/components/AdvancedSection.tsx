@@ -2,8 +2,7 @@ import { TextField } from "@radix-ui/themes";
 import { type ReactElement, useEffect, useState } from "react";
 
 import { ElementIds } from "~/api";
-import type { ToastContent } from "~/components/Toast.tsx";
-import { ToastType } from "~/components/Toast.tsx";
+import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 
 import { SettingRow } from "./SettingRow.tsx";
 

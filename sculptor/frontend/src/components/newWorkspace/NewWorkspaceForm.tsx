@@ -14,6 +14,7 @@ import {
 import { isDismissibleOverlayOpen } from "~/common/overlayUtils.ts";
 import { lastUsedAgentTypeAtom, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { projectsArrayAtom, updateProjectsAtom } from "~/common/state/atoms/projects.ts";
+import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import {
   defaultEffortLevelAtom,
   defaultModelAtom,
@@ -23,19 +24,19 @@ import {
 import { useCreateWorkspace } from "~/common/state/hooks/useCreateWorkspace.ts";
 import { useRepoInfo } from "~/common/state/hooks/useRepoInfo.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
-import { AgentSettingsControls } from "~/components/AgentSettingsControls.tsx";
-import { BranchSelector } from "~/components/BranchSelector.tsx";
 import { KeyboardHint } from "~/components/KeyboardHint.tsx";
+import { AgentSettingsControls } from "~/components/newWorkspace/AgentSettingsControls.tsx";
 import { AgentTypeSelect } from "~/components/newWorkspace/AgentTypeSelect.tsx";
 import { BranchNameField } from "~/components/newWorkspace/BranchNameField.tsx";
+import { BranchSelector } from "~/components/newWorkspace/BranchSelector.tsx";
 import { useBranchNamePreview } from "~/components/newWorkspace/hooks/useBranchNamePreview.ts";
 import { ModeSelect } from "~/components/newWorkspace/ModeSelect.tsx";
 import {
   keepNewWorkspaceDialogOpenAtom,
   lastWorkspaceCreationSettingsAtom,
 } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
-import { RepoSelector } from "~/components/RepoSelector.tsx";
-import { Toast, type ToastContent, ToastType } from "~/components/Toast.tsx";
+import { RepoSelector } from "~/components/newWorkspace/RepoSelector.tsx";
+import { Toast } from "~/components/Toast.tsx";
 import { getMetaKey, isModifierPressed } from "~/electron/utils.ts";
 import { resolveStoredAgentType } from "~/pages/workspace/layout/atoms/addPanel.ts";
 

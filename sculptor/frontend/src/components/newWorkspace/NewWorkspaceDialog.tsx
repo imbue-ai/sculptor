@@ -5,7 +5,7 @@ import { useCallback, useEffect } from "react";
 import { ElementIds } from "~/api";
 import { newWorkspaceDialogAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { NewWorkspaceForm } from "~/components/newWorkspace/NewWorkspaceForm.tsx";
-import { PaletteDialog } from "~/components/PaletteDialog/PaletteDialog.tsx";
+import { PaletteDialog } from "~/components/newWorkspace/PaletteDialog.tsx";
 
 /**
  * Global host for the new-workspace dialog. Opened/closed via

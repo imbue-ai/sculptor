@@ -7,10 +7,10 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 
 import type { UserConfig } from "~/api";
 import { ElementIds } from "~/api";
+import { ToastType } from "~/common/state/atoms/toasts.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import { getTelemetryEnabled, initializeTelemetry, setTelemetryEnabled } from "~/common/Telemetry.ts";
 
-import { ToastType } from "../../../components/Toast.tsx";
 import { TelemetryRow } from "./TelemetryRow.tsx";
 
 const { mockSetTelemetry, mockOptIn, mockOptOut, mockCapture, mockSentrySetUser } = vi.hoisted(() => ({

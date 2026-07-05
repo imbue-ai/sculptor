@@ -7,7 +7,7 @@ import type { ChatMessage, FileBlock } from "~/api";
 import { ElementIds } from "~/api";
 import type { BlockUnion } from "~/common/Guards";
 import { isFileBlock, isTextBlock } from "~/common/Guards";
-import { FilePreviewList } from "~/components/FilePreviewList.tsx";
+import { FilePreviewList } from "~/pages/workspace/filePreview/FilePreviewList.tsx";
 import { stripHtml } from "~/pages/workspace/utils/stripHtml.ts";
 
 import styles from "./AlphaChatView.module.scss";

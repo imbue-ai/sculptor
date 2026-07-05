@@ -3,7 +3,7 @@ import { getDefaultStore } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { commandActionsAtom } from "~/components/CommandPalette/commandActions.ts";
+import { commandActionsAtom } from "~/components/commandPalette/utils/commandActions.ts";
 
 import type { TerminalConnectionStatus } from "./useTerminal.ts";
 import {

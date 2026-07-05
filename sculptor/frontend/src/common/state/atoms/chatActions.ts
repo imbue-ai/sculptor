@@ -1,6 +1,6 @@
 import { atom } from "jotai";
 
-import type { SkillType } from "~/components/skillBadge";
+import type { SkillType } from "~/common/utils/skillBadge";
 
 export type InsertSkillArg = {
   name: string;

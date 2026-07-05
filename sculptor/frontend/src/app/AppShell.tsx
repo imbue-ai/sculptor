@@ -40,8 +40,8 @@ import {
 } from "~/common/state/atoms/toasts.ts";
 import { useProject } from "~/common/state/hooks/useProjects.ts";
 import { useUnifiedStream } from "~/common/state/hooks/useUnifiedStream";
-import { CommandPalette } from "~/components/CommandPalette";
-import { CommandRegistrations } from "~/components/CommandPalette/CommandRegistrations.tsx";
+import { CommandPalette } from "~/components/commandPalette";
+import { CommandRegistrations } from "~/components/commandPalette/CommandRegistrations.tsx";
 import { NewWorkspaceDialog } from "~/components/newWorkspace/NewWorkspaceDialog.tsx";
 import { sidebarCollapsedAtom } from "~/pages/workspace/layout/atoms/sidebar.ts";
 import { PluginLoader } from "~/plugins/PluginLoader.tsx";

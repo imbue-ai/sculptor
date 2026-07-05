@@ -2,10 +2,9 @@ import type { ChangeEvent, ReactElement, Ref } from "react";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
+import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 
-import { ALLOWED_EXTENSIONS, processAndValidateFiles, saveFiles } from "../../../components/FileUploadUtils";
-import type { ToastContent } from "../../../components/Toast";
-import { ToastType } from "../../../components/Toast";
+import { ALLOWED_EXTENSIONS, processAndValidateFiles, saveFiles } from "../../../common/utils/fileUpload";
 
 type FileUploadProps = {
   files: Array<string>;

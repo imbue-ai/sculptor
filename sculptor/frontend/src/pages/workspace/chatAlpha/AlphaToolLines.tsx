@@ -8,9 +8,9 @@ import type { DiffToolContent, GenericToolContent, ToolResultBlock, ToolUseBlock
 import { ElementIds } from "~/api";
 import { isDiffToolContent, isGenericToolContent } from "~/common/Guards";
 import { appThemeAtom } from "~/common/state/atoms/userConfig";
-import { parseDiff } from "~/components/DiffUtils";
 import { LargeDiffGate } from "~/pages/workspace/diffPanel/LargeDiffGate";
 import { PierreDiffView } from "~/pages/workspace/diffPanel/PierreDiffView";
+import { parseDiff } from "~/pages/workspace/utils/diff";
 
 import styles from "./AlphaChatView.module.scss";
 import { PulsingDot } from "./pill-animations";

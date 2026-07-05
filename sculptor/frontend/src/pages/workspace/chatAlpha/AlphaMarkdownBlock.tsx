@@ -7,9 +7,9 @@ import remarkEmoji from "remark-emoji";
 import remarkGfm from "remark-gfm";
 
 import { ElementIds } from "~/api";
+import type { SkillType } from "~/common/utils/skillBadge";
 import type { EntityType } from "~/components/EntityMentionSuggestion";
 import { MentionChip } from "~/components/MentionChip";
-import type { SkillType } from "~/components/skillBadge";
 import { openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms.ts";
 import { useWorkspaceCodePath } from "~/pages/workspace/hooks/useWorkspaceCodePath.ts";
 

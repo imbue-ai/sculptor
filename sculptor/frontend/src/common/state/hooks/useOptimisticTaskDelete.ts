@@ -2,9 +2,10 @@ import { useSetAtom, useStore } from "jotai";
 import { posthog } from "posthog-js";
 import { useCallback, useEffect, useRef } from "react";
 
+import { ToastType } from "~/common/state/atoms/toasts.ts";
+
 import type { CodingAgentTaskView } from "../../../api";
 import { deleteWorkspaceAgent } from "../../../api";
-import { ToastType } from "../../../components/Toast.tsx";
 import { useImbueLocation, useImbueNavigate, useImbueParams } from "../../NavigateUtils.ts";
 import { optimisticDeleteTaskAtom, rollbackDeleteTaskAtom } from "../atoms/tasks";
 import { deleteErrorToastAtom } from "../atoms/toasts";

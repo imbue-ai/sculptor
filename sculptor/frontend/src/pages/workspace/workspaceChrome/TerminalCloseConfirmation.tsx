@@ -13,7 +13,7 @@ import { useCallback } from "react";
 
 import { closeWorkspaceTerminal } from "~/api";
 import { terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
-import { terminalCloseTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
+import { terminalCloseTargetAtom } from "~/components/commandPalette/contextActions/atoms/contextActions.ts";
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
 import { closePanelAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
 

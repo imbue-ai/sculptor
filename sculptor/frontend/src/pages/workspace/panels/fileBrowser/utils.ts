@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 
-import type { DiffData } from "~/components/DiffUtils.ts";
+import type { DiffData } from "~/pages/workspace/utils/diff.ts";
 
 import type { FileStatus, FlatFileEntry, TreeNode } from "./types.ts";
 

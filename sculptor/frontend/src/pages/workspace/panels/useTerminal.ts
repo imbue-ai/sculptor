@@ -16,7 +16,7 @@ import type { TerminalConnectionStatus } from "~/common/state/atoms/terminalTabs
 import { useThemeAccentColor, useThemeGrayColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { getColorScale, resolveGrayColor } from "~/common/theme/radixColorHexMap.ts";
 import { useResolvedTheme } from "~/common/Utils.ts";
-import { commandActionsAtom } from "~/components/CommandPalette/commandActions.ts";
+import { commandActionsAtom } from "~/components/commandPalette/utils/commandActions.ts";
 
 // ESC character code (0x1B)
 const ESC = "\u001b";

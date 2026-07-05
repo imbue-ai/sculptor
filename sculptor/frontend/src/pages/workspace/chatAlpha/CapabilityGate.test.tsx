@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { ElementIds } from "~/api";
 
-import { CAPABILITY_UNSUPPORTED_COPY, useCapabilityGate } from "../../../components/useCapabilityGate";
+import { CAPABILITY_UNSUPPORTED_COPY, useCapabilityGate } from "../../../common/hooks/useCapabilityGate";
 import { CapabilityGate } from "./CapabilityGate";
 
 const Wrapper = ({ children }: { children: ReactNode }): ReactElement => <Theme>{children}</Theme>;

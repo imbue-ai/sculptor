@@ -4,9 +4,10 @@ import { useCallback, useMemo, useState } from "react";
 
 import { useInstallUpdate } from "~/app/hooks/useInstallUpdate.ts";
 import { autoUpdateStatusAtom } from "~/common/state/atoms/autoUpdate.ts";
+import { ToastType } from "~/common/state/atoms/toasts.ts";
 import type { AutoUpdateStatus } from "~/shared/types.ts";
 
-import { Toast, ToastType } from "../components/Toast.tsx";
+import { Toast } from "../components/Toast.tsx";
 
 type OpenToast = "download" | "ready" | "error" | null;
 

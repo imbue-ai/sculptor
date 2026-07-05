@@ -3,9 +3,10 @@ import type { ReactElement } from "react";
 import { useState } from "react";
 
 import { ElementIds, restoreWorkspaceAgent } from "~/api";
+import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { useIsWorkspaceDeleted } from "~/common/state/hooks/useWorkspace.ts";
-import { Toast, type ToastContent, ToastType } from "~/components/Toast.tsx";
+import { Toast } from "~/components/Toast.tsx";
 
 import styles from "./ErrorInput.module.scss";
 

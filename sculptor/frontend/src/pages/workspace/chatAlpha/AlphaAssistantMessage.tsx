@@ -3,9 +3,9 @@ import { useMemo } from "react";
 
 import type { ChatMessage, ToolResultBlock } from "~/api";
 import { ElementIds, TaskStatus } from "~/api";
-import { FilePreviewList } from "~/components/FilePreviewList.tsx";
 import type { SubagentMetadata } from "~/pages/workspace/chatAlpha/utils/subagentTree.ts";
 import type { SubagentTreeNode } from "~/pages/workspace/chatAlpha/utils/subagentTree.ts";
+import { FilePreviewList } from "~/pages/workspace/filePreview/FilePreviewList.tsx";
 
 import styles from "./AlphaChatView.module.scss";
 import { AlphaContextSummary } from "./AlphaContextSummary.tsx";

@@ -15,14 +15,14 @@ import { openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms";
 import { revealFolderAtom } from "~/pages/workspace/panels/fileBrowser/atoms";
 import { getFileIcon } from "~/pages/workspace/panels/fileBrowser/fileIcons";
 
+import { type SkillType } from "../common/utils/skillBadge";
+import styles from "./editor/MentionNodeView.module.scss";
 import { TYPE_ICONS } from "./EntityMentionSuggestion";
 import { HoverCard } from "./HoverCard";
 import entityStyles from "./MentionChip.module.scss";
 import { AgentDetailPane } from "./mentionDetailPanes/AgentDetailPane";
 import { RepositoryDetailPane } from "./mentionDetailPanes/RepositoryDetailPane";
 import { WorkspaceDetailPane } from "./mentionDetailPanes/WorkspaceDetailPane";
-import styles from "./MentionNodeView.module.scss";
-import { type SkillType } from "./skillBadge";
 import { SkillHoverContent } from "./skills/SkillHoverContent";
 
 const ICON_STYLE = { width: "calc(1em - 1px)", height: "calc(1em - 1px)" };

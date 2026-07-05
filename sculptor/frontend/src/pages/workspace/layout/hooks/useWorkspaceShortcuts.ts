@@ -20,7 +20,7 @@ import { useCallback } from "react";
 
 import { useKeybindingHandler } from "~/common/keybindings";
 import { workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
-import { workspaceDeleteTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
+import { workspaceDeleteTargetAtom } from "~/components/commandPalette/contextActions/atoms/contextActions.ts";
 import {
   activePanelIdInSubSectionAtom,
   activeWorkspaceIdAtom,

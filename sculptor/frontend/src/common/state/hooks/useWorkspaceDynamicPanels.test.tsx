@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { CodingAgentTaskView } from "~/api";
 import { taskAtomFamily, taskIdsAtom } from "~/common/state/atoms/tasks.ts";
-import { agentDeleteTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
+import { agentDeleteTargetAtom } from "~/components/commandPalette/contextActions/atoms/contextActions.ts";
 import { makeAgentPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
 import { panelRegistryAtom } from "~/pages/workspace/layout/registry/panelRegistry.ts";
 

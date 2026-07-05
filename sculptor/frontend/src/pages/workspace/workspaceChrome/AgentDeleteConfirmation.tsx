@@ -16,7 +16,7 @@ import type { CodingAgentTaskView } from "~/api";
 import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { useOptimisticTaskDelete } from "~/common/state/hooks/useOptimisticTaskDelete.ts";
-import { agentDeleteTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
+import { agentDeleteTargetAtom } from "~/components/commandPalette/contextActions/atoms/contextActions.ts";
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
 import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 import { closePanelAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";

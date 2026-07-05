@@ -10,6 +10,7 @@ import { getUpdateStatusText } from "~/common/autoUpdateUtils.ts";
 import { autoUpdateStatusAtom, updateChannelAtom } from "~/common/state/atoms/autoUpdate.ts";
 import { healthCheckDataAtom } from "~/common/state/atoms/backend.ts";
 import { themeBuilderSettingsAtom } from "~/common/state/atoms/themeBuilder.ts";
+import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { ModelSelectOptions } from "~/components/ModelSelectOptions.tsx";
 import type { UpdateChannel } from "~/shared/types.ts";
 
@@ -29,8 +30,7 @@ import {
 import { useUserConfig } from "../../common/state/hooks/useUserConfig.ts";
 import { mergeClasses, optional } from "../../common/Utils.ts";
 import { EFFORT_DISPLAY_NAMES, EFFORT_OPTIONS } from "../../components/effortConstants.ts";
-import type { ToastContent } from "../../components/Toast.tsx";
-import { Toast, ToastType } from "../../components/Toast.tsx";
+import { Toast } from "../../components/Toast.tsx";
 import { AccountFieldRow } from "./components/AccountFieldRow.tsx";
 import { ActionsSettingsSection } from "./components/ActionsSettingsSection.tsx";
 import { CustomBackendSection } from "./components/AdvancedSection.tsx";

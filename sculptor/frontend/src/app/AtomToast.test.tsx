@@ -5,8 +5,8 @@ import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ElementIds } from "../api";
-import type { ErrorToastData } from "../common/state/atoms/toasts.ts";
-import { ToastProvider, ToastType } from "../components/Toast.tsx";
+import { type ErrorToastData, ToastType } from "../common/state/atoms/toasts.ts";
+import { ToastProvider } from "../components/Toast.tsx";
 import { AtomToast } from "./AtomToast.tsx";
 
 afterEach(cleanup);

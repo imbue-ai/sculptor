@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactElement } from "react";
 
-import { DependencyCard } from "~/components/onboarding-wizard/DependencyCard.tsx";
+import { DependencyCard } from "~/pages/onboarding/DependencyCard.tsx";
 
 const meta = {
   title: "Custom/Onboarding/DependencyCard",

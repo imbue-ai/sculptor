@@ -2,8 +2,8 @@ import { type ButtonProps, IconButton, Tooltip, type TooltipProps } from "@radix
 import type { ReactElement, ReactNode } from "react";
 
 import { type ElementIds } from "../../../api";
+import { useCapabilityGate } from "../../../common/hooks/useCapabilityGate.ts";
 import { neutral } from "../../../common/Utils.ts";
-import { useCapabilityGate } from "../../../components/useCapabilityGate.ts";
 
 type CapabilityGateProps = {
   /** The narrow capability value, e.g. `useTaskSupportsInterruption(taskId)`. */

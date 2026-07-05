@@ -15,7 +15,6 @@ import {
 import { useUserConfig } from "~/common/state/hooks/useUserConfig.ts";
 import { invalidateWorkspaceCommitDiff, useWorkspaceCommitDiff } from "~/common/state/hooks/useWorkspaceCommitDiff.ts";
 import { useForceRefreshWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
-import { getLineCounts, parseDiff } from "~/components/DiffUtils.ts";
 import type { MarkdownRenderMode } from "~/pages/workspace/diffPanel/atoms.ts";
 import {
   closeDiffTabAtom,
@@ -37,6 +36,7 @@ import { useInFileSearch } from "~/pages/workspace/diffPanel/useInFileSearch.ts"
 import { useScrollPreservation } from "~/pages/workspace/diffPanel/useScrollPreservation.ts";
 import { IndeterminateProgress } from "~/pages/workspace/diffViewer/IndeterminateProgress.tsx";
 import { determineFileStatus } from "~/pages/workspace/panels/fileBrowser/utils.ts";
+import { getLineCounts, parseDiff } from "~/pages/workspace/utils/diff.ts";
 
 import styles from "./DiffViewer.module.scss";
 import { DiffViewerHeader } from "./DiffViewerHeader.tsx";

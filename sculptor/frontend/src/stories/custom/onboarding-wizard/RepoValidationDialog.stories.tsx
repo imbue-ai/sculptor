@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import { RepoValidationDialog } from "~/components/add-repo/RepoValidationDialog.tsx";
+import { RepoValidationDialog } from "~/components/addRepo/RepoValidationDialog.tsx";
 
 const noop = (): void => {};
 

@@ -1,6 +1,6 @@
 import type { ToolResultBlock, ToolUseBlock } from "~/api";
 import { isDiffToolContent, isGenericToolContent } from "~/common/Guards.ts";
-import { getLineCounts } from "~/components/DiffUtils.ts";
+import { getLineCounts } from "~/pages/workspace/utils/diff.ts";
 import { isDiffTool } from "~/pages/workspace/utils/toolPredicates.ts";
 
 import type { ChipData, ChipState, Segment } from "./chipRow.types.ts";

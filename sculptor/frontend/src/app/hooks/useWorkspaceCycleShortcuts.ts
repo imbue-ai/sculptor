@@ -15,7 +15,7 @@ import { sidebarOrderedWorkspacesAtom } from "~/app/nav/sidebarWorkspaceOrder.ts
 import { useKeybindingHandler } from "~/common/keybindings";
 import { useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { openWorkspaceTabAtom } from "~/common/state/atoms/workspaces.ts";
-import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
+import { useRegisterCommandAction } from "~/components/commandPalette/utils/commandActions.ts";
 import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 
 type CycleDirection = 1 | -1;

@@ -16,21 +16,20 @@ import { memo, useCallback } from "react";
 import type { Workspace } from "~/api";
 import { ElementIds, updateWorkspace } from "~/api";
 import { useImbueLocation } from "~/common/NavigateUtils.ts";
-import { workspaceRenameErrorToastAtom } from "~/common/state/atoms/toasts.ts";
+import { ToastType, workspaceRenameErrorToastAtom } from "~/common/state/atoms/toasts.ts";
 import { workspaceAtomFamily, workspaceDotStatusAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
-import { renamingWorkspaceIdAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
+import { renamingWorkspaceIdAtom } from "~/components/commandPalette/contextActions/atoms/contextActions.ts";
 import {
   type OpenInRuntime,
   WorkspaceContextMenuContent,
   WorkspaceDropdownMenuContent,
-} from "~/components/CommandPalette/contextActions/menu.tsx";
-import type { WorkspaceAction } from "~/components/CommandPalette/contextActions/types.ts";
+} from "~/components/commandPalette/contextActions/menu.tsx";
+import type { WorkspaceAction } from "~/components/commandPalette/contextActions/types.ts";
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCreateWorkspaceFromSidebar.ts";
 import { WorkspaceStatusDots } from "~/components/statusDot";
-import { ToastType } from "~/components/Toast.tsx";
 
 import { collapsedRepoGroupsAtom, isRepoCollapsedAtomFamily } from "./navAtoms.ts";
 import styles from "./SidebarRepoGroup.module.scss";

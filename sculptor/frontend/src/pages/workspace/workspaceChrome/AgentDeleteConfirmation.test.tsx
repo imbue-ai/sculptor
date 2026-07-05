@@ -3,7 +3,7 @@ import { createStore } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "~/common/testUtils.tsx";
-import { agentDeleteTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
+import { agentDeleteTargetAtom } from "~/components/commandPalette/contextActions/atoms/contextActions.ts";
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
 import { EMPTY_WORKSPACE_LAYOUT } from "~/pages/workspace/layout/persistence/snapshot.ts";
 import { makeAgentPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";

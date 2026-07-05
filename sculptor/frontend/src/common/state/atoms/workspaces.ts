@@ -3,12 +3,13 @@ import { atom } from "jotai";
 import { atomFamily, atomWithStorage, createJSONStorage, selectAtom } from "jotai/utils";
 import { isEqual } from "lodash";
 
+import { ToastType } from "~/common/state/atoms/toasts.ts";
+
 import type { Workspace } from "../../../api";
 import { batchUpdateOpenState, updateWorkspace as updateWorkspaceApi } from "../../../api";
-import type { WorkspaceDotStatus } from "../../../components/statusDot/statusUtils.ts";
-import { computeWorkspaceDotStatus } from "../../../components/statusDot/statusUtils.ts";
-import { ToastType } from "../../../components/Toast.tsx";
 import { invalidateWorkspaceGitQueries, removeWorkspaceQueriesCache } from "../../queryClient.ts";
+import type { WorkspaceDotStatus } from "../../utils/statusDot.ts";
+import { computeWorkspaceDotStatus } from "../../utils/statusDot.ts";
 import { tasksArrayAtom } from "./tasks.ts";
 import { workspaceOpenCloseErrorToastAtom } from "./toasts";
 import { getAgentDotStatusWithUnreadOverride } from "./unreadOverrides.ts";

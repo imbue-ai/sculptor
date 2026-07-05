@@ -2,8 +2,10 @@ import { AlertDialog, Button, Flex, IconButton, Text, Tooltip } from "@radix-ui/
 import { CopyIcon } from "lucide-react";
 import { type ReactElement, useState } from "react";
 
+import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
+
 import { ElementIds } from "../../../api";
-import { Toast, type ToastContent, ToastType } from "../../../components/Toast.tsx";
+import { Toast } from "../../../components/Toast.tsx";
 import styles from "./UndoQueuedMessageDialog.module.scss";
 
 type UndoQueuedMessageDialogProps = {

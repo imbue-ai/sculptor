@@ -11,14 +11,14 @@ import { themeCodeThemeAtom } from "~/common/state/atoms/themeBuilder.ts";
 import { appThemeAtom, fileBrowserLineWrappingAtom } from "~/common/state/atoms/userConfig.ts";
 import { useWorkspaceFileContent } from "~/common/state/hooks/useWorkspaceFileContent.ts";
 import { getShikiThemes } from "~/common/theme/shikiThemes.ts";
-import { parseFrontmatter } from "~/components/MarkdownDiff/frontmatter.ts";
-import { FrontmatterBlock } from "~/components/MarkdownDiff/FrontmatterBlock.tsx";
-import { MarkdownAnchor } from "~/components/MarkdownDiff/MarkdownAnchor.tsx";
+import { FrontmatterBlock } from "~/pages/workspace/diffPanel/markdownDiff/FrontmatterBlock.tsx";
+import { MarkdownAnchor } from "~/pages/workspace/diffPanel/markdownDiff/MarkdownAnchor.tsx";
+import { parseFrontmatter } from "~/pages/workspace/diffPanel/markdownDiff/utils/frontmatter.ts";
 import {
   FILE_MARKDOWN_REHYPE_PLUGINS,
   FILE_MARKDOWN_REMARK_PLUGINS,
   safeUrlTransform,
-} from "~/components/MarkdownDiff/markdownPlugins.ts";
+} from "~/pages/workspace/diffPanel/markdownDiff/utils/markdownPlugins.ts";
 
 import type { MarkdownRenderMode } from "./atoms.ts";
 import { isMarkdownPath, markdownRenderModeAtom } from "./atoms.ts";

@@ -17,11 +17,12 @@ import {
 } from "~/api";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
 import { chatSearchVisibleAtom } from "~/common/state/atoms/chatSearch.ts";
-import { AgentLightboxProvider } from "~/components/AgentLightboxContext.tsx";
-import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
-import { Toast, type ToastContent, ToastType } from "~/components/Toast.tsx";
+import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
+import { useRegisterCommandAction } from "~/components/commandPalette/utils/commandActions.ts";
+import { Toast } from "~/components/Toast.tsx";
 import { isModifierPressed } from "~/electron/utils.ts";
 import { buildSubagentMetadataMap, buildSubagentTree } from "~/pages/workspace/chatAlpha/utils/subagentTree.ts";
+import { AgentLightboxProvider } from "~/pages/workspace/filePreview/AgentLightboxContext.tsx";
 import { VerticalOverlayScrollbar } from "~/pages/workspace/VerticalOverlayScrollbar.tsx";
 
 import { openDiffTabAtom } from "../diffPanel/atoms.ts";

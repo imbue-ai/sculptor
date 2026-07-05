@@ -3,9 +3,11 @@ import type { ReactElement } from "react";
 import { useCallback } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ToastType } from "~/common/state/atoms/toasts.ts";
+
 import { ElementIds } from "../api";
 import * as Utils from "../common/Utils.ts";
-import { Toast, ToastProvider, ToastType } from "./Toast";
+import { Toast, ToastProvider } from "./Toast";
 
 afterEach(() => {
   cleanup();

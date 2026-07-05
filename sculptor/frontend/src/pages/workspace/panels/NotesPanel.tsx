@@ -7,7 +7,7 @@ import { useState } from "react";
 import { ElementIds } from "~/api";
 import { notesDraftAtomFamily } from "~/common/state/atoms/notesDrafts.ts";
 import { usePromptDraft } from "~/common/state/hooks/usePromptDraft.ts";
-import { Editor } from "~/components/Editor.tsx";
+import { Editor } from "~/components/editor/Editor.tsx";
 import { PanelHeader } from "~/components/panels/PanelHeader.tsx";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";

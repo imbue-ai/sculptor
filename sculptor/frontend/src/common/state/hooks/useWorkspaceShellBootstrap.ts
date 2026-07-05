@@ -23,7 +23,7 @@ import {
 } from "~/common/state/agentPanelPlacement.ts";
 import { viewedAgentIdAtom } from "~/common/state/atoms/viewedAgent.ts";
 import { useMarkRead } from "~/common/state/hooks/useMarkRead";
-import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
+import { useRegisterCommandAction } from "~/components/commandPalette/utils/commandActions.ts";
 import { seedFirstVisitTerminal } from "~/pages/workspace/layout/atoms/addPanel.ts";
 import {
   isEmptyLayout,

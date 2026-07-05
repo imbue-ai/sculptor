@@ -4,8 +4,8 @@ import type { ReactElement } from "react";
 import { useMemo } from "react";
 
 import { ElementIds } from "~/api";
-import type { BadgeInfo } from "~/components/BranchSelectorCore.tsx";
-import { BranchSelectorCore, type BranchWithBadges } from "~/components/BranchSelectorCore.tsx";
+import type { BadgeInfo } from "~/components/BranchCombobox.tsx";
+import { BranchCombobox, type BranchWithBadges } from "~/components/BranchCombobox.tsx";
 
 import styles from "./TargetBranchSelector.module.scss";
 
@@ -43,7 +43,7 @@ export const TargetBranchSelector = ({
   const isAmber = variant === "amber";
 
   return (
-    <BranchSelectorCore
+    <BranchCombobox
       selectedBranch={currentTargetBranch}
       onBranchSelected={onBranchChange}
       branches={branches}

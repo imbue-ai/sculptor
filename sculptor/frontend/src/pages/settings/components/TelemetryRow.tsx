@@ -4,10 +4,10 @@ import { posthog } from "posthog-js";
 import { type ReactElement, useState } from "react";
 
 import { ElementIds, setTelemetry } from "~/api";
+import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { isTelemetryEnabledAtom, userConfigAtom, userEmailAtom } from "~/common/state/atoms/userConfig.ts";
 import { applyTelemetryConsent } from "~/common/Telemetry.ts";
 
-import { type ToastContent, ToastType } from "../../../components/Toast.tsx";
 import { SettingRow } from "./SettingRow.tsx";
 
 type TelemetryRowProps = {

@@ -9,10 +9,9 @@ import { deleteProject, ElementIds, type Project, updateNamingPattern, updateWor
 import { getErrorMessage } from "~/common/Errors.ts";
 import { projectAtomFamily, removeProjectAtom } from "~/common/state/atoms/projects.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
+import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { useProjects } from "~/common/state/hooks/useProjects.ts";
-import { AddRepoDialog } from "~/components/add-repo/AddRepoDialog.tsx";
-import type { ToastContent } from "~/components/Toast.tsx";
-import { ToastType } from "~/components/Toast.tsx";
+import { AddRepoDialog } from "~/components/addRepo/AddRepoDialog.tsx";
 
 import { RemoveRepoDialog } from "./RemoveRepoDialog.tsx";
 import { RepoRow } from "./RepoRow.tsx";

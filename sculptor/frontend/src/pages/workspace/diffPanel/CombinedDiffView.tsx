@@ -8,13 +8,13 @@ import { ElementIds } from "~/api";
 import { appThemeAtom, fileBrowserLineWrappingAtom } from "~/common/state/atoms/userConfig.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
-import type { DiffData } from "~/components/DiffUtils.ts";
-import { parseDiff } from "~/components/DiffUtils.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 import { CommitButton } from "~/pages/workspace/panels/fileBrowser/CommitButton.tsx";
 import { FileDropdownMenu } from "~/pages/workspace/panels/fileBrowser/FileDropdownMenu.tsx";
 import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
 import { determineFileStatus, isBinaryFile } from "~/pages/workspace/panels/fileBrowser/utils.ts";
+import type { DiffData } from "~/pages/workspace/utils/diff.ts";
+import { parseDiff } from "~/pages/workspace/utils/diff.ts";
 
 import { diffScopeAtomFamily } from "./atoms.ts";
 import styles from "./CombinedDiffView.module.scss";

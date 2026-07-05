@@ -3,9 +3,9 @@ import { createStore, Provider as JotaiProvider } from "jotai";
 import type { ReactElement } from "react";
 
 import type { HealthCheckResponse } from "~/api";
+import type { ReportProblemContentProps, ScreenshotState, SubmitState } from "~/app/nav/ReportProblemPopover.tsx";
+import { ReportProblemContent } from "~/app/nav/ReportProblemPopover.tsx";
 import { healthCheckDataAtom } from "~/common/state/atoms/backend.ts";
-import type { ReportProblemContentProps, ScreenshotState, SubmitState } from "~/components/ReportProblemPopover.tsx";
-import { ReportProblemContent } from "~/components/ReportProblemPopover.tsx";
 
 const SAMPLE_HEALTH_CHECK: HealthCheckResponse = {
   version: "0.42.1",

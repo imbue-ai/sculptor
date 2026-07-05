@@ -1,10 +1,10 @@
 import { useMemo } from "react";
 
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
-import type { DiffData } from "~/components/DiffUtils.ts";
-import { getLineCounts, parseDiff } from "~/components/DiffUtils.ts";
 import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
 import { determineFileStatus, isBinaryFile } from "~/pages/workspace/panels/fileBrowser/utils.ts";
+import type { DiffData } from "~/pages/workspace/utils/diff.ts";
+import { getLineCounts, parseDiff } from "~/pages/workspace/utils/diff.ts";
 
 import type { DiffSelection } from "./types.ts";
 

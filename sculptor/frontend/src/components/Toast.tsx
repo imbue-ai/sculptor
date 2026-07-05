@@ -6,25 +6,9 @@ import type { PropsWithChildren, ReactNode } from "react";
 import { memo } from "react";
 
 import { ElementIds } from "../api";
+import { ToastType } from "../common/state/atoms/toasts.ts";
 import { mergeClasses } from "../common/Utils.ts";
 import styles from "./Toast.module.scss";
-
-// eslint-disable-next-line react-refresh/only-export-components -- enum-style const shared with non-component code
-export const ToastType = {
-  DEFAULT: "default",
-  SUCCESS: "success",
-  ERROR: "error",
-  WARNING: "warning",
-  ERROR_PROMINENT: "errorProminent",
-} as const;
-
-export type ToastType = (typeof ToastType)[keyof typeof ToastType];
-
-export type ToastContent = {
-  title: string;
-  description?: ReactNode;
-  type?: ToastType;
-};
 
 export type ToastProps = {
   open?: boolean;

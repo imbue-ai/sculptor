@@ -2,10 +2,10 @@ import { atom } from "jotai";
 import { atomFamily, atomWithStorage, selectAtom } from "jotai/utils";
 
 import { getCachedWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
-import { parseDiff } from "~/components/DiffUtils.ts";
 import type { DiffScope } from "~/pages/workspace/diffPanel/types.ts";
 import { activeWorkspaceIdAtom, workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
 import { jumpToSectionAtom, openPanelAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
+import { parseDiff } from "~/pages/workspace/utils/diff.ts";
 
 import type { FileBrowserState, FileStatus, ViewMode } from "./types.ts";
 import { determineFileStatus } from "./utils.ts";

@@ -1,8 +1,9 @@
 import { useAtomValue, useStore } from "jotai";
 import { useCallback, useState } from "react";
 
+import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
+
 import { interruptWorkspaceAgent } from "../../../api";
-import { type ToastContent, ToastType } from "../../../components/Toast.tsx";
 import { isInterruptingAtomFamily } from "../atoms/interruptState.ts";
 
 type UseInterruptAgentResult = {

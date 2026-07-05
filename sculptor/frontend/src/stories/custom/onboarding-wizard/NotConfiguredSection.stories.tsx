@@ -2,8 +2,8 @@ import { Box } from "@radix-ui/themes";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactElement } from "react";
 
-import { NotConfiguredSection } from "~/components/add-repo/NotConfiguredSection.tsx";
-import type { RemoteProvider } from "~/components/add-repo/SourceRadioCards.tsx";
+import { NotConfiguredSection } from "~/components/addRepo/NotConfiguredSection.tsx";
+import type { RemoteProvider } from "~/components/addRepo/SourceRadioCards.tsx";
 
 // Approximates the dialog's 520px max content width so the section reads
 // the way the user will see it inside AddRepoDialog (instead of stretching

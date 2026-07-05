@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 
 import type { LlmModel, ModelOption } from "~/api";
 import { ElementIds } from "~/api";
+import { useCapabilityGate } from "~/common/hooks/useCapabilityGate.ts";
 import {
   getModelShortName,
   getProviderDisplayName,
@@ -10,7 +11,6 @@ import {
   routeModelChange,
 } from "~/common/modelConstants.ts";
 import { ModelSelectOptions } from "~/components/ModelSelectOptions.tsx";
-import { useCapabilityGate } from "~/components/useCapabilityGate.ts";
 
 import styles from "./ModelSelector.module.scss";
 

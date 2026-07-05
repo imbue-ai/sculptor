@@ -7,8 +7,8 @@ import type { CodingAgentTaskView, Project, Workspace } from "~/api";
 import { formatRelativeTime } from "~/common/formatRelativeTime";
 import { formatRepoUrl } from "~/common/formatRepoUrl";
 
-import { EntityMentionList } from "./EntityMentionList";
-import { renderSuggestion, SuggestionItem } from "./SuggestionUtils";
+import { EntityMentionList } from "./editor/EntityMentionList";
+import { renderSuggestion, SuggestionItem } from "./editor/utils/suggestion";
 
 export type EntityType = "repository" | "workspace" | "agent";
 

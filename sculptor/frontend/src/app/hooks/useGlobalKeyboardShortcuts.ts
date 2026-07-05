@@ -16,7 +16,7 @@ import { useDevPanel } from "../../common/state/hooks/useDevPanel.ts";
 import { useHelpDialog } from "../../common/state/hooks/useHelpDialog.ts";
 import { useOpenSettings } from "../../common/state/hooks/useOpenSettings.ts";
 import { useResolvedTheme } from "../../common/Utils.ts";
-import { useCommandPalette } from "../../components/CommandPalette";
+import { useCommandPalette } from "../../components/commandPalette";
 import {
   areGlobalShortcutsDisabledAtom,
   newWorkspaceDialogAtom,

@@ -40,8 +40,8 @@
 import { atom } from "jotai";
 
 import { markWorkspaceAgentUnread, TaskStatus } from "../../../api";
-import type { AgentDotStatus } from "../../../components/statusDot/statusUtils.ts";
-import { getAgentDotStatus } from "../../../components/statusDot/statusUtils.ts";
+import type { AgentDotStatus } from "../../utils/statusDot.ts";
+import { getAgentDotStatus } from "../../utils/statusDot.ts";
 import { taskAtomFamily } from "./tasks";
 
 // The task fields the override lifecycle depends on. Structurally satisfied by

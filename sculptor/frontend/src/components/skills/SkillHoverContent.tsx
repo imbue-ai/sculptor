@@ -1,7 +1,7 @@
 import { Badge, Flex, Text } from "@radix-ui/themes";
 import type { ReactElement } from "react";
 
-import { badgeColorForType, badgeLabelForType, type SkillType } from "../skillBadge";
+import { badgeColorForType, badgeLabelForType, type SkillType } from "../../common/utils/skillBadge";
 import styles from "./SkillHoverContent.module.scss";
 
 type SkillHoverContentProps = {

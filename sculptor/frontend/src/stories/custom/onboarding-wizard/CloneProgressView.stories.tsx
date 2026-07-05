@@ -2,7 +2,7 @@ import { Dialog } from "@radix-ui/themes";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactElement } from "react";
 
-import { CloneProgressView } from "~/components/add-repo/CloneProgressView.tsx";
+import { CloneProgressView } from "~/components/addRepo/CloneProgressView.tsx";
 
 // The real CloneProgressView lives inside a Radix Dialog.Content, so wrap it
 // here for accurate sizing/typography. Each story controls its own dialog.

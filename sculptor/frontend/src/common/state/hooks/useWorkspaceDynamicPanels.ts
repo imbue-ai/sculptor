@@ -15,7 +15,10 @@ import { taskAtomFamily, tasksArrayAtom, updateTasksAtom } from "~/common/state/
 import { terminalConnectionStatusesAtom, terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
 import { markAgentUnreadAtom } from "~/common/state/atoms/unreadOverrides.ts";
 import { viewedAgentIdAtom } from "~/common/state/atoms/viewedAgent.ts";
-import { agentDeleteTargetAtom, terminalCloseTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
+import {
+  agentDeleteTargetAtom,
+  terminalCloseTargetAtom,
+} from "~/components/commandPalette/contextActions/atoms/contextActions.ts";
 import type { DynamicAgentInput, DynamicTerminalInput } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
 import { deriveDynamicPanels, makeTerminalPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
 import {

@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactElement } from "react";
 
-import { parseFrontmatter } from "~/components/MarkdownDiff/frontmatter.ts";
-import { FrontmatterBlock } from "~/components/MarkdownDiff/FrontmatterBlock.tsx";
+import { FrontmatterBlock } from "~/pages/workspace/diffPanel/markdownDiff/FrontmatterBlock.tsx";
+import { parseFrontmatter } from "~/pages/workspace/diffPanel/markdownDiff/utils/frontmatter.ts";
 
 // Render the block exactly as it appears in the file preview: inside a padded
 // `markdownBody` surface, above the rendered document body.

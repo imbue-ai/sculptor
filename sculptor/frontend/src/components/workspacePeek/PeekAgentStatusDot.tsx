@@ -3,7 +3,8 @@ import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
 import { useTask } from "~/common/state/hooks/useTaskHelpers";
-import { type AgentDotStatus, AgentStatusDot as AgentStatusDotBase, getAgentDotStatus } from "~/components/statusDot";
+import { type AgentDotStatus, getAgentDotStatus } from "~/common/utils/statusDot.ts";
+import { AgentStatusDot as AgentStatusDotBase } from "~/components/statusDot";
 
 import { useRelativeTime } from "./hooks/useRelativeTime";
 import styles from "./PeekAgentStatusDot.module.scss";

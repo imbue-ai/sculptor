@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import { SourceRadioCards } from "~/components/add-repo/SourceRadioCards.tsx";
+import { SourceRadioCards } from "~/components/addRepo/SourceRadioCards.tsx";
 
 const noop = (): void => {};
 

@@ -30,9 +30,8 @@ import {
 } from "~/common/state/atoms/agentTabs.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { terminalNextIndexAtom, terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
-import { createAgentErrorToastAtom } from "~/common/state/atoms/toasts.ts";
+import { createAgentErrorToastAtom, ToastType } from "~/common/state/atoms/toasts.ts";
 import { isPiAgentEnabledAtom, userConfigAtom } from "~/common/state/atoms/userConfig.ts";
-import { ToastType } from "~/components/Toast.tsx";
 import { resetReviewAllScopeAtom } from "~/pages/workspace/diffPanel/atoms.ts";
 import { makeAgentPanelId, makeTerminalPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
 import { panelRegistryAtom } from "~/pages/workspace/layout/registry/panelRegistry.ts";

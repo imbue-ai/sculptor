@@ -9,7 +9,8 @@ import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 import { memo, useCallback } from "react";
 
-import { Toast, type ToastType } from "~/components/Toast.tsx";
+import { type ToastType } from "~/common/state/atoms/toasts.ts";
+import { Toast } from "~/components/Toast.tsx";
 
 // The payload contract the app-level toast atoms share (see ErrorToastData /
 // InfoToastData in common/state/atoms/toasts.ts): a title plus optional
