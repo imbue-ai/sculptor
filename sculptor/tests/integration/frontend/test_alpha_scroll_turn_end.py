@@ -121,11 +121,11 @@ def test_following_keeps_pin_gap_below_last_message(sculptor_instance_: Sculptor
 def test_entering_following_lands_at_the_pin_gap(sculptor_instance_: SculptorInstance) -> None:
     """Entering `following` must already satisfy the pin invariant.
 
-    The anchoring→following handoff pins to the bottom on entry, and the pin is
-    down-only. If the handoff fires while the anchored rest position is still
-    above the pin target, that entry pin silently no-ops and the view parks
-    with the last message floating deeper than the designed gap until the
-    stream grows through the leftover slack — a plateau long enough on CI
+    The anchoring→following handoff pins to the bottom on entry. If that entry
+    pin cannot land on the target — a handoff fired above the pin, or a tail
+    shrink around the handoff that a down-only pin refuses to chase — the view
+    parks with the last message floating deeper than the designed gap until the
+    stream grows through the leftover slack: a plateau long enough on CI
     hardware for the sibling test's stability-polled sample to certify it as
     the resting gap. Sampling the very first window after the phase flips
     checks the entry geometry directly: the max across the window IS the entry

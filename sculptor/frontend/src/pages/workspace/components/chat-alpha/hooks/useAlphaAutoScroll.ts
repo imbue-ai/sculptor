@@ -171,8 +171,9 @@ export const useAlphaAutoScroll = (
     const el = scrollContainerRef.current;
     if (!el || messageCount === 0) return;
     const desired = bottomPinOffset(el, virtualizer);
-    const isUpwardMove = desired <= el.scrollTop + 1;
-    if (isUpwardMove && !(isFollowing() && el.scrollTop - desired > PIN_UPWARD_DEADBAND)) return;
+    const isBelowTarget = desired > el.scrollTop + 1;
+    const isStrandedPastTarget = isFollowing() && el.scrollTop - desired > PIN_UPWARD_DEADBAND;
+    if (!isBelowTarget && !isStrandedPastTarget) return;
     isProgrammaticScroll.current = true;
     el.scrollTop = desired;
   }, [scrollContainerRef, virtualizer, messageCount, isProgrammaticScroll, isFollowing]);
