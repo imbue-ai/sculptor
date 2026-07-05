@@ -3,19 +3,20 @@
  * authors target. Changes here are breaking changes to the plugin API
  * and must bump the SDK major version.
  */
-import type { PluginPanelDefinition } from "../types.ts";
+import type { PluginPanelDefinition } from "../contract.ts";
 
 export { openExternal } from "./actions.ts";
 export { Markdown, PanelHeader } from "./components.ts";
-export type { CurrentWorkspace, WorkspaceView } from "./hooks.ts";
+export type { CurrentWorkspace, WorkspaceView } from "./hostHooks.ts";
 export {
   useCurrentWorkspace,
   useNavigateToWorkspace,
   usePluginSetting,
   usePluginSettings,
+  useWorkspaceAgents,
   useWorkspaces,
   useWorkspaceTasks,
-} from "./hooks.ts";
+} from "./hostHooks.ts";
 export type { CodingAgentTaskView } from "~/api";
 // The contract a plugin's `activate(api)` targets. Re-exported as types so
 // plugins reference the host's real definitions instead of hand-redeclaring
@@ -26,7 +27,7 @@ export type {
   PluginHostApi,
   PluginManifest,
   WorkspaceWidgetDefinition,
-} from "../types.ts";
+} from "../contract.ts";
 export type { PluginPanelDefinition };
 
 /**

@@ -3,8 +3,8 @@ import { X } from "lucide-react";
 import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
 
 import { ElementIds } from "../../../api";
-import { formatShortcutForDisplay } from "../../../common/ShortcutUtils.ts";
-import { isMac } from "../../../electron/utils.ts";
+import { formatShortcutForDisplay } from "../../../common/keybindings/format.ts";
+import { isMac } from "../../../electron/platform.ts";
 import styles from "./HotkeyChip.module.scss";
 
 type HotkeyState = "idle" | "recording" | "set";

@@ -9,23 +9,23 @@ import { useRef, useState } from "react";
 
 import type { CustomAction, CustomActionGroup } from "~/api";
 import { ElementIds } from "~/api";
+import { chatActionsAtom } from "~/common/state/atoms/chatActions";
+import { collapsedGroupsAtom } from "~/common/state/atoms/customActions";
+import { useCustomActions } from "~/common/state/hooks/useCustomActions";
 import {
   BUILTIN_SCULPTOR_ACTIONS,
   BUILTIN_SCULPTOR_GROUP,
   isBuiltInAction,
   isBuiltInGroup,
   SCULPTOR_BUILTIN_GROUP_ID,
-} from "~/common/builtinActions";
-import { chatActionsAtom } from "~/common/state/atoms/chatActions";
-import { collapsedGroupsAtom } from "~/common/state/atoms/customActions";
-import { useCustomActions } from "~/common/state/hooks/useCustomActions";
+} from "~/common/utils/builtinActions";
 import { ActionChip } from "~/components/actions/ActionChip";
 import { ActionDialog, type ActionFormData } from "~/components/actions/ActionDialog";
 import { DeleteActionDialog } from "~/components/actions/DeleteActionDialog";
 import { DeleteGroupDialog } from "~/components/actions/DeleteGroupDialog";
 import { GroupContextMenu } from "~/components/actions/GroupContextMenu";
 import { PanelHeader } from "~/components/panels/PanelHeader";
-import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
+import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 
 import styles from "./ActionsPanel.module.scss";
 import { useWorkspacePanelData } from "./useWorkspacePanelData";
@@ -238,7 +238,7 @@ export const ActionsPanel = (): ReactElement => {
   } = useCustomActions();
   const [collapsedGroups, setCollapsedGroups] = useAtom(collapsedGroupsAtom);
   const chatActions = useAtomValue(chatActionsAtom);
-  const { task } = useWorkspacePanelData();
+  const { agent } = useWorkspacePanelData();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingAction, setEditingAction] = useState<CustomAction | undefined>(undefined);
@@ -275,7 +275,7 @@ export const ActionsPanel = (): ReactElement => {
     return getActionsInGroup(groupId);
   };
 
-  const isAgentRunning = task?.status === "RUNNING" || task?.status === "BUILDING";
+  const isAgentRunning = agent?.status === "RUNNING" || agent?.status === "BUILDING";
 
   const handleAddAction = (): void => {
     setEditingAction(undefined);

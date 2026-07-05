@@ -7,8 +7,8 @@ import { useCallback, useEffect, useRef } from "react";
 
 import { mentionChipUnreachableToastAtom } from "~/common/state/atoms/toasts.ts";
 
-import { focusFolderAtom } from "./atoms.ts";
-import type { FlatRowEntry } from "./utils.ts";
+import { focusFolderAtom } from "./atoms/fileBrowser.ts";
+import type { FlatRowEntry } from "./utils/fileTree.ts";
 
 const HIGHLIGHT_CLASS = "promptNavigatorHighlight";
 const FADE_OUT_CLASS = "promptNavigatorHighlightFadeOut";

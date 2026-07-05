@@ -4,8 +4,8 @@ import { type ReactElement, type ReactNode, useCallback, useMemo, useState } fro
 
 import type { AuthenticatedProviderEntry } from "~/api";
 import { ElementIds } from "~/api";
-import { getProviderDisplayName } from "~/common/modelConstants";
 import { usePiAuthenticatedProviders } from "~/common/state/hooks/usePiAuthenticatedProviders";
+import { getProviderDisplayName } from "~/common/utils/modelConstants";
 import { BlandCircle } from "~/components/PulsingCircle.tsx";
 
 import { PiLoginDialog, type PiLoginRequestView } from "./PiLoginDialog.tsx";

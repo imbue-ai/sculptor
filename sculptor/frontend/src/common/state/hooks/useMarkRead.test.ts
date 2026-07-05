@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as api from "../../../api";
 import type { CodingAgentTaskView } from "../../../api";
-import { taskAtomFamily } from "../atoms/tasks";
+import { agentAtomFamily } from "../atoms/agents";
 import { markAgentUnreadAtom, resetUnreadOverridesForTesting } from "../atoms/unreadOverrides";
 import { useMarkRead } from "./useMarkRead";
 
@@ -18,7 +18,7 @@ vi.mock("../../../api", async () => {
   return { ...actual, markWorkspaceAgentRead: mockMarkRead, markWorkspaceAgentUnread: mockMarkUnread };
 });
 
-const makeTask = (updatedAt: string, lastReadAt: string | null, id = "agent-1"): CodingAgentTaskView =>
+const makeAgent = (updatedAt: string, lastReadAt: string | null, id = "agent-1"): CodingAgentTaskView =>
   ({ id, status: "READY", updatedAt, lastReadAt }) as unknown as CodingAgentTaskView;
 
 const renderMarkRead = (store: ReturnType<typeof createStore>): RenderHookResult<void, unknown> => {
@@ -42,7 +42,7 @@ afterEach(() => {
 describe("useMarkRead", () => {
   it("flushes a pending debounced read when the agent is left mid-debounce", () => {
     const store = createStore();
-    store.set(taskAtomFamily("agent-1"), makeTask("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z"));
+    store.set(agentAtomFamily("agent-1"), makeAgent("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z"));
     const { unmount } = renderMarkRead(store);
     // The mount marks the agent read once; isolate the flush from it.
     expect(mockMarkRead).toHaveBeenCalledTimes(1);
@@ -50,7 +50,7 @@ describe("useMarkRead", () => {
 
     // A new update arrives while viewing — schedules a debounced read.
     act(() => {
-      store.set(taskAtomFamily("agent-1"), makeTask("2024-01-01T00:00:06.000Z", "2024-01-01T00:00:01.000Z"));
+      store.set(agentAtomFamily("agent-1"), makeAgent("2024-01-01T00:00:06.000Z", "2024-01-01T00:00:01.000Z"));
     });
 
     // Leaving the agent before the debounce fires must flush the pending read.
@@ -66,7 +66,7 @@ describe("useMarkRead", () => {
 
   it("does not flush when there is no pending read", () => {
     const store = createStore();
-    store.set(taskAtomFamily("agent-1"), makeTask("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z"));
+    store.set(agentAtomFamily("agent-1"), makeAgent("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z"));
     const { unmount } = renderMarkRead(store);
     expect(mockMarkRead).toHaveBeenCalledTimes(1);
     mockMarkRead.mockClear();
@@ -80,19 +80,19 @@ describe("useMarkRead", () => {
 
   it("does not flush when the user marked the agent unread while a read was pending", () => {
     const store = createStore();
-    store.set(taskAtomFamily("agent-1"), makeTask("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z"));
+    store.set(agentAtomFamily("agent-1"), makeAgent("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z"));
     const { unmount } = renderMarkRead(store);
     mockMarkRead.mockClear();
 
     // A new update schedules a debounced read...
     act(() => {
-      store.set(taskAtomFamily("agent-1"), makeTask("2024-01-01T00:00:06.000Z", "2024-01-01T00:00:01.000Z"));
+      store.set(agentAtomFamily("agent-1"), makeAgent("2024-01-01T00:00:06.000Z", "2024-01-01T00:00:01.000Z"));
     });
     // ...then the user explicitly marks it unread. The real action records an
     // unread override AND optimistically clears lastReadAt (unreadOverrides.ts);
     // the override is what the flush guard consults.
     act(() => {
-      store.set(markAgentUnreadAtom, { workspaceId: "ws-1", taskId: "agent-1" });
+      store.set(markAgentUnreadAtom, { workspaceId: "ws-1", agentId: "agent-1" });
     });
 
     act(() => {
@@ -104,8 +104,8 @@ describe("useMarkRead", () => {
 
   it("preserves an explicit mark-unread on the agent being left when switching agents", () => {
     const store = createStore();
-    store.set(taskAtomFamily("agent-x"), makeTask("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z", "agent-x"));
-    store.set(taskAtomFamily("agent-y"), makeTask("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z", "agent-y"));
+    store.set(agentAtomFamily("agent-x"), makeAgent("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z", "agent-x"));
+    store.set(agentAtomFamily("agent-y"), makeAgent("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z", "agent-y"));
     const wrapper = ({ children }: { children: ReactNode }): ReactElement =>
       createElement(Provider, { store }, children);
     const { rerender } = renderHook(({ agentId }: { agentId: string }) => useMarkRead("ws-1", agentId), {
@@ -117,10 +117,13 @@ describe("useMarkRead", () => {
     // agent-x gets an update (schedules a debounced read), then the user marks
     // agent-x unread before the debounce fires (recording its unread override).
     act(() => {
-      store.set(taskAtomFamily("agent-x"), makeTask("2024-01-01T00:00:06.000Z", "2024-01-01T00:00:01.000Z", "agent-x"));
+      store.set(
+        agentAtomFamily("agent-x"),
+        makeAgent("2024-01-01T00:00:06.000Z", "2024-01-01T00:00:01.000Z", "agent-x"),
+      );
     });
     act(() => {
-      store.set(markAgentUnreadAtom, { workspaceId: "ws-1", taskId: "agent-x" });
+      store.set(markAgentUnreadAtom, { workspaceId: "ws-1", agentId: "agent-x" });
     });
 
     // Switching to agent-y must consult agent-x's state (it is explicitly

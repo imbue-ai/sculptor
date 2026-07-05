@@ -1,14 +1,14 @@
 import type { ComponentType, ReactElement } from "react";
 
 import { type ExternalApp, openPathInApp } from "~/api";
-import cursorIcon from "~/assets/app-icons/cursor.png";
-import finderIcon from "~/assets/app-icons/finder.png";
-import ghosttyIcon from "~/assets/app-icons/ghostty.png";
-import itermIcon from "~/assets/app-icons/iterm.png";
-import pycharmIcon from "~/assets/app-icons/pycharm.png";
-import terminalIcon from "~/assets/app-icons/terminal.png";
-import vscodeIcon from "~/assets/app-icons/vscode.png";
-import { isMac } from "~/electron/utils";
+import cursorIcon from "~/assets/appIcons/cursor.png";
+import finderIcon from "~/assets/appIcons/finder.png";
+import ghosttyIcon from "~/assets/appIcons/ghostty.png";
+import itermIcon from "~/assets/appIcons/iterm.png";
+import pycharmIcon from "~/assets/appIcons/pycharm.png";
+import terminalIcon from "~/assets/appIcons/terminal.png";
+import vscodeIcon from "~/assets/appIcons/vscode.png";
+import { isMac } from "~/electron/platform";
 
 export type OpenWithItem = {
   app: ExternalApp;

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as api from "../../../api";
 import type { CodingAgentTaskView, Workspace } from "../../../api";
 import { TaskStatus, updateWorkspace } from "../../../api";
-import { taskAtomFamily, taskIdsAtom } from "./tasks.ts";
+import { agentAtomFamily, agentIdsAtom } from "./agents.ts";
 import { workspaceOpenCloseErrorToastAtom } from "./toasts";
 import {
   closeWorkspaceTabAtom,
@@ -534,7 +534,7 @@ describe("isWorkspaceKnownAtomFamily", () => {
 });
 
 describe("workspaceDotStatusAtomFamily", () => {
-  const dotTask = (
+  const dotAgent = (
     id: string,
     workspaceId: string,
     overrides: Partial<CodingAgentTaskView> = {},
@@ -550,35 +550,35 @@ describe("workspaceDotStatusAtomFamily", () => {
       ...overrides,
     }) as CodingAgentTaskView;
 
-  it("aggregates only the workspace's own tasks", () => {
+  it("aggregates only the workspace's own agents", () => {
     const store = createStore();
-    store.set(taskIdsAtom, ["t1", "t2"]);
-    store.set(taskAtomFamily("t1"), dotTask("t1", "ws-a"));
-    store.set(taskAtomFamily("t2"), dotTask("t2", "ws-b", { status: TaskStatus.ERROR }));
+    store.set(agentIdsAtom, ["t1", "t2"]);
+    store.set(agentAtomFamily("t1"), dotAgent("t1", "ws-a"));
+    store.set(agentAtomFamily("t2"), dotAgent("t2", "ws-b", { status: TaskStatus.ERROR }));
 
     expect(store.get(workspaceDotStatusAtomFamily("ws-a"))).toMatchObject({ hasRunning: true, hasError: false });
     expect(store.get(workspaceDotStatusAtomFamily("ws-b"))).toMatchObject({ hasRunning: false, hasError: true });
   });
 
-  it("keeps reference identity across a task tick that does not flip any flag", () => {
+  it("keeps reference identity across an agent tick that does not flip any flag", () => {
     const store = createStore();
-    store.set(taskIdsAtom, ["t1"]);
-    store.set(taskAtomFamily("t1"), dotTask("t1", "ws-a"));
+    store.set(agentIdsAtom, ["t1"]);
+    store.set(agentAtomFamily("t1"), dotAgent("t1", "ws-a"));
 
     const first = store.get(workspaceDotStatusAtomFamily("ws-a"));
-    store.set(taskAtomFamily("t1"), dotTask("t1", "ws-a", { title: "tick" }));
+    store.set(agentAtomFamily("t1"), dotAgent("t1", "ws-a", { title: "tick" }));
 
     expect(store.get(workspaceDotStatusAtomFamily("ws-a"))).toBe(first);
   });
 
   it("notifies subscribers when an aggregate flag flips", () => {
     const store = createStore();
-    store.set(taskIdsAtom, ["t1"]);
-    store.set(taskAtomFamily("t1"), dotTask("t1", "ws-a"));
+    store.set(agentIdsAtom, ["t1"]);
+    store.set(agentAtomFamily("t1"), dotAgent("t1", "ws-a"));
     const listener = vi.fn();
     const unsubscribe = store.sub(workspaceDotStatusAtomFamily("ws-a"), listener);
 
-    store.set(taskAtomFamily("t1"), dotTask("t1", "ws-a", { status: TaskStatus.WAITING }));
+    store.set(agentAtomFamily("t1"), dotAgent("t1", "ws-a", { status: TaskStatus.WAITING }));
 
     expect(listener).toHaveBeenCalledTimes(1);
     expect(store.get(workspaceDotStatusAtomFamily("ws-a"))).toMatchObject({ hasRunning: false, hasWaiting: true });

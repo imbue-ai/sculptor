@@ -7,22 +7,22 @@ import { createElement, useCallback } from "react";
 import { useParams } from "react-router-dom";
 
 import { ElementIds } from "~/api";
-import { useImbueNavigate } from "~/common/NavigateUtils";
+import { useImbueNavigate } from "~/common/hooks/navigation";
+import { agentAtomFamily } from "~/common/state/atoms/agents";
 import { projectAtomFamily } from "~/common/state/atoms/projects";
-import { taskAtomFamily } from "~/common/state/atoms/tasks";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces";
-import { openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atoms";
-import { revealFolderAtom } from "~/pages/workspace/panels/fileBrowser/atoms";
+import { openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms/diffPanel";
+import { revealFolderAtom } from "~/pages/workspace/panels/fileBrowser/atoms/fileBrowser";
 import { getFileIcon } from "~/pages/workspace/panels/fileBrowser/fileIcons";
 
+import { type SkillType } from "../common/utils/skillBadge";
+import styles from "./editor/MentionNodeView.module.scss";
 import { TYPE_ICONS } from "./EntityMentionSuggestion";
 import { HoverCard } from "./HoverCard";
 import entityStyles from "./MentionChip.module.scss";
 import { AgentDetailPane } from "./mentionDetailPanes/AgentDetailPane";
 import { RepositoryDetailPane } from "./mentionDetailPanes/RepositoryDetailPane";
 import { WorkspaceDetailPane } from "./mentionDetailPanes/WorkspaceDetailPane";
-import styles from "./MentionNodeView.module.scss";
-import { type SkillType } from "./skillBadge";
 import { SkillHoverContent } from "./skills/SkillHoverContent";
 
 const ICON_STYLE = { width: "calc(1em - 1px)", height: "calc(1em - 1px)" };
@@ -286,10 +286,10 @@ const EntityMentionChip = ({
   // gated to "" so Jotai's atomFamily doesn't create new instances per id.
   const project = useAtomValue(projectAtomFamily(entityType === "repository" ? entityId : ""));
   const workspace = useAtomValue(workspaceAtomFamily(entityType === "workspace" ? entityId : ""));
-  const task = useAtomValue(taskAtomFamily(entityType === "agent" ? entityId : ""));
+  const agent = useAtomValue(agentAtomFamily(entityType === "agent" ? entityId : ""));
 
   const isDeleted =
-    entityType === "repository" ? project === null : entityType === "workspace" ? workspace === null : task === null;
+    entityType === "repository" ? project === null : entityType === "workspace" ? workspace === null : agent === null;
 
   const { navigateToWorkspace, navigateToAgent } = useImbueNavigate();
   // Repository chips and deleted entities never navigate. They render as inert
@@ -305,11 +305,11 @@ const EntityMentionChip = ({
       e.preventDefault();
       if (entityType === "workspace") {
         navigateToWorkspace(entityId);
-      } else if (entityType === "agent" && task?.workspaceId != null) {
-        navigateToAgent(task.workspaceId, entityId);
+      } else if (entityType === "agent" && agent?.workspaceId != null) {
+        navigateToAgent(agent.workspaceId, entityId);
       }
     },
-    [entityType, entityId, navigateToWorkspace, navigateToAgent, task?.workspaceId],
+    [entityType, entityId, navigateToWorkspace, navigateToAgent, agent?.workspaceId],
   );
 
   return (

@@ -2,7 +2,7 @@ import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 import type { ComponentType } from "react";
 
-import type { PluginManifest, PluginPanelDefinition } from "./types.ts";
+import type { PluginManifest, PluginPanelDefinition } from "./contract.ts";
 
 /**
  * Panels contributed by loaded plugins. The plugin manager merges these into the

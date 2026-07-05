@@ -20,7 +20,7 @@ import { useSearchParams } from "react-router-dom";
 import { type DependencyInfo, ElementIds, type UserConfigField } from "../../../api";
 import { getBackendCapabilities } from "../../../common/state/atoms/backendCapabilities";
 import { dependenciesStatusAtom } from "../../../common/state/atoms/dependenciesStatus";
-import { useManagedDependency } from "../../../common/useManagedDependency";
+import { useManagedDependency } from "../hooks/useManagedDependency";
 import { SettingRow } from "./SettingRow.tsx";
 import { SectionTitle, SettingsSectionLayout } from "./SettingsSection.tsx";
 

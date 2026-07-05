@@ -1,11 +1,11 @@
 import { useAtom } from "jotai";
 import type { SetStateAction } from "react";
 
-import type { TaskID } from "../../Types.ts";
 import { attachedFilesAtomFamily } from "../atoms/attachedFiles.ts";
+import type { AgentID } from "../ids.ts";
 
 export const useDraftAttachedFiles = (
-  taskId: TaskID,
+  agentId: AgentID,
 ): [Array<string>, (update: SetStateAction<Array<string>>) => void] => {
-  return useAtom(attachedFilesAtomFamily(taskId));
+  return useAtom(attachedFilesAtomFamily(agentId));
 };

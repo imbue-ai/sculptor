@@ -6,8 +6,8 @@ import { ElementIds } from "~/api";
 
 import { getFileIcon } from "./fileIcons.ts";
 import styles from "./FileTree.module.scss";
-import type { TreeNode } from "./types.ts";
-import { STATUS_COLOR_STYLES, truncateMiddlePath } from "./utils.ts";
+import type { TreeNode } from "./types/fileBrowser.ts";
+import { STATUS_COLOR_STYLES, truncateMiddlePath } from "./utils/rowDisplay.ts";
 
 /** Left padding (px) of a depth-0 row. */
 const TREE_ROW_BASE_PADDING_LEFT = 12;

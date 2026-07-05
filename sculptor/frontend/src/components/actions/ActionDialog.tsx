@@ -5,7 +5,7 @@ import { useCallback, useState } from "react";
 
 import type { CustomAction, CustomActionGroup } from "~/api";
 import { ElementIds } from "~/api";
-import { Editor } from "~/components/Editor";
+import { Editor } from "~/components/editor/Editor";
 
 import styles from "./ActionDialog.module.scss";
 

@@ -1,19 +1,19 @@
 import { useMemo } from "react";
 
-import { isToolUseBlock } from "~/common/Guards.ts";
-import { useTaskChatMessages } from "~/common/state/hooks/useTaskDetail.ts";
-import { isDiffTool } from "~/pages/workspace/utils/utils.ts";
+import { useAgentChatMessages } from "~/common/state/hooks/useAgentDetail.ts";
+import { isToolUseBlock } from "~/pages/workspace/utils/blockGuards.ts";
+import { isDiffTool } from "~/pages/workspace/utils/toolPredicates.ts";
 
 type ActiveFileOperation = {
   filePath: string;
   tool: string;
 };
 
-export const useActiveFileOperation = (taskId: string | undefined): ActiveFileOperation | undefined => {
-  const { inProgressChatMessage } = useTaskChatMessages(taskId ?? "");
+export const useActiveFileOperation = (agentId: string | undefined): ActiveFileOperation | undefined => {
+  const { inProgressChatMessage } = useAgentChatMessages(agentId ?? "");
 
   return useMemo(() => {
-    if (!taskId || !inProgressChatMessage) return undefined;
+    if (!agentId || !inProgressChatMessage) return undefined;
 
     for (const block of inProgressChatMessage.content) {
       if (!isToolUseBlock(block)) continue;
@@ -27,5 +27,5 @@ export const useActiveFileOperation = (taskId: string | undefined): ActiveFileOp
     }
 
     return undefined;
-  }, [taskId, inProgressChatMessage]);
+  }, [agentId, inProgressChatMessage]);
 };

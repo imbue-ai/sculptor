@@ -1,7 +1,7 @@
 import { atom } from "jotai";
 
 import type { HealthCheckResponse } from "~/api";
-import type { AnyBackendStatus } from "~/shared/types.ts";
+import type { AnyBackendStatus } from "~/common/types/backend.ts";
 
 export const backendStatusAtom = atom<AnyBackendStatus>({
   status: "loading",

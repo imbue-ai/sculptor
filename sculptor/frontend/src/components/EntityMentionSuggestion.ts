@@ -4,11 +4,11 @@ import { Bot, FolderGit2, Layers, type LucideIcon } from "lucide-react";
 import type { MutableRefObject } from "react";
 
 import type { CodingAgentTaskView, Project, Workspace } from "~/api";
-import { formatRelativeTime } from "~/common/formatRelativeTime";
-import { formatRepoUrl } from "~/common/formatRepoUrl";
+import { formatRelativeTime } from "~/common/utils/formatRelativeTime";
+import { formatRepoUrl } from "~/components/formatRepoUrl";
 
-import { EntityMentionList } from "./EntityMentionList";
-import { renderSuggestion, SuggestionItem } from "./SuggestionUtils";
+import { EntityMentionList } from "./editor/EntityMentionList";
+import { renderSuggestion, SuggestionItem } from "./editor/utils/suggestion";
 
 export type EntityType = "repository" | "workspace" | "agent";
 
@@ -110,8 +110,8 @@ const formatAgentCount = (count: number): string => {
   return `${count} agents`;
 };
 
-const getAgentDisplayName = (task: CodingAgentTaskView): string =>
-  task.title ?? (task.goal ? task.goal.slice(0, AGENT_GOAL_PREVIEW_LENGTH) : "Untitled");
+const getAgentDisplayName = (agent: CodingAgentTaskView): string =>
+  agent.title ?? (agent.goal ? agent.goal.slice(0, AGENT_GOAL_PREVIEW_LENGTH) : "Untitled");
 
 export const createEntitySuggestion = (entityDataRef: EntityDataRef): Omit<SuggestionOptions, "editor"> => ({
   pluginKey: new PluginKey("entityMention"),
@@ -190,14 +190,14 @@ export const createEntitySuggestion = (entityDataRef: EntityDataRef): Omit<Sugge
     // surfacing it on every row would be redundant noise.
     const agentItems: Array<EntityMentionItem> = [...agents]
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .filter((task) => matchesQuery(getAgentDisplayName(task), ""))
-      .map((task) =>
+      .filter((agent) => matchesQuery(getAgentDisplayName(agent), ""))
+      .map((agent) =>
         makeEntityItem({
           entityType: "agent",
-          entityId: task.id,
-          entityDisplayName: getAgentDisplayName(task),
-          subtitle: formatRelativeTime(task.createdAt),
-          parentId: task.workspaceId ?? undefined,
+          entityId: agent.id,
+          entityDisplayName: getAgentDisplayName(agent),
+          subtitle: formatRelativeTime(agent.createdAt),
+          parentId: agent.workspaceId ?? undefined,
         }),
       );
 

@@ -4,6 +4,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { PluginCommandUiAction } from "~/api";
 
+import type {
+  LoadedPlugin,
+  PluginHostApi,
+  PluginLoadError,
+  PluginManifest,
+  PluginPanelDefinition,
+} from "./contract.ts";
 import { type LocalPluginRef, PluginManager, resolveEntryUrl, validateManifest } from "./pluginManager.tsx";
 import {
   pluginDisabledSourcesAtom,
@@ -14,7 +21,6 @@ import {
   pluginSourceStatesAtom,
   pluginWorkspaceWidgetsAtom,
 } from "./pluginRegistry.ts";
-import type { LoadedPlugin, PluginHostApi, PluginLoadError, PluginManifest, PluginPanelDefinition } from "./types.ts";
 
 const manifestFor = (id: string): PluginManifest => ({
   id,

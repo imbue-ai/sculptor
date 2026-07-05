@@ -11,15 +11,15 @@ import { useCallback, useMemo, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
-import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 import {
   activeDiffTabAtomFamily,
   changesSelectionFromTab,
   closeDiffTabAtom,
-} from "~/pages/workspace/components/diffPanel/atoms.ts";
-import { DiffScopePicker } from "~/pages/workspace/components/diffPanel/DiffScopePicker.tsx";
-import type { DiffSelection, TreeViewOptions } from "~/pages/workspace/components/diffViewer/index.ts";
-import { DiffViewer } from "~/pages/workspace/components/diffViewer/index.ts";
+} from "~/pages/workspace/diffPanel/atoms/diffPanel.ts";
+import { DiffScopePicker } from "~/pages/workspace/diffPanel/DiffScopePicker.tsx";
+import type { DiffSelection, TreeViewOptions } from "~/pages/workspace/diffViewer/index.ts";
+import { DiffViewer } from "~/pages/workspace/diffViewer/index.ts";
+import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 
 import styles from "./ChangesPanel.module.scss";
 import { DiscardDialog } from "./changesPanel/DiscardDialog.tsx";
@@ -31,11 +31,11 @@ import {
   collapseAllChangesFoldersAtom,
   fileBrowserViewModeAtomFamily,
   toggleViewModeAtom,
-} from "./fileBrowser/atoms.ts";
+} from "./fileBrowser/atoms/fileBrowser.ts";
 import { ChangesTreeView } from "./fileBrowser/ChangesTreeView.tsx";
 import { CommitButton } from "./fileBrowser/CommitButton.tsx";
-import { useFileStatusMap } from "./fileBrowser/hooks.ts";
-import type { FileStatus } from "./fileBrowser/types.ts";
+import { useFileStatusMap } from "./fileBrowser/fileDiffMaps.ts";
+import type { FileStatus } from "./fileBrowser/types/fileBrowser.ts";
 import { reconcileSelectionByRecency } from "./selectionRecency.ts";
 
 const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactElement => {

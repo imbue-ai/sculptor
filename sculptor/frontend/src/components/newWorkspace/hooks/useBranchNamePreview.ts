@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 
 import type { NewBranchNameValidationResponse, WorkspaceInitializationStrategy } from "~/api";
 import { previewBranchName, validateNewBranchName, WorkspaceInitializationStrategy as Strategy } from "~/api";
-import type { BackendQueryKeyResult } from "~/common/queryClient.ts";
-import { SCULPTOR_QUERY_KEY_PREFIX } from "~/common/queryClient.ts";
+import type { BackendQueryKeyResult } from "~/common/state/queryClient.ts";
+import { SCULPTOR_QUERY_KEY_PREFIX } from "~/common/state/queryClient.ts";
 
 /**
  * Status of the displayed branch name, from the debounced backend check:
@@ -100,22 +100,22 @@ const fetchBranchNameValidation = async (
 
 // Delay a rapidly-changing value so it only settles after `delayMs` of quiet,
 // keeping intermediate keystrokes out of a query key until the user pauses.
-function useDebouncedValue<T>(value: T, delayMs: number): T {
+const useDebouncedValue = <T>(value: T, delayMs: number): T => {
   const [debounced, setDebounced] = useState<T>(value);
   useEffect(() => {
     const timer = window.setTimeout(() => setDebounced(value), delayMs);
     return (): void => window.clearTimeout(timer);
   }, [value, delayMs]);
   return debounced;
-}
+};
 
-export function useBranchNamePreview({
+export const useBranchNamePreview = ({
   projectId,
   workspaceName,
   mode,
   override,
   shuffleNonce = 0,
-}: UseBranchNamePreviewArgs): BranchNamePreviewState {
+}: UseBranchNamePreviewArgs): BranchNamePreviewState => {
   const isManuallyEdited = override !== null;
 
   // Debounce the typed workspace name so each keystroke doesn't spawn a preview
@@ -161,4 +161,4 @@ export function useBranchNamePreview({
   }
 
   return { preview, displayedValue, isLoading, status };
-}
+};

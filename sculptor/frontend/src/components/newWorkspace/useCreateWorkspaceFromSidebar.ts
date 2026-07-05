@@ -3,16 +3,15 @@ import { useCallback, useState } from "react";
 
 import { getCurrentBranch, previewBranchName, WorkspaceInitializationStrategy } from "~/api";
 import type { StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
-import { createWorkspaceErrorToastAtom } from "~/common/state/atoms/toasts.ts";
+import { createWorkspaceErrorToastAtom, ToastType } from "~/common/state/atoms/toasts.ts";
 import { defaultModelAtom, isPiAgentEnabledAtom } from "~/common/state/atoms/userConfig.ts";
 import { useCreateWorkspace } from "~/common/state/hooks/useCreateWorkspace.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 import {
   lastWorkspaceCreationSettingsAtom,
-  newWorkspaceModalAtom,
+  newWorkspaceDialogAtom,
 } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
-import { resolveStoredAgentType } from "~/components/sections/addPanelCore.ts";
-import { ToastType } from "~/components/Toast.tsx";
+import { resolveStoredAgentType } from "~/pages/workspace/layout/atoms/addPanel.ts";
 
 type UseCreateWorkspaceFromSidebarReturn = {
   /** True while a direct-create is in flight. */
@@ -40,7 +39,7 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
   const lastSettings = useAtomValue(lastWorkspaceCreationSettingsAtom);
   const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
   const defaultModel = useAtomValue(defaultModelAtom);
-  const setModalState = useSetAtom(newWorkspaceModalAtom);
+  const setModalState = useSetAtom(newWorkspaceDialogAtom);
   const setCreateWorkspaceErrorToast = useSetAtom(createWorkspaceErrorToastAtom);
   const { registrations } = useTerminalAgentRegistrations();
   const { isCreating, createWorkspace } = useCreateWorkspace();

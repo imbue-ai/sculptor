@@ -5,13 +5,14 @@ import { Monitor, Moon, Sun } from "lucide-react";
 import { type ReactElement, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { getUpdateStatusText } from "~/common/autoUpdateUtils.ts";
+import { useInstallUpdate } from "~/app/hooks/useInstallUpdate.ts";
 import { autoUpdateStatusAtom, updateChannelAtom } from "~/common/state/atoms/autoUpdate.ts";
 import { healthCheckDataAtom } from "~/common/state/atoms/backend.ts";
 import { themeBuilderSettingsAtom } from "~/common/state/atoms/themeBuilder.ts";
+import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
+import type { UpdateChannel } from "~/common/types/backend.ts";
+import { getUpdateStatusText } from "~/common/utils/autoUpdate.ts";
 import { ModelSelectOptions } from "~/components/ModelSelectOptions.tsx";
-import { useInstallUpdate } from "~/hooks/useInstallUpdate.ts";
-import type { UpdateChannel } from "~/shared/types.ts";
 
 import { ElementIds, UserConfigField } from "../../api";
 import {
@@ -27,10 +28,10 @@ import {
   userEmailAtom,
 } from "../../common/state/atoms/userConfig.ts";
 import { useUserConfig } from "../../common/state/hooks/useUserConfig.ts";
-import { mergeClasses, optional } from "../../common/Utils.ts";
+import { mergeClasses } from "../../common/utils/classNames.ts";
+import { optional } from "../../common/utils/optional.ts";
 import { EFFORT_DISPLAY_NAMES, EFFORT_OPTIONS } from "../../components/effortConstants.ts";
-import type { ToastContent } from "../../components/Toast.tsx";
-import { Toast, ToastType } from "../../components/Toast.tsx";
+import { Toast } from "../../components/Toast.tsx";
 import { AccountFieldRow } from "./components/AccountFieldRow.tsx";
 import { ActionsSettingsSection } from "./components/ActionsSettingsSection.tsx";
 import { CustomBackendSection } from "./components/AdvancedSection.tsx";

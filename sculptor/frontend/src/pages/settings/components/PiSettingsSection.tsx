@@ -21,7 +21,7 @@ import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { ElementIds, UserConfigField } from "../../../api";
 import { dependenciesStatusAtom } from "../../../common/state/atoms/dependenciesStatus";
 import { isPiAgentEnabledAtom, userConfigAtom } from "../../../common/state/atoms/userConfig";
-import { useManagedDependency } from "../../../common/useManagedDependency";
+import { useManagedDependency } from "../hooks/useManagedDependency";
 import { PiProvidersArea } from "./PiProvidersArea.tsx";
 import { SettingRow } from "./SettingRow.tsx";
 import { SettingsSectionLayout } from "./SettingsSection.tsx";

@@ -4,10 +4,10 @@ import type { ReactElement, ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { CodingAgentTaskView } from "~/api";
-import { taskAtomFamily, taskIdsAtom } from "~/common/state/atoms/tasks.ts";
-import { agentDeleteTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
-import { makeAgentPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
-import { panelRegistryAtom } from "~/components/sections/registry/panelRegistry.ts";
+import { agentAtomFamily, agentIdsAtom } from "~/common/state/atoms/agents.ts";
+import { agentDeleteTargetAtom } from "~/components/commandPalette/contextActions/atoms/contextActions.ts";
+import { makeAgentPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
+import { panelRegistryAtom } from "~/pages/workspace/layout/registry/panelRegistry.ts";
 
 import { useWorkspaceDynamicPanels } from "./useWorkspaceDynamicPanels.ts";
 
@@ -19,13 +19,13 @@ vi.mock("./useWorkspaceAgentDiagnostics.ts", () => ({
 
 const WORKSPACE_ID = "ws-1";
 
-const createMockTask = (overrides: Partial<CodingAgentTaskView> = {}): CodingAgentTaskView =>
+const createMockAgent = (overrides: Partial<CodingAgentTaskView> = {}): CodingAgentTaskView =>
   ({
-    id: "task-1",
+    id: "agent-1",
     projectId: "proj-1",
     createdAt: "2024-01-01T00:00:00Z",
     updatedAt: "2024-01-01T00:00:00Z",
-    taskStatus: "RUNNING",
+    agentStatus: "RUNNING",
     isAutoCompacting: false,
     artifactNames: [],
     initialPrompt: "Test prompt",
@@ -45,10 +45,10 @@ const createMockTask = (overrides: Partial<CodingAgentTaskView> = {}): CodingAge
     ...overrides,
   }) as CodingAgentTaskView;
 
-const renderWithTask = (task: CodingAgentTaskView): ReturnType<typeof createStore> => {
+const renderWithAgent = (agent: CodingAgentTaskView): ReturnType<typeof createStore> => {
   const store = createStore();
-  store.set(taskIdsAtom, [task.id]);
-  store.set(taskAtomFamily(task.id), task);
+  store.set(agentIdsAtom, [agent.id]);
+  store.set(agentAtomFamily(agent.id), agent);
 
   const wrapper = ({ children }: { children: ReactNode }): ReactElement => (
     <Provider store={store}>{children}</Provider>
@@ -59,20 +59,20 @@ const renderWithTask = (task: CodingAgentTaskView): ReturnType<typeof createStor
 
 describe("useWorkspaceDynamicPanels agent close target", () => {
   it("falls back to the tab display name for an untitled agent's delete confirmation", () => {
-    const store = renderWithTask(createMockTask({ title: null, titleOrSomethingLikeIt: "Claude 2" }));
+    const store = renderWithAgent(createMockAgent({ title: null, titleOrSomethingLikeIt: "Claude 2" }));
 
-    const agentPanel = store.get(panelRegistryAtom).find((panel) => panel.id === makeAgentPanelId("task-1"));
+    const agentPanel = store.get(panelRegistryAtom).find((panel) => panel.id === makeAgentPanelId("agent-1"));
     expect(agentPanel).toBeDefined();
 
     act(() => agentPanel?.onRequestClose?.());
-    expect(store.get(agentDeleteTargetAtom)).toEqual({ id: "task-1", name: "Claude 2" });
+    expect(store.get(agentDeleteTargetAtom)).toEqual({ id: "agent-1", name: "Claude 2" });
   });
 
   it("uses the explicit title when the agent has one", () => {
-    const store = renderWithTask(createMockTask({ title: "My agent" }));
+    const store = renderWithAgent(createMockAgent({ title: "My agent" }));
 
-    const agentPanel = store.get(panelRegistryAtom).find((panel) => panel.id === makeAgentPanelId("task-1"));
+    const agentPanel = store.get(panelRegistryAtom).find((panel) => panel.id === makeAgentPanelId("agent-1"));
     act(() => agentPanel?.onRequestClose?.());
-    expect(store.get(agentDeleteTargetAtom)).toEqual({ id: "task-1", name: "My agent" });
+    expect(store.get(agentDeleteTargetAtom)).toEqual({ id: "agent-1", name: "My agent" });
   });
 });

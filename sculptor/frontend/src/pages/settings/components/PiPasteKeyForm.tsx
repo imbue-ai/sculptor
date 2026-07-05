@@ -2,7 +2,7 @@ import { Button, Flex, Text, TextField } from "@radix-ui/themes";
 import { type ReactElement, useCallback, useState } from "react";
 
 import { ElementIds, writePiProviderKey } from "~/api";
-import { HTTPException } from "~/common/Errors.ts";
+import { HTTPException } from "~/common/utils/errors.ts";
 
 type PiPasteKeyFormProps = {
   providerId: string;

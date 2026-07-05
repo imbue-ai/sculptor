@@ -1,5 +1,5 @@
 /**
- * Imperative host actions plugins can call. Unlike the hooks in `hooks.ts`,
+ * Imperative host actions plugins can call. Unlike the SDK's React hooks,
  * these are plain functions, callable from event handlers or anywhere outside
  * a React render. The generated SDK runtime stub (served at
  * `/plugin-runtime/sculptor-plugin-sdk.js`) re-exports them from the

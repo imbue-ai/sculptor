@@ -3,9 +3,11 @@ import type { ReactElement } from "react";
 import { useCallback } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ToastType } from "~/common/state/atoms/toasts.ts";
+
 import { ElementIds } from "../api";
-import * as Utils from "../common/Utils.ts";
-import { Toast, ToastProvider, ToastType } from "./Toast";
+import * as classNames from "../common/utils/classNames.ts";
+import { Toast, ToastProvider } from "./Toast";
 
 afterEach(() => {
   cleanup();
@@ -34,7 +36,7 @@ describe("Toast", () => {
   // className), and nothing else in this isolated tree calls it, so its call
   // count is a faithful proxy for "how many times did Toast render".
   it("does not re-render when an unrelated parent update commits", () => {
-    const mergeSpy = vi.spyOn(Utils, "mergeClasses");
+    const mergeSpy = vi.spyOn(classNames, "mergeClasses");
 
     const { rerender } = render(<Harness unrelated={0} />);
 

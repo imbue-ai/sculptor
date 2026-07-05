@@ -1,4 +1,4 @@
-import { BUILTIN_SCULPTOR_ACTIONS } from "~/common/builtinActions.ts";
+import { BUILTIN_SCULPTOR_ACTIONS } from "~/common/utils/builtinActions.ts";
 
 // Built-in action whose slash command the first-run prompt leads with.
 const HELP_ACTION_NAME = "/help";

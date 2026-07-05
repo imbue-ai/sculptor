@@ -9,10 +9,10 @@ import type { ReactElement } from "react";
 import { useCallback, useMemo, useState } from "react";
 
 import { ElementIds } from "~/api";
-import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
-import { activeDiffTabAtomFamily, fileViewSelectionFromTab } from "~/pages/workspace/components/diffPanel/atoms.ts";
-import type { DiffSelection, TreeViewOptions } from "~/pages/workspace/components/diffViewer/index.ts";
-import { DiffViewer } from "~/pages/workspace/components/diffViewer/index.ts";
+import { activeDiffTabAtomFamily, fileViewSelectionFromTab } from "~/pages/workspace/diffPanel/atoms/diffPanel.ts";
+import type { DiffSelection, TreeViewOptions } from "~/pages/workspace/diffViewer/index.ts";
+import { DiffViewer } from "~/pages/workspace/diffViewer/index.ts";
+import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 
 import { ExplorerLayout } from "./ExplorerLayout.tsx";
 import { ExplorerTreeHeader } from "./ExplorerTreeHeader.tsx";
@@ -21,10 +21,11 @@ import {
   fileBrowserViewModeAtomFamily,
   filesPanelSelectionAtomFamily,
   toggleViewModeAtom,
-} from "./fileBrowser/atoms.ts";
+} from "./fileBrowser/atoms/fileBrowser.ts";
 import { EmptyState, SkeletonLoading } from "./fileBrowser/EmptyStates.tsx";
 import { FileTree } from "./fileBrowser/FileTree.tsx";
-import { useFileSearch, useFileTree } from "./fileBrowser/hooks.ts";
+import { useFileSearch } from "./fileBrowser/useFileSearch.ts";
+import { useFileTree } from "./fileBrowser/useFileTree.ts";
 import styles from "./FilesPanel.module.scss";
 import { reconcileSelectionByRecency } from "./selectionRecency.ts";
 

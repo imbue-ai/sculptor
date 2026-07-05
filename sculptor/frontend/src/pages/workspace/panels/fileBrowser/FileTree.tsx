@@ -4,17 +4,17 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { type ReactElement, useCallback, useEffect, useMemo, useRef } from "react";
 
 import { ElementIds } from "~/api";
-import { VerticalOverlayScrollbar } from "~/components/VerticalOverlayScrollbar.tsx";
+import { VerticalOverlayScrollbar } from "~/pages/workspace/VerticalOverlayScrollbar.tsx";
 
 import { activeAgentIdAtomFamily } from "../workspaceAgentActions.ts";
-import { expandFoldersAtom, fileBrowserStateAtomFamily, toggleFolderAtom } from "./atoms.ts";
+import { expandFoldersAtom, fileBrowserStateAtomFamily, toggleFolderAtom } from "./atoms/fileBrowser.ts";
 import { FileContextMenu } from "./FileContextMenu.tsx";
 import styles from "./FileTree.module.scss";
 import { FlatListRow } from "./FlatListRow.tsx";
-import { useFileTree } from "./hooks.ts";
 import { TreeRow } from "./TreeRow.tsx";
-import type { TreeNode, ViewMode } from "./types.ts";
+import type { TreeNode, ViewMode } from "./types/fileBrowser.ts";
 import { useActiveFileOperation } from "./useActiveFileOperation.ts";
+import { useFileTree } from "./useFileTree.ts";
 import { useFocusFolderHighlight } from "./useFocusFolderHighlight.ts";
 import { useKeyboardNavigation } from "./useKeyboardNavigation.ts";
 import { useAgentFileTracking, useCollapseChildren, useSearchAutoExpand, useTreeNodeMap } from "./useTreeView.ts";
@@ -27,8 +27,8 @@ import {
   filterTreeByPaths,
   flattenVisibleTreeWithDepth,
   getAllFiles,
-  isBinaryFile,
-} from "./utils.ts";
+} from "./utils/fileTree.ts";
+import { isBinaryFile } from "./utils/fileType.ts";
 
 const SCROLL_SAVE_DEBOUNCE_MS = 200;
 

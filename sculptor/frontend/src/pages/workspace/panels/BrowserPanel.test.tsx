@@ -9,12 +9,12 @@ import { ElementIds } from "~/api";
 import { type BrowserViewStatus, browserViewStatusAtomFamily } from "./browser/browserViewRegistry";
 import { BrowserPanel } from "./BrowserPanel";
 
-vi.mock("~/electron/utils", () => ({
+vi.mock("~/electron/platform", () => ({
   isElectron: vi.fn(),
 }));
 
 // The Electron panel reads the active workspace's id from the router; pin it.
-vi.mock("~/common/NavigateUtils", async (importOriginal) => ({
+vi.mock("~/common/hooks/navigation", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   useWorkspacePageParams: (): { workspaceID: string } => ({ workspaceID: WORKSPACE_ID }),
 }));
@@ -54,7 +54,7 @@ afterEach(() => {
 
 describe("BrowserPanel", () => {
   it("renders the web-mode placeholder when running outside Electron", async () => {
-    const { isElectron } = await import("~/electron/utils");
+    const { isElectron } = await import("~/electron/platform");
     (isElectron as ReturnType<typeof vi.fn>).mockReturnValue(false);
 
     renderBrowserPanel();
@@ -66,7 +66,7 @@ describe("BrowserPanel", () => {
   it("surfaces the committed webview status on the panel for integration tests", async () => {
     // The page object gates on these production-truth attributes instead of a
     // focus-coupled global bridge or a guest document.location round-trip.
-    const { isElectron } = await import("~/electron/utils");
+    const { isElectron } = await import("~/electron/platform");
     (isElectron as ReturnType<typeof vi.fn>).mockReturnValue(true);
 
     renderBrowserPanel({ webContentsId: 7, currentUrl: "http://example.test/page.html" });
@@ -77,7 +77,7 @@ describe("BrowserPanel", () => {
   });
 
   it("omits the content id until the guest has attached", async () => {
-    const { isElectron } = await import("~/electron/utils");
+    const { isElectron } = await import("~/electron/platform");
     (isElectron as ReturnType<typeof vi.fn>).mockReturnValue(true);
 
     renderBrowserPanel({ webContentsId: null });

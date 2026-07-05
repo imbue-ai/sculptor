@@ -4,7 +4,7 @@ import { atom } from "jotai";
 
 import type { HealthCheckResponse } from "~/api";
 import { uploadDiagnostics } from "~/api";
-import { getTelemetryEnabled } from "~/common/Telemetry.ts";
+import { getTelemetryEnabled } from "~/common/telemetry/telemetry.ts";
 
 import { healthCheckDataAtom } from "./backend.ts";
 import { userEmailAtom, userFullNameAtom } from "./userConfig.ts";

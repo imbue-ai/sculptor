@@ -2,14 +2,14 @@ import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useEffect, useRef } from "react";
 
 import { markWorkspaceAgentRead } from "../../../api";
-import { taskAtomFamily } from "../atoms/tasks";
+import { agentAtomFamily } from "../atoms/agents";
 import { clearUnreadOverride, isUnreadOverrideActive } from "../atoms/unreadOverrides";
 
 const DEBOUNCE_MS = 1000;
 
 export const useMarkRead = (workspaceID: string, agentID: string): void => {
-  const task = useAtomValue(taskAtomFamily(agentID));
-  const setTask = useSetAtom(taskAtomFamily(agentID));
+  const agent = useAtomValue(agentAtomFamily(agentID));
+  const setAgent = useSetAtom(agentAtomFamily(agentID));
   const store = useStore();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // True while a debounced mark-read is scheduled but hasn't fired yet, so the
@@ -18,21 +18,21 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
 
   const markRead = (): void => {
     // Functional update: read the latest atom value at apply time so a stale
-    // closure can't clobber unrelated task fields that changed since render.
-    setTask((prev) => (prev ? { ...prev, lastReadAt: new Date().toISOString() } : prev));
+    // closure can't clobber unrelated agent fields that changed since render.
+    setAgent((prev) => (prev ? { ...prev, lastReadAt: new Date().toISOString() } : prev));
     markWorkspaceAgentRead({ path: { workspace_id: workspaceID, agent_id: agentID } }).catch(() => {
       // Fire-and-forget: the server-authoritative value will arrive via WebSocket
     });
   };
 
   // Whether the user's explicit "Mark as unread" is still in force for THIS agent
-  // (see unreadOverrides.ts for the override's lifetime). Read the task from the
-  // store, not the rendered `task`: on an agent switch the hook re-renders to the
+  // (see unreadOverrides.ts for the override's lifetime). Read the agent from the
+  // store, not the rendered `agent`: on an agent switch the hook re-renders to the
   // new agent before the departing agent's cleanup runs, so a render-scoped value
   // would be the wrong agent; the cleanup's `agentID` closure still points at the
   // departing one.
   const isExplicitlyUnread = (): boolean => {
-    const latest = store.get(taskAtomFamily(agentID));
+    const latest = store.get(agentAtomFamily(agentID));
     return latest !== null && isUnreadOverrideActive(agentID, latest);
   };
 
@@ -41,7 +41,7 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
   // A fresh activation is the user seeing the agent again, so it also ends any
   // explicit "Mark as unread" (see unreadOverrides.ts).
   useEffect(() => {
-    if (task) {
+    if (agent) {
       clearUnreadOverride(agentID);
       markRead();
     }
@@ -61,12 +61,12 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
         }
       }
     };
-    // Only run on mount and when agentID changes, not on every task update
+    // Only run on mount and when agentID changes, not on every agent update
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentID]);
 
   // Re-fire (debounced) when updatedAt changes while the hook is active
-  const updatedAt = task?.updatedAt;
+  const updatedAt = agent?.updatedAt;
   const isInitialMount = useRef(true);
   useEffect(() => {
     if (isInitialMount.current) {
@@ -74,7 +74,7 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
       return;
     }
 
-    if (!task || !updatedAt) {
+    if (!agent || !updatedAt) {
       return;
     }
 

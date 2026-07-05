@@ -11,15 +11,15 @@ type AgentDetailPaneProps = {
   entityDisplayName: string;
 };
 
-// Cap a goal-derived title so the hover card stays compact when the task has
+// Cap a goal-derived title so the hover card stays compact when the agent has
 // no explicit title and we fall back to the first line of its goal.
 const GOAL_TITLE_MAX_LENGTH = 60;
 
-const fallbackTitle = (task: { title: string | null; goal?: string | null } | null, fallback: string): string => {
-  if (task === null) return fallback;
-  if (task.title !== null && task.title !== "") return task.title;
-  if (task.goal != null && task.goal !== "") {
-    const firstLine = task.goal.split("\n")[0].slice(0, GOAL_TITLE_MAX_LENGTH);
+const fallbackTitle = (agent: { title: string | null; goal?: string | null } | null, fallback: string): string => {
+  if (agent === null) return fallback;
+  if (agent.title !== null && agent.title !== "") return agent.title;
+  if (agent.goal != null && agent.goal !== "") {
+    const firstLine = agent.goal.split("\n")[0].slice(0, GOAL_TITLE_MAX_LENGTH);
     return firstLine;
   }
   return fallback;
@@ -27,7 +27,7 @@ const fallbackTitle = (task: { title: string | null; goal?: string | null } | nu
 
 /**
  * Detail pane for a `+[agent:id|name]` chip. Reads the composite
- * `agentDetailAtomFamily` so a single subscription pulls the task,
+ * `agentDetailAtomFamily` so a single subscription pulls the agent,
  * derived status, and parent workspace.
  *
  * When the composite is null (deleted / unknown agent) the shell
@@ -49,11 +49,16 @@ export const AgentDetailPane = ({ agentId, entityDisplayName }: AgentDetailPaneP
     );
   }
 
-  const title = fallbackTitle(detail.task, entityDisplayName);
+  const title = fallbackTitle(detail.agent, entityDisplayName);
   const body: Array<{ text: string; mono?: boolean }> = [];
   // The goal line is surfaced unless it was used as the title fallback.
-  if (detail.task.title !== null && detail.task.title !== "" && detail.task.goal != null && detail.task.goal !== "") {
-    body.push({ text: detail.task.goal.split("\n")[0] });
+  if (
+    detail.agent.title !== null &&
+    detail.agent.title !== "" &&
+    detail.agent.goal != null &&
+    detail.agent.goal !== ""
+  ) {
+    body.push({ text: detail.agent.goal.split("\n")[0] });
   }
 
   if (detail.workspace !== null && detail.workspace.description !== "") {

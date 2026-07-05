@@ -2,8 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 
 import type { CommitHistoryResponse } from "../../../api";
 import { getWorkspaceCommits } from "../../../api";
-import type { BackendQueryKeyResult, BackendQueryResult } from "../../queryClient.ts";
-import { SCULPTOR_QUERY_KEY_PREFIX } from "../../queryClient.ts";
+import type { BackendQueryKeyResult, BackendQueryResult } from "../queryClient.ts";
+import { SCULPTOR_QUERY_KEY_PREFIX } from "../queryClient.ts";
 import { useWorkspace } from "./useWorkspace";
 
 const workspaceCommitsQueryKey = (workspaceId: string | null, targetBranch: string | null): BackendQueryKeyResult => ({

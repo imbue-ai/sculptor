@@ -1,11 +1,11 @@
-import { RequestTimeoutError } from "~/common/Errors.ts";
+import { RequestTimeoutError } from "~/common/utils/errors.ts";
 
-import type { RequestID } from "../Types.ts";
 import {
   isSingletonWebsocketActiveAtom,
   type RequestAcknowledgment,
   requestAcknowledgmentsAtom,
 } from "./atoms/requests.ts";
+import type { RequestID } from "./ids.ts";
 import { requestStore } from "./requestStore.ts";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 10000;

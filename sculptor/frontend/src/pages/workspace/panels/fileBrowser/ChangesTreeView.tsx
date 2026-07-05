@@ -7,17 +7,18 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { DiffStatus, ElementIds } from "~/api";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
-import type { DiffScope } from "~/pages/workspace/components/diffPanel/types.ts";
+import type { DiffScope } from "~/pages/workspace/diffPanel/types/diffPanel.ts";
 
 import { activeAgentIdAtomFamily } from "../workspaceAgentActions.ts";
-import { expandChangesFoldersAtom, fileBrowserStateAtomFamily, toggleChangesFolderAtom } from "./atoms.ts";
+import { expandChangesFoldersAtom, fileBrowserStateAtomFamily, toggleChangesFolderAtom } from "./atoms/fileBrowser.ts";
 import { FileContextMenu } from "./FileContextMenu.tsx";
+import { usePerFileDiffMap } from "./fileDiffMaps.ts";
 import styles from "./FileTree.module.scss";
 import { FlatListRow } from "./FlatListRow.tsx";
-import { useFileTree, usePerFileDiffMap } from "./hooks.ts";
 import { TreeRow } from "./TreeRow.tsx";
-import type { FileStatus, TreeNode, ViewMode } from "./types.ts";
+import type { FileStatus, TreeNode, ViewMode } from "./types/fileBrowser.ts";
 import { useActiveFileOperation } from "./useActiveFileOperation.ts";
+import { useFileTree } from "./useFileTree.ts";
 import { useKeyboardNavigation } from "./useKeyboardNavigation.ts";
 import { useAgentFileTracking, useCollapseChildren, useTreeNodeMap } from "./useTreeView.ts";
 import {
@@ -32,8 +33,8 @@ import {
   filterTreeByPaths,
   flattenVisibleTreeWithDepth,
   getChangedFiles,
-  isBinaryFile,
-} from "./utils.ts";
+} from "./utils/fileTree.ts";
+import { isBinaryFile } from "./utils/fileType.ts";
 
 /** Stable empty set used as the "no expanded folders" value in flat view mode. */
 const EMPTY_EXPANDED_SET: Set<string> = new Set<string>();

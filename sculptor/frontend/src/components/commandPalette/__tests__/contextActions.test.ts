@@ -1,0 +1,162 @@
+import { describe, expect, it, vi } from "vitest";
+
+import type { Workspace } from "../../../api";
+import { buildAgentActions } from "../contextActions/agentActions.ts";
+import type {
+  Agent,
+  AgentActionRuntime,
+  WorkspaceAction,
+  WorkspaceActionRuntime,
+} from "../contextActions/types/contextActions.ts";
+import { buildWorkspaceActions } from "../contextActions/workspaceActions.ts";
+
+const fakeWorkspace = (id: string): Workspace => ({ objectId: id, description: `ws-${id}` }) as unknown as Workspace;
+
+const fakeAgent = (id: string): Agent =>
+  ({
+    id,
+    title: `agent-${id}`,
+    workspaceId: "w1",
+    initialPrompt: "",
+    createdAt: "2026-04-01T00:00:00Z",
+    updatedAt: "2026-04-01T00:00:00Z",
+    lastReadAt: null,
+    status: "running",
+  }) as unknown as Agent;
+
+type WorkspaceRuntimeOverrides = {
+  hasUncommittedChanges?: boolean;
+  hasOpenPr?: boolean;
+  canCreatePr?: boolean;
+  canOpenInOS?: boolean;
+  isMacUi?: boolean;
+};
+
+const makeWorkspaceRuntime = (overrides: WorkspaceRuntimeOverrides = {}): WorkspaceActionRuntime => ({
+  beginRename: vi.fn(),
+  beginDelete: vi.fn(),
+  commitChanges: vi.fn(),
+  createMergeRequest: vi.fn(),
+  openMergeRequest: vi.fn(),
+  openInApp: vi.fn(),
+  hasUncommittedChanges: vi.fn(() => overrides.hasUncommittedChanges ?? false),
+  hasOpenPr: vi.fn(() => overrides.hasOpenPr ?? false),
+  canCreatePr: vi.fn(() => overrides.canCreatePr ?? true),
+  canOpenInOS: vi.fn(() => overrides.canOpenInOS ?? true),
+  isMacUi: vi.fn(() => overrides.isMacUi ?? true),
+});
+
+const makeAgentRuntime = (): AgentActionRuntime => ({
+  markUnread: vi.fn(),
+  beginDelete: vi.fn(),
+});
+
+describe("buildWorkspaceActions", () => {
+  it("emits the canonical right-click menu set in order", () => {
+    const actions = buildWorkspaceActions(makeWorkspaceRuntime());
+    expect(actions.map((a) => a.id)).toEqual(["commit", "create_pr", "open_pr", "rename", "delete"]);
+  });
+
+  it("omits the defunct close-workspace actions (workspaces can no longer be closed)", () => {
+    const actions = buildWorkspaceActions(makeWorkspaceRuntime());
+    const ids = actions.map((a) => a.id);
+    expect(ids).not.toContain("close");
+    expect(ids).not.toContain("close_others");
+    expect(ids).not.toContain("close_all");
+  });
+
+  it("delete is destructive and adds a separator", () => {
+    const actions = buildWorkspaceActions(makeWorkspaceRuntime());
+    const del = actions.find((a) => a.id === "delete") as WorkspaceAction;
+    expect(del.destructive).toBe(true);
+    expect(del.separatorBefore).toBe(true);
+  });
+
+  it("perform invokes the runtime with the workspace target", () => {
+    const runtime = makeWorkspaceRuntime();
+    const actions = buildWorkspaceActions(runtime);
+    const ws = fakeWorkspace("w1");
+    actions.find((a) => a.id === "rename")?.perform(ws);
+    actions.find((a) => a.id === "delete")?.perform(ws);
+    expect(runtime.beginRename).toHaveBeenCalledWith(ws);
+    expect(runtime.beginDelete).toHaveBeenCalledWith(ws);
+  });
+
+  it("commit is disabled when there are no uncommitted changes, enabled otherwise", () => {
+    const noChanges = buildWorkspaceActions(makeWorkspaceRuntime({ hasUncommittedChanges: false }));
+    const withChanges = buildWorkspaceActions(makeWorkspaceRuntime({ hasUncommittedChanges: true }));
+    const ws = fakeWorkspace("w1");
+    expect(noChanges.find((a) => a.id === "commit")?.disabled?.(ws)).toBe(true);
+    expect(withChanges.find((a) => a.id === "commit")?.disabled?.(ws)).toBe(false);
+  });
+
+  it("commit perform routes to runtime.commitChanges", () => {
+    const runtime = makeWorkspaceRuntime();
+    const actions = buildWorkspaceActions(runtime);
+    const ws = fakeWorkspace("w1");
+    actions.find((a) => a.id === "commit")?.perform(ws);
+    expect(runtime.commitChanges).toHaveBeenCalledWith(ws);
+  });
+
+  it("create_pr uses pull request terminology", () => {
+    const actions = buildWorkspaceActions(makeWorkspaceRuntime());
+    expect(actions.find((a) => a.id === "create_pr")?.title).toBe("Create pull request");
+  });
+
+  it("create_pr is disabled when an open PR already exists", () => {
+    const noPr = buildWorkspaceActions(makeWorkspaceRuntime({ canCreatePr: true }));
+    const withOpenPr = buildWorkspaceActions(makeWorkspaceRuntime({ canCreatePr: false }));
+    const ws = fakeWorkspace("w1");
+    expect(noPr.find((a) => a.id === "create_pr")?.disabled?.(ws)).toBe(false);
+    expect(withOpenPr.find((a) => a.id === "create_pr")?.disabled?.(ws)).toBe(true);
+  });
+
+  it("open_pr is disabled when no open PR exists, enabled when one does", () => {
+    const noPr = buildWorkspaceActions(makeWorkspaceRuntime({ hasOpenPr: false }));
+    const openPr = buildWorkspaceActions(makeWorkspaceRuntime({ hasOpenPr: true }));
+    const ws = fakeWorkspace("w1");
+    expect(noPr.find((a) => a.id === "open_pr")?.disabled?.(ws)).toBe(true);
+    expect(openPr.find((a) => a.id === "open_pr")?.disabled?.(ws)).toBe(false);
+  });
+
+  it("open_pr uses pull request terminology", () => {
+    const actions = buildWorkspaceActions(makeWorkspaceRuntime());
+    expect(actions.find((a) => a.id === "open_pr")?.title).toBe("Open pull request");
+  });
+
+  it("open_pr perform routes to runtime.openMergeRequest", () => {
+    const runtime = makeWorkspaceRuntime({ hasOpenPr: true });
+    const actions = buildWorkspaceActions(runtime);
+    const ws = fakeWorkspace("w1");
+    actions.find((a) => a.id === "open_pr")?.perform(ws);
+    expect(runtime.openMergeRequest).toHaveBeenCalledWith(ws);
+  });
+});
+
+describe("buildAgentActions", () => {
+  it("emits the canonical right-click menu set", () => {
+    const actions = buildAgentActions(makeAgentRuntime());
+    expect(actions.map((a) => a.id)).toEqual(["mark_unread", "delete"]);
+  });
+
+  it("omits rename — agent rename is the panel tab's inline edit, not a palette action", () => {
+    const actions = buildAgentActions(makeAgentRuntime());
+    expect(actions.map((a) => a.id)).not.toContain("rename");
+  });
+
+  it("delete is destructive and routes through the runtime", () => {
+    const runtime = makeAgentRuntime();
+    const actions = buildAgentActions(runtime);
+    const agent = fakeAgent("a1");
+    actions.find((a) => a.id === "delete")?.perform(agent);
+    expect(runtime.beginDelete).toHaveBeenCalledWith(agent);
+  });
+
+  it("mark_unread fires the runtime hook", () => {
+    const runtime = makeAgentRuntime();
+    const actions = buildAgentActions(runtime);
+    const agent = fakeAgent("a2");
+    actions.find((a) => a.id === "mark_unread")?.perform(agent);
+    expect(runtime.markUnread).toHaveBeenCalledWith(agent);
+  });
+});

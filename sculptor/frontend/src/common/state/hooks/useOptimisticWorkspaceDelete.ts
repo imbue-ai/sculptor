@@ -2,11 +2,11 @@ import { useSetAtom } from "jotai";
 import { posthog } from "posthog-js";
 import { useCallback, useEffect, useRef } from "react";
 
-import { removeWorkspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
+import { ToastType } from "~/common/state/atoms/toasts.ts";
+import { removeWorkspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
 import { removeWorkspaceAgentActionState } from "~/pages/workspace/panels/workspaceAgentActions.ts";
 
 import { deleteWorkspace } from "../../../api";
-import { ToastType } from "../../../components/Toast.tsx";
 import { workspaceDeleteErrorToastAtom } from "../atoms/toasts";
 import { optimisticDeleteWorkspaceAtom, rollbackDeleteWorkspaceAtom } from "../atoms/workspaces";
 

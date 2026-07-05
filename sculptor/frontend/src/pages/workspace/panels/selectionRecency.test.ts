@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { DiffTab } from "~/pages/workspace/components/diffPanel/types.ts";
-import type { DiffSelection } from "~/pages/workspace/components/diffViewer/types.ts";
+import type { DiffTab } from "~/pages/workspace/diffPanel/types/diffPanel.ts";
+import type { DiffSelection } from "~/pages/workspace/diffViewer/types/diffViewer.ts";
 
 import { reconcileSelectionByRecency } from "./selectionRecency.ts";
 

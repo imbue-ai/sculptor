@@ -3,14 +3,14 @@ import type { ReactElement } from "react";
 
 import type { LlmModel, ModelOption } from "~/api";
 import { ElementIds } from "~/api";
+import { useCapabilityGate } from "~/common/hooks/useCapabilityGate.ts";
 import {
   getModelShortName,
   getProviderDisplayName,
   groupModelsByProvider,
   routeModelChange,
-} from "~/common/modelConstants.ts";
+} from "~/common/utils/modelConstants.ts";
 import { ModelSelectOptions } from "~/components/ModelSelectOptions.tsx";
-import { useCapabilityGate } from "~/components/useCapabilityGate.ts";
 
 import styles from "./ModelSelector.module.scss";
 
@@ -19,7 +19,7 @@ type ModelSelectorProps = {
   /** The Claude per-turn change handler. Called when the harness sources no
    *  backend list (Claude); the selected model rides the next turn. */
   onModelChange: (model: LlmModel) => void;
-  /** The active task's `supports_model_selection` capability. When false the
+  /** The active agent's `supports_model_selection` capability. When false the
    *  switcher renders disabled-with-tooltip (the current model still shows). */
   capabilityValue?: boolean;
   /** A harness-supplied model list (pi). Options are keyed by model_id and

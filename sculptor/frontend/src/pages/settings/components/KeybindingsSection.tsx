@@ -4,15 +4,16 @@ import type { ReactElement } from "react";
 import { useCallback, useMemo, useState } from "react";
 
 import { ElementIds, UserConfigField } from "~/api";
+import { KEYBINDING_DEFINITIONS } from "~/common/keybindings/definitions.ts";
+import { formatShortcutForDisplay } from "~/common/keybindings/format.ts";
+import { parseShortcut } from "~/common/keybindings/matching.ts";
 import {
   CATEGORY_DISPLAY_NAMES,
   CATEGORY_ORDER,
-  KEYBINDING_DEFINITIONS,
   type KeybindingId,
   type ResolvedKeybinding,
-} from "~/common/keybindings";
-import { keybindingsAtom } from "~/common/keybindings/atoms.ts";
-import { formatShortcutForDisplay, parseShortcut } from "~/common/ShortcutUtils.ts";
+} from "~/common/keybindings/model.ts";
+import { keybindingsAtom } from "~/common/keybindings/resolvedBindings.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 
 import { HotkeyChip } from "./HotkeyChip.tsx";

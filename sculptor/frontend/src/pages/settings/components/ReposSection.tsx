@@ -6,13 +6,12 @@ import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { deleteProject, ElementIds, type Project, updateNamingPattern, updateWorkspaceSetupCommand } from "~/api";
-import { getErrorMessage } from "~/common/Errors.ts";
+import { agentsArrayAtom } from "~/common/state/atoms/agents.ts";
 import { projectAtomFamily, removeProjectAtom } from "~/common/state/atoms/projects.ts";
-import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
+import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { useProjects } from "~/common/state/hooks/useProjects.ts";
-import { AddRepoDialog } from "~/components/add-repo/AddRepoDialog.tsx";
-import type { ToastContent } from "~/components/Toast.tsx";
-import { ToastType } from "~/components/Toast.tsx";
+import { getErrorMessage } from "~/common/utils/errors.ts";
+import { AddRepoDialog } from "~/components/addRepo/AddRepoDialog.tsx";
 
 import { RemoveRepoDialog } from "./RemoveRepoDialog.tsx";
 import { RepoRow } from "./RepoRow.tsx";
@@ -28,22 +27,22 @@ export const ReposSection = ({ setToast }: { setToast: (toast: ToastContent | nu
   const projects = useProjects();
   const [searchParams] = useSearchParams();
   const focusRepoId = searchParams.get("focusRepo");
-  const allTasks = useAtomValue(tasksArrayAtom);
+  const allAgents = useAtomValue(agentsArrayAtom);
   const removeProjectFromState = useSetAtom(removeProjectAtom);
   const store = useStore();
   const [removeDialogState, setRemoveDialogState] = useState<RemoveDialogState>({ status: "closed" });
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
-  // Derive agent counts from global tasks atom (grouped by project via workspace)
+  // Derive agent counts from global agents atom (grouped by project via workspace)
   const agentCounts = useMemo(() => {
-    const tasks = allTasks ?? [];
+    const agents = allAgents ?? [];
     const counts: Record<string, number> = {};
     for (const project of projects) {
-      const projectTasks = tasks.filter((task) => task.projectId === project.objectId && !task.isDeleted);
-      counts[project.objectId] = projectTasks.length;
+      const projectAgents = agents.filter((agent) => agent.projectId === project.objectId && !agent.isDeleted);
+      counts[project.objectId] = projectAgents.length;
     }
     return counts;
-  }, [projects, allTasks]);
+  }, [projects, allAgents]);
 
   const handleRemoveClick = useCallback(
     (project: Project) => {

@@ -3,8 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import type { AuthenticatedProviderEntry } from "~/api";
 import { getPiAuthenticatedProviders } from "~/api";
 
-import type { BackendQueryResult } from "../../queryClient.ts";
-import { SCULPTOR_QUERY_KEY_PREFIX } from "../../queryClient.ts";
+import type { BackendQueryResult } from "../queryClient.ts";
+import { SCULPTOR_QUERY_KEY_PREFIX } from "../queryClient.ts";
 
 const PI_AUTHENTICATED_PROVIDERS_QUERY_KEY = [SCULPTOR_QUERY_KEY_PREFIX, "pi", "authenticated-providers"] as const;
 
