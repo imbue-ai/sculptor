@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactElement } from "react";
 
-import { AlphaCodeBlock } from "~/pages/workspace/components/chat-alpha/AlphaCodeBlock.tsx";
+import { AlphaCodeBlock } from "~/pages/workspace/chatAlpha/AlphaCodeBlock.tsx";
 
 const meta = {
   title: "Chat Alpha/Content/CodeBlock",

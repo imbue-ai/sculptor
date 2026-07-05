@@ -4,15 +4,15 @@ import { Check, Square } from "lucide-react";
 import type { ComponentType, ReactElement } from "react";
 
 import { ElementIds } from "~/api";
-import type { AnimationProps } from "~/pages/workspace/components/chat-alpha/pill-animations";
+import type { AnimationProps } from "~/pages/workspace/chatAlpha/pill-animations";
 import {
   ANIMATION_POOL,
   BouncingDotsAnimation,
   OrbitAnimation,
   SpinnerAnimation,
   WaveDotsAnimation,
-} from "~/pages/workspace/components/chat-alpha/pill-animations";
-import styles from "~/pages/workspace/components/chat-alpha/StatusPill.module.scss";
+} from "~/pages/workspace/chatAlpha/pill-animations";
+import styles from "~/pages/workspace/chatAlpha/StatusPill.module.scss";
 
 /**
  * StatusPill uses hooks that depend on workspace context (useWorkspacePageParams,

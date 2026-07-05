@@ -3,9 +3,9 @@ import type { ReactElement } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import type { ToolResultBlock } from "~/api";
-import { AlphaChipDiffPopover } from "~/pages/workspace/components/chat-alpha/AlphaChipDiffPopover.tsx";
-import { ChatTaskProvider } from "~/pages/workspace/components/chat-alpha/ChatTaskContext.tsx";
-import type { ChipData } from "~/pages/workspace/components/chat-alpha/chipRow.types.ts";
+import { AlphaChipDiffPopover } from "~/pages/workspace/chatAlpha/AlphaChipDiffPopover.tsx";
+import { ChatTaskProvider } from "~/pages/workspace/chatAlpha/ChatTaskContext.tsx";
+import type { ChipData } from "~/pages/workspace/chatAlpha/chipRow.types.ts";
 
 const sampleDiff = `--- a/src/components/Button.tsx
 +++ b/src/components/Button.tsx

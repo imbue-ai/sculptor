@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactElement } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
-import { AlphaSubagentPill } from "~/pages/workspace/components/chat-alpha/AlphaSubagentPill.tsx";
+import { AlphaSubagentPill } from "~/pages/workspace/chatAlpha/AlphaSubagentPill.tsx";
 
 import {
   backgroundCompletedSubagent,

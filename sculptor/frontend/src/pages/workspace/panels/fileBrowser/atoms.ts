@@ -3,7 +3,7 @@ import { atomFamily, atomWithStorage, selectAtom } from "jotai/utils";
 
 import { getCachedWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
 import { parseDiff } from "~/components/DiffUtils.ts";
-import type { DiffScope } from "~/pages/workspace/components/diffPanel/types.ts";
+import type { DiffScope } from "~/pages/workspace/diffPanel/types.ts";
 import { activeWorkspaceIdAtom, workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
 import { jumpToSectionAtom, openPanelAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
 

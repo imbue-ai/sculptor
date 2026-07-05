@@ -2,8 +2,8 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactElement } from "react";
 import { useState } from "react";
 
-import { AlphaToolPill } from "~/pages/workspace/components/chat-alpha/AlphaToolPill.tsx";
-import type { PillData } from "~/pages/workspace/components/chat-alpha/toolPill.types.ts";
+import { AlphaToolPill } from "~/pages/workspace/chatAlpha/AlphaToolPill.tsx";
+import type { PillData } from "~/pages/workspace/chatAlpha/toolPill.types.ts";
 
 import {
   completedGlobPill,

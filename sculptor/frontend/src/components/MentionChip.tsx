@@ -11,7 +11,7 @@ import { useImbueNavigate } from "~/common/NavigateUtils";
 import { projectAtomFamily } from "~/common/state/atoms/projects";
 import { taskAtomFamily } from "~/common/state/atoms/tasks";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces";
-import { openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atoms";
+import { openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms";
 import { revealFolderAtom } from "~/pages/workspace/panels/fileBrowser/atoms";
 import { getFileIcon } from "~/pages/workspace/panels/fileBrowser/fileIcons";
 

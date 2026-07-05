@@ -4,7 +4,7 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { type ReactElement, useCallback, useEffect, useMemo, useRef } from "react";
 
 import { ElementIds } from "~/api";
-import { VerticalOverlayScrollbar } from "~/components/VerticalOverlayScrollbar.tsx";
+import { VerticalOverlayScrollbar } from "~/pages/workspace/VerticalOverlayScrollbar.tsx";
 
 import { activeAgentIdAtomFamily } from "../workspaceAgentActions.ts";
 import { expandFoldersAtom, fileBrowserStateAtomFamily, toggleFolderAtom } from "./atoms.ts";

@@ -33,7 +33,7 @@ import { terminalNextIndexAtom, terminalTabStateAtom } from "~/common/state/atom
 import { createAgentErrorToastAtom } from "~/common/state/atoms/toasts.ts";
 import { isPiAgentEnabledAtom, userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import { ToastType } from "~/components/Toast.tsx";
-import { resetReviewAllScopeAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
+import { resetReviewAllScopeAtom } from "~/pages/workspace/diffPanel/atoms.ts";
 import { makeAgentPanelId, makeTerminalPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
 import { panelRegistryAtom } from "~/pages/workspace/layout/registry/panelRegistry.ts";
 import type { PanelId, SubSectionId } from "~/pages/workspace/layout/types/section.ts";

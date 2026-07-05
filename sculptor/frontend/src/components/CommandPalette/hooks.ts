@@ -3,9 +3,9 @@ import { posthog } from "posthog-js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 
 import { useImbueLocation } from "~/common/NavigateUtils.ts";
+import { chatPanelMountedAtom, terminalPanelMountedAtom } from "~/common/state/atoms/panelMounts.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { effectiveOpenTabIdsAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
-import { chatPanelMountedAtom, terminalPanelMountedAtom } from "~/pages/workspace/atoms.ts";
 import { recentAgentTypeAtom } from "~/pages/workspace/layout/atoms/addPanel.ts";
 import { workspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
 import { maximizedSectionAtom } from "~/pages/workspace/layout/atoms/transient.ts";

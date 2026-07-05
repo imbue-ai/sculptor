@@ -12,7 +12,7 @@ import { PanelHeader } from "~/components/panels/PanelHeader.tsx";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 
-import { UndoQueuedMessageDialog } from "../components/UndoQueuedMessageDialog.tsx";
+import { UndoQueuedMessageDialog } from "../queuedMessages/UndoQueuedMessageDialog.tsx";
 import styles from "./NotesPanel.module.scss";
 import { activeChatAgentIdAtomFamily } from "./workspaceAgentActions.ts";
 

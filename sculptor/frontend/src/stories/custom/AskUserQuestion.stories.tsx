@@ -3,7 +3,7 @@ import { Provider as JotaiProvider } from "jotai";
 import type { ReactElement } from "react";
 
 import type { AskUserQuestionData } from "~/api";
-import { AskUserQuestion } from "~/pages/workspace/components/AskUserQuestion";
+import { AskUserQuestion } from "~/pages/workspace/chatAlpha/AskUserQuestion";
 
 const SINGLE_QUESTION_DATA: AskUserQuestionData = {
   questions: [

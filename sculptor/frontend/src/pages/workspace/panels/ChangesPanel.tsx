@@ -15,10 +15,10 @@ import {
   activeDiffTabAtomFamily,
   changesSelectionFromTab,
   closeDiffTabAtom,
-} from "~/pages/workspace/components/diffPanel/atoms.ts";
-import { DiffScopePicker } from "~/pages/workspace/components/diffPanel/DiffScopePicker.tsx";
-import type { DiffSelection, TreeViewOptions } from "~/pages/workspace/components/diffViewer/index.ts";
-import { DiffViewer } from "~/pages/workspace/components/diffViewer/index.ts";
+} from "~/pages/workspace/diffPanel/atoms.ts";
+import { DiffScopePicker } from "~/pages/workspace/diffPanel/DiffScopePicker.tsx";
+import type { DiffSelection, TreeViewOptions } from "~/pages/workspace/diffViewer/index.ts";
+import { DiffViewer } from "~/pages/workspace/diffViewer/index.ts";
 import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 
 import styles from "./ChangesPanel.module.scss";

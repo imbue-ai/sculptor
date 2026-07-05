@@ -2,7 +2,7 @@ import { Box, Flex, Progress, Text } from "@radix-ui/themes";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactElement } from "react";
 
-import { IndeterminateProgress } from "~/components/IndeterminateProgress.tsx";
+import { IndeterminateProgress } from "~/pages/workspace/diffViewer/IndeterminateProgress.tsx";
 
 const meta = {
   title: "Custom/IndeterminateProgress",

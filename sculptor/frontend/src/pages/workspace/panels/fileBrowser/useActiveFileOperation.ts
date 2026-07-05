@@ -2,7 +2,7 @@ import { useMemo } from "react";
 
 import { isToolUseBlock } from "~/common/Guards.ts";
 import { useTaskChatMessages } from "~/common/state/hooks/useTaskDetail.ts";
-import { isDiffTool } from "~/pages/workspace/utils/utils.ts";
+import { isDiffTool } from "~/pages/workspace/utils/toolPredicates.ts";
 
 type ActiveFileOperation = {
   filePath: string;

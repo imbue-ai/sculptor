@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactElement } from "react";
 
-import { TurnFooter } from "~/pages/workspace/components/chat-alpha/TurnFooter.tsx";
+import { TurnFooter } from "~/pages/workspace/chatAlpha/TurnFooter.tsx";
 
 const meta = {
   title: "Chat Alpha/Controls/TurnFooter",

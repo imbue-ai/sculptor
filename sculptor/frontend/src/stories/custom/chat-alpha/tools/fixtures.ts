@@ -7,8 +7,8 @@
 
 import type { ChatMessage, ToolResultBlock, ToolUseBlock } from "~/api";
 import { ChatMessageRole } from "~/api";
-import type { PillData } from "~/pages/workspace/components/chat-alpha/toolPill.types.ts";
-import type { SubagentMetadata, SubagentTreeNode } from "~/pages/workspace/utils/subagentTree.ts";
+import type { PillData } from "~/pages/workspace/chatAlpha/toolPill.types.ts";
+import type { SubagentMetadata, SubagentTreeNode } from "~/pages/workspace/chatAlpha/utils/subagentTree.ts";
 
 let fixtureIdCounter = 0;
 

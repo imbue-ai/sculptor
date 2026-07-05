@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactElement } from "react";
 
-import { AlphaTable } from "~/pages/workspace/components/chat-alpha/AlphaTable.tsx";
+import { AlphaTable } from "~/pages/workspace/chatAlpha/AlphaTable.tsx";
 
 const meta = {
   title: "Chat Alpha/Content/Table",

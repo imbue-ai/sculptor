@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { DiffStatus, ElementIds } from "~/api";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
-import type { DiffScope } from "~/pages/workspace/components/diffPanel/types.ts";
+import type { DiffScope } from "~/pages/workspace/diffPanel/types.ts";
 
 import { activeAgentIdAtomFamily } from "../workspaceAgentActions.ts";
 import { expandChangesFoldersAtom, fileBrowserStateAtomFamily, toggleChangesFolderAtom } from "./atoms.ts";

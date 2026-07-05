@@ -5,7 +5,7 @@ import { useCallback, useMemo } from "react";
 
 import { ElementIds } from "~/api";
 import { useWorkspaceCommits } from "~/common/state/hooks/useWorkspaceCommits.ts";
-import { openCommitDiffTabAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
+import { openCommitDiffTabAtom } from "~/pages/workspace/diffPanel/atoms.ts";
 import type { ViewMode } from "~/pages/workspace/panels/fileBrowser/types.ts";
 
 import { expandedCommitsAtomFamily, toggleCommitExpandedAtom } from "./atoms.ts";

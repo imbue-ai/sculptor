@@ -6,8 +6,8 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ToolResultBlock, ToolUseBlock, Workspace } from "~/api";
 import { WorkspaceInitializationStrategy } from "~/api";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces";
-import { AlphaToolPillRow } from "~/pages/workspace/components/chat-alpha/AlphaToolPillRow.tsx";
-import { chatToolDensityAtom } from "~/pages/workspace/components/chat-alpha/atoms.ts";
+import { AlphaToolPillRow } from "~/pages/workspace/chatAlpha/AlphaToolPillRow.tsx";
+import { chatToolDensityAtom } from "~/pages/workspace/chatAlpha/atoms.ts";
 
 import { toolResult, toolUse } from "./fixtures.ts";
 

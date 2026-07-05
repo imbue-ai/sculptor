@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactElement } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
-import { AlphaMarkdownBlock } from "~/pages/workspace/components/chat-alpha/AlphaMarkdownBlock.tsx";
+import { AlphaMarkdownBlock } from "~/pages/workspace/chatAlpha/AlphaMarkdownBlock.tsx";
 
 const meta = {
   title: "Chat Alpha/Content/MarkdownBlock",

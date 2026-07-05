@@ -8,8 +8,8 @@
 import { useSetAtom } from "jotai";
 import { type ReactElement, useCallback, useEffect } from "react";
 
+import { terminalPanelMountedAtom } from "~/common/state/atoms/panelMounts.ts";
 import { reportTerminalConnectionStatusAtom } from "~/common/state/atoms/terminalTabs.ts";
-import { terminalPanelMountedAtom } from "~/pages/workspace/atoms.ts";
 import { makeTerminalPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
 
 import styles from "./TerminalPanelView.module.scss";

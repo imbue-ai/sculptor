@@ -13,10 +13,10 @@ import { ChevronRightIcon } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { useEffect, useState } from "react";
 
-import chatStyles from "~/pages/workspace/components/chat-alpha/AlphaChatView.module.scss";
-import { PulsingDot } from "~/pages/workspace/components/chat-alpha/pill-animations";
-import { TurnFooter } from "~/pages/workspace/components/chat-alpha/TurnFooter";
-import { PierreDiffView } from "~/pages/workspace/components/diffPanel/PierreDiffView.tsx";
+import chatStyles from "~/pages/workspace/chatAlpha/AlphaChatView.module.scss";
+import { PulsingDot } from "~/pages/workspace/chatAlpha/pill-animations";
+import { TurnFooter } from "~/pages/workspace/chatAlpha/TurnFooter";
+import { PierreDiffView } from "~/pages/workspace/diffPanel/PierreDiffView.tsx";
 
 import {
   DIFF_AUTH_MIDDLEWARE,

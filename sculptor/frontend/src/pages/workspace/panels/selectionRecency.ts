@@ -4,8 +4,8 @@
 // Whichever was activated last drives the panel's embedded viewer, so a local
 // click still takes effect after an agent open and vice-versa.
 
-import type { DiffTab } from "~/pages/workspace/components/diffPanel/types.ts";
-import type { DiffSelection } from "~/pages/workspace/components/diffViewer/types.ts";
+import type { DiffTab } from "~/pages/workspace/diffPanel/types.ts";
+import type { DiffSelection } from "~/pages/workspace/diffViewer/types.ts";
 
 type ReconcileParams<TLocal extends { at: number }> = {
   /** The panel's own click selection, or null when nothing was clicked. */

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ComponentType, ReactElement } from "react";
 
-import type { AnimationProps } from "~/pages/workspace/components/chat-alpha/pill-animations";
+import type { AnimationProps } from "~/pages/workspace/chatAlpha/pill-animations";
 import {
   ANIMATION_POOL,
   AudioBarsAnimation,
@@ -12,7 +12,7 @@ import {
   SparkAnimation,
   SpinnerAnimation,
   WaveDotsAnimation,
-} from "~/pages/workspace/components/chat-alpha/pill-animations";
+} from "~/pages/workspace/chatAlpha/pill-animations";
 
 const NAMED_ANIMATIONS: ReadonlyArray<{ name: string; Component: ComponentType<AnimationProps> }> = [
   { name: "Orbit", Component: OrbitAnimation },

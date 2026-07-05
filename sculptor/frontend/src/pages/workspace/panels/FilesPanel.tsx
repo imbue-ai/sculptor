@@ -9,9 +9,9 @@ import type { ReactElement } from "react";
 import { useCallback, useMemo, useState } from "react";
 
 import { ElementIds } from "~/api";
-import { activeDiffTabAtomFamily, fileViewSelectionFromTab } from "~/pages/workspace/components/diffPanel/atoms.ts";
-import type { DiffSelection, TreeViewOptions } from "~/pages/workspace/components/diffViewer/index.ts";
-import { DiffViewer } from "~/pages/workspace/components/diffViewer/index.ts";
+import { activeDiffTabAtomFamily, fileViewSelectionFromTab } from "~/pages/workspace/diffPanel/atoms.ts";
+import type { DiffSelection, TreeViewOptions } from "~/pages/workspace/diffViewer/index.ts";
+import { DiffViewer } from "~/pages/workspace/diffViewer/index.ts";
 import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 
 import { ExplorerLayout } from "./ExplorerLayout.tsx";

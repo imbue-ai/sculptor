@@ -11,8 +11,8 @@ import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { prDefaultTargetBranchAtom } from "~/common/state/atoms/userConfig.ts";
 import { useGitProvider } from "~/common/state/hooks/useGitProvider.ts";
 import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch.ts";
+import { PrButton } from "~/components/prButton/PrButton.tsx";
 import { computeWorkspaceDotStatus, EMPTY_WORKSPACE_DOT_STATUS, WorkspaceStatusDots } from "~/components/statusDot";
-import { PrButton } from "~/pages/workspace/components/PrButton.tsx";
 
 import styles from "./WorkspaceRow.module.scss";
 

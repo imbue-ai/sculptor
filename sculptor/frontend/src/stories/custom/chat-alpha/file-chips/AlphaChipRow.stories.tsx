@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import type { ToolResultBlock, ToolUseBlock } from "~/api";
-import { AlphaChipRow } from "~/pages/workspace/components/chat-alpha/AlphaChipRow.tsx";
+import { AlphaChipRow } from "~/pages/workspace/chatAlpha/AlphaChipRow.tsx";
 
 const toolUse = (id: string, name: string, filePath: string): ToolUseBlock =>
   ({ type: "tool_use", id, name, input: { file_path: filePath } }) as unknown as ToolUseBlock;

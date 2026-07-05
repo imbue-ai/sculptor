@@ -10,8 +10,8 @@ import { ElementIds } from "~/api";
 import { projectAtomFamily } from "~/common/state/atoms/projects.ts";
 import { taskAtomFamily } from "~/common/state/atoms/tasks.ts";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
-import { diffPanelStateAtomFamily } from "~/pages/workspace/components/diffPanel/atoms.ts";
-import { FILE_VIEW_PREFIX } from "~/pages/workspace/components/diffPanel/types.ts";
+import { diffPanelStateAtomFamily } from "~/pages/workspace/diffPanel/atoms.ts";
+import { FILE_VIEW_PREFIX } from "~/pages/workspace/diffPanel/types.ts";
 import { fileBrowserStateAtomFamily, focusFolderAtom } from "~/pages/workspace/panels/fileBrowser/atoms.ts";
 
 import { MentionChip, type MentionChipProps } from "./MentionChip.tsx";

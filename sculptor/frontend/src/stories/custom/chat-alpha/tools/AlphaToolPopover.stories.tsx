@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactElement } from "react";
 
-import { AlphaToolPopover } from "~/pages/workspace/components/chat-alpha/AlphaToolPopover.tsx";
-import type { PillData } from "~/pages/workspace/components/chat-alpha/toolPill.types.ts";
+import { AlphaToolPopover } from "~/pages/workspace/chatAlpha/AlphaToolPopover.tsx";
+import type { PillData } from "~/pages/workspace/chatAlpha/toolPill.types.ts";
 
 import {
   completedGrepOutsideWorkspacePill,

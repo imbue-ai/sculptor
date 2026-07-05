@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import { useCallback, useMemo } from "react";
 
 import { getBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
-import { openDiffTabAtom, openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
+import { openDiffTabAtom, openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms.ts";
 import { useWorkspaceCodePath } from "~/pages/workspace/hooks/useWorkspaceCodePath.ts";
 
 import { expandFoldersAtom } from "./atoms.ts";

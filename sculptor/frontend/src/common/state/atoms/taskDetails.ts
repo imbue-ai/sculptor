@@ -3,8 +3,20 @@ import { atom } from "jotai";
 import { atomFamily } from "jotai/utils";
 import isEqual from "lodash/isEqual";
 
-import type { ArtifactType, AskUserQuestionData, ChatMessage, SubmittedQuestionAnswers } from "../../../api";
-import type { ArtifactsMap } from "../../../pages/workspace/Types";
+import type {
+  ArtifactType,
+  AskUserQuestionData,
+  ChatMessage,
+  SubmittedQuestionAnswers,
+  TaskListArtifact,
+} from "../../../api";
+
+// The artifacts accumulated for a task, keyed by artifact type. Lives here beside the
+// state that owns it (`TaskDetailState.artifacts`); artifact-sync and the panel data
+// hooks import it from this module.
+export type ArtifactsMap = {
+  [ArtifactType.PLAN]?: TaskListArtifact;
+};
 
 /**
  * Complete state for a single task's detail view.

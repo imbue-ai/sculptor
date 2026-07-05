@@ -1,6 +1,6 @@
 import { ArrowDownIcon, MessageSquareIcon, Rows3Icon, RowsIcon, SearchIcon } from "lucide-react";
 
-import { chatToolDensityAtom } from "~/pages/workspace/components/chat-alpha/atoms.ts";
+import { chatToolDensityAtom } from "~/pages/workspace/chatAlpha/atoms.ts";
 
 import type { CommandRuntime } from "../runtime.ts";
 import type { Command, CommandIcon } from "../types.ts";

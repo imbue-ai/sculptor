@@ -24,7 +24,6 @@ import {
 import { viewedAgentIdAtom } from "~/common/state/atoms/viewedAgent.ts";
 import { useMarkRead } from "~/common/state/hooks/useMarkRead";
 import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
-import { useArtifactSync } from "~/pages/workspace/hooks/useArtifactSync";
 import { seedFirstVisitTerminal } from "~/pages/workspace/layout/atoms/addPanel.ts";
 import {
   isEmptyLayout,
@@ -56,8 +55,10 @@ const buildAgentlessDefaultLayout = (terminalPanelId: PanelId): WorkspaceLayoutS
 };
 
 // `taskId` is the route's agent id; it is undefined for a workspace with no agents,
-// which renders the shell with an empty center instead of a blank page.
-export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId?: string }): void => {
+// which renders the shell with an empty center instead of a blank page. Returns the
+// resolved "viewed agent" id so the workspace page can drive that agent's artifact
+// sync (a workspace-layer hook that `common/` must not import directly).
+export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId?: string }): string | undefined => {
   const { workspaceId, taskId } = inputs;
 
   const store = useStore();
@@ -102,9 +103,9 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
   // isolation.
   const panelAgentId = useAtomValue(viewedAgentIdAtom);
   const viewedAgentId = panelAgentId !== null && workspaceAgentIds.includes(panelAgentId) ? panelAgentId : taskId;
-  // Both hooks take a required id; in an agentless workspace the empty id matches
-  // no task, so each is a safe no-op (their task lookups miss).
-  useArtifactSync(workspaceId, viewedAgentId ?? "");
+  // useMarkRead takes a required id; in an agentless workspace the empty id matches
+  // no task, so it is a safe no-op (its task lookup misses). The matching artifact
+  // sync runs from WorkspacePage off this hook's returned `viewedAgentId`.
   useMarkRead(workspaceId, viewedAgentId ?? "");
 
   // Switch the layout scope to this workspace, seeding the default on the
@@ -166,4 +167,6 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
   useEffect(() => {
     bumpRingNonce((nonce) => nonce + 1);
   }, [workspaceId, bumpRingNonce]);
+
+  return viewedAgentId;
 };

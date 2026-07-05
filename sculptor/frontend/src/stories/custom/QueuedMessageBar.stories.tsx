@@ -4,8 +4,8 @@ import type { ReactElement } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import type { ChatMessage } from "~/api";
-import { ChatInput } from "~/pages/workspace/components/ChatInput";
-import { QueuedMessageBar } from "~/pages/workspace/components/QueuedMessageBar";
+import { ChatInput } from "~/pages/workspace/chatAlpha/ChatInput";
+import { QueuedMessageBar } from "~/pages/workspace/queuedMessages/QueuedMessageBar";
 
 const SHORT_MESSAGE: ChatMessage = {
   id: "msg-1",

@@ -8,9 +8,9 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useMemo } from "react";
 
-import { activeDiffTabAtomFamily, commitSelectionFromTab } from "~/pages/workspace/components/diffPanel/atoms.ts";
-import type { DiffSelection, TreeViewOptions } from "~/pages/workspace/components/diffViewer/index.ts";
-import { DiffViewer } from "~/pages/workspace/components/diffViewer/index.ts";
+import { activeDiffTabAtomFamily, commitSelectionFromTab } from "~/pages/workspace/diffPanel/atoms.ts";
+import type { DiffSelection, TreeViewOptions } from "~/pages/workspace/diffViewer/index.ts";
+import { DiffViewer } from "~/pages/workspace/diffViewer/index.ts";
 import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 
 import styles from "./CommitsPanel.module.scss";

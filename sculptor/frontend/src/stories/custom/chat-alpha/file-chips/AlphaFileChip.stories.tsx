@@ -2,8 +2,8 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactElement } from "react";
 import { useState } from "react";
 
-import { AlphaFileChip } from "~/pages/workspace/components/chat-alpha/AlphaFileChip.tsx";
-import type { ChipData } from "~/pages/workspace/components/chat-alpha/chipRow.types.ts";
+import { AlphaFileChip } from "~/pages/workspace/chatAlpha/AlphaFileChip.tsx";
+import type { ChipData } from "~/pages/workspace/chatAlpha/chipRow.types.ts";
 
 const completedChip: ChipData = {
   id: "tool-001",

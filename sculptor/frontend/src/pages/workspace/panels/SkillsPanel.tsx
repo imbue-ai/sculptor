@@ -15,7 +15,7 @@ import type { SkillType } from "~/components/skillBadge";
 import { SkillChip } from "~/components/skills/SkillChip";
 import { SkillHoverContent } from "~/components/skills/SkillHoverContent";
 import { TooltipIconButton } from "~/components/TooltipIconButton";
-import { openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atoms";
+import { openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms";
 import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 import { draggedPanelIdAtom } from "~/pages/workspace/layout/atoms/transient.ts";
 

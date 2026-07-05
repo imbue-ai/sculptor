@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactElement } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
-import { AlphaSubagentPopover } from "~/pages/workspace/components/chat-alpha/AlphaSubagentPopover.tsx";
+import { AlphaSubagentPopover } from "~/pages/workspace/chatAlpha/AlphaSubagentPopover.tsx";
 
 import { completedSubagent, noToolsSubagent, thinkingSubagent } from "../tools/fixtures.ts";
 

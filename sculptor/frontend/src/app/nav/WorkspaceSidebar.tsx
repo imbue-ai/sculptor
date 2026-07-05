@@ -26,8 +26,8 @@ import { isWorkspaceListEmptyAtom, newWorkspaceDialogAtom } from "~/components/n
 import { ReportProblemPopover } from "~/components/ReportProblemPopover.tsx";
 import { Toast, type ToastContent } from "~/components/Toast.tsx";
 import { VersionPopover } from "~/components/VersionPopover.tsx";
+import { WorkspacePeekOverlay } from "~/components/workspacePeek/WorkspacePeekOverlay.tsx";
 import { getTitleBarLeftPadding } from "~/electron/utils.ts";
-import { WorkspacePeekOverlay } from "~/pages/workspace/components/WorkspacePeekOverlay.tsx";
 import { sidebarCollapsedAtom, sidebarWidthAtom } from "~/pages/workspace/layout/atoms/sidebar.ts";
 import { layoutPersistenceAdapter } from "~/pages/workspace/layout/persistence/LocalStorageLayoutAdapter.ts";
 import { ResizeHandle } from "~/pages/workspace/layout/ResizeHandle.tsx";

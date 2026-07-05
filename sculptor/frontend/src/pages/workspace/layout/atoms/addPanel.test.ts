@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TerminalAgentRegistration, UserConfig } from "~/api";
 import { createAgentErrorToastAtom } from "~/common/state/atoms/toasts.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
-import { diffScopeAtomFamily } from "~/pages/workspace/components/diffPanel/atoms.ts";
+import { diffScopeAtomFamily } from "~/pages/workspace/diffPanel/atoms.ts";
 import { EMPTY_WORKSPACE_LAYOUT } from "~/pages/workspace/layout/persistence/snapshot.ts";
 import { makeAgentPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
 import type { PanelId } from "~/pages/workspace/layout/types/section.ts";

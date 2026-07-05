@@ -4,7 +4,7 @@ import { workspaceOpenInOs } from "~/api";
 import { useForceRefreshWorkspaceDiff, useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
 import { useWorkspaceFiles } from "~/common/state/hooks/useWorkspaceFiles.ts";
 import { parseDiff } from "~/components/DiffUtils.ts";
-import type { DiffScope } from "~/pages/workspace/components/diffPanel/types.ts";
+import type { DiffScope } from "~/pages/workspace/diffPanel/types.ts";
 
 import type { FileStatus, FlatFileEntry, PerFileDiff, TreeNode } from "./types.ts";
 import { buildFileTree, computeFolderChangeCounts, determineFileStatus, filterFilesBySubstring } from "./utils.ts";

@@ -15,7 +15,8 @@ import {
   setAgentForWorkspaceAtom,
 } from "../../common/state/atoms/workspaces.ts";
 import { useWorkspaceShellBootstrap } from "../../common/state/hooks/useWorkspaceShellBootstrap.ts";
-import { WorkspaceLayoutShell } from "./WorkspaceLayoutShell.tsx";
+import { useArtifactSync } from "./hooks/useArtifactSync.ts";
+import { WorkspaceLayoutShell } from "./workspaceChrome/WorkspaceLayoutShell.tsx";
 
 // The desktop shell, bootstrapped for the active workspace + agent: scope switch,
 // registry sync, and center-agent placement happen here so the center renders the
@@ -24,7 +25,11 @@ import { WorkspaceLayoutShell } from "./WorkspaceLayoutShell.tsx";
 // (MobileWorkspaceShell) is not built yet — useIsMobile is a no-op seam that
 // always takes this path.
 const WorkspacePageContent = ({ workspaceId, taskId }: { workspaceId: string; taskId?: string }): ReactElement => {
-  useWorkspaceShellBootstrap({ workspaceId, taskId });
+  // The bootstrap resolves which agent is being viewed (route vs. active panel);
+  // sync that agent's artifacts here so `common/` never imports this workspace hook.
+  // The empty id in an agentless workspace matches no task, so the sync is a no-op.
+  const viewedAgentId = useWorkspaceShellBootstrap({ workspaceId, taskId });
+  useArtifactSync(workspaceId, viewedAgentId ?? "");
 
   // Workspace-switch profiler: the content rendered with the
   // new workspace id; the bootstrap above has restored its persisted layout into
