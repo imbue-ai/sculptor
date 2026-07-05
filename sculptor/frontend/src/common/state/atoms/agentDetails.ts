@@ -32,7 +32,7 @@ export type AgentDetailState = {
   submittedQuestionAnswers: Record<string, SubmittedQuestionAnswers>;
   isInPlanMode: boolean;
   // Background tasks whose ``task_started`` has arrived but whose
-  // ``task_notification`` has not. Drives the alpha status pill's
+  // ``task_notification`` has not. Drives the status pill's
   // "waiting for background task" label so it doesn't claim the agent is
   // thinking while the harness is actually idle (SCU-387).
   pendingBackgroundTaskIds: Array<string>;

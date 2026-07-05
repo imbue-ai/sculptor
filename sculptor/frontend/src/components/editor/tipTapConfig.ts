@@ -313,7 +313,7 @@ export const createTipTapExtensions = ({
         const entityType = node.attrs?.entityType as string | null | undefined;
         if (entityType) {
           // Entity chips round-trip as a compact `+[type:id|displayName]`
-          // token. The backend forwards it verbatim; AlphaMarkdownBlock and
+          // token. The backend forwards it verbatim; ChatMarkdownBlock and
           // TipTapViewer re-hydrate it to a chip via regex.
           const entityId = String(node.attrs?.entityId ?? "");
           const entityDisplayName = String(node.attrs?.entityDisplayName ?? "");

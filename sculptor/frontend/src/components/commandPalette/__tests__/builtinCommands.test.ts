@@ -3,7 +3,7 @@ import { Maximize2, Minimize2 } from "lucide-react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_THEME_BUILDER_SETTINGS, themeBuilderSettingsAtom } from "../../../common/state/atoms/themeBuilder.ts";
-import { chatToolDensityAtom } from "../../../pages/workspace/chatAlpha/atoms/chatAlpha.ts";
+import { chatToolDensityAtom } from "../../../pages/workspace/chat/atoms/chat.ts";
 import { buildChatCommands } from "../builtinCommands/chat.ts";
 import { buildHelpCommands } from "../builtinCommands/help.ts";
 import { buildNavigationCommands } from "../builtinCommands/navigation.ts";

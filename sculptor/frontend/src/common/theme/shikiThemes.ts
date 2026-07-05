@@ -4,7 +4,7 @@ import type { BundledTheme } from "shiki/bundle/web";
  * Shiki syntax highlighting theme pairs.
  *
  * Each entry maps a user-facing label to a { light, dark } pair of bundled
- * shiki theme IDs. These are used by the alpha chat code blocks and the
+ * shiki theme IDs. These are used by the chat code blocks and the
  * Pierre diff panel so syntax highlighting stays consistent across the app.
  *
  * Both theme IDs in a pair must be valid `BundledTheme` members of
