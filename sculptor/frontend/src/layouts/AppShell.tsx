@@ -38,7 +38,7 @@ import { KeyboardShortcutsDialog } from "~/components/KeyboardShortcutsDialog.ts
 import { sidebarCollapsedAtom } from "~/components/layout/sidebarAtoms.ts";
 import { CollapsedSidebarToggle } from "~/components/nav/CollapsedSidebarToggle.tsx";
 import { WorkspaceSidebar } from "~/components/nav/WorkspaceSidebar.tsx";
-import { NewWorkspaceModal } from "~/components/newWorkspace/NewWorkspaceModal.tsx";
+import { NewWorkspaceDialog } from "~/components/newWorkspace/NewWorkspaceDialog.tsx";
 import { NotificationToasts } from "~/components/NotificationToasts.tsx";
 import { RepoPathDialog } from "~/components/RepoPathDialog.tsx";
 import { WarningStatusBanner } from "~/components/WarningStatusBanner.tsx";
@@ -126,7 +126,7 @@ export const AppShell = (): ReactElement => {
       <CommandRegistrations />
       <CommandPalette />
       <KeyboardShortcutsDialog />
-      <NewWorkspaceModal />
+      <NewWorkspaceDialog />
       <RepoPathDialog
         isOpen={isRepoPathDialogOpen}
         project={currentProject}

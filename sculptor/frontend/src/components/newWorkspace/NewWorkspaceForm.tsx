@@ -31,7 +31,7 @@ import { BranchNameField } from "~/components/newWorkspace/BranchNameField.tsx";
 import { useBranchNamePreview } from "~/components/newWorkspace/hooks/useBranchNamePreview.ts";
 import { ModeSelect } from "~/components/newWorkspace/ModeSelect.tsx";
 import {
-  keepNewWorkspaceModalOpenAtom,
+  keepNewWorkspaceDialogOpenAtom,
   lastWorkspaceCreationSettingsAtom,
 } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { RepoSelector } from "~/components/RepoSelector.tsx";
@@ -78,7 +78,7 @@ export const NewWorkspaceForm = ({
   const defaultModel = useAtomValue(defaultModelAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
-  const [isKeepOpen, setIsKeepOpen] = useAtom(keepNewWorkspaceModalOpenAtom);
+  const [isKeepOpen, setIsKeepOpen] = useAtom(keepNewWorkspaceDialogOpenAtom);
 
   // Per-prompt agent-settings overrides — model / effort / fast mode / plan
   // mode. Seeded once from the user's defaults; surfaced beneath the prompt only

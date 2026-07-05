@@ -41,7 +41,7 @@ const makeRuntime = (): CommandRuntime => {
       toWorkspace: vi.fn(),
       toAgent: vi.fn(),
     },
-    openNewWorkspaceModal: noop,
+    openNewWorkspaceDialog: noop,
     ui: {
       toggleHelpDialog: noop,
       toggleDevPanel: noop,

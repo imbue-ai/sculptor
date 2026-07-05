@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ElementIds } from "~/api";
 import { renderWithProviders } from "~/common/testUtils.tsx";
 
-import { newWorkspaceModalAtom } from "./newWorkspaceAtoms.ts";
-import { NewWorkspaceModal } from "./NewWorkspaceModal.tsx";
+import { newWorkspaceDialogAtom } from "./newWorkspaceAtoms.ts";
+import { NewWorkspaceDialog } from "./NewWorkspaceDialog.tsx";
 
 // The real form pulls in project queries and creation hooks; the modal's
 // open/close contract is what is under test, so stub the form out.
@@ -14,7 +14,7 @@ vi.mock("~/components/newWorkspace/NewWorkspaceForm.tsx", () => ({
   NewWorkspaceForm: (): null => null,
 }));
 
-describe("NewWorkspaceModal", () => {
+describe("NewWorkspaceDialog", () => {
   // vitest runs with `globals: false`, so RTL's automatic post-test cleanup
   // isn't registered — do it explicitly so each render starts from a fresh DOM.
   afterEach(() => {
@@ -23,14 +23,14 @@ describe("NewWorkspaceModal", () => {
 
   it("renders nothing while the atom holds no open request", () => {
     const store = createStore();
-    renderWithProviders(<NewWorkspaceModal />, { store });
+    renderWithProviders(<NewWorkspaceDialog />, { store });
     expect(screen.queryByTestId(ElementIds.NEW_WORKSPACE_DIALOG)).toBeNull();
   });
 
   it("renders the dialog for an open request", () => {
     const store = createStore();
-    store.set(newWorkspaceModalAtom, { open: true });
-    renderWithProviders(<NewWorkspaceModal />, { store });
+    store.set(newWorkspaceDialogAtom, { open: true });
+    renderWithProviders(<NewWorkspaceDialog />, { store });
     expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_DIALOG)).toBeTruthy();
   });
 
@@ -40,11 +40,11 @@ describe("NewWorkspaceModal", () => {
     // the host — otherwise it survives invisibly in the store and pops the
     // dialog (overlay and all) over the first workspace created afterwards.
     const store = createStore();
-    store.set(newWorkspaceModalAtom, { open: true });
-    const { unmount } = renderWithProviders(<NewWorkspaceModal />, { store });
+    store.set(newWorkspaceDialogAtom, { open: true });
+    const { unmount } = renderWithProviders(<NewWorkspaceDialog />, { store });
     expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_DIALOG)).toBeTruthy();
 
     unmount();
-    expect(store.get(newWorkspaceModalAtom)).toEqual({ open: false });
+    expect(store.get(newWorkspaceDialogAtom)).toEqual({ open: false });
   });
 });

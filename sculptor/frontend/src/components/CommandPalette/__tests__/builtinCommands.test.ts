@@ -62,7 +62,7 @@ const makeRuntime = (overrides: Partial<CommandRuntime> = {}): CommandRuntime =>
       toWorkspace: vi.fn(),
       toAgent: vi.fn(),
     },
-    openNewWorkspaceModal: vi.fn(),
+    openNewWorkspaceDialog: vi.fn(),
     ui: {
       toggleHelpDialog: vi.fn(),
       toggleDevPanel: vi.fn(),
@@ -129,7 +129,7 @@ describe("buildNavigationCommands", () => {
     const runtime = makeRuntime();
     const cmd = buildNavigationCommands(runtime).find((c) => c.id === "nav.new_workspace")!;
     runPerform(cmd);
-    expect(runtime.openNewWorkspaceModal).toHaveBeenCalledTimes(1);
+    expect(runtime.openNewWorkspaceDialog).toHaveBeenCalledTimes(1);
   });
 
   it("nav.settings is titled 'Open settings' (direct nav, distinct from settings.open's 'Go to settings...' picker)", () => {

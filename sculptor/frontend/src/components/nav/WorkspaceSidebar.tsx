@@ -21,7 +21,7 @@ import { buildWorkspaceActions } from "~/components/CommandPalette/contextAction
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
 import { DevModeIndicator } from "~/components/DevModeIndicator.tsx";
 import { sidebarCollapsedAtom, sidebarWidthAtom } from "~/components/layout/sidebarAtoms.ts";
-import { isWorkspaceListEmptyAtom, newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
+import { isWorkspaceListEmptyAtom, newWorkspaceDialogAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { ReportProblemPopover } from "~/components/ReportProblemPopover.tsx";
 import { layoutPersistenceAdapter } from "~/components/sections/persistence/LocalStorageLayoutAdapter.ts";
 import { ResizeHandle } from "~/components/sections/ResizeHandle.tsx";
@@ -34,7 +34,7 @@ import { WorkspacePeekOverlay } from "~/pages/workspace/components/WorkspacePeek
 
 import navItemStyles from "./NavItem.module.scss";
 import { NavItem } from "./NavItem.tsx";
-import { SidebarFirstRunState } from "./SidebarFirstRunState.tsx";
+import { SidebarEmptyState } from "./SidebarEmptyState.tsx";
 import { SidebarRepoGroup } from "./SidebarRepoGroup.tsx";
 import { sidebarWorkspaceGroupsAtom } from "./sidebarWorkspaceOrder.ts";
 import styles from "./WorkspaceSidebar.module.scss";
@@ -83,7 +83,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
 
   // External hooks
   const { navigateToWorkspace, navigateToAgent, navigateToHome, navigateToGlobalSettings } = useImbueNavigate();
-  const setNewWorkspaceModal = useSetAtom(newWorkspaceModalAtom);
+  const setNewWorkspaceDialog = useSetAtom(newWorkspaceDialogAtom);
   const { toggle: toggleCommandPalette } = useCommandPalette();
   const { workspaceId: activeWorkspaceId, isHomeRoute, isSettingsRoute } = useImbueLocation();
   const { navigateToNextTab } = useWorkspaceTabActions();
@@ -238,17 +238,17 @@ export const WorkspaceSidebar = (): ReactElement | null => {
             label="New Workspace"
             disabled={isWorkspaceListEmpty}
             disabledTooltip="Use the form to create your first workspace"
-            onClick={() => setNewWorkspaceModal({ open: true })}
+            onClick={() => setNewWorkspaceDialog({ open: true })}
             testId={ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON}
           />
         </nav>
 
         <div className={styles.repoList}>
           {/* Empty first-run repo area. `repoGroups` is built from workspaces, so
-            it's empty here — SidebarFirstRunState renders from `projects`
+            it's empty here — SidebarEmptyState renders from `projects`
             instead. */}
           {isWorkspaceListEmpty ? (
-            <SidebarFirstRunState projects={projects} onAddRepo={() => setIsAddRepoDialogOpen(true)} />
+            <SidebarEmptyState projects={projects} onAddRepo={() => setIsAddRepoDialogOpen(true)} />
           ) : null}
           {repoGroups.map((group) => (
             <SidebarRepoGroup

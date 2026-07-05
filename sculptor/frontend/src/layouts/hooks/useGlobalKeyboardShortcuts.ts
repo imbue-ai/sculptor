@@ -18,7 +18,7 @@ import { useCommandPalette } from "../../components/CommandPalette";
 import { sidebarCollapsedAtom } from "../../components/layout/sidebarAtoms.ts";
 import {
   areGlobalShortcutsDisabledAtom,
-  newWorkspaceModalAtom,
+  newWorkspaceDialogAtom,
 } from "../../components/newWorkspace/newWorkspaceAtoms.ts";
 import { chatToolDensityAtom } from "../../pages/workspace/components/chat-alpha/atoms.ts";
 
@@ -35,7 +35,7 @@ export const useGlobalKeyboardShortcuts = (): void => {
   const { navigateToHome } = useImbueNavigate();
   const setChatSearchVisible = useSetAtom(chatSearchVisibleAtom);
   const setFocusRequest = useSetAtom(chatSearchFocusRequestAtom);
-  const setNewWorkspaceModal = useSetAtom(newWorkspaceModalAtom);
+  const setNewWorkspaceDialog = useSetAtom(newWorkspaceDialogAtom);
   const openSettings = useOpenSettings();
 
   const resolvedTheme = useResolvedTheme();
@@ -176,10 +176,10 @@ export const useGlobalKeyboardShortcuts = (): void => {
             if (isCommandPaletteOpen) {
               closeCommandPalette();
             }
-            // Open the global new-workspace dialog. Its host (NewWorkspaceModal)
+            // Open the global new-workspace dialog. Its host (NewWorkspaceDialog)
             // is mounted in AppShell alongside this hook, so wherever this
             // handler runs the dialog can actually render.
-            setNewWorkspaceModal({ open: true });
+            setNewWorkspaceDialog({ open: true });
           },
         ],
         [
@@ -245,7 +245,7 @@ export const useGlobalKeyboardShortcuts = (): void => {
     toggleDevPanel,
     toggleCommandPalette,
     openCommandPaletteTo,
-    setNewWorkspaceModal,
+    setNewWorkspaceDialog,
     navigateToHome,
     openSettings,
     toggleHelpDialog,

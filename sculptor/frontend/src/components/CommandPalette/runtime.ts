@@ -33,7 +33,7 @@ export type CommandRuntime = {
    * create surface, so palette/keyboard entry points open it rather than
    * navigating away to a standalone page.
    */
-  openNewWorkspaceModal: () => void;
+  openNewWorkspaceDialog: () => void;
   ui: {
     toggleHelpDialog: () => void;
     toggleDevPanel: () => void;

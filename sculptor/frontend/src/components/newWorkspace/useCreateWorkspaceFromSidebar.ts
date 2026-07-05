@@ -9,7 +9,7 @@ import { useCreateWorkspace } from "~/common/state/hooks/useCreateWorkspace.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 import {
   lastWorkspaceCreationSettingsAtom,
-  newWorkspaceModalAtom,
+  newWorkspaceDialogAtom,
 } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { resolveStoredAgentType } from "~/components/sections/addPanelCore.ts";
 import { ToastType } from "~/components/Toast.tsx";
@@ -40,7 +40,7 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
   const lastSettings = useAtomValue(lastWorkspaceCreationSettingsAtom);
   const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
   const defaultModel = useAtomValue(defaultModelAtom);
-  const setModalState = useSetAtom(newWorkspaceModalAtom);
+  const setModalState = useSetAtom(newWorkspaceDialogAtom);
   const setCreateWorkspaceErrorToast = useSetAtom(createWorkspaceErrorToastAtom);
   const { registrations } = useTerminalAgentRegistrations();
   const { isCreating, createWorkspace } = useCreateWorkspace();

@@ -15,7 +15,7 @@ import { useOpenSettings } from "../../common/state/hooks/useOpenSettings.ts";
 import { useUserConfig } from "../../common/state/hooks/useUserConfig.ts";
 import type { AppearanceMode } from "../../common/theme/appearanceModes.ts";
 import { sidebarCollapsedAtom } from "../layout/sidebarAtoms.ts";
-import { newWorkspaceModalAtom } from "../newWorkspace/newWorkspaceAtoms.ts";
+import { newWorkspaceDialogAtom } from "../newWorkspace/newWorkspaceAtoms.ts";
 import { toggleSectionAtom } from "../sections/sectionActions.ts";
 import { workspaceLayoutAtom } from "../sections/sectionAtoms.ts";
 import { toSection } from "../sections/sectionTypes.ts";
@@ -111,7 +111,7 @@ export const useCommandRuntime = (): CommandRuntime => {
   });
   // Write through the already-captured `store` rather than pulling in another
   // useSetAtom hook for this single write.
-  const openNewWorkspaceModal = useEvent((): void => store.set(newWorkspaceModalAtom, { open: true }));
+  const openNewWorkspaceDialog = useEvent((): void => store.set(newWorkspaceDialogAtom, { open: true }));
 
   const uiToggleHelpDialog = useEvent((): void => toggleHelpDialog());
   const uiToggleDevPanel = useEvent((): void => toggleDevPanel());
@@ -169,7 +169,7 @@ export const useCommandRuntime = (): CommandRuntime => {
       // call `runtime.store.get(atom)`.
       store,
       navigate: { toHome, toSettings, toWorkspace, toAgent },
-      openNewWorkspaceModal,
+      openNewWorkspaceDialog,
       ui: {
         toggleHelpDialog: uiToggleHelpDialog,
         toggleDevPanel: uiToggleDevPanel,
@@ -199,7 +199,7 @@ export const useCommandRuntime = (): CommandRuntime => {
       toSettings,
       toWorkspace,
       toAgent,
-      openNewWorkspaceModal,
+      openNewWorkspaceDialog,
       uiToggleHelpDialog,
       uiToggleDevPanel,
       uiToggleLeftPanel,

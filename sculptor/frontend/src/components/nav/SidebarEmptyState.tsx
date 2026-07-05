@@ -13,12 +13,12 @@ import { ElementIds } from "~/api";
 import { NavItem } from "./NavItem.tsx";
 import styles from "./SidebarRepoGroup.module.scss";
 
-type SidebarFirstRunStateProps = {
+type SidebarEmptyStateProps = {
   projects: ReadonlyArray<Project>;
   onAddRepo: () => void;
 };
 
-export const SidebarFirstRunState = ({ projects, onAddRepo }: SidebarFirstRunStateProps): ReactElement => {
+export const SidebarEmptyState = ({ projects, onAddRepo }: SidebarEmptyStateProps): ReactElement => {
   if (projects.length === 0) {
     return (
       <NavItem icon={FolderPlus} label="Add a repo" onClick={onAddRepo} testId={ElementIds.SIDEBAR_ADD_REPO_BUTTON} />

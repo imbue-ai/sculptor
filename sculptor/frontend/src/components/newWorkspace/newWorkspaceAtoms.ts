@@ -12,12 +12,12 @@ import { workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
  * group's "+" so the form lands on that repo. Transient — the modal is
  * ephemeral, so this resets on reload.
  */
-export type NewWorkspaceModalState = {
+export type NewWorkspaceDialogState = {
   open: boolean;
   presetProjectId?: string;
 };
 
-export const newWorkspaceModalAtom: PrimitiveAtom<NewWorkspaceModalState> = atom<NewWorkspaceModalState>({
+export const newWorkspaceDialogAtom: PrimitiveAtom<NewWorkspaceDialogState> = atom<NewWorkspaceDialogState>({
   open: false,
 });
 
@@ -26,7 +26,7 @@ export const newWorkspaceModalAtom: PrimitiveAtom<NewWorkspaceModalState> = atom
  * for rapid multi-create — the form resets its title/prompt/branch but retains
  * the repo + agent type. Persisted so the preference survives reloads.
  */
-export const keepNewWorkspaceModalOpenAtom: WritableAtom<boolean, [boolean], void> = atomWithStorage<boolean>(
+export const keepNewWorkspaceDialogOpenAtom: WritableAtom<boolean, [boolean], void> = atomWithStorage<boolean>(
   "sculptor-keep-new-workspace-modal-open",
   false,
   undefined,
@@ -84,7 +84,7 @@ export const isWorkspaceListEmptyAtom: Atom<boolean> = atom<boolean>((get) => {
  * `isWorkspaceListEmptyAtom` (false while the list is still loading, so the
  * empty page never flashes), shortcuts stay DISABLED until the first snapshot
  * arrives. Otherwise a shortcut fired during the load window of a
- * zero-workspace boot (e.g. Cmd/Meta+T) could set `newWorkspaceModalAtom`
+ * zero-workspace boot (e.g. Cmd/Meta+T) could set `newWorkspaceDialogAtom`
  * open right before the first-run swap unmounts the modal's host, leaving a
  * stale open request that pops the dialog over the first created workspace.
  */
