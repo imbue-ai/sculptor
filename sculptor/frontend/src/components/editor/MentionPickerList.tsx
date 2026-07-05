@@ -4,7 +4,7 @@ import type { ReactElement, ReactNode } from "react";
 import { forwardRef, useCallback, useEffect, useMemo, useState } from "react";
 
 import { ElementIds } from "~/api";
-import { highlightMatch } from "~/common/highlightMatch";
+import { highlightMatch } from "~/components/editor/highlightMatch";
 
 import type { EntityType } from "../EntityMentionSuggestion";
 import { EntityMentionList } from "./EntityMentionList";

@@ -1,7 +1,7 @@
 import type { ToolResultBlock, ToolUseBlock } from "~/api";
 import { ChatMessageRole } from "~/api";
-import { isToolResultBlock, isToolUseBlock } from "~/common/Guards.ts";
 import type { SubagentTreeNode } from "~/pages/workspace/chatAlpha/utils/subagentTree.ts";
+import { isToolResultBlock, isToolUseBlock } from "~/pages/workspace/utils/blockGuards.ts";
 import { isHiddenTool } from "~/pages/workspace/utils/toolPredicates.ts";
 
 /**

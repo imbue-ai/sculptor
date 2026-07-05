@@ -1,4 +1,4 @@
-import type { KeybindingId } from "~/common/keybindings/types.ts";
+import type { KeybindingId } from "~/common/keybindings/model.ts";
 
 import type { CodingAgentTaskView, ExternalApp, Workspace } from "../../../api";
 import type { CommandIcon } from "../types/commandPalette.ts";

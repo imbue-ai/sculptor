@@ -11,7 +11,6 @@ import {
   type LlmModel,
   WorkspaceInitializationStrategy,
 } from "~/api";
-import { isDismissibleOverlayOpen } from "~/common/overlayUtils.ts";
 import { lastUsedAgentTypeAtom, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { projectsArrayAtom, updateProjectsAtom } from "~/common/state/atoms/projects.ts";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
@@ -24,6 +23,7 @@ import {
 import { useCreateWorkspace } from "~/common/state/hooks/useCreateWorkspace.ts";
 import { useRepoInfo } from "~/common/state/hooks/useRepoInfo.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
+import { isDismissibleOverlayOpen } from "~/common/utils/overlays.ts";
 import { KeyboardHint } from "~/components/KeyboardHint.tsx";
 import { AgentSettingsControls } from "~/components/newWorkspace/AgentSettingsControls.tsx";
 import { AgentTypeSelect } from "~/components/newWorkspace/AgentTypeSelect.tsx";

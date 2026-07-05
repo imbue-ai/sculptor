@@ -9,7 +9,7 @@ import {
   getProviderDisplayName,
   groupModelsByProvider,
   routeModelChange,
-} from "~/common/modelConstants.ts";
+} from "~/common/utils/modelConstants.ts";
 import { ModelSelectOptions } from "~/components/ModelSelectOptions.tsx";
 
 import styles from "./ModelSelector.module.scss";

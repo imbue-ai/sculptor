@@ -1,21 +1,6 @@
 import { useEffect, useState } from "react";
-import { typeid } from "typeid-js";
 
-import { useThemeAppearance } from "./state/hooks/useThemeBuilder.ts";
-
-export const mergeClasses = (...classes: ReadonlyArray<string | undefined>): string => {
-  return classes.filter((c) => c).join(" ");
-};
-
-export const optional = <T>(condition: boolean, value: T): T | undefined => {
-  return condition ? value : undefined;
-};
-
-export const neutral = "gray" as const;
-
-export const makeRequestId = (): string => {
-  return typeid("rqst").toString();
-};
+import { useThemeAppearance } from "./useThemeBuilder.ts";
 
 type Theme = "light" | "dark";
 

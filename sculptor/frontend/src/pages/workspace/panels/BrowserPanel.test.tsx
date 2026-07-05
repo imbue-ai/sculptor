@@ -14,7 +14,7 @@ vi.mock("~/electron/utils", () => ({
 }));
 
 // The Electron panel reads the active workspace's id from the router; pin it.
-vi.mock("~/common/NavigateUtils", async (importOriginal) => ({
+vi.mock("~/common/hooks/navigation", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   useWorkspacePageParams: (): { workspaceID: string } => ({ workspaceID: WORKSPACE_ID }),
 }));

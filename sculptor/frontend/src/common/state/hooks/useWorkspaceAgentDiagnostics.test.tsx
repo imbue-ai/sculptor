@@ -5,7 +5,7 @@ import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TaskStatus } from "~/api";
-import { queryClient } from "~/common/queryClient";
+import { queryClient } from "~/common/state/queryClient";
 
 import type { AgentDiagnosticsTarget } from "./useWorkspaceAgentDiagnostics";
 import { useWorkspaceAgentDiagnostics } from "./useWorkspaceAgentDiagnostics";

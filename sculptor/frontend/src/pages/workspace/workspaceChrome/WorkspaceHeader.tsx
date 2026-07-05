@@ -5,7 +5,7 @@ import type { ReactElement } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ElementIds, updateWorkspace, WorkspaceInitializationStrategy } from "~/api";
-import { useActiveProjectID, useWorkspacePageParams } from "~/common/NavigateUtils";
+import { useActiveProjectID, useWorkspacePageParams } from "~/common/hooks/navigation";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus";
 import { prDefaultTargetBranchAtom } from "~/common/state/atoms/userConfig";
 import { useGitProvider } from "~/common/state/hooks/useGitProvider";
@@ -13,7 +13,6 @@ import { useWorkspace } from "~/common/state/hooks/useWorkspace";
 import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 import { getCollapsedSidebarToggleClearance } from "~/electron/utils.ts";
-import { getBranchName } from "~/pages/home/Utils";
 import { isSectionExpandedAtom } from "~/pages/workspace/layout/atoms/section.ts";
 import { toggleSectionAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
 import { sidebarCollapsedAtom } from "~/pages/workspace/layout/atoms/sidebar.ts";
@@ -104,7 +103,9 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
   const [isTargetBranchOpen, setIsTargetBranchOpen] = useState<boolean>(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const branchName = getBranchName(workspaceBranchInfo?.currentBranch);
+  // Normalize an absent branch (loading or unavailable) to null so the header
+  // renders a single empty state.
+  const branchName = workspaceBranchInfo?.currentBranch ?? null;
 
   // Effects
   // Prevent setState-on-unmount from the "Copied!" timer.

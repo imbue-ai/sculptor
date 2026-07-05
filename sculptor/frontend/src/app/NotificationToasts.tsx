@@ -6,7 +6,7 @@ import { ToastType } from "~/common/state/atoms/toasts.ts";
 
 import type { Notification } from "../api";
 import { NotificationImportance } from "../api";
-import { useImbueParams } from "../common/NavigateUtils";
+import { useImbueParams } from "../common/hooks/navigation";
 import { notificationsAtom } from "../common/state/atoms/notifications";
 import { Toast } from "../components/Toast";
 

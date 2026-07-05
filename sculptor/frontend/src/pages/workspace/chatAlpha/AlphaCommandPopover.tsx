@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ToolResultBlock, ToolUseBlock } from "~/api";
 import { ElementIds } from "~/api";
-import { isGenericToolContent } from "~/common/Guards.ts";
+import { isGenericToolContent } from "~/pages/workspace/utils/blockGuards.ts";
 
 import styles from "./AlphaCommandPopover.module.scss";
 import { formatDuration } from "./durationUtils.ts";

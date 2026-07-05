@@ -1,10 +1,10 @@
 import { PluginKey } from "@tiptap/pm/state";
 import type { SuggestionOptions } from "@tiptap/suggestion";
 
-import { BUILTIN_SKILLS } from "~/common/builtinSkills";
-import { PSEUDO_SKILLS } from "~/common/pseudoSkills";
 import { fetchFreshProjectSkills } from "~/common/state/hooks/useProjectSkills";
 import { fetchFreshWorkspaceSkills } from "~/common/state/hooks/useWorkspaceSkills";
+import { BUILTIN_SKILLS } from "~/common/utils/builtinSkills";
+import { PSEUDO_SKILLS } from "~/common/utils/pseudoSkills";
 
 import { badgeLabelForType, type SkillType } from "../../common/utils/skillBadge";
 import { SkillList } from "./SkillList";

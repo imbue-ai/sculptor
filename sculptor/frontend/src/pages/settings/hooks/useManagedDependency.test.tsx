@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DependenciesStatus, DependencyInfo } from "~/api";
 import { UserConfigField } from "~/api";
 import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus";
-import { useManagedDependency } from "~/common/useManagedDependency";
+import { useManagedDependency } from "~/pages/settings/hooks/useManagedDependency";
 
 const { mockInstallDependency, mockGetDependenciesStatus } = vi.hoisted(() => ({
   mockInstallDependency: vi.fn(),
@@ -24,7 +24,7 @@ vi.mock("~/api", async (importOriginal) => {
 
 // The poll loop has its own tests (usePollingInterval.test.ts); stub it so these
 // tests stay timer-free and assert only the hook's own state handling.
-vi.mock("~/common/usePollingInterval", () => ({
+vi.mock("~/common/hooks/usePollingInterval", () => ({
   usePollingInterval: (): { startPolling: () => void; stopPolling: () => void } => ({
     startPolling: vi.fn(),
     stopPolling: vi.fn(),

@@ -23,7 +23,7 @@ vi.mock("../../../api", async () => {
   };
 });
 
-vi.mock("~/common/NavigateUtils.ts", () => ({
+vi.mock("~/common/hooks/navigation.ts", () => ({
   useImbueNavigate: (): Record<string, unknown> => ({ navigateToRoot: vi.fn() }),
   useImbueLocation: (): Record<string, unknown> => ({ isAgentRoute: false }),
   useImbueParams: (): Record<string, unknown> => ({ taskID: undefined }),

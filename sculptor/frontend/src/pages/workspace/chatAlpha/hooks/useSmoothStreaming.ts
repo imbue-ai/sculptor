@@ -2,7 +2,7 @@ import { useAtomValue } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ChatMessage } from "~/api";
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
+import { useWorkspacePageParams } from "~/common/hooks/navigation.ts";
 import { isSmoothStreamingEnabledAtom } from "~/common/state/atoms/smoothStreaming.ts";
 import { useTask } from "~/common/state/hooks/useTaskHelpers.ts";
 

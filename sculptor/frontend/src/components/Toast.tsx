@@ -7,7 +7,7 @@ import { memo } from "react";
 
 import { ElementIds } from "../api";
 import { ToastType } from "../common/state/atoms/toasts.ts";
-import { mergeClasses } from "../common/Utils.ts";
+import { mergeClasses } from "../common/utils/classNames.ts";
 import styles from "./Toast.module.scss";
 
 export type ToastProps = {

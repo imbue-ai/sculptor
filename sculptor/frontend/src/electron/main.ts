@@ -22,9 +22,10 @@ import {
 } from "electron";
 import Store from "electron-store";
 
-import type { AnyBackendStatus, SculptorDevInfo } from "../shared/types";
+import type { AnyBackendStatus } from "../common/types/backend";
 import { APP_SCHEME, getAppRendererUrl, resolveRequestToFilePath, shouldFallbackToIndex } from "./appProtocol";
 import { initAutoUpdater } from "./autoUpdater";
+import type { SculptorDevInfo } from "./bridge";
 import { captureNonEmptyPage } from "./captureNonEmptyPage";
 import type { ZoomCommand } from "./constants";
 import {

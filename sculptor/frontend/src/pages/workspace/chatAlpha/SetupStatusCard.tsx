@@ -6,12 +6,12 @@ import type { CSSProperties, HTMLAttributes, KeyboardEvent, ReactElement, ReactN
 import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
-import { resolveWorkspaceSetupCommand } from "~/common/setupDefaults";
 import { workspaceSetupOutputAtomFamily } from "~/common/state/atoms/workspaceSetupOutput";
 import { workspaceSetupStatusAtomFamily } from "~/common/state/atoms/workspaceSetupStatus";
 import { useOpenSettings } from "~/common/state/hooks/useOpenSettings";
 import { useProject } from "~/common/state/hooks/useProjects";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
+import { resolveWorkspaceSetupCommand } from "~/common/utils/setupDefaults";
 
 import bashStyles from "./bashBlockStyles.module.scss";
 import type { BashBlockState } from "./BashStatusBadge";

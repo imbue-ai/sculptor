@@ -24,7 +24,7 @@ const { navigateToWorkspaceSpy, navigateToAgentSpy } = vi.hoisted(() => ({
   navigateToWorkspaceSpy: vi.fn(),
   navigateToAgentSpy: vi.fn(),
 }));
-vi.mock("~/common/NavigateUtils", () => ({
+vi.mock("~/common/hooks/navigation", () => ({
   useImbueNavigate: (): {
     navigateToWorkspace: (id: string) => void;
     navigateToAgent: (wsId: string, agentId: string) => void;

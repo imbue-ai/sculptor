@@ -9,7 +9,7 @@ import type { UserConfig } from "~/api";
 import { ElementIds } from "~/api";
 import { ToastType } from "~/common/state/atoms/toasts.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
-import { getTelemetryEnabled, initializeTelemetry, setTelemetryEnabled } from "~/common/Telemetry.ts";
+import { getTelemetryEnabled, initializeTelemetry, setTelemetryEnabled } from "~/common/telemetry/telemetry.ts";
 
 import { TelemetryRow } from "./TelemetryRow.tsx";
 

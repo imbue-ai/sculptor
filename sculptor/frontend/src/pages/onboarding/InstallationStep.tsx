@@ -12,11 +12,11 @@ import {
   submitDependencyAuthCode,
   updateUserConfig,
 } from "~/api";
-import { HTTPException } from "~/common/Errors.ts";
+import { useInterval } from "~/common/hooks/useInterval.ts";
+import { usePollingInterval } from "~/common/hooks/usePollingInterval.ts";
 import { getBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
-import { useInterval } from "~/common/useInterval.ts";
-import { usePollingInterval } from "~/common/usePollingInterval.ts";
+import { HTTPException } from "~/common/utils/errors.ts";
 
 import { DependencyCard } from "./DependencyCard.tsx";
 import styles from "./OnboardingWizard.module.scss";

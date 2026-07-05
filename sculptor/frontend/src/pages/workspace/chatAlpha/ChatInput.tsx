@@ -6,16 +6,15 @@ import { posthog } from "posthog-js";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { HTTPException } from "~/common/Errors.ts";
-import { isTextBlock } from "~/common/Guards.ts";
-import { useTimedLatch } from "~/common/Hooks.ts";
 import { CAPABILITY_UNSUPPORTED_COPY } from "~/common/hooks/useCapabilityGate.ts";
-import { useKeybinding, useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
-import { getModelCapabilities } from "~/common/modelCapabilities.ts";
-import { type ParsedPseudoSkillCommand, parsePseudoSkillCommand } from "~/common/pseudoSkills.ts";
+import { useKeybinding, useKeybindingDisplayText } from "~/common/keybindings/useKeybinding.ts";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
-import { mergeClasses, optional } from "~/common/Utils.ts";
+import { mergeClasses } from "~/common/utils/classNames.ts";
+import { HTTPException } from "~/common/utils/errors.ts";
 import { processAndValidateFiles, saveFiles } from "~/common/utils/fileUpload.ts";
+import { getModelCapabilities } from "~/common/utils/modelCapabilities.ts";
+import { optional } from "~/common/utils/optional.ts";
+import { type ParsedPseudoSkillCommand, parsePseudoSkillCommand } from "~/common/utils/pseudoSkills.ts";
 import { EffortSelector } from "~/components/EffortSelector.tsx";
 import { FastModeToggle } from "~/components/FastModeToggle.tsx";
 import { KeyboardHint } from "~/components/KeyboardHint.tsx";
@@ -23,6 +22,8 @@ import { ModelSelector } from "~/components/ModelSelector.tsx";
 import { CapabilityGate } from "~/pages/workspace/chatAlpha/CapabilityGate.tsx";
 import { SendButton } from "~/pages/workspace/chatAlpha/SendButton.tsx";
 import { FilePreviewList } from "~/pages/workspace/filePreview/FilePreviewList.tsx";
+import { useTimedLatch } from "~/pages/workspace/hooks/useTimedLatch.ts";
+import { isTextBlock } from "~/pages/workspace/utils/blockGuards.ts";
 
 import {
   btwAgent,
@@ -37,9 +38,8 @@ import {
   sendWorkspaceAgentMessages,
   setWorkspaceAgentModel,
 } from "../../../api";
-import { CHAT_INPUT_ELEMENT_ID } from "../../../common/Constants.ts";
-import { useImbueNavigate, useWorkspacePageParams } from "../../../common/NavigateUtils.ts";
-import { shouldHandleKeybinding, useModifiedEnter } from "../../../common/ShortcutUtils.ts";
+import { useImbueNavigate, useWorkspacePageParams } from "../../../common/hooks/navigation.ts";
+import { shouldHandleKeybinding } from "../../../common/keybindings/matching.ts";
 import { closeBtwPopupAtom, openBtwPopupAtom } from "../../../common/state/atoms/btwPopup.ts";
 import type { InsertSkillArg } from "../../../common/state/atoms/chatActions.ts";
 import {
@@ -72,10 +72,12 @@ import {
   useTaskSupportsInterruption,
   useTaskSupportsModelSelection,
 } from "../../../common/state/hooks/useTaskHelpers.ts";
+import { CHAT_INPUT_ELEMENT_ID } from "../../../common/utils/elementIds.ts";
 import { Editor } from "../../../components/editor/Editor.tsx";
 import { Toast } from "../../../components/Toast.tsx";
 import { TooltipIconButton } from "../../../components/TooltipIconButton.tsx";
 import { SettingsSection } from "../../settings/sections.ts";
+import { useModifiedEnter } from "../hooks/useModifiedEnter.ts";
 import { stripHtml } from "../utils/stripHtml.ts";
 import styles from "./ChatInput.module.scss";
 import type { FileUploadHandle } from "./FileUpload.tsx";

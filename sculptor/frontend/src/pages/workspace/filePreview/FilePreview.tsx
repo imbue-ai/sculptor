@@ -4,7 +4,8 @@ import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
-import { mergeClasses, optional } from "~/common/Utils.ts";
+import { mergeClasses } from "~/common/utils/classNames.ts";
+import { optional } from "~/common/utils/optional.ts";
 
 import { CopyImageContextMenu } from "./CopyImageContextMenu.tsx";
 import styles from "./FilePreview.module.scss";

@@ -6,8 +6,8 @@ import type { SuggestionOptions, SuggestionProps } from "@tiptap/suggestion";
 import type { ForwardRefExoticComponent, RefAttributes } from "react";
 
 import { getFilesAndFolders } from "~/api";
-import { CHAT_INPUT_ELEMENT_ID } from "~/common/Constants";
 import { ensureWorkspaceFiles } from "~/common/state/hooks/useWorkspaceFiles";
+import { CHAT_INPUT_ELEMENT_ID } from "~/common/utils/elementIds";
 
 import { MentionList } from "../MentionList.jsx";
 import { dismissTrigger, isPositionDismissed } from "../suggestionDismissalPlugin";

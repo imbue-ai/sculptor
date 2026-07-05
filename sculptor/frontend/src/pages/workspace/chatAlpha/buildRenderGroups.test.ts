@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { BlockUnion } from "~/common/Guards.ts";
 import type { SubagentTreeNode } from "~/pages/workspace/chatAlpha/utils/subagentTree.ts";
+import type { BlockUnion } from "~/pages/workspace/utils/blockGuards.ts";
 
 import { buildRenderGroups } from "./buildRenderGroups.ts";
 

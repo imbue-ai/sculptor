@@ -7,7 +7,6 @@ import type { KeyboardEvent, MutableRefObject, ReactElement } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
-import { isDiffToolContent } from "~/common/Guards.ts";
 import { themeCodeThemeAtom } from "~/common/state/atoms/themeBuilder.ts";
 import { appThemeAtom } from "~/common/state/atoms/userConfig.ts";
 import { getShikiThemes } from "~/common/theme/shikiThemes.ts";
@@ -15,6 +14,7 @@ import { openDiffTabAtom, openFileViewTabAtom } from "~/pages/workspace/diffPane
 import { adoptPierreOverrideSheet, createPierreOverrideSheet } from "~/pages/workspace/diffPanel/pierreShadowStyles.ts";
 import { usePierreHighlighterReady } from "~/pages/workspace/diffPanel/usePierreHighlighterReady.ts";
 import { useWorkspaceCodePath } from "~/pages/workspace/hooks/useWorkspaceCodePath.ts";
+import { isDiffToolContent } from "~/pages/workspace/utils/blockGuards.ts";
 
 import styles from "./AlphaChipDiffPopover.module.scss";
 import { useChatTask } from "./ChatTaskContext.tsx";

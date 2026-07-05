@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { AutoUpdateStatus } from "~/shared/types.ts";
+import type { AutoUpdateStatus } from "~/common/types/backend.ts";
 
-import { getUpdateStatusText } from "./autoUpdateUtils.ts";
+import { getUpdateStatusText } from "./autoUpdate.ts";
 
 const idleStatus = (latestChannelVersion: string): AutoUpdateStatus =>
   ({ type: "idle", latestChannelVersion }) as unknown as AutoUpdateStatus;

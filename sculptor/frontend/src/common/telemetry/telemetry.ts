@@ -29,7 +29,7 @@ import { posthog } from "posthog-js";
 
 import { type TelemetryInfo, type UserConfig } from "~/api";
 
-import { computeAnalyticsUserId } from "./Analytics.ts";
+import { computeAnalyticsUserId } from "./analyticsId.ts";
 
 // Vite-baked constants (see `vite.electron.config.ts:define` and
 // `builder/cli.py::setup_build_vars`).

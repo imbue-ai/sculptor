@@ -4,18 +4,18 @@ import { useEffect, useRef } from "react";
 import { sidebarCollapsedAtom } from "~/pages/workspace/layout/atoms/sidebar.ts";
 
 import { ElementIds } from "../../api";
-import { CHAT_INPUT_ELEMENT_ID } from "../../common/Constants.ts";
-import { keybindingsMapAtom } from "../../common/keybindings/atoms.ts";
-import type { KeybindingId } from "../../common/keybindings/types.ts";
-import { useImbueNavigate } from "../../common/NavigateUtils.ts";
-import { isDismissibleOverlayOpen } from "../../common/overlayUtils.ts";
-import { shouldHandleKeybinding } from "../../common/ShortcutUtils.ts";
+import { useImbueNavigate } from "../../common/hooks/navigation.ts";
+import { shouldHandleKeybinding } from "../../common/keybindings/matching.ts";
+import type { KeybindingId } from "../../common/keybindings/model.ts";
+import { keybindingsMapAtom } from "../../common/keybindings/resolvedBindings.ts";
 import { chatSearchFocusRequestAtom, chatSearchVisibleAtom } from "../../common/state/atoms/chatSearch.ts";
 import { themeBuilderSettingsAtom } from "../../common/state/atoms/themeBuilder.ts";
 import { useDevPanel } from "../../common/state/hooks/useDevPanel.ts";
 import { useHelpDialog } from "../../common/state/hooks/useHelpDialog.ts";
 import { useOpenSettings } from "../../common/state/hooks/useOpenSettings.ts";
-import { useResolvedTheme } from "../../common/Utils.ts";
+import { useResolvedTheme } from "../../common/state/hooks/useResolvedTheme.ts";
+import { CHAT_INPUT_ELEMENT_ID } from "../../common/utils/elementIds.ts";
+import { isDismissibleOverlayOpen } from "../../common/utils/overlays.ts";
 import { useCommandPalette } from "../../components/commandPalette";
 import {
   areGlobalShortcutsDisabledAtom,

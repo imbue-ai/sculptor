@@ -6,8 +6,6 @@ import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 
 import type { ChatMessage, FileBlock, TextBlock } from "../../../api";
 import { deleteWorkspaceAgentMessage, ElementIds } from "../../../api";
-import type { BlockUnion } from "../../../common/Guards.ts";
-import { isFileBlock, isTextBlock } from "../../../common/Guards.ts";
 import { useDraftAttachedFiles } from "../../../common/state/hooks/useDraftAttachedFiles.ts";
 import { useInterruptAgent } from "../../../common/state/hooks/useInterruptAgent.ts";
 import { usePromptDraft } from "../../../common/state/hooks/usePromptDraft.ts";
@@ -16,6 +14,8 @@ import { Toast } from "../../../components/Toast.tsx";
 import { getMetaKey } from "../../../electron/utils.ts";
 import { CapabilityGate } from "../chatAlpha/CapabilityGate.tsx";
 import { useChatTask } from "../chatAlpha/ChatTaskContext.tsx";
+import type { BlockUnion } from "../utils/blockGuards.ts";
+import { isFileBlock, isTextBlock } from "../utils/blockGuards.ts";
 import { stripHtml } from "../utils/stripHtml.ts";
 import styles from "./QueuedMessageBar.module.scss";
 

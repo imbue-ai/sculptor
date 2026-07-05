@@ -5,8 +5,8 @@ import type { ReactElement, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ToolResultBlock, ToolUseBlock } from "~/api";
-import { isGenericToolContent } from "~/common/Guards.ts";
 import { openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms.ts";
+import { isGenericToolContent } from "~/pages/workspace/utils/blockGuards.ts";
 
 import styles from "./AlphaToolPopover.module.scss";
 import { useChatTask } from "./ChatTaskContext.tsx";

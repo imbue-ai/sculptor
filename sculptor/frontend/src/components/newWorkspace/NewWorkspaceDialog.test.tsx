@@ -3,7 +3,7 @@ import { createStore } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ElementIds } from "~/api";
-import { renderWithProviders } from "~/common/testUtils.tsx";
+import { renderWithProviders } from "~/common/utils/renderWithProviders.tsx";
 
 import { newWorkspaceDialogAtom } from "./newWorkspaceAtoms.ts";
 import { NewWorkspaceDialog } from "./NewWorkspaceDialog.tsx";

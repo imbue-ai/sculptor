@@ -4,8 +4,8 @@ import type { ReactElement } from "react";
 import { useMemo } from "react";
 
 import { ElementIds } from "~/api";
-import { useTimedLatch } from "~/common/Hooks.ts";
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff";
+import { useTimedLatch } from "~/pages/workspace/hooks/useTimedLatch.ts";
 import { jumpToSectionAtom, openPanelAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
 
 import { parseDiffStats } from "../../common/utils/parseDiffStats";

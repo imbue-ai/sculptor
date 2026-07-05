@@ -4,9 +4,9 @@ import type { ReactElement } from "react";
 import { useState } from "react";
 
 import { completeOnboarding, getConfigStatus, saveUserEmail, skipAccountSetup } from "~/api";
-import { HTTPException } from "~/common/Errors.ts";
-import { ValidationError } from "~/common/Errors.ts";
-import { identifyAnalyticsUser, updateTelemetryConfig } from "~/common/Telemetry";
+import { identifyAnalyticsUser, updateTelemetryConfig } from "~/common/telemetry/telemetry";
+import { HTTPException } from "~/common/utils/errors.ts";
+import { ValidationError } from "~/common/utils/errors.ts";
 import { TitleBar } from "~/components/TitleBar";
 
 import { AddRepoStep } from "./AddRepoStep.tsx";

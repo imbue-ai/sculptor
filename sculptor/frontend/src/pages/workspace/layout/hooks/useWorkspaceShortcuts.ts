@@ -18,7 +18,7 @@
 import { useSetAtom, useStore } from "jotai";
 import { useCallback } from "react";
 
-import { useKeybindingHandler } from "~/common/keybindings";
+import { useKeybindingHandler } from "~/common/keybindings/useKeybinding.ts";
 import { workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 import { workspaceDeleteTargetAtom } from "~/components/commandPalette/contextActions/atoms/contextActions.ts";
 import {

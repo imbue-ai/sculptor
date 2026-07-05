@@ -6,7 +6,7 @@
  * milestones are reported from the layout code paths as they complete.
  *
  * Every milestone is a real `performance.mark()` with a `ws-switch.` prefix,
- * so when tracing is enabled (see common/tracing.ts) the marks flow into the
+ * so when tracing is enabled (see common/perf/tracing.ts) the marks flow into the
  * Perfetto trace with no extra wiring. Because mark timestamps are relative to
  * `performance.timeOrigin`, external frame-capture tooling can add that origin
  * to line the marks up with compositor frames on a shared wall clock.
@@ -54,7 +54,7 @@ declare global {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface Window {
     /** Inlined by the backend's static-HTML serve path when --trace-to is set.
-     * The renderer reads this synchronously at boot in common/tracing.ts. */
+     * The renderer reads this synchronously at boot in common/perf/tracing.ts. */
     __SCULPTOR_TRACING__?: { enabled: boolean };
     /** Opts the workspace-switch profiler in (set by perf/capture harnesses). */
     __WS_SWITCH_PROFILER__?: boolean;

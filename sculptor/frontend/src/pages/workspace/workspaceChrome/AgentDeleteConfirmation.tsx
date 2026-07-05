@@ -13,7 +13,7 @@ import type { ReactElement } from "react";
 import { useCallback } from "react";
 
 import type { CodingAgentTaskView } from "~/api";
-import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
+import { useImbueLocation, useImbueNavigate } from "~/common/hooks/navigation.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { useOptimisticTaskDelete } from "~/common/state/hooks/useOptimisticTaskDelete.ts";
 import { agentDeleteTargetAtom } from "~/components/commandPalette/contextActions/atoms/contextActions.ts";

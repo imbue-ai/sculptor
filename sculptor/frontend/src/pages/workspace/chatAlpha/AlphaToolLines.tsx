@@ -6,10 +6,10 @@ import { useCallback, useMemo, useState } from "react";
 
 import type { DiffToolContent, GenericToolContent, ToolResultBlock, ToolUseBlock } from "~/api";
 import { ElementIds } from "~/api";
-import { isDiffToolContent, isGenericToolContent } from "~/common/Guards";
 import { appThemeAtom } from "~/common/state/atoms/userConfig";
 import { LargeDiffGate } from "~/pages/workspace/diffPanel/LargeDiffGate";
 import { PierreDiffView } from "~/pages/workspace/diffPanel/PierreDiffView";
+import { isDiffToolContent, isGenericToolContent } from "~/pages/workspace/utils/blockGuards";
 import { parseDiff } from "~/pages/workspace/utils/diff";
 
 import styles from "./AlphaChatView.module.scss";

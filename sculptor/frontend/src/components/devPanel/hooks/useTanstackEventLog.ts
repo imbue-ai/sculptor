@@ -2,8 +2,8 @@ import type { MutationCacheNotifyEvent, QueryCacheNotifyEvent } from "@tanstack/
 import { useAtom } from "jotai";
 import { useCallback, useEffect } from "react";
 
-import { queryClient } from "~/common/queryClient.ts";
 import { tanstackEventLogEnabledAtom } from "~/common/state/atoms/devPanel.ts";
+import { queryClient } from "~/common/state/queryClient.ts";
 
 type UseTanstackEventLogResult = {
   isEnabled: boolean;

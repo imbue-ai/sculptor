@@ -15,7 +15,7 @@ import { memo, useCallback } from "react";
 
 import type { Workspace } from "~/api";
 import { ElementIds, updateWorkspace } from "~/api";
-import { useImbueLocation } from "~/common/NavigateUtils.ts";
+import { useImbueLocation } from "~/common/hooks/navigation.ts";
 import { ToastType, workspaceRenameErrorToastAtom } from "~/common/state/atoms/toasts.ts";
 import { workspaceAtomFamily, workspaceDotStatusAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";

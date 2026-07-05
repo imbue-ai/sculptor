@@ -2,7 +2,7 @@ import { atom, useAtom, useAtomValue, useSetAtom } from "jotai";
 import { posthog } from "posthog-js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 
-import { useImbueLocation } from "~/common/NavigateUtils.ts";
+import { useImbueLocation } from "~/common/hooks/navigation.ts";
 import { chatPanelMountedAtom, terminalPanelMountedAtom } from "~/common/state/atoms/panelMounts.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { effectiveOpenTabIdsAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
@@ -351,7 +351,7 @@ export const useRunCommand = (): ((cmd: Command, opts?: { keepOpen?: boolean }) 
       // and intentionally separate from this telemetry call.
       //
       // Property names use snake_case to match PostHog conventions and the
-      // existing register() shape in `~/common/Telemetry.ts`. Only the
+      // existing register() shape in `~/common/telemetry/telemetry.ts`. Only the
       // command id, group, page, elapsed, and boolean flags are emitted —
       // no PII (no titles, no search query, no workspace/agent ids).
       if (!isPageOpener) {

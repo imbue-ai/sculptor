@@ -1,5 +1,5 @@
 import { baseUrl } from "~/common/apiClient.ts";
-import { setupAuthHeaders } from "~/common/Auth.ts";
+import { setupAuthHeaders } from "~/common/utils/sessionToken.ts";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 // NOTE: we can support PDF uploads but Claude Code can not read PDFs

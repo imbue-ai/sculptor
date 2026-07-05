@@ -3,8 +3,8 @@ import { ListChecks } from "lucide-react";
 import { type ReactElement, useCallback } from "react";
 
 import { type EffortLevel, ElementIds, type LlmModel } from "~/api";
-import { getModelCapabilities } from "~/common/modelCapabilities.ts";
-import { useImbueNavigate } from "~/common/NavigateUtils.ts";
+import { useImbueNavigate } from "~/common/hooks/navigation.ts";
+import { getModelCapabilities } from "~/common/utils/modelCapabilities.ts";
 import { EffortSelector } from "~/components/EffortSelector.tsx";
 import { FastModeToggle } from "~/components/FastModeToggle.tsx";
 import { ModelSelector } from "~/components/ModelSelector.tsx";

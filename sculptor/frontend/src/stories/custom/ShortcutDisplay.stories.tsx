@@ -2,7 +2,7 @@ import { Badge, Code, Flex, Heading, Separator, Text, Tooltip } from "@radix-ui/
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactElement } from "react";
 
-import { formatShortcutForDisplay } from "~/common/ShortcutUtils";
+import { formatShortcutForDisplay } from "~/common/keybindings/format";
 import { getMetaKey } from "~/electron/utils";
 
 type ShortcutEntry = {

@@ -1,7 +1,7 @@
 import { atom, type PrimitiveAtom } from "jotai";
 import { atomFamily, atomWithStorage } from "jotai/utils";
 
-import type { TaskID } from "../../Types.ts";
+import type { TaskID } from "../ids.ts";
 
 /**
  * Per-task state for the StatusPill agent-tasks widget. These atoms persist

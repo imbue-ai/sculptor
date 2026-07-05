@@ -6,11 +6,11 @@ import { useMemo } from "react";
 
 import type { RecentWorkspaceResponse } from "~/api";
 import { ElementIds } from "~/api";
-import { formatRelativeTime } from "~/common/formatRelativeTime.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { prDefaultTargetBranchAtom } from "~/common/state/atoms/userConfig.ts";
 import { useGitProvider } from "~/common/state/hooks/useGitProvider.ts";
 import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch.ts";
+import { formatRelativeTime } from "~/common/utils/formatRelativeTime.ts";
 import { computeWorkspaceDotStatus, EMPTY_WORKSPACE_DOT_STATUS } from "~/common/utils/statusDot.ts";
 import { PrButton } from "~/components/prButton/PrButton.tsx";
 import { WorkspaceStatusDots } from "~/components/statusDot";

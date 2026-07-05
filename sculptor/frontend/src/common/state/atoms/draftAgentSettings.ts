@@ -2,7 +2,7 @@ import type { PrimitiveAtom } from "jotai";
 import { atomFamily, atomWithStorage } from "jotai/utils";
 
 import type { EffortLevel, LlmModel } from "../../../api";
-import type { TaskID } from "../../Types.ts";
+import type { TaskID } from "../ids.ts";
 
 /**
  * Per-task fast-mode, effort, and model preference, persisted to localStorage

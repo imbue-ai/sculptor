@@ -2,13 +2,13 @@ import type { ReactElement } from "react";
 import { useMemo } from "react";
 
 import type { ToolResultBlock, ToolUseBlock } from "~/api";
-import { isToolUseBlock } from "~/common/Guards";
 import {
   useTaskSupportsInteractiveBackchannel,
   useTaskSupportsSubAgents,
 } from "~/common/state/hooks/useTaskHelpers.ts";
 import type { SubagentMetadata, SubagentTreeNode } from "~/pages/workspace/chatAlpha/utils/subagentTree.ts";
 import { SUBAGENT_TOOL_NAMES } from "~/pages/workspace/chatAlpha/utils/subagentTree.ts";
+import { isToolUseBlock } from "~/pages/workspace/utils/blockGuards";
 import { isEnterPlanModeTool, isHiddenTool } from "~/pages/workspace/utils/toolPredicates.ts";
 
 import { AlphaAskUserQuestionBlock } from "./AlphaAskUserQuestionBlock.tsx";

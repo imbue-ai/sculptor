@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatMessage, TaskStatus } from "~/api";
 import { AgentTaskStatus, ArtifactType, ElementIds } from "~/api";
 import { useCapabilityGate } from "~/common/hooks/useCapabilityGate.ts";
-import { useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
+import { useKeybindingDisplayText } from "~/common/keybindings/useKeybinding.ts";
 import { isCancellableAtomFamily } from "~/common/state/atoms/interruptState.ts";
 import {
   activeTurnIdAtomFamily,

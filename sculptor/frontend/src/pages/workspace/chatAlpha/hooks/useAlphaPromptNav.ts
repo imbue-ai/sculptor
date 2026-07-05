@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 
 import type { ChatMessage } from "~/api";
 import { ChatMessageRole, ElementIds } from "~/api";
-import { CHAT_INPUT_ELEMENT_ID } from "~/common/Constants.ts";
+import { CHAT_INPUT_ELEMENT_ID } from "~/common/utils/elementIds.ts";
 
 import { createScrollStateMachine, type ScrollStateMachine } from "../scroll/scrollStateMachine.ts";
 import type { ActivePromptIndex } from "./useAlphaActivePromptIndex.ts";

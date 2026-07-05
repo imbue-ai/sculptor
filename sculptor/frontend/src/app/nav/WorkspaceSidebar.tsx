@@ -10,7 +10,7 @@ import { ElementIds } from "~/api";
 import { DevModeIndicator } from "~/app/nav/DevModeIndicator.tsx";
 import { ReportProblemPopover } from "~/app/nav/ReportProblemPopover.tsx";
 import { VersionPopover } from "~/app/nav/VersionPopover.tsx";
-import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
+import { useImbueLocation, useImbueNavigate } from "~/common/hooks/navigation.ts";
 import { projectsArrayAtom } from "~/common/state/atoms/projects.ts";
 import { type ToastContent } from "~/common/state/atoms/toasts.ts";
 import { agentIdsByWorkspaceAtom, ensurePseudoTabAtom } from "~/common/state/atoms/workspaces.ts";

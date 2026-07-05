@@ -4,7 +4,8 @@ import { CheckSquare, Network } from "lucide-react";
 import { type KeyboardEvent, type ReactElement, useCallback, useEffect, useRef, useState } from "react";
 
 import { AgentTaskStatus, ElementIds, type Task } from "~/api";
-import { mergeClasses, optional } from "~/common/Utils";
+import { mergeClasses } from "~/common/utils/classNames";
+import { optional } from "~/common/utils/optional";
 
 import { AgentTasksGraph } from "./AgentTasksGraph.tsx";
 import styles from "./AgentTasksPanel.module.scss";

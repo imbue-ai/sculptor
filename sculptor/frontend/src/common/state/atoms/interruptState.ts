@@ -1,7 +1,7 @@
 import { atom, type PrimitiveAtom } from "jotai";
 import { atomFamily } from "jotai/utils";
 
-import type { TaskID } from "../../Types.ts";
+import type { TaskID } from "../ids.ts";
 
 // Per-task "interrupt in flight" flag backing `useInterruptAgent`. The hook
 // writes it through the Jotai store when a stop request fires and clears it

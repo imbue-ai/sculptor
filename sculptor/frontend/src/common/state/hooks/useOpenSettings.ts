@@ -1,7 +1,7 @@
 import { useSetAtom } from "jotai";
 import { useMemo } from "react";
 
-import { useImbueNavigate } from "~/common/NavigateUtils.ts";
+import { useImbueNavigate } from "~/common/hooks/navigation.ts";
 import { ensurePseudoTabAtom } from "~/common/state/atoms/workspaces.ts";
 import { SETTINGS_TAB_ID } from "~/common/utils/workspaceTabIds.ts";
 

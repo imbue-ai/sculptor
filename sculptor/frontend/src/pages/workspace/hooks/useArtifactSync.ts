@@ -2,7 +2,6 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef } from "react";
 
 import { ArtifactType, getWorkspaceAgentArtifact, type GetWorkspaceAgentArtifactResponse } from "../../../api";
-import { isTaskListArtifact } from "../../../common/Guards";
 import {
   type ArtifactsMap,
   clearTaskUpdatedArtifactsAtom,
@@ -10,6 +9,7 @@ import {
   updateTaskDetailAtom,
   updateTaskUpdatedArtifactsAtom,
 } from "../../../common/state/atoms/taskDetails";
+import { isTaskListArtifact } from "../utils/blockGuards";
 
 /**
  * Hook that watches for artifact updates in the task detail stream

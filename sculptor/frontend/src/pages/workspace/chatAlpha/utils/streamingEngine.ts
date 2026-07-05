@@ -1,5 +1,5 @@
 import type { ChatMessage, TextBlock } from "~/api";
-import { isTextBlock } from "~/common/Guards.ts";
+import { isTextBlock } from "~/pages/workspace/utils/blockGuards.ts";
 
 type Cursor = {
   blockIndex: number | null;

@@ -1,9 +1,9 @@
 import { useMemo } from "react";
 
 import type { ChatMessage, DiffToolContent, ToolResultBlock, ToolUseBlock } from "~/api";
-import type { BlockUnion } from "~/common/Guards";
-import { isDiffToolContent, isToolResultBlock, isToolUseBlock } from "~/common/Guards";
 import type { SubagentTreeNode } from "~/pages/workspace/chatAlpha/utils/subagentTree";
+import type { BlockUnion } from "~/pages/workspace/utils/blockGuards";
+import { isDiffToolContent, isToolResultBlock, isToolUseBlock } from "~/pages/workspace/utils/blockGuards";
 
 type FileChangeStatus = "modified" | "new" | "deleted" | "renamed";
 

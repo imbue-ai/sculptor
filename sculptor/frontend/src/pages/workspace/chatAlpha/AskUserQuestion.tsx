@@ -6,13 +6,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { AskUserQuestionData } from "~/api";
 import { ElementIds } from "~/api";
-import { useTimedLatch } from "~/common/Hooks.ts";
 import { useFocusOnMountIfUnclaimed } from "~/common/hooks/useFocusOnMountIfUnclaimed";
-import { useKeybinding } from "~/common/keybindings/hooks.ts";
-import { useModifiedEnter } from "~/common/ShortcutUtils";
+import { useKeybinding } from "~/common/keybindings/useKeybinding.ts";
 import { draftQuestionStateAtomFamily, EMPTY_DRAFT_QUESTION_STATE } from "~/common/state/atoms/taskDetails";
-import { mergeClasses, optional } from "~/common/Utils";
+import { mergeClasses } from "~/common/utils/classNames";
+import { optional } from "~/common/utils/optional";
 import { MarkdownBlock } from "~/components/MarkdownBlock";
+import { useModifiedEnter } from "~/pages/workspace/hooks/useModifiedEnter";
+import { useTimedLatch } from "~/pages/workspace/hooks/useTimedLatch.ts";
 
 import styles from "./AskUserQuestion.module.scss";
 

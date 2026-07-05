@@ -2,7 +2,7 @@ import { useAtomValue } from "jotai";
 import { useCallback, useMemo } from "react";
 
 import type { CustomAction, CustomActionGroup, CustomActionsConfig } from "~/api";
-import { isBuiltInAction, isBuiltInGroup } from "~/common/builtinActions.ts";
+import { isBuiltInAction, isBuiltInGroup } from "~/common/utils/builtinActions.ts";
 
 import { customActionsAtom } from "../atoms/userConfig.ts";
 import { useUserConfig } from "./useUserConfig.ts";

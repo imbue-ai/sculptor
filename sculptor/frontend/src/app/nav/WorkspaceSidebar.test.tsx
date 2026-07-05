@@ -5,9 +5,9 @@ import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ElementIds, type Workspace } from "~/api";
-import { queryClient } from "~/common/queryClient";
 import { workspaceAtomFamily, workspaceIdsAtom } from "~/common/state/atoms/workspaces.ts";
-import { renderWithProviders } from "~/common/testUtils.tsx";
+import { queryClient } from "~/common/state/queryClient";
+import { renderWithProviders } from "~/common/utils/renderWithProviders.tsx";
 
 import { WorkspaceSidebar } from "./WorkspaceSidebar.tsx";
 

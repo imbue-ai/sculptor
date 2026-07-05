@@ -6,7 +6,7 @@ import { ToastType } from "~/common/state/atoms/toasts.ts";
 
 import type { CodingAgentTaskView } from "../../../api";
 import { deleteWorkspaceAgent } from "../../../api";
-import { useImbueLocation, useImbueNavigate, useImbueParams } from "../../NavigateUtils.ts";
+import { useImbueLocation, useImbueNavigate, useImbueParams } from "../../hooks/navigation.ts";
 import { optimisticDeleteTaskAtom, rollbackDeleteTaskAtom } from "../atoms/tasks";
 import { deleteErrorToastAtom } from "../atoms/toasts";
 import { agentIdForWorkspaceAtomFamily, setAgentForWorkspaceAtom } from "../atoms/workspaces.ts";

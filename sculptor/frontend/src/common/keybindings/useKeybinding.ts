@@ -1,10 +1,12 @@
 import { useAtomValue } from "jotai";
 import { useEffect, useMemo, useRef } from "react";
 
-import { formatShortcutForDisplay, isDismissibleOverlayOpen, shouldHandleKeybinding } from "~/common/ShortcutUtils.ts";
+import { formatShortcutForDisplay } from "~/common/keybindings/format.ts";
+import { shouldHandleKeybinding } from "~/common/keybindings/matching.ts";
+import { isDismissibleOverlayOpen } from "~/common/utils/overlays.ts";
 
-import { keybindingsMapAtom } from "./atoms.ts";
-import type { KeybindingId } from "./types.ts";
+import type { KeybindingId } from "./model.ts";
+import { keybindingsMapAtom } from "./resolvedBindings.ts";
 
 export const useKeybinding = (id: KeybindingId): string | null => {
   const map = useAtomValue(keybindingsMapAtom);

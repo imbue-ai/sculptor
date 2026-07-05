@@ -2,8 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 
 import type { ReadFileAtRefResponse } from "../../../api";
 import { workspaceReadFile, workspaceReadFileAtRef } from "../../../api";
-import type { BackendQueryKeyResult, BackendQueryResult } from "../../queryClient.ts";
-import { SCULPTOR_QUERY_KEY_PREFIX } from "../../queryClient.ts";
+import type { BackendQueryKeyResult, BackendQueryResult } from "../queryClient.ts";
+import { SCULPTOR_QUERY_KEY_PREFIX } from "../queryClient.ts";
 
 export type WorkspaceFilePayload = ReadFileAtRefResponse;
 

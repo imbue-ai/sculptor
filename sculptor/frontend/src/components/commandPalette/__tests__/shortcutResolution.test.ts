@@ -2,7 +2,7 @@ import { getDefaultStore } from "jotai";
 import { describe, expect, it, vi } from "vitest";
 
 import { KEYBINDING_DEFINITIONS } from "~/common/keybindings/definitions.ts";
-import type { KeybindingId } from "~/common/keybindings/types.ts";
+import type { KeybindingId } from "~/common/keybindings/model.ts";
 
 import { buildChatCommands } from "../builtinCommands/chat.ts";
 import { buildHelpCommands } from "../builtinCommands/help.ts";

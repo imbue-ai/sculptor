@@ -1,10 +1,17 @@
+import { typeid } from "typeid-js";
+
 import { client } from "../api/client.gen";
 import { isElectron } from "../electron/utils.ts";
-import { setupAuthHeaders } from "./Auth.ts";
-import { HTTPException, RequestTimeoutError, ValidationError } from "./Errors.ts";
 import { initBackendCapabilities } from "./state/atoms/backendCapabilities.ts";
 import { createRequestTracker } from "./state/requestTracking.ts";
-import { makeRequestId } from "./Utils.ts";
+import { HTTPException, RequestTimeoutError, ValidationError } from "./utils/errors.ts";
+import { setupAuthHeaders } from "./utils/sessionToken.ts";
+
+// Unique per-request ID, correlated across the request tracker and the
+// WebSocket acknowledgement that resolves each in-flight request.
+const makeRequestId = (): string => {
+  return typeid("rqst").toString();
+};
 
 type TrackingConfig = {
   /** Custom timeout in milliseconds for WebSocket acknowledgment */

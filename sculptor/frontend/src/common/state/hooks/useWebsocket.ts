@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
 
 import { baseUrl } from "../../apiClient.ts";
-import { getSessionToken, SESSION_TOKEN_HEADER_NAME } from "../../Auth.ts";
-import { traceMark } from "../../tracing.ts";
+import { traceMark } from "../../perf/tracing.ts";
+import { getSessionToken, SESSION_TOKEN_HEADER_NAME } from "../../utils/sessionToken.ts";
 
 const RECONNECT_DELAY = 1000;
 

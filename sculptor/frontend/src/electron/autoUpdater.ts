@@ -4,7 +4,7 @@ import type Store from "electron-store";
 import { autoUpdater } from "electron-updater";
 import semver from "semver";
 
-import type { AutoUpdateStatus, UpdateChannel } from "../shared/types";
+import type { AutoUpdateStatus, UpdateChannel } from "../common/types/backend";
 import {
   AUTO_UPDATE_CHECK_CHANNEL_NAME,
   AUTO_UPDATE_INSTALL_CHANNEL_NAME,

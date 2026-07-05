@@ -24,8 +24,8 @@ import { WorkspaceSidebar } from "~/app/nav/WorkspaceSidebar.tsx";
 import { NotificationToasts } from "~/app/NotificationToasts.tsx";
 import { RepoPathDialog } from "~/app/RepoPathDialog.tsx";
 import { WarningStatusBanner } from "~/app/WarningStatusBanner.tsx";
+import { useActiveProjectID } from "~/common/hooks/navigation.ts";
 import { useSyncActiveTabFromRoute } from "~/common/hooks/useSyncActiveTabFromRoute.ts";
-import { useActiveProjectID } from "~/common/NavigateUtils.ts";
 import { backendStatusAtom } from "~/common/state/atoms/backend.ts";
 import {
   commitPromptSendFailedToastAtom,

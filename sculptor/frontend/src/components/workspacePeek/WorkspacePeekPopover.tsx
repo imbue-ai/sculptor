@@ -5,7 +5,6 @@ import { type CSSProperties, type ReactElement, useCallback, useEffect, useMemo,
 
 import type { CodingAgentTaskView, PrStatusInfo } from "~/api";
 import { ElementIds, WorkspacePeekAgentStatus } from "~/api";
-import { useTimedLatch } from "~/common/Hooks.ts";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks";
 import { useProject, useProjects } from "~/common/state/hooks/useProjects";
@@ -13,6 +12,7 @@ import { useThemeDangerColor, useThemeSuccessColor, useThemeWarningColor } from 
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
 import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch";
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff";
+import { useTimedLatch } from "~/pages/workspace/hooks/useTimedLatch.ts";
 import { revealPanelInWorkspaceAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
 
 import { parseDiffStats } from "../../common/utils/parseDiffStats";

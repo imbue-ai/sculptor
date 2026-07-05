@@ -1,6 +1,6 @@
 import type { ChatMessage } from "../../../../api";
-import type { BlockUnion } from "../../../../common/Guards.ts";
-import { isToolResultBlock, isToolUseBlock } from "../../../../common/Guards.ts";
+import type { BlockUnion } from "../../utils/blockGuards.ts";
+import { isToolResultBlock, isToolUseBlock } from "../../utils/blockGuards.ts";
 
 /**
  * A node in the subagent tree. Each node wraps a ChatMessage and contains

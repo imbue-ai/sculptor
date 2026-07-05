@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { BUILTIN_SCULPTOR_ACTIONS } from "~/common/builtinActions.ts";
+import { BUILTIN_SCULPTOR_ACTIONS } from "~/common/utils/builtinActions.ts";
 
 import { HOME_PROMPT_PREFILL } from "./homePromptPrefill.ts";
 

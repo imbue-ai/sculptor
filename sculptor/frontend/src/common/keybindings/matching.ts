@@ -1,9 +1,7 @@
 /**
  * Utility functions for handling keyboard shortcuts
  */
-import { useCallback } from "react";
-
-import { isMac, isModifierPressed } from "~/electron/utils.ts";
+import { isMac } from "~/electron/utils.ts";
 
 export type ShortcutParsed = {
   meta: boolean;
@@ -195,18 +193,6 @@ export const matchesShortcut = (event: KeyboardEvent, shortcut: ShortcutParsed):
 };
 
 /**
- * Check whether focus is currently inside a dismissible overlay (dialog, menu,
- * popover, or select). When a Radix overlay is open it traps focus, so
- * checking the active element is a reliable way to detect this without
- * fragile DOM scanning.
- */
-export const isDismissibleOverlayOpen = (): boolean => {
-  const active = document.activeElement;
-  if (!active || active === document.body) return false;
-  return active.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]') != null;
-};
-
-/**
  * Determine whether a keybinding should be handled in the current context.
  * Checks that the event matches the shortcut string. Call sites that need
  * overlay-awareness should check isDismissibleOverlayOpen() separately.
@@ -214,85 +200,4 @@ export const isDismissibleOverlayOpen = (): boolean => {
 export const shouldHandleKeybinding = (event: KeyboardEvent, shortcutString: string): boolean => {
   const parsed = parseShortcut(shortcutString);
   return matchesShortcut(event, parsed);
-};
-
-/**
- * Convert shortcut modifiers to platform-specific symbols
- */
-export const formatShortcutForDisplay = (shortcut: string | undefined): string => {
-  if (!shortcut) {
-    return "";
-  }
-
-  const isMacOS = isMac();
-  const separator = isMacOS ? "" : "+";
-
-  return shortcut
-    .split("+")
-    .map((part) => {
-      const trimmed = part.trim().toLowerCase();
-      switch (trimmed) {
-        case "cmd":
-        case "meta":
-          return isMacOS ? "⌘" : "Ctrl";
-        case "ctrl":
-        case "control":
-          return isMacOS ? "⌃" : "Ctrl";
-        case "alt":
-        case "option":
-          return isMacOS ? "⌥" : "Alt";
-        case "shift":
-          return isMacOS ? "⇧" : "Shift";
-        case "enter":
-          return "↵";
-        case "escape":
-          return "Esc";
-        case "arrowleft":
-          return "←";
-        case "arrowright":
-          return "→";
-        case "arrowup":
-          return "↑";
-        case "arrowdown":
-          return "↓";
-        default:
-          return part.trim().toUpperCase();
-      }
-    })
-    .join(separator);
-};
-
-type UseModifiedEnterOptions = {
-  onConfirm: () => void;
-  onInterruptAndSend?: () => void;
-  sendMessageBinding: string | null;
-};
-
-export const useModifiedEnter = ({
-  onConfirm,
-  onInterruptAndSend,
-  sendMessageBinding,
-}: UseModifiedEnterOptions): ((e: KeyboardEvent) => boolean) => {
-  return useCallback(
-    (e: KeyboardEvent): boolean => {
-      if (e.key !== "Enter" || sendMessageBinding == null) {
-        return false;
-      }
-
-      // Cmd+Shift+Enter (or Ctrl+Shift+Enter) always triggers interrupt-and-send
-      if (e.shiftKey && isModifierPressed(e) && onInterruptAndSend) {
-        onInterruptAndSend();
-        return true;
-      }
-
-      // Check if the binding matches the event
-      if (shouldHandleKeybinding(e, sendMessageBinding)) {
-        onConfirm();
-        return true;
-      }
-
-      return false;
-    },
-    [onConfirm, onInterruptAndSend, sendMessageBinding],
-  );
 };

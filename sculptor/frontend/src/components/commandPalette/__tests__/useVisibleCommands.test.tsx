@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CodingAgentTaskView } from "~/api";
 import { taskAtomFamily, taskIdsAtom, tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
-import { renderWithProviders } from "~/common/testUtils.tsx";
+import { renderWithProviders } from "~/common/utils/renderWithProviders.tsx";
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
 import { EMPTY_WORKSPACE_LAYOUT } from "~/pages/workspace/layout/persistence/snapshot.ts";
 

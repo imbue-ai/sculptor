@@ -8,7 +8,7 @@ import { DEFAULT_THEME_BUILDER_SETTINGS, themeBuilderSettingsAtom } from "~/comm
 import { ImbueTheme } from "./ThemeProvider";
 
 // Mock useResolvedTheme to avoid matchMedia dependency in tests
-vi.mock("~/common/Utils.ts", () => ({
+vi.mock("~/common/state/hooks/useResolvedTheme.ts", () => ({
   useResolvedTheme: (): "light" | "dark" => "light",
 }));
 

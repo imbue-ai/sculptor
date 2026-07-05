@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { useInterval } from "../../../common/useInterval.ts";
+import { useInterval } from "../../../common/hooks/useInterval.ts";
 
 type RelativeTimeResult = {
   relativeTime: string;

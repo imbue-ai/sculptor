@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ChatMessage, TaskStatus } from "~/api";
-import type { BlockUnion } from "~/common/Guards";
-import { isTextBlock } from "~/common/Guards";
+import type { BlockUnion } from "~/pages/workspace/utils/blockGuards";
+import { isTextBlock } from "~/pages/workspace/utils/blockGuards";
 
 export type AgentState =
   | "thinking"

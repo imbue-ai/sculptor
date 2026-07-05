@@ -4,7 +4,7 @@ import { posthog } from "posthog-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ElementIds } from "~/api";
-import { renderWithProviders } from "~/common/testUtils.tsx";
+import { renderWithProviders } from "~/common/utils/renderWithProviders.tsx";
 
 import { commandPaletteOpenAtom, commandPalettePagesAtom, commandPalettePendingAtom } from "../atoms/commandPalette.ts";
 import { CommandPalette } from "../CommandPalette.tsx";

@@ -1,5 +1,5 @@
 import type { ToolResultBlock, ToolUseBlock } from "~/api";
-import { isDiffToolContent, isGenericToolContent } from "~/common/Guards.ts";
+import { isDiffToolContent, isGenericToolContent } from "~/pages/workspace/utils/blockGuards.ts";
 import { getLineCounts } from "~/pages/workspace/utils/diff.ts";
 import { isDiffTool } from "~/pages/workspace/utils/toolPredicates.ts";
 

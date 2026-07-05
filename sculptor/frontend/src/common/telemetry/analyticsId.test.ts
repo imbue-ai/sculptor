@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computeAnalyticsUserId, SCULPTOR_ANALYTICS_NAMESPACE } from "./Analytics.ts";
+import { computeAnalyticsUserId, SCULPTOR_ANALYTICS_NAMESPACE } from "./analyticsId.ts";
 
 describe("computeAnalyticsUserId", () => {
   // These snapshots lock in the namespace constant + email normalization rule.

@@ -4,9 +4,7 @@ import type { ReactElement } from "react";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { ElementIds, UserConfigField } from "~/api";
-import { useTimedLatch } from "~/common/Hooks.ts";
-import { useKeybindingHandler } from "~/common/keybindings";
-import { invalidateWorkspaceGitQueries } from "~/common/queryClient.ts";
+import { useKeybindingHandler } from "~/common/keybindings/useKeybinding.ts";
 import {
   appThemeAtom,
   fileBrowserDiffViewTypeAtom,
@@ -15,6 +13,7 @@ import {
 import { useUserConfig } from "~/common/state/hooks/useUserConfig.ts";
 import { invalidateWorkspaceCommitDiff, useWorkspaceCommitDiff } from "~/common/state/hooks/useWorkspaceCommitDiff.ts";
 import { useForceRefreshWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
+import { invalidateWorkspaceGitQueries } from "~/common/state/queryClient.ts";
 import type { MarkdownRenderMode } from "~/pages/workspace/diffPanel/atoms.ts";
 import {
   closeDiffTabAtom,
@@ -35,6 +34,7 @@ import { useFileLines } from "~/pages/workspace/diffPanel/useFileLines.ts";
 import { useInFileSearch } from "~/pages/workspace/diffPanel/useInFileSearch.ts";
 import { useScrollPreservation } from "~/pages/workspace/diffPanel/useScrollPreservation.ts";
 import { IndeterminateProgress } from "~/pages/workspace/diffViewer/IndeterminateProgress.tsx";
+import { useTimedLatch } from "~/pages/workspace/hooks/useTimedLatch.ts";
 import { determineFileStatus } from "~/pages/workspace/panels/fileBrowser/utils.ts";
 import { getLineCounts, parseDiff } from "~/pages/workspace/utils/diff.ts";
 

@@ -1,8 +1,8 @@
 import { useAtom } from "jotai";
 import type { SetStateAction } from "react";
 
-import type { TaskID } from "../../Types.ts";
 import { attachedFilesAtomFamily } from "../atoms/attachedFiles.ts";
+import type { TaskID } from "../ids.ts";
 
 export const useDraftAttachedFiles = (
   taskId: TaskID,

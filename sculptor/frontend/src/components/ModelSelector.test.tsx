@@ -5,7 +5,7 @@ import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ElementIds, LlmModel, type ModelOption } from "~/api";
-import { groupModelsByProvider, routeModelChange } from "~/common/modelConstants.ts";
+import { groupModelsByProvider, routeModelChange } from "~/common/utils/modelConstants.ts";
 
 import { ModelSelectOptions } from "./ModelSelectOptions";
 import { CascadingProviderMenu, ModelSelector } from "./ModelSelector";

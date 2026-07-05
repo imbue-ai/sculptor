@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { getSkills } from "../../../api";
-import type { BackendQueryKeyResult, BackendQueryResult } from "../../queryClient.ts";
-import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "../../queryClient.ts";
+import type { BackendQueryKeyResult, BackendQueryResult } from "../queryClient.ts";
+import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "../queryClient.ts";
 import type { SkillEntry } from "./useWorkspaceSkills";
 
 const projectSkillsQueryKey = (projectId: string | null): BackendQueryKeyResult => ({

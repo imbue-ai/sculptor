@@ -1,5 +1,5 @@
 import type { ChatMessage } from "~/api";
-import { isTextBlock, isToolResultBlock, isToolUseBlock } from "~/common/Guards";
+import { isTextBlock, isToolResultBlock, isToolUseBlock } from "~/pages/workspace/utils/blockGuards";
 
 export type SearchableBlock = {
   blockIndex: number;

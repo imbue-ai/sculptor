@@ -1,7 +1,7 @@
 import type { ChatMessage, ToolResultBlock } from "~/api";
 import { ChatMessageRole } from "~/api";
-import { isToolResultBlock } from "~/common/Guards";
 import { SUBAGENT_TOOL_NAMES } from "~/pages/workspace/chatAlpha/utils/subagentTree.ts";
+import { isToolResultBlock } from "~/pages/workspace/utils/blockGuards";
 
 export const buildToolResultMap = (messages: ReadonlyArray<ChatMessage>): Map<string, ToolResultBlock> => {
   const map = new Map<string, ToolResultBlock>();

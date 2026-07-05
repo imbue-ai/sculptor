@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { HTTPException } from "~/common/Errors.ts";
-import { SCULPTOR_QUERY_KEY_PREFIX } from "~/common/queryClient.ts";
+import { SCULPTOR_QUERY_KEY_PREFIX } from "~/common/state/queryClient.ts";
+import { HTTPException } from "~/common/utils/errors.ts";
 
 import {
   normalizeQuery,

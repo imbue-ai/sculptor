@@ -4,8 +4,8 @@ import { useEffect } from "react";
 
 import { useWorkspaceTabActions } from "~/common/state/hooks/useWorkspaceTabActions.ts";
 
+import { useImbueNavigate, useWorkspacePageParams } from "../../common/hooks/navigation.ts";
 import { useIsMobile } from "../../common/hooks/useLayoutMode.ts";
-import { useImbueNavigate, useWorkspacePageParams } from "../../common/NavigateUtils.ts";
 import { markSwitchMilestone } from "../../common/perf/workspaceSwitchProfiler.ts";
 import { workspaceAgentIdsWhenLoadedAtomFamily } from "../../common/state/agentPanelPlacement.ts";
 import {

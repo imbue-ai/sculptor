@@ -5,9 +5,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ChatMessage, FileBlock } from "~/api";
 import { ElementIds } from "~/api";
-import type { BlockUnion } from "~/common/Guards";
-import { isFileBlock, isTextBlock } from "~/common/Guards";
 import { FilePreviewList } from "~/pages/workspace/filePreview/FilePreviewList.tsx";
+import type { BlockUnion } from "~/pages/workspace/utils/blockGuards";
+import { isFileBlock, isTextBlock } from "~/pages/workspace/utils/blockGuards";
 import { stripHtml } from "~/pages/workspace/utils/stripHtml.ts";
 
 import styles from "./AlphaChatView.module.scss";

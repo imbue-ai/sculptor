@@ -4,9 +4,9 @@ import type { ReactElement, RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { ChatMessage, TextBlock } from "~/api";
-import type { BlockUnion } from "~/common/Guards.ts";
-import { isTextBlock } from "~/common/Guards.ts";
 import { MarkdownBlock } from "~/components/MarkdownBlock";
+import type { BlockUnion } from "~/pages/workspace/utils/blockGuards.ts";
+import { isTextBlock } from "~/pages/workspace/utils/blockGuards.ts";
 import { stripHtml } from "~/pages/workspace/utils/stripHtml.ts";
 
 import styles from "./AlphaPromptNavigator.module.scss";

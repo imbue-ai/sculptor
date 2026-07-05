@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 import type { CodingAgentTaskView } from "~/api";
-import { useActiveProjectID, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
+import { useActiveProjectID, useWorkspacePageParams } from "~/common/hooks/navigation.ts";
 import { useTaskChatMessages, useTaskDetailWithDefaults } from "~/common/state/hooks/useTaskDetail";
 import { useTask } from "~/common/state/hooks/useTaskHelpers";
 

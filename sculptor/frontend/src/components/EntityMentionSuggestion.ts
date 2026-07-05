@@ -4,8 +4,8 @@ import { Bot, FolderGit2, Layers, type LucideIcon } from "lucide-react";
 import type { MutableRefObject } from "react";
 
 import type { CodingAgentTaskView, Project, Workspace } from "~/api";
-import { formatRelativeTime } from "~/common/formatRelativeTime";
-import { formatRepoUrl } from "~/common/formatRepoUrl";
+import { formatRelativeTime } from "~/common/utils/formatRelativeTime";
+import { formatRepoUrl } from "~/components/formatRepoUrl";
 
 import { EntityMentionList } from "./editor/EntityMentionList";
 import { renderSuggestion, SuggestionItem } from "./editor/utils/suggestion";

@@ -9,13 +9,13 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { baseUrl } from "~/common/apiClient.ts";
-import { getSessionToken, SESSION_TOKEN_HEADER_NAME } from "~/common/Auth.ts";
-import { keybindingsMapAtom } from "~/common/keybindings/atoms.ts";
-import { shouldHandleKeybinding } from "~/common/ShortcutUtils.ts";
+import { shouldHandleKeybinding } from "~/common/keybindings/matching.ts";
+import { keybindingsMapAtom } from "~/common/keybindings/resolvedBindings.ts";
 import type { TerminalConnectionStatus } from "~/common/state/atoms/terminalTabs.ts";
+import { useResolvedTheme } from "~/common/state/hooks/useResolvedTheme.ts";
 import { useThemeAccentColor, useThemeGrayColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { getColorScale, resolveGrayColor } from "~/common/theme/radixColorHexMap.ts";
-import { useResolvedTheme } from "~/common/Utils.ts";
+import { getSessionToken, SESSION_TOKEN_HEADER_NAME } from "~/common/utils/sessionToken.ts";
 import { commandActionsAtom } from "~/components/commandPalette/utils/commandActions.ts";
 
 // ESC character code (0x1B)

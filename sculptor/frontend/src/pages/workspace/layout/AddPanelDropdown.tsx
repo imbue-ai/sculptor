@@ -18,7 +18,7 @@ import type { ReactElement } from "react";
 import { useRef } from "react";
 
 import { type AgentTypeName, ElementIds } from "~/api";
-import { useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
+import { useKeybindingDisplayText } from "~/common/keybindings/useKeybinding.ts";
 import { isPiAgentEnabledAtom } from "~/common/state/atoms/userConfig.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 import {

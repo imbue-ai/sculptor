@@ -4,10 +4,10 @@ import { useCallback, useState } from "react";
 
 import type { EffortLevel, LlmModel, TerminalAgentRegistration } from "~/api";
 import { createWorkspaceAgent, createWorkspaceV2, WorkspaceInitializationStrategy } from "~/api";
-import { HTTPException } from "~/common/Errors.ts";
-import { useImbueNavigate } from "~/common/NavigateUtils.ts";
+import { useImbueNavigate } from "~/common/hooks/navigation.ts";
 import { parseStoredAgentType, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
+import { HTTPException } from "~/common/utils/errors.ts";
 import { lastWorkspaceCreationSettingsAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 
 /** Everything the create flow needs from its caller's form state. */

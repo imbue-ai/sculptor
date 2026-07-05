@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { baseUrl } from "~/common/apiClient.ts";
-import { setupAuthHeaders } from "~/common/Auth.ts";
+import { setupAuthHeaders } from "~/common/utils/sessionToken.ts";
 
 import { useAgentLightbox } from "./AgentLightboxContext.tsx";
 import { FilePreview } from "./FilePreview.tsx";

@@ -2,8 +2,8 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
-import { markSwitchStart } from "./perf/workspaceSwitchProfiler.ts";
-import { setActiveTabByIdAtom, setAgentForWorkspaceAtom, workspaceAtomFamily } from "./state/atoms/workspaces";
+import { markSwitchStart } from "../perf/workspaceSwitchProfiler.ts";
+import { setActiveTabByIdAtom, setAgentForWorkspaceAtom, workspaceAtomFamily } from "../state/atoms/workspaces";
 
 type ImbueNavigationFunctions = {
   navigateToWorkspace: (workspaceID: string) => void;

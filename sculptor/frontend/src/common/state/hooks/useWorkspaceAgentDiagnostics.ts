@@ -22,7 +22,7 @@ import { useCallback, useEffect, useRef } from "react";
 
 import type { TaskStatus } from "~/api";
 import { getWorkspaceAgentDiagnostics } from "~/api";
-import { SCULPTOR_QUERY_KEY_PREFIX } from "~/common/queryClient.ts";
+import { SCULPTOR_QUERY_KEY_PREFIX } from "~/common/state/queryClient.ts";
 import type { DynamicAgentDiagnostics } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
 
 export type AgentDiagnosticsTarget = { taskId: string; status: TaskStatus };

@@ -7,8 +7,8 @@ import type { ReactElement } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { getTelemetryInfo } from "~/api";
-import { queryClient } from "~/common/queryClient.ts";
-import { applyTelemetryInfo } from "~/common/Telemetry.ts";
+import { queryClient } from "~/common/state/queryClient.ts";
+import { applyTelemetryInfo } from "~/common/telemetry/telemetry.ts";
 
 import { TanstackDevtoolsMount } from "../components/devPanel/TanstackDevtoolsMount.tsx";
 import { ToastProvider } from "../components/Toast.tsx";

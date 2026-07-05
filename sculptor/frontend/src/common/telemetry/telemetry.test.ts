@@ -3,7 +3,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 
 import type { TelemetryInfo, UserConfig } from "~/api";
 
-import { computeAnalyticsUserId } from "./Analytics.ts";
+import { computeAnalyticsUserId } from "./analyticsId.ts";
 import {
   applyTelemetryInfo,
   getTelemetryEnabled,
@@ -11,7 +11,7 @@ import {
   initializeTelemetry,
   setTelemetryEnabled,
   updateTelemetryConfig,
-} from "./Telemetry.ts";
+} from "./telemetry.ts";
 
 const sentrySetUserMock = vi.fn();
 const sentryAddIntegrationMock = vi.fn();

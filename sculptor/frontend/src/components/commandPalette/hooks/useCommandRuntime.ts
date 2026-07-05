@@ -9,8 +9,7 @@ import { maximizedSectionAtom } from "~/pages/workspace/layout/atoms/transient.t
 import { toSection } from "~/pages/workspace/layout/types/section.ts";
 
 import type { UserConfigField } from "../../../api";
-import { CHAT_INPUT_ELEMENT_ID } from "../../../common/Constants.ts";
-import { useImbueNavigate } from "../../../common/NavigateUtils.ts";
+import { useImbueNavigate } from "../../../common/hooks/navigation.ts";
 import { chatSearchFocusRequestAtom, chatSearchVisibleAtom } from "../../../common/state/atoms/chatSearch.ts";
 import { updateReportProblemAtom } from "../../../common/state/atoms/reportProblem.ts";
 import { themeBuilderSettingsAtom } from "../../../common/state/atoms/themeBuilder.ts";
@@ -20,6 +19,7 @@ import { useHelpDialog } from "../../../common/state/hooks/useHelpDialog.ts";
 import { useOpenSettings } from "../../../common/state/hooks/useOpenSettings.ts";
 import { useUserConfig } from "../../../common/state/hooks/useUserConfig.ts";
 import type { AppearanceMode } from "../../../common/theme/appearanceModes.ts";
+import { CHAT_INPUT_ELEMENT_ID } from "../../../common/utils/elementIds.ts";
 import { newWorkspaceDialogAtom } from "../../newWorkspace/newWorkspaceAtoms.ts";
 import { type CommandActionId, commandActionsAtom } from "../utils/commandActions.ts";
 import type { AppStore, CommandRuntime } from "../utils/runtime.ts";

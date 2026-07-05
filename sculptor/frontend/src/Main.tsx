@@ -6,10 +6,10 @@ import ReactDOM from "react-dom/client";
 
 import { App } from "./app/App.tsx";
 import { baseUrl, configureClient } from "./common/apiClient.ts";
-import { initializeSessionToken } from "./common/Auth.ts";
-import { initializeKeyboardLayoutMap } from "./common/ShortcutUtils.ts";
-import { initializeTelemetry } from "./common/Telemetry.ts";
-import { initializeTracing } from "./common/tracing.ts";
+import { initializeKeyboardLayoutMap } from "./common/keybindings/matching.ts";
+import { initializeTracing } from "./common/perf/tracing.ts";
+import { initializeTelemetry } from "./common/telemetry/telemetry.ts";
+import { initializeSessionToken } from "./common/utils/sessionToken.ts";
 import { initializeSentry } from "./instrument.ts";
 
 (async (): Promise<void> => {

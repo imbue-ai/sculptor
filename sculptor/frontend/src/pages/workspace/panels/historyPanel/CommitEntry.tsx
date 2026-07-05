@@ -5,7 +5,7 @@ import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { type CommitInfo, ElementIds } from "~/api";
-import { formatRelativeTime } from "~/common/formatRelativeTime.ts";
+import { formatRelativeTime } from "~/common/utils/formatRelativeTime.ts";
 import type { FileStatus, ViewMode } from "~/pages/workspace/panels/fileBrowser/types.ts";
 
 import { CommitGraph } from "./CommitGraph.tsx";

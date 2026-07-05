@@ -7,7 +7,7 @@ import { createElement, useCallback } from "react";
 import { useParams } from "react-router-dom";
 
 import { ElementIds } from "~/api";
-import { useImbueNavigate } from "~/common/NavigateUtils";
+import { useImbueNavigate } from "~/common/hooks/navigation";
 import { projectAtomFamily } from "~/common/state/atoms/projects";
 import { taskAtomFamily } from "~/common/state/atoms/tasks";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces";

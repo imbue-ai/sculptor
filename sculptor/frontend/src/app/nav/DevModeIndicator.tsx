@@ -1,7 +1,7 @@
 import { Tooltip } from "@radix-ui/themes";
 import { type ReactElement, useEffect, useState } from "react";
 
-import type { SculptorDevInfo } from "~/shared/types.ts";
+import type { SculptorDevInfo } from "~/electron/bridge.ts";
 
 import styles from "./DevModeIndicator.module.scss";
 

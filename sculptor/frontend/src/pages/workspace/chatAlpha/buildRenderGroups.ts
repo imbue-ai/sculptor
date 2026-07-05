@@ -1,5 +1,7 @@
 import type { ErrorBlock, FileBlock, ToolResultBlock, ToolUseBlock, WarningBlock } from "~/api";
-import type { BlockUnion } from "~/common/Guards";
+import type { SubagentTreeNode } from "~/pages/workspace/chatAlpha/utils/subagentTree.ts";
+import { SUBAGENT_TOOL_NAMES } from "~/pages/workspace/chatAlpha/utils/subagentTree.ts";
+import type { BlockUnion } from "~/pages/workspace/utils/blockGuards";
 import {
   isContextClearedBlock,
   isContextSummaryBlock,
@@ -10,9 +12,7 @@ import {
   isToolResultBlock,
   isToolUseBlock,
   isWarningBlock,
-} from "~/common/Guards";
-import type { SubagentTreeNode } from "~/pages/workspace/chatAlpha/utils/subagentTree.ts";
-import { SUBAGENT_TOOL_NAMES } from "~/pages/workspace/chatAlpha/utils/subagentTree.ts";
+} from "~/pages/workspace/utils/blockGuards";
 
 export type RenderGroup =
   | { type: "text"; blocks: Array<{ text: string }> }

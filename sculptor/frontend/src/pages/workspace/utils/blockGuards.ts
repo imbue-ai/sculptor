@@ -12,8 +12,7 @@ import type {
   ToolResultBlock,
   ToolUseBlock,
   WarningBlock,
-} from "../api";
-import { LlmModel } from "../api";
+} from "~/api";
 
 // Artifact type guards
 export const isTaskListArtifact = (response: GetWorkspaceAgentArtifactResponse): response is TaskListArtifact => {
@@ -76,8 +75,4 @@ export const isGenericToolContent = (content: GenericToolContent | DiffToolConte
 
 export const isDiffToolContent = (content: GenericToolContent | DiffToolContent): content is DiffToolContent => {
   return content.contentType === "diff";
-};
-
-export const isLlmModel = (value: string): value is LlmModel => {
-  return (Object.values(LlmModel) as ReadonlyArray<string>).includes(value);
 };

@@ -6,11 +6,11 @@ import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { deleteProject, ElementIds, type Project, updateNamingPattern, updateWorkspaceSetupCommand } from "~/api";
-import { getErrorMessage } from "~/common/Errors.ts";
 import { projectAtomFamily, removeProjectAtom } from "~/common/state/atoms/projects.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { useProjects } from "~/common/state/hooks/useProjects.ts";
+import { getErrorMessage } from "~/common/utils/errors.ts";
 import { AddRepoDialog } from "~/components/addRepo/AddRepoDialog.tsx";
 
 import { RemoveRepoDialog } from "./RemoveRepoDialog.tsx";

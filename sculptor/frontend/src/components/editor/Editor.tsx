@@ -11,9 +11,10 @@ import { tasksArrayAtom } from "~/common/state/atoms/tasks";
 import { isEntityMentionsEnabledAtom } from "~/common/state/atoms/userConfig";
 import { workspacesArrayAtom } from "~/common/state/atoms/workspaces";
 
-import { useImbueParams } from "../../common/NavigateUtils";
-import { mergeClasses, optional } from "../../common/Utils.ts";
+import { useImbueParams } from "../../common/hooks/navigation";
+import { mergeClasses } from "../../common/utils/classNames.ts";
 import { processAndValidateFiles, saveFiles } from "../../common/utils/fileUpload";
+import { optional } from "../../common/utils/optional.ts";
 import type { EntityDataRef } from "../EntityMentionSuggestion";
 import styles from "./Editor.module.scss";
 import { hydrateEntityMentions } from "./entityMentionHydration";

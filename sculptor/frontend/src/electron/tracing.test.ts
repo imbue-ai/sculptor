@@ -2,7 +2,7 @@
  *
  * The argv-parsing tests cover ``parseTraceToArg`` in isolation. The remaining
  * suites exercise the flush/retry/buffer-cap/lifecycle paths the same way the
- * renderer tests in ``common/tracing.test.ts`` do: each test resets the module
+ * renderer tests in ``common/perf/tracing.test.ts`` do: each test resets the module
  * registry and re-imports the module so the module-level mutable state
  * (``traceToPath``, ``pendingEvents``, ``backendUrlForFlush``, ``flushTimer``,
  * ``hasLoggedFlushFailure``) starts fresh.

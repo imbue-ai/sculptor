@@ -1,7 +1,7 @@
 import { useAtomValue } from "jotai";
 import { useCallback } from "react";
 
-import { useImbueNavigate } from "~/common/NavigateUtils.ts";
+import { useImbueNavigate } from "~/common/hooks/navigation.ts";
 import {
   agentIdsByWorkspaceAtom,
   effectiveOpenTabIdsAtom,

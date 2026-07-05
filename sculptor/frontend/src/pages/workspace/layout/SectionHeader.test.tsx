@@ -5,7 +5,7 @@ import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ElementIds } from "~/api";
-import { renderWithProviders } from "~/common/testUtils.tsx";
+import { renderWithProviders } from "~/common/utils/renderWithProviders.tsx";
 import {
   activePanelIdInSubSectionAtom,
   activeWorkspaceIdAtom,

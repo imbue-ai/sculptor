@@ -6,8 +6,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { RemoteRepo } from "~/api";
 import { ElementIds } from "~/api";
-import { HTTPException } from "~/common/Errors.ts";
-import { formatRelativeTime } from "~/common/formatRelativeTime.ts";
+import { HTTPException } from "~/common/utils/errors.ts";
+import { formatRelativeTime } from "~/common/utils/formatRelativeTime.ts";
 
 import { REMOTE_REPOS_INITIAL_LIMIT, useRemoteRepos } from "./hooks/useRemoteRepos.ts";
 import styles from "./RemoteRepoCombobox.module.scss";

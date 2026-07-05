@@ -1,12 +1,17 @@
 import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 
-import { isLlmModel } from "~/common/Guards.ts";
-import { getTelemetryEnabled } from "~/common/Telemetry.ts";
+import { getTelemetryEnabled } from "~/common/telemetry/telemetry.ts";
 
 import type { CiBabysitterConfig, CustomActionsConfig, UserConfig } from "../../../api";
 import { LlmModel } from "../../../api";
 import { themeBuilderSettingsAtom } from "./themeBuilder";
+
+// Narrow an arbitrary persisted string (a stale or hand-edited config value) to
+// a currently-known LlmModel before it is treated as the default model.
+const isLlmModel = (value: string): value is LlmModel => {
+  return (Object.values(LlmModel) as ReadonlyArray<string>).includes(value);
+};
 
 /**
  * PRIMARY ATOM: Global UserConfig State

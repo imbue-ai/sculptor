@@ -7,9 +7,9 @@ import type { ReactElement } from "react";
 import { useMemo } from "react";
 
 import { ElementIds } from "../api";
-import { keybindingsAtom } from "../common/keybindings/atoms.ts";
-import { CATEGORY_DISPLAY_NAMES, CATEGORY_ORDER, type KeybindingCategory } from "../common/keybindings/types.ts";
-import { formatShortcutForDisplay } from "../common/ShortcutUtils.ts";
+import { formatShortcutForDisplay } from "../common/keybindings/format.ts";
+import { CATEGORY_DISPLAY_NAMES, CATEGORY_ORDER, type KeybindingCategory } from "../common/keybindings/model.ts";
+import { keybindingsAtom } from "../common/keybindings/resolvedBindings.ts";
 import { useHelpDialog } from "../common/state/hooks/useHelpDialog.ts";
 import styles from "./KeyboardShortcutsDialog.module.scss";
 

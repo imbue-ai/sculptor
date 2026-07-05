@@ -12,8 +12,8 @@ import { useSetAtom, useStore } from "jotai";
 import { useCallback } from "react";
 
 import { sidebarOrderedWorkspacesAtom } from "~/app/nav/sidebarWorkspaceOrder.ts";
-import { useKeybindingHandler } from "~/common/keybindings";
-import { useImbueNavigate } from "~/common/NavigateUtils.ts";
+import { useImbueNavigate } from "~/common/hooks/navigation.ts";
+import { useKeybindingHandler } from "~/common/keybindings/useKeybinding.ts";
 import { openWorkspaceTabAtom } from "~/common/state/atoms/workspaces.ts";
 import { useRegisterCommandAction } from "~/components/commandPalette/utils/commandActions.ts";
 import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";

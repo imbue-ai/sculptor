@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 
 import type { NewBranchNameValidationResponse, WorkspaceInitializationStrategy } from "~/api";
 import { previewBranchName, validateNewBranchName, WorkspaceInitializationStrategy as Strategy } from "~/api";
-import type { BackendQueryKeyResult } from "~/common/queryClient.ts";
-import { SCULPTOR_QUERY_KEY_PREFIX } from "~/common/queryClient.ts";
+import type { BackendQueryKeyResult } from "~/common/state/queryClient.ts";
+import { SCULPTOR_QUERY_KEY_PREFIX } from "~/common/state/queryClient.ts";
 
 /**
  * Status of the displayed branch name, from the debounced backend check:

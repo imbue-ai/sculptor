@@ -7,8 +7,9 @@ import type { KeyboardEvent, ReactElement } from "react";
 import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ElementIds } from "../../api";
-import { keybindingsMapAtom } from "../../common/keybindings/atoms.ts";
-import { formatShortcutForDisplay, shouldHandleKeybinding } from "../../common/ShortcutUtils.ts";
+import { formatShortcutForDisplay } from "../../common/keybindings/format.ts";
+import { shouldHandleKeybinding } from "../../common/keybindings/matching.ts";
+import { keybindingsMapAtom } from "../../common/keybindings/resolvedBindings.ts";
 import { commandPaletteOpenAtom, commandPalettePendingAtom, commandPaletteSearchAtom } from "./atoms/commandPalette.ts";
 import styles from "./CommandPalette.module.scss";
 import {

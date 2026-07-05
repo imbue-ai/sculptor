@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { UserConfig } from "~/api";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 
-import { keybindingsMapAtom } from "./atoms.ts";
+import { keybindingsMapAtom } from "./resolvedBindings.ts";
 
 const makeConfig = (keybindings: Record<string, string | null>): UserConfig =>
   ({ keybindings }) as unknown as UserConfig;

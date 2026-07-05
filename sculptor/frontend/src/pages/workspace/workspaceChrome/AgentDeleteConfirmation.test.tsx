@@ -2,7 +2,7 @@ import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { createStore } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { renderWithProviders } from "~/common/testUtils.tsx";
+import { renderWithProviders } from "~/common/utils/renderWithProviders.tsx";
 import { agentDeleteTargetAtom } from "~/components/commandPalette/contextActions/atoms/contextActions.ts";
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
 import { EMPTY_WORKSPACE_LAYOUT } from "~/pages/workspace/layout/persistence/snapshot.ts";

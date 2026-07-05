@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 
-import type { KeybindingId } from "~/common/keybindings/types.ts";
+import type { KeybindingId } from "~/common/keybindings/model.ts";
 
 export type CommandId = string;
 

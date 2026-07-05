@@ -4,10 +4,10 @@ import { useLayoutEffect, useMemo, useRef } from "react";
 
 import type { ColorSettingKey, HexOverrides, ThemeBuilderSettings } from "~/common/state/atoms/themeBuilder.ts";
 import { COLOR_SETTING_KEYS, DEFAULT_HEX_OVERRIDES } from "~/common/state/atoms/themeBuilder.ts";
+import { useResolvedTheme } from "~/common/state/hooks/useResolvedTheme.ts";
 import { useThemeBuilderSettings } from "~/common/state/hooks/useThemeBuilder.ts";
 import { generateColorScale, isValidHex } from "~/common/theme/generateColorScale.ts";
 import { getColorScale, resolveGrayColor } from "~/common/theme/radixColorHexMap.ts";
-import { useResolvedTheme } from "~/common/Utils.ts";
 
 /**
  * Maps a ColorSettingKey to the CSS variable prefix used by Radix.

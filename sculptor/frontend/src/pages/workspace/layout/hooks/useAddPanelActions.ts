@@ -22,7 +22,7 @@ import { useStore } from "jotai/react";
 import { useCallback } from "react";
 
 import type { AgentTypeName } from "~/api";
-import { useImbueNavigate, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
+import { useImbueNavigate, useWorkspacePageParams } from "~/common/hooks/navigation.ts";
 import { parseStoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import {
   createAgentAndNavigate,

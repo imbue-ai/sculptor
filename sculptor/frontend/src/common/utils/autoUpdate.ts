@@ -1,6 +1,6 @@
 import semver from "semver";
 
-import type { AutoUpdateStatus, UpdateChannel } from "~/shared/types.ts";
+import type { AutoUpdateStatus, UpdateChannel } from "~/common/types/backend.ts";
 
 const UPDATE_CHANNEL_DISPLAY_NAMES: Record<UpdateChannel, string> = {
   STABLE: "Stable",

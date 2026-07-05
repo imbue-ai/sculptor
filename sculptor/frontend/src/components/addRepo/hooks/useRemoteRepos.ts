@@ -2,9 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 
 import type { RemoteRepo } from "~/api";
 import { listRemoteRepos } from "~/api";
-import { HTTPException } from "~/common/Errors.ts";
-import type { BackendQueryResult } from "~/common/queryClient.ts";
-import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "~/common/queryClient.ts";
+import type { BackendQueryResult } from "~/common/state/queryClient.ts";
+import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "~/common/state/queryClient.ts";
+import { HTTPException } from "~/common/utils/errors.ts";
 
 import type { RemoteProvider } from "../SourceRadioCards.tsx";
 

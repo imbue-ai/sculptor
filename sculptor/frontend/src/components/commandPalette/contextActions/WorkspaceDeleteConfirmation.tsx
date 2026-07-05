@@ -9,7 +9,7 @@ import { useAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback } from "react";
 
-import { useImbueLocation } from "~/common/NavigateUtils.ts";
+import { useImbueLocation } from "~/common/hooks/navigation.ts";
 import { useOptimisticWorkspaceDelete } from "~/common/state/hooks/useOptimisticWorkspaceDelete.ts";
 import { useWorkspaceTabActions } from "~/common/state/hooks/useWorkspaceTabActions.ts";
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";

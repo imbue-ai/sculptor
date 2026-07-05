@@ -1,6 +1,6 @@
 import * as Sentry from "@sentry/react";
 
-import { getTelemetryEnabled } from "~/common/Telemetry.ts";
+import { getTelemetryEnabled } from "~/common/telemetry/telemetry.ts";
 
 declare const FRONTEND_SENTRY_DSN: string;
 declare const FRONTEND_SENTRY_RELEASE_ID: string;

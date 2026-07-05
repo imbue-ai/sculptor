@@ -7,9 +7,9 @@ import { ToastType } from "~/common/state/atoms/toasts.ts";
 
 import type { Workspace } from "../../../api";
 import { batchUpdateOpenState, updateWorkspace as updateWorkspaceApi } from "../../../api";
-import { invalidateWorkspaceGitQueries, removeWorkspaceQueriesCache } from "../../queryClient.ts";
 import type { WorkspaceDotStatus } from "../../utils/statusDot.ts";
 import { computeWorkspaceDotStatus } from "../../utils/statusDot.ts";
+import { invalidateWorkspaceGitQueries, removeWorkspaceQueriesCache } from "../queryClient.ts";
 import { tasksArrayAtom } from "./tasks.ts";
 import { workspaceOpenCloseErrorToastAtom } from "./toasts";
 import { getAgentDotStatusWithUnreadOverride } from "./unreadOverrides.ts";

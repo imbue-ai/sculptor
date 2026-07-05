@@ -5,10 +5,10 @@ import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
 import { useInstallUpdate } from "~/app/hooks/useInstallUpdate.ts";
-import { getUpdateChannelDisplayName, getUpdateStatusText } from "~/common/autoUpdateUtils.ts";
 import { autoUpdateStatusAtom, updateChannelAtom } from "~/common/state/atoms/autoUpdate.ts";
 import { healthCheckDataAtom } from "~/common/state/atoms/backend.ts";
 import { useDevPanel } from "~/common/state/hooks/useDevPanel.ts";
+import { getUpdateChannelDisplayName, getUpdateStatusText } from "~/common/utils/autoUpdate.ts";
 
 import { useReactGrab } from "../../components/devPanel/hooks/useReactGrab.ts";
 import { useTanstackDevtools } from "../../components/devPanel/hooks/useTanstackDevtools.ts";

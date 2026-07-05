@@ -3,13 +3,13 @@ import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 
 import type { ModelOption } from "~/api";
+import { isIntegrationTestingEnabledAtom } from "~/common/state/atoms/sculptorSettings.ts";
 import {
   getClaudeModelList,
   getModelLongName,
   getProviderDisplayName,
   groupModelsByProvider,
-} from "~/common/modelConstants";
-import { isIntegrationTestingEnabledAtom } from "~/common/state/atoms/sculptorSettings.ts";
+} from "~/common/utils/modelConstants";
 
 type ModelSelectOptionsProps = {
   // Base test id for the option items. Each item's `data-testid` is suffixed with

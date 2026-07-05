@@ -2,10 +2,10 @@ import { useSetAtom } from "jotai";
 import { useCallback, useReducer } from "react";
 
 import { cloneRemoteRepo, createInitialCommit, initializeGitRepository, initializeProject, listProjects } from "~/api";
-import { getErrorMessage, HTTPException } from "~/common/Errors.ts";
 import { getBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
 import { updateProjectsAtom } from "~/common/state/atoms/projects.ts";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
+import { getErrorMessage, HTTPException } from "~/common/utils/errors.ts";
 import { isElectron, selectProjectDirectory } from "~/electron/utils.ts";
 
 import { stripGitSuffix } from "../utils/remoteRepoFormHelpers.ts";

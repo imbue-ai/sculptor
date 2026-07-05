@@ -9,8 +9,8 @@ import {
   type PluginSnapshot,
 } from "~/api";
 import { baseUrl } from "~/common/apiClient.ts";
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
-import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "~/common/queryClient.ts";
+import { useWorkspacePageParams } from "~/common/hooks/navigation.ts";
+import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "~/common/state/queryClient.ts";
 import { BUILTIN_HOME_VIEW_ID } from "~/pages/home/homeViews.ts";
 
 import { installHostRuntime } from "./hostRuntime.ts";

@@ -4,7 +4,7 @@ import type { PropsWithChildren, ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ElementIds, getHealthCheck } from "~/api";
-import { useInterval } from "~/common/useInterval.ts";
+import { useInterval } from "~/common/hooks/useInterval.ts";
 
 import SculptorLogoAndTitle from "../assets/logos/sculptor_logo_and_title.svg";
 import {
@@ -12,9 +12,9 @@ import {
   hasBackendStartedSuccessfullyAtom,
   healthCheckDataAtom,
 } from "../common/state/atoms/backend.ts";
+import type { AnyBackendStatus, BackendStatus } from "../common/types/backend.ts";
 import { TitleBar } from "../components/TitleBar.tsx";
 import { ErrorPage } from "../pages/error/ErrorPage.tsx";
-import type { AnyBackendStatus, BackendStatus } from "../shared/types.ts";
 import styles from "./BackendStatusBoundary.module.scss";
 
 // Once the renderer enters ``shutting_down``, the boundary locks the state

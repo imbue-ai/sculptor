@@ -3,8 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { DependenciesStatus, DependencyInfo, InstallProgress } from "~/api";
 import { getDependenciesStatus, installDependency, UserConfigField } from "~/api";
+import { usePollingInterval } from "~/common/hooks/usePollingInterval";
 import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus";
-import { usePollingInterval } from "~/common/usePollingInterval";
 
 type ManagedDependencyTool = "CLAUDE" | "PI";
 

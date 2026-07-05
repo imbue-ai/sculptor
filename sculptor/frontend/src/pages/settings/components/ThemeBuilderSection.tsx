@@ -24,13 +24,13 @@ import {
   SCALINGS,
   themeBuilderSettingsAtom,
 } from "~/common/state/atoms/themeBuilder.ts";
+import { useResolvedTheme } from "~/common/state/hooks/useResolvedTheme.ts";
 import type { AppearanceMode } from "~/common/theme/appearanceModes.ts";
 import { APPEARANCE_MODES } from "~/common/theme/appearanceModes.ts";
 import { isValidHex } from "~/common/theme/generateColorScale.ts";
 import { getColorHex9, resolveGrayColor } from "~/common/theme/radixColorHexMap.ts";
 import type { ShikiThemePairName } from "~/common/theme/shikiThemes.ts";
 import { SHIKI_THEME_PAIR_NAMES } from "~/common/theme/shikiThemes.ts";
-import { useResolvedTheme } from "~/common/Utils.ts";
 
 import { SettingRow } from "./SettingRow.tsx";
 import { SettingsSectionLayout } from "./SettingsSection.tsx";

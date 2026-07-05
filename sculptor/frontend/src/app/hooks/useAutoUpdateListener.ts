@@ -2,7 +2,7 @@ import { useSetAtom } from "jotai";
 import { useEffect } from "react";
 
 import { autoUpdateStatusAtom, updateChannelAtom } from "~/common/state/atoms/autoUpdate.ts";
-import type { AutoUpdateStatus } from "~/shared/types.ts";
+import type { AutoUpdateStatus } from "~/common/types/backend.ts";
 
 export const useAutoUpdateListener = (): void => {
   const setStatus = useSetAtom(autoUpdateStatusAtom);

@@ -4,7 +4,7 @@ import type { ReactElement, ReactNode } from "react";
 import { forwardRef, useCallback } from "react";
 
 import { ElementIds } from "~/api";
-import { highlightMatch } from "~/common/highlightMatch";
+import { highlightMatch } from "~/components/editor/highlightMatch";
 import { getFileIcon } from "~/pages/workspace/panels/fileBrowser/fileIcons";
 
 import styles from "./MentionList.module.scss";

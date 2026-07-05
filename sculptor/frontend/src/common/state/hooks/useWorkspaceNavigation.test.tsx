@@ -26,7 +26,7 @@ vi.mock("../../../api", async () => {
   };
 });
 
-vi.mock("~/common/NavigateUtils.ts", () => ({
+vi.mock("~/common/hooks/navigation.ts", () => ({
   useImbueNavigate: (): Record<string, unknown> => ({
     navigateToAgent: mockNavigateToAgent,
     navigateToWorkspace: mockNavigateToWorkspace,

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { getCloneDefaults } from "~/api";
-import { SCULPTOR_QUERY_KEY_PREFIX } from "~/common/queryClient.ts";
+import { SCULPTOR_QUERY_KEY_PREFIX } from "~/common/state/queryClient.ts";
 
 /**
  * The backend's default clones parent dir (`<sculptor_folder>/repos`). Only the

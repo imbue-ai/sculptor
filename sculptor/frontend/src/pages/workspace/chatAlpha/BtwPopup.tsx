@@ -5,8 +5,8 @@ import type { CSSProperties, ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ElementIds } from "../../../api";
-import { CHAT_INPUT_ELEMENT_ID } from "../../../common/Constants.ts";
 import { btwPopupAtom, closeBtwPopupAtom, setBtwPopupPositionAtom } from "../../../common/state/atoms/btwPopup";
+import { CHAT_INPUT_ELEMENT_ID } from "../../../common/utils/elementIds.ts";
 import styles from "./BtwPopup.module.scss";
 
 const POPUP_WIDTH = 360;

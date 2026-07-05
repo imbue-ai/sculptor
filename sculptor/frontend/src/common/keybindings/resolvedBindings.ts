@@ -3,7 +3,7 @@ import { atom } from "jotai";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 
 import { KEYBINDING_DEFINITIONS } from "./definitions.ts";
-import type { KeybindingId, ResolvedKeybinding } from "./types.ts";
+import type { KeybindingId, ResolvedKeybinding } from "./model.ts";
 
 export const keybindingsAtom = atom<ReadonlyArray<ResolvedKeybinding>>((get) => {
   const userConfig = get(userConfigAtom);

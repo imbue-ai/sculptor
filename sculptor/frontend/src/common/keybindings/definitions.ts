@@ -1,4 +1,4 @@
-import type { KeybindingDefinition } from "./types.ts";
+import type { KeybindingDefinition } from "./model.ts";
 
 export const KEYBINDING_DEFINITIONS: ReadonlyArray<KeybindingDefinition> = [
   {

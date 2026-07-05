@@ -3,7 +3,7 @@ import type { SuggestionProps } from "@tiptap/suggestion";
 import type { ReactElement, ReactNode } from "react";
 import { forwardRef, useCallback } from "react";
 
-import { highlightMatch } from "~/common/highlightMatch";
+import { highlightMatch } from "~/components/editor/highlightMatch";
 
 import { badgeColorForType, badgeLabelForType, type SkillType } from "../../common/utils/skillBadge";
 import styles from "./SkillList.module.scss";

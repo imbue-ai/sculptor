@@ -9,16 +9,16 @@ import { useRef, useState } from "react";
 
 import type { CustomAction, CustomActionGroup } from "~/api";
 import { ElementIds } from "~/api";
+import { chatActionsAtom } from "~/common/state/atoms/chatActions";
+import { collapsedGroupsAtom } from "~/common/state/atoms/customActions";
+import { useCustomActions } from "~/common/state/hooks/useCustomActions";
 import {
   BUILTIN_SCULPTOR_ACTIONS,
   BUILTIN_SCULPTOR_GROUP,
   isBuiltInAction,
   isBuiltInGroup,
   SCULPTOR_BUILTIN_GROUP_ID,
-} from "~/common/builtinActions";
-import { chatActionsAtom } from "~/common/state/atoms/chatActions";
-import { collapsedGroupsAtom } from "~/common/state/atoms/customActions";
-import { useCustomActions } from "~/common/state/hooks/useCustomActions";
+} from "~/common/utils/builtinActions";
 import { ActionChip } from "~/components/actions/ActionChip";
 import { ActionDialog, type ActionFormData } from "~/components/actions/ActionDialog";
 import { DeleteActionDialog } from "~/components/actions/DeleteActionDialog";

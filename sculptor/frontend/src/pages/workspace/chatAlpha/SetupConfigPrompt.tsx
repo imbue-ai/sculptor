@@ -3,7 +3,7 @@ import { TerminalSquareIcon } from "lucide-react";
 import type { ReactElement } from "react";
 import { useCallback } from "react";
 
-import { useActiveProjectID } from "~/common/NavigateUtils";
+import { useActiveProjectID } from "~/common/hooks/navigation";
 import { useOpenSettings } from "~/common/state/hooks/useOpenSettings";
 
 import styles from "./ChatIntro.module.scss";
