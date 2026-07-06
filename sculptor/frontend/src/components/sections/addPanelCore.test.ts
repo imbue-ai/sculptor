@@ -121,8 +121,8 @@ describe("createAgentInLocation placement", () => {
   });
 });
 
-describe("createAgentInLocation pi agent", () => {
-  it("creates a pi agent when a pi agent is requested (pi is always available)", async () => {
+describe("createAgentInLocation pi harness", () => {
+  it("creates a pi workspace when a pi workspace is requested (pi is always available)", async () => {
     createWorkspaceAgentMock.mockResolvedValue({ data: { id: "task-pi" } });
     const store = createStore();
     store.set(activeWorkspaceIdAtom, "ws-test");
