@@ -12,7 +12,7 @@ only real local branches.
 from playwright.sync_api import expect
 
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.playwright_utils import open_new_workspace_form
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
 
@@ -35,7 +35,7 @@ def test_detached_head_placeholder_not_listed_as_source_branch(
 
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
-        navigate_to_add_workspace_page(page)
+        open_new_workspace_form(page)
         add_ws_page = PlaywrightAddWorkspacePage(page=page)
 
         add_ws_page.open_branch_selector()

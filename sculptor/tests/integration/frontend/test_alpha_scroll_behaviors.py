@@ -10,6 +10,7 @@ Covers:
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.alpha_chat_view import get_alpha_scroll_position
 from sculptor.testing.elements.alpha_chat_view import get_jump_to_bottom_button
@@ -17,7 +18,8 @@ from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_by
 from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_to_top
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.elements.panels import close_bottom_panel
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -130,12 +132,11 @@ def test_first_message_visible_after_agent_switch(sculptor_instance_: SculptorIn
     )
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=4)
 
-    agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tab_bar.get_add_agent_button().click()
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(2)
+    create_agent_panel(page, section="center")
+    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
+    expect(tabs).to_have_count(2)
 
-    agent_tabs.first.click()
+    tabs.first.click()
     alpha_view = get_alpha_chat_view(page)
     expect(alpha_view).to_be_visible()
 
@@ -151,11 +152,9 @@ def test_first_message_visible_after_agent_switch(sculptor_instance_: SculptorIn
         }}"""
     )
 
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    agent_tabs.last.click()
+    tabs.last.click()
 
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    agent_tabs.first.click()
+    tabs.first.click()
 
     page.wait_for_function(
         f"""() => {{
@@ -183,7 +182,7 @@ def test_user_message_visible_at_max_scroll_after_agent_switch(sculptor_instance
     )
     chat_panel = task_page.get_chat_panel()
 
-    close_bottom_panel(page)
+    PlaywrightWorkspaceSection(page, "bottom").collapse_section()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
     send_chat_message(
@@ -192,20 +191,17 @@ def test_user_message_visible_at_max_scroll_after_agent_switch(sculptor_instance
     )
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=4)
 
-    agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tab_bar.get_add_agent_button().click()
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(2)
+    create_agent_panel(page, section="center")
+    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
+    expect(tabs).to_have_count(2)
 
-    agent_tabs.first.click()
+    tabs.first.click()
     alpha_view = get_alpha_chat_view(page)
     expect(alpha_view).to_be_visible()
 
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    agent_tabs.last.click()
+    tabs.last.click()
 
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    agent_tabs.first.click()
+    tabs.first.click()
     expect(alpha_view).to_be_visible()
 
     scroll_alpha_chat_by(page, 10000)

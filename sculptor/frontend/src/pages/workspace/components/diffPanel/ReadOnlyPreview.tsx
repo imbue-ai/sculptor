@@ -20,9 +20,16 @@ import {
   safeUrlTransform,
 } from "~/components/MarkdownDiff/markdownPlugins.ts";
 
+import type { MarkdownRenderMode } from "./atoms.ts";
 import { isMarkdownPath, markdownRenderModeAtom } from "./atoms.ts";
+import {
+  adoptPierreOverrideSheet,
+  createPierreOverrideSheet,
+  HIDE_NATIVE_HSCROLLBAR_CSS,
+} from "./pierreShadowStyles.ts";
 import styles from "./ReadOnlyPreview.module.scss";
 import { StickyHorizontalScrollbar } from "./StickyHorizontalScrollbar.tsx";
+import { usePierreHighlighterReady } from "./usePierreHighlighterReady.ts";
 
 // react-markdown hands its components map a renderer-internal `node` prop
 // alongside the regular HTML attributes. We deliberately destructure only
@@ -38,23 +45,9 @@ const READ_ONLY_PREVIEW_COMPONENTS: Components = {
   ),
 };
 
-/**
- * Override Pierre's shadow DOM background and hide the native horizontal
- * scrollbar (replaced by StickyHorizontalScrollbar at the panel bottom).
- */
-const bgOverrideSheet = new CSSStyleSheet();
-bgOverrideSheet.replaceSync(
-  [
-    "[data-diffs], [data-diffs-header], [data-error-wrapper] {",
-    "  --diffs-light-bg: var(--color-panel-solid) !important;",
-    "  --diffs-dark-bg: var(--color-background) !important;",
-    "  --diffs-bg: light-dark(var(--color-panel-solid), var(--color-background)) !important;",
-    "}",
-    // Hide Pierre's native horizontal scrollbar — replaced by StickyHorizontalScrollbar.
-    "[data-code] { scrollbar-width: none; }",
-    "[data-code]::-webkit-scrollbar { display: none; }",
-  ].join("\n"),
-);
+// The shared Pierre background override plus the native-scrollbar hide (this
+// preview replaces it with StickyHorizontalScrollbar at the panel bottom).
+const bgOverrideSheet = createPierreOverrideSheet(HIDE_NATIVE_HSCROLLBAR_CSS);
 
 const EXTENSION_LANGUAGE_MAP: Record<string, SupportedLanguages> = {
   ts: "typescript",
@@ -108,38 +101,39 @@ const getLanguageFromPath = (filePath: string): SupportedLanguages | undefined =
 type ReadOnlyPreviewProps = {
   workspaceId: string;
   filePath: string;
+  /** When set, wins over the persisted global render-mode preference — used by
+   *  the quick-open-rendered-markdown path so one explicit open never rewrites
+   *  the preference itself. */
+  renderModeOverride?: MarkdownRenderMode;
 };
 
-export const ReadOnlyPreview = ({ workspaceId, filePath }: ReadOnlyPreviewProps): ReactElement => {
+export const ReadOnlyPreview = ({ workspaceId, filePath, renderModeOverride }: ReadOnlyPreviewProps): ReactElement => {
   const { data: content, isPending, isError: hasError } = useWorkspaceFileContent(workspaceId, filePath, null);
   const overflow = useAtomValue(fileBrowserLineWrappingAtom);
   const appTheme = useAtomValue(appThemeAtom);
   const codeTheme = useAtomValue(themeCodeThemeAtom);
   const shikiThemes = getShikiThemes(codeTheme);
-  const markdownMode = useAtomValue(markdownRenderModeAtom);
+  // Pierre must not MOUNT before its shared highlighter has these themes
+  // attached — a cold-themes first mount paints nothing and does not survive
+  // React StrictMode's remount (see usePierreHighlighterReady).
+  const isHighlighterReady = usePierreHighlighterReady(shikiThemes);
+  const globalMarkdownMode = useAtomValue(markdownRenderModeAtom);
+  const markdownMode = renderModeOverride ?? globalMarkdownMode;
   const pierreRef = useRef<HTMLDivElement>(null);
   const shouldRenderMarkdown = isMarkdownPath(filePath) && markdownMode === "rendered";
 
-  /**
-   * Inject our override stylesheet into Pierre's shadow DOM.
-   *
-   * `useLayoutEffect` so the sheet is adopted between React's commit and the
-   * browser's next paint — without this, Pierre's first paint shows the
-   * Shiki theme background (passed inline on the `<pre>`) until our override
-   * lands, which flashes in dark mode against the surrounding `#111`.
-   * Pierre's web component upgrades synchronously on element creation, so
-   * the shadow root is already attached by the time this effect runs.
-   */
+  // Inject our override stylesheet into Pierre's shadow DOM (see
+  // adoptPierreOverrideSheet for why this is a layout effect). The container
+  // only exists once content has loaded AND the highlighter gate has opened
+  // (Pierre mounts at that point). Re-run on overflow changes because Pierre
+  // re-creates its shadow DOM when the wrap mode flips, and when
+  // `isHighlighterReady` flips (though it isn't read here) so the sheet is
+  // adopted the moment Pierre first mounts.
   const hasContent = content != null;
   useLayoutEffect(() => {
-    const el = pierreRef.current;
-    if (!el || !hasContent) return;
-    const shadowRoot = el.querySelector("diffs-container")?.shadowRoot;
-    if (!shadowRoot) return;
-    if (!shadowRoot.adoptedStyleSheets.includes(bgOverrideSheet)) {
-      shadowRoot.adoptedStyleSheets = [...shadowRoot.adoptedStyleSheets, bgOverrideSheet];
-    }
-  }, [hasContent, overflow]);
+    if (!hasContent) return;
+    adoptPierreOverrideSheet(pierreRef.current, bgOverrideSheet);
+  }, [hasContent, overflow, isHighlighterReady]);
 
   const fileName = useMemo(() => filePath.split("/").pop() ?? filePath, [filePath]);
   const lang = useMemo(() => getLanguageFromPath(filePath), [filePath]);
@@ -216,6 +210,19 @@ export const ReadOnlyPreview = ({ workspaceId, filePath }: ReadOnlyPreviewProps)
           </ReactMarkdown>
         </Box>
       </div>
+    );
+  }
+
+  // Only the Pierre source view below needs the highlighter; the markdown
+  // branch above renders without it. The gate resolves in milliseconds, so it
+  // shares the file fetch's loading placeholder rather than a distinct state.
+  if (!isHighlighterReady) {
+    return (
+      <Flex align="center" justify="center" flexGrow="1">
+        <Text size="2" color="gray">
+          Loading file...
+        </Text>
+      </Flex>
     );
   }
 

@@ -16,9 +16,6 @@ declare global {
     sculptor?: SculptorElectronAPI;
     /** Exposed by the active TerminalInstance for integration tests. */
     __xterm?: XTerm;
-    /** Inlined by the backend's static-HTML serve path when --trace-to is set.
-     * The renderer reads this synchronously at boot in common/tracing.ts. */
-    __SCULPTOR_TRACING__?: { enabled: boolean };
   }
 
   declare const API_URL_BASE: string | undefined;

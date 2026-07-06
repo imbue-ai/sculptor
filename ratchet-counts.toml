@@ -33,10 +33,10 @@
 "." = 0
 
 [no-inline-functions]
-"." = 33
+"." = 34
 
 [no-inline-imports]
-"." = 63
+"." = 65
 
 [no-integration-css-locators]
 "." = 0
@@ -45,13 +45,13 @@
 "." = 0
 
 [no-integration-page-evaluate]
-"." = 22
+"." = 19
 
 [no-integration-page-goto]
 "." = 0
 
 [no-integration-page-reload]
-"." = 4
+"." = 2
 
 [no-integration-time-sleep]
 "." = 9
@@ -108,7 +108,7 @@
 "." = 0
 
 [no-raw-html-button]
-"." = 21
+"." = 24
 
 [no-relative-imports]
 "." = 0

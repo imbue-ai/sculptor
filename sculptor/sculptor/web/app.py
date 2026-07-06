@@ -1948,9 +1948,9 @@ def _resolve_most_recently_used_agent_type(*, has_prompt: bool) -> tuple[AgentTy
 
     Mirrors the app's "+" button default: decode ``UserConfig.last_used_agent_type``
     and apply the same fallbacks so the app and the sculpt CLI agree — a stored
-    Pi is unusable once the pi agent is disabled, a stored registered agent may
-    have been unregistered, and a prompt-ful create is always a chat agent (so a
-    terminal harness falls back to Claude). Defaults to Claude when unset.
+    registered agent may have been unregistered, and a prompt-ful create is always
+    a chat agent (so a terminal harness falls back to Claude). Defaults to Claude
+    when unset.
     """
     config = get_user_config_instance()
     stored = config.last_used_agent_type
@@ -1958,8 +1958,6 @@ def _resolve_most_recently_used_agent_type(*, has_prompt: bool) -> tuple[AgentTy
     if decoded is None:
         return AgentTypeName.CLAUDE, None
     agent_type, registration_id = decoded
-    if agent_type == AgentTypeName.PI and not config.enable_pi_agent:
-        return AgentTypeName.CLAUDE, None
     if agent_type == AgentTypeName.REGISTERED and (
         registration_id is None or get_registration(registration_id) is None
     ):

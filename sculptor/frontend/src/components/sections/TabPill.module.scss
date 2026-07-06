@@ -1,0 +1,62 @@
+// The two non-interactive tab-pill copies drawn during a drag: the ghost drop
+// preview inside a tab strip and the floating overlay copy in the dnd-kit
+// DragOverlay. Both mirror the real tab pill (SectionHeader.module.scss `.tab`) so a
+// dragged tab keeps the exact same footprint wherever it is drawn.
+
+.pill {
+  align-items: center;
+  border-radius: var(--radius-2);
+  display: flex;
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  user-select: none;
+}
+
+// Ghosted placeholder shown in the gap a dragged tab would land in. outline (not
+// border) keeps the footprint stable so neighbouring tabs don't shift. Mirrors the
+// real tab's cursor/hover/transition so the strip reads identically while the
+// pointer passes over the placeholder mid-drag.
+.ghost {
+  background-color: var(--gray-a2);
+  color: var(--gray-a8);
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 70%;
+  outline: 1px dashed var(--gray-a7);
+  outline-offset: -1px;
+  touch-action: none;
+  transition:
+    background-color var(--duration-fast),
+    color var(--duration-fast);
+
+  &:hover {
+    background-color: var(--gray-a3);
+  }
+}
+
+// The floating copy that follows the cursor: elevated (shadow + solid background) to
+// read as "picked up".
+.overlay {
+  background: var(--gray-3);
+  box-shadow: var(--shadow-4);
+  color: var(--gray-12);
+  cursor: grabbing;
+}
+
+// The agent-status dot slot, mirroring the source tab's dot so the pill doesn't
+// change shape when copied. The dot itself is the shared AgentStatusDot svg; this
+// slot only centers it and keeps it from shrinking as the label truncates.
+.dot {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+}
+
+.label {
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- matches the tab label truncation cap in SectionHeader.module.scss
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

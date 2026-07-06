@@ -14,6 +14,7 @@ import {
   globalShortcut,
   ipcMain,
   Menu,
+  nativeTheme,
   net,
   protocol,
   shell,
@@ -751,6 +752,11 @@ const createWindow = async (): Promise<void> => {
   }
 
   window = new BrowserWindow({
+    // The native layer shows this color wherever the renderer hasn't painted
+    // (window resizes, startup) — Electron's default is white, which flashes
+    // hard in dark mode. Follow the OS theme; the renderer's real background
+    // takes over as soon as it paints. Matches --color-background in dark mode.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#111111" : "#ffffff",
     width: savedBounds.width,
     height: savedBounds.height,
     x: savedBounds.x,
@@ -807,41 +813,37 @@ const createWindow = async (): Promise<void> => {
   await window.loadURL(appUrl);
 
   // Only show the native context menu on editable fields (inputs, textareas).
-  // Non-editable areas are left to the renderer (e.g. Radix ContextMenu).
+  // Non-editable areas are handled by the renderer's Radix ContextMenu (the
+  // chat's Copy/Paste/Select All menu). Showing a native menu for selected
+  // text in non-editable regions would override the renderer menu.
   window.webContents.on("context-menu", (_event, params) => {
-    if (!window) return; // Only to prove to the type checker that window is non-null below
-    if (params.isEditable) {
-      const menuItems: Array<MenuItemConstructorOptions> = [];
+    if (!window) return;
+    if (!params.isEditable) return;
 
-      // Add spelling suggestions when a word is misspelled
-      if (params.misspelledWord) {
-        for (const suggestion of params.dictionarySuggestions) {
-          menuItems.push({
-            label: suggestion,
-            click: () => window.webContents.replaceMisspelling(suggestion),
-          });
-        }
+    const menuItems: Array<MenuItemConstructorOptions> = [];
 
-        if (params.dictionarySuggestions.length > 0) {
-          menuItems.push({ type: "separator" });
-        }
+    // Add spelling suggestions when a word is misspelled
+    if (params.misspelledWord) {
+      for (const suggestion of params.dictionarySuggestions) {
         menuItems.push({
-          label: "Add to Dictionary",
-          click: () => window.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord),
+          label: suggestion,
+          click: () => window.webContents.replaceMisspelling(suggestion),
         });
-        menuItems.push({ type: "separator" });
       }
 
-      menuItems.push(
-        { role: "cut" },
-        { role: "copy" },
-        { role: "paste" },
-        { type: "separator" },
-        { role: "selectAll" },
-      );
-
-      Menu.buildFromTemplate(menuItems).popup({ window, x: params.x, y: params.y });
+      if (params.dictionarySuggestions.length > 0) {
+        menuItems.push({ type: "separator" });
+      }
+      menuItems.push({
+        label: "Add to Dictionary",
+        click: () => window.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord),
+      });
+      menuItems.push({ type: "separator" });
     }
+
+    menuItems.push({ role: "cut" }, { role: "copy" }, { role: "paste" }, { type: "separator" }, { role: "selectAll" });
+
+    Menu.buildFromTemplate(menuItems).popup({ window, x: params.x, y: params.y });
   });
 
   // This is necessary to prevent the ttyd terminal from blocking window close events.

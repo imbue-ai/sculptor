@@ -1,9 +1,10 @@
 import { atom } from "jotai";
-import { atomFamily, atomWithStorage } from "jotai/utils";
+import { atomFamily, atomWithStorage, selectAtom } from "jotai/utils";
 
 import { getCachedWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
 import { parseDiff } from "~/components/DiffUtils.ts";
-import { activePanelPerZoneAtom, zoneAssignmentsAtom, zoneVisibilityAtom } from "~/components/panels/atoms.ts";
+import { jumpToSectionAtom, openPanelAtom } from "~/components/sections/sectionActions.ts";
+import { activeWorkspaceIdAtom, workspaceLayoutFamily } from "~/components/sections/sectionAtoms.ts";
 import type { DiffScope } from "~/pages/workspace/components/diffPanel/types.ts";
 
 import type { FileBrowserState, FileStatus, ViewMode } from "./types.ts";
@@ -24,6 +25,14 @@ const DEFAULT_FILE_BROWSER_STATE: FileBrowserState = {
 
 export const fileBrowserStateAtomFamily = atomFamily((workspaceId: string) =>
   atomWithStorage<FileBrowserState>(`fileBrowser-state-${workspaceId}`, DEFAULT_FILE_BROWSER_STATE),
+);
+
+/** Read-only per-workspace slice of the file-browser view mode (tree vs flat).
+ *  Panels that only need the view mode subscribe here so the far more frequent
+ *  folder-expand, scroll-position, and search writes to the full state atom don't
+ *  re-render them (and their embedded viewers). */
+export const fileBrowserViewModeAtomFamily = atomFamily((workspaceId: string) =>
+  selectAtom(fileBrowserStateAtomFamily(workspaceId), (state) => state.viewMode),
 );
 
 /**
@@ -54,6 +63,22 @@ export const getUncommittedFileStatusMap = (
 
 /** Per-workspace scope for the Changes tab (independent of the Review All scope). Resets on page refresh. */
 export const changesScopeAtomFamily = atomFamily((_workspaceId: string) => atom<DiffScope>("vs-target-branch"));
+
+/** The Changes panel's clicked file selection (filePath + reported status, stamped for
+ *  recency reconciliation). Held per-workspace in an atom — not React state — so the
+ *  open file survives the panel unmounting when the user switches section tabs. */
+export type ChangesPanelSelection = { filePath: string; status: FileStatus; at: number };
+export const changesPanelSelectionAtomFamily = atomFamily((_workspaceId: string) =>
+  atom<ChangesPanelSelection | null>(null),
+);
+
+/** The Files panel's clicked file selection (stamped for recency reconciliation).
+ *  Held per-workspace in an atom — not React state — so the open file survives the
+ *  panel remounting on a section-tab switch or a section maximize/restore. */
+export type FilesPanelSelection = { filePath: string; at: number };
+export const filesPanelSelectionAtomFamily = atomFamily((_workspaceId: string) =>
+  atom<FilesPanelSelection | null>(null),
+);
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 const createToggleFolderAtom = (key: FolderStateKey) =>
@@ -140,17 +165,17 @@ export const revealFolderAtom = atom(null, (get, set, { workspaceId, path }: { w
 
   set(expandFoldersAtom, { workspaceId, paths: computeAncestorFolderPaths(normalised) });
 
-  const zoneAssignments = get(zoneAssignmentsAtom);
-  const zone = zoneAssignments[FILE_BROWSER_PANEL_ID];
-  if (zone) {
-    const activePanel = get(activePanelPerZoneAtom);
-    if (activePanel[zone] !== FILE_BROWSER_PANEL_ID) {
-      set(activePanelPerZoneAtom, { ...activePanel, [zone]: FILE_BROWSER_PANEL_ID });
-    }
-    const visibility = get(zoneVisibilityAtom);
-    if (!visibility[zone]) {
-      set(zoneVisibilityAtom, { ...visibility, [zone]: true });
-    }
+  // Surface the Files panel (opening/expanding its section and pulsing the ring) so the
+  // revealed folder is visible. openPanelAtom/jumpToSectionAtom write through the
+  // active-workspace layout proxy, so only touch the layout when this workspace is the
+  // active scope — otherwise the reveal would mutate the layout of the workspace being viewed.
+  if (workspaceId === get(activeWorkspaceIdAtom)) {
+    set(openPanelAtom, { panelId: FILE_BROWSER_PANEL_ID, in: "left" });
+    // Follow the panel's actual placement: openPanelAtom activates an already-open Files
+    // panel wherever it lives, so jumping to "left" would pulse the wrong section when the
+    // user has moved it elsewhere. "left" is the fallback for a newly placed panel.
+    const subSection = get(workspaceLayoutFamily(workspaceId)).placement[FILE_BROWSER_PANEL_ID] ?? "left";
+    set(jumpToSectionAtom, { subSection });
   }
 
   set(focusFolderAtom, { workspaceId, path: normalised, nonce: Date.now() });

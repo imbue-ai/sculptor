@@ -4,7 +4,7 @@ import type { KeybindingId } from "~/common/keybindings/types.ts";
 
 export type CommandId = string;
 
-export type CommandGroupId = "navigation" | "workspaces" | "view" | "chat" | "terminal" | "help";
+export type CommandGroupId = "navigation" | "workspaces" | "panels" | "view" | "chat" | "terminal" | "help";
 
 export type PageId =
   | "theme.appearance"
@@ -18,10 +18,14 @@ export type PageId =
   | "workspace.open_in"
   /** Action list for the current agent (set via `agentActionsTargetAtom`). */
   | "agent.actions"
-  /** Layout toggles: Left/Right/Bottom panel zones + Focus/Zen modes. */
+  /** Section toggles: the left/right/bottom sections. */
   | "view.layout"
   /** Individual panel toggles (Files, Actions, Terminal, Notes, …). */
-  | "view.panels";
+  | "view.panels"
+  /** Add panel — pick the destination section/sub-section. */
+  | "addpanel.location"
+  /** Add panel — pick the panel for the chosen location (set via addPanelTargetSubSectionAtom). */
+  | "addpanel.panels";
 
 /**
  * Icon component reference. Wide on purpose so `lucide-react` icons (which
@@ -35,7 +39,6 @@ export type PaletteRoute = {
   isHome: boolean;
   isWorkspace: boolean;
   isSettings: boolean;
-  isAddWorkspace: boolean;
   isAgent: boolean;
 };
 
@@ -45,7 +48,9 @@ export type PaletteContext = {
   activeAgentId: string | null;
   hasChatPanel: boolean;
   hasTerminalPanel: boolean;
-  isZenMode: boolean;
+  /** True while a workspace section is maximized — lets toggle commands
+   *  (e.g. maximize/minimize section) surface state-aware copy. */
+  isSectionMaximized: boolean;
   /** The current sub-page id, or null for the root page. */
   page: PageId | null;
 };

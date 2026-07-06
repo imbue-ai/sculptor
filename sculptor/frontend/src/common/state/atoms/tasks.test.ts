@@ -279,6 +279,30 @@ describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
   });
 });
 
+describe("updateTasksAtom", () => {
+  it("marks the task list as loaded (undefined -> []) on an empty update", () => {
+    const store = createStore();
+    expect(store.get(tasksArrayAtom)).toBeUndefined();
+
+    // A zero-task instance streams frames whose task-view map is empty; the
+    // first frame must still flip the list from "loading" to "loaded, empty".
+    store.set(updateTasksAtom, {});
+
+    expect(store.get(taskIdsAtom)).toEqual([]);
+    expect(store.get(tasksArrayAtom)).toEqual([]);
+  });
+
+  it("keeps the ids reference stable across empty updates once loaded", () => {
+    const store = createStore();
+    store.set(updateTasksAtom, {});
+    const loadedIds = store.get(taskIdsAtom);
+
+    store.set(updateTasksAtom, {});
+
+    expect(store.get(taskIdsAtom)).toBe(loadedIds);
+  });
+});
+
 describe("stream convergence after optimistic delete", () => {
   it("remains correctly deleted when stream confirms deletion", () => {
     const store = createStore();

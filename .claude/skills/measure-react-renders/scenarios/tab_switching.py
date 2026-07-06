@@ -1,35 +1,34 @@
-"""Scenario: Workspace tab switching render cascade.
+"""Scenario: Workspace switching render cascade.
 
-Measures re-renders when the user clicks between workspace tabs in the
-WorkspaceTabs component. Tab switching navigates to a different workspace URL
-and changes the active agent, causing WorkspacePage to mount new content.
+Measures re-renders when the user clicks between workspace rows in the
+sidebar. Switching navigates to a different workspace URL and changes the
+active agent, causing WorkspacePage to mount new content.
 
-This tests whether tab switching causes excessive re-renders in components
-that should be stable across tab changes (sidebars, DockingLayout structure).
+This tests whether workspace switching causes excessive re-renders in
+components that should be stable across switches (the workspace sidebar,
+the section-grid structure).
 """
 
 import time
 
-DESCRIPTION = "Workspace tab switching"
+DESCRIPTION = "Workspace switching (sidebar rows)"
 
+# Memo-wrapped exports (e.g. SplittableSection) are recorded under their inner
+# function names ("SplittableSectionComponent").
 TARGET_COMPONENTS = [
     "WorkspacePage",
     "WorkspacePageContent",
-    "DockingLayout",
-    "LeftSidebar",
-    "LeftSidebarInner",
-    "RightSidebar",
-    "RightSidebarInner",
-    "ZoneContent",
-    "ZoneContentInner",
-    "DiffSplitContainer",
-    "DiffSplitContainerInner",
+    "WorkspaceLayoutShell",
+    "WorkspaceSidebar",
+    "WorkspaceHeaderComponent",
+    "SectionGrid",
+    "SplittableSectionComponent",
+    "PanelSectionComponent",
+    "SectionHeaderComponent",
+    "SectionBodyComponent",
     "AlphaChatInterface",
-    "AlphaChatInterfaceInner",
+    "ChatPanelContent",
     "ChatInput",
-    "WorkspaceBanner",
-    "WorkspaceTabs",
-    "TopBar",
 ]
 
 
@@ -75,17 +74,11 @@ def setup(page, base_url, workspace_id, task_id):
 
 
 def action(page):
-    # Find workspace tab buttons in the WorkspaceTabs area
-    # Try several selectors since the tab bar implementation may vary
-    tabs = page.locator('[data-testid="workspace-tab"]').all()
+    # Find the workspace rows in the sidebar
+    rows = page.locator('[data-testid="SIDEBAR_WORKSPACE_ROW"]').all()
 
-    if len(tabs) < 2:
-        # Fall back to any tab-like elements in the top bar
-        tabs = page.locator('[role="tab"]').all()
-
-    if len(tabs) < 2:
-        # Try clicking the "+" new workspace button path indirectly — just navigate
-        # directly via URL to simulate a tab switch
+    if len(rows) < 2:
+        # Fall back to navigating directly via URL to simulate a workspace switch
         result = page.evaluate("""async () => {
             const res = await fetch('/api/v1/projects');
             const projects = await res.json();
@@ -96,7 +89,7 @@ def action(page):
         }""")
         if result and len(result) >= 2:
             ws_id_2 = result[1]["id"]
-            # Simulate tab switch via navigation
+            # Simulate a workspace switch via navigation
             page.evaluate(f"window.location.hash = '#/ws/{ws_id_2}'")
             time.sleep(0.5)
             # Navigate back
@@ -104,14 +97,14 @@ def action(page):
             time.sleep(0.5)
         return
 
-    # Click second tab
-    tabs[1].click()
+    # Click second workspace row
+    rows[1].click()
     time.sleep(0.4)
 
-    # Click first tab
-    tabs[0].click()
+    # Click first workspace row
+    rows[0].click()
     time.sleep(0.4)
 
-    # Click second tab again
-    tabs[1].click()
+    # Click second workspace row again
+    rows[1].click()
     time.sleep(0.4)

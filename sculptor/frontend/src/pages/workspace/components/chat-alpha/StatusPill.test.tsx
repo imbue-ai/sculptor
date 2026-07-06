@@ -13,6 +13,7 @@ import {
   tasksPhaseAtomFamily,
 } from "~/common/state/atoms/statusPillTasks.ts";
 
+import { ChatTaskProvider } from "./ChatTaskContext.tsx";
 import { StatusPill } from "./StatusPill.tsx";
 
 const { mockUseAgentStatus, mockUseElapsedTime, mockUseTaskDetailWithDefaults } = vi.hoisted(() => ({
@@ -33,13 +34,6 @@ vi.mock("~/common/state/hooks/useTaskDetail.ts", () => ({
   useTaskDetailWithDefaults: mockUseTaskDetailWithDefaults,
 }));
 
-vi.mock("~/common/NavigateUtils.ts", () => ({
-  useWorkspacePageParams: (): { workspaceID: string; agentID: string } => ({
-    workspaceID: "ws-1",
-    agentID: "agent-1",
-  }),
-}));
-
 vi.mock("~/electron/utils.ts", () => ({
   getMetaKey: (): string => "⌘",
   isModifierPressed: (): boolean => false,
@@ -53,7 +47,9 @@ let testStore = createStore();
 
 const Wrapper = ({ children }: { children: ReactNode }): ReactElement => (
   <Provider store={testStore}>
-    <Theme>{children}</Theme>
+    <ChatTaskProvider workspaceId="ws-1" taskId="agent-1">
+      <Theme>{children}</Theme>
+    </ChatTaskProvider>
   </Provider>
 );
 

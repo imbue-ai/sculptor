@@ -1335,21 +1335,21 @@ def test_create_agent_without_type_defaults_to_claude_when_mru_unset(
     assert isinstance(_agent_config_for_created(response, test_services), ClaudeCodeSDKAgentConfig)
 
 
-def test_create_agent_pi_mru_falls_back_to_claude_when_pi_disabled(
+def test_create_agent_pi_mru_resolves_pi(
     client: TestClient,
     test_services: CompleteServiceCollection,
     test_project: Project,
     isolated_user_config: None,
 ) -> None:
-    """A stored Pi harness is unusable once the pi agent is disabled."""
-    _set_user_config_with(last_used_agent_type="pi", enable_pi_agent=False)
+    """A stored Pi harness resolves to Pi: it is always an available agent type."""
+    _set_user_config_with(last_used_agent_type="pi")
     user_session = authenticate_anonymous(test_services, RequestID())
     with user_session.open_transaction(test_services) as transaction:
         workspace = _create_workspace(transaction, test_services, test_project)
 
     response = _post_agent(client, workspace, {})
     assert response.status_code == 200, response.text
-    assert isinstance(_agent_config_for_created(response, test_services), ClaudeCodeSDKAgentConfig)
+    assert isinstance(_agent_config_for_created(response, test_services), PiAgentConfig)
 
 
 def test_start_task_terminal_mru_falls_back_to_claude_for_prompt(

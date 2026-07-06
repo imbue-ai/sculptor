@@ -547,11 +547,7 @@ class CIBabysitterCoordinator(Service):
         if isinstance(choice, BabysitterAgentClaude):
             return ChatAgent(ClaudeCodeSDKAgentConfig())
         if isinstance(choice, BabysitterAgentPi):
-            # A pinned Pi while Pi is disabled goes Disabled — no silent
-            # fallback. This differs from an MRU Pi, which falls back to Claude.
-            if config.enable_pi_agent:
-                return ChatAgent(PiAgentConfig())
-            return Disabled(_DISABLED_REASON_PINNED_UNAVAILABLE)
+            return ChatAgent(PiAgentConfig())
         if isinstance(choice, BabysitterAgentRegistered):
             driveable = _driveable_terminal_from_registration(choice.registration_id)
             if driveable is not None:
@@ -570,11 +566,7 @@ class CIBabysitterCoordinator(Service):
         if isinstance(agent_config, ClaudeCodeSDKAgentConfig):
             return ChatAgent(ClaudeCodeSDKAgentConfig())
         if isinstance(agent_config, PiAgentConfig):
-            # MRU is a best-effort inherit: an MRU Pi while Pi is disabled should
-            # not brick the babysitter — fall back to Claude.
-            if config.enable_pi_agent:
-                return ChatAgent(PiAgentConfig())
-            return ChatAgent(ClaudeCodeSDKAgentConfig())
+            return ChatAgent(PiAgentConfig())
         if isinstance(agent_config, RegisteredTerminalAgentConfig):
             # Re-resolve against the live registration: the task's stamped
             # accepts_automated_prompts may be stale.

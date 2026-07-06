@@ -1,0 +1,26 @@
+// stylelint-disable selector-class-pattern -- targets Radix's rt-* internals, scoped under .root
+// Full-width scope picker with EQUAL, shrinkable segments. The Radix
+// segmented-control indicator is sized as 100%/N and translated by whole
+// segment widths, so it assumes every track is identical; the default `1fr`
+// tracks floor at each label's min-content and go unequal in a narrow pane,
+// desyncing the indicator pill from the segment under it. minmax(0, 1fr)
+// keeps the tracks equal at any width and the labels ellipsize instead.
+.root {
+  grid-auto-columns: minmax(0, 1fr);
+  min-width: 0;
+  width: 100%;
+}
+
+.root :global(.rt-SegmentedControlItem) {
+  min-width: 0;
+}
+
+// Both label layers (the active/inactive crossfade pair) must clip: the
+// inactive one is absolutely positioned, so it needs the explicit max-width.
+.root :global(.rt-SegmentedControlItemLabelActive),
+.root :global(.rt-SegmentedControlItemLabelInactive) {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

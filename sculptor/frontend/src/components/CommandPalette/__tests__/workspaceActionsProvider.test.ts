@@ -29,12 +29,12 @@ vi.mock("../../../common/openInApp/items.tsx", () => {
 import { buildWorkspaceActionsProvider } from "../dynamic/workspaceActions.ts";
 
 const ROOT_CTX: PaletteContext = {
-  route: { isHome: true, isWorkspace: false, isSettings: false, isAddWorkspace: false, isAgent: false },
+  route: { isHome: true, isWorkspace: false, isSettings: false, isAgent: false },
   activeWorkspaceId: null,
   activeAgentId: null,
   hasChatPanel: false,
   hasTerminalPanel: false,
-  isZenMode: false,
+  isSectionMaximized: false,
   page: null,
 };
 
@@ -57,16 +57,16 @@ const makeCommandRuntime = (): CommandRuntime => {
   const noop = (): void => {};
   return {
     store: getDefaultStore(),
-    navigate: { toHome: noop, toSettings: noop, toAddWorkspace: noop, toWorkspace: vi.fn(), toAgent: vi.fn() },
+    navigate: { toHome: noop, toSettings: noop, toWorkspace: vi.fn(), toAgent: vi.fn() },
+    openNewWorkspaceModal: noop,
     ui: {
       toggleHelpDialog: noop,
       toggleDevPanel: noop,
-      toggleZenMode: noop,
-      toggleFocusMode: noop,
       toggleLeftPanel: noop,
       toggleBottomPanel: noop,
       toggleRightPanel: noop,
-      togglePanel: noop,
+      toggleSidebar: noop,
+      toggleMaximizeSection: noop,
       setTheme: noop,
       focusChatInput: noop,
       showChatSearch: noop,
@@ -93,11 +93,7 @@ type ActionRuntimeOverrides = {
 
 const makeActionRuntime = (overrides: ActionRuntimeOverrides = {}): WorkspaceActionRuntime => ({
   beginRename: vi.fn(),
-  closeWorkspace: vi.fn(),
-  closeOtherWorkspaces: vi.fn(),
-  closeAllWorkspaces: vi.fn(),
   beginDelete: vi.fn(),
-  canCloseOthers: vi.fn(() => true),
   commitChanges: vi.fn(),
   createMergeRequest: vi.fn(),
   openMergeRequest: vi.fn(),

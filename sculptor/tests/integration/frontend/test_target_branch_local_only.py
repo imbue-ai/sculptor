@@ -24,7 +24,7 @@ from sculptor.testing.elements.chat_panel import wait_for_completed_message_coun
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.playwright_utils import open_new_workspace_form
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -49,7 +49,7 @@ def test_worktree_on_local_only_repo_shows_all_tab_and_uncommitted_changes(
     """
     page = sculptor_instance_.page
 
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     add_workspace_page = PlaywrightAddWorkspacePage(page=page)
     add_workspace_page.get_workspace_name_input().fill("Local only worktree")
 
@@ -57,6 +57,11 @@ def test_worktree_on_local_only_repo_shows_all_tab_and_uncommitted_changes(
     branch_input = add_workspace_page.get_branch_name_input()
     expect(branch_input).to_be_visible()
     expect(branch_input).not_to_have_value("")
+
+    # Clear the empty-first-run prompt prefill (`/sculptor:help`) so the first agent is
+    # created promptless — otherwise it runs an extra turn with the default model and the
+    # message-count assertion below sees 4 messages instead of 2.
+    add_workspace_page.get_task_input().fill("")
 
     add_workspace_page.submit_and_wait_for_chat_panel()
 

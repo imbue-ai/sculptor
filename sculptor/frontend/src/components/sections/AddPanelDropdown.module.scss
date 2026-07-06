@@ -1,0 +1,27 @@
+// Add-panel dropdown row styling: a text-only title with an optional trailing
+// keybinding hint. Rendered inside Radix DropdownMenu items, so the row itself
+// only lays out its contents — hover/active backgrounds come from the Radix item.
+
+.item {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.itemTitle {
+  color: var(--gray-12);
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Trailing keybinding hint (e.g. ⌘⇧T) on the recent-agent row.
+.shortcut {
+  color: var(--gray-10);
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  margin-left: var(--space-3);
+}

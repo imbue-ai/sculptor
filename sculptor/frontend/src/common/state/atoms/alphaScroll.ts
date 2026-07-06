@@ -14,5 +14,3 @@ export type AlphaScrollPosition = {
 export const alphaScrollPositionAtomFamily = atomFamily<string, PrimitiveAtom<AlphaScrollPosition | undefined>>(() =>
   atom<AlphaScrollPosition | undefined>(undefined),
 );
-
-export const debugViewAtomFamily = atomFamily<string, PrimitiveAtom<boolean>>(() => atom<boolean>(false));

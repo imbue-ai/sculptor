@@ -41,19 +41,26 @@ path, where the wrapper's exception handler emits
 short-circuits past the state-update site.
 """
 
+import re
+
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
-from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
-from sculptor.web.derived import TaskStatus
 
 _SECONDS_MS = 1000
+
+# An idle (READY) agent panel tab settles to a read/unread status dot once the
+# user is viewing the workspace — the section shell exposes lifecycle as
+# ``data-dot-status`` (the getAgentDotStatus vocabulary), not the raw TaskStatus.
+# A replayed prompt would instead keep the dot at "running" for the whole sleep.
+_IDLE_DOT_STATUS = re.compile(r"^(read|unread)$")
 
 # Visibility gate for the post-restart page — generous because the Phase-2
 # backend is restoring a previously-running task and CI can be slow.
@@ -78,15 +85,14 @@ _AUQ_PROMPT = 'fake_claude:ask_user_question `{"questions": [{"question": "Pick 
 
 
 def _open_workspace_after_restart(page: Page) -> None:
-    """Click the persisted workspace tab on a fresh Sculptor instance."""
-    layout = PlaywrightProjectLayoutPage(page)
-    workspace_tab = layout.get_workspace_tabs().first
-    expect(workspace_tab).to_be_visible(timeout=_RESTART_VISIBILITY_TIMEOUT_MS)
-    workspace_tab.click()
+    """Click the persisted workspace's sidebar row on a fresh Sculptor instance."""
+    workspace_row = get_workspace_sidebar(page).get_workspace_rows().first
+    expect(workspace_row).to_be_visible(timeout=_RESTART_VISIBILITY_TIMEOUT_MS)
+    workspace_row.click()
 
 
 def _agent_tab(page: Page) -> Locator:
-    return PlaywrightAgentTabBarElement(page).get_agent_tabs().first
+    return PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs().first
 
 
 @user_story("not have my interrupted prompt silently re-run after Sculptor restarts")
@@ -125,11 +131,11 @@ def test_chat_does_not_replay_after_shutdown_mid_turn(
 
     with sculptor_instance_factory_.spawn_instance() as instance:
         _open_workspace_after_restart(instance.page)
-        # After the BUILDING phase the agent should be idle (READY). If the
-        # prompt was replayed it would be RUNNING the sleep again for ~120s,
-        # so this expect would time out.
+        # After the BUILDING phase the agent should be idle (READY → read/unread
+        # dot). If the prompt was replayed it would be RUNNING the sleep again
+        # for ~120s (a "running" dot), so this expect would time out.
         expect(_agent_tab(instance.page)).to_have_attribute(
-            "data-status", TaskStatus.READY, timeout=_SETTLE_TIMEOUT_MS
+            "data-dot-status", _IDLE_DOT_STATUS, timeout=_SETTLE_TIMEOUT_MS
         )
 
 
@@ -171,9 +177,10 @@ def test_chat_does_not_replay_after_shutdown_during_auq_wait(
         _open_workspace_after_restart(instance.page)
         # With the fix: BUILDING → READY (no replay; the historical AUQ
         # block doesn't pin to WAITING because the derived-status walk
-        # breaks on the persisted RequestStopped). With the bug: BUILDING → RUNNING → WAITING (Claude
-        # re-emits AUQ on the replayed chat), and ``READY`` is never
-        # reached, so this expect times out.
+        # breaks on the persisted RequestStopped) — a read/unread dot. With the
+        # bug: BUILDING → RUNNING → WAITING (Claude re-emits AUQ on the replayed
+        # chat), so the dot would be "running"/"waiting" and the idle dot is
+        # never reached, timing this expect out.
         expect(_agent_tab(instance.page)).to_have_attribute(
-            "data-status", TaskStatus.READY, timeout=_SETTLE_TIMEOUT_MS
+            "data-dot-status", _IDLE_DOT_STATUS, timeout=_SETTLE_TIMEOUT_MS
         )

@@ -13,11 +13,19 @@
 //
 // Each entry config passes its own `root` (the frontend dir) so path resolution
 // here never depends on how Vite bundles this module.
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
 import react from "@vitejs/plugin-react-swc";
-import { defineConfig, loadEnv, type Plugin, type UserConfig, type UserConfigExport } from "vite";
+import {
+  defineConfig,
+  loadEnv,
+  type HtmlTagDescriptor,
+  type Plugin,
+  type UserConfig,
+  type UserConfigExport,
+} from "vite";
 
 import { bundledPlugins } from "./vite-plugins/bundled-plugins.ts";
 import { pluginRuntimeStubs } from "./vite-plugins/plugin-runtime-stubs.ts";
@@ -167,6 +175,50 @@ export interface FrontendConfigOptions {
   gateHmrUnderPytest?: boolean;
 }
 
+/**
+ * OpenHost preview identity: inject `<meta name="sculptor-preview">` into
+ * index.html so the /proxy/ switchboard (openhost-preview-fallback.html) and
+ * the openhost-preview-switcher plugin can label this preview. A dev server has
+ * no "build time" to report; instead branch/sha/dirty are read fresh from the
+ * working tree on each index.html request. HMR patches modules without
+ * refetching index.html, so a loaded page keeps the identity it loaded with —
+ * but scanners always GET index.html anew, so listings stay current.
+ *
+ * Deliberately calls git per request rather than reusing an existing config
+ * value: Vite carries no VCS context of its own, and the one git-derived value
+ * we do have (the web build's sentry release sha, read once in
+ * vite.web.config.ts) is frozen at config load. A preview session is
+ * long-lived — commits land mid-session while HMR keeps serving — so a
+ * boot-time identity would go stale exactly when the label matters. The cost
+ * is a few ~10ms subprocess calls per index.html request, dev-only and gated
+ * behind SCULPTOR_OPENHOST_PROXY.
+ */
+function previewIdentity(root: string): Plugin {
+  const git = (...args: Array<string>): string => {
+    try {
+      return execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    } catch {
+      return ""; // e.g. /app previews: the deploy image ships without .git
+    }
+  };
+  return {
+    name: "sculptor:preview-identity",
+    // Dev-server only: baking a serve-time identity into a `vite build`
+    // dist/index.html would freeze an immediately-stale label (e.g. an
+    // in-place prod rebuild from a shell where the preview env var leaked).
+    apply: "serve",
+    transformIndexHtml(): Array<HtmlTagDescriptor> {
+      const branch = git("branch", "--show-current");
+      const sha = git("rev-parse", "--short", "HEAD");
+      const dirty = git("status", "--porcelain") === "" ? "" : "*";
+      // Without git (no branch AND no sha), fall back to the serving dir —
+      // still enough to tell /app from a workspace checkout.
+      const content = branch === "" && sha === "" ? root : `${branch}@${sha}${dirty}`;
+      return [{ tag: "meta", attrs: { name: "sculptor-preview", content }, injectTo: "head" }];
+    },
+  };
+}
+
 /** Dev-only proxy server forwarding `/api`, `/ws`, and `/plugins/local` to the backend. */
 function devServer(env: Record<string, string>, fePort: number): import("vite").ServerOptions {
   const apiPort = Number(env.SCULPTOR_API_PORT || 5050);
@@ -236,7 +288,11 @@ export function defineFrontendConfig(opts: FrontendConfigOptions): UserConfigExp
       envPrefix: "SCULPTOR_",
       resolve: sharedResolve(opts.root),
       css: sharedCss(opts.root),
-      plugins: [...sharedPlugins(opts.root), ...(opts.extraPlugins ?? [])],
+      plugins: [
+        ...sharedPlugins(opts.root),
+        ...(opts.extraPlugins ?? []),
+        ...(openhostProxyBase ? [previewIdentity(opts.root)] : []),
+      ],
     };
 
     if (command === "serve" || mode === "development") {

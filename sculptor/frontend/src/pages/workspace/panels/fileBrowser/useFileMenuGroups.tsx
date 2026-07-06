@@ -1,17 +1,10 @@
-import { useAtomValue, useSetAtom } from "jotai";
-import { ChevronsDown, ChevronsUp, Copy, ExternalLink, Eye, FileText, FolderOpen, X, XCircle } from "lucide-react";
+import { useSetAtom } from "jotai";
+import { ChevronsDown, ChevronsUp, Copy, ExternalLink, Eye, FileText, FolderOpen } from "lucide-react";
 import type { ReactElement } from "react";
 import { useCallback, useMemo } from "react";
 
 import { getBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
-import {
-  closeAllDiffTabsAtom,
-  closeDiffTabAtom,
-  closeOtherDiffTabsAtom,
-  diffPanelStateAtomFamily,
-  openDiffTabAtom,
-  openFileViewTabAtom,
-} from "~/pages/workspace/components/diffPanel/atoms.ts";
+import { openDiffTabAtom, openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
 import { useWorkspaceCodePath } from "~/pages/workspace/hooks/useWorkspaceCodePath.ts";
 
 import { expandFoldersAtom } from "./atoms.ts";
@@ -45,16 +38,12 @@ export const useFileMenuGroups = ({
 }: UseFileMenuGroupsParams): Array<MenuGroup> => {
   const openDiffTab = useSetAtom(openDiffTabAtom);
   const openFileViewTab = useSetAtom(openFileViewTabAtom);
-  const closeDiffTab = useSetAtom(closeDiffTabAtom);
-  const closeOtherDiffTabs = useSetAtom(closeOtherDiffTabsAtom);
-  const closeAllDiffTabs = useSetAtom(closeAllDiffTabsAtom);
   const expandFolders = useSetAtom(expandFoldersAtom);
-  const diffPanelState = useAtomValue(diffPanelStateAtomFamily(workspaceId));
   const codePath = useWorkspaceCodePath(workspaceId);
 
   const isDeleted = context.fileStatus === "D";
   const isFile = !context.isFolder;
-  const isDiffSource = context.source === "diff-header" || context.source === "diff-tab";
+  const isDiffSource = context.source === "diff-header";
   const isCombinedDiffSource = context.source === "combined-diff-header";
 
   const handleOpenDiffView = useCallback((): void => {
@@ -92,20 +81,6 @@ export const useFileMenuGroups = ({
   const handleCollapseAllChildren = useCallback((): void => {
     onCollapseChildren?.(context.filePath);
   }, [onCollapseChildren, context.filePath]);
-
-  const tabId = context.tabFilePath ?? context.filePath;
-
-  const handleCloseTab = useCallback((): void => {
-    closeDiffTab({ workspaceId, filePath: tabId, tabCloseBehavior: "mru" });
-  }, [closeDiffTab, workspaceId, tabId]);
-
-  const handleCloseOtherTabs = useCallback((): void => {
-    closeOtherDiffTabs({ workspaceId, filePath: tabId });
-  }, [closeOtherDiffTabs, workspaceId, tabId]);
-
-  const handleCloseAllTabs = useCallback((): void => {
-    closeAllDiffTabs({ workspaceId });
-  }, [closeAllDiffTabs, workspaceId]);
 
   return useMemo(() => {
     const groups: Array<MenuGroup> = [];
@@ -196,33 +171,8 @@ export const useFileMenuGroups = ({
       groups.push(group4);
     }
 
-    // Group 5: Tab actions (diff header and diff tabs)
-    if (isDiffSource) {
-      const group5: MenuGroup = [
-        {
-          key: "close-tab",
-          label: "Close tab",
-          icon: <X size={14} />,
-          disabled: false,
-          handleSelect: handleCloseTab,
-        },
-        {
-          key: "close-other-tabs",
-          label: "Close other tabs",
-          icon: <XCircle size={14} />,
-          disabled: diffPanelState.openTabs.length <= 1,
-          handleSelect: handleCloseOtherTabs,
-        },
-        {
-          key: "close-all-tabs",
-          label: "Close all",
-          icon: <XCircle size={14} />,
-          disabled: false,
-          handleSelect: handleCloseAllTabs,
-        },
-      ];
-      groups.push(group5);
-    }
+    // The diff/file view shows a single file at a time (no tab strip), so no tab
+    // actions are offered here.
 
     return groups;
   }, [
@@ -232,7 +182,6 @@ export const useFileMenuGroups = ({
     context.isFolder,
     isDeleted,
     isExpanded,
-    diffPanelState.openTabs.length,
     handleOpenDiffView,
     handleOpenFileView,
     handleCopyFilePath,
@@ -241,8 +190,5 @@ export const useFileMenuGroups = ({
     handleOpenContainingFolder,
     handleExpandAllChildren,
     handleCollapseAllChildren,
-    handleCloseTab,
-    handleCloseOtherTabs,
-    handleCloseAllTabs,
   ]);
 };

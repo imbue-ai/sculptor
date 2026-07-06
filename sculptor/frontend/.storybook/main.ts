@@ -1,9 +1,12 @@
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import path from "node:path";
 
 import type { StorybookConfig } from "@storybook/react-vite";
 
-const SRC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../src");
+import { sharedCss, sharedResolve } from "../vite.base.config.ts";
+
+// The frontend root (parent of `.storybook`), which anchors the `~` alias and
+// SCSS load paths.
+const FRONTEND_ROOT = path.resolve(__dirname, "..");
 
 const config: StorybookConfig = {
   stories: ["../src/**/*.mdx", "../src/**/*.stories.@(js|jsx|mjs|ts|tsx)"],
@@ -20,22 +23,18 @@ const config: StorybookConfig = {
       }
       return true;
     });
-    // Resolve the `~` -> src alias explicitly: the tsconfig-paths plugin does not
-    // resolve `~/...ts` (explicit extension) imports under Storybook's vite.
-    const existingAlias = config.resolve?.alias;
-    config.resolve = config.resolve ?? {};
-    config.resolve.alias = Array.isArray(existingAlias)
-      ? [...existingAlias, { find: /^~\//, replacement: `${SRC_DIR}/` }]
-      : { ...existingAlias, "~": SRC_DIR };
-    // Mirror the app's Sass load path (vite.base.config.ts) so SCSS modules that
-    // `@use "scrollbar"` (e.g. TabBar) resolve the shared partials under
-    // src/styles; without this those components fail to compile under Storybook.
-    config.css = config.css ?? {};
-    config.css.preprocessorOptions = config.css.preprocessorOptions ?? {};
-    config.css.preprocessorOptions.scss = {
-      ...config.css.preprocessorOptions.scss,
-      loadPaths: [resolve(SRC_DIR, "styles")],
+
+    // Storybook derives its own Vite config and cannot auto-load the app's
+    // (which lives in vite.web/base/electron.config.ts, not the default
+    // vite.config.ts), so the shared `~` -> src alias and the SCSS load paths
+    // never reach it. Wire them in explicitly, or every `~/…` import and
+    // `@use "scrollbar"` fails to resolve and no story renders.
+    config.resolve = {
+      ...config.resolve,
+      alias: { ...config.resolve?.alias, ...sharedResolve(FRONTEND_ROOT).alias },
     };
+    config.css = { ...config.css, ...sharedCss(FRONTEND_ROOT) };
+
     return config;
   },
 };

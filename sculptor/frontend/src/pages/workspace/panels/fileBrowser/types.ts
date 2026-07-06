@@ -35,9 +35,7 @@ export type FileContextMenuContext = {
   isFolder: boolean;
   fileStatus?: FileStatus;
   isBinary: boolean;
-  source: "tree" | "flat-list" | "search" | "diff-header" | "diff-tab" | "combined-diff-header";
-  /** The tab identifier (may include a scope prefix). Used for tab close operations. */
-  tabFilePath?: string;
+  source: "tree" | "flat-list" | "search" | "diff-header" | "combined-diff-header";
 };
 
 export type PerFileDiff = {

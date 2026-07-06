@@ -1,4 +1,5 @@
 import { getDefaultStore } from "jotai";
+import { Maximize2, Minimize2 } from "lucide-react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_THEME_BUILDER_SETTINGS, themeBuilderSettingsAtom } from "../../../common/state/atoms/themeBuilder.ts";
@@ -15,28 +16,30 @@ import type { CommandRuntime } from "../runtime.ts";
 import type { Command, PaletteContext } from "../types.ts";
 
 const ROOT_CTX: PaletteContext = {
-  route: { isHome: true, isWorkspace: false, isSettings: false, isAddWorkspace: false, isAgent: false },
+  route: { isHome: true, isWorkspace: false, isSettings: false, isAgent: false },
   activeWorkspaceId: null,
   activeAgentId: null,
   hasChatPanel: false,
   hasTerminalPanel: false,
-  isZenMode: false,
+  isSectionMaximized: false,
   page: null,
 };
 
 const WORKSPACE_CTX: PaletteContext = {
   ...ROOT_CTX,
-  route: { isHome: false, isWorkspace: true, isSettings: false, isAddWorkspace: false, isAgent: false },
+  route: { isHome: false, isWorkspace: true, isSettings: false, isAgent: false },
 };
 
 const SETTINGS_CTX: PaletteContext = {
   ...ROOT_CTX,
-  route: { isHome: false, isWorkspace: false, isSettings: true, isAddWorkspace: false, isAgent: false },
+  route: { isHome: false, isWorkspace: false, isSettings: true, isAgent: false },
 };
 
-const ADD_WORKSPACE_CTX: PaletteContext = {
+// A context where no top-level route is active (every route flag false). Used
+// to assert that route-gated commands stay hidden when nothing is selected.
+const NO_ACTIVE_ROUTE_CTX: PaletteContext = {
   ...ROOT_CTX,
-  route: { isHome: false, isWorkspace: false, isSettings: false, isAddWorkspace: true, isAgent: false },
+  route: { isHome: false, isWorkspace: false, isSettings: false, isAgent: false },
 };
 
 const WORKSPACE_WITH_CHAT_CTX: PaletteContext = {
@@ -56,19 +59,18 @@ const makeRuntime = (overrides: Partial<CommandRuntime> = {}): CommandRuntime =>
     navigate: {
       toHome: vi.fn(),
       toSettings: vi.fn(),
-      toAddWorkspace: vi.fn(),
       toWorkspace: vi.fn(),
       toAgent: vi.fn(),
     },
+    openNewWorkspaceModal: vi.fn(),
     ui: {
       toggleHelpDialog: vi.fn(),
       toggleDevPanel: vi.fn(),
-      toggleZenMode: vi.fn(),
-      toggleFocusMode: vi.fn(),
       toggleLeftPanel: vi.fn(),
       toggleBottomPanel: vi.fn(),
       toggleRightPanel: vi.fn(),
-      togglePanel: vi.fn(),
+      toggleSidebar: vi.fn(),
+      toggleMaximizeSection: vi.fn(),
       setTheme: vi.fn(),
       focusChatInput: vi.fn(),
       showChatSearch: vi.fn(),
@@ -108,13 +110,6 @@ describe("buildNavigationCommands", () => {
     );
   });
 
-  it("does NOT emit nav.component_gallery (intentionally removed)", () => {
-    // Regression-lock: Component Gallery is reachable from the
-    // ThemeBuilder / Settings, but we don't want it cluttering the palette.
-    const cmds = buildNavigationCommands(makeRuntime());
-    expect(cmds.find((c) => c.id === "nav.component_gallery")).toBeUndefined();
-  });
-
   it("nav.home perform calls runtime.navigate.toHome", () => {
     const runtime = makeRuntime();
     const cmd = buildNavigationCommands(runtime).find((c) => c.id === "nav.home")!;
@@ -130,11 +125,11 @@ describe("buildNavigationCommands", () => {
     expect(runtime.navigate.toSettings).toHaveBeenCalledWith();
   });
 
-  it("nav.new_workspace perform calls runtime.navigate.toAddWorkspace", () => {
+  it("nav.new_workspace perform opens the new-workspace dialog", () => {
     const runtime = makeRuntime();
     const cmd = buildNavigationCommands(runtime).find((c) => c.id === "nav.new_workspace")!;
     runPerform(cmd);
-    expect(runtime.navigate.toAddWorkspace).toHaveBeenCalledTimes(1);
+    expect(runtime.openNewWorkspaceModal).toHaveBeenCalledTimes(1);
   });
 
   it("nav.settings is titled 'Open settings' (direct nav, distinct from settings.open's 'Go to settings...' picker)", () => {
@@ -156,17 +151,18 @@ describe("buildNavigationCommands", () => {
   });
 
   it("nav.new_agent is gated on a concrete active workspace, not just the route flags", () => {
-    // createAgent needs a workspace to add the agent to — the action is
-    // only registered while AgentTabs is mounted (i.e. activeWorkspaceId is
-    // set). Gating on the id (not route.isWorkspace) also keeps it visible
-    // on agent sub-routes, mirroring the dynamic agent provider.
+    // createAgent needs a workspace to add the agent to. The `agent.create`
+    // action it dispatches is registered by useWorkspaceShellBootstrap, which
+    // only mounts under an active workspace, so gating this row on the id
+    // (not route.isWorkspace) keeps the two in sync — and keeps it visible on
+    // agent sub-routes, mirroring the dynamic agent provider.
     const cmd = buildNavigationCommands(makeRuntime()).find((c) => c.id === "nav.new_agent")!;
     const inWorkspace: PaletteContext = { ...WORKSPACE_CTX, activeWorkspaceId: "ws-1" };
     expect(cmd.when!(inWorkspace)).toBe(true);
     expect(cmd.when!(WORKSPACE_CTX)).toBe(false);
     expect(cmd.when!(ROOT_CTX)).toBe(false);
     expect(cmd.when!(SETTINGS_CTX)).toBe(false);
-    expect(cmd.when!(ADD_WORKSPACE_CTX)).toBe(false);
+    expect(cmd.when!(NO_ACTIVE_ROUTE_CTX)).toBe(false);
   });
 
   it("nav.new_agent lives in the Workspaces group and declares the new_agent shortcut", () => {
@@ -320,8 +316,8 @@ describe("buildPanelCommands", () => {
         "view.toggle_left_panel",
         "view.toggle_right_panel",
         "view.toggle_bottom_panel",
-        "view.focus_mode",
-        "view.zen_mode",
+        "view.toggle_sidebar",
+        "view.maximize_section",
       ].sort(),
     );
   });
@@ -338,10 +334,10 @@ describe("buildPanelCommands", () => {
     expect(panelsOpener.primary).toBe(true);
   });
 
-  it("the panels page-opener title matches what users search for", () => {
+  it("the panels page-opener uses show/focus language, not toggle", () => {
     const cmds = buildPanelCommands(makeRuntime());
     const panelsOpener = cmds.find((c) => c.id === "view.toggle_panels")!;
-    expect(panelsOpener.title).toBe("Toggle panel visibility...");
+    expect(panelsOpener.title).toBe("Show panel...");
   });
 
   it('does NOT use the word "plugin" in any user-visible string', () => {
@@ -356,39 +352,38 @@ describe("buildPanelCommands", () => {
     }
   });
 
-  it("zone toggles + Focus/Zen modes are scoped to the view.layout sub-page", () => {
+  it("section toggles are scoped to the view.layout sub-page", () => {
     const cmds = buildPanelCommands(makeRuntime());
-    for (const id of [
-      "view.toggle_left_panel",
-      "view.toggle_right_panel",
-      "view.toggle_bottom_panel",
-      "view.focus_mode",
-      "view.zen_mode",
-    ]) {
+    for (const id of ["view.toggle_left_panel", "view.toggle_right_panel", "view.toggle_bottom_panel"]) {
       const cmd = cmds.find((c) => c.id === id)!;
       expect(cmd.onPage).toBe("view.layout");
     }
   });
 
-  it("all when predicates require route.isWorkspace", () => {
+  it("when predicates require route.isWorkspace, except the sidebar toggle", () => {
+    // The sidebar rail is app-shell chrome mounted on every route (workspace,
+    // Home, Settings), so its toggle is deliberately ungated. The section/layout
+    // commands act on workspace sections and stay workspace-only.
     const cmds = buildPanelCommands(makeRuntime());
     for (const cmd of cmds) {
+      if (cmd.id === "view.toggle_sidebar") {
+        expect(cmd.when).toBeUndefined();
+        continue;
+      }
       expect(cmd.when).toBeDefined();
       expect(cmd.when!(WORKSPACE_CTX)).toBe(true);
       expect(cmd.when!(ROOT_CTX)).toBe(false);
       expect(cmd.when!(SETTINGS_CTX)).toBe(false);
-      expect(cmd.when!(ADD_WORKSPACE_CTX)).toBe(false);
+      expect(cmd.when!(NO_ACTIVE_ROUTE_CTX)).toBe(false);
     }
   });
 
-  it("the three zone-toggle commands have keepOpen: true; focus_mode and zen_mode do not", () => {
+  it("the three section-toggle commands have keepOpen: true", () => {
     const cmds = buildPanelCommands(makeRuntime());
     const byId = (id: string): Command => cmds.find((c) => c.id === id)!;
     expect(byId("view.toggle_left_panel").keepOpen).toBe(true);
     expect(byId("view.toggle_right_panel").keepOpen).toBe(true);
     expect(byId("view.toggle_bottom_panel").keepOpen).toBe(true);
-    expect(byId("view.focus_mode").keepOpen).not.toBe(true);
-    expect(byId("view.zen_mode").keepOpen).not.toBe(true);
   });
 
   it("perform delegates to the matching runtime.ui method", () => {
@@ -397,13 +392,42 @@ describe("buildPanelCommands", () => {
     runPerform(cmds.find((c) => c.id === "view.toggle_left_panel")!);
     runPerform(cmds.find((c) => c.id === "view.toggle_right_panel")!);
     runPerform(cmds.find((c) => c.id === "view.toggle_bottom_panel")!);
-    runPerform(cmds.find((c) => c.id === "view.focus_mode")!);
-    runPerform(cmds.find((c) => c.id === "view.zen_mode")!);
+    runPerform(cmds.find((c) => c.id === "view.toggle_sidebar")!);
+    runPerform(cmds.find((c) => c.id === "view.maximize_section")!);
     expect(runtime.ui.toggleLeftPanel).toHaveBeenCalledTimes(1);
     expect(runtime.ui.toggleRightPanel).toHaveBeenCalledTimes(1);
     expect(runtime.ui.toggleBottomPanel).toHaveBeenCalledTimes(1);
-    expect(runtime.ui.toggleFocusMode).toHaveBeenCalledTimes(1);
-    expect(runtime.ui.toggleZenMode).toHaveBeenCalledTimes(1);
+    expect(runtime.ui.toggleSidebar).toHaveBeenCalledTimes(1);
+    expect(runtime.ui.toggleMaximizeSection).toHaveBeenCalledTimes(1);
+  });
+
+  it("the sidebar toggle keeps the palette open; the maximize toggle closes it", () => {
+    const cmds = buildPanelCommands(makeRuntime());
+    expect(cmds.find((c) => c.id === "view.toggle_sidebar")!.keepOpen).toBe(true);
+    expect(cmds.find((c) => c.id === "view.maximize_section")!.keepOpen).not.toBe(true);
+  });
+
+  it("view.maximize_section lives on the view.layout sub-page", () => {
+    const cmd = buildPanelCommands(makeRuntime()).find((c) => c.id === "view.maximize_section")!;
+    expect(cmd.onPage).toBe("view.layout");
+  });
+
+  it("view.maximize_section flips title/subtitle/icon on isSectionMaximized", () => {
+    // The command toggles, so its copy names the action it will perform: it
+    // reads "Maximize" while nothing is maximized and "Minimize" once a
+    // section is maximized.
+    const cmd = buildPanelCommands(makeRuntime()).find((c) => c.id === "view.maximize_section")!;
+    const notMaximized: PaletteContext = { ...WORKSPACE_CTX, isSectionMaximized: false };
+    const maximized: PaletteContext = { ...WORKSPACE_CTX, isSectionMaximized: true };
+
+    expect(cmd.getTitle!(notMaximized)).toBe("Maximize section");
+    expect(cmd.getTitle!(maximized)).toBe("Minimize section");
+
+    expect(cmd.getSubtitle!(notMaximized)).toBe("Maximize the active section");
+    expect(cmd.getSubtitle!(maximized)).toBe("Restore the maximized section to the normal layout");
+
+    expect(cmd.getIcon!(notMaximized)).toBe(Maximize2);
+    expect(cmd.getIcon!(maximized)).toBe(Minimize2);
   });
 });
 
@@ -481,13 +505,13 @@ describe("buildChatCommands", () => {
   it("chat.focus_input.when requires hasChatPanel (not surfaced on AddWorkspace)", () => {
     // Title says "Focus chat input" — must not surface anywhere a chat
     // input doesn't exist. The `focus_input` keybinding handler in
-    // usePageLayoutKeyboardShortcuts handles AddWorkspace's name input
+    // useGlobalKeyboardShortcuts handles AddWorkspace's name input
     // separately (and as a keyboard-only fallback).
     const cmd = buildChatCommands(makeRuntime()).find((c) => c.id === "chat.focus_input")!;
     expect(cmd.when!(ROOT_CTX)).toBe(false);
     expect(cmd.when!(WORKSPACE_CTX)).toBe(false);
     expect(cmd.when!(WORKSPACE_WITH_CHAT_CTX)).toBe(true);
-    expect(cmd.when!(ADD_WORKSPACE_CTX)).toBe(false);
+    expect(cmd.when!(NO_ACTIVE_ROUTE_CTX)).toBe(false);
   });
 
   it("chat.search and chat.jump_bottom both require hasChatPanel", () => {
@@ -497,7 +521,7 @@ describe("buildChatCommands", () => {
       expect(cmd.when).toBeDefined();
       expect(cmd.when!(WORKSPACE_WITH_CHAT_CTX)).toBe(true);
       expect(cmd.when!(WORKSPACE_CTX)).toBe(false);
-      expect(cmd.when!(ADD_WORKSPACE_CTX)).toBe(false);
+      expect(cmd.when!(NO_ACTIVE_ROUTE_CTX)).toBe(false);
       expect(cmd.when!(ROOT_CTX)).toBe(false);
     }
   });
@@ -587,7 +611,7 @@ describe("buildTerminalCommands", () => {
     expect(cmd.when!(WORKSPACE_CTX)).toBe(false);
     expect(cmd.when!(ROOT_CTX)).toBe(false);
     expect(cmd.when!(SETTINGS_CTX)).toBe(false);
-    expect(cmd.when!(ADD_WORKSPACE_CTX)).toBe(false);
+    expect(cmd.when!(NO_ACTIVE_ROUTE_CTX)).toBe(false);
   });
 
   it("perform delegates to runtime.ui.clearActiveTerminal", () => {
@@ -633,7 +657,7 @@ describe("buildHelpCommands", () => {
 
 describe("invariants", () => {
   it("no builtin command claims the `command_palette` keybinding as its own shortcut", () => {
-    // The Cmd+K-while-open close path lives in `usePageLayoutKeyboardShortcuts`
+    // The Cmd+K-while-open close path lives in `useGlobalKeyboardShortcuts`
     // (see the special-case block before the overlay-suppression rule).
     // The in-palette window listener at `CommandPalette.tsx` walks the
     // visible commands and intercepts any keystroke that matches one of

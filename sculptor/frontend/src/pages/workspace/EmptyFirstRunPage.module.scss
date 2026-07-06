@@ -1,0 +1,18 @@
+.content {
+  background: var(--gray-2);
+  padding: var(--space-9) var(--space-5) var(--space-6) var(--space-5);
+}
+
+// Card-wrapped inline form: the same opaque panel treatment as the
+// new-workspace dialog (solid fill + hairline border + soft shadow), centered
+// near the top of the content area rather than floating in an overlay.
+.formCard {
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-a5);
+  border-radius: var(--radius-4);
+  box-shadow: var(--shadow-xl);
+  margin-top: var(--space-7);
+  max-width: 100%;
+  overflow: hidden;
+  width: min(640px, 92%);
+}

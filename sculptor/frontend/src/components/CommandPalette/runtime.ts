@@ -25,30 +25,34 @@ export type CommandRuntime = {
   navigate: {
     toHome: () => void;
     toSettings: (section?: string) => void;
-    toAddWorkspace: () => void;
     toWorkspace: (workspaceId: string) => void;
     toAgent: (workspaceId: string, agentId: string) => void;
   };
+  /**
+   * Open the global new-workspace dialog. Mounted globally and the sanctioned
+   * create surface, so palette/keyboard entry points open it rather than
+   * navigating away to a standalone page.
+   */
+  openNewWorkspaceModal: () => void;
   ui: {
     toggleHelpDialog: () => void;
     toggleDevPanel: () => void;
-    toggleZenMode: () => void;
-    toggleFocusMode: () => void;
+    /**
+     * Expand or collapse the left / bottom / right section of the workspace shell.
+     * Wraps `toggleSectionAtom`; center never collapses.
+     */
     toggleLeftPanel: () => void;
     toggleBottomPanel: () => void;
     toggleRightPanel: () => void;
-    /**
-     * Toggle the visibility of one specific panel by id (e.g. "files",
-     * "terminal", "notes"). Smart-toggles via `usePanelActions`: opens
-     * a hidden zone, switches the active panel inside a zone, or
-     * closes the zone if the panel is already active and visible.
-     */
-    togglePanel: (panelId: string) => void;
+    /** Collapse or expand the workspace nav sidebar (wraps `sidebarCollapsedAtom`). */
+    toggleSidebar: () => void;
+    /** Maximize the active section, or restore if one is already maximized. */
+    toggleMaximizeSection: () => void;
     setTheme: (mode: AppearanceMode) => void;
     focusChatInput: () => void;
     showChatSearch: () => void;
     jumpChatToBottom: () => void;
-    /** Cycle to the next/previous workspace tab. Wraps `next_tab` / `previous_tab`. */
+    /** Cycle to the next/previous workspace. Wraps the `next_tab` / `previous_tab` keybindings. */
     nextWorkspaceTab: () => void;
     previousWorkspaceTab: () => void;
     /** Cycle to the next/previous agent within the current workspace. */
@@ -57,8 +61,8 @@ export type CommandRuntime = {
     /**
      * Create a new agent in the current workspace (inheriting the active
      * agent's model) and navigate to it. Delegates to the same handler the
-     * `+` tab button and the `new_agent` keybinding use, registered by
-     * `AgentTabs`. No-op when no workspace is mounted.
+     * add-panel `+` and the `new_agent` keybinding use, registered by
+     * `useWorkspaceShellBootstrap`. No-op when no workspace is mounted.
      */
     createAgent: () => void;
     /** Open the Report a problem (file a bug) popover. */

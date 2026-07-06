@@ -40,12 +40,14 @@ does not apply — use normal `pnpm run dev` / `just frontend` there instead.
 
 ## Run a preview
 
-Pick a free port in 51000-59999 (e.g. 51731). Launch it **DETACHED** — do NOT use
-a tracked background task; this Sculptor will not release your turn to the user
-while one is alive:
+Pick a free port in 51000-59999, preferring the 51000-51099 range: the
+`/proxy/` switchboard page (openhost-preview-fallback.html) quick-scans that
+range on load, so previews there are found without a full-band scan. Launch it
+**DETACHED** — do NOT use a tracked background task; this Sculptor will not
+release your turn to the user while one is alive:
 
     cd <frontend-dir>
-    setsid bash launch-preview.sh 51731 >/tmp/vite-51731.log 2>&1 </dev/null &
+    setsid bash launch-preview.sh 51042 >/tmp/vite-51042.log 2>&1 </dev/null &
 
 `<frontend-dir>` is either:
 - **`/app/sculptor/frontend`** — preview the deployed UI as-is (its `node_modules`
@@ -60,7 +62,7 @@ env var only drives the OpenHost wss/HMR override). First start pre-bundles deps
 (~tens of seconds) — watch
 `/tmp/vite-<port>.log` for `ready in`. Then open, on any logged-in browser:
 
-    https://sculptor.<your-zone>/proxy/51731/
+    https://sculptor.<your-zone>/proxy/51042/
 
 Edits to the frontend source hot-reload live.
 
@@ -69,7 +71,7 @@ Edits to the frontend source hot-reload live.
 Do NOT `pkill -f vite...` — the pattern matches your own shell command and kills
 the call. Stop by port -> pid -> process group:
 
-    PID=$(ss -tlnpH | grep ':51731' | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)
+    PID=$(ss -tlnpH | grep ':51042' | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)
     PGID=$(ps -o pgid= -p "$PID" | tr -d ' ')
     kill -9 -"$PGID"
 

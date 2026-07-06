@@ -3,6 +3,8 @@
  * authors target. Changes here are breaking changes to the plugin API
  * and must bump the SDK major version.
  */
+import type { PluginPanelDefinition } from "../types.ts";
+
 export { openExternal } from "./actions.ts";
 export { Markdown, PanelHeader } from "./components.ts";
 export type { CurrentWorkspace, WorkspaceView } from "./hooks.ts";
@@ -25,4 +27,11 @@ export type {
   PluginManifest,
   WorkspaceWidgetDefinition,
 } from "../types.ts";
-export type { PanelDefinition } from "~/components/panels/types.ts";
+export type { PluginPanelDefinition };
+
+/**
+ * @deprecated Use {@link PluginPanelDefinition}. Kept as an alias so existing
+ * plugins that import the old name still type-check; the section shell ignores
+ * the legacy zone fields.
+ */
+export type PanelDefinition = PluginPanelDefinition;

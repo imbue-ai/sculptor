@@ -360,6 +360,72 @@ describe("useAlphaAutoScroll", () => {
     expect(result.current.isEngaged).toBe(true);
   });
 
+  describe("following pin direction", () => {
+    /** Engage `following` by starting a stream while the view sits at the bottom. */
+    const renderFollowing = (el: HTMLDivElement): void => {
+      const ref = { current: el };
+      const virtualizer = createMockVirtualizer();
+      const { result, rerender } = renderHook(
+        ({ isStreaming }) => useAlphaAutoScroll(ref, isStreaming, 10, virtualizer, null, -1, "test-task"),
+        { initialProps: { isStreaming: false } },
+      );
+      act(() => {
+        el.dispatchEvent(new Event("scroll"));
+      });
+      rerender({ isStreaming: true });
+      expect(result.current.isEngaged).toBe(true);
+    };
+
+    it("chases a tail shrink back up to the pin while following", () => {
+      const el = createMockScrollContainer(1300, 2000, 500); // distance=200, at bottom
+      renderFollowing(el);
+
+      // A reflow while following lands on the pin.
+      act(() => {
+        triggerResize();
+      });
+      expectPinnedToBottom(el);
+
+      // The tail shrinks by a text line with scrollTop untouched — the view is
+      // now stranded past the pin. The next reflow must correct back up.
+      setScrollPosition(el, el.scrollTop, 1975);
+      act(() => {
+        triggerResize();
+      });
+      expectPinnedToBottom(el);
+    });
+
+    it("holds a sub-dead-band overshoot instead of chasing measurement wobble", () => {
+      const el = createMockScrollContainer(1300, 2000, 500);
+      renderFollowing(el);
+      act(() => {
+        triggerResize();
+      });
+      const pinnedScrollTop = el.scrollTop;
+
+      // A shrink smaller than the dead-band: within measurement rounding — hold.
+      setScrollPosition(el, pinnedScrollTop, 1995);
+      act(() => {
+        triggerResize();
+      });
+      expect(el.scrollTop).toBe(pinnedScrollTop);
+    });
+
+    it("leaves an overshoot in place when not following (down-only preserved)", () => {
+      // Not streaming, never engaged: the authority is userControlled, and a
+      // position past the pin (inside the tail padding) is legitimate.
+      const el = createMockScrollContainer(1540, 2000, 500); // pin target is 1500
+      const ref = { current: el };
+      const virtualizer = createMockVirtualizer();
+      const { result } = renderHook(() => useAlphaAutoScroll(ref, false, 10, virtualizer, null, -1, "test-task"));
+
+      act(() => {
+        result.current.scrollToBottom();
+      });
+      expect(el.scrollTop).toBe(1540);
+    });
+  });
+
   it("scrolls to bottom when messageCount increases while at bottom (pin-to-bottom)", () => {
     // User is pinned to the bottom (distance=0), not streaming.
     // A new message arrives: messageCount increases and scrollHeight grows by 300px,

@@ -24,7 +24,7 @@ from sculptor.testing.dependency_stubs import create_cli_stub
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import delete_all_workspaces_via_ui
 from sculptor.testing.playwright_utils import full_spa_reload
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.playwright_utils import open_new_workspace_form
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -99,7 +99,7 @@ def _cleanup_workspaces(instance: SculptorInstance) -> None:
     add-workspace page to set the active tab before any subsequent reload.
     """
     delete_all_workspaces_via_ui(instance.page)
-    navigate_to_add_workspace_page(instance.page)
+    open_new_workspace_form(instance.page)
 
 
 def _assert_error_button_with_popover(

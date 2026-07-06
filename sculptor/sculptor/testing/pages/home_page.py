@@ -11,7 +11,10 @@ class PlaywrightHomePage(PlaywrightIntegrationTestPage):
         return self._page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
 
     def get_empty_state(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
+        # A brand-new user with zero workspaces lands on the EmptyFirstRunPage
+        # (the inline create form), not the home list's own empty state — so the
+        # "new user" empty state is keyed by EMPTY_FIRST_RUN_PAGE.
+        return self._page.get_by_test_id(ElementIDs.EMPTY_FIRST_RUN_PAGE)
 
     def get_search_input(self) -> Locator:
         return self._page.get_by_placeholder("Search workspaces...")

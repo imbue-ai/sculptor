@@ -67,6 +67,14 @@ _TRANSIENT_WEBVIEW_EXECUTE_MARKERS: tuple[str, ...] = (
 class PlaywrightBrowserPanelElement(PlaywrightIntegrationTestElement):
     """Page Object Model for the Browser panel."""
 
+    def get_root(self) -> Locator:
+        """Return the panel root (``BROWSER_PANEL``) locator this POM wraps.
+
+        Lets tests assert the panel's open/closed state through the POM
+        instead of re-deriving ``ElementIDs.BROWSER_PANEL`` inline.
+        """
+        return self._locator
+
     def get_web_mode_placeholder(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.BROWSER_WEB_MODE_PLACEHOLDER)
 
