@@ -467,6 +467,39 @@ General guidelines:
 * Use `useState` if that state exists only within a component.
 * Avoid accessing more state than necessary. For example, if you only need the `userId` create an atom like the following `atom<string>((get) => get(userAtom)!.userId);` to only access the information you need and prevent unnecessary re-renders.
 
+### TanStack Query mutations
+
+Server-mutating operations (POST/PUT/PATCH/DELETE) that optimistically update the UI use `useMutation` from `@tanstack/react-query`. The cache is the single source of truth — populated by the WebSocket stream, not by network fetches — so mutations follow this pattern:
+
+```typescript
+export const useMyMutation = (workspaceId: string, agentId: string) =>
+  useMutation({
+    mutationFn: () => myApiCall({ path: { workspace_id: workspaceId, agent_id: agentId } }),
+    onMutate: async (): Promise<{ prev: CodingAgentTaskView | null | undefined }> => {
+      // Snapshot the current cache entry for rollback.
+      const prev = queryClient.getQueryData(taskQueryKey(agentId));
+      if (prev) {
+        // Apply the optimistic update.
+        queryClient.setQueryData(taskQueryKey(agentId), { ...prev, title: newName });
+      }
+      return { prev };
+    },
+    onError: (_e, _v, ctx): void => {
+      // Restore the snapshot on failure.
+      if (ctx?.prev !== undefined) {
+        queryClient.setQueryData(taskQueryKey(agentId), ctx.prev);
+      }
+    },
+    // No onSuccess — the server-authoritative value arrives via WS.
+  });
+```
+
+Key rules:
+* Always capture `prev` in `onMutate` and return it as rollback context.
+* Never write the cache in `onSuccess` — the WS stream delivers the authoritative value.
+* Use `queryClient.getQueryData()` / `setQueryData()` for cache reads/writes, not network fetches.
+* See `src/common/state/mutations/` for the canonical implementations.
+
 ### Hooks
 
 Create custom hooks to encapsulate logic that can be reused across components. This helps keep your components clean and focused on rendering.
