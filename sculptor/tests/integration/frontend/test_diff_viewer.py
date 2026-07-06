@@ -728,9 +728,7 @@ def test_diff_refreshes_when_current_branch_changes(sculptor_instance_: Sculptor
     # Step 1: Create workspace (clone mode — the test relies on `origin/main`
     # being available in the workspace's checkout, which only exists in
     # clones) and have the agent write a file.
-    task_page = start_task_and_wait_for_ready(
-        page, prompt=_WRITE_HELLO_PROMPT, mode="CLONE", backend_url=sculptor_instance_.backend_api_url
-    )
+    task_page = start_task_and_wait_for_ready(page, prompt=_WRITE_HELLO_PROMPT, mode="CLONE")
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 

@@ -1,13 +1,11 @@
 """Unit tests for the user-config integration-test helpers.
 
-These lock in that the config REST calls target the *backend* HTTP origin,
-not the renderer origin (``page.url``). In packaged Electron builds the renderer
-origin is ``sculptor://app``, which serves no ``/api`` and which Playwright's
-``APIRequestContext`` refuses to fetch (it only speaks ``http:``/``https:``).
-Deriving the request URL from ``page.url`` therefore breaks every
-config-toggling test in packaged mode, while passing in ``page.url`` still works
-in the http dev lanes — a regression a green PR CI run cannot catch because that
-lane never exercises the packaged origin.
+These lock in that ``_set_user_config_flag`` builds its ``/api/v1/config`` URL
+from the backend origin resolved via :func:`resolve_backend_api_url`, never from
+``page.url``. In packaged Electron builds the renderer origin is ``sculptor://app``,
+which serves no ``/api`` and which Playwright's ``page.request`` refuses to fetch;
+the resolver returns the backend's http origin instead. See
+:mod:`sculptor.testing.backend_url` for the resolver's own tests.
 """
 
 from typing import Any
@@ -16,8 +14,10 @@ from sculptor.testing.elements.user_config import _set_user_config_flag
 from sculptor.testing.elements.user_config import enable_clone_workspaces
 
 # A sculptor:// renderer origin, as seen in packaged Electron builds. It must
-# never appear in a request URL — that is the exact bug these tests guard.
+# never appear in a request URL — the fake page exposes it as ``url`` precisely
+# so a regression back to ``page.url`` would surface it in the assertions below.
 _RENDERER_URL = "sculptor://app/index.html#/ws/abc123"
+# What the resolver's page path yields (its evaluate() mirrors apiClient.ts).
 _BACKEND_URL = "http://127.0.0.1:52111"
 
 
@@ -58,9 +58,12 @@ class _FakeLocator:
 class _FakePage:
     """Minimal ``Page`` stand-in exercising only what the config helpers touch.
 
-    ``url`` is deliberately a ``sculptor://`` origin: if a helper regresses to
-    building the API URL from the page origin, the recorded request URLs will
-    carry that scheme and the assertions below fail.
+    ``evaluate`` returns the backend origin (what ``resolve_backend_api_url``'s
+    page path yields in a real renderer). ``url`` is a ``sculptor://`` origin on
+    purpose: if a helper regresses to building the API URL from the page origin,
+    the recorded request URLs will carry that scheme and the assertions fail.
+    Deliberately has no ``backend_api_url`` attribute, so the resolver takes the
+    page (``evaluate``) path.
     """
 
     def __init__(self, initial_config: dict[str, Any]) -> None:
@@ -68,6 +71,9 @@ class _FakePage:
         self.request = _RecordingRequestContext(initial_config)
         self.reload_count = 0
         self.load_states: list[str] = []
+
+    def evaluate(self, _js: str) -> str:
+        return _BACKEND_URL
 
     def reload(self) -> None:
         self.reload_count += 1
@@ -82,10 +88,10 @@ class _FakePage:
         return _FakeLocator()
 
 
-def test_set_user_config_flag_targets_backend_origin_not_page_url() -> None:
+def test_set_user_config_flag_targets_resolved_backend_origin_not_page_url() -> None:
     page = _FakePage(initial_config={"enableCloneWorkspaces": False})
 
-    _set_user_config_flag(page, "enableCloneWorkspaces", True, backend_url=_BACKEND_URL)
+    _set_user_config_flag(page, "enableCloneWorkspaces", True)
 
     expected_url = f"{_BACKEND_URL}/api/v1/config"
     assert page.request.get_urls == [expected_url]
@@ -101,18 +107,10 @@ def test_set_user_config_flag_targets_backend_origin_not_page_url() -> None:
     assert page.reload_count == 1
 
 
-def test_set_user_config_flag_strips_trailing_slash_on_backend_url() -> None:
-    page = _FakePage(initial_config={})
-
-    _set_user_config_flag(page, "defaultFastMode", True, backend_url=_BACKEND_URL + "/")
-
-    assert page.request.get_urls == [f"{_BACKEND_URL}/api/v1/config"]
-
-
-def test_enable_wrapper_threads_backend_url_through() -> None:
+def test_enable_wrapper_writes_flag_via_resolved_backend_origin() -> None:
     page = _FakePage(initial_config={"enableCloneWorkspaces": False})
 
-    enable_clone_workspaces(page, backend_url=_BACKEND_URL)
+    enable_clone_workspaces(page)
 
     put_url, put_data = page.request.put_calls[0]
     assert put_url == f"{_BACKEND_URL}/api/v1/config"

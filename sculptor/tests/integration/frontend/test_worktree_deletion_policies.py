@@ -19,6 +19,7 @@ from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_fixed
 
+from sculptor.testing.backend_url import resolve_backend_api_url
 from sculptor.testing.elements.user_config import _set_user_config_flag
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.playwright_utils import open_new_workspace_form
@@ -109,7 +110,7 @@ def _commit_on_worktree(worktree_path: Path, message: str) -> None:
 )
 def _delete_workspace_via_api(page: Page, workspace_id: str) -> None:
     # Retry on transient ECONNRESET under heavy offload-sandbox load (SCU-773).
-    base_url = page.url.split("#")[0].rstrip("/")
+    base_url = resolve_backend_api_url(page)
     response = page.request.delete(f"{base_url}/api/v1/workspaces/{workspace_id}")
     assert response.ok, f"DELETE workspace failed: {response.status} {response.text()}"
 
@@ -148,9 +149,7 @@ def _wait_for_branch_deleted(
 @user_story("to preserve my worktree branch after deleting the workspace when policy is 'never'")
 def test_never_policy_preserves_branch(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
-    _set_user_config_flag(
-        page, "workspaceBranchDeletionPolicy", "never", backend_url=sculptor_instance_.backend_api_url
-    )
+    _set_user_config_flag(page, "workspaceBranchDeletionPolicy", "never")
 
     branch_name, workspace_id = _create_worktree_workspace(page, "policy-never-test")
     paths = _worktree_paths(sculptor_instance_.project_path)
@@ -169,9 +168,7 @@ def test_never_policy_preserves_branch(sculptor_instance_: SculptorInstance) -> 
 @user_story("to clean up my merged branch when deleting the workspace under 'delete_if_safe'")
 def test_delete_if_safe_with_merged_branch(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
-    _set_user_config_flag(
-        page, "workspaceBranchDeletionPolicy", "delete_if_safe", backend_url=sculptor_instance_.backend_api_url
-    )
+    _set_user_config_flag(page, "workspaceBranchDeletionPolicy", "delete_if_safe")
 
     branch_name, workspace_id = _create_worktree_workspace(page, "policy-safe-merged")
     paths = _worktree_paths(sculptor_instance_.project_path)
@@ -192,9 +189,7 @@ def test_delete_if_safe_with_merged_branch(sculptor_instance_: SculptorInstance)
 @user_story("to keep my unmerged work when deleting the workspace under 'delete_if_safe'")
 def test_delete_if_safe_with_unmerged_branch(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
-    _set_user_config_flag(
-        page, "workspaceBranchDeletionPolicy", "delete_if_safe", backend_url=sculptor_instance_.backend_api_url
-    )
+    _set_user_config_flag(page, "workspaceBranchDeletionPolicy", "delete_if_safe")
 
     branch_name, workspace_id = _create_worktree_workspace(page, "policy-safe-unmerged")
     paths = _worktree_paths(sculptor_instance_.project_path)
@@ -213,9 +208,7 @@ def test_delete_if_safe_with_unmerged_branch(sculptor_instance_: SculptorInstanc
 @user_story("to force-delete even unmerged branches when policy is 'always'")
 def test_always_policy_force_deletes_branch(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
-    _set_user_config_flag(
-        page, "workspaceBranchDeletionPolicy", "always", backend_url=sculptor_instance_.backend_api_url
-    )
+    _set_user_config_flag(page, "workspaceBranchDeletionPolicy", "always")
 
     branch_name, workspace_id = _create_worktree_workspace(page, "policy-always")
     paths = _worktree_paths(sculptor_instance_.project_path)

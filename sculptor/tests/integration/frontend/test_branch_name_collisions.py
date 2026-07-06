@@ -90,7 +90,7 @@ def test_clone_mode_collision_blocks_creation(sculptor_instance_: SculptorInstan
     add_ws_page = PlaywrightAddWorkspacePage(page=page)
 
     # Clone is opt-in; enable the flag and pick clone mode explicitly.
-    enable_clone_workspaces(page, backend_url=sculptor_instance_.backend_api_url)
+    enable_clone_workspaces(page)
 
     open_new_workspace_form(page)
     add_ws_page.get_workspace_name_input().fill("test")

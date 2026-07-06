@@ -252,7 +252,7 @@ def test_fast_mode_respects_default_on_first_visit(
     page = sculptor_instance_.page
 
     # Set defaultFastMode=true (reloads the page as part of applying the config)
-    enable_default_fast_mode(page, backend_url=sculptor_instance_.backend_api_url)
+    enable_default_fast_mode(page)
 
     # Create a brand-new agent with that default in place
     task_page = start_task_and_wait_for_ready(

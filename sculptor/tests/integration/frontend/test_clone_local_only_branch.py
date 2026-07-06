@@ -95,7 +95,7 @@ def test_clone_from_local_only_branch_with_source_remotes_present(
     )
 
     page = sculptor_instance_.page
-    enable_clone_workspaces(page, backend_url=sculptor_instance_.backend_api_url)
+    enable_clone_workspaces(page)
 
     open_new_workspace_form(page)
     add_ws_page = PlaywrightAddWorkspacePage(page)

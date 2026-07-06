@@ -64,7 +64,7 @@ def _branch_exists(repo_path: Path, branch: str) -> bool:
 @user_story("to clone a repo and work on the base branch directly by clearing the branch-name field")
 def test_clone_mode_cleared_branch_checks_out_base(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
-    enable_clone_workspaces(page, backend_url=sculptor_instance_.backend_api_url)
+    enable_clone_workspaces(page)
 
     open_new_workspace_form(page)
     add_ws_page = PlaywrightAddWorkspacePage(page)
@@ -89,7 +89,7 @@ def test_clone_mode_cleared_branch_checks_out_base(sculptor_instance_: SculptorI
 @user_story("to clone a repo and work on a new branch using the auto-filled name")
 def test_clone_mode_kept_branch_name_creates_new_branch(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
-    enable_clone_workspaces(page, backend_url=sculptor_instance_.backend_api_url)
+    enable_clone_workspaces(page)
 
     open_new_workspace_form(page)
     add_ws_page = PlaywrightAddWorkspacePage(page)

@@ -61,7 +61,7 @@ def test_plus_filters_categories_by_query(sculptor_instance_: SculptorInstance) 
     """``+wor`` filters to a single category row; Enter drills in."""
     page = sculptor_instance_.page
     entity_picker = PlaywrightEntityPickerElement(page)
-    enable_entity_mentions(page, backend_url=sculptor_instance_.backend_api_url)
+    enable_entity_mentions(page)
     task_page = _navigate_to_task_chat(sculptor_instance_)
 
     chat_input = task_page.get_chat_panel().get_chat_input()
@@ -121,7 +121,7 @@ def test_plus_drill_into_skills_via_enter(sculptor_instance_: SculptorInstance) 
 def test_plus_drill_into_workspaces(sculptor_instance_: SculptorInstance) -> None:
     """``+wor`` + Enter + workspace name + Enter inserts an entity-mention chip."""
     page = sculptor_instance_.page
-    enable_entity_mentions(page, backend_url=sculptor_instance_.backend_api_url)
+    enable_entity_mentions(page)
     task_page = _navigate_to_task_chat(sculptor_instance_)
 
     chat_panel = task_page.get_chat_panel()
@@ -142,7 +142,7 @@ def test_plus_drill_into_repositories(sculptor_instance_: SculptorInstance) -> N
     """``+rep`` + Enter pins the entity picker to repositories; Enter commits."""
     page = sculptor_instance_.page
     entity_picker = PlaywrightEntityPickerElement(page)
-    enable_entity_mentions(page, backend_url=sculptor_instance_.backend_api_url)
+    enable_entity_mentions(page)
     task_page = _navigate_to_task_chat(sculptor_instance_)
 
     chat_panel = task_page.get_chat_panel()

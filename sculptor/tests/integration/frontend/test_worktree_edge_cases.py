@@ -30,7 +30,7 @@ from sculptor.testing.user_stories import user_story
 @user_story("to only see the CLONE option when the opt-in clone flag is enabled")
 def test_clone_mode_hidden_when_flag_off(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
-    enable_in_place_workspaces(page, backend_url=sculptor_instance_.backend_api_url)
+    enable_in_place_workspaces(page)
 
     # With clone disabled but in-place enabled, the mode selector is visible
     # (since one opt-in flag is on) and lists Worktree + In-place but NOT
@@ -46,7 +46,7 @@ def test_clone_mode_hidden_when_flag_off(sculptor_instance_: SculptorInstance) -
     page.keyboard.press("Escape")
 
     # Flip on the clone flag — Clone option appears in the selector.
-    enable_clone_workspaces(page, backend_url=sculptor_instance_.backend_api_url)
+    enable_clone_workspaces(page)
     open_new_workspace_form(page)
     add_ws.get_mode_selector().click()
     expect(add_ws.get_mode_option_clone()).to_be_visible()

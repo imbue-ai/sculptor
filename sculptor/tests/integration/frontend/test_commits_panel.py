@@ -479,7 +479,7 @@ _TEXT_ONLY_PROMPT = "Say hello"
 
 
 def _open_commits_panel_with(
-    page: Page, prompt: str, *, mode: str | None = None, backend_url: str | None = None
+    page: Page, prompt: str, *, mode: str | None = None
 ) -> tuple[PlaywrightTaskPage, PlaywrightCommitsPanelElement]:
     """Run a FakeClaude prompt, wait for it, then open the Commits panel.
 
@@ -489,9 +489,7 @@ def _open_commits_panel_with(
     messages both work without remounting anything. The message count is awaited
     BEFORE opening the panel.
     """
-    task_page = start_task_and_wait_for_ready(
-        page, prompt=prompt, wait_for_agent_to_finish=False, mode=mode, backend_url=backend_url
-    )
+    task_page = start_task_and_wait_for_ready(page, prompt=prompt, wait_for_agent_to_finish=False, mode=mode)
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2, timeout=60_000)
     section_root = open_panel(page, "commits", sub_section="left")
@@ -574,9 +572,7 @@ def test_history_panel_refreshes_on_target_branch_change(sculptor_instance_: Scu
     # Create a branch with 2 commits and push it to origin. Clone mode is
     # required because the agent pushes to ``origin`` and the test later
     # references ``origin/feature-tb-test`` — neither exists in a worktree.
-    task_page, commits_panel = _open_commits_panel_with(
-        page, _TARGET_BRANCH_CHANGE_PROMPT, mode="CLONE", backend_url=sculptor_instance_.backend_api_url
-    )
+    task_page, commits_panel = _open_commits_panel_with(page, _TARGET_BRANCH_CHANGE_PROMPT, mode="CLONE")
 
     commits_list = commits_panel.get_list()
     expect(commits_list).to_be_visible()

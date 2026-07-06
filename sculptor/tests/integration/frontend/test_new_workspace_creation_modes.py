@@ -344,7 +344,7 @@ def test_mode_selector_gates_optional_modes(sculptor_instance_: SculptorInstance
     """
     page = sculptor_instance_.page
     # Enable in-place only — the selector should show Worktree + In-place, no Clone.
-    enable_in_place_workspaces(page, backend_url=sculptor_instance_.backend_api_url)
+    enable_in_place_workspaces(page)
     _seed_one_workspace(page)
 
     dialog = _open_dialog(page)
@@ -355,7 +355,7 @@ def test_mode_selector_gates_optional_modes(sculptor_instance_: SculptorInstance
     page.keyboard.press("Escape")
 
     # Enabling clone too (reloads the page) makes the Clone option appear.
-    enable_clone_workspaces(page, backend_url=sculptor_instance_.backend_api_url)
+    enable_clone_workspaces(page)
     dialog = _open_dialog(page)
     dialog.get_mode_selector().click()
     expect(dialog.get_mode_option_clone()).to_be_visible()
@@ -371,7 +371,7 @@ def test_clone_mode_kept_branch_name_creates_new_branch(sculptor_instance_: Scul
     git-state check (the clone checks out the new branch) is unchanged.
     """
     page = sculptor_instance_.page
-    enable_clone_workspaces(page, backend_url=sculptor_instance_.backend_api_url)
+    enable_clone_workspaces(page)
     _seed_one_workspace(page)
 
     dialog = _open_dialog(page)
@@ -402,7 +402,7 @@ def test_clone_mode_cleared_branch_checks_out_base(sculptor_instance_: SculptorI
     unchanged.
     """
     page = sculptor_instance_.page
-    enable_clone_workspaces(page, backend_url=sculptor_instance_.backend_api_url)
+    enable_clone_workspaces(page)
     _seed_one_workspace(page)
 
     dialog = _open_dialog(page)

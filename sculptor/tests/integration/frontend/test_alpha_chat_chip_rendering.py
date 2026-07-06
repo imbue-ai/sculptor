@@ -281,7 +281,7 @@ def test_alpha_chat_entity_mention_renders_as_chip_in_sent_message(
     """
     page = sculptor_instance_.page
 
-    enable_entity_mentions(page, backend_url=sculptor_instance_.backend_api_url)
+    enable_entity_mentions(page)
 
     task_page = start_task_and_wait_for_ready(
         sculptor_page=page,

@@ -23,6 +23,7 @@ from tenacity import wait_fixed
 from sculptor.constants import ElementIDs
 from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.state.messages import LLMModel
+from sculptor.testing.backend_url import resolve_backend_api_url
 from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.base import type_into_tiptap
 from sculptor.testing.elements.chat_panel import select_model_by_name
@@ -398,7 +399,6 @@ def start_task_and_wait_for_ready(
     workspace_name: str | None = None,
     mode: str | None = None,
     agent_type: str | None = None,
-    backend_url: str | None = None,
 ) -> PlaywrightTaskPage:
     """Create a workspace and agent through the new-workspace UI.
 
@@ -428,20 +428,10 @@ def start_task_and_wait_for_ready(
     Tests that exercise CLONE-specific semantics (e.g. ``origin/*`` remote
     refs in the workspace's checkout) can pass ``mode="CLONE"`` — the helper
     will enable the clone-workspaces flag, reload, then pick CLONE in the
-    mode selector before submitting. CLONE mode requires ``backend_url`` (the
-    backend's HTTP origin, ``SculptorInstance.backend_api_url``) because
-    enabling the flag hits ``/api/v1/config``, which the renderer origin cannot
-    serve in packaged builds (it is ``sculptor://app``).
+    mode selector before submitting.
     """
     if mode == "CLONE":
-        if backend_url is None:
-            raise ValueError(
-                "start_task_and_wait_for_ready(mode='CLONE') requires backend_url so the "
-                + "clone-workspaces flag can be toggled against the backend http origin; pass "
-                + "sculptor_instance_.backend_api_url. The renderer origin is sculptor://app in "
-                + "packaged builds and serves no /api."
-            )
-        enable_clone_workspaces(sculptor_page, backend_url=backend_url)
+        enable_clone_workspaces(sculptor_page)
     elif mode not in (None, "WORKTREE"):
         raise ValueError(f"unsupported mode: {mode!r}; expected None, 'WORKTREE', or 'CLONE'")
 
@@ -772,7 +762,7 @@ def upload_file_via_api(page: Page, *, name: str, mime_type: str, content: bytes
     frontend — so this is how an integration test attaches a non-image file the
     UI would refuse. ``page.request`` inherits the page's session cookie.
     """
-    base_url = page.url.split("#")[0].rstrip("/")
+    base_url = resolve_backend_api_url(page)
     response = page.request.post(
         f"{base_url}/api/v1/upload-file",
         multipart={"file": {"name": name, "mimeType": mime_type, "buffer": content}},
@@ -792,7 +782,7 @@ def send_message_via_api(
     pi ignores ``model`` (it reads its own ``models.json``), so the default is
     only a schema-valid placeholder for pi workspaces.
     """
-    base_url = page.url.split("#")[0].rstrip("/")
+    base_url = resolve_backend_api_url(page)
     match = re.search(r"/ws/([^/]+)/agent/([^/?#]+)", page.url)
     assert match is not None, f"could not parse workspace/agent ids from URL: {page.url}"
     workspace_id, agent_id = match.group(1), match.group(2)
@@ -977,7 +967,7 @@ def create_zero_agent_workspace(page: Page, *, description: str | None = None, s
     ``preview-branch-name`` endpoint the Add Workspace form uses) so the worktree
     branch never collides across repeated calls.
     """
-    base_url = page.url.split("#")[0].rstrip("/")
+    base_url = resolve_backend_api_url(page)
 
     projects_response = request_with_retry(page.request.get, f"{base_url}/api/v1/projects/active")
     assert projects_response.ok, f"list active projects failed: {projects_response.status} {projects_response.text()}"
