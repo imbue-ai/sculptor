@@ -451,7 +451,7 @@ export const CommandPalette = (): ReactElement => {
   // them against every visible command's `shortcut`. A match closes the
   // palette and runs the command — so `Cmd+T` (toggle theme) fires its
   // command directly, instead of being swallowed by the overlay
-  // suppression in `usePageLayoutKeyboardShortcuts`.
+  // suppression in `useGlobalKeyboardShortcuts`.
   //
   // We use the capture phase so we run BEFORE that suppression handler
   // (which is registered on `window` in bubble phase). cmdk's own input

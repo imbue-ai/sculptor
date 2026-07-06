@@ -44,6 +44,7 @@ from sculptor.utils.build import get_internal_folder
 from sculptor.web.data_types import AuthResult
 from sculptor.web.data_types import AuthStartResult
 from sculptor.web.data_types import BinaryMode
+from sculptor.web.data_types import BinarySource
 from sculptor.web.data_types import DependenciesStatus
 from sculptor.web.data_types import DependencyInfo
 from sculptor.web.data_types import InstallProgress
@@ -372,14 +373,13 @@ class DependencyManagementService(Service):
             logger.warning("Could not acquire auth lock during shutdown; sign-in subprocess may linger")
 
     def _auto_install_if_needed(self) -> None:
-        """Auto-install each managed tool whose pinned binary is missing or out of range.
+        """Auto-install managed tools at startup: bootstrap required ones, refresh optional ones.
 
-        Loops the ManagedTool registry; for every tool with a MANAGED binary mode that
-        is not already installed-and-in-range, it spawns an install. Claude always
-        auto-installs when MANAGED. pi additionally requires the ``enable_pi_agent``
-        experiment to be on, so a Claude-only user (the default) never auto-downloads pi.
-        They can still trigger a manual install from the Pi settings section, which routes
-        through ``install_managed`` and is not gated here.
+        Loops the ManagedTool registry over tools in MANAGED binary mode. A required
+        tool (Claude) installs whenever its pinned binary is missing or out of range.
+        An optional tool (pi) never bootstraps — its first install is an explicit user
+        action — but an already-downloaded managed copy that is out of range or broken
+        is refreshed, which is what MANAGED promises.
         """
         try:
             config = get_user_config_instance()
@@ -394,21 +394,29 @@ class DependencyManagementService(Service):
             if tool == Dependency.CLAUDE:
                 mode, _ = _parse_dependency_config(config.dependency_paths.claude)
             elif tool == Dependency.PI:
-                # pi is dark-launched: only auto-provision it for users who opted into
-                # the pi-agent experiment. Without this gate every Claude-only user
-                # would download the pinned pi build on startup.
-                if not config.enable_pi_agent:
-                    continue
                 mode, _ = _parse_dependency_config(config.dependency_paths.pi)
             else:
                 continue
             if mode == BinaryMode.MANAGED:
                 managed_mode_tools.append(tool)
 
-        # Probe concurrently so one slow binary's --version timeout doesn't serialize startup.
-        checks = self._check_installed_concurrently(managed_mode_tools)
-
+        # A tool that must not bootstrap is considered only when a managed copy is
+        # already on disk; the in-range probe below then decides whether to refresh
+        # it. (With a managed copy present, resolution prefers it, so the probe
+        # exercises the managed binary rather than any PATH fallback.)
+        startup_tools: list[Dependency] = []
         for tool in managed_mode_tools:
+            managed_tool = get_managed_tool(tool)
+            if managed_tool is None:
+                continue
+            if not managed_tool.installs_on_startup_when_missing and self._find_managed_binary(tool) is None:
+                continue
+            startup_tools.append(tool)
+
+        # Probe concurrently so one slow binary's --version timeout doesn't serialize startup.
+        checks = self._check_installed_concurrently(startup_tools)
+
+        for tool in startup_tools:
             check = checks.get(tool)
             if check is None:
                 continue
@@ -498,7 +506,13 @@ class DependencyManagementService(Service):
         mode, custom_path = _parse_dependency_config(config.dependency_paths.pi)
 
         if mode == BinaryMode.MANAGED:
-            return self._find_managed_binary(Dependency.PI)
+            managed_binary = self._find_managed_binary(Dependency.PI)
+            if managed_binary is not None:
+                return managed_binary
+            # pi is optional and its managed copy is only downloaded on explicit
+            # user action, so MANAGED with no downloaded copy falls back to a pi
+            # already on the system PATH rather than reporting nothing.
+            return shutil.which("pi")
 
         # CUSTOM: an absolute path or bare command name, resolved via PATH —
         # unchanged from the pre-managed behaviour (a "CUSTOM" keyword or empty
@@ -821,7 +835,11 @@ class DependencyManagementService(Service):
         if claude_check.version:
             claude_in_range = self.is_version_in_range(claude_check.version)
 
-        managed_version = self._get_managed_version()
+        claude_managed_version = self._get_managed_version()
+        # Claude has no PATH fallback, so its source follows the configured mode.
+        claude_source = None
+        if claude_check.installed:
+            claude_source = BinarySource.MANAGED if effective_mode == BinaryMode.MANAGED else BinarySource.EXTERNAL
 
         # Snapshot per-tool install state under the lock; each DependencyInfo
         # below carries its own tool's progress/error.
@@ -842,9 +860,10 @@ class DependencyManagementService(Service):
             path=claude_check.path,
             version=claude_check.version,
             mode=effective_mode,
+            source=claude_source,
             version_range=claude_version_range,
             is_version_in_range=claude_in_range,
-            managed_version=managed_version,
+            managed_version=claude_managed_version,
             is_authenticated=is_authenticated,
             install_progress=progress_by_tool.get(Dependency.CLAUDE),
             install_error=error_by_tool.get(Dependency.CLAUDE),
@@ -859,13 +878,22 @@ class DependencyManagementService(Service):
         pi_in_range = None
         if pi_check.version:
             pi_in_range = self.is_version_in_range(pi_check.version, Dependency.PI)
+        # pi's MANAGED mode falls back to a PATH binary, so its source is decided by
+        # which binary actually resolved rather than by the configured mode.
+        pi_source = None
+        if pi_check.installed:
+            pi_managed_binary = self._find_managed_binary(Dependency.PI)
+            is_managed_binary_active = pi_managed_binary is not None and pi_check.path == pi_managed_binary
+            pi_source = BinarySource.MANAGED if is_managed_binary_active else BinarySource.EXTERNAL
         pi_info = DependencyInfo(
             installed=pi_check.installed,
             path=pi_check.path,
             version=pi_check.version,
             mode=pi_mode,
+            source=pi_source,
             version_range=pi_version_range,
             is_version_in_range=pi_in_range,
+            managed_version=self._get_managed_version(Dependency.PI),
             install_progress=progress_by_tool.get(Dependency.PI),
             install_error=error_by_tool.get(Dependency.PI),
         )

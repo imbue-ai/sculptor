@@ -10,22 +10,22 @@ import time
 
 DESCRIPTION = "Chat message arrival render cascade"
 
+# Memo-wrapped exports (e.g. SplittableSection) are recorded under their inner
+# function names ("SplittableSectionComponent").
 TARGET_COMPONENTS = [
     "WorkspacePageContent",
-    "DockingLayout",
-    "LeftSidebar",
-    "LeftSidebarInner",
-    "RightSidebar",
-    "RightSidebarInner",
-    "ZoneContent",
-    "ZoneContentInner",
-    "DiffSplitContainer",
-    "DiffSplitContainerInner",
+    "WorkspaceLayoutShell",
+    "WorkspaceSidebar",
+    "WorkspaceHeaderComponent",
+    "SectionGrid",
+    "SplittableSectionComponent",
+    "PanelSectionComponent",
+    "SectionHeaderComponent",
+    "SectionBodyComponent",
+    "ChangesPanel",
     "AlphaChatInterface",
-    "AlphaChatInterfaceInner",
+    "ChatPanelContent",
     "ChatInput",
-    "WorkspaceBanner",
-    "AgentTabs",
 ]
 
 

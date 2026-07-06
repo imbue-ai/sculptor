@@ -42,12 +42,7 @@ run_args = "-p no:xdist"
 
 [groups.stable]
 retry_count = 1
-filters = "-m 'not real_claude and not real_pi and not isolated'"
-
-[groups.isolated]
-retry_count = 1
-schedule_individual = true
-filters = "-m 'isolated and not real_claude and not real_pi'"
+filters = "-m 'not real_claude and not real_pi'"
 
 [checkpoint]
 build_inputs = [

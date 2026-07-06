@@ -2,10 +2,8 @@ import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
 
+import { SHORT_HASH_LENGTH } from "./commitGraph";
 import styles from "./HistoryPanel.module.scss";
-
-/** Number of leading characters shown for a commit hash in the spur label. */
-const SHORT_HASH_LENGTH = 11;
 
 type MergeSpurRowProps = {
   parentHash: string;

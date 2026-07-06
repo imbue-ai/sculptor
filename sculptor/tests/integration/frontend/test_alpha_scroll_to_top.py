@@ -12,7 +12,7 @@ from sculptor.testing.elements.alpha_chat_view import get_message_top_offset
 from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_by
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.elements.panels import close_bottom_panel
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -133,7 +133,7 @@ def test_jump_button_suppressed_on_send(sculptor_instance_: SculptorInstance) ->
     # terminal open the short conversation can still exceed the viewport and
     # the jump button surfaces after the response arrives, flipping the
     # final "still hidden" assertion below.
-    close_bottom_panel(page)
+    PlaywrightWorkspaceSection(page, "bottom").collapse_section()
 
     expect(get_alpha_chat_view(page)).to_be_visible()
 
@@ -208,7 +208,7 @@ def test_short_response_keeps_user_message_visible(sculptor_instance_: SculptorI
     # Close the bottom panel (terminal) to maximize chat height — scroll tests
     # depend on having enough vertical space for dynamic padding math.
     # Must be done after workspace creation since the terminal only exists in workspaces.
-    close_bottom_panel(page)
+    PlaywrightWorkspaceSection(page, "bottom").collapse_section()
 
     expect(get_alpha_chat_view(page)).to_be_visible()
 
@@ -254,7 +254,7 @@ def test_scroll_to_top_first_message(sculptor_instance_: SculptorInstance) -> No
     chat_panel = task_page.get_chat_panel()
 
     # Close the bottom panel (terminal) to maximize chat height.
-    close_bottom_panel(page)
+    PlaywrightWorkspaceSection(page, "bottom").collapse_section()
 
     expect(get_alpha_chat_view(page)).to_be_visible()
 
@@ -363,7 +363,7 @@ def test_scroll_to_top_rapid_successive_sends(sculptor_instance_: SculptorInstan
 
     # Close the bottom panel to maximize chat height for scroll tests.
     # Must be done after workspace creation since the terminal only exists in workspaces.
-    close_bottom_panel(page)
+    PlaywrightWorkspaceSection(page, "bottom").collapse_section()
 
     expect(get_alpha_chat_view(page)).to_be_visible()
 

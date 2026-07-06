@@ -7,14 +7,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as api from "../../../api";
 import type { CodingAgentTaskView } from "../../../api";
 import { taskAtomFamily } from "../atoms/tasks";
+import { markAgentUnreadAtom, resetUnreadOverridesForTesting } from "../atoms/unreadOverrides";
 import { useMarkRead } from "./useMarkRead";
 
-// Capture calls to the mark-read endpoint without hitting the network.
-const { mockMarkRead } = vi.hoisted(() => ({ mockMarkRead: vi.fn() }));
+// Capture calls to the mark-read/mark-unread endpoints without hitting the network.
+const { mockMarkRead, mockMarkUnread } = vi.hoisted(() => ({ mockMarkRead: vi.fn(), mockMarkUnread: vi.fn() }));
 
 vi.mock("../../../api", async () => {
   const actual = await vi.importActual<typeof api>("../../../api");
-  return { ...actual, markWorkspaceAgentRead: mockMarkRead };
+  return { ...actual, markWorkspaceAgentRead: mockMarkRead, markWorkspaceAgentUnread: mockMarkUnread };
 });
 
 const makeTask = (updatedAt: string, lastReadAt: string | null, id = "agent-1"): CodingAgentTaskView =>
@@ -28,6 +29,10 @@ const renderMarkRead = (store: ReturnType<typeof createStore>): RenderHookResult
 beforeEach(() => {
   vi.clearAllMocks();
   mockMarkRead.mockResolvedValue(true);
+  mockMarkUnread.mockResolvedValue(true);
+  // Unread overrides live in a module-level map (not a Jotai store), so they
+  // leak across tests without an explicit reset.
+  resetUnreadOverridesForTesting();
 });
 
 afterEach(() => {
@@ -83,9 +88,11 @@ describe("useMarkRead", () => {
     act(() => {
       store.set(taskAtomFamily("agent-1"), makeTask("2024-01-01T00:00:06.000Z", "2024-01-01T00:00:01.000Z"));
     });
-    // ...then the user explicitly marks it unread (lastReadAt -> null).
+    // ...then the user explicitly marks it unread. The real action records an
+    // unread override AND optimistically clears lastReadAt (unreadOverrides.ts);
+    // the override is what the flush guard consults.
     act(() => {
-      store.set(taskAtomFamily("agent-1"), makeTask("2024-01-01T00:00:06.000Z", null));
+      store.set(markAgentUnreadAtom, { workspaceId: "ws-1", taskId: "agent-1" });
     });
 
     act(() => {
@@ -108,16 +115,16 @@ describe("useMarkRead", () => {
     mockMarkRead.mockClear();
 
     // agent-x gets an update (schedules a debounced read), then the user marks
-    // agent-x unread before the debounce fires.
+    // agent-x unread before the debounce fires (recording its unread override).
     act(() => {
       store.set(taskAtomFamily("agent-x"), makeTask("2024-01-01T00:00:06.000Z", "2024-01-01T00:00:01.000Z", "agent-x"));
     });
     act(() => {
-      store.set(taskAtomFamily("agent-x"), makeTask("2024-01-01T00:00:06.000Z", null, "agent-x"));
+      store.set(markAgentUnreadAtom, { workspaceId: "ws-1", taskId: "agent-x" });
     });
 
-    // Switching to agent-y must consult agent-x's state (it is unread), not
-    // agent-y's, so the flush must not re-mark agent-x read.
+    // Switching to agent-y must consult agent-x's state (it is explicitly
+    // unread), not agent-y's, so the flush must not re-mark agent-x read.
     act(() => {
       rerender({ agentId: "agent-y" });
     });

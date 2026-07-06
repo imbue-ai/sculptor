@@ -281,18 +281,3 @@ export class StreamingEngine {
     return this.cursor.offset <= text.length;
   }
 }
-
-export const registerEngine = (engine: StreamingEngine): void => {
-  if (activeEngine && activeEngine !== engine) {
-    throw new Error("StreamingEngine already registered. Only one stream may be active at a time.");
-  }
-  activeEngine = engine;
-};
-
-export const unregisterEngine = (engine: StreamingEngine): void => {
-  if (activeEngine === engine) {
-    activeEngine = null;
-  }
-};
-
-let activeEngine: StreamingEngine | null = null;

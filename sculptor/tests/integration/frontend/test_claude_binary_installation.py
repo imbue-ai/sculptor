@@ -37,7 +37,10 @@ def _populate_with_custom_mode(path: Path) -> None:
         user_id="claude-install-test",
         organization_id="claude-install-test",
         instance_id="claude-install-test",
-        dependency_paths=DependencyPaths(claude="claude"),
+        # Pin pi to CUSTOM ("pi") so it resolves the FakePi stub on PATH without
+        # touching the managed-copy directory — mirroring the default test
+        # config (resources.py _make_test_user_config).
+        dependency_paths=DependencyPaths(claude="claude", pi="pi"),
     )
     save_config(config, internal_dir / "config.toml")
 
@@ -54,7 +57,10 @@ def _populate_with_managed_mode(path: Path) -> None:
         user_id="claude-install-test",
         organization_id="claude-install-test",
         instance_id="claude-install-test",
-        dependency_paths=DependencyPaths(claude="MANAGED"),
+        # claude is deliberately MANAGED here; pin pi to CUSTOM ("pi") so startup
+        # auto-install only touches Claude and doesn't also pull the managed pi
+        # binary (see _populate_with_custom_mode).
+        dependency_paths=DependencyPaths(claude="MANAGED", pi="pi"),
     )
     save_config(config, internal_dir / "config.toml")
 

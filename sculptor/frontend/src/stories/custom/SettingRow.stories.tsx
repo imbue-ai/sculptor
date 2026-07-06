@@ -70,12 +70,12 @@ export const WithTextField: Story = {
 
 export const WithNumberField: Story = {
   args: {
-    title: "Default split ratio",
-    description: "Controls the initial width ratio of the file browser panel.",
+    title: "Minimum free disk space",
+    description: "Sculptor stops allowing new tasks below this threshold.",
     children: (
       <Flex align="center" gap="2">
-        <TextField.Root type="number" defaultValue="50" min={20} max={80} step={5} style={{ width: 80 }} />
-        <Text size="2">%</Text>
+        <TextField.Root type="number" defaultValue="2" min={1} max={100} step={1} style={{ width: 80 }} />
+        <Text size="2">GB</Text>
       </Flex>
     ),
   },

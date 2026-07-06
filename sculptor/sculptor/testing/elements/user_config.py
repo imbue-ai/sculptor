@@ -61,25 +61,6 @@ def enable_entity_mentions(page: Page) -> None:
     _set_user_config_flag(page, "enableEntityMentions", True)
 
 
-def enable_pi_agent(page: Page) -> None:
-    """Enable the experimental pi-agent flag.
-
-    Gates the pi option in the agent-type pickers; off by default, so any
-    test that selects pi (or asserts the option is visible) must enable it first.
-    """
-    _set_user_config_flag(page, "enablePiAgent", True)
-
-
-def disable_pi_agent(page: Page) -> None:
-    """Disable the experimental pi-agent flag (its default).
-
-    `enable_pi_agent` (also called by `start_task_and_wait_for_ready`
-    whenever a harness is selected) is sticky on the shared test instance, so a
-    test that asserts the flag-off behavior must reset it defensively first.
-    """
-    _set_user_config_flag(page, "enablePiAgent", False)
-
-
 def enable_default_fast_mode(page: Page) -> None:
     """Enable the default-fast-mode user preference."""
     _set_user_config_flag(page, "defaultFastMode", True)

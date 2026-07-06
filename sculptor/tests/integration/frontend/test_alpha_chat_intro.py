@@ -13,6 +13,8 @@ from sculptor.testing.elements.alpha_chat_view import get_message_top_offset
 from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_to_top
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -47,19 +49,20 @@ def test_alpha_chat_intro_shows_names_and_reacts_to_renames(
     expect(intro).to_be_visible()
     expect(intro).to_contain_text("My Workspace")
 
-    # Step 3: Rename the agent and verify.
-    agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tab = agent_tab_bar.get_agent_tabs().first
-    agent_tab_bar.rename_tab(agent_tab, "Renamed Agent")
+    # Step 3: Rename the agent (via its panel tab) and verify.
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    agent_tab = panel_tabs.get_panel_tabs().first
+    panel_tabs.rename_tab_via_context_menu(agent_tab, "Renamed Agent")
     # Wait for the tab text to update (confirms the rename round-tripped through
     # the backend) before asserting the intro, which reads from a different atom.
     expect(agent_tab).to_contain_text("Renamed Agent")
     expect(intro).to_contain_text("Renamed Agent")
 
-    # Step 4: Rename the workspace and verify.
-    workspace_tab = task_page.get_workspace_tabs().first
-    agent_tab_bar.rename_tab(workspace_tab, "Updated Workspace")
-    expect(workspace_tab).to_contain_text("Updated Workspace")
+    # Step 4: Rename the workspace (via its sidebar row) and verify.
+    sidebar = get_workspace_sidebar(page)
+    workspace_row = sidebar.get_workspace_rows().first
+    sidebar.rename_workspace_via_context_menu(workspace_row, "Updated Workspace")
+    expect(sidebar.get_workspace_rows().first).to_contain_text("Updated Workspace")
     expect(intro).to_contain_text("Updated Workspace")
 
 

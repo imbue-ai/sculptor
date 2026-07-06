@@ -1,81 +1,82 @@
-"""Scenario: Panel resize render cascade.
+"""Scenario: Section resize render cascade.
 
-Measures re-renders triggered by resizing the panel divider between the
-center content area and the right/left sidebar via keyboard arrow keys.
+Measures re-renders triggered by resizing the divider between the center
+section and a side section via keyboard arrow keys.
 
-We open a side panel first via the sidebar keyboard shortcut (Cmd+shift+e for
-file browser, or directly clicking a sidebar icon) to ensure a resize handle
-is present, then resize 5 left and 5 right.
+We expand the right section first via its workspace-header toggle to ensure a
+section resize handle is present, then resize 5 left and 5 right.
 """
 
 import time
 
-DESCRIPTION = "Panel resize render cascade"
+DESCRIPTION = "Section resize render cascade"
 
+# Memo-wrapped exports (e.g. SplittableSection) are recorded under their inner
+# function names ("SplittableSectionComponent").
 TARGET_COMPONENTS = [
     "WorkspacePageContent",
-    "DockingLayout",
-    "LeftSidebar",
-    "LeftSidebarInner",
-    "RightSidebar",
-    "RightSidebarInner",
-    "ZoneContent",
-    "ZoneContentInner",
-    "DiffSplitContainer",
-    "DiffSplitContainerInner",
+    "WorkspaceLayoutShell",
+    "WorkspaceSidebar",
+    "WorkspaceHeaderComponent",
+    "SectionGrid",
+    "SplittableSectionComponent",
+    "PanelSectionComponent",
+    "SectionHeaderComponent",
+    "SectionBodyComponent",
+    "ResizeHandle",
     "AlphaChatInterface",
-    "AlphaChatInterfaceInner",
+    "ChatPanelContent",
     "ChatInput",
-    "WorkspaceBanner",
     "DiffSummary",
-    "FileBrowserPanel",
+    "FilesPanel",
 ]
 
+# Section dividers carry SECTION_RESIZE_HANDLE-{left,right,bottom} test ids;
+# the bare [role="separator"] also matches the sidebar's edge-overlay handle,
+# so scope the locator to section handles.
+SECTION_RESIZE_HANDLES = '[data-testid^="SECTION_RESIZE_HANDLE"]'
 
-def _open_side_panel(page):
-    """Ensure at least one side panel is open so a resize handle exists."""
-    # Check if any resize handle already exists
-    handles = page.locator('[role="separator"]').all()
-    if handles:
+
+def _expand_right_section(page):
+    """Ensure at least one side section is expanded so a resize handle exists."""
+    if page.locator(SECTION_RESIZE_HANDLES).count() > 0:
         return
 
-    # Try clicking the first sidebar icon to open a panel
-    # Look for sidebar icon buttons (panel icons in LeftSidebar / RightSidebar)
-    sidebar_icons = page.locator('[data-panel-icon]').all()
-    if sidebar_icons:
-        sidebar_icons[0].click()
+    # Expand the right section via its toggle in the workspace header.
+    toggle = page.locator('[data-testid="HEADER_SECTION_TOGGLE_RIGHT"]')
+    if toggle.count() > 0:
+        toggle.click()
         time.sleep(0.5)
-        return
-
-    # Fallback: try keyboard shortcut for file browser (Cmd+Shift+E on mac)
-    page.keyboard.press("Meta+Shift+e")
-    time.sleep(0.5)
 
 
 def setup(page, base_url, workspace_id, task_id):
     page.goto(f"{base_url}/#/ws/{workspace_id}/agent/{task_id}")
     page.wait_for_load_state("networkidle")
     time.sleep(5)
-    _open_side_panel(page)
-    # Wait for panel to mount
+    _expand_right_section(page)
+    # Wait for the section to mount
     time.sleep(0.5)
 
 
 def action(page):
-    handles = page.locator('[role="separator"]').all()
+    handles = page.locator(SECTION_RESIZE_HANDLES).all()
     if not handles:
-        # Try opening a panel at action time if setup didn't work
-        _open_side_panel(page)
+        # Try expanding a section at action time if setup didn't work
+        _expand_right_section(page)
         time.sleep(0.5)
-        handles = page.locator('[role="separator"]').all()
+        handles = page.locator(SECTION_RESIZE_HANDLES).all()
 
     if not handles:
         raise RuntimeError(
-            "No resize handles found. Ensure a side panel is visible."
+            "No section resize handles found. Ensure a side section is expanded."
         )
 
-    # Use the last separator (typically the outer left/center divider)
-    handle = handles[-1]
+    # Prefer a horizontal divider — ArrowLeft/ArrowRight only resizes x-axis
+    # handles (the bottom divider listens to ArrowUp/ArrowDown instead).
+    x_handles = page.locator(
+        '[data-testid="SECTION_RESIZE_HANDLE-left"], [data-testid="SECTION_RESIZE_HANDLE-right"]'
+    ).all()
+    handle = x_handles[-1] if x_handles else handles[-1]
     handle.focus()
     time.sleep(0.3)
     for _ in range(5):

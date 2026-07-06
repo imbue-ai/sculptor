@@ -1,4 +1,3 @@
-from playwright.sync_api import Locator
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
@@ -27,17 +26,6 @@ class PlaywrightExperimentalSettingsElement(PlaywrightIntegrationTestElement):
         # Verify the select now shows "Enabled" (works even if the value
         # was already "true" and onValueChange didn't fire).
         expect(select_trigger).to_contain_text("Enabled")
-
-    def get_review_all_toggle(self) -> Locator:
-        """Return the Review All toggle locator."""
-        return self._page.get_by_test_id(ElementIDs.SETTINGS_ENABLE_REVIEW_ALL_TOGGLE)
-
-    def enable_review_all(self) -> None:
-        """Enable the 'Review All' toggle (idempotent)."""
-        toggle = self.get_review_all_toggle()
-        expect(toggle).to_be_visible()
-        if toggle.get_attribute("data-state") != "checked":
-            toggle.click()
 
     def disable_always_interrupt(self) -> None:
         """Disable the 'Always interrupt and send' setting."""

@@ -3,7 +3,6 @@ import { FolderOpen } from "lucide-react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { PluginCommandUiAction } from "~/api";
-import type { PanelDefinition } from "~/components/panels/types.ts";
 
 import { type LocalPluginRef, PluginManager, resolveEntryUrl, validateManifest } from "./pluginManager.tsx";
 import {
@@ -15,7 +14,7 @@ import {
   pluginSourceStatesAtom,
   pluginWorkspaceWidgetsAtom,
 } from "./pluginRegistry.ts";
-import type { LoadedPlugin, PluginHostApi, PluginLoadError, PluginManifest } from "./types.ts";
+import type { LoadedPlugin, PluginHostApi, PluginLoadError, PluginManifest, PluginPanelDefinition } from "./types.ts";
 
 const manifestFor = (id: string): PluginManifest => ({
   id,
@@ -25,13 +24,10 @@ const manifestFor = (id: string): PluginManifest => ({
   sdkVersion: "^1.0.0",
 });
 
-const panelFor = (id: string): PanelDefinition => ({
+const panelFor = (id: string): PluginPanelDefinition => ({
   id,
   displayName: id,
-  description: "test panel",
   icon: FolderOpen,
-  defaultZone: "top-right",
-  defaultShortcut: "",
   component: () => null,
 });
 

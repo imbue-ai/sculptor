@@ -118,6 +118,15 @@ type ChatInputProps = {
   insertSkillRef?: React.MutableRefObject<((skill: InsertSkillArg) => void) | null>;
   editorRef?: React.MutableRefObject<TipTapEditor | null>;
   showPromptNavHint?: boolean;
+  // The agent + workspace this input drives. Supplied by the owning panel so the
+  // input keys its per-agent draft state (model / fast-mode / effort / prompt
+  // draft) on the PANEL's agent, not the route's agent. In the section shell the
+  // active center tab can differ from the route (switching tabs activates a panel
+  // without navigating), so reading the route here would bind the wrong agent and
+  // leak one agent's settings into another (effort/fast-mode/model isolation).
+  // Falls back to the route params when omitted to keep older callers working.
+  taskId?: string;
+  workspaceId?: string;
 };
 
 export const ChatInput = ({
@@ -128,12 +137,16 @@ export const ChatInput = ({
   insertSkillRef,
   editorRef: externalEditorRef,
   showPromptNavHint = false,
+  taskId: taskIdProp,
+  workspaceId: workspaceIdProp,
 }: ChatInputProps): ReactElement => {
   const internalEditorRef = useRef<TipTapEditor | null>(null);
   const editorRef = externalEditorRef ?? internalEditorRef;
   const dragCounterRef = useRef<number>(0);
   const [isDragging, setIsDragging] = useState<boolean>(false);
-  const { workspaceID, agentID: taskID } = useWorkspacePageParams();
+  const { workspaceID: workspaceIDFromRoute, agentID: agentIDFromRoute } = useWorkspacePageParams();
+  const taskID = taskIdProp ?? agentIDFromRoute;
+  const workspaceID = workspaceIdProp ?? workspaceIDFromRoute;
   const { navigateToGlobalSettings } = useImbueNavigate();
   const taskModel = useTaskModel(taskID ?? "");
   // Harness-supplied model list + selection (pi). hasBackendModelSource
@@ -726,6 +739,10 @@ export const ChatInput = ({
                 <Plus size={16} />
               </TooltipIconButton>
             </Flex>
+            {/* Parallel copy of AgentSettingsControls' toolbar block, extended with
+                capability-gated disabled states and a backend-model selector this live
+                chat needs. Keep the shared tooltip strings, aria-labels, testids, and
+                styling in sync with AgentSettingsControls. */}
             <Flex align="center" flexShrink="0">
               <CapabilityGate
                 capabilityValue={canEnterPlanMode}

@@ -11,7 +11,6 @@ import {
 import { baseUrl } from "~/apiClient.ts";
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "~/common/queryClient.ts";
-import type { PanelDefinition } from "~/components/panels/types.ts";
 import { BUILTIN_HOME_VIEW_ID } from "~/pages/home/homeViews.ts";
 
 import { installHostRuntime } from "./hostRuntime.ts";
@@ -39,6 +38,7 @@ import type {
   PluginLoadError,
   PluginManifest,
   PluginModule,
+  PluginPanelDefinition,
   WorkspaceWidgetDefinition,
 } from "./types.ts";
 import { WorkspacePluginContext } from "./WorkspaceContext.tsx";
@@ -813,7 +813,7 @@ export class PluginManager {
   /** Builds the per-plugin `api` handed to `activate()`, backed by the given store. */
   private makeApi(store: JotaiStore, manifest: PluginManifest, loadDisposers: Array<() => void>): PluginHostApi {
     return {
-      registerPanel: (panel: PanelDefinition): (() => void) => {
+      registerPanel: (panel: PluginPanelDefinition): (() => void) => {
         // Wrap the plugin's component in the error boundary plus context
         // providers exposing the plugin id (for settings hooks) and the
         // current workspace id (read fresh per render from the route params).
@@ -835,7 +835,7 @@ export class PluginManager {
           );
         };
         Wrapped.displayName = `PluginPanel(${panel.id})`;
-        const wrappedPanel: PanelDefinition = { ...panel, component: Wrapped, pluginId: manifest.id };
+        const wrappedPanel: PluginPanelDefinition = { ...panel, component: Wrapped, pluginId: manifest.id };
 
         // Replace-by-id so a panel can only ever be registered once. The undo
         // removes by *instance*, not id — a stale load attempt rolling itself
@@ -907,8 +907,8 @@ export class PluginManager {
           );
         };
         Wrapped.displayName = `PluginWorkspaceWidget(${widget.id})`;
-        // Default to the lowest priority (hidden first) when unspecified, so an
-        // unprioritised widget never crowds out the host's own banner items.
+        // Default to 0 when unspecified so an unprioritised widget sorts ahead of
+        // (renders before) widgets that set a value.
         const entry = { id: widget.id, component: Wrapped, collapsePriority: widget.collapsePriority ?? 0 };
 
         // Replace-by-id; undo by instance (see the panel undo above).

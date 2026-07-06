@@ -40,7 +40,7 @@ Uses Playwright with a Page Object Model (POM) architecture.
 - Always access elements through POM hierarchy — never raw `get_by_test_id()` in tests
 - Use `expect()` for assertions and waiting — not Python `assert` or manual loops
 - Use `@user_story("...")` decorator to document what the test validates
-- Use `wait_for_tasks_to_build()` / `wait_for_tasks_to_finish()` helpers
+- Use the `start_task_and_wait_for_ready()` helper (`sculptor.testing.playwright_utils`) to create a workspace/agent and wait for it to be ready
 - One test, one feature
 
 See [docs/development/review/integration_tests.md](review/integration_tests.md) for detailed anti-patterns with examples (flaky assertions, timeout rules, test isolation).

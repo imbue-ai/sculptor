@@ -45,7 +45,9 @@ const INITIAL_REMOTE_STATE: Record<RemoteProvider, PerProviderState> = {
 export const AddRepoDialog = ({ open, onOpenChange, setToast }: AddRepoDialogProps): ReactElement => {
   // internal state
   const [path, setPath] = useState<string>("");
-  const [mode, setMode] = useState<AddRepoSource>("github");
+  // Local is the default source: adding a folder already on disk needs no CLI
+  // install or auth, so a fresh user is never greeted by NotConfiguredSection.
+  const [mode, setMode] = useState<AddRepoSource>("local");
   // Shared atom: the WS stream and the dropdown's prefetch keep this populated
   // before the dialog opens, so we render the configured state on first paint
   // instead of flashing NotConfiguredSection while our first poll is in flight.
@@ -155,7 +157,7 @@ export const AddRepoDialog = ({ open, onOpenChange, setToast }: AddRepoDialogPro
   useEffect(() => {
     if (open && !prevOpenRef.current) {
       setPath("");
-      setMode("github");
+      setMode("local");
       setRemoteState(INITIAL_REMOTE_STATE);
     }
     prevOpenRef.current = open;
