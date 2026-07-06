@@ -15,7 +15,7 @@ import { ContextMenu, Flex, IconButton, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { Maximize2, Minimize2, Plus, X } from "lucide-react";
 import type { ReactElement } from "react";
-import { memo, useState } from "react";
+import { memo, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
@@ -73,6 +73,8 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   const recordRecentlyClosed = useSetAtom(recentlyClosedPanelIdsAtom);
   const store = useStore();
   const [isRenaming, setIsRenaming] = useState<boolean>(false);
+  const labelRef = useRef<HTMLSpanElement>(null);
+  const [isLabelTruncated, setIsLabelTruncated] = useState<boolean>(false);
   // The context-menu items shown while the menu is open, resolved fresh on each open
   // (see resolveLiveDefinition below).
   const [openMenuActions, setOpenMenuActions] = useState<ReadonlyArray<PanelContextMenuItem>>([]);
@@ -176,6 +178,26 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
     setActivatorNodeRef(node);
   };
 
+  // The label ellipsis-clips at a fixed max-width, so a tooltip is only useful when the
+  // text is actually cut off. Truncation is measured on hover (scrollWidth vs
+  // clientWidth) rather than via a ResizeObserver: the tab strip re-renders heavily
+  // during drags, and measuring at hover time reads layout exactly when the tooltip
+  // could appear — no observer to keep alive across those churny re-renders.
+  const labelSpan = (
+    <span
+      ref={labelRef}
+      className={styles.label}
+      onMouseEnter={() => {
+        const el = labelRef.current;
+        if (el !== null) {
+          setIsLabelTruncated(el.scrollWidth > el.clientWidth);
+        }
+      }}
+    >
+      {definition.displayName}
+    </span>
+  );
+
   const tabBody = (
     <div
       ref={setTabRef}
@@ -220,8 +242,10 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
           onCancel={() => setIsRenaming(false)}
           isEditing
         />
+      ) : isLabelTruncated ? (
+        <Tooltip content={definition.displayName}>{labelSpan}</Tooltip>
       ) : (
-        <span className={styles.label}>{definition.displayName}</span>
+        labelSpan
       )}
       <IconButton
         variant="ghost"
