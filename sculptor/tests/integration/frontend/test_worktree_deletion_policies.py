@@ -148,7 +148,9 @@ def _wait_for_branch_deleted(
 @user_story("to preserve my worktree branch after deleting the workspace when policy is 'never'")
 def test_never_policy_preserves_branch(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
-    _set_user_config_flag(page, "workspaceBranchDeletionPolicy", "never")
+    _set_user_config_flag(
+        page, "workspaceBranchDeletionPolicy", "never", backend_url=sculptor_instance_.backend_api_url
+    )
 
     branch_name, workspace_id = _create_worktree_workspace(page, "policy-never-test")
     paths = _worktree_paths(sculptor_instance_.project_path)
@@ -167,7 +169,9 @@ def test_never_policy_preserves_branch(sculptor_instance_: SculptorInstance) -> 
 @user_story("to clean up my merged branch when deleting the workspace under 'delete_if_safe'")
 def test_delete_if_safe_with_merged_branch(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
-    _set_user_config_flag(page, "workspaceBranchDeletionPolicy", "delete_if_safe")
+    _set_user_config_flag(
+        page, "workspaceBranchDeletionPolicy", "delete_if_safe", backend_url=sculptor_instance_.backend_api_url
+    )
 
     branch_name, workspace_id = _create_worktree_workspace(page, "policy-safe-merged")
     paths = _worktree_paths(sculptor_instance_.project_path)
@@ -188,7 +192,9 @@ def test_delete_if_safe_with_merged_branch(sculptor_instance_: SculptorInstance)
 @user_story("to keep my unmerged work when deleting the workspace under 'delete_if_safe'")
 def test_delete_if_safe_with_unmerged_branch(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
-    _set_user_config_flag(page, "workspaceBranchDeletionPolicy", "delete_if_safe")
+    _set_user_config_flag(
+        page, "workspaceBranchDeletionPolicy", "delete_if_safe", backend_url=sculptor_instance_.backend_api_url
+    )
 
     branch_name, workspace_id = _create_worktree_workspace(page, "policy-safe-unmerged")
     paths = _worktree_paths(sculptor_instance_.project_path)
@@ -207,7 +213,9 @@ def test_delete_if_safe_with_unmerged_branch(sculptor_instance_: SculptorInstanc
 @user_story("to force-delete even unmerged branches when policy is 'always'")
 def test_always_policy_force_deletes_branch(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
-    _set_user_config_flag(page, "workspaceBranchDeletionPolicy", "always")
+    _set_user_config_flag(
+        page, "workspaceBranchDeletionPolicy", "always", backend_url=sculptor_instance_.backend_api_url
+    )
 
     branch_name, workspace_id = _create_worktree_workspace(page, "policy-always")
     paths = _worktree_paths(sculptor_instance_.project_path)

@@ -120,7 +120,9 @@ def test_enter_accepts_skill_suggestion_when_enter_is_send_binding(
     # Configure Enter as the send-message keybinding. This triggers a page
     # reload, so do it AFTER start_task_and_wait_for_ready — the helper
     # waits for the TipTap editor to re-initialize.
-    _set_user_config_flag(page, "keybindings", {"send_message": "Enter"})
+    _set_user_config_flag(
+        page, "keybindings", {"send_message": "Enter"}, backend_url=sculptor_instance_.backend_api_url
+    )
 
     chat_panel = task_page.get_chat_panel()
     _open_skill_popover_with_filter(page, chat_panel, skill_name)

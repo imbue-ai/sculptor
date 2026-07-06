@@ -64,7 +64,7 @@ def test_entity_mention_chip_persists_after_workspace_switch(
     page = sculptor_instance_.page
 
     # The entity-mention picker is gated by a user-config flag.
-    enable_entity_mentions(page)
+    enable_entity_mentions(page, backend_url=sculptor_instance_.backend_api_url)
 
     task_page = _navigate_to_task_chat(sculptor_instance_, _SINGLE_MENTION_WORKSPACE_NAME)
     chat_panel = task_page.get_chat_panel()
@@ -114,7 +114,7 @@ def test_entity_mentions_in_two_paragraphs_persist_after_workspace_switch(
     """
     page = sculptor_instance_.page
 
-    enable_entity_mentions(page)
+    enable_entity_mentions(page, backend_url=sculptor_instance_.backend_api_url)
 
     task_page = _navigate_to_task_chat(sculptor_instance_, _MULTI_PARAGRAPH_WORKSPACE_NAME)
     chat_panel = task_page.get_chat_panel()

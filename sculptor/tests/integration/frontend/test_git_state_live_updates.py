@@ -56,7 +56,9 @@ def test_current_branch_updates_after_external_checkout(sculptor_instance_: Scul
     page = sculptor_instance_.page
 
     # Clone mode so `origin/main` exists in the workspace checkout to branch from.
-    task_page = start_task_and_wait_for_ready(page, prompt=_WRITE_FILE_PROMPT, mode="CLONE")
+    task_page = start_task_and_wait_for_ready(
+        page, prompt=_WRITE_FILE_PROMPT, mode="CLONE", backend_url=sculptor_instance_.backend_api_url
+    )
     wait_for_completed_message_count(chat_panel=task_page.get_chat_panel(), expected_message_count=2)
 
     # Wait for the scanner to publish the baseline branch before changing it.
@@ -86,7 +88,9 @@ def test_target_branch_selector_updates_when_remote_ref_added(sculptor_instance_
     """
     page = sculptor_instance_.page
 
-    task_page = start_task_and_wait_for_ready(page, prompt=_WRITE_FILE_PROMPT, mode="CLONE")
+    task_page = start_task_and_wait_for_ready(
+        page, prompt=_WRITE_FILE_PROMPT, mode="CLONE", backend_url=sculptor_instance_.backend_api_url
+    )
     wait_for_completed_message_count(chat_panel=task_page.get_chat_panel(), expected_message_count=2)
 
     # Open the selector and confirm the auto-resolved remote is already listed.

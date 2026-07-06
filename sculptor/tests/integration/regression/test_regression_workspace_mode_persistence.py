@@ -39,7 +39,7 @@ def test_workspace_selection_mode_persists_after_workspace_creation(sculptor_ins
 
     # Enable the experimental in-place workspaces flag so the mode selector
     # offers the In-place option.
-    enable_in_place_workspaces(page)
+    enable_in_place_workspaces(page, backend_url=sculptor_instance_.backend_api_url)
 
     # Per-test cleanup deletes every workspace, so the empty first-run page hosts
     # the inline create form (it shares the modal form's field testids). Its

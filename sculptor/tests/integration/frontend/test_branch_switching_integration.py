@@ -89,7 +89,7 @@ def test_in_place_mode_displayed_correctly(sculptor_instance_: SculptorInstance)
     page = sculptor_instance_.page
 
     # Enable the experimental in-place workspaces flag so the mode selector is visible.
-    enable_in_place_workspaces(page)
+    enable_in_place_workspaces(page, backend_url=sculptor_instance_.backend_api_url)
 
     # We should already be on the Add Workspace page (cleanup deletes all workspaces).
     add_workspace_page = PlaywrightAddWorkspacePage(page=page)

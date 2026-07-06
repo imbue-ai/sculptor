@@ -80,7 +80,7 @@ def test_tab_on_workspace_drills_into_agent_list(
     on the workspace row" without depending on row text content.
     """
     page = sculptor_instance_.page
-    enable_entity_mentions(page)
+    enable_entity_mentions(page, backend_url=sculptor_instance_.backend_api_url)
 
     workspace_name = f"{_WORKSPACE_NAME_PREFIX}TabAgents"
     task_page = _navigate_to_task_chat(sculptor_instance_, workspace_name)
@@ -118,7 +118,7 @@ def test_click_on_workspace_drills_into_agent_list(
     on row text content.
     """
     page = sculptor_instance_.page
-    enable_entity_mentions(page)
+    enable_entity_mentions(page, backend_url=sculptor_instance_.backend_api_url)
 
     workspace_name = f"{_WORKSPACE_NAME_PREFIX}ClickAgents"
     task_page = _navigate_to_task_chat(sculptor_instance_, workspace_name)
@@ -158,7 +158,7 @@ def test_shift_tab_steps_back_from_workspace_drill(
     showing, not the agent list.
     """
     page = sculptor_instance_.page
-    enable_entity_mentions(page)
+    enable_entity_mentions(page, backend_url=sculptor_instance_.backend_api_url)
 
     workspace_name = f"{_WORKSPACE_NAME_PREFIX}StepBack"
     task_page = _navigate_to_task_chat(sculptor_instance_, workspace_name)
@@ -194,7 +194,7 @@ def test_enter_on_agent_after_drill_commits_agent_chip(
     relying on row text content.
     """
     page = sculptor_instance_.page
-    enable_entity_mentions(page)
+    enable_entity_mentions(page, backend_url=sculptor_instance_.backend_api_url)
 
     workspace_name = f"{_WORKSPACE_NAME_PREFIX}AgentCommit"
     task_page = _navigate_to_task_chat(sculptor_instance_, workspace_name)

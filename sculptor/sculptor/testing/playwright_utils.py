@@ -398,6 +398,7 @@ def start_task_and_wait_for_ready(
     workspace_name: str | None = None,
     mode: str | None = None,
     agent_type: str | None = None,
+    backend_url: str | None = None,
 ) -> PlaywrightTaskPage:
     """Create a workspace and agent through the new-workspace UI.
 
@@ -427,10 +428,20 @@ def start_task_and_wait_for_ready(
     Tests that exercise CLONE-specific semantics (e.g. ``origin/*`` remote
     refs in the workspace's checkout) can pass ``mode="CLONE"`` — the helper
     will enable the clone-workspaces flag, reload, then pick CLONE in the
-    mode selector before submitting.
+    mode selector before submitting. CLONE mode requires ``backend_url`` (the
+    backend's HTTP origin, ``SculptorInstance.backend_api_url``) because
+    enabling the flag hits ``/api/v1/config``, which the renderer origin cannot
+    serve in packaged builds (it is ``sculptor://app``).
     """
     if mode == "CLONE":
-        enable_clone_workspaces(sculptor_page)
+        if backend_url is None:
+            raise ValueError(
+                "start_task_and_wait_for_ready(mode='CLONE') requires backend_url so the "
+                + "clone-workspaces flag can be toggled against the backend http origin; pass "
+                + "sculptor_instance_.backend_api_url. The renderer origin is sculptor://app in "
+                + "packaged builds and serves no /api."
+            )
+        enable_clone_workspaces(sculptor_page, backend_url=backend_url)
     elif mode not in (None, "WORKTREE"):
         raise ValueError(f"unsupported mode: {mode!r}; expected None, 'WORKTREE', or 'CLONE'")
 
