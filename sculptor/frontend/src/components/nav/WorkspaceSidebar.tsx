@@ -232,12 +232,14 @@ export const WorkspaceSidebar = (): ReactElement | null => {
             testId={ElementIds.SIDEBAR_CMDK_LINK}
           />
           {/* Opens the new-workspace dialog; the per-repo "+" in the repo groups
-            below is the direct-create affordance. */}
+            below is the direct-create affordance. Disabled on first run, but with
+            no tooltip: the inline first-run form is the obvious create affordance,
+            so a tooltip pointing back at the sidebar row would just float detached
+            beside the centered form. */}
           <NavItem
             icon={Plus}
             label="New Workspace"
             disabled={isWorkspaceListEmpty}
-            disabledTooltip="Use the form to create your first workspace"
             onClick={() => setNewWorkspaceModal({ open: true })}
             testId={ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON}
           />
