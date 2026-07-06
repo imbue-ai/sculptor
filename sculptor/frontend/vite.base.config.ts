@@ -219,6 +219,35 @@ function previewIdentity(root: string): Plugin {
   };
 }
 
+/**
+ * OpenHost preview HMR keepalive: periodically send a no-op custom event to
+ * every connected HMR client so the websocket never looks idle. The HMR socket
+ * carries traffic only on file edits, so during normal browsing an
+ * intermediary's idle timeout (the OpenHost edge in front of the nginx /proxy
+ * route) can silently kill it — and Vite's client answers any lost connection
+ * with a full location.reload() once the server responds again, which on a
+ * phone shows up as the page "randomly" hard-reloading about once a minute
+ * (and on every return from the background, where the frozen page stops
+ * generating traffic but the socket can survive if packets keep flowing).
+ * Clients ignore custom events they have no listener for, so this is
+ * invisible to the app.
+ */
+function previewHmrKeepalive(): Plugin {
+  const KEEPALIVE_INTERVAL_MS = 25_000; // safely under common 60s idle timeouts
+  return {
+    name: "sculptor:preview-hmr-keepalive",
+    apply: "serve",
+    configureServer(server): void {
+      const interval = setInterval(() => {
+        server.ws.send({ type: "custom", event: "sculptor:preview-keepalive" });
+      }, KEEPALIVE_INTERVAL_MS);
+      // Don't let the timer hold the process; stop it with the server.
+      interval.unref();
+      server.httpServer?.on("close", () => clearInterval(interval));
+    },
+  };
+}
+
 /** Dev-only proxy server forwarding `/api`, `/ws`, and `/plugins/local` to the backend. */
 function devServer(env: Record<string, string>, fePort: number): import("vite").ServerOptions {
   const apiPort = Number(env.SCULPTOR_API_PORT || 5050);
@@ -291,7 +320,7 @@ export function defineFrontendConfig(opts: FrontendConfigOptions): UserConfigExp
       plugins: [
         ...sharedPlugins(opts.root),
         ...(opts.extraPlugins ?? []),
-        ...(openhostProxyBase ? [previewIdentity(opts.root)] : []),
+        ...(openhostProxyBase ? [previewIdentity(opts.root), previewHmrKeepalive()] : []),
       ],
     };
 
