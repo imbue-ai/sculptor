@@ -249,6 +249,7 @@ def _run_cycle(
     emit_streaming: bool,
     plugin_dir: str | None,
     system_commands: list[str],
+    write_session_file: bool,
 ) -> int | None:
     """Run one full ``init → messages → result`` cycle for a single user frame.
 
@@ -259,6 +260,12 @@ def _run_cycle(
     processor has the session id before any handler blocks (e.g.
     ask_user_question waiting on an MCP response).
 
+    ``write_session_file`` writes the ``--resume`` history file just before the
+    first init. The caller sets it only on the first cycle (and only when
+    session persistence is enabled), so it runs exactly once per invocation and
+    — crucially — never when stdin is already at EOF: an immediate-EOF exit runs
+    no cycle at all and therefore leaves nothing on disk.
+
     ``system_commands`` (directives extracted from ``--append-system-prompt``)
     run before the frame's own directives. The caller passes them only for the
     first cycle, since an appended system prompt is a launch-time input, not a
@@ -267,6 +274,9 @@ def _run_cycle(
     Returns an exit code if the cycle terminates the whole process (an unknown
     command → 1), or ``None`` to signal the caller may run further cycles.
     """
+    if write_session_file:
+        _write_session_file(session_id)
+
     _emit_jsonl([make_init_message(session_id)])
 
     all_messages: list[dict] = []
@@ -326,8 +336,9 @@ def main(argv: list[str] | None = None) -> int:
 
     # `--no-session-persistence` (used by /btw's forked invocation) means we
     # must leave the resumed session file untouched and not write a new one.
-    if not parsed.no_session_persistence:
-        _write_session_file(session_id)
+    # The write itself is deferred into the first cycle (see `_run_cycle`) so an
+    # immediate-EOF exit leaves no orphan session file on disk.
+    persist_session = not parsed.no_session_persistence
 
     # fake_claude: directives embedded in the appended system prompt are a
     # launch-time input, so they run once — on the first cycle only.
@@ -337,7 +348,9 @@ def main(argv: list[str] | None = None) -> int:
     # invocation) — a single cycle, no stdin loop.
     if isinstance(parsed.p_flag, str):
         _maybe_delay_for_compact_indicator(parsed.p_flag, parsed.resume)
-        exit_code = _run_cycle(parsed.p_flag, session_id, cwd, emit_streaming, plugin_dir, system_commands)
+        exit_code = _run_cycle(
+            parsed.p_flag, session_id, cwd, emit_streaming, plugin_dir, system_commands, persist_session
+        )
         return exit_code if exit_code is not None else 0
 
     # Stream-json stdin (the standard main-agent path): one scripted cycle per
@@ -351,7 +364,15 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             _maybe_delay_for_compact_indicator(prompt, parsed.resume)
             cycle_system_commands = system_commands if is_first_cycle else []
-            exit_code = _run_cycle(prompt, session_id, cwd, emit_streaming, plugin_dir, cycle_system_commands)
+            exit_code = _run_cycle(
+                prompt,
+                session_id,
+                cwd,
+                emit_streaming,
+                plugin_dir,
+                cycle_system_commands,
+                write_session_file=is_first_cycle and persist_session,
+            )
             if exit_code is not None:
                 return exit_code
             is_first_cycle = False
@@ -359,7 +380,7 @@ def main(argv: list[str] | None = None) -> int:
     # Non-stream-json single-shot: a plain piped prompt, or nothing on a tty.
     prompt = html.unescape(sys.stdin.read()).strip() if not sys.stdin.isatty() else ""
     _maybe_delay_for_compact_indicator(prompt, parsed.resume)
-    exit_code = _run_cycle(prompt, session_id, cwd, emit_streaming, plugin_dir, system_commands)
+    exit_code = _run_cycle(prompt, session_id, cwd, emit_streaming, plugin_dir, system_commands, persist_session)
     return exit_code if exit_code is not None else 0
 
 

@@ -701,12 +701,18 @@ def _user_frame(content: str) -> str:
 
 
 def _run_fake_claude_stream_json(
-    stdin_text: str, *, include_partial: bool = False, timeout: float = 30.0
+    stdin_text: str,
+    *,
+    include_partial: bool = False,
+    append_system_prompt: str | None = None,
+    home: Path | None = None,
+    timeout: float = 30.0,
 ) -> subprocess.CompletedProcess[str]:
     """Run FakeClaude in stream-json input mode, feeding ``stdin_text`` then EOF.
 
     ``subprocess.run(input=...)`` closes stdin after writing, so this exercises
-    the exit-on-EOF path once all frames are consumed.
+    the exit-on-EOF path once all frames are consumed. ``home`` pins ``$HOME``
+    so a test can inspect (or assert the absence of) the on-disk session file.
     """
     argv = [
         sys.executable,
@@ -720,12 +726,16 @@ def _run_fake_claude_stream_json(
     ]
     if include_partial:
         argv.append("--include-partial-messages")
+    if append_system_prompt is not None:
+        argv.extend(["--append-system-prompt", append_system_prompt])
+    env = {**os.environ, "HOME": str(home)} if home is not None else None
     return subprocess.run(
         argv,
         input=stdin_text,
         capture_output=True,
         text=True,
         cwd=str(Path(__file__).parents[3]),
+        env=env,
         timeout=timeout,
     )
 
@@ -789,6 +799,43 @@ def test_stream_json_exits_silently_on_immediate_eof() -> None:
     result = _run_fake_claude_stream_json("")
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == ""
+
+
+def test_stream_json_immediate_eof_writes_no_session_file(tmp_path: Path) -> None:
+    """The silent immediate-EOF exit touches no disk: the session history file
+    is deferred until a frame arrives, so a session that emits nothing leaves no
+    orphan file. A single real frame under the same pinned HOME does write one,
+    proving the negative assertion isn't vacuous."""
+    claude_dir = tmp_path / ".claude"
+
+    eof = _run_fake_claude_stream_json("", home=tmp_path)
+    assert eof.returncode == 0, eof.stderr
+    session_files = list(claude_dir.rglob("*.jsonl")) if claude_dir.exists() else []
+    assert session_files == []
+
+    framed = _run_fake_claude_stream_json(_user_frame('fake_claude:text `{"text": "hi"}`'), home=tmp_path)
+    assert framed.returncode == 0, framed.stderr
+    assert list(claude_dir.rglob("*.jsonl"))
+
+
+def test_stream_json_system_prompt_directives_run_once_on_first_cycle() -> None:
+    """fake_claude: directives in --append-system-prompt run on the first cycle
+    only (before that frame's own directives) — an appended system prompt is a
+    launch-time input, not a per-turn one — and do not repeat on later cycles."""
+    frames = [
+        _user_frame('fake_claude:text `{"text": "TURN1"}`'),
+        _user_frame('fake_claude:text `{"text": "TURN2"}`'),
+    ]
+    result = _run_fake_claude_stream_json(
+        "".join(frames),
+        append_system_prompt='fake_claude:text `{"text": "SYSTEM"}`',
+    )
+    assert result.returncode == 0, result.stderr
+
+    events = _top_level_events(result.stdout)
+    assistant_texts = [e["message"]["content"][0]["text"] for e in events if e.get("type") == "assistant"]
+    # SYSTEM runs exactly once, in the first cycle ahead of TURN1; TURN2's cycle has none.
+    assert assistant_texts == ["SYSTEM", "TURN1", "TURN2"]
 
 
 def test_stream_json_interrupt_between_cycles_exits_with_sigterm_code() -> None:
