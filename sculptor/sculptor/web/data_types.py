@@ -686,6 +686,18 @@ class BinaryMode(UpperCaseStrEnum):
     CUSTOM = auto()
 
 
+class BinarySource(UpperCaseStrEnum):
+    """Where a dependency's active binary was resolved from.
+
+    Distinct from :class:`BinaryMode`, which is the *configured intent*: pi in
+    MANAGED mode falls back to a system-PATH binary when no managed copy has
+    been downloaded, so its mode can be MANAGED while its source is EXTERNAL.
+    """
+
+    MANAGED = auto()
+    EXTERNAL = auto()
+
+
 class DependencyInfo(SerializableModel):
     """Rich status information for a single dependency binary."""
 
@@ -694,6 +706,10 @@ class DependencyInfo(SerializableModel):
     version: str | None = None
     is_override: bool = False
     mode: BinaryMode | None = None
+    # Where the active binary came from: Sculptor's downloaded, version-pinned
+    # copy (MANAGED) or a user-provided one — custom path or system PATH
+    # (EXTERNAL). None when not installed, and for tools with no managed mode.
+    source: BinarySource | None = None
     version_range: VersionRangeInfo | None = None
     is_version_in_range: bool | None = None
     managed_version: str | None = None

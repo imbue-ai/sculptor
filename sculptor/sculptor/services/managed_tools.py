@@ -113,6 +113,11 @@ class ManagedTool(ABC):
     # known per tool, so the offline binary-resolution read path can find a staged
     # binary without resolving a (possibly network-bound) distribution.
     binary_subpath: str
+    # Whether startup auto-install may download this tool when no managed copy exists
+    # yet. A required tool (Claude) bootstraps itself on first run; an optional one
+    # (pi) is first installed only by explicit user action, and startup merely
+    # refreshes an already-downloaded copy that has fallen out of the pinned range.
+    installs_on_startup_when_missing: bool
 
     @abstractmethod
     def resolve_distribution(self) -> ResolvedDistribution:
@@ -193,6 +198,9 @@ class PiManagedTool(ManagedTool):
     retention_keep = 1
     # pi keeps its whole extracted tree and runs from ``pi/pi``.
     binary_subpath = "pi/pi"
+    # pi is an optional harness: its managed copy is downloaded only when the user
+    # asks for it (onboarding or Settings), never by startup.
+    installs_on_startup_when_missing = False
 
     def resolve_distribution(self) -> ResolvedDistribution:
         platform_key = _current_pi_platform_key()
@@ -292,6 +300,8 @@ class ClaudeManagedTool(ManagedTool):
     retention_keep = 2
     # Claude's single binary sits directly at ``claude`` in the version dir.
     binary_subpath = "claude"
+    # Claude is required, so a missing MANAGED binary is installed on startup.
+    installs_on_startup_when_missing = True
 
     def resolve_distribution(self) -> ResolvedDistribution:
         platform_key = _current_claude_platform_key()

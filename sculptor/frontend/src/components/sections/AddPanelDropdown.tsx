@@ -19,6 +19,7 @@ import { useRef } from "react";
 
 import { type AgentTypeName, ElementIds } from "~/api";
 import { useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
+import { INSTALL_PI_LABEL, usePiAgentOption } from "~/common/state/hooks/usePiAgentOption.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 
 import {
@@ -92,6 +93,7 @@ const AddPanelMenuItems = ({
   // refetchOnMount), so the agent-type sub-menu tracks the registrations
   // directory without a restart or an explicit refetch call.
   const { registrations } = useTerminalAgentRegistrations();
+  const { isPiAvailable, openPiSettings } = usePiAgentOption();
 
   // rendering / derived data
   const agentTypeOptions = buildAgentTypeOptions({ registrations });
@@ -113,19 +115,29 @@ const AddPanelMenuItems = ({
           <MenuRow label="New agent of type…" />
         </DropdownMenu.SubTrigger>
         <DropdownMenu.SubContent data-testid={ElementIds.AGENT_TYPE_MENU}>
-          {agentTypeOptions.map((option) => (
-            <DropdownMenu.Item
-              key={option.key}
-              data-testid={agentTypeTestId(option.agentType)}
-              data-registration-id={option.registrationId}
-              onSelect={() => {
-                onOpenPanel();
-                actions.createAgent(option.agentType, option.registrationId, subSection);
-              }}
-            >
-              <MenuRow label={option.label} />
-            </DropdownMenu.Item>
-          ))}
+          {agentTypeOptions.map((option) => {
+            // pi is optional: while no usable binary is resolved its entry reads
+            // "Install Pi" and routes to Settings → Pi instead of creating a pi
+            // agent that cannot launch.
+            const isUnavailablePi = option.agentType === "pi" && !isPiAvailable;
+            return (
+              <DropdownMenu.Item
+                key={option.key}
+                data-testid={agentTypeTestId(option.agentType)}
+                data-registration-id={option.registrationId}
+                onSelect={() => {
+                  if (isUnavailablePi) {
+                    openPiSettings();
+                    return;
+                  }
+                  onOpenPanel();
+                  actions.createAgent(option.agentType, option.registrationId, subSection);
+                }}
+              >
+                <MenuRow label={isUnavailablePi ? INSTALL_PI_LABEL : option.label} />
+              </DropdownMenu.Item>
+            );
+          })}
         </DropdownMenu.SubContent>
       </DropdownMenu.Sub>
 

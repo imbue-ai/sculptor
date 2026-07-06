@@ -37,6 +37,7 @@ from sculptor.services.managed_tools import PiPin
 from sculptor.services.managed_tools import PlatformPin
 from sculptor.services.managed_tools import get_managed_tool
 from sculptor.web.data_types import BinaryMode
+from sculptor.web.data_types import BinarySource
 from sculptor.web.data_types import InstallProgress
 
 # These tests exercise the real install/download orchestrator with httpx stubbed in
@@ -1783,10 +1784,11 @@ class TestResolvePiPath:
 
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
     @patch("sculptor.services.dependency_management_service.get_internal_folder")
-    def test_managed_mode_returns_staged_pi_binary(
-        self, mock_folder: MagicMock, mock_config: MagicMock, tmp_path: Path
+    @patch("shutil.which", return_value="/usr/local/bin/pi")
+    def test_managed_mode_prefers_staged_binary_over_path(
+        self, mock_which: MagicMock, mock_folder: MagicMock, mock_config: MagicMock, tmp_path: Path
     ) -> None:
-        """MANAGED pi resolves to the staged ``…/version-<v>/pi/pi`` (not PATH)."""
+        """MANAGED pi resolves to the staged ``…/version-<v>/pi/pi``, never consulting PATH."""
         mock_folder.return_value = tmp_path
         mock_config.return_value = _make_user_config_with_pi("MANAGED")
 
@@ -1799,11 +1801,30 @@ class TestResolvePiPath:
             result = service.resolve_binary_path(Dependency.PI)
 
         assert result == str(version_dir / "pi")
+        mock_which.assert_not_called()
 
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
     @patch("sculptor.services.dependency_management_service.get_internal_folder")
-    def test_managed_mode_with_no_install_returns_none(
-        self, mock_folder: MagicMock, mock_config: MagicMock, tmp_path: Path
+    @patch("shutil.which", return_value="/usr/local/bin/pi")
+    def test_managed_mode_with_no_install_falls_back_to_path(
+        self, mock_which: MagicMock, mock_folder: MagicMock, mock_config: MagicMock, tmp_path: Path
+    ) -> None:
+        """MANAGED with no downloaded copy falls back to a pi on the system PATH."""
+        mock_folder.return_value = tmp_path
+        mock_config.return_value = _make_user_config_with_pi("MANAGED")
+
+        with ConcurrencyGroup(name="test") as cg:
+            service = DependencyManagementService(concurrency_group=cg)
+            result = service.resolve_binary_path(Dependency.PI)
+
+        assert result == "/usr/local/bin/pi"
+        mock_which.assert_called_once_with("pi")
+
+    @patch("sculptor.services.dependency_management_service.get_user_config_instance")
+    @patch("sculptor.services.dependency_management_service.get_internal_folder")
+    @patch("shutil.which", return_value=None)
+    def test_managed_mode_with_no_install_and_no_path_pi_returns_none(
+        self, mock_which: MagicMock, mock_folder: MagicMock, mock_config: MagicMock, tmp_path: Path
     ) -> None:
         mock_folder.return_value = tmp_path
         mock_config.return_value = _make_user_config_with_pi("MANAGED")
@@ -1942,6 +1963,72 @@ class TestPiGetStatus:
         assert status.pi.installed is True
         assert status.pi.version == "0.50.0"
         assert status.pi.is_version_in_range is False
+
+    @patch("shutil.which", return_value="/usr/local/bin/pi")
+    @patch("sculptor.services.dependency_management_service.get_user_config_instance")
+    @patch("sculptor.services.dependency_management_service.get_internal_folder")
+    def test_status_reports_external_source_for_path_fallback(
+        self, mock_folder: MagicMock, mock_config: MagicMock, mock_which: MagicMock, tmp_path: Path
+    ) -> None:
+        """MANAGED with no downloaded copy resolves a PATH pi and reports it as EXTERNAL."""
+        mock_folder.return_value = tmp_path
+        mock_config.return_value = _make_user_config_with_pi("MANAGED")
+
+        pi_version_result = FinishedProcess(
+            stdout="", stderr=f"pi {_PI_RECOMMENDED}", returncode=0, command=("test",), is_output_already_logged=False
+        )
+        mock_cg = MagicMock()
+        mock_cg.run_process_to_completion.return_value = pi_version_result
+
+        service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
+        status = service.get_status()
+
+        assert status.pi.installed is True
+        assert status.pi.path == "/usr/local/bin/pi"
+        assert status.pi.source == BinarySource.EXTERNAL
+        assert status.pi.managed_version is None
+
+    @patch("shutil.which", return_value=None)
+    @patch("sculptor.services.dependency_management_service.get_user_config_instance")
+    @patch("sculptor.services.dependency_management_service.get_internal_folder")
+    def test_status_reports_managed_source_for_staged_binary(
+        self, mock_folder: MagicMock, mock_config: MagicMock, mock_which: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_folder.return_value = tmp_path
+        mock_config.return_value = _make_user_config_with_pi("MANAGED")
+
+        version_dir = tmp_path / "dependencies" / "pi" / f"version-{_PI_RECOMMENDED}" / "pi"
+        version_dir.mkdir(parents=True)
+        (version_dir / "pi").touch()
+
+        pi_version_result = FinishedProcess(
+            stdout="", stderr=f"pi {_PI_RECOMMENDED}", returncode=0, command=("test",), is_output_already_logged=False
+        )
+        mock_cg = MagicMock()
+        mock_cg.run_process_to_completion.return_value = pi_version_result
+
+        service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
+        status = service.get_status()
+
+        assert status.pi.installed is True
+        assert status.pi.path == str(version_dir / "pi")
+        assert status.pi.source == BinarySource.MANAGED
+        assert status.pi.managed_version == _PI_RECOMMENDED
+
+    @patch("shutil.which", return_value=None)
+    @patch("sculptor.services.dependency_management_service.get_user_config_instance")
+    @patch("sculptor.services.dependency_management_service.get_internal_folder")
+    def test_status_reports_no_source_when_not_installed(
+        self, mock_folder: MagicMock, mock_config: MagicMock, mock_which: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_folder.return_value = tmp_path
+        mock_config.return_value = _make_user_config_with_pi("MANAGED")
+
+        service = DependencyManagementService.model_construct(concurrency_group=MagicMock())
+        status = service.get_status()
+
+        assert status.pi.installed is False
+        assert status.pi.source is None
 
 
 class TestPiInstallManaged:
@@ -2408,16 +2495,18 @@ class TestCheckInstalledConcurrently:
 class TestAutoInstallLoop:
     """_auto_install_if_needed loops over managed tools (Claude + pi).
 
-    Both Claude and pi auto-install whenever they are MANAGED and missing; neither
-    is gated behind a flag.
+    Claude is required and bootstraps itself whenever it is MANAGED and missing.
+    pi is optional: it is first installed only by explicit user action, so startup
+    never bootstraps it — it only refreshes an already-downloaded managed copy
+    that is out of the pinned range (or broken).
     """
 
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
     @patch("sculptor.services.dependency_management_service.get_internal_folder")
-    def test_pi_managed_and_missing_is_auto_installed(
+    def test_pi_managed_with_no_managed_copy_is_not_bootstrapped(
         self, mock_folder: MagicMock, mock_config: MagicMock, tmp_path: Path
     ) -> None:
-        """pi MANAGED + missing auto-installs on startup; Claude (CUSTOM) does not."""
+        """pi MANAGED with no downloaded copy is left alone on startup."""
         mock_folder.return_value = tmp_path
         mock_config.return_value = _make_managed_config(claude="claude", pi="MANAGED")
         mock_cg = MagicMock()
@@ -2425,7 +2514,7 @@ class TestAutoInstallLoop:
 
         service._auto_install_if_needed()
 
-        assert _auto_install_spawn_args(mock_cg) == [(Dependency.PI,)]
+        assert _auto_install_spawn_args(mock_cg) == []
 
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
     @patch("sculptor.services.dependency_management_service.get_internal_folder")
@@ -2444,10 +2533,10 @@ class TestAutoInstallLoop:
 
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
     @patch("sculptor.services.dependency_management_service.get_internal_folder")
-    def test_both_auto_install_when_managed_and_missing(
+    def test_both_managed_and_missing_only_claude_bootstraps(
         self, mock_folder: MagicMock, mock_config: MagicMock, tmp_path: Path
     ) -> None:
-        """Both MANAGED + missing: Claude and pi both auto-install, in registry order."""
+        """Both MANAGED + missing: required Claude bootstraps, optional pi does not."""
         mock_folder.return_value = tmp_path
         mock_config.return_value = _make_managed_config(claude="MANAGED", pi="MANAGED")
         mock_cg = MagicMock()
@@ -2455,7 +2544,31 @@ class TestAutoInstallLoop:
 
         service._auto_install_if_needed()
 
-        assert _auto_install_spawn_args(mock_cg) == [(Dependency.CLAUDE,), (Dependency.PI,)]
+        assert _auto_install_spawn_args(mock_cg) == [(Dependency.CLAUDE,)]
+
+    @patch("sculptor.services.dependency_management_service.get_user_config_instance")
+    @patch("sculptor.services.dependency_management_service.get_internal_folder")
+    def test_pi_managed_copy_out_of_range_is_upgraded(
+        self, mock_folder: MagicMock, mock_config: MagicMock, tmp_path: Path
+    ) -> None:
+        """An already-downloaded managed pi outside the pinned range is refreshed."""
+        mock_folder.return_value = tmp_path
+        mock_config.return_value = _make_managed_config(claude="claude", pi="MANAGED")
+
+        # Stage a stale managed pi so the upgrade path (not the bootstrap gate) decides.
+        version_dir = tmp_path / "dependencies" / "pi" / "version-0.79.0" / "pi"
+        version_dir.mkdir(parents=True)
+        (version_dir / "pi").touch()
+
+        mock_cg = MagicMock()
+        mock_cg.run_process_to_completion.return_value = FinishedProcess(
+            stdout="", stderr="pi 0.79.0", returncode=0, command=("test",), is_output_already_logged=False
+        )
+        service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
+
+        service._auto_install_if_needed()
+
+        assert _auto_install_spawn_args(mock_cg) == [(Dependency.PI,)]
 
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
     @patch("sculptor.services.dependency_management_service.get_internal_folder")

@@ -36,10 +36,9 @@ def _populate_with_path_mode(path: Path) -> None:
         user_id="onboarding-test",
         organization_id="onboarding-test",
         instance_id="onboarding-test",
-        # Pin pi to CUSTOM ("pi") so startup auto-install skips the managed pi
-        # download and the backend stays offline — mirroring the default test
-        # config (resources.py _make_test_user_config). This test exercises the
-        # Claude card and must not trigger an unrelated pi download.
+        # Pin pi to CUSTOM ("pi") so it resolves the FakePi stub on PATH without
+        # touching the managed-copy directory — mirroring the default test
+        # config (resources.py _make_test_user_config).
         dependency_paths=DependencyPaths(claude="claude", pi="pi"),
     )
     save_config(config, internal_dir / "config.toml")
@@ -77,6 +76,35 @@ def test_full_onboarding_flow(sculptor_instance_factory_: SculptorInstanceFactor
         # After onboarding, the Add Workspace page should load
         add_workspace_page = PlaywrightAddWorkspacePage(page)
         expect(add_workspace_page.get_submit_button()).to_be_visible()
+
+
+@user_story("to continue onboarding without installing the optional pi harness")
+@custom_sculptor_folder_populator.with_args(_populate_with_path_mode)
+@stub_dependency("pi", state=DependencyState.NOT_INSTALLED)
+def test_onboarding_pi_is_optional_and_does_not_gate_continue(
+    sculptor_instance_factory_: SculptorInstanceFactory,
+) -> None:
+    """pi appears in the labeled Optional group of the installation step; with no
+    pi binary at all the card offers a direct Install (the managed download) and
+    Continue stays enabled."""
+    with sculptor_instance_factory_.spawn_instance(auto_project=False) as sculptor_instance:
+        page = sculptor_instance.page
+        onboarding_page = PlaywrightOnboardingPage(page)
+        onboarding_page.get_welcome_step().complete_step("test@user.com")
+
+        installation_step = onboarding_page.get_installation_step()
+        expect(installation_step).to_be_visible()
+
+        expect(installation_step.get_optional_header()).to_be_visible()
+        pi_card = installation_step.get_pi_card()
+        expect(pi_card.get_status()).to_have_text("not installed")
+        expect(pi_card.get_install_button()).to_be_visible()
+
+        # A missing pi never gates onboarding: Continue enables once the required
+        # dependencies (Claude, Git) are satisfied, and proceeds to add-repo.
+        expect(installation_step.get_complete_button()).to_be_enabled()
+        installation_step.complete_step()
+        expect(onboarding_page.get_add_repo_step()).to_be_visible()
 
 
 @user_story("to see a descriptive validation error when my email is rejected during onboarding")
@@ -406,8 +434,8 @@ def _populate_with_email_no_privacy(path: Path) -> None:
         user_id="returning-user-test",
         organization_id="returning-user-test-org",
         instance_id="returning-user-test-instance",
-        # Pin pi to CUSTOM ("pi") so startup auto-install skips the managed pi
-        # download and the backend stays offline (see _populate_with_path_mode).
+        # Pin pi to CUSTOM ("pi") so it resolves the FakePi stub on PATH (see
+        # _populate_with_path_mode).
         dependency_paths=DependencyPaths(claude="claude", pi="pi"),
     )
     save_config(config, internal_dir / "config.toml")

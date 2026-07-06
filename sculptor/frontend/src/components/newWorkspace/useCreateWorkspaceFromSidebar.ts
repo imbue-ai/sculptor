@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 
 import { getCurrentBranch, previewBranchName, WorkspaceInitializationStrategy } from "~/api";
 import type { StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
+import { isPiAvailableAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { createWorkspaceErrorToastAtom } from "~/common/state/atoms/toasts.ts";
 import { defaultModelAtom } from "~/common/state/atoms/userConfig.ts";
 import { useCreateWorkspace } from "~/common/state/hooks/useCreateWorkspace.ts";
@@ -38,6 +39,7 @@ type UseCreateWorkspaceFromSidebarReturn = {
 export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarReturn => {
   // State and hooks
   const lastSettings = useAtomValue(lastWorkspaceCreationSettingsAtom);
+  const isPiAvailable = useAtomValue(isPiAvailableAtom);
   const defaultModel = useAtomValue(defaultModelAtom);
   const setModalState = useSetAtom(newWorkspaceModalAtom);
   const setCreateWorkspaceErrorToast = useSetAtom(createWorkspaceErrorToastAtom);
@@ -53,8 +55,13 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
       const sameRepoSettings = lastSettings?.projectId === projectId ? lastSettings : null;
       const mode = lastSettings?.initStrategy ?? WorkspaceInitializationStrategy.WORKTREE;
       // Normalize the remembered type, mirroring the dialog's seeding. A bare
-      // "terminal" stays: it is a legitimate first-agent choice here.
-      const agentType: StoredAgentType = resolveStoredAgentType(lastSettings?.agentType ?? "claude");
+      // "terminal" stays: it is a legitimate first-agent choice here. This
+      // direct-create has no picker to steer to Settings, so a remembered "pi"
+      // with no usable binary falls back to Claude rather than launching a pi
+      // that cannot start.
+      const seedAgentType = lastSettings?.agentType ?? "claude";
+      const agentType: StoredAgentType =
+        seedAgentType === "pi" && !isPiAvailable ? "claude" : resolveStoredAgentType(seedAgentType);
 
       setIsPreparing(true);
       let sourceBranch = sameRepoSettings?.sourceBranch ?? "";
@@ -111,7 +118,15 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
         setModalState({ open: true, presetProjectId: projectId });
       }
     },
-    [lastSettings, defaultModel, registrations, createWorkspace, setModalState, setCreateWorkspaceErrorToast],
+    [
+      lastSettings,
+      isPiAvailable,
+      defaultModel,
+      registrations,
+      createWorkspace,
+      setModalState,
+      setCreateWorkspaceErrorToast,
+    ],
   );
 
   return { isCreating: isCreating || isPreparing, createFromSidebar };

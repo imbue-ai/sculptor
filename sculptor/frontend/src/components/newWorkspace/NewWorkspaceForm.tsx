@@ -13,6 +13,7 @@ import {
 } from "~/api";
 import { isDismissibleOverlayOpen } from "~/common/overlayUtils.ts";
 import { lastUsedAgentTypeAtom, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
+import { isPiAvailableAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { projectsArrayAtom, updateProjectsAtom } from "~/common/state/atoms/projects.ts";
 import { defaultEffortLevelAtom, defaultModelAtom, isDefaultFastModeAtom } from "~/common/state/atoms/userConfig.ts";
 import { useCreateWorkspace } from "~/common/state/hooks/useCreateWorkspace.ts";
@@ -69,6 +70,7 @@ export const NewWorkspaceForm = ({
   const updateProjects = useSetAtom(updateProjectsAtom);
   const lastSettings = useAtomValue(lastWorkspaceCreationSettingsAtom);
   const lastUsedAgentType = useAtomValue(lastUsedAgentTypeAtom);
+  const isPiAvailable = useAtomValue(isPiAvailableAtom);
   const defaultModel = useAtomValue(defaultModelAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
@@ -99,8 +101,10 @@ export const NewWorkspaceForm = ({
   const [agentTypeValue, setAgentTypeValue] = useState<StoredAgentType>(() => {
     const seed = lastSettings?.agentType ?? lastUsedAgentType;
     // Normalize the remembered seed. A bare "terminal" stays: it is a
-    // legitimate first-agent choice here.
-    return resolveStoredAgentType(seed);
+    // legitimate first-agent choice here. pi can be the remembered seed while no
+    // usable pi binary is resolved; preset Claude rather than a pi that cannot
+    // launch (the picker still lists pi as "Install Pi").
+    return seed === "pi" && !isPiAvailable ? "claude" : resolveStoredAgentType(seed);
   });
   const [userSelectedBranch, setUserSelectedBranch] = useState<string | undefined>(() => lastSettings?.sourceBranch);
   // `null` means "use the auto-filled preview"; any string means the user has
