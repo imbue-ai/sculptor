@@ -466,7 +466,15 @@ def start_task_and_wait_for_ready(
             "pi": ElementIDs.AGENT_TYPE_OPTION_PI,
             "terminal": ElementIDs.AGENT_TYPE_OPTION_TERMINAL,
         }[agent_type]
-        sculptor_page.get_by_test_id(option_id).click()
+        option = sculptor_page.get_by_test_id(option_id)
+        if agent_type == "pi":
+            # pi is optional: its entry reads "Install Pi" — and clicking it
+            # routes to Settings instead of selecting — until the picker's
+            # availability re-check (fired on this open) observes a usable
+            # binary. Tests install FakePi mid-session, so wait for the entry
+            # to flip to the selectable "pi" before clicking.
+            expect(option).to_have_text("pi", timeout=30_000)
+        option.click()
 
     # The empty-first-run inline form seeds the prompt with `/sculptor:help`; clear
     # it so the first agent is created promptless and this helper sends `prompt` as

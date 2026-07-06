@@ -28,7 +28,7 @@ type AgentTypeSelectProps = {
 export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectProps): ReactElement => {
   // State and hooks
   const { registrations, refetch: refreshRegistrations } = useTerminalAgentRegistrations();
-  const { isPiAvailable, openPiSettings } = usePiAgentOption();
+  const { isPiAvailable, openPiSettings, refreshPiAvailability } = usePiAgentOption();
 
   // JSX and rendering logic
   const { agentType, registrationId } = parseStoredAgentType(value);
@@ -52,9 +52,13 @@ export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectP
         onChange(next as StoredAgentType);
       }}
       onOpenChange={(open) => {
-        // Re-read the registrations directory on every open so the options track
-        // the filesystem without a restart.
-        if (open) refreshRegistrations();
+        // Re-read the registrations directory and pi's availability on every
+        // open so the options track the filesystem without a restart — the
+        // select's host (the new-workspace form) can outlive a pi install.
+        if (open) {
+          refreshRegistrations();
+          refreshPiAvailability();
+        }
       }}
     >
       <Select.Trigger variant="ghost" className={className} data-testid={ElementIds.ADD_WORKSPACE_AGENT_TYPE_SELECT}>
