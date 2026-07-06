@@ -19,6 +19,7 @@ import os
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any
+from typing import NoReturn
 from urllib.parse import urlparse
 
 import httpx
@@ -173,25 +174,49 @@ def _client_or_exit(json_output: bool) -> AuthenticatedClient:
         raise
 
 
-def _check_command_status(response: Any, json_output: bool) -> PluginCommandResponse:
-    """Map a command-endpoint response's status to errors, or return its body.
+def _parse_structured_error(content: bytes) -> tuple[str | None, str | None]:
+    """Extract ``(code, message)`` from a backend error body, if it has them.
 
-    Distinguishes the 403 "agent plugin loading disabled" case so we can point
-    the user at the setting that gates write ops.
+    The backend raises HTTPExceptions with ``detail={"code": ..., "message":
+    ...}``, which FastAPI serializes as ``{"detail": {"code": ..., "message":
+    ...}}``. Returns ``(None, None)`` for anything else, so callers can fall
+    back to the raw body.
+    """
+    try:
+        payload = json.loads(content)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None, None
+    detail = payload.get("detail") if isinstance(payload, dict) else None
+    if not isinstance(detail, dict):
+        return None, None
+    code = detail.get("code")
+    message = detail.get("message")
+    return (code if isinstance(code, str) else None, message if isinstance(message, str) else None)
+
+
+def _backend_error(action: str, response: Any, json_output: bool) -> NoReturn:
+    """Report a non-2xx backend response and exit.
+
+    Surfaces the backend's structured ``{code, message}`` when present (as the
+    message plus a machine-readable ``code`` in ``--json`` output) instead of
+    dumping the raw JSON body as an opaque string.
     """
     status = int(response.status_code)
-    if status == HTTPStatus.FORBIDDEN and b"agent_plugin_loading_disabled" in response.content:
-        cli_error(
-            "agent plugin loading is disabled",
-            detail="Enable it in Sculptor under Settings -> Plugins, then try again.",
-            json_output=json_output,
-        )
+    code, message = _parse_structured_error(response.content)
+    if message is not None:
+        cli_error(message, code=code, json_output=json_output)
+    cli_error(
+        f"{action} failed (HTTP {status})",
+        detail=response.content.decode(errors="replace"),
+        json_output=json_output,
+    )
+
+
+def _check_command_status(response: Any, json_output: bool) -> PluginCommandResponse:
+    """Map a command-endpoint response's status to errors, or return its body."""
+    status = int(response.status_code)
     if not (HTTPStatus.OK <= status < HTTPStatus.MULTIPLE_CHOICES):
-        cli_error(
-            f"backend error (HTTP {status})",
-            detail=response.content.decode(errors="replace"),
-            json_output=json_output,
-        )
+        _backend_error("plugin command", response, json_output)
     body = response.parsed
     if not isinstance(body, PluginCommandResponse):
         cli_error(
@@ -225,11 +250,17 @@ def _send_command(
 
 
 def _results_or_exit(response: PluginCommandResponse, json_output: bool) -> list[PluginCommandResult]:
-    """Return the per-renderer results, erroring if no window answered."""
+    """Return the per-renderer results, erroring if no window answered.
+
+    An empty ``results`` and "no windows connected" are the same condition on
+    the wire, so name it with an explicit code rather than leaving ``--json``
+    consumers to guess from an empty array.
+    """
     results = response.results
     if isinstance(results, Unset) or not results:
         cli_error(
             "No Sculptor window responded. Is Sculptor running with frontend plugins enabled?",
+            code="no_windows_connected",
             json_output=json_output,
         )
     return results
@@ -244,10 +275,17 @@ def _preferred_result(results: list[PluginCommandResult]) -> PluginCommandResult
 
 
 def _renderer_label(result: PluginCommandResult) -> str:
-    """A compact ``environment short-id origin`` label for a renderer."""
+    """A compact ``environment short-id origin[base]`` label for a renderer.
+
+    The base is appended only when it isn't the root, so a window running an
+    OpenHost preview bundle reads as ``…example.com/proxy/51042/`` while the
+    deployed app stays ``…example.com`` (they share the origin by design).
+    """
     renderer = result.renderer
     short_id = renderer.renderer_id[:_RENDERER_ID_DISPLAY_LENGTH]
-    return f"{renderer.environment.value} {short_id} {renderer.origin}"
+    base = _opt_str(renderer.base)
+    suffix = base if base is not None and base != "/" else ""
+    return f"{renderer.environment.value} {short_id} {renderer.origin}{suffix}"
 
 
 def _opt_str(value: None | str | Unset) -> str | None:
@@ -312,9 +350,11 @@ def _report_mutation(
     Default: report the preferred (Electron) renderer and note the rest.
     ``--all``: report every renderer and fail if any reports ``ok=False``.
     """
+    # Check for the no-windows case BEFORE emitting: otherwise --json would
+    # print the empty aggregate response AND then a second error document.
+    results = _results_or_exit(response, json_output)
     if json_output:
         _emit_json(response)
-    results = _results_or_exit(response, json_output)
 
     if show_all:
         any_failed = False
@@ -352,10 +392,13 @@ def _report_snapshots(
     show_all: bool,
 ) -> None:
     """Render list/inspect outcomes (read-only; never exits on ok=False)."""
+    # No-windows check first, even for --json: a bare `"results": []` is
+    # indistinguishable from success against zero windows, so name the
+    # condition (and exit non-zero) instead of emitting it.
+    results = _results_or_exit(response, json_output)
     if json_output:
         _emit_json(response)
         return
-    results = _results_or_exit(response, json_output)
 
     if show_all:
         for result in results:
@@ -409,11 +452,7 @@ def load(
             handle_connection_error(json_output)
         install_status = int(install_response.status_code)
         if not (HTTPStatus.OK <= install_status < HTTPStatus.MULTIPLE_CHOICES) or install_response.parsed is None:
-            cli_error(
-                f"upload failed (HTTP {install_status})",
-                detail=install_response.content.decode(errors="replace"),
-                json_output=json_output,
-            )
+            _backend_error("upload", install_response, json_output)
         source = install_response.parsed.manifest_url
 
     response = _send_command(
@@ -492,11 +531,7 @@ def remove(
         handle_connection_error(json_output)
     status = int(remove_response.status_code)
     if not (HTTPStatus.OK <= status < HTTPStatus.MULTIPLE_CHOICES):
-        cli_error(
-            f"remove failed (HTTP {status})",
-            detail=remove_response.content.decode(errors="replace"),
-            json_output=json_output,
-        )
+        _backend_error("remove", remove_response, json_output)
     if json_output:
         typer.echo(json.dumps({"ok": True, "plugin_id": plugin_id}))
     else:
@@ -553,11 +588,7 @@ def dir_command(
         handle_connection_error(json_output)
     status = int(response.status_code)
     if not (HTTPStatus.OK <= status < HTTPStatus.MULTIPLE_CHOICES) or response.parsed is None:
-        cli_error(
-            f"backend error (HTTP {status})",
-            detail=response.content.decode(errors="replace"),
-            json_output=json_output,
-        )
+        _backend_error("plugins directory lookup", response, json_output)
     if json_output:
         typer.echo(json.dumps({"path": response.parsed.path}))
     else:
