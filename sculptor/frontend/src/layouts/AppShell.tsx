@@ -90,6 +90,7 @@ export const AppShell = (): ReactElement => {
   // JSX and rendering logic
   const hasBackendStopped = backendStatus.status === "unresponsive";
   const hasHealthWarningOnBackend = backendStatus.status === "warning";
+  const isBackendReconnecting = backendStatus.status === "reconnecting";
   const isProjectPathInaccessible = currentProject !== null && currentProject.isPathAccessible === false;
 
   return (
@@ -117,6 +118,7 @@ export const AppShell = (): ReactElement => {
               onLinkClick={() => setIsRepoPathDialogOpen(true)}
             />
           )}
+          {isBackendReconnecting && <WarningStatusBanner tone="warning" message={backendStatus.payload.message} />}
           {(hasBackendStopped || hasHealthWarningOnBackend) && (
             <WarningStatusBanner message={backendStatus.payload.message} />
           )}
