@@ -7,6 +7,9 @@ Open Settings with `Cmd+,`. The sections:
 - **Agent** — defaults for new agents: model, fast mode, and effort level.
 - **Keybindings** — view and customize keyboard shortcuts.
 - **Panels** — default panel layout and visibility.
+- **Plugins** — manage [extensions](extensions.md): toggle bundled and
+  installed extensions, and control whether agents may load extensions into
+  your UI.
 - **File browser** — diff defaults (split vs. unified, line wrapping) and the
   commit prompt.
 - **Repositories** — add or remove repos, and set per-repo setup commands and

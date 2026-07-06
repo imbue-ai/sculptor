@@ -5,16 +5,18 @@ commands inside any agent session. Type `/` in the chat input to open the
 picker. Skills run as full agents with their own tools, so they can read your
 codebase, spawn parallel subagents, and adapt to your repo.
 
-Two plugins ship with Sculptor:
+Two skill bundles ship with Sculptor:
 
 - **`sculptor-workflow`** — an opinionated, end-to-end engineering pipeline that
   takes a feature from idea to reviewed code.
 - **`sculptor-experimental`** — newer skills for moving work between agents and
   workspaces.
 
-(There are also two `sculptor:*` helpers — `/sculptor:help` to ask questions
-about Sculptor, and `/sculptor:sculpt-cli` to drive Sculptor from the `sculpt`
-CLI. Both are listed in [Slash commands](chat.md#slash-commands).)
+(There are also three `sculptor:*` helpers — `/sculptor:help` to ask questions
+about Sculptor, `/sculptor:sculpt-cli` to drive Sculptor from the `sculpt`
+CLI, and `/sculptor:build-sculptor-plugin` to build an
+[extension](extensions.md). They're listed in
+[Slash commands](chat.md#slash-commands).)
 
 ---
 

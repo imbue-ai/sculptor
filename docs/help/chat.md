@@ -94,7 +94,7 @@ you've installed locally — all sorted alphabetically.
 
 **Skills** run as full agents with their own tools. A few general-purpose ones —
 `/batch`, `/btw`, `/loop`, `/simplify` — handle work you'd otherwise re-prompt
-for, and two bundled plugins (`sculptor-workflow` and `sculptor-experimental`)
+for, and two skill bundles (`sculptor-workflow` and `sculptor-experimental`)
 make up Sculptor's engineering workflow. See [Skills](skills.md) for the full
 reference, and the
 [Claude Code commands reference](https://code.claude.com/docs/en/commands) for
