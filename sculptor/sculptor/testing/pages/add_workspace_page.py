@@ -7,7 +7,12 @@ from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 
 
 class PlaywrightAddWorkspacePage(PlaywrightProjectLayoutPage):
-    """Page object for the Add Workspace page (/ws/new)."""
+    """Page object for the new-workspace modal and the inline empty-first-run form.
+
+    Both surfaces share the same field testids, so the getters here drive
+    either one. The create button and prompt input are keyed by
+    ``NEW_WORKSPACE_CREATE_BUTTON`` / ``NEW_WORKSPACE_PROMPT_TEXTAREA``.
+    """
 
     def get_project_selector(self) -> Locator:
         return self.get_by_test_id(ElementIDs.PROJECT_SELECTOR)
@@ -27,10 +32,10 @@ class PlaywrightAddWorkspacePage(PlaywrightProjectLayoutPage):
     def open_add_repo_dialog(self) -> PlaywrightAddRepoDialogElement:
         """Open the 'Add Repository' dialog from the repo selector.
 
-        The dialog defaults to the GitHub source, which keeps the local
-        path-input form mounted but hidden (``display:none``). This helper is
-        the local-path entry point, so select the Local source first so the
-        path input is interactable.
+        The dialog opens on the Local source (the default), so the path input
+        is already interactable. This helper still selects Local explicitly —
+        an idempotent radio click — so the precondition doesn't silently
+        depend on the default.
         """
         self.get_project_selector().click()
         self.get_open_new_repo_button().click()
@@ -42,13 +47,13 @@ class PlaywrightAddWorkspacePage(PlaywrightProjectLayoutPage):
         return dialog
 
     def get_task_input(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.TASK_INPUT)
+        return self.get_by_test_id(ElementIDs.NEW_WORKSPACE_PROMPT_TEXTAREA)
 
     def get_workspace_name_input(self) -> Locator:
         return self.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
 
     def get_submit_button(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+        return self.get_by_test_id(ElementIDs.NEW_WORKSPACE_CREATE_BUTTON)
 
     def get_branch_name_input(self) -> Locator:
         return self.get_by_test_id(ElementIDs.BRANCH_NAME_INPUT)

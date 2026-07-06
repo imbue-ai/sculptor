@@ -1013,13 +1013,12 @@ def _make_agent_task(
     )
 
 
-def _make_config_with_agent(agent: Any, enable_pi_agent: bool = False) -> UserConfig:
+def _make_config_with_agent(agent: Any) -> UserConfig:
     return UserConfig(
         user_email="test@example.com",
         user_id="u",
         organization_id="o",
         instance_id="i",
-        enable_pi_agent=enable_pi_agent,
         ci_babysitter=CIBabysitterConfig(enabled=True, agent=agent),
     )
 
@@ -1058,26 +1057,12 @@ def test_mru_most_recent_claude_resolves_chat_claude(
     assert isinstance(result.config, ClaudeCodeSDKAgentConfig)
 
 
-def test_mru_most_recent_pi_resolves_pi_when_enabled(
-    env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup
-) -> None:
+def test_mru_most_recent_pi_resolves_pi(env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup) -> None:
     coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
     tasks = [_make_agent_task(env, PiAgentConfig(), "2026-01-01T00:00:00")]
-    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentMRU(), enable_pi_agent=True), tasks)
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentMRU()), tasks)
     assert isinstance(result, ChatAgent)
     assert isinstance(result.config, PiAgentConfig)
-
-
-def test_mru_most_recent_pi_falls_back_to_claude_when_pi_disabled(
-    env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup
-) -> None:
-    # MRU is best-effort: an MRU Pi while Pi is disabled must not brick the
-    # babysitter — fall back to Claude (unlike a *pinned* Pi, which goes Disabled).
-    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
-    tasks = [_make_agent_task(env, PiAgentConfig(), "2026-01-01T00:00:00")]
-    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentMRU(), enable_pi_agent=False), tasks)
-    assert isinstance(result, ChatAgent)
-    assert isinstance(result.config, ClaudeCodeSDKAgentConfig)
 
 
 def test_mru_most_recent_driveable_terminal_resolves_driveable(
@@ -1158,19 +1143,11 @@ def test_pinned_claude_resolves_chat_claude(env: _FakeEnv, test_root_concurrency
     assert isinstance(result.config, ClaudeCodeSDKAgentConfig)
 
 
-def test_pinned_pi_resolves_pi_when_enabled(env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup) -> None:
+def test_pinned_pi_resolves_pi(env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup) -> None:
     coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
-    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentPi(), enable_pi_agent=True), [])
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentPi()), [])
     assert isinstance(result, ChatAgent)
     assert isinstance(result.config, PiAgentConfig)
-
-
-def test_pinned_pi_is_disabled_when_pi_disabled(env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup) -> None:
-    # A *pinned* Pi while Pi is disabled goes Disabled — no silent fallback.
-    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
-    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentPi(), enable_pi_agent=False), [])
-    assert isinstance(result, Disabled)
-    assert result.reason == coordinator_module._DISABLED_REASON_PINNED_UNAVAILABLE
 
 
 def test_pinned_registered_available_resolves_driveable(
@@ -1198,7 +1175,7 @@ def test_pinned_registered_unavailable_is_disabled(
 def test_deliver_prompt_to_agent_writes_to_terminal_via_helper(
     env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The seam dispatches a registered-terminal task through the Task 1.1 helper.
+    # The seam dispatches a registered-terminal task through the shared helper.
     coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
     terminal_config = RegisteredTerminalAgentConfig(
         registration_id="claude-code",
@@ -1589,9 +1566,15 @@ def test_snapshot_reason_self_heals_when_mru_becomes_driveable(
 
 
 def test_snapshot_surfaces_pinned_unavailable_reason(
-    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    patch_user_config.config = _make_config_with_agent(BabysitterAgentPi(), enable_pi_agent=False)
+    # A pinned registered agent whose registration is gone surfaces the
+    # persistent "no longer available" reason.
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: None)
+    patch_user_config.config = _make_config_with_agent(BabysitterAgentRegistered(registration_id="gone"))
     coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
     coordinator.set_paused(env.workspace_id, False)
 

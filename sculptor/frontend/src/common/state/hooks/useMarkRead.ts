@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 
 import { markWorkspaceAgentRead } from "../../../api";
 import { taskAtomFamily } from "../atoms/tasks";
+import { clearUnreadOverride, isUnreadOverrideActive } from "../atoms/unreadOverrides";
 
 const DEBOUNCE_MS = 1000;
 
@@ -24,17 +25,24 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
     });
   };
 
-  // Whether the user has explicitly marked THIS agent unread (lastReadAt=null).
-  // Read from the store, not the rendered `task`: on an agent switch the hook
-  // re-renders to the new agent before the departing agent's cleanup runs, so a
-  // render-scoped value would be the wrong agent; the cleanup's `agentID` closure
-  // still points at the departing one.
-  const isExplicitlyUnread = (): boolean => store.get(taskAtomFamily(agentID))?.lastReadAt === null;
+  // Whether the user's explicit "Mark as unread" is still in force for THIS agent
+  // (see unreadOverrides.ts for the override's lifetime). Read the task from the
+  // store, not the rendered `task`: on an agent switch the hook re-renders to the
+  // new agent before the departing agent's cleanup runs, so a render-scoped value
+  // would be the wrong agent; the cleanup's `agentID` closure still points at the
+  // departing one.
+  const isExplicitlyUnread = (): boolean => {
+    const latest = store.get(taskAtomFamily(agentID));
+    return latest !== null && isUnreadOverrideActive(agentID, latest);
+  };
 
   // Mark as read on mount / agent change, and flush a still-pending debounced
-  // read when leaving this agent so it persists as read before the route changes.
+  // read when leaving this agent so it persists as read before the view moves on.
+  // A fresh activation is the user seeing the agent again, so it also ends any
+  // explicit "Mark as unread" (see unreadOverrides.ts).
   useEffect(() => {
     if (task) {
+      clearUnreadOverride(agentID);
       markRead();
     }
 
@@ -77,8 +85,13 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
       hasPendingReadRef.current = false;
-      // Skip if the user explicitly marked unread while the timer was pending —
-      // don't undo their action.
+      // Skip while the user's explicit "Mark as unread" is still active — don't
+      // undo their action. The override holds through the update that scheduled
+      // this timer when the user marked the agent unread after it, and through
+      // every streaming tick (including the completion) of a run the agent was
+      // marked unread during. Once the override expires — the next agent turn
+      // after the mark, or after the marked run completes — the normal auto
+      // mark-read resumes for the agent being viewed.
       if (isExplicitlyUnread()) {
         return;
       }

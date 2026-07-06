@@ -20,9 +20,10 @@ from playwright.sync_api import Page
 from playwright.sync_api import Route
 from playwright.sync_api import expect
 
-from sculptor.testing.elements.panel_zones import PlaywrightPanelZonesElement
-from sculptor.testing.elements.panels import ensure_right_area_visible
+from sculptor.testing.elements.add_panel_dropdown import open_panel
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 
@@ -64,10 +65,17 @@ def _make_linear_route(captured_auth: list[str]):
     return handle
 
 
-def _activate_linear_panel(page: Page, zones: PlaywrightPanelZonesElement) -> None:
-    """Reveal the right area and make the Linear panel the active top-right panel."""
-    ensure_right_area_visible(page)
-    zones.activate_plugin_panel("linear-issue")
+def _open_linear_panel(page: Page) -> None:
+    """Open (or reveal) the Linear plugin panel in the right section.
+
+    The Linear panel is a registered single-instance plugin panel (id
+    ``linear-issue``) with no default section, so ``open_panel`` brings it into the
+    right section (or reveals it if already open there). Plugin panels are never
+    auto-placed: opening one from a section's add-panel dropdown is how a user
+    opts in. Each workspace has its own layout, so this runs per workspace; on
+    return to a workspace the panel is already open and is just revealed.
+    """
+    open_panel(page, "linear-issue", "right")
 
 
 def test_linear_panel_follows_workspace_branch_and_sends_key(
@@ -89,28 +97,25 @@ def test_linear_panel_follows_workspace_branch_and_sends_key(
         plugins.expect_loaded(LINEAR_SOURCE, name="Linear", version="0.1.0")
         plugins.set_source_text_setting(LINEAR_SOURCE, API_KEY)
 
-        # The Linear panel ships disabled (opt-in, like the built-in Browser
-        # panel), so enable it before driving it from the panel zones.
-        settings_page.click_on_panels().set_panel_enabled("linear-issue", True)
+        right_section = PlaywrightWorkspaceSection(page, "right")
 
-        zones = PlaywrightPanelZonesElement(page)
-
-        # Workspace A: open the panel, expect it to show A's branch issue.
+        # Workspace A: open the Linear panel, expect it to show A's branch issue.
         task_page_a = start_task_and_wait_for_ready(page, prompt="linear a", workspace_name="Linear WS A")
         branch_a = task_page_a.get_branch_name()
-        _activate_linear_panel(page, zones)
-        expect(zones.get_top_right_zone()).to_contain_text(f"Issue for {branch_a}")
+        _open_linear_panel(page)
+        expect(right_section.get_section()).to_contain_text(f"Issue for {branch_a}")
 
-        # Workspace B (a different branch): the already-open panel must follow the
-        # newly-active workspace and show B's branch issue.
+        # Workspace B (a different branch): its own Linear panel shows B's branch
+        # issue (each workspace has an independent layout).
         task_page_b = start_task_and_wait_for_ready(page, prompt="linear b", workspace_name="Linear WS B")
         branch_b = task_page_b.get_branch_name()
         assert branch_a != branch_b, f"workspaces must differ by branch (both {branch_a!r})"
-        expect(zones.get_top_right_zone()).to_contain_text(f"Issue for {branch_b}")
+        _open_linear_panel(page)
+        expect(right_section.get_section()).to_contain_text(f"Issue for {branch_b}")
 
-        # Switching back re-adjusts the panel to the first workspace's branch.
-        task_page_a.get_workspace_tabs().first.click()
-        expect(zones.get_top_right_zone()).to_contain_text(f"Issue for {branch_a}")
+        # Switching back shows the first workspace's persisted panel + branch.
+        navigate_to_workspace(page, "Linear WS A")
+        expect(right_section.get_section()).to_contain_text(f"Issue for {branch_a}")
 
         # Every Linear request carried the configured API key (raw, no Bearer).
         assert captured_auth, "the Linear plugin made no request"

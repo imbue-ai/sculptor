@@ -1,16 +1,15 @@
 import { Flex, Spinner, Text } from "@radix-ui/themes";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useAtom, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { DiffStatus, ElementIds } from "~/api";
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
-import { openDiffTabAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
 import type { DiffScope } from "~/pages/workspace/components/diffPanel/types.ts";
 
+import { activeAgentIdAtomFamily } from "../workspaceAgentActions.ts";
 import { expandChangesFoldersAtom, fileBrowserStateAtomFamily, toggleChangesFolderAtom } from "./atoms.ts";
 import { FileContextMenu } from "./FileContextMenu.tsx";
 import styles from "./FileTree.module.scss";
@@ -55,6 +54,14 @@ type ChangesTreeViewProps = {
   scope?: DiffScope;
   searchMatchingPaths?: Set<string> | null;
   onDiscardFile?: (filePath: string) => void;
+  /**
+   * A file click calls this with the clicked path and its status. The
+   * ChangesPanel drives its embedded viewer from per-panel selection state
+   * rather than the shared diff-panel tab list.
+   */
+  onSelectFile: (filePath: string, status: FileStatus) => void;
+  /** The currently selected file path, highlighted in the list. */
+  selectedPath?: string | null;
 };
 
 export const ChangesTreeView = ({
@@ -63,14 +70,18 @@ export const ChangesTreeView = ({
   scope = "uncommitted",
   searchMatchingPaths,
   onDiscardFile,
+  onSelectFile,
+  selectedPath,
 }: ChangesTreeViewProps): ReactElement => {
   const [fileBrowserState, setFileBrowserState] = useAtom(fileBrowserStateAtomFamily(workspaceId));
   const toggleFolder = useSetAtom(toggleChangesFolderAtom);
   const expandFolders = useSetAtom(expandChangesFoldersAtom);
-  const openDiffTab = useSetAtom(openDiffTabAtom);
 
-  const { agentID } = useWorkspacePageParams();
-  const activeOperation = useActiveFileOperation(agentID);
+  // Track file operations of the workspace's current agent, resolved from the
+  // section shell rather than the route: activating a different center tab
+  // doesn't navigate, so the route's agent id goes stale.
+  const agentId = useAtomValue(activeAgentIdAtomFamily(workspaceId));
+  const activeOperation = useActiveFileOperation(agentId);
   const workspace = useWorkspace(workspaceId);
   const { data: diff } = useWorkspaceDiff(workspaceId);
   const isDiffReady = workspace?.diffStatus === DiffStatus.READY && diff != null;
@@ -165,11 +176,12 @@ export const ChangesTreeView = ({
     (path: string): void => {
       const statusMap = viewMode === "tree" ? flatRowStatusMap : flatFileStatusMap;
       const status = statusMap.get(path);
-      if (status != null) {
-        openDiffTab({ workspaceId, filePath: path, status, scope });
+      if (status == null) {
+        return;
       }
+      onSelectFile(path, status);
     },
-    [viewMode, flatRowStatusMap, flatFileStatusMap, openDiffTab, workspaceId, scope],
+    [viewMode, flatRowStatusMap, flatFileStatusMap, onSelectFile],
   );
 
   const setExpandedFolders = useCallback(
@@ -281,6 +293,7 @@ export const ChangesTreeView = ({
                   <FlatListRow
                     entry={entry}
                     isFocused={virtualItem.index === focusedIndex}
+                    isSelected={entry.path === selectedPath}
                     addedLines={fileDiff?.addedLines}
                     removedLines={fileDiff?.removedLines}
                     onFileClick={handleFileClick}
@@ -332,6 +345,7 @@ export const ChangesTreeView = ({
                   isExpanded={isExpanded}
                   isFocused={virtualItem.index === focusedIndex}
                   isActiveFile={node.path === activeOperation?.filePath}
+                  isSelected={node.path === selectedPath}
                   folderChangeCount={folderChangeCount}
                   addedLines={fileDiff?.addedLines}
                   removedLines={fileDiff?.removedLines}

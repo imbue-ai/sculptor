@@ -16,7 +16,6 @@ import { useEffect, useRef } from "react";
  */
 export type CommandActionId =
   | "chat.jumpToBottom"
-  | "workspace.closeCurrent"
   | "workspace.nextTab"
   | "workspace.previousTab"
   | "agent.next"

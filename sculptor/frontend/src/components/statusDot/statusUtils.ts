@@ -76,12 +76,16 @@ type AgentTaskLike = {
   isArchived?: boolean;
 };
 
-// `focusedAgentId` is the agent the user is currently viewing (or null when no
-// agent is focused, e.g. on the home page); it is treated as read — see
-// getAgentDotStatus.
-export function computeWorkspaceDotStatus(
-  tasks: ReadonlyArray<AgentTaskLike>,
-  focusedAgentId: string | null = null,
+// Per-task dot resolution used by the workspace aggregate. Injectable (and
+// generic over the caller's task type) so override-aware callers — the sidebar
+// rows, matching the panel tabs' manual mark-as-unread — can substitute their
+// resolver without this pure leaf module importing override state.
+const resolveBaseDotStatus = (task: AgentTaskLike): AgentDotStatus =>
+  getAgentDotStatus(task.status, task.lastReadAt, task.updatedAt);
+
+export function computeWorkspaceDotStatus<T extends AgentTaskLike>(
+  tasks: ReadonlyArray<T>,
+  resolveDotStatus: (task: T) => AgentDotStatus = resolveBaseDotStatus,
 ): WorkspaceDotStatus {
   const activeTasks = tasks.filter((task) => !task.isDeleted && !task.isArchived);
 
@@ -89,16 +93,13 @@ export function computeWorkspaceDotStatus(
     return EMPTY_WORKSPACE_DOT_STATUS;
   }
 
-  const dotStatuses = activeTasks.map((task) =>
-    getAgentDotStatus(task.status, task.lastReadAt, task.updatedAt, task.id === focusedAgentId),
-  );
-  const hasError = dotStatuses.some((dotStatus) => dotStatus === "error");
+  const hasError = activeTasks.some((task) => resolveDotStatus(task) === "error");
   const hasWaiting = activeTasks.some((task) => task.status === TaskStatus.WAITING);
   const hasRunning = activeTasks.some(
     (task) => task.status === TaskStatus.RUNNING || task.status === TaskStatus.BUILDING,
   );
-  const isAllError = dotStatuses.every((dotStatus) => dotStatus === "error");
-  const hasUnread = dotStatuses.some((dotStatus) => dotStatus === "unread");
+  const isAllError = activeTasks.every((task) => resolveDotStatus(task) === "error");
+  const hasUnread = activeTasks.some((task) => resolveDotStatus(task) === "unread");
 
   return { hasError, hasWaiting, hasRunning, isAllError, hasUnread };
 }

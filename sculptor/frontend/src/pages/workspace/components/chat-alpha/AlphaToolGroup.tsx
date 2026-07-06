@@ -3,7 +3,6 @@ import { useMemo } from "react";
 
 import type { ToolResultBlock, ToolUseBlock } from "~/api";
 import { isToolUseBlock } from "~/common/Guards";
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import {
   useTaskSupportsInteractiveBackchannel,
   useTaskSupportsSubAgents,
@@ -16,6 +15,7 @@ import { AlphaAskUserQuestionBlock } from "./AlphaAskUserQuestionBlock.tsx";
 import { AlphaExitPlanModeBlock } from "./AlphaExitPlanModeBlock.tsx";
 import { AlphaSubagentPill } from "./AlphaSubagentPill.tsx";
 import { CompletedToolLine, ToolLine } from "./AlphaToolLines.tsx";
+import { useChatTask } from "./ChatTaskContext.tsx";
 import { renderToolSegments } from "./renderToolSegments.tsx";
 import { ToolNavigationProvider } from "./ToolNavigationContext.tsx";
 
@@ -55,13 +55,15 @@ export const ToolBlockGroup = ({
   inProgressMessageId?: string | null;
   isActive: boolean;
 }): ReactElement => {
-  const { agentID: taskID } = useWorkspacePageParams();
+  // The owning chat panel's agent — the capability gates below must reflect
+  // the harness whose transcript this panel renders, not the route's agent.
+  const { taskId: taskID } = useChatTask();
   // Per-harness gates centralized here so the leaf components stay test-isolated:
   //   `supportsSubAgents` hides the AlphaSubagentPill
   //   `supportsInteractiveBackchannel` hides AlphaAskUserQuestionBlock + AlphaExitPlanModeBlock
   // `?? true` preserves existing Claude behavior while the task is still loading.
-  const canRenderSubAgents = useTaskSupportsSubAgents(taskID ?? "") ?? true;
-  const canRenderInteractiveBackchannel = useTaskSupportsInteractiveBackchannel(taskID ?? "") ?? true;
+  const canRenderSubAgents = useTaskSupportsSubAgents(taskID) ?? true;
+  const canRenderInteractiveBackchannel = useTaskSupportsInteractiveBackchannel(taskID) ?? true;
   // Separate blocks into subagent, top-level, special, and regular categories
   const { subagentBlocks, topLevelBlocks, specialBlocks, regularBlocks } = useMemo(() => {
     const subagent: Array<ToolUseBlock> = [];

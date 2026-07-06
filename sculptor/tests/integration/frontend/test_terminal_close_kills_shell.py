@@ -28,13 +28,16 @@ import time
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect
 
-from sculptor.testing.elements.terminal import get_add_terminal_button
+from sculptor.testing.elements.terminal import add_terminal
+from sculptor.testing.elements.terminal import confirm_close_terminal
 from sculptor.testing.elements.terminal import get_tab_close_button
 from sculptor.testing.elements.terminal import get_terminal_tabs
 from sculptor.testing.elements.terminal import get_xterm_buffer_text
 from sculptor.testing.elements.terminal import open_terminal_and_wait
 from sculptor.testing.elements.terminal import run_command_in_active_terminal
+from sculptor.testing.elements.terminal import wait_for_fresh_xterm_buffer
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -133,10 +136,23 @@ def test_close_terminal_tab_kills_shell_process(sculptor_instance_: SculptorInst
     #    handleCloseTerminal doesn't fire (which would mask the close).
     # 2. After the close, we can run a command in the surviving second
     #    tab to prove the panel is still healthy.
-    add_button = get_add_terminal_button(page)
-    add_button.click()
+    add_terminal(page)
+    # The terminal tab strip lives in the bottom section's header, which only
+    # renders while bottom is expanded; keep it expanded before reading the tabs so
+    # the count assertion below targets a mounted SECTION_HEADER-bottom rather than
+    # racing a collapsed section.
+    PlaywrightWorkspaceSection(page, "bottom").expand_section()
     terminal_tabs = get_terminal_tabs(page)
     expect(terminal_tabs).to_have_count(2)
+
+    # In the section shell only the active panel mounts, so adding the second tab
+    # unmounts the first terminal's xterm and mounts a fresh one. window.__xterm can
+    # still reference Terminal 1's handle (whose buffer holds the first PID line)
+    # until that unmount cleanup runs, so wait for a buffer that has rendered output
+    # yet carries no "PID:" marker — that uniquely identifies Terminal 2's fresh
+    # shell prompt. Typing before it connects would drop the PID echo and time out
+    # the read below.
+    wait_for_fresh_xterm_buffer(page, "PID:")
 
     # The second tab is active by default after add. Capture its pid too
     # so we can prove ONLY the first tab's shell was killed.
@@ -144,10 +160,12 @@ def test_close_terminal_tab_kills_shell_process(sculptor_instance_: SculptorInst
     assert second_pid > 0 and second_pid != first_pid
 
     # Close the FIRST tab (index 0) — explicitly not the active one, so
-    # we can keep typing in the second tab afterward.
+    # we can keep typing in the second tab afterward. Closing a terminal tab opens a
+    # confirmation dialog (mirrors agent delete); confirm it to actually kill the shell.
     first_tab = terminal_tabs.first
     close_button = get_tab_close_button(first_tab)
     close_button.click()
+    confirm_close_terminal(page)
 
     # Only the second tab remains.
     expect(terminal_tabs).to_have_count(1)

@@ -20,7 +20,8 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import expect
 
-from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
+from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropdownElement
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.terminal import get_agent_terminal_textarea
 from sculptor.testing.elements.terminal import get_xterm_buffer_text
@@ -136,13 +137,15 @@ def test_claude_code_terminal_agent(sculptor_instance_: SculptorInstance) -> Non
     start_task_and_wait_for_ready(page, prompt="", model_name=None, workspace_name="Claude Code TUI WS")
     _install_sample(sculptor_instance_.sculptor_folder)
 
-    agent_tab_bar = PlaywrightAgentTabBarElement(page)
-    agent_tab_bar.open_agent_type_menu()
-    registered_item = agent_tab_bar.get_agent_type_menu_item_registered("claude-code")
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
+    dropdown.open()
+    dropdown.open_agent_type_submenu()
+    registered_item = dropdown.get_agent_type_item_registered("claude-code")
     expect(registered_item).to_be_visible()
     registered_item.click()
 
-    claude_tab = agent_tab_bar.get_agent_tab_by_name("Claude CLI 1").first
+    claude_tab = panel_tabs.get_panel_tab_by_name("Claude CLI 1").first
     expect(claude_tab).to_be_visible()
     expect(get_agent_terminal_panel(page)).to_be_visible()
     expect(get_agent_terminal_textarea(page)).to_be_attached()

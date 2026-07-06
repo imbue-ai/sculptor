@@ -3,16 +3,7 @@ import { ArrowUpRight, BotIcon } from "lucide-react";
 import { tasksArrayAtom } from "../../../common/state/atoms/tasks.ts";
 import type { CommandRuntime } from "../runtime.ts";
 import type { Command, DynamicProvider } from "../types.ts";
-
-const MAX_TITLE_LENGTH = 80;
-const ELLIPSIS = "...";
-
-const taskDisplayTitle = (task: { title?: string | null; initialPrompt: string }): string => {
-  const display = task.title?.trim() || task.initialPrompt.trim() || "Untitled agent";
-  return display.length > MAX_TITLE_LENGTH
-    ? `${display.slice(0, MAX_TITLE_LENGTH - ELLIPSIS.length)}${ELLIPSIS}`
-    : display;
-};
+import { taskDisplayTitle } from "./agentTitle.ts";
 
 /**
  * Surfaces agents in the palette, scoped to the workspace the user is

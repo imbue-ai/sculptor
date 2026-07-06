@@ -1,0 +1,51 @@
+.row {
+  // The section tab strip above is intentionally borderless, so this top border
+  // delineates the panel content (list header + viewer header) from the strip.
+  border-top: 1px solid var(--gray-a5);
+  display: flex;
+  flex-direction: row;
+  flex-grow: 1;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.list {
+  // Pixel width from the shared explorer list-width atom (set inline); the
+  // viewer flexes to fill the rest. The ResizeHandle rendered after this pane
+  // is the single 1px divider delineating the list from the viewer, so the
+  // pane carries no right border of its own.
+  //
+  // The shared width can exceed a narrow host section (the seeded left section
+  // is narrower than the default list width); without a cap the divider lands
+  // outside the section's overflow:hidden and becomes unreachable. Cap the
+  // rendered width so the divider always stays inside, reserving a sliver of
+  // viewer; the persisted width is untouched, so wider hosts keep it.
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- divider + viewer-sliver reserve
+  max-width: calc(100% - 48px);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.detail {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+// The sidebar toggle's two states: solid (high-contrast) while the sidebar is
+// visible, muted while collapsed. Set on the icon so it overrides the button's
+// inherited color.
+.toggleOn {
+  color: var(--gray-12);
+}
+
+.toggleOff {
+  color: var(--gray-9);
+}

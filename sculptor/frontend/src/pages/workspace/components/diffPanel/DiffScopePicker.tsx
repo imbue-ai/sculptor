@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
 
+import styles from "./DiffScopePicker.module.scss";
 import type { DiffScope } from "./types.ts";
 
 type DiffScopePickerProps = {
@@ -30,6 +31,10 @@ export const DiffScopePicker = ({
   return (
     <SegmentedControl.Root
       size="1"
+      // Fills the host row and keeps its segments equal at any width — the
+      // intrinsic (label) width can exceed a narrow list pane; see the module
+      // stylesheet for why plain width/minWidth overrides break the indicator.
+      className={styles.root}
       value={effectiveScope}
       onValueChange={(value) => onScopeChange(value as DiffScope)}
       data-testid={ElementIds.DIFF_SCOPE_PICKER}

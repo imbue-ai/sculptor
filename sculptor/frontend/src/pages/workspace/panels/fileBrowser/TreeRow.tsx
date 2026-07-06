@@ -20,6 +20,8 @@ type TreeRowProps = {
   isExpanded: boolean;
   isFocused: boolean;
   isActiveFile: boolean;
+  /** True when this row is the file selected in an embedding panel's viewer. */
+  isSelected?: boolean;
   folderChangeCount: number;
   addedLines?: number;
   removedLines?: number;
@@ -112,6 +114,7 @@ export const TreeRow = memo(function TreeRow({
   isExpanded,
   isFocused,
   isActiveFile,
+  isSelected,
   folderChangeCount,
   addedLines,
   removedLines,
@@ -135,7 +138,7 @@ export const TreeRow = memo(function TreeRow({
 
   return (
     <div
-      className={`${styles.row} ${isDeleted ? styles.deleted : ""} ${isFocused ? styles.focused : ""} ${isActiveFile ? styles.activeFile : ""}`}
+      className={`${styles.row} ${isDeleted ? styles.deleted : ""} ${isFocused ? styles.focused : ""} ${isActiveFile || isSelected ? styles.activeFile : ""}`}
       style={{ paddingLeft }}
       onClick={handleClick}
       data-testid={ElementIds.FILE_BROWSER_TREE_ROW}

@@ -34,7 +34,7 @@ from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_to_top
 from sculptor.testing.elements.alpha_chat_view import wait_for_alpha_scroll_settled
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.elements.panels import close_bottom_panel
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -449,7 +449,7 @@ def test_anchored_turn_holds_top_on_narrow(sculptor_instance_: SculptorInstance)
 
     # Maximize chat height so the short streaming response fills below the
     # anchored user message without overflowing into the following phase.
-    close_bottom_panel(page)
+    PlaywrightWorkspaceSection(page, "bottom").collapse_section()
 
     expect(get_alpha_chat_view(page)).to_be_visible()
 
@@ -491,7 +491,7 @@ def test_anchored_turn_holds_top_on_widen(sculptor_instance_: SculptorInstance) 
 
     # Maximize chat height so the short streaming response fills below the
     # anchored user message without overflowing into the following phase.
-    close_bottom_panel(page)
+    PlaywrightWorkspaceSection(page, "bottom").collapse_section()
 
     expect(get_alpha_chat_view(page)).to_be_visible()
 

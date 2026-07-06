@@ -21,15 +21,16 @@ from pathlib import Path
 
 from playwright.sync_api import expect
 
-from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
+from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropdownElement
 from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.pr_popover import PlaywrightPrPopoverElement
 from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
 from sculptor.testing.fake_claude_pause import FakeClaudePause
-from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import full_spa_reload
 from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -237,8 +238,8 @@ def test_scenario_1_failed_pipeline_creates_babysitter(sculptor_instance_: Sculp
     start_task_and_wait_for_ready(sculptor_instance_.page, "say hello")
     _arm_failed_transition(sculptor_instance_, state_file)
 
-    agent_tabs = PlaywrightAgentTabBarElement(sculptor_instance_.page)
-    babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")
+    panel_tabs = PlaywrightPanelTabElement(sculptor_instance_.page, sub_section="center")
+    babysitter_tab = panel_tabs.get_panel_tab_by_name("CI Babysitter")
     expect(babysitter_tab.first).to_be_visible(timeout=60_000)
 
     babysitter_tab.first.click()
@@ -262,8 +263,8 @@ def test_scenario_7_merged_pr_retires_babysitter(sculptor_instance_: SculptorIns
     start_task_and_wait_for_ready(sculptor_instance_.page, "say hello")
     _arm_failed_transition(sculptor_instance_, state_file)
 
-    agent_tabs = PlaywrightAgentTabBarElement(sculptor_instance_.page)
-    babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")
+    panel_tabs = PlaywrightPanelTabElement(sculptor_instance_.page, sub_section="center")
+    babysitter_tab = panel_tabs.get_panel_tab_by_name("CI Babysitter")
     expect(babysitter_tab.first).to_be_visible(timeout=60_000)
     babysitter_tab.first.click()
 
@@ -294,8 +295,8 @@ def test_scenario_4_pause_toggle_prevents_prompt(sculptor_instance_: SculptorIns
     start_task_and_wait_for_ready(sculptor_instance_.page, "say hello")
     _arm_failed_transition(sculptor_instance_, state_file)
 
-    agent_tabs = PlaywrightAgentTabBarElement(sculptor_instance_.page)
-    babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")
+    panel_tabs = PlaywrightPanelTabElement(sculptor_instance_.page, sub_section="center")
+    babysitter_tab = panel_tabs.get_panel_tab_by_name("CI Babysitter")
     expect(babysitter_tab.first).to_be_visible(timeout=60_000)
 
     pr_popover = PlaywrightPrPopoverElement(sculptor_instance_.page)
@@ -365,10 +366,7 @@ def test_pause_state_persists_across_restart(
         _set_remote(instance, _FAKE_GITHUB_REMOTE)
         _enable_babysitter(instance)
 
-        layout = PlaywrightProjectLayoutPage(page=instance.page)
-        workspace_tab = layout.get_workspace_tabs().first
-        expect(workspace_tab).to_be_visible()
-        workspace_tab.click()
+        navigate_to_workspace(instance.page)
 
         pr_popover = PlaywrightPrPopoverElement(instance.page)
         pr_chevron = pr_popover.get_chevron()
@@ -402,12 +400,14 @@ def test_babysitter_drives_registered_terminal_agent(sculptor_instance_: Sculpto
         start_task_and_wait_for_ready(page, "say hello")
 
         # Make the registered terminal agent the workspace's most-recent agent.
-        agent_tabs = PlaywrightAgentTabBarElement(page)
-        agent_tabs.open_agent_type_menu()
-        registered_item = agent_tabs.get_agent_type_menu_item_registered("babysit-prompts")
+        panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+        dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
+        dropdown.open()
+        dropdown.open_agent_type_submenu()
+        registered_item = dropdown.get_agent_type_item_registered("babysit-prompts")
         expect(registered_item).to_be_visible()
         registered_item.click()
-        user_tab = agent_tabs.get_agent_tab_by_name("Babysit Prompts 1").first
+        user_tab = panel_tabs.get_panel_tab_by_name("Babysit Prompts 1").first
         expect(user_tab).to_be_visible()
         expect(get_agent_terminal_panel(page)).to_be_visible()
         wait_for_xterm_substring(page, "IDLE-DONE")  # the program is at its prompt
@@ -416,7 +416,7 @@ def test_babysitter_drives_registered_terminal_agent(sculptor_instance_: Sculpto
 
         # The babysitter spawns its own "CI Babysitter" terminal task (distinct
         # from the user's tab) and writes the fix-CI prompt to its PTY.
-        babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")
+        babysitter_tab = panel_tabs.get_panel_tab_by_name("CI Babysitter")
         expect(babysitter_tab.first).to_be_visible(timeout=60_000)
         babysitter_tab.first.click()
         expect(get_agent_terminal_panel(page)).to_be_visible()
@@ -441,25 +441,33 @@ def test_plain_terminal_mru_shows_disabled_reason(sculptor_instance_: SculptorIn
     page = sculptor_instance_.page
     start_task_and_wait_for_ready(page, "say hello")
 
-    # Make the workspace's most-recent agent a plain terminal (never driveable).
-    agent_tabs = PlaywrightAgentTabBarElement(page)
-    agent_tabs.open_agent_type_menu()
-    agent_tabs.get_agent_type_menu_item_terminal().click()
-    terminal_tab = agent_tabs.get_agent_tab_by_name("Terminal 1").first
-    expect(terminal_tab).to_be_visible()
+    # Make the workspace's most-recent agent a non-driveable terminal agent
+    # (a registered agent without the automated-prompt opt-in; there is no
+    # bare-terminal agent type).
+    registration = _write_registration(sculptor_instance_, "plain-term", "Plain Term", accepts_automated_prompts=False)
+    try:
+        panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+        dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
+        dropdown.open()
+        dropdown.open_agent_type_submenu()
+        dropdown.get_agent_type_item_registered("plain-term").click()
+        terminal_tab = panel_tabs.get_panel_tab_by_name("Plain Term 1").first
+        expect(terminal_tab).to_be_visible()
 
-    # Let the polling create per-workspace state so the proactive reason is
-    # computed before the popover fetches it.
-    page.wait_for_timeout(_BASELINE_POLL_SETTLE_MS)
+        # Let the polling create per-workspace state so the proactive reason is
+        # computed before the popover fetches it.
+        page.wait_for_timeout(_BASELINE_POLL_SETTLE_MS)
 
-    pr_popover = PlaywrightPrPopoverElement(page)
-    pr_chevron = pr_popover.get_chevron()
-    expect(pr_chevron).to_be_visible(timeout=60_000)
-    pr_chevron.click()
+        pr_popover = PlaywrightPrPopoverElement(page)
+        pr_chevron = pr_popover.get_chevron()
+        expect(pr_chevron).to_be_visible(timeout=60_000)
+        pr_chevron.click()
 
-    expect(pr_popover.get_babysitter_status()).to_contain_text(_NON_DRIVEABLE_REASON_FRAGMENT, timeout=30_000)
-    # A persistent reason makes the toggle inert (it won't act regardless of pause).
-    expect(pr_popover.get_babysitter_pause_toggle()).to_be_disabled()
+        expect(pr_popover.get_babysitter_status()).to_contain_text(_NON_DRIVEABLE_REASON_FRAGMENT, timeout=30_000)
+        # A persistent reason makes the toggle inert (it won't act regardless of pause).
+        expect(pr_popover.get_babysitter_pause_toggle()).to_be_disabled()
+    finally:
+        registration.unlink(missing_ok=True)
 
 
 @user_story("to pick which agent the CI Babysitter uses, limited to ones that accept automated prompts")
@@ -515,8 +523,8 @@ def test_restart_reuses_existing_babysitter_tab(
         start_task_and_wait_for_ready(instance.page, "say hello")
         _arm_failed_transition(instance, state_file)
 
-        agent_tabs = PlaywrightAgentTabBarElement(instance.page)
-        babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")
+        panel_tabs = PlaywrightPanelTabElement(instance.page, sub_section="center")
+        babysitter_tab = panel_tabs.get_panel_tab_by_name("CI Babysitter")
         expect(babysitter_tab).to_have_count(1, timeout=60_000)
         babysitter_tab.first.click()
         alpha_chat = get_alpha_chat_view(instance.page)
@@ -528,13 +536,10 @@ def test_restart_reuses_existing_babysitter_tab(
     # it must re-discover the persisted babysitter task rather than create a new
     # one.
     with sculptor_instance_factory_.spawn_instance() as instance:
-        layout = PlaywrightProjectLayoutPage(page=instance.page)
-        workspace_tab = layout.get_workspace_tabs().first
-        expect(workspace_tab).to_be_visible()
-        workspace_tab.click()
+        navigate_to_workspace(instance.page)
 
-        agent_tabs = PlaywrightAgentTabBarElement(instance.page)
-        babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")
+        panel_tabs = PlaywrightPanelTabElement(instance.page, sub_section="center")
+        babysitter_tab = panel_tabs.get_panel_tab_by_name("CI Babysitter")
         expect(babysitter_tab).to_have_count(1)
         babysitter_tab.first.click()
         alpha_chat = get_alpha_chat_view(instance.page)
@@ -550,7 +555,7 @@ def test_restart_reuses_existing_babysitter_tab(
         _arm_failed_transition(instance, state_file)
 
         expect(pipeline_prompts).to_have_count(2, timeout=60_000)
-        expect(agent_tabs.get_agent_tab_by_name("CI Babysitter")).to_have_count(1)
+        expect(panel_tabs.get_panel_tab_by_name("CI Babysitter")).to_have_count(1)
 
 
 @user_story("to have the CI Babysitter automatically resolve a merge conflict on a GitHub PR")
@@ -582,8 +587,8 @@ def test_github_pr_merge_conflict_creates_babysitter(sculptor_instance_: Sculpto
     start_task_and_wait_for_ready(sculptor_instance_.page, "say hello")
     _arm_merge_conflict_transition(sculptor_instance_, state_file)
 
-    agent_tabs = PlaywrightAgentTabBarElement(sculptor_instance_.page)
-    babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")
+    panel_tabs = PlaywrightPanelTabElement(sculptor_instance_.page, sub_section="center")
+    babysitter_tab = panel_tabs.get_panel_tab_by_name("CI Babysitter")
     expect(babysitter_tab.first).to_be_visible(timeout=60_000)
 
     babysitter_tab.first.click()
@@ -637,8 +642,8 @@ def test_babysitter_ignores_ci_failure_while_agent_busy(sculptor_instance_: Scul
     expect(badge).to_have_text("Failed", timeout=60_000)
     page.keyboard.press("Escape")
 
-    agent_tabs = PlaywrightAgentTabBarElement(page)
-    babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    babysitter_tab = panel_tabs.get_panel_tab_by_name("CI Babysitter")
     # Busy: the failure is skipped, so no babysitter tab appears.
     page.wait_for_timeout(_BUSY_SKIP_STABLE_WAIT_MS)
     expect(babysitter_tab).to_have_count(0)

@@ -10,25 +10,22 @@ import { PLUGIN_ID } from "./constants.ts";
 // `activate` is the plugin entry point. The host calls it once after loading
 // the bundle; the returned function disposes the contributions on unload.
 export default function activate(api: PluginHostApi): () => void {
+  // The issues panel (Linear issues linked to this workspace — by branch, PR,
+  // or pinned). Plugin panels are not auto-placed: the user opens it from a
+  // section's `+` add-panel dropdown (or Cmd+K), so a bundled plugin never
+  // claims a slot in anyone's layout uninvited. The workspace banner widget
+  // below is the always-on surface.
   const disposePanel = api.registerPanel({
     id: PLUGIN_ID,
     displayName: "Linear",
-    description: "Linear issues linked to this workspace — by branch, PR, or pinned",
     icon: Hash,
-    defaultZone: "top-right",
-    defaultShortcut: "",
-    // Registered but off by default: a bundled, on-by-default plugin shouldn't
-    // claim a slot in everyone's panel layout uninvited. The workspace banner
-    // widget below is the always-on surface; users opt the panel in from
-    // Settings → Panels (like the built-in Browser panel).
-    defaultEnabled: false,
     component: LinearPanel,
   });
   const disposeSettings = api.registerSettings(LinearSettings);
   // The banner ticket chip: a compact ticket reference beside the PR button,
-  // sharing the panel's per-workspace ticket-assignment state. collapsePriority 3
-  // sits between the host's repo (2) and PR (4) items, so it collapses before the
-  // PR button but after the repo breadcrumb when the banner runs out of room.
+  // sharing the panel's per-workspace ticket-assignment state. collapsePriority
+  // orders this widget among the other plugin widgets when the banner runs out
+  // of room (lower collapses first).
   const disposeWidget = api.registerWorkspaceWidget({
     id: PLUGIN_ID,
     component: WorkspaceTicketWidget,

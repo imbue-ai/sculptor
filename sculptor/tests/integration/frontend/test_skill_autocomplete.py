@@ -7,6 +7,7 @@ from playwright.sync_api import expect
 
 from sculptor.testing.elements.base import type_trigger_char
 from sculptor.testing.playwright_utils import navigate_to_home_page
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -221,9 +222,7 @@ def test_slash_command_persists_as_chip_after_reload(sculptor_instance_: Sculpto
     # the markdown draft in localStorage.  This is the same pattern used by
     # ``test_at_mention_persists_as_styled_span_after_workspace_switch``.
     navigate_to_home_page(page)
-    workspace_tab = task_page.get_workspace_tabs()
-    expect(workspace_tab).to_be_visible()
-    workspace_tab.click()
+    navigate_to_workspace(page)
 
     chat_input = chat_panel.get_chat_input()
     expect(chat_input).to_be_visible()

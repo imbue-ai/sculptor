@@ -2,7 +2,6 @@ import { Theme } from "@radix-ui/themes";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ToolResultBlock, ToolUseBlock } from "~/api";
@@ -11,6 +10,7 @@ import { ElementIds } from "~/api";
 import { AlphaToolPillRow } from "../AlphaToolPillRow.tsx";
 import type * as AlphaToolPopoverModule from "../AlphaToolPopover.tsx";
 import { chatToolDensityAtom } from "../atoms.ts";
+import { ChatTaskProvider } from "../ChatTaskContext.tsx";
 
 vi.mock("~/pages/workspace/hooks/useWorkspaceCodePath.ts", () => ({
   useWorkspaceCodePath: (): string => "/workspace/code",
@@ -79,16 +79,13 @@ const renderPillRow = (
   };
 
   // Expanded density renders the per-tool entries inline, and ReadEntry
-  // calls `useWorkspacePageParams` (which uses `useLocation`). Wrap in a
-  // MemoryRouter with a workspace path so the hook resolves.
+  // reads the owning chat panel's identity via `useChatTask` — provide it.
   const WrapperWithStore = ({ children }: { children: ReactNode }): ReactElement => (
     <Provider store={store}>
       <Theme>
-        <MemoryRouter initialEntries={["/ws/test-workspace"]}>
-          <Routes>
-            <Route path="/ws/:workspaceID" element={children} />
-          </Routes>
-        </MemoryRouter>
+        <ChatTaskProvider workspaceId="test-workspace" taskId="agent-1">
+          {children}
+        </ChatTaskProvider>
       </Theme>
     </Provider>
   );

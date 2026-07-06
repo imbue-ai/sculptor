@@ -21,7 +21,11 @@ set -euo pipefail
 port="${1:-}"
 case "$port" in
   5[1-9][0-9][0-9][0-9]) ;;   # 51000-59999, the nginx preview band
-  *) echo "usage: $(basename "$0") <port in 51000-59999>" >&2; exit 1 ;;
+  *)
+    echo "usage: $(basename "$0") <port in 51000-59999>" >&2
+    echo "  prefer 51000-51099: the /proxy/ switchboard quick-scans that range" >&2
+    exit 1
+    ;;
 esac
 
 cd "$(dirname "$0")"

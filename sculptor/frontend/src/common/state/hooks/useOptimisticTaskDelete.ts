@@ -1,17 +1,25 @@
-import { useSetAtom } from "jotai";
+import { useSetAtom, useStore } from "jotai";
 import { posthog } from "posthog-js";
 import { useCallback, useEffect, useRef } from "react";
 
+import type { CodingAgentTaskView } from "../../../api";
 import { deleteWorkspaceAgent } from "../../../api";
 import { ToastType } from "../../../components/Toast.tsx";
 import { useImbueLocation, useImbueNavigate, useImbueParams } from "../../NavigateUtils.ts";
 import { optimisticDeleteTaskAtom, rollbackDeleteTaskAtom } from "../atoms/tasks";
 import { deleteErrorToastAtom } from "../atoms/toasts";
+import { agentIdForWorkspaceAtomFamily, setAgentForWorkspaceAtom } from "../atoms/workspaces.ts";
 
 type UseOptimisticTaskDeleteInputs = {
   workspaceId: string;
-  /** Custom navigation after optimistic removal. If omitted, navigates to root when the deleted agent is active. */
-  onNavigateAfterDelete?: (taskId: string) => void;
+  /**
+   * Custom navigation after optimistic removal. If omitted, navigates to root when the
+   * deleted agent is active. Receives the deleted task's pre-delete snapshot because the
+   * optimistic removal has already dropped the task from the store by the time this runs —
+   * callbacks that need the deleted task's data (e.g. its position among siblings) must
+   * read it from the snapshot, not the store.
+   */
+  onNavigateAfterDelete?: (taskId: string, deletedTask: CodingAgentTaskView) => void;
 };
 
 type UseOptimisticTaskDeleteResult = {
@@ -20,9 +28,11 @@ type UseOptimisticTaskDeleteResult = {
 
 export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): UseOptimisticTaskDeleteResult => {
   const { workspaceId, onNavigateAfterDelete } = inputs;
+  const store = useStore();
   const setOptimisticDelete = useSetAtom(optimisticDeleteTaskAtom);
   const setRollbackDelete = useSetAtom(rollbackDeleteTaskAtom);
   const setDeleteErrorToast = useSetAtom(deleteErrorToastAtom);
+  const setAgentForWorkspace = useSetAtom(setAgentForWorkspaceAtom);
   const { navigateToRoot } = useImbueNavigate();
   const { isAgentRoute } = useImbueLocation();
   const { taskID } = useImbueParams();
@@ -38,8 +48,15 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
         return;
       }
 
+      // A deleted agent must not linger as the workspace's saved agent, or the next
+      // cold-start redirect targets a dead route. Left cleared on a failed delete —
+      // the mapping re-saves on the next agent visit.
+      if (store.get(agentIdForWorkspaceAtomFamily(workspaceId)) === taskId) {
+        setAgentForWorkspace({ wsId: workspaceId, agentId: null });
+      }
+
       if (onNavigateAfterDelete) {
-        onNavigateAfterDelete(taskId);
+        onNavigateAfterDelete(taskId, snapshot);
       } else if (isAgentRoute && taskID === taskId) {
         navigateToRoot();
       }
@@ -69,9 +86,11 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
       });
     },
     [
+      store,
       setOptimisticDelete,
       setRollbackDelete,
       setDeleteErrorToast,
+      setAgentForWorkspace,
       onNavigateAfterDelete,
       isAgentRoute,
       taskID,

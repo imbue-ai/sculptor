@@ -79,7 +79,7 @@ def test_missing_claude_binary_shows_friendly_error(
         # sees installed=True, and lets the app through.
 
         # Create the workspace with the real Opus model but WITHOUT a prompt.
-        # We must NOT delete the stub yet: navigate_to_add_workspace_page may
+        # We must NOT delete the stub yet: open_new_workspace_form may
         # trigger a full page reload which would re-trigger RequireOnboarding.
         task_page = start_task_and_wait_for_ready(
             sculptor_page=instance.page,

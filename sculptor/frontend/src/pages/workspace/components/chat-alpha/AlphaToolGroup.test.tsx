@@ -7,22 +7,20 @@ import type { ToolResultBlock, ToolUseBlock } from "~/api";
 import type { SubagentTreeNode } from "~/pages/workspace/utils/subagentTree.ts";
 
 import { ToolBlockGroup } from "./AlphaToolGroup.tsx";
+import { ChatTaskProvider } from "./ChatTaskContext.tsx";
 
-// The component reads workspace params and per-harness capability hooks; mock
-// them so the group renders without the full app/router/jotai context.
-vi.mock("~/common/NavigateUtils.ts", () => ({
-  useWorkspacePageParams: (): { workspaceID: string; agentID: string } => ({
-    workspaceID: "ws-1",
-    agentID: "agent-1",
-  }),
-}));
-
+// The component reads per-harness capability hooks; mock them so the group
+// renders without the full app/jotai context.
 vi.mock("~/common/state/hooks/useTaskHelpers.ts", () => ({
   useTaskSupportsSubAgents: (): boolean => true,
   useTaskSupportsInteractiveBackchannel: (): boolean => true,
 }));
 
-const ThemeWrapper = ({ children }: { children: ReactNode }): ReactElement => <Theme>{children}</Theme>;
+const ThemeWrapper = ({ children }: { children: ReactNode }): ReactElement => (
+  <ChatTaskProvider workspaceId="ws-1" taskId="agent-1">
+    <Theme>{children}</Theme>
+  </ChatTaskProvider>
+);
 const render = (ui: ReactElement): ReturnType<typeof rtlRender> => rtlRender(ui, { wrapper: ThemeWrapper });
 
 afterEach(() => {

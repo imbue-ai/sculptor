@@ -1,6 +1,35 @@
+import type { LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 
-import type { PanelDefinition } from "~/components/panels/types.ts";
+import type { SectionId } from "~/components/sections/sectionTypes.ts";
+
+/**
+ * A panel a plugin contributes via `registerPanel`. The host renders the
+ * `component` inside the section shell (the manager adapts this into the
+ * host's internal registry shape). A plugin panel is not auto-placed on load:
+ * the user opens it from the section "+" / Cmd+K, which drops it into the
+ * sub-section they pick. `defaultSection` is recorded on the registry entry but
+ * no placement path reads it yet — it is reserved for a future default-placement
+ * pass. The legacy `defaultZone` / `defaultShortcut` / `description` fields are
+ * accepted but ignored — the docking shell they targeted is gone.
+ */
+export type PluginPanelDefinition = {
+  /** Stable id; registering twice with the same id replaces the previous one. */
+  id: string;
+  displayName: string;
+  icon: LucideIcon;
+  component: ComponentType;
+  /** Reserved: recorded on the registry entry, but no placement path reads it yet. */
+  defaultSection?: SectionId;
+  /** @deprecated Ignored — the zone/docking shell is gone. */
+  defaultZone?: string;
+  /** @deprecated Ignored — per-panel keybindings were removed. */
+  defaultShortcut?: string;
+  /** @deprecated Ignored. */
+  description?: string;
+  /** Set by the loader to the owning plugin's id; not supplied by plugins. */
+  pluginId?: string;
+};
 
 /**
  * The manifest a plugin ships alongside its bundle. Loaded by the host before
@@ -63,13 +92,11 @@ export type WorkspaceWidgetDefinition = {
   id: string;
   component: ComponentType;
   /**
-   * Where the widget sits in the host's progressive-collapse order when the row
-   * runs out of horizontal room: lower values are hidden first, higher values
-   * survive longer (the banner's PR button is the most protected built-in). A
-   * host without a collapsing container — e.g. the future vertical-tabs layout —
-   * is free to ignore this. Built-in banner items occupy a few small integers,
-   * so pick a value that orders the widget relative to them; omit it to collapse
-   * before everything else.
+   * Orders plugin widgets relative to one another within the action row: lower
+   * values render first, higher values render nearer the PR button. It only
+   * sorts plugin widgets among themselves — built-in banner items are not part
+   * of this ordering — and a host that lays the widgets out differently is free
+   * to ignore it. Omit it to sort ahead of widgets that set a value.
    */
   collapsePriority?: number;
 };
@@ -102,7 +129,7 @@ export type HomeViewDefinition = {
 };
 
 export type PluginHostApi = {
-  registerPanel: (panel: PanelDefinition) => () => void;
+  registerPanel: (panel: PluginPanelDefinition) => () => void;
   /**
    * Registers a settings component shown under the plugin in the Plugins
    * settings section. Rendered inside the host's PluginContext (so SDK hooks

@@ -18,7 +18,7 @@
   border-bottom: 1px solid var(--gray-a5);
   box-sizing: border-box;
   flex-shrink: 0;
-  // stylelint-disable-next-line sculptor/no-hardcoded-values -- matches PanelHeader / WorkspaceBanner height
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- matches PanelHeader height
   height: 41px;
   padding: var(--space-1) var(--space-2);
 }

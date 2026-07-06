@@ -13,12 +13,10 @@ const COMMAND_GROUPS_BY_ID: Record<CommandGroupId, CommandGroup> = {
   // chat actions much more often than panel toggles.
   workspaces: { id: "workspaces", heading: "Workspaces", order: 10 },
   navigation: { id: "navigation", heading: "Navigation", order: 20 },
-  // Combined Theme + Layout: appearance toggles cluster with panel /
-  // zone toggles since users think of them as one "look & feel"
-  // surface. Theme rows lead within the group (low explicit `order`),
-  // panel/layout rows follow. Sits above Chat — adjusting the
-  // workspace's look is more universally invoked than chat affordances.
-  view: { id: "view", heading: "Theme & Layout", order: 30 },
+  // Panel and section affordances (add panel, toggle sections, show
+  // panel, maximize) cluster together right after Navigation.
+  panels: { id: "panels", heading: "Panels & Sections", order: 25 },
+  view: { id: "view", heading: "Theme", order: 30 },
   chat: { id: "chat", heading: "Chat", order: 40 },
   terminal: { id: "terminal", heading: "Terminal", order: 50 },
   help: { id: "help", heading: "Help", order: 60 },

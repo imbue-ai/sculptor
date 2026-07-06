@@ -7,7 +7,7 @@ from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 
 
 class PlaywrightPiSettingsElement(PlaywrightIntegrationTestElement):
-    """Page Object Model for the Pi (experimental) section in Settings.
+    """Page Object Model for the Pi section in Settings.
 
     Mirrors ``PlaywrightClaudeCliSettingsElement``: the controls (mode selector,
     install/retry, progress) parallel Claude's.
@@ -50,10 +50,6 @@ class PlaywrightPiSettingsElement(PlaywrightIntegrationTestElement):
     def get_pinned_version(self) -> Locator:
         """Get the pinned-version display."""
         return self.get_by_test_id(ElementIDs.PI_PINNED_VERSION)
-
-    def get_disabled_banner(self) -> Locator:
-        """Get the pi-agent-disabled callout banner."""
-        return self.get_by_test_id(ElementIDs.PI_SETTINGS_DISABLED_BANNER)
 
     def get_install_commands_block(self) -> Locator:
         """Get the CUSTOM-only manual npm install block.
