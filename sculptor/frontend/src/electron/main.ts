@@ -899,8 +899,9 @@ const createWindow = async (): Promise<void> => {
           })();
           `,
         )
-        .catch(() => {
-          // Swallow: the page may have navigated away before we could inject.
+        .catch((error) => {
+          // The page may have navigated away before we could inject.
+          console.warn("Failed to inject target=_blank interceptor; the page likely navigated away.", error);
         });
     };
     attachedContents.on("dom-ready", injectTargetBlankInterceptor);

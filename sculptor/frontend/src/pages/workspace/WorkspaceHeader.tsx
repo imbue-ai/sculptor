@@ -126,7 +126,9 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
         if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
         copyTimerRef.current = setTimeout(() => setIsCopied(false), 1500);
       })
-      .catch(() => {});
+      .catch((error) => {
+        console.warn("Failed to copy branch name to clipboard.", error);
+      });
   }, [branchName]);
 
   const handleTargetBranchChange = useCallback(

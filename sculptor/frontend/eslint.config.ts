@@ -150,6 +150,22 @@ export default tseslint.config(
           selector: "TSEnumDeclaration",
           message: "Replace enum with a literal type or a const assertion.",
         },
+        // A `.catch()` whose callback body is empty silently swallows the
+        // rejection. Log the error (with context on what failed and that the
+        // app continues) so failures are visible in the console and Sentry. A
+        // bare explanatory comment is not enough — it counts as an empty body.
+        {
+          selector:
+            "CallExpression[callee.property.name='catch'] > ArrowFunctionExpression.arguments > BlockStatement.body[body.length=0]",
+          message:
+            "Do not silently swallow a rejected promise. Log the error (with context) inside the .catch() callback.",
+        },
+        {
+          selector:
+            "CallExpression[callee.property.name='catch'] > FunctionExpression.arguments > BlockStatement.body[body.length=0]",
+          message:
+            "Do not silently swallow a rejected promise. Log the error (with context) inside the .catch() callback.",
+        },
       ],
 
       // From the section "Naming":
@@ -202,6 +218,11 @@ export default tseslint.config(
       // so we don't include the rules from the "Test" section.
 
       "no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+
+      // Empty blocks hide bugs; an empty `catch` additionally swallows the error
+      // silently. The empty-`.catch()`-callback case is handled by the
+      // no-restricted-syntax selectors above (this rule only covers `try/catch`).
+      "no-empty": ["error", { allowEmptyCatch: false }],
 
       /* Eslint stylistic: https://eslint.style/packages/default */
       "@stylistic/padding-line-between-statements": [
