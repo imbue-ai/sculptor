@@ -120,7 +120,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | ADDWS-002 | Partial | test_multi_repo.py::test_mru_project_updates_after_creating_workspace | Add the no-MRU case (first project pre-selected). |
 | ADDWS-003 | Partial | test_new_workspace_dialog.py::test_form_renders_core_fields (asserts the name input is present) | Assert placeholder "Untitled workspace (optional)" and autofocus on initial load. |
 | ADDWS-004 | Partial | test_worktree_create_happy_path.py::test_worktree_create_with_empty_workspace_name_random_slug | Assert created workspace named "Untitled workspace" (+ whitespace-only case). |
-| ADDWS-005 | Missing | — | Type a name in the modal, close and reopen the same draft; assert the previously typed name is restored. |
+| ADDWS-005 | Missing | — | Create a workspace, reopen the new-workspace form; assert the repo and agent type default to the most-recently-used values while title/prompt/branch reset. |
 | ADDWS-006 | Partial | test_multi_repo.py::test_create_new_project_from_add_workspace_page; ::test_adding_duplicate_repo_shows_error | Open selector; assert all projects plus an "Add Repository" entry. |
 | ADDWS-007 | Partial | test_multi_repo.py::test_create_workspaces_in_multiple_projects_and_switch | Assert selecting another project reloads the branch selector and clears any branch-name override. |
 | ADDWS-008 | Partial | test_multi_repo.py::test_create_new_project_from_add_workspace_page (adds via Settings UI) | Trigger "Add Repository" from the repo-selector dropdown; assert the new project is auto-selected. |

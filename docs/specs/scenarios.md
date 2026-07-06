@@ -606,10 +606,10 @@ The home page's default view is a recent-workspaces list of rows; a switcher let
   - When: the user creates the workspace.
   - Then: it is created as "Untitled workspace".
 
-- **ADDWS-005 — Name draft persists**
-  - Given: the user typed a name and navigated away.
-  - When: the user returns to the same draft.
-  - Then: the previously typed name is restored.
+- **ADDWS-005 — Repo & agent-type defaults persist**
+  - Given: the user created a workspace with a chosen repo and agent type.
+  - When: the user next opens the new-workspace form.
+  - Then: the form defaults to the most-recently-used repo and agent type (the typed title, prompt, and branch name start fresh).
 
 - **ADDWS-025 — "Keep open" retains context across creates**
   - Given: the "Keep open" switch is on in the new-workspace form.
