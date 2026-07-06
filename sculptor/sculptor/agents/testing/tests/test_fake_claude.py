@@ -683,9 +683,10 @@ def test_end_to_end_unknown_command_exits_with_error() -> None:
 
 # --- Multi-turn (borrowing-model) FakeClaude, driven directly over stdin ---
 #
-# In production each turn currently spawns a fresh process, so these behaviors
-# are latent capability that the Phase 1 borrowing model will drive; the tests
-# exercise them by feeding stdin directly, the way a lingering CLI is fed.
+# The multi-turn contract is a property of FakeClaude itself, independent of
+# whether a caller sends one frame per process or many. These tests assert it
+# directly by feeding stdin the way a lingering CLI is fed, rather than routing
+# through the process manager.
 
 
 def _user_frame(content: str) -> str:
@@ -784,7 +785,7 @@ def test_stream_json_single_frame_then_eof_runs_exactly_one_cycle() -> None:
 
 def test_stream_json_exits_silently_on_immediate_eof() -> None:
     """With no user frame at all, stdin closing makes FakeClaude exit 0 and emit
-    nothing — no spurious default-handler cycle (the pre-multi-turn behavior)."""
+    nothing, instead of synthesizing a default-handler cycle."""
     result = _run_fake_claude_stream_json("")
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == ""

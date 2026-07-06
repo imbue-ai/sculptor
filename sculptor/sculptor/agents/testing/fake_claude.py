@@ -199,9 +199,16 @@ def _read_prompt_from_stream_json_stdin() -> str | None:
     in-cycle handlers perform. Other non-user frames (context-usage requests,
     control responses, etc.) are ignored.
 
-    ``sys.stdin`` is its own iterator, so successive calls resume where the
-    previous one stopped and share one read buffer — reading a sequence of
-    frames across cycles neither drops nor reorders lines.
+    ``sys.stdin`` is its own iterator, so successive *between-cycle* reads
+    resume where the previous one stopped and share one read buffer: frames
+    delivered while FakeClaude is idle between cycles are neither dropped nor
+    reordered. That guarantee is scoped to idle delivery only. A frame written
+    while a cycle's handler is itself polling stdin can be consumed and
+    discarded by that handler before this reader ever sees it — ``_wait_until``
+    drops non-interrupt lines and the raw-fd ``_read_mcp_control_response_text``
+    drops non-matching lines (with the SCU-783 buffering interplay on top) — so
+    tests must not queue a follow-up frame mid-cycle. (Mid-cycle absorption is
+    SCU-1679's concern, not this reader's.)
     """
     for line in sys.stdin:
         line = line.strip()
