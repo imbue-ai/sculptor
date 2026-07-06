@@ -106,9 +106,7 @@ export const NewWorkspaceForm = ({
     // launch (the picker still lists pi as "Install Pi").
     return seed === "pi" && !isPiAvailable ? "claude" : resolveStoredAgentType(seed);
   });
-  // Fast mode and model selection are only available for the Claude harness;
-  // Pi and registered terminal agents manage their own model catalogs and
-  // don't support fast mode. Derived each render (cheap, not stored).
+  // Fast mode and model selection are only available for the Claude harness.
   const isNonClaudeHarness = parseStoredAgentType(agentTypeValue).agentType !== "claude";
   const [userSelectedBranch, setUserSelectedBranch] = useState<string | undefined>(() => lastSettings?.sourceBranch);
   // `null` means "use the auto-filled preview"; any string means the user has
@@ -467,10 +465,7 @@ export const NewWorkspaceForm = ({
               rendered so the row reserves its space; hidden via `visibility`
               until the user has typed a prompt so the modal doesn't jump. */}
           <div className={styles.agentSettings} data-visible={!isPromptEmpty} aria-hidden={isPromptEmpty}>
-            {/* Pi and registered terminal agents manage their own model
-                catalogs and don't support fast mode; derive both gates from
-                the selected agent type. Pi supports interactive backchannel
-                (plan mode stays enabled). */}
+            {/* Pi supports interactive backchannel, so plan mode stays enabled. */}
             <AgentSettingsControls
               model={agentModel}
               onModelChange={setAgentModel}

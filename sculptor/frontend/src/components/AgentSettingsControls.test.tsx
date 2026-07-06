@@ -49,14 +49,12 @@ const defaultProps = {
 describe("AgentSettingsControls canSelectModel", () => {
   it("renders an enabled model picker when canSelectModel defaults to true", () => {
     render(withStore(<AgentSettingsControls {...defaultProps} />));
-    // The enabled model selector has the standard testid.
     expect(screen.getByTestId(ElementIds.MODEL_SELECTOR)).toBeTruthy();
     expect(screen.queryByTestId(ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION)).toBeNull();
   });
 
   it("renders a disabled model picker when canSelectModel is false", () => {
     render(withStore(<AgentSettingsControls {...defaultProps} canSelectModel={false} />));
-    // The capability gate replaces the model selector with a disabled trigger.
     expect(screen.queryByTestId(ElementIds.MODEL_SELECTOR)).toBeNull();
     expect(screen.getByTestId(ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION)).toBeTruthy();
   });
@@ -64,14 +62,12 @@ describe("AgentSettingsControls canSelectModel", () => {
 
 describe("AgentSettingsControls canUseFastMode", () => {
   it("hides the fast-mode toggle when canUseFastMode is false", () => {
-    // A model that normally supports fast mode, plus canUseFastMode=false.
     render(withStore(<AgentSettingsControls {...defaultProps} canUseFastMode={false} />));
     expect(screen.queryByTestId(ElementIds.FAST_MODE_TOGGLE)).toBeNull();
   });
 
   it("shows the fast-mode toggle when the model supports it and canUseFastMode is true", () => {
     render(withStore(<AgentSettingsControls {...defaultProps} canUseFastMode={true} />));
-    // CLAUDE_4_OPUS supports fast mode in modelCapabilities.
     expect(screen.getByTestId(ElementIds.FAST_MODE_TOGGLE)).toBeTruthy();
   });
 });

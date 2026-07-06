@@ -32,9 +32,7 @@ type AgentSettingsControlsProps = {
   canUseFastMode?: boolean;
   /**
    * Gate the model picker on harness support. When false, the picker renders
-   * disabled with a capability-tooltip. Defaults to `true`. Pi and registered
-   * terminal agents set this to false because they manage their own model
-   * catalogs; the Claude models pre-selected here do not apply.
+   * disabled with a capability-tooltip. Defaults to `true`.
    */
   canSelectModel?: boolean;
 };
@@ -46,9 +44,8 @@ type AgentSettingsControlsProps = {
  * prompt textarea without duplicating ChatInput's wiring. The fast-mode
  * toggle is gated on `getModelCapabilities(model).supportsFastMode`
  * here (rather than at every callsite) so consumers only have to pass
- * the selected model. The model picker is gated on `canSelectModel` so
- * harnesses that manage their own catalogs (pi, registered terminal agents)
- * can suppress the Claude model list.
+ * the selected model. The model picker is gated on `canSelectModel` (false
+ * disables it with a capability tooltip).
  *
  * ChatInput renders a parallel copy of this toolbar block that adds
  * capability-gated disabled states and a backend-model selector it needs in
