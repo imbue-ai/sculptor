@@ -812,13 +812,11 @@ const createWindow = async (): Promise<void> => {
   logger.info("[main] Initial URL:", appUrl);
   await window.loadURL(appUrl);
 
-  // Only show the native context menu on editable fields (inputs, textareas).
-  // Non-editable areas are left to the renderer (e.g. Radix ContextMenu).
   window.webContents.on("context-menu", (_event, params) => {
-    if (!window) return; // Only to prove to the type checker that window is non-null below
-    if (params.isEditable) {
-      const menuItems: Array<MenuItemConstructorOptions> = [];
+    if (!window) return;
+    const menuItems: Array<MenuItemConstructorOptions> = [];
 
+    if (params.isEditable) {
       // Add spelling suggestions when a word is misspelled
       if (params.misspelledWord) {
         for (const suggestion of params.dictionarySuggestions) {
@@ -845,7 +843,11 @@ const createWindow = async (): Promise<void> => {
         { type: "separator" },
         { role: "selectAll" },
       );
+    } else if (params.selectionText) {
+      menuItems.push({ role: "copy" }, { type: "separator" }, { role: "selectAll" });
+    }
 
+    if (menuItems.length > 0) {
       Menu.buildFromTemplate(menuItems).popup({ window, x: params.x, y: params.y });
     }
   });
