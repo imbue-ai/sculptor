@@ -286,9 +286,9 @@ export const WorkspaceSidebar = (): ReactElement | null => {
               <span className={navItemStyles.navLabel}>Report a bug</span>
             </button>
           </ReportProblemPopover>
-          <DevModeIndicator />
           <div className={styles.versionRow} data-testid={ElementIds.SIDEBAR_VERSION}>
             <VersionPopover />
+            <DevModeIndicator />
           </div>
         </nav>
 

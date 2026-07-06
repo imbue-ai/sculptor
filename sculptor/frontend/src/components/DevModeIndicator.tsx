@@ -8,8 +8,8 @@ import styles from "./DevModeIndicator.module.scss";
 // In Electron the recolored dock icon, label, and workspace id arrive from
 // the GET_DEV_INFO IPC channel — the same NativeImage already used for the
 // dock icon, serialized at full resolution. The browser scales it via CSS.
-// When running in pure-browser dev (Vite dev server, no Electron), we fall
-// back to a minimal label-only banner gated on import.meta.env.DEV.
+// When running in pure-browser dev (Vite dev server, no Electron), there is no
+// icon, so we fall back to a small colored dot gated on import.meta.env.DEV.
 export const DevModeIndicator = (): ReactElement | null => {
   const [devInfo, setDevInfo] = useState<SculptorDevInfo | null>(null);
   const isViteDev = import.meta.env.DEV;
@@ -32,7 +32,6 @@ export const DevModeIndicator = (): ReactElement | null => {
 
   if (!devInfo && !isViteDev) return null;
 
-  const label = devInfo?.label ?? "src";
   const iconDataUrl = devInfo?.iconDataUrl ?? null;
   const workspaceId = devInfo?.workspaceId ?? null;
 
@@ -46,15 +45,17 @@ export const DevModeIndicator = (): ReactElement | null => {
     </span>
   );
 
+  // Compact dev-source indicator that sits inline beside the version string:
+  // the recolored Electron icon when it's available, otherwise a small colored
+  // dot (matching VersionPopover's update dot). Full detail — source running
+  // plus the workspace id — lives in the tooltip.
   return (
     <Tooltip content={tooltipContent}>
       <span className={styles.root} data-testid="dev-mode-indicator">
-        {iconDataUrl && <img className={styles.icon} src={iconDataUrl} alt="" aria-hidden="true" />}
-        <span className={styles.label}>{label}</span>
-        {workspaceId && (
-          <span className={styles.detail} data-testid="dev-mode-workspace-id">
-            {workspaceId}
-          </span>
+        {iconDataUrl ? (
+          <img className={styles.icon} src={iconDataUrl} alt="" aria-hidden="true" />
+        ) : (
+          <span className={styles.dot} aria-hidden="true" />
         )}
       </span>
     </Tooltip>
