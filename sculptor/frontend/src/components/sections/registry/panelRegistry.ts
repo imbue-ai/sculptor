@@ -29,6 +29,9 @@ export type PanelDefinition = {
   kind: PanelKind;
   // Optional: review-all and browser have no default section (not opened by default).
   defaultSection?: SubSectionId;
+  // Secondary text shown under the panel's label in the add-panel dropdown. Only
+  // plugin panels supply it; static built-ins leave it unset and render title-only.
+  description?: string;
   component: ComponentType;
   // The agent/terminal-agent status reflected by the tab's status dot. Exposed on the
   // tab element as `data-dot-status` so tests can read read/unread/running/waiting/error
@@ -103,6 +106,7 @@ export type PluginRegistryPanel = {
   icon: LucideIcon;
   component: ComponentType;
   defaultSection?: SubSectionId;
+  description?: string;
 };
 
 // Adapt plugin-contributed panels into registry PanelDefinitions so the new shell can
@@ -118,6 +122,7 @@ export function buildPluginPanelDefinitions(
     icon: panel.icon,
     kind: "static",
     defaultSection: panel.defaultSection,
+    description: panel.description,
     component: panel.component,
   }));
 }
@@ -153,6 +158,7 @@ function panelDefinitionEqual(a: PanelDefinition | undefined, b: PanelDefinition
       a.icon === b.icon &&
       a.kind === b.kind &&
       a.defaultSection === b.defaultSection &&
+      a.description === b.description &&
       a.dotStatus === b.dotStatus &&
       a.connectionStatus === b.connectionStatus &&
       a.component === b.component)

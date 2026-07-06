@@ -10,9 +10,27 @@
   min-width: 0;
 }
 
+// Vertical stack holding the title and (optionally) the description, so the
+// description sits UNDER the title while the trailing shortcut stays on the row.
+// Takes the row's free space and clamps its width so both lines ellipsize.
+.itemText {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
 .itemTitle {
   color: var(--gray-12);
-  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Secondary line under the title: compact, muted, single-line with ellipsis.
+.description {
+  color: var(--gray-10);
+  font-size: var(--font-size-1);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
