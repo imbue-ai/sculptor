@@ -48,6 +48,8 @@ delivery assertions past a confirmed setup are hard failures.
 
 from __future__ import annotations
 
+import contextlib
+import functools
 import json
 import os
 import shutil
@@ -64,9 +66,23 @@ import pytest
 from sculptor.agents.default.claude_code_sdk.harness import compute_claude_jsonl_directory
 from tests.integration.real_claude.helpers import real_claude
 
-# The CLI these behaviors were empirically verified against. Recorded here so a
-# failure can be triaged against a version bump; see the module docstring.
+# The CLI these behaviors were empirically verified against. Surfaced in every
+# failure's diagnostics next to the installed version (see _diagnostics) so a
+# red canary immediately shows which CLI it actually ran against.
 _VERIFIED_CLI_VERSION = "2.1.198"
+
+
+@functools.cache
+def _installed_cli_version() -> str:
+    """``claude --version`` (cached), for triage when the canary goes red."""
+    if _CLAUDE_BINARY is None:
+        return "unknown (claude not on PATH)"
+    try:
+        completed = subprocess.run([_CLAUDE_BINARY, "--version"], capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f"unknown ({exc})"
+    return completed.stdout.strip() or completed.stderr.strip() or "unknown"
+
 
 # Cheap, deterministic-enough model for the canary. Must be a valid --model
 # shortname the CLI accepts.
@@ -138,15 +154,29 @@ def _is_result(obj: dict) -> bool:
     return obj.get("type") == "result"
 
 
-def _is_tool_use(obj: dict) -> bool:
+def _is_bash_sleep_tool_use(obj: dict) -> bool:
+    """A ``Bash`` tool_use whose command runs ``sleep`` — the slow in-flight turn.
+
+    Matching the specific slow call (not any tool_use) keeps a fast tool the
+    model might emit first — e.g. TodoWrite — from being mistaken for the
+    in-flight turn, which would land the injection near turn-end.
+    """
     if obj.get("type") != "assistant":
         return False
-    content = obj.get("message", {}).get("content", [])
-    return any(isinstance(b, dict) and b.get("type") == "tool_use" for b in content)
+    for block in obj.get("message", {}).get("content", []):
+        if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "Bash":
+            command = (block.get("input") or {}).get("command", "")
+            if isinstance(command, str) and "sleep" in command:
+                return True
+    return False
 
 
 def _is_task_started(obj: dict) -> bool:
     return obj.get("type") == "system" and obj.get("subtype") == "task_started"
+
+
+def _is_task_updated(obj: dict) -> bool:
+    return obj.get("type") == "system" and obj.get("subtype") == "task_updated"
 
 
 def _is_task_completed(obj: dict) -> bool:
@@ -155,8 +185,8 @@ def _is_task_completed(obj: dict) -> bool:
     )
 
 
-def _is_tool_use_or_result(obj: dict) -> bool:
-    return _is_tool_use(obj) or _is_result(obj)
+def _is_bash_sleep_or_result(obj: dict) -> bool:
+    return _is_bash_sleep_tool_use(obj) or _is_result(obj)
 
 
 def _assistant_text(obj: dict) -> str:
@@ -201,7 +231,10 @@ class _StreamJsonSession:
         process = self._process
         if process is not None and process.poll() is None:
             process.kill()
-            process.wait(timeout=10)
+            # Suppress so a slow teardown can't raise while unwinding a failing
+            # assertion and mask the original error.
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                process.wait(timeout=10)
         for thread in (self._reader, self._stderr_reader):
             if thread is not None:
                 thread.join(timeout=5)
@@ -283,6 +316,12 @@ class _StreamJsonSession:
         own ``assistant`` thinking/text, and tool results arrive as list-content
         user events — neither is an input echo, so matching on those would be a
         false positive.
+
+        Narrow by construction: if the replay shape ever changes (e.g. to
+        list-content), this negative check could pass vacuously. It is a
+        secondary signal — the load-bearing delivery assertion is the
+        transcript (queued_command attachment vs plain user message), which
+        would still catch a delivery regression.
         """
         echoes = []
         for event in self.events():
@@ -414,7 +453,10 @@ class _StreamJsonSession:
             summary.append(f"  {event.monotonic:8.2f}  {label}")
         stderr = self.stderr_text()
         stderr_block = f"\nstderr:\n{stderr}" if stderr else ""
-        return "stdout events:\n" + "\n".join(summary) + stderr_block
+        version_line = (
+            f"claude --version: {_installed_cli_version()} (canary verified against {_VERIFIED_CLI_VERSION})\n"
+        )
+        return version_line + "stdout events:\n" + "\n".join(summary) + stderr_block
 
 
 def _read_transcript(cwd: Path, session_id: str) -> list[dict]:
@@ -504,12 +546,13 @@ def test_mid_turn_frame_becomes_steering_queued_command(tmp_path: Path) -> None:
                 + "finish. Only then reply with exactly the single word WAKE."
             )
             session.wait_for_event(_is_init, timeout=30, description="system/init")
-            # Inject only once the turn is genuinely in-flight on the slow tool, so
-            # the frame is mid-turn by construction (the tool won't return for ~12s).
-            # If the model answers without the tool, the turn's result arrives before
-            # any tool_use — a setup miss, so retry on a fresh session.
+            # Inject only once the turn is genuinely in-flight on the slow Bash sleep,
+            # so the frame is mid-turn by construction (the tool won't return for
+            # ~12s). If the model answers without that tool — or emits a fast tool
+            # first and then the result — the turn's result arrives before the slow
+            # tool_use, which is a setup miss, so retry on a fresh session.
             setup = session.wait_for_event(
-                _is_tool_use_or_result, timeout=60, description="Bash tool_use or turn result"
+                _is_bash_sleep_or_result, timeout=60, description="Bash sleep tool_use or turn result"
             )
             if _is_result(setup.obj):
                 continue
@@ -551,7 +594,8 @@ def test_mid_turn_frame_becomes_steering_queued_command(tmp_path: Path) -> None:
             )
             return
     pytest.fail(
-        f"Model never ran the slow Bash tool across {_MAX_SETUP_ATTEMPTS} attempts; cannot exercise mid-turn steering."
+        f"Model never ran the slow Bash tool across {_MAX_SETUP_ATTEMPTS} attempts; cannot exercise mid-turn steering. "
+        + f"(claude --version: {_installed_cli_version()})"
     )
 
 
@@ -599,13 +643,34 @@ def test_between_turns_frame_is_plain_followup_then_reaction_turn(tmp_path: Path
             assert result1.monotonic < followup_time  # between-turns by construction
             result2 = session.wait_for_result_count(2, timeout=90, description="turn 2 result (follow-up)")
 
-            # Scenario 3: the background task completes and drives a reaction turn.
+            # Scenario 3: task completion emits task_updated + task_notification and
+            # drives a fresh reaction turn. Pin the full shape: task_updated precedes
+            # the notification, and the reaction turn is its own init -> ... -> result
+            # cycle after the notification (each turn re-emits system/init).
+            task_updated = session.wait_for_event(_is_task_updated, timeout=120, description="background task_updated")
             completion = session.wait_for_event(
                 _is_task_completed, timeout=120, description="background task_notification (completed)"
+            )
+            assert task_updated.monotonic <= completion.monotonic, (
+                "task_updated did not precede the task_notification.\n" + session._diagnostics()
             )
             result3 = session.wait_for_result_count(3, timeout=90, description="reaction turn result")
             assert result3.monotonic > completion.monotonic, (
                 "Reaction-turn result arrived before the task completion notification.\n" + session._diagnostics()
+            )
+            reaction_init = next(
+                (
+                    e
+                    for e in session.events()
+                    if e.obj is not None
+                    and _is_init(e.obj)
+                    and completion.monotonic <= e.monotonic <= result3.monotonic
+                ),
+                None,
+            )
+            assert reaction_init is not None, (
+                "Reaction turn did not open a fresh system/init cycle after the task notification.\n"
+                + session._diagnostics()
             )
 
             session.close_stdin()
@@ -634,7 +699,8 @@ def test_between_turns_frame_is_plain_followup_then_reaction_turn(tmp_path: Path
             assert plain_with_marker, "Follow-up frame was not recorded as a plain user message."
             return
     pytest.fail(
-        f"Model never launched a still-running background task in a fast turn 1 across {_MAX_SETUP_ATTEMPTS} attempts."
+        f"Model never launched a still-running background task in a fast turn 1 across {_MAX_SETUP_ATTEMPTS} attempts. "
+        + f"(claude --version: {_installed_cli_version()})"
     )
 
 
