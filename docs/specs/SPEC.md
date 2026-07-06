@@ -77,8 +77,8 @@ the diff, commits, and opens a pull request — never having stashed or branched
 **S2 — Compare two approaches in parallel.** Unsure which approach is better, Priya creates two
 workspaces from the same starting branch and gives each agent the same task with a different steer
 ("smallest possible change" vs. "refactor for clarity"). The two agents run at the same time in
-their separate copies; she watches both from their tabs, compares the resulting diffs, and keeps the
-one she prefers — discarding the other workspace. (Two *workspaces*, not two agents in one: agents
+their separate copies; she watches both from the workspace sidebar, compares the resulting diffs, and
+keeps the one she prefers — discarding the other workspace. (Two *workspaces*, not two agents in one: agents
 sharing a workspace would edit the same files.)
 
 **S3 — Drive a feature from spec to shipped.** Sam has a larger feature. He invokes
@@ -106,11 +106,11 @@ remote CI runner, which has no local backend or checkout to drive.)
 **S5 — Run a fleet; let the dots route your attention.** Maya is mid-sprint with a dozen things in
 flight at once. Three large features are each moving through the workflow skills in their own
 workspaces; another seven or eight smaller bugs are each handed to a `fix-bug` agent in a workspace
-of its own. She isn't watching any single one — she reads the **status dots** across the workspace
-tabs as a dashboard of where her attention is owed: a *ready* dot means an agent has finished and
+of its own. She isn't watching any single one — she reads the **status dots** down the workspace
+sidebar as a dashboard of where her attention is owed: a *ready* dot means an agent has finished and
 wants review, a *waiting* dot means one is blocked on a question or plan approval, an *error* dot
-means one needs a human. She hovers a tab to **peek** at that workspace's agents, branch, PR status,
-and diff stats without leaving the agent she's in, and uses **Cmd+P / Cmd+K** to jump straight to
+means one needs a human. She hovers a sidebar row to **peek** at that workspace's agents, branch, PR
+status, and diff stats without leaving the agent she's in, and uses **Cmd+P / Cmd+K** to jump straight to
 whichever workspace is asking for her. She approves a plan here, reviews and commits a finished bug
 fix there, unsticks a confused build agent — then drops back into her own work. The win isn't that
 any single agent is faster; it's that Sculptor lets her keep ten-plus autonomous agents productive at
@@ -190,10 +190,10 @@ workspace's mode is fixed for its lifetime.
 
 A workspace also has a source branch, a **target branch** (what its changes and any PR are measured
 against), a **setup status** (if the project defines a setup command), and a set of **changes** that
-may still be computing just after the agent edits files. It is shown as a tab.
+may still be computing just after the agent edits files. It is shown as a row in the sidebar.
 
-**Agent.** One LLM conversation bound to a workspace — the user-facing unit of work, shown as a tab
-inside the workspace. An agent has a **status** the user sees as status dots and tab state:
+**Agent.** One LLM conversation bound to a workspace — the user-facing unit of work, shown as a panel
+inside the workspace. An agent has a **status** the user sees as status dots and panel-tab state:
 *building* (it's being set up), *running* (actively working), *ready* (idle / done), *waiting* (it
 asked a question or wants plan approval), *error*, or *request-error* (its last request failed but
 the agent is still usable). Several agents can run in one workspace; they share its files and git
@@ -288,34 +288,38 @@ instead. (Opening a PR is GitHub-only → §7.6; the GitHub sign-in is the same 
 
 A **workspace** is how you start work in Sculptor: you pick a project (repo) and Sculptor creates an
 isolated copy of it for agents to work in, rather than touching your own checkout. You create one
-from the **Add Workspace** form (titled "Name your workspace") — choosing the repo, the source branch
-to start from, a workspace name, the name for the workspace's new branch (with a live preview and a
-warning if that branch already exists), and the **type of the first agent** to create (Claude, a
-terminal agent, Pi, or a registered agent → §7.4). By default
-the workspace is a **worktree**: it shares your repo's history but gets its own branch, so the
-agent's commits show up in your repo right away and you can push them yourself. (The older **clone**
-mode and the unisolated **in-place** mode are experimental opt-ins that, once enabled in Settings,
-add a mode picker to this form — see §7.12.) Each open workspace is a **tab**.
+from the **New Workspace** form — opened from the sidebar's **New Workspace** button, a repo group's
+**+**, `Cmd+T`, or the command palette (and shown inline on first run) — choosing the repo, the
+source branch to start from, a workspace name, the name for the workspace's new branch (with a live
+preview, a shuffle button to re-roll it, and inline validation that blocks an invalid or
+already-taken name), the **type of the first agent** to create (Claude, Pi, a terminal agent, or a
+registered agent → §7.4), and an optional opening prompt. By default the workspace is a **worktree**:
+it shares your repo's history but gets its own branch, so the agent's commits show up in your repo
+right away and you can push them yourself. (The older **clone** mode and the unisolated **in-place**
+mode are experimental opt-ins that, once enabled in Settings, add a mode picker to this form — see
+§7.12.) A repo group's **+** skips the form and creates a worktree workspace on a fresh auto-named
+branch in one click. Each workspace appears as a row in the **sidebar**, grouped under its repo.
 
-Inside a workspace, a header **banner** shows where you are: the repo, the workspace's branch (which
-you can copy), and a one-glance **diff summary**. The banner also shows the workspace's **target
-branch** — what its changes are diffed against — with a selector to change it and a warning if an
-open PR's target wouldn't match. The selector works for **every repo regardless of remote host**; a
-repo with a remote offers its remote-tracking branches as targets, while a repo with no remote falls
-back to offering the repo's own local branches. (Opening a pull request, by contrast, requires
-a GitHub `origin` → §7.6 — the target-branch concept is independent of the PR surface.)
-A non-default mode (clone or in-place) is shown as a strategy badge, and the banner collapses
-progressively as space tightens.
+Inside a workspace, a compact **header** shows where you are: the workspace's branch (which you can
+copy), a one-glance **diff summary** (clicking it opens the Changes panel scoped to the target
+branch), and the workspace's **target branch** — what its changes are diffed against — with a selector
+to change it and a warning if an open PR's target wouldn't match. The selector works for **every repo
+regardless of remote host**; a repo with a remote offers its remote-tracking branches as targets,
+while a repo with no remote falls back to offering the repo's own local branches. (Opening a pull
+request, by contrast, requires a GitHub `origin` → §7.6 — the target-branch concept is independent of
+the PR surface.) A non-default mode (clone or in-place) is shown as a strategy badge, and the header
+also carries the Create-PR button and the toggles for the workspace's side sections (→ §7.9).
 
 If the project defines a **setup command**, it runs when the workspace is created; its progress and
 logs are surfaced, with controls to cancel or re-run, and the workspace's diff isn't meaningful
 until setup finishes.
 
-A workspace can hold **multiple agents**, shown as tabs within it. They all share the same files and
-git state — there is no locking between them, so two agents editing the same workspace can step on
-each other — but each has its own conversation, status, and history. You can add, rename
-(double-click), reorder, mark-unread, and delete agents, and a small **peek** popover previews other
-agents' state on hover.
+A workspace can hold **multiple agents**, each shown as its own panel in the workspace's section grid
+(→ §7.4, §7.9). They all share the same files and git state — there is no locking between them, so two
+agents editing the same workspace can step on each other — but each has its own conversation, status,
+and history. You add, rename (inline), mark-unread, and delete agents from the panel's tab, and
+hovering a workspace's sidebar row opens a **peek** popover previewing that workspace's agents,
+branch, PR, and diff stats.
 
 Deleting a workspace removes it and all of its agents; for worktree and clone workspaces this also
 cleans up the underlying git worktree or clone. A workspace whose underlying repo or working copy
@@ -333,7 +337,8 @@ agents at once is §7.4.
 **Chat** is where you direct an agent. You compose a prompt in the input box at the bottom, and the
 agent's reply, its tool calls, and its progress stream into the panel above. Press the send
 keybinding (or click **Send**) to send; the editor and any attachments clear. The Send button
-explains itself when it can't act — for example when the editor is empty. The send keybinding is
+explains itself when it can't act — for example when the editor is empty — and shows a brief spinner
+while a send is in flight. The send keybinding is
 **Cmd/Ctrl+Enter**, so a plain **Enter** (or **Shift+Enter**) inserts a line break and a prompt can
 span several lines while still sending as one message.
 
@@ -343,7 +348,7 @@ agent), and shown disabled with the current model for those that don't; the list
 the agent's own harness, so a **Claude** agent picks from the Claude models while a **Pi** agent
 surfaces Pi's live catalog grouped by provider — a single provider lists its models flat, while two or
 more providers cascade into a per-provider submenu, and a Pi agent with no authenticated providers
-shows an **Authenticate a provider** prompt in place of the list. Changing a Pi agent's model takes
+shows a "log in to authenticate" prompt with an **Open pi login** button in place of the list. Changing a Pi agent's model takes
 effect in-session (a failed switch leaves the choice unchanged and raises an actionable error toast). An **effort**
 selector budgets how much thinking it spends per step (Low, Medium, High, Extra High, Max — Extra High
 by default); a **fast mode** toggle trades some depth for quicker output on the models that support it
@@ -382,7 +387,8 @@ Sometimes the agent turns the question around and asks **you**. A **question pan
 chat input, showing the question, its options, and an **Other** choice for a free-text answer.
 Questions can be single- or multi-select; when there are several you move between them with the
 progress dots or Tab, and submitting jumps to the next unanswered one until every question is
-answered and the panel closes. You can also **dismiss** the panel to decline. Answered questions
+answered and the panel closes (the Submit button locks, showing a brief spinner, while the answer is
+sent). You can also **dismiss** the panel to decline. Answered questions
 remain in the chat history as plain text for the record.
 
 When a turn finishes, a **footer** summarizes it: duration (with a "Stopped" label if you interrupted
@@ -395,7 +401,8 @@ Beyond composing prompts, the chat offers a few conveniences for working in a lo
 recall earlier prompts by pressing the up/down arrows in an empty input, search the transcript
 (Cmd/Ctrl+Shift+F), and switch tool calls between compact pills and expanded rows
 (Cmd/Ctrl+Shift+E). Right-clicking an image anywhere in the conversation (a message, the attachment
-preview, or the zoomed lightbox) offers **Copy Image** to put it on your clipboard.
+preview, or the zoomed lightbox) offers **Copy Image** to put it on your clipboard, and right-clicking
+elsewhere in the chat offers **Copy**, **Paste** (into the input), and **Select All**.
 
 #### 7.3.2 Terminal agents
 
@@ -404,7 +411,7 @@ interactive, full-pane terminal — a real shell session (a PTY) running inside 
 than a chat transcript. You type into the
 shell directly; Sculptor renders no message stream, model picker, or chat input for it, so the
 chat-only affordances above (plan mode, queued messages, `/btw`) don't apply. It is still a
-first-class agent — its own tab, name, status dot, history, and lifecycle, sharing the workspace's
+first-class agent — its own panel, name, status dot, history, and lifecycle, sharing the workspace's
 files and git state with its siblings (→ §7.4). The reason to use one is to run a coding tool that
 drives *its own* terminal UI — most importantly a CLI coding agent like Claude Code — alongside your
 chat agents, while Sculptor still tracks it as an agent and surfaces its edits in the Changes view.
@@ -439,20 +446,23 @@ you create it (→ §7.4 Agents).
 ### 7.4 Agents — multiple roles & background
 
 A workspace can hold several **agents** at once, each its own conversation with its own history and
-pending changes, shown as a row of **tabs**. Each tab carries the agent's name and a **status dot**,
+pending changes, and each shown as a **panel** in the workspace's section grid — the active agent sits
+in the center section, and additional agents can share it or be moved into another section to watch
+two chats side by side (→ §7.9). Each agent panel's tab carries the agent's name and a **status dot**,
 and hovering the dot tells you the status and how long since its last activity. Click a tab (or use
 the next/previous-agent keybinding) to switch between them.
 
-Create a new agent with the **+** button at the end of the tab bar (or the new-agent keybinding); it
-creates an agent of your last-used **type**. Next to it, a small **chevron** opens a menu of the types
-you can create: the built-in **Claude** rich-chat agent, the **Pi** chat agent, a plain **Terminal**,
-and then each **registered terminal agent** by its display
-name — out of the box that's **"Claude CLI"**, which runs the Claude Code TUI in the workspace (→ §7.3
-Chat). The menu marks your last-used type with a check, Sculptor remembers it, and a plain **+** click
-re-creates that type without opening the menu. **Double-click** a tab to rename it (Enter saves, Escape cancels), drag tabs to **reorder**
-them, and right-click for more: rename, **mark as unread**, **copy the agent's name**, delete, plus
-diagnostics. **Deleting** an
-agent (after confirming) moves you to the next one, or starts a fresh agent if it was the last.
+Create a new agent from a section's **add-panel menu** — its **+**, or `Cmd+Shift+T` (which adds one
+to the center section). The pinned entry creates an agent of your last-used **type**, and a submenu
+lists the types you can create: the built-in **Claude** rich-chat agent, the **Pi** chat agent (shown
+as **"Install Pi"** and routing to Settings when Pi isn't installed yet → §7.10), and each
+**registered terminal agent** by its display name, such as the **"Claude CLI"** agent that runs the
+Claude Code TUI in the workspace (→ §7.3 Chat). (A plain **Terminal** is added from the same menu's
+separate "New terminal" entry, → §7.7.) Sculptor remembers your last-used type and shows it on the
+pinned entry. From an agent panel's tab you **rename** it inline (Enter saves, Escape cancels),
+**mark it unread**, **copy** its name / id / session id / transcript paths (diagnostics), and
+**delete** it (after confirming); deleting removes the panel and moves you to the next agent, and
+closing the last one leaves the center section on its empty state rather than starting a fresh agent.
 
 Because every agent in a workspace works on the same copy of your repo, **siblings share its files
 and Git state with no locking**. In practice it's rare to have two of them *actively editing* at the
@@ -467,61 +477,62 @@ parallel work, separate **workspaces** are usually the better tool (→ §7.2, s
 your siblings, a single agent can spin up its own **subagents** to fan out sub-tasks, and can run
 longer **background tasks** that keep going while you read its main reply (→ §7.3 Chat).
 
-To check on a workspace without leaving the one you're in, hover a workspace tab to open a **peek**
-popover: a quick preview of that workspace's status, its list of agents, branch, pull-request state,
-and diff stats. Moving between tabs swaps the preview instantly; for a busy workspace it shows the
-first few agents with a "+N more" control to reveal the rest. Click an agent row (or the header) to
-jump straight there.
+To check on a workspace without leaving the one you're in, hover its **sidebar row** to open a
+**peek** popover: a quick preview of that workspace's status, its list of agents, branch,
+pull-request state, and diff stats. Moving between rows swaps the preview instantly; for a busy
+workspace it shows the first few agents with a "+N more" control to reveal the rest. Click an agent
+row (or the header) to jump straight there.
 
 ### 7.5 Changes — review & commit
 
-When an agent edits files, you review the result in the **Files** panel, which sits at the top-left
-of the workspace and carries three tabs: **Browse** (the workspace's full file tree, for opening any
-file), **Changes** (every modified file), and **Commits** (the workspace's commit history). The
-Changes and Commits tabs show a count badge when there's something to see. Nothing leaves the
-workspace until you choose to commit (→ §7.6 Pull Requests).
+When an agent edits files you review the result in three panels that live in the workspace's **left
+section** by default — **Files**, **Changes**, and **Commits** — each pairing a list on the left with
+an embedded **diff/file viewer** on the right (a resizable split whose list can be hidden). Nothing
+leaves the workspace until you choose to commit (→ §7.6 Pull Requests).
 
-The file tree can be shown as a nested **tree** or a flat list, and you can toggle between them,
-collapse every folder at once, or refresh to re-fetch. A search control filters the tree as you type
-— ancestor folders of matches expand automatically, and "No matches" appears when nothing fits. In the
-**Changes** view each file carries a status letter (modified, added, deleted, renamed) in a distinct
-color along with its added/removed line counts; folders roll those up into a change-count badge,
-deletions are struck through, and a file that failed to process shows an error badge. (The **Browse**
-tree lists the whole repository without these change decorations.) When the agent is actively touching
-a file, the tree scrolls to it, opens its ancestors, and briefly **highlights** the row so you can
-follow the work as it happens. Right-clicking a file or folder opens a menu with actions like opening
-its diff, viewing the file, and copying its path (full or relative) — plus, when Sculptor can reach
-your local filesystem, opening it in your OS's default app and revealing its containing folder.
+The **Files** panel is the workspace's full file tree, for opening any file; clicking a file shows its
+read-only contents, since an unchanged file has no diff. The tree can be shown as a nested **tree** or
+a flat list, collapsed all at once, or refreshed, and a search control filters it as you type —
+ancestor folders of matches expand automatically, and "No matches" appears when nothing fits.
+Right-clicking a file or folder opens a menu with actions like opening its diff, viewing the file, and
+copying its path (full or relative) — plus, when Sculptor can reach your local filesystem, opening it
+in your OS's default app and revealing its containing folder.
 
-Clicking a file in the **Changes** tab opens it in the main **diff** view; clicking a file in
-**Browse** opens its read-only contents instead, since an unchanged file has no diff. A scope picker lets you look at only the
-**uncommitted** changes or, when the workspace has a target branch (any repo → §7.2),
-**all** changes measured against that target branch, with a count on each option. The diff itself can be shown **side-by-side** or **unified** (inline), with line-wrapping, a
-find-in-file search that highlights matches and counts them ("X of Y") as you step through, and an
-expand control that widens the diff across the whole window. A binary file replaces the diff with an
-explanatory banner, and renamed or deleted files show a banner above the diff — and for images, a
-before/after preview with zoom and pan — while a very large diff is truncated behind a "Show full diff" button. When the
-experimental **Rich markdown rendering** feature is enabled (→ §7.12), a markdown file can be flipped
-between its raw source and a rendered preview. You
-can also open a file's full read-only contents with syntax highlighting rather than a diff, and — with
-the experimental **Review All** feature enabled (→ §7.12) — a
-"Review All" option gathers every change into a single combined diff tab. In the **uncommitted** scope, each changed file has a
-**Discard changes** action that reverts just that file to its last committed state after you confirm.
+The **Changes** panel lists every modified file. A **scope picker** lets you look at only the
+**uncommitted** changes or, when the workspace has a target branch (any repo → §7.2), **all** changes
+measured against that target branch, with a count on each option. Each file carries a status letter
+(modified, added, deleted, renamed) in a distinct color along with its added/removed line counts;
+folders roll those up into a change-count badge, deletions are struck through, and a file that failed
+to process shows an error badge. When the agent is actively touching a file, the tree scrolls to it,
+opens its ancestors, and briefly **highlights** the row so you can follow the work as it happens.
+Clicking a file opens its **diff** in the viewer. In the **uncommitted** scope, each changed file has
+a **Discard changes** action that reverts just that file to its last committed state after you confirm.
 
-When you're satisfied, the **Commit** button at the top of the Changes tab, above the file list — labeled with the
+When you're satisfied, the **Commit** button at the bottom of the Changes panel — labeled with the
 pending count, e.g. "Commit 2 changes," and disabled when there's nothing to commit — asks the agent
 to write a message and make the commit on the workspace branch. Committing does not push; the commit
-stays on the branch until you push it or open a PR. Clicking the button does a **quick commit**
-with the default prompt; right-clicking it opens a dialog to **edit and save the commit-message
-prompt**, which then steers how messages are written on subsequent commits.
+stays on the branch until you push it or open a PR. Clicking the button does a **quick commit** with
+the default prompt; right-clicking it opens a dialog to **edit and save the commit-message prompt**,
+which then steers how messages are written on subsequent commits.
 
-The **Commits** tab shows the workspace's history as a **commit graph** with connecting dots and
-lines. Each entry shows the first line of its message, the file count, added/removed stats, a
-relative time, and a short hash; hovering reveals a popover with the commit's author, date,
-and short hash, and a copy button that copies the full hash, confirming by briefly swapping its icon for a checkmark. Clicking an entry expands it to
-list the files in that commit, and clicking one of those files opens a diff of that file against its
-parent. Merge commits can be expanded to follow the merged-in branch, and a marker at the bottom
-shows where the workspace's history forks from its starting point.
+The **Commits** panel shows the workspace's history as a **commit graph** with connecting dots and
+lines. Each entry shows the first line of its message, the file count, added/removed stats, a relative
+time, and a short hash; hovering reveals a popover with the commit's author, date, and short hash, and
+a copy button that copies the full hash, confirming by briefly swapping its icon for a checkmark.
+Clicking an entry expands it to list the files in that commit, and clicking one of those files opens a
+diff of that file against its parent. Merge commits can be expanded to follow the merged-in branch,
+and a marker at the bottom shows where the workspace's history forks from its starting point.
+
+The **diff viewer** shared by these panels shows a file **side-by-side** or **unified** (inline). A
+**View options** menu gathers its controls — tree vs. flat list, collapse, split vs. unified,
+line-wrapping, a find-in-file search that highlights matches and counts them ("X of Y") as you step
+through, markdown rendering, and refresh — and a breadcrumb reopens files you recently viewed in that
+panel. A binary file replaces the diff with an explanatory banner; renamed or deleted files show a
+banner above the diff — and for images, a before/after preview with zoom and pan — while a very large
+diff is truncated behind a "Show full diff" button. A markdown file can be flipped between its raw
+source and a **rendered** preview (the default for markdown), which also renders any YAML/TOML
+**frontmatter** at the top of the file as a key/value table. To review everything at once, add the
+**Review All** panel, which gathers every change into a single combined diff.
 
 ### 7.6 Pull Requests
 
@@ -529,7 +540,7 @@ The pull-request surface described here appears **only when the workspace's repo
 `origin`**; for any other repo there is no PR control and you push the branch yourself. (The
 target-branch selector itself is *not* gated this way — it appears on every repo, → §7.2; only opening
 a PR requires a detected GitHub remote.) Given such a repo, once you've committed work on a workspace
-branch you can open a **pull request** straight from the workspace's top bar with **Create PR**.
+branch you can open a **pull request** straight from the workspace header with **Create PR**.
 Clicking it pushes the branch and asks the agent to open the request against the workspace's target
 branch. If you'd rather adjust how that's done first, the button's chevron menu offers **Edit
 prompt...**, which opens a dialog to revise the PR-creation prompt before you create anything. While
@@ -563,18 +574,18 @@ remediation command.
 Sculptor includes a built-in **workspace terminal** — a real shell that runs inside the current
 workspace, so anything you type operates on the very files the agent is working with. It's handy for
 starting a dev server, running tests or linters, inspecting git state, or any command that's quicker
-to run yourself than to ask the agent for. You open it from the command palette or the panel controls
-in the bottom bar, and it can sit open alongside a running agent without interfering with the
-conversation.
+to run yourself than to ask the agent for. A terminal sits in the workspace's **bottom section** by
+default; you open more from a section's add-panel menu or the command palette, and a terminal can sit
+open alongside a running agent without interfering with the conversation.
 
-You can keep several terminals going at once. The **+** in the tab bar adds another ("Terminal N"),
-double-clicking a tab renames it inline, and each tab is an independent shell in the same workspace;
-right-clicking offers rename, close, and "Close others," tabs can be reordered, and closing the last
-one spins up a fresh replacement. When output arrives in a tab you're not looking at, a pulsing
-**unread** dot appears on it and clears when you switch over. A starting terminal briefly shows
-"Starting terminal..." while it
-comes up; Ctrl+L clears the focused terminal; and your terminals — along with their scrollback —
-persist as you navigate around Sculptor rather than resetting each time.
+You can keep several terminals going at once. **New terminal** in the add-panel menu adds another
+("Terminal N", numbered across the whole workspace), each an independent shell in the same workspace;
+double-clicking a terminal's tab renames it inline. When output arrives in a terminal you're not
+looking at, a pulsing **unread** dot appears on its tab and clears when you switch over, and a
+connection indicator reads **"Reconnecting…"** or **"Disconnected"** if its link drops. A starting
+terminal briefly shows "Starting terminal..." while it comes up; Ctrl+L clears the focused terminal;
+and your terminals — along with their scrollback — persist as you navigate around Sculptor rather than
+resetting each time.
 
 This section is about your own terminal. It is distinct from a **terminal agent** — an agent type
 whose main panel is a shell the *agent* drives rather than you (→ §7.3 Chat, §7.4 Agents).
@@ -602,7 +613,7 @@ clear loading, empty, and error states.
 The flagship bundled skills form the **engineering workflow** (the `sculptor-workflow` plugin): a
 pipeline that takes a feature from idea to shipped code in focused stages — **spec → mock → architect
 → plan → build → review**. Each stage is its own skill and runs as its own dedicated agent, renamed
-to match the stage ("Spec", "Architect", "Plan", and so on) so you can tell the tabs apart, and each
+to match the stage ("Spec", "Architect", "Plan", and so on) so you can tell them apart, and each
 produces a durable artifact on disk that the next stage reads. `spec` writes the implementation spec
 through guided Q&A you watch take shape in the diff viewer; `mock` produces interactive HTML mocks
 (exploration mode generates several variants to compare, confirmation mode refines one); `architect`
@@ -621,16 +632,18 @@ pull request if the repo allows it.
 
 ### 7.9 Command Palette & Navigation
 
-Sculptor is organized into **tabs** along the top: a **Home** tab, a **Settings** tab, and a tab for
-each open workspace. You switch tabs by clicking, cycle through them with keyboard shortcuts (these
-keep working even in zen mode), drag to reorder them, and close them with the tab's minimize button, a middle-click,
-or a keyboard shortcut. Workspace tab labels truncate when long and carry a small **status dot**
-reflecting the agent's state; double-clicking a tab renames the workspace inline, and right-clicking
-opens a context menu to rename it, delete it, copy its name / branch / workspace id, or close
-others/all. **Cmd+Shift+W** deletes the active workspace (after the same confirmation dialog as the
-menu and palette actions). When too many tabs are open they overflow into a horizontal
-scroller that keeps the active tab in view, and closed workspaces collect into a pill you can reopen
-from. Tabs persist across restarts.
+Sculptor is organized around a persistent **sidebar** on the left. At the top sit **Home**,
+**Commands**, and **New Workspace**; below them your workspaces are listed as rows **grouped by
+repo**, each with a **status dot** reflecting its agents' state; at the bottom sit **Settings**, a
+**Report a bug** button, and the app version. The sidebar stays put as you move between Home,
+Settings, and any workspace, so switching never tears the shell down. A row's name truncates when
+long; hovering it reveals a **…** menu and a delete button, and right-clicking opens that same menu —
+rename inline, commit, open a PR, copy the workspace's name / branch / id, and delete. **Cmd+Shift+W**
+deletes the active workspace (after a confirmation dialog). A repo group can be collapsed, its gear
+opens Settings scoped to that repo, and its **+** creates a workspace there. Cycle between workspaces
+with **Cmd+[** / **Cmd+]** (wrapping through the sidebar's order), and jump straight to one with
+**Cmd+P**. The sidebar can be **collapsed** to a thin rail (a floating button brings it back) and
+**resized** by dragging its edge; its width and collapsed state persist.
 
 The **Command Palette**, opened with **Cmd+K** from anywhere, is the fastest way to get around once
 you have several workspaces and agents open. It's a searchable list with the input focused and
@@ -639,36 +652,38 @@ commands grouped (Workspaces, Navigation, Theme & Layout, Chat, Terminal, Help).
 **Enter** to run a command — or **Cmd+Enter** to run it and keep the palette open for another. Some
 commands open **sub-pages** (shown with a chevron and reached with Tab) such as the workspace
 switcher, which **Cmd+P** opens directly. From the palette you can switch between or create workspaces
-and agents, show or hide panels, open Settings or Help, and toggle the theme. Commands
-that don't apply right now are greyed out with a reason ("Only one agent in this workspace", "No
-uncommitted changes"), and rows show their keyboard shortcut where one exists.
+and agents, add panels, open Settings or Help, and toggle the theme. Commands that don't apply right
+now are greyed out with a reason ("Only one agent in this workspace", "No uncommitted changes"), and
+rows show their keyboard shortcut where one exists.
 
-The **bottom bar** carries toggle buttons for the left, bottom, and right side panels plus a
-focus-mode button. Clicking a toggle shows or hides that panel and updates its active state; a panel
-with no content is disabled with a "Panel is empty" tooltip; and hovering any toggle shows its name
-and keybinding. **Focus mode** (Cmd+\) collapses all side panels so the chat expands, and toggles
-back. **Zen mode** (Cmd+Shift+\) goes further, hiding the top bar and side panels entirely to leave
-just the chat with a draggable title bar; an "Exit zen mode" button appears when you move to the
-top-left corner. The app's **version number** sits in the bottom-right — in the workspace bottom bar
-and in the corner of the non-workspace pages; clicking it opens a popover with version details,
-update status, and diagnostics, and a colored dot plus toasts signal when an update is downloading or
-ready to install. A **Report a problem** button sits alongside the version indicator for sending
+Inside a workspace the panels are arranged in a grid of **sections**: a **center** section for the
+active agent that can't be collapsed, plus **left**, **bottom**, and **right** sections that hold the
+other panels and start collapsed. Toggles in the workspace header — and **Cmd+Alt+←/↓/→** — expand or
+collapse the left, bottom, and right sections; a section can be **maximized** to fill the workspace
+(hiding the header) and restored; and cycling the active section briefly pulses a ring around it. You
+add panels from a section's **add-panel** menu, drag them between sections, split a section in two, and
+resize sections by dragging their borders; the arrangement is remembered per workspace (§7.5 and the
+panel details cover this in full). Alongside the built-in panels, optional ones can be added on
+demand — the combined **Review All** diff (→ §7.5) and, on desktop, an in-app **Browser** panel (an
+embedded browser with an address bar and back/forward/reload/screenshot controls; a placeholder
+outside the desktop app). The app's **version** sits at the bottom of the sidebar; clicking it
+opens a popover with version details, update status, and diagnostics, and a colored dot plus toasts
+signal when an update is downloading or ready to install. The **Report a bug** button beside it sends
 feedback.
 
 ### 7.10 Settings
 
-**Settings** (opened with Cmd+, or from the top bar) is a single page with a sidebar of sections; it
-remembers the last section you viewed and can be deep-linked to a specific one. Changing a setting
-saves on the spot with a "Setting updated" toast (or an error toast on failure).
+**Settings** (opened with Cmd+, or from the sidebar) is a single page with a sidebar of sections —
+some banded under group headings such as **Harnesses**, **Interface**, and **Project**; it remembers
+the last section you viewed and can be deep-linked to a specific one. Changing a setting saves on the
+spot with a "Setting updated" toast (or an error toast on failure).
 
 The **General** section controls appearance — the Light / Dark / System theme — and software updates,
 including the release channel and a "Check for updates" / "Install and restart" control. **Agent**
 sets the defaults applied to new agents: the default model, fast mode, and effort level.
 **Keybindings** lets you search, view, assign, clear, and reset every keyboard shortcut, warning you
-when a combination conflicts with an existing one. **Panels** governs the default panel layout —
-which zone each panel lives in, per-panel hotkeys, and which non-builtin panels are enabled — with a
-reset-to-defaults. **File Browser** sets diff defaults (split versus unified, line wrapping, the
-default split ratio), tab-close behavior, and the commit-message prompt.
+when a combination conflicts with an existing one. **File Browser** sets diff defaults (split versus
+unified, line wrapping, the default split ratio), tab-close behavior, and the commit-message prompt.
 
 The repo-facing sections are **Repositories**, **Git**, and **CI**. Repositories lists your connected
 repos with their paths and agent counts and lets you add or remove them and configure each one's
@@ -685,14 +700,15 @@ conflicts.
 
 The remaining sections cover the environment and account. **Dependencies** manages the Claude CLI and
 git binaries Sculptor uses — switching between a managed install and a custom path, showing each one's
-version and health. **Pi** is the parallel dependency manager for the Pi
-agent harness — its binary (managed or custom path), version, and the API-key environment variable it
-needs. **Environment Variables** surfaces the global and per-repo `.sculptor/.env` files (which you edit
+version and health. **Pi** manages the Pi agent harness — its binary (managed or custom path),
+version, and the API-key environment variables it needs — and **authenticates the LLM providers** Pi
+can use, either through an interactive login or by pasting a provider API key (→ §7.3). **Environment
+Variables** surfaces the global and per-repo `.sculptor/.env` files (which you edit
 directly) and controls whether they override existing variables. **Privacy** shows your (read-only) email address and
 the telemetry opt-out. **Actions** is the full manager for your saved prompts and groups, including
 import/export (→ §7.11). **Experimental** holds opt-in feature toggles and the custom backend command
 (→ §7.12). A **Theme Builder** section lets you fine-tune fonts, the code theme, accent and semantic
-colors, border radius, UI scaling, and panel translucency, with a component gallery and a reset.
+colors, border radius, UI scaling, and panel translucency, with a reset.
 
 ### 7.11 Actions & Notes
 
@@ -732,18 +748,13 @@ product makes no finer distinction than that: a feature is either generally avai
 - **Clone workspaces** and **In-place workspaces** — worktree is the only workspace mode out of the
   box; enabling these adds the older **clone** mode (a full git clone whose remotes mirror your
   repo's, where commits stay in the clone until you push the branch back to your repo) and the
-  unisolated **in-place** mode to the Add Workspace picker (→ §6, §7.2).
+  unisolated **in-place** mode to the New Workspace picker (→ §6, §7.2).
 - **Always interrupt and send** — a new message immediately interrupts the running agent instead of
   being queued (→ §7.3).
 - **Smooth streaming** — animate streamed text smoothly rather than showing it in bursts. (Unlike the
   other toggles here, this one is **on by default**.)
-- **Per-workspace panel layout** — panel visibility and sizes become local to each workspace (panel
-  positions stay shared).
-- **Review All** — adds the combined "Review all changes" diff view to the Files panel (→ §7.5).
 - **Entity Mentions** — type `+` in the chat input to mention repositories, workspaces, and agents
   (→ §7.11).
-- **Rich markdown rendering** — render `.md` / `.markdown` files as formatted HTML in the file
-  viewer, toggled by the eye icon in the diff toolbar.
 - **Custom backend command** — the entry point for the container / remote backend described below.
 
 The **CI babysitter** (→ §7.6, §7.10) is likewise experimental and off by default.
@@ -755,11 +766,6 @@ The **CI babysitter** (→ §7.6, §7.10) is likewise experimental and off by de
 - **`stack`** — a handoff into a new workspace whose branch is both based off and targets the current
   branch, scoping the new workspace's diff and any pull request to just the work stacked on top.
   Available only from worktree workspaces.
-
-**Experimental panels.** Optional, non-builtin panels can be enabled from Settings → Panels — most
-notably the in-app **Browser** panel (desktop-only), which embeds a browser beside the chat with an
-address bar and back/forward/reload/screenshot controls; outside the desktop app it shows a
-placeholder.
 
 **Container / remote execution backend.** Pointing the **custom backend command** at a launcher lets
 Sculptor run agents somewhere other than your host machine — inside a Docker container, on a remote
@@ -773,9 +779,10 @@ in Settings or through an environment variable, and setting or clearing it requi
 ### 7.13 Frontend plugins
 
 Sculptor loads **plugins** that extend the app's own UI from inside the renderer — contributing new
-**panels** (which show up in the Panels list with a "plugin" badge), full-screen **overlays**, and
-compact **workspace widgets** that sit in the workspace banner's action row (collapsing in priority
-order as space tightens, like the built-in segments) — built against a small versioned Sculptor SDK
+**panels** (which appear in a section's add-panel menu with a "plugin" badge), full-screen
+**overlays**, compact **workspace widgets** that sit in the workspace header's action row (collapsing
+in priority order as space tightens, like the built-in segments), and alternate **home views**
+selectable from a switcher on the Home page — built against a small versioned Sculptor SDK
 that reuses the host's React, Radix theming, icons, and shared data client so they look and behave
 like native UI. The plugin system is **on by default**. A
 toggle at the top of the **Plugins** settings section globally enables or disables all plugins:
@@ -790,12 +797,13 @@ has an enable/disable switch (mute a plugin without removing it) and, while enab
 Reload controls; user-added URL sources can also be removed, while bundled and disk-discovered plugins
 can't. Sculptor ships a bundled **Linear** plugin, enabled by default, alongside two no-build example
 plugins — **Sculpty** and **Pomodoro** — that ship disabled and can be switched on per plugin. The
-Linear plugin shows two surfaces: a banner **widget**, shown by default, displaying the workspace's
-primary issue as a `# TICKET-ID` badge with a state dot (clicking it opens the issue in Linear), and a
-side **panel** of ticket details with collapsible **sub-issues** (the open state is remembered per
-workspace) and badges marking where each ticket came from (branch, PR, or a pinned search). The panel
-ships **off by default** and is enabled from Settings → Panels (like the built-in Browser panel), so an
-on-by-default plugin doesn't claim a slot in the panel layout uninvited. It resolves the workspace's
+Linear plugin shows several surfaces: a header **widget**, shown by default, displaying the
+workspace's primary issue as a `# TICKET-ID` badge with a state dot (clicking it opens the issue in
+Linear); a side **panel** of ticket details with collapsible **sub-issues** (the open state is
+remembered per workspace) and badges marking where each ticket came from (branch, PR, or a pinned
+search); and a **board** home view listing tickets. The panel ships **off by default** and is added
+from a section's add-panel menu (like the built-in Browser panel), so an on-by-default plugin doesn't
+claim a slot in the panel layout uninvited. It resolves the workspace's
 **primary issue** from the branch name first, falling back to the issues linked from the workspace's
 pull request.
 
@@ -824,6 +832,7 @@ The CLI is organized into a handful of command groups, each mapping to a domain 
 | `sculpt run` | One-shot convenience: from a single prompt, create a workspace **and** an agent in one step, optionally `--follow` its output live. Accepts the same workspace-creation flags as `sculpt workspace create` (`--strategy`, `--branch`, `--target-branch`, …) plus `--model`, `--file`, and `--harness`. Because `run` always sends a prompt, a terminal/registered harness is rejected here (use `sculpt agent create` for those). |
 | `sculpt signal` | Run from **inside an agent's environment** to report state back to Sculptor — `busy`, `idle`, `waiting`, `files-changed` (refreshes the diff), or `session-id <id>` (which takes the session identifier as an argument). Lets terminal-based agents light up the same status indicators the GUI shows. |
 | `sculpt ui` | Let an agent **drive the app's UI** for the user: `open-file` (open a file or diff tab, with `--mode auto`/`diff`/`file`) and `webview-navigate` / `webview-refresh` (point or reload the in-app Browser panel, e.g. at a generated HTML report). |
+| `sculpt plugin` | Develop and manage **frontend plugins** in the live UI (requires the plugin system to be enabled): `load` a plugin from a local directory or a manifest URL (`--persist` to install a local path permanently), `reload`, `unload`, `remove`, `list` what each window has loaded, `inspect` one, and print the drop-in plugin `dir`. |
 | `sculpt schema` | Print machine-readable **JSON Schemas** for command output (run with no argument to list the available schema names, including a dedicated `error` schema for `--json` failures), so scripts can validate and parse results reliably. |
 
 Two conventions make the CLI script-friendly. Commands that emit results accept **`--json`** for
@@ -1011,7 +1020,7 @@ data model across releases without corrupting users' existing state.
 #### 10.10 Diagnosability
 Finally, infrastructure for understanding failures that escape the tests: distributed **tracing**,
 **Sentry** error reporting, structured logging conventions, in-app **debug / diagnostics** views
-(per-agent diagnostics, the chat debug view), the **auto-qa** headless-browser harness for
+(per-agent diagnostics and the version popover), the **auto-qa** headless-browser harness for
 visual/manual QA, and **Storybook** for inspecting components in isolation.
 
 ## 11. Build, Release & Distribution
@@ -1054,9 +1063,9 @@ re-captured screenshots.
 Unresolved questions to settle as the spec matures. Each names a specific place the spec is currently
 inconsistent about the §9-product-behavior vs. §10-engineering-substrate line:
 
-- **Do user-facing diagnostics belong in §7 or §10?** The diagnostics a user can actually open — the
-  chat **debug view** (and its timestamp toggle), per-agent **diagnostics** from the agent context
-  menu, and the **diagnostics** in the version popover — are currently filed under §10.10
+- **Do user-facing diagnostics belong in §7 or §10?** The diagnostics a user can actually open —
+  per-agent **diagnostics** from the agent context menu and the **diagnostics** in the version
+  popover — are currently filed under §10.10
   (Diagnosability) as engineering substrate, yet they're user-visible features that would otherwise
   belong in §7. They're documented in neither place right now. Decide the rule (user-openable ⇒ §7?)
   and apply it.
@@ -1083,4 +1092,4 @@ used throughout:
 - **Slug** — the short feature identifier the workflow skills (spec → … → review) use to find each
   other's artifacts.
 - **Skill** — a reusable, slash-invoked workflow that runs as its own agent.
-- **Zen / Focus mode** — view modes that hide panels (and, for zen, the top bar) to maximize the chat.
+- **Section** — one cell of a workspace's panel grid (center, left, bottom, right) that holds panels.

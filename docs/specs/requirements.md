@@ -59,7 +59,7 @@ pointers to their spec/scenario home.
 | REQ-FUNC-008 | Pull/Merge requests: create, status dots, detail dropdown, retarget, CI babysitter toggle | §7.6 | `WS` | Core |
 | REQ-FUNC-009 | Built-in workspace terminal(s) | §7.7 | `PANEL` | Standard |
 | REQ-FUNC-010 | Skills & workflows: picker, library panel, `sculptor-workflow` pipeline, `fix-bug`, `setup-repo` | §7.8 | `SKILL`, `CMDP` | Standard |
-| REQ-FUNC-011 | Command palette & navigation: tabs, Cmd+K / Cmd+P, bottom bar, focus/zen mode, version popover | §7.9 | `SHELL`, `CMDP`, `HELP` | Core |
+| REQ-FUNC-011 | Command palette & navigation: sidebar, Cmd+K / Cmd+P, section toggles, version popover | §7.9 | `SHELL`, `CMDP`, `HELP` | Core |
 | REQ-FUNC-012 | Settings (all sections) | §7.10 | `SET` | Core |
 | REQ-FUNC-013 | Actions & notes; mentions & path autocomplete | §7.11 | `ACT`, `MENT` | Optional |
 | REQ-FUNC-014 | Experimental surface (toggles, experimental skills/panels, container backend) | §7.12 | `SET`, `PANEL` | Experimental |
@@ -95,7 +95,7 @@ and flags the targets it does not currently define.
 - **REQ-NFR-003 (SHOULD).** UI debounce/throttle budgets that shape perceived responsiveness:
   - agent status: **500 ms** (`.../chat-alpha/useAgentStatus.ts`)
   - auto-scroll / jump-to-bottom / in-file search: **150 ms** (`.../chat-alpha/hooks/`, `diffPanel/useInFileSearch.ts`)
-  - active-prompt scroll throttle: **100 ms**; mark-read: **1000 ms**; panel-layout sync: **2000 ms**
+  - active-prompt scroll throttle: **100 ms**; mark-read: **1000 ms**; layout-persistence write debounce: **250 ms** (`components/sections/persistence/LocalStorageLayoutAdapter.ts`)
   - branch-name preview: **250 ms**; branch-name collision check: **300 ms** (`components/newWorkspace/hooks/useBranchNamePreview.ts`)
 - **REQ-NFR-004 [Unspecified].** The product defines no explicit end-to-end **streaming latency**
   budget (model token emitted → rendered) or **interaction latency** (click → visible response) target.
@@ -162,8 +162,8 @@ and flags the targets it does not currently define.
   **30 s**; provider rate-limit cooldown **60 s** (`sculptor/sculptor/config/user_config.py`,
   `sculptor/sculptor/web/pr_polling_service.py`). Interval and multiplier are user-configurable (`SPEC.md` §7.10).
 - **REQ-NFR-061 (SHOULD).** Local workspace/remote-branch polling interval is **3 s**
-  (`sculptor/sculptor/web/repo_polling_manager.py`); git-info lookups time out at **10 s**, branch-name preview
-  git calls at **5 s**.
+  (`sculptor/sculptor/services/workspace_service/branch_poller.py`); git-info lookups time out at **10 s**,
+  branch-name preview git calls at **5 s**.
 - **REQ-NFR-062 (SHOULD).** CI babysitter defaults: **off**, retry cap **3**
   (`sculptor/sculptor/config/user_config.py`).
 
@@ -196,6 +196,11 @@ depends on.
 - **REQ-COMPAT-003 [Unspecified].** The supported **minimum macOS version** is not stated as a
   product requirement (CI builds/tests on macOS 14 Sonoma; Electron 42's own floor is macOS 12), and
   the **minimum Linux glibc** is likewise unpinned. → OPEN-5 (§7).
+- **REQ-COMPAT-004 (SHOULD).** The **web** build (served in a browser, distinct from the Electron
+  desktop app) is an **installable PWA**: the web Vite build emits a web manifest and service worker
+  (app name "Sculptor", theme/background color `#f2f0e7`, 192/512/maskable icons). The service worker
+  exists only to satisfy installability and precaches nothing, so the app always loads from the server
+  and is **not** offline-capable (`sculptor/frontend/vite.web.config.ts`).
 
 ### 3.2 Toolchain / framework baselines
 
@@ -317,7 +322,7 @@ rules behind them.
   **target-branch** selector is *not* gated on the provider, however — it is host-independent and
   available on every repo, including repos with no remote (which offer the repo's local branches as
   targets); only opening a PR requires a detected GitHub remote (`SPEC.md` §7.2 / §7.5;
-  `sculptor/sculptor/web/repo_polling_manager.py` target-branch fallback).
+  `sculptor/sculptor/services/git_repo_service/git_ref_scanning.py` target-branch fallback).
 - **REQ-INT-002 (MUST).** Operations performed via `gh`: **list** PRs for a branch, **view** a PR's
   status-check rollup, **reviews/approvals**, and **unresolved comments**; **push** the branch and
   **open** a PR; poll status thereafter (`gh pr list/view`).

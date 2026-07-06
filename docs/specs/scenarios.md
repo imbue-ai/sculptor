@@ -21,17 +21,17 @@ behavior**.
 
 | Prefix | Area |
 |--------|------|
-| `SHELL` | App shell: tabs, top bar, window controls, zen/focus mode, version, status banners |
+| `SHELL` | App shell: sidebar navigation, workspace rows, window controls, version, status banners |
 | `ROUTE` | Routing, redirects, error/404 pages, startup |
 | `HELP` | Keyboard-shortcuts (Help) dialog |
 | `HOME` | Home page / recent-workspaces list |
 | `ONB` | Onboarding wizard |
-| `ADDWS` | Add-workspace page (create workspace form) |
+| `ADDWS` | New-workspace modal & form (create workspace) |
 | `ADDREPO` | Add-repository flow and dialogs |
-| `WS` | Workspace shell (chat input, banner, PR button, agent tabs, peek, etc.) |
+| `WS` | Workspace shell (chat input, header, PR button, agents, peek, etc.) |
 | `CHAT` | Chat-alpha interface, status, search, navigation, subagents, tasks, questions |
 | `MSG` | Chat message & tool-content rendering |
-| `PANEL` | Workspace side panels (files, changes, history, diff, terminal, notes, skills, actions, browser) |
+| `PANEL` | Workspace panels & sections (files, changes, commits, diff, terminal, notes, skills, actions, review-all, browser) |
 | `CMDP` | Command palette |
 | `SET` | Settings page |
 | `ACT` | Actions feature components |
@@ -41,185 +41,101 @@ behavior**.
 
 ---
 
-# SHELL — App shell, tabs & navigation
+# SHELL — App shell, sidebar & navigation
 
-## Tabs
+## Workspace sidebar
 
-- **SHELL-001 — Open a new workspace tab**
+- **SHELL-001 — Open the New Workspace form**
   - Given: the app is open on any page.
-  - When: the user clicks the `+` button at the end of the tab bar, or presses `Cmd+T`.
-  - Then: a new "New Workspace" tab appears, becomes active, and the Add Workspace form is shown.
+  - When: the user clicks **New Workspace** in the sidebar, or presses `Cmd+T`.
+  - Then: the new-workspace form opens (as a modal) with its fields ready.
 
-- **SHELL-002 — Open the Home tab**
+- **SHELL-002 — Open Home**
   - Given: the app is open.
-  - When: the user clicks the Home button in the top bar, or presses the Home keybinding.
-  - Then: a "Home" tab is shown (created if absent, otherwise re-activated) and the home page is displayed.
+  - When: the user clicks **Home** in the sidebar (or presses the Home keybinding).
+  - Then: the home page is displayed.
 
-- **SHELL-003 — Open the Settings tab**
+- **SHELL-003 — Open Settings**
   - Given: the app is open.
-  - When: the user clicks the Settings (gear) button in the top bar, or presses the Settings keybinding.
-  - Then: a "Settings" tab is shown and the settings page is displayed.
+  - When: the user clicks **Settings** in the sidebar (or presses the Settings keybinding).
+  - Then: the settings page is displayed.
 
-- **SHELL-004 — Switch tabs by clicking**
-  - Given: multiple tabs are open.
-  - When: the user clicks a non-active tab.
-  - Then: that tab becomes highlighted/active and its content is shown.
+- **SHELL-004 — Switch workspaces by clicking a row**
+  - Given: two or more workspaces are listed in the sidebar.
+  - When: the user clicks a non-active workspace row.
+  - Then: that row becomes highlighted/active and its workspace is shown.
 
-- **SHELL-005 — Cycle to next tab**
-  - Given: multiple tabs are open.
+- **SHELL-005 — Cycle to next workspace**
+  - Given: multiple workspaces exist.
   - When: the user presses `Cmd+]`.
-  - Then: the next tab to the right becomes active, wrapping to the first after the last.
+  - Then: the next workspace in the sidebar's order becomes active, wrapping to the first after the last.
 
-- **SHELL-006 — Cycle to previous tab**
-  - Given: multiple tabs are open.
+- **SHELL-006 — Cycle to previous workspace**
+  - Given: multiple workspaces exist.
   - When: the user presses `Cmd+[`.
-  - Then: the previous tab becomes active, wrapping to the last before the first.
+  - Then: the previous workspace becomes active, wrapping to the last before the first.
 
-- **SHELL-007 — Close a tab via its X button**
-  - Given: a tab is present.
-  - When: the user clicks the tab's X (close) button.
-  - Then: the tab disappears; an adjacent tab becomes active, or the Add Workspace page is shown if it was the last tab.
-
-- **SHELL-008 — Close a tab via middle-click**
-  - Given: multiple tabs are open.
-  - When: the user middle-clicks a tab.
-  - Then: that tab closes without changing which tab is active (unless the active one was closed).
-
-- **SHELL-009 — Close the current tab via keyboard**
-  - Given: a workspace/Home/Settings tab is active.
-  - When: the user presses `Cmd+W`.
-  - Then: the active tab closes and a remaining tab (or the Add Workspace page) is shown.
-
-- **SHELL-010 — Reorder tabs by dragging**
-  - Given: multiple tabs are open.
-  - When: the user drags a tab horizontally past another.
-  - Then: a drop indicator appears, and on release the tabs reorder; the active tab is unchanged.
-
-- **SHELL-011 — Tab overflow scrolling**
-  - Given: more tabs are open than fit in the bar.
-  - When: the user scrolls (wheel or trackpad) over the tab bar.
-  - Then: the tab strip scrolls horizontally to reveal hidden tabs.
-
-- **SHELL-012 — Active tab auto-scrolls into view**
-  - Given: tabs overflow and the active tab is off-screen.
-  - When: a tab becomes active (e.g., via keyboard cycle).
-  - Then: the strip scrolls so the active tab is visible.
-
-- **SHELL-013 — Tab label truncates**
-  - Given: a tab with a long title.
-  - When: the tab is rendered at a constrained width.
+- **SHELL-013 — Workspace row label truncates**
+  - Given: a workspace with a long name.
+  - When: the row is rendered at a constrained width.
   - Then: the label is truncated with an ellipsis.
 
-- **SHELL-014 — Workspace tab status dots**
-  - Given: a workspace tab whose agents have a status.
-  - When: the tab is displayed.
+- **SHELL-014 — Workspace row status dots**
+  - Given: a workspace whose agents have a status.
+  - When: the row is displayed.
   - Then: status dot(s) appear next to the name (pulsing for running, solid for waiting/ready, red for error, two dots for mixed states).
 
-- **SHELL-015 — Tab right-click context menu**
-  - Given: a tab is present.
-  - When: the user right-clicks the tab.
-  - Then: a context menu appears with at least Close / Close others / Close all (and Rename/Delete + git actions for workspace tabs).
+- **SHELL-015 — Workspace row menu**
+  - Given: a workspace row.
+  - When: the user right-clicks it, or clicks its hover **…** button.
+  - Then: a menu appears with Rename, Commit, Open PR, Copy (name / branch / id), and Delete.
 
-- **SHELL-016 — Rename a workspace tab inline**
-  - Given: a workspace tab's context menu is open, or the user double-clicks the tab.
-  - When: the user chooses Rename (or double-clicks), types a new name, and presses Enter.
-  - Then: the tab label updates to the new name; pressing Escape instead cancels and restores the old name.
+- **SHELL-016 — Rename a workspace inline**
+  - Given: a workspace row's menu is open.
+  - When: the user chooses Rename, types a new name, and presses Enter.
+  - Then: the row label updates to the new name; pressing Escape instead cancels and restores the old name.
 
-- **SHELL-017 — Delete a workspace from its tab**
-  - Given: a workspace tab context menu is open.
-  - When: the user chooses Delete and confirms in the dialog.
-  - Then: the tab disappears and an adjacent tab/page is shown.
+- **SHELL-017 — Delete a workspace from its row**
+  - Given: a workspace row's menu is open, or its hover delete button is used.
+  - When: the user triggers Delete and confirms in the dialog.
+  - Then: the row disappears and, if it was active, an adjacent workspace (or the empty state) is shown.
 
-- **SHELL-049 — Copy workspace details from tab context menu**
-  - Given: a workspace tab's context menu is open.
+- **SHELL-049 — Copy workspace details from the row menu**
+  - Given: a workspace row's menu is open.
   - When: the user chooses Copy workspace name, Copy branch, or Copy workspace id.
-  - Then: the chosen value is copied to the clipboard (a confirmation appears briefly).
+  - Then: the chosen value is copied to the clipboard.
 
 - **SHELL-050 — Delete the active workspace via keybinding**
-  - Given: a workspace tab is active.
+  - Given: a workspace is active.
   - When: the user presses `Cmd+Shift+W`.
-  - Then: the same delete-workspace confirmation dialog opens; confirming removes the workspace and its agents and an adjacent tab/page is shown.
+  - Then: the delete-workspace confirmation dialog opens; confirming removes the workspace and its agents and an adjacent workspace/page is shown.
 
-- **SHELL-018 — Close others / Close all from tab menu**
-  - Given: multiple tabs open and a tab's context menu is open.
-  - When: the user chooses "Close others" or "Close all".
-  - Then: all other tabs (or all tabs) close accordingly; "Close all" navigates to the Add Workspace page.
+- **SHELL-051 — Collapse and expand the sidebar**
+  - Given: the sidebar is expanded.
+  - When: the user clicks the collapse control.
+  - Then: the sidebar hides to a thin rail with a floating "Show sidebar" button; clicking that button restores it.
 
-- **SHELL-019 — Tabs persist across restart**
-  - Given: the user has tabs open in a particular order with one active.
-  - When: the app is closed and reopened.
-  - Then: the same tabs reappear in the same order and the previously active tab is shown.
+- **SHELL-052 — Resize the sidebar**
+  - Given: the sidebar is expanded.
+  - When: the user drags its right edge (or focuses the resize handle and presses the arrow keys).
+  - Then: the sidebar width changes, clamped to a minimum, and persists across reloads.
 
-## Closed-workspaces pill
+- **SHELL-053 — Collapse a repo group**
+  - Given: the sidebar lists workspaces grouped under their repos.
+  - When: the user clicks a repo group's chevron.
+  - Then: that group's workspace rows hide/show; the collapsed state persists.
 
-- **SHELL-020 — Closed-workspaces pill appears**
-  - Given: the user has closed one or more workspace tabs.
-  - When: viewing the top bar.
-  - Then: a "Closed N" pill is visible.
+- **SHELL-054 — Create a workspace from a repo group**
+  - Given: a repo group header is shown.
+  - When: the user clicks the group's **+**.
+  - Then: a worktree workspace is created in that repo on a fresh auto-named branch and shown (falling back to the new-workspace form if the branch can't be resolved).
 
-- **SHELL-021 — Open the closed-workspaces menu**
-  - Given: the closed-workspaces pill is visible.
-  - When: the user clicks it.
-  - Then: a dropdown lists recently-closed workspaces (showing a spinner while loading).
+## Command palette button
 
-- **SHELL-022 — Reopen a closed workspace**
-  - Given: the closed-workspaces dropdown is open.
-  - When: the user clicks a workspace row.
-  - Then: that workspace tab reopens and is shown; the dropdown closes.
-
-- **SHELL-023 — Open all closed workspaces**
-  - Given: the closed-workspaces dropdown is open.
-  - When: the user clicks "Open all".
-  - Then: all closed workspace tabs reopen in the bar; the dropdown closes.
-
-- **SHELL-024 — Delete a closed workspace from the menu**
-  - Given: the closed-workspaces dropdown is open.
-  - When: the user triggers delete on a row and confirms.
-  - Then: that row disappears from the list and the workspace is gone.
-
-## Top-bar buttons
-
-- **SHELL-025 — Command palette button**
-  - Given: the top bar is visible.
-  - When: the user clicks the search/command icon (tooltip "Command palette").
+- **SHELL-025 — Open the command palette from the sidebar**
+  - Given: the sidebar is visible.
+  - When: the user clicks **Commands** (or presses `Cmd+K`).
   - Then: the command palette opens with its input focused.
-
-- **SHELL-026 — Help button**
-  - Given: the top bar is visible.
-  - When: the user clicks the Help (?) icon.
-  - Then: the keyboard-shortcuts dialog opens.
-
-- **SHELL-027 — Top-bar button tooltips**
-  - Given: the top bar is visible.
-  - When: the user hovers a top-bar button.
-  - Then: a tooltip shows the button name and its keyboard shortcut.
-
-## Zen & focus modes
-
-- **SHELL-028 — Enter zen mode**
-  - Given: the user is on a workspace page.
-  - When: the user presses `Cmd+Shift+\`.
-  - Then: the top bar and side panels hide, leaving only the chat; a draggable title bar is shown.
-
-- **SHELL-029 — Exit zen mode via floating button**
-  - Given: zen mode is active.
-  - When: the user moves the mouse to the top-left hot zone.
-  - Then: an "Exit zen mode" button appears; clicking it restores the normal layout.
-
-- **SHELL-030 — Tab cycling works in zen mode**
-  - Given: zen mode is active.
-  - When: the user presses `Cmd+[` / `Cmd+]`.
-  - Then: the active tab changes even though the top bar remains hidden.
-
-- **SHELL-031 — Toggle focus mode**
-  - Given: the user is on a workspace page.
-  - When: the user presses `Cmd+\`.
-  - Then: all side panels collapse and the chat expands; pressing again restores the panels.
-
-- **SHELL-032 — Toggle individual panels via keyboard**
-  - Given: the user is on a workspace page.
-  - When: the user presses `Cmd+Alt+Left` / `Cmd+Alt+Down` / `Cmd+Alt+Right`.
-  - Then: the left / bottom / right panel toggles hidden/visible respectively.
 
 ## Theme
 
@@ -231,13 +147,13 @@ behavior**.
 ## Version indicator & updates
 
 - **SHELL-034 — Version number shown**
-  - Given: the user is on a non-workspace page (and not in zen mode).
-  - When: the page renders.
-  - Then: the version number is visible in the bottom-right corner.
+  - Given: the app is open.
+  - When: the sidebar renders.
+  - Then: the app version is visible at the bottom of the sidebar.
 
 - **SHELL-035 — Open version popover**
-  - Given: the version number is visible.
-  - When: the user clicks it (or the adjacent bug icon).
+  - Given: the version is visible at the bottom of the sidebar.
+  - When: the user clicks it.
   - Then: a popover opens showing version details, update status, and diagnostics (platform, uptime, active agents, disk, paths, Claude CLI info).
 
 - **SHELL-036 — Update-available dot**
@@ -313,10 +229,10 @@ behavior**.
 
 # ROUTE — Routing, startup & error pages
 
-- **ROUTE-001 — Startup redirect to last active tab**
-  - Given: the user had tabs open previously.
+- **ROUTE-001 — Startup redirect to last active view**
+  - Given: the user had a workspace or page active previously.
   - When: the app launches and loads `/`.
-  - Then: it redirects to the previously active tab's page (or the Add Workspace page if none).
+  - Then: it redirects to the previously active view's URL (falling back to the home page, or the empty first-run form when no workspaces exist).
 
 - **ROUTE-002 — New-workspace route generates a draft**
   - Given: the user navigates to `/ws/new`.
@@ -366,7 +282,7 @@ behavior**.
 
 # HOME — Home page / recent workspaces
 
-The home page and the Add Workspace page share the recent-workspaces list and its rows.
+The home page's default view is a recent-workspaces list of rows; a switcher lets the user pick a plugin-contributed home view instead.
 
 - **HOME-001 — Loading state**
   - Given: the workspace list is being fetched.
@@ -468,6 +384,11 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the PR status is known.
   - Then: the button reflects the state: a spinner + "Checking PR…" while loading; "Create PR" when none exists; "PR #N" with pipeline & review status dots when open; a merged/closed badge when merged/closed; an "Assign PR" option when a PR targets a different branch; and an error button (warning/info icon) on failure.
   - (See WS-PR scenarios for full PR-button behavior; rows reuse the same component.)
+
+- **HOME-021 — Home view switcher**
+  - Given: the home page, with one or more plugin-contributed home views registered.
+  - When: the user picks a view from the switcher.
+  - Then: the selected view is shown (the built-in "Recent workspaces" list is always first, plus each plugin view such as the Linear board) and the choice persists.
 
 ---
 
@@ -663,16 +584,16 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 
 ---
 
-# ADDWS — Add-workspace page (create workspace)
+# ADDWS — New-workspace modal & form (create workspace)
 
-- **ADDWS-001 — Page loading then form**
-  - Given: the Add Workspace page is opening.
+- **ADDWS-001 — Form loading**
+  - Given: the new-workspace form is opening (as a modal, or inline on first run).
   - When: projects are being fetched.
-  - Then: a centered spinner is shown; once loaded the creation form appears.
+  - Then: skeletons/spinner are shown; once loaded the creation form appears with its fields.
 
 - **ADDWS-002 — Default project selection**
   - Given: projects exist.
-  - When: the page loads.
+  - When: the form opens.
   - Then: the most-recently-used project (or the first project if no MRU) is pre-selected in the repo selector.
 
 - **ADDWS-003 — Workspace name input**
@@ -690,10 +611,10 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user returns to the same draft.
   - Then: the previously typed name is restored.
 
-- **ADDWS-025 — Repo/branch/source-branch selections persist across tab switches**
-  - Given: the user chose a repo, source branch, and branch name on the Add Workspace form, then switched tabs.
-  - When: the user returns to the same draft.
-  - Then: the previously chosen repo, source branch, and branch name are all restored.
+- **ADDWS-025 — "Keep open" retains context across creates**
+  - Given: the "Keep open" switch is on in the new-workspace form.
+  - When: the user creates a workspace.
+  - Then: the form stays open with the repo, agent type, and mode retained (title, prompt, and branch name reset) for rapid successive creates.
 
 - **ADDWS-006 — Repo selector dropdown**
   - Given: the repo selector is shown.
@@ -773,7 +694,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **ADDWS-021 — Create the workspace**
   - Given: all fields are valid.
   - When: the user clicks "Create workspace" or presses `Cmd+Enter`.
-  - Then: the workspace and its first agent are created and the user is navigated into the new workspace/agent tab.
+  - Then: the workspace and its first agent are created and the user is navigated into the new workspace/agent.
 
 - **ADDWS-022 — Keyboard focus into form**
   - Given: the page loads with nothing focused.
@@ -1063,79 +984,74 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: viewing the banner.
   - Then: a "clone" or "in-place" badge is shown next to the repo name (no badge for worktree).
 
-## Banner & diff summary
+## Workspace header & diff summary
 
-- **WS-037 — Banner visibility**
-  - Given: the user is/ is not in zen mode.
-  - When: viewing the workspace.
-  - Then: the banner with repo/branch/PR info is shown normally and hidden in zen mode.
+- **WS-037 — Workspace header**
+  - Given: the user is on a workspace.
+  - When: viewing the top of the workspace.
+  - Then: a compact header shows the branch, a diff summary, the target-branch selector, and (for a git-hosted repo) the PR button.
 
-- **WS-038 — Banner progressive collapse**
-  - Given: the viewport narrows.
-  - When: space becomes constrained.
-  - Then: banner elements collapse in priority order (PR button → diff summary → repo segment).
-
-- **WS-039 — Copy branch name from banner**
-  - Given: the branch name is shown in the banner.
+- **WS-039 — Copy branch name from the header**
+  - Given: the branch is shown in the workspace header.
   - When: the user clicks it.
   - Then: it is copied and a "Copied!" tooltip appears briefly.
 
 - **WS-040 — Diff summary button**
   - Given: the workspace has uncommitted changes.
-  - When: viewing the banner.
-  - Then: a "+X −Y · Z files" summary is shown (with a shimmer while loading); clicking it opens the file browser's Changes tab scoped to the target branch.
+  - When: viewing the header.
+  - Then: a "+X −Y · Z files" summary is shown (with a shimmer while loading); clicking it opens the Changes panel scoped to the target branch.
 
-## Agent tabs
+## Agents
 
-- **WS-041 — Agent tabs shown**
+- **WS-041 — Agent panels shown**
   - Given: a workspace with one or more agents.
   - When: viewing the workspace.
-  - Then: a tab per agent is shown with its title and status dot.
+  - Then: each agent is a panel in the section grid, its tab showing the agent's title and status dot.
 
 - **WS-042 — Switch agents**
-  - Given: multiple agent tabs.
-  - When: the user clicks another agent tab (or presses the next/previous-agent keybinding).
+  - Given: multiple agent panels.
+  - When: the user clicks another agent panel's tab (or presses the next/previous-agent keybinding).
   - Then: the view switches to that agent's chat/state.
 
 - **WS-043 — Agent status-dot tooltip**
-  - Given: an agent tab.
+  - Given: an agent panel's tab.
   - When: the user hovers its status dot.
   - Then: a tooltip shows the status label and time since last activity / creation.
 
 - **WS-044 — Create a new agent**
-  - Given: agent tabs are shown.
-  - When: the user clicks the "+" button.
-  - Then: a new agent of the default type is created and shown.
+  - Given: a workspace section.
+  - When: the user chooses "New agent" from a section's add-panel menu (or presses `Cmd+Shift+T`).
+  - Then: a new agent of the last-used type is created as a panel and shown.
 
 - **WS-045 — Choose agent type when creating**
-  - Given: the "+" chevron menu.
+  - Given: the add-panel menu's agent-type submenu.
   - When: the user opens it.
-  - Then: it lists Claude, Pi, Terminal, and registered custom agents; selecting one creates that type and remembers it.
+  - Then: it lists Claude, Pi (shown as "Install Pi" when Pi isn't installed), and any registered agents; selecting one creates that type and remembers it. (A plain terminal is added from the menu's separate "New terminal" entry.)
 
-- **WS-046 — Rename an agent (double-click)**
-  - Given: an agent tab.
-  - When: the user double-clicks the title, types a name, and presses Enter.
+- **WS-046 — Rename an agent**
+  - Given: an agent panel's tab.
+  - When: the user chooses Rename from its context menu (or double-clicks the tab), types a name, and presses Enter.
   - Then: the agent is renamed; Escape cancels.
 
-- **WS-047 — Agent context menu**
-  - Given: an agent tab.
+- **WS-047 — Agent tab context menu**
+  - Given: an agent panel's tab.
   - When: the user right-clicks it.
-  - Then: a menu offers Rename, Mark as unread, Copy agent name, Delete, and a Diagnostics submenu (Debug View toggle; copy Claude session id / transcript path / Sculptor transcript path — disabled when unavailable).
+  - Then: a menu offers Rename, Mark as unread, and Copy items (agent id, agent name, Claude session id, Claude transcript path, Sculptor transcript path — the session/transcript items disabled until a session exists).
 
 - **WS-048 — Delete an agent**
-  - Given: an agent context menu (or close button) is used.
-  - When: the user deletes and confirms.
-  - Then: the agent is removed and navigation moves to the next agent (or a fresh one if it was the last).
+  - Given: an agent panel's tab close button is used.
+  - When: the user confirms the deletion.
+  - Then: the agent panel is removed and navigation moves to the next agent; closing the last agent leaves the center section on its empty state.
 
 - **WS-049 — Mark agent unread**
   - Given: a read agent.
-  - When: the user chooses "Mark as unread".
+  - When: the user chooses "Mark as unread" from its tab menu.
   - Then: the agent's status indicator changes to unread.
 
-- **WS-050 — Reorder agent tabs**
-  - Given: multiple agent tabs.
-  - When: the user drags a tab to a new position.
-  - Then: the order updates.
+- **WS-050 — Move an agent panel to another section**
+  - Given: an agent panel.
+  - When: the user drags it onto another section.
+  - Then: the panel moves to that section (expanding it if collapsed).
 
 ## Terminal agent panel
 
@@ -1150,8 +1066,8 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - Then: the terminal reconnects and previous scrollback is restored.
 
 - **WS-079 — Terminal pane focuses on tab select**
-  - Given: a workspace with a terminal agent among its tabs.
-  - When: the user selects the terminal agent's tab.
+  - Given: a workspace with a terminal agent among its panels.
+  - When: the user selects the terminal agent's panel tab.
   - Then: the terminal pane takes keyboard focus so the user can type into the shell immediately.
 
 ## Ask-user-question (input area)
@@ -1201,14 +1117,14 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 ## Workspace peek
 
 - **WS-061 — Peek popover on hover**
-  - Given: workspace tabs are shown.
-  - When: the user hovers a workspace tab for a moment.
+  - Given: workspace rows are shown in the sidebar.
+  - When: the user hovers a workspace row for a moment.
   - Then: a peek popover appears showing status, agent list, PR info, branch, and diff stats.
 
 - **WS-062 — Smooth peek transitions**
   - Given: a peek popover is open.
-  - When: the user moves between tabs within the grace period.
-  - Then: the popover content swaps instantly; leaving all tabs closes it after a short delay.
+  - When: the user moves between rows within the grace period.
+  - Then: the popover content swaps instantly; leaving all rows closes it after a short delay.
 
 - **WS-063 — Expand more agents in peek**
   - Given: a workspace with more than 5 agents.
@@ -1220,32 +1136,52 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user clicks an agent row or the header.
   - Then: the popover closes and the workspace/agent opens; clicking the branch copies it ("Copied!").
 
-## Bottom bar & layout
+## Sections & layout
 
-- **WS-065 — Panel toggle buttons**
-  - Given: not in zen mode.
-  - When: viewing the bottom bar.
-  - Then: toggle buttons for the left, bottom, and right panels and a focus-mode button are shown.
+- **WS-065 — Section toggles in the header**
+  - Given: the user is on a workspace.
+  - When: viewing the workspace header.
+  - Then: toggle controls for the left, bottom, and right sections are shown (the center section, which holds the active agent, has no toggle).
 
-- **WS-066 — Toggle a panel from the bottom bar**
-  - Given: a panel has content.
-  - When: the user clicks its toggle button.
-  - Then: the panel hides/shows and the button's active state updates.
+- **WS-066 — Toggle a section**
+  - Given: a workspace with a collapsed side section.
+  - When: the user clicks its header toggle or presses `Cmd+Alt+←/↓/→`.
+  - Then: that section expands (or collapses again), showing/hiding its panels.
 
-- **WS-067 — Empty-panel toggle disabled**
-  - Given: a panel has no content.
-  - When: viewing/hovering its toggle button.
-  - Then: the button is disabled with a "Panel is empty" tooltip and does nothing on click.
+- **WS-069 — Resize a section**
+  - Given: two adjacent sections are visible.
+  - When: the user drags the border between them (or focuses the handle and presses the arrow keys).
+  - Then: the sections resize, clamped to a minimum, without changing the active panel.
 
-- **WS-068 — Panel toggle tooltips show keybinding**
-  - Given: a panel toggle button.
-  - When: the user hovers it.
-  - Then: a tooltip shows the name and keybinding.
+- **WS-080 — Maximize a section**
+  - Given: a workspace section is active.
+  - When: the user maximizes it (via its control or the maximize hotkey).
+  - Then: that section fills the workspace and the header hides; restoring (or the hotkey again) returns the normal grid.
 
-- **WS-069 — Diff split resize / collapse / expand**
-  - Given: the diff panel is open beside the chat.
-  - When: the user drags the divider.
-  - Then: the panels resize; dragging past a threshold collapses the diff panel; an expand control maximizes the diff and collapses the chat, and vice-versa.
+- **WS-081 — Split a section**
+  - Given: a section with a panel.
+  - When: the user right-clicks the panel's tab and chooses "Create split and move panel".
+  - Then: the section splits in two and the panel moves into the new half; a section allows at most one split.
+
+- **WS-082 — Active-section ring on cycle**
+  - Given: multiple sections are visible.
+  - When: the user cycles the active section via its hotkey.
+  - Then: the next section becomes active and a ring briefly pulses around it (a plain click activates a section without the ring).
+
+- **WS-083 — Add a panel to a section**
+  - Given: a workspace section.
+  - When: the user opens the section's add-panel menu.
+  - Then: it offers a new agent (with an agent-type submenu), a new terminal, and any single-instance panel not currently open; choosing one adds it to that section.
+
+- **WS-084 — Empty section state**
+  - Given: an expanded section with no panels.
+  - When: viewing it.
+  - Then: it shows an add-panel button plus quick actions ("New agent", "New terminal", and recently-closed single-instance panels).
+
+- **WS-085 — Layout persists per workspace**
+  - Given: the user has arranged a workspace's sections and panels.
+  - When: the app reloads or the user switches away and back.
+  - Then: that workspace's arrangement is restored, and other workspaces keep their own arrangements.
 
 ## Chat search bar (workspace-level)
 
@@ -1523,22 +1459,12 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: viewing it.
   - Then: a "DISMISSED" badge is shown and the options appear dimmed.
 
-## Debug chat view
-
-- **CHAT-044 — Debug view content**
-  - Given: Debug View is enabled for an agent.
-  - When: viewing the chat.
-  - Then: each message is listed with role, id, timestamp, and block types; tool_use/tool_result names are listed.
-
-- **CHAT-045 — Debug timestamp toggle**
-  - Given: the debug view shows timestamps.
-  - When: the user clicks a timestamp.
-  - Then: it toggles between relative and absolute formats.
+## Model picker
 
 - **CHAT-046 — Capability-gated model picker / Pi model catalog**
   - Given: agents whose harness does and doesn't support model selection.
   - When: the user opens the model picker on each (a Claude agent, a Pi agent, and a terminal agent).
-  - Then: a Claude agent lists Claude models; a Pi agent lists Pi's own models grouped by provider (a single provider flat, two or more cascading into per-provider submenus), and a Pi agent with no authenticated providers shows an "Authenticate a provider" prompt instead of a list; a terminal agent shows the picker disabled with the current model; switching a Pi model that the harness rejects leaves the selection unchanged and shows an error toast.
+  - Then: a Claude agent lists Claude models; a Pi agent lists Pi's own models grouped by provider (a single provider flat, two or more cascading into per-provider submenus), and a Pi agent with no authenticated providers shows a "log in to authenticate" prompt with an "Open pi login" button instead of a list; a terminal agent shows the picker disabled with the current model; switching a Pi model that the harness rejects leaves the selection unchanged and shows an error toast.
 
 ---
 
@@ -1617,10 +1543,10 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 
 ## Tables
 
-- **MSG-014 — Table horizontal scroll & wrap toggle**
+- **MSG-014 — Table wrap / scroll toggle**
   - Given: a wide table.
   - When: it renders / the user hovers and clicks the wrap toggle.
-  - Then: the table scrolls horizontally with fade indicators; toggling switches to wrapped cells (fades disappear) and back.
+  - Then: the table wraps its cells by default; toggling switches to a horizontally scrollable layout with fade indicators, and back.
 
 - **MSG-015 — Copy table as markdown**
   - Given: a table.
@@ -1747,17 +1673,17 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 
 # PANEL — Workspace side panels
 
-## File browser
+## Files, Changes & Commits panels
 
-- **PANEL-001 — Browse / Changes / Commits tabs**
-  - Given: the file browser panel.
-  - When: the user clicks the Browse, Changes, or Commits tab.
-  - Then: the corresponding view is shown; Changes and Commits show a count badge when there are changes/commits.
+- **PANEL-001 — Files / Changes / Commits panels**
+  - Given: a workspace's left section (which holds the Files, Changes, and Commits panels by default).
+  - When: the user opens the Files, Changes, or Commits panel.
+  - Then: the corresponding panel is shown, each pairing its list with an embedded diff/file viewer.
 
 - **PANEL-002 — Review all**
-  - Given: changes/commits exist and the Review-all feature is enabled.
-  - When: the user clicks "Review all".
-  - Then: a combined diff tab opens showing all files.
+  - Given: the Review All panel has been added to a section.
+  - When: viewing it.
+  - Then: a combined diff of every change (in the chosen scope) is shown.
 
 - **PANEL-003 — Toggle tree/flat view**
   - Given: a file list view.
@@ -1775,7 +1701,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - Then: the icon spins and the tree re-fetches.
 
 - **PANEL-006 — File search**
-  - Given: the Browse tab.
+  - Given: the Files panel.
   - When: the user clicks the search icon and types.
   - Then: the header becomes a search input, the list filters in real time, ancestor folders of matches auto-expand, and "No matches" shows when empty; Escape/close exits search.
 
@@ -1787,7 +1713,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **PANEL-008 — Open a file**
   - Given: a file in the tree/flat list.
   - When: the user clicks it.
-  - Then: a diff view tab opens for that file.
+  - Then: it opens in the panel's viewer — a read-only file view in Files, or its diff in Changes/Commits.
 
 - **PANEL-009 — Tree keyboard navigation**
   - Given: the tree is focused.
@@ -1807,17 +1733,17 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **PANEL-012 — File context menu**
   - Given: a file/folder in the tree.
   - When: the user right-clicks it.
-  - Then: a menu offers Open diff view, View file, Copy file path, Copy relative path, Open in OS, and (folders) Expand all / Collapse all, plus Close tab / Close other tabs when a diff tab is open — each performing its labeled action.
+  - Then: a menu offers Open diff view, View file, Copy file path, Copy relative path, Open in OS, and (folders) Expand all / Collapse all — each performing its labeled action.
 
 - **PANEL-013 — Empty / loading file tree**
   - Given: no files / the tree is loading.
-  - When: the Browse tab is shown.
+  - When: the Files panel is shown.
   - Then: "No files yet" / animated skeleton rows are shown.
 
 ## Changes & commit
 
 - **PANEL-014 — Diff scope picker**
-  - Given: the Changes tab with a target branch.
+  - Given: the Changes panel with a target branch.
   - When: the user picks "All" vs "Uncommitted".
   - Then: the list shows all changes vs target or only uncommitted changes, with counts per segment.
 
@@ -1827,7 +1753,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - Then: the file reverts to HEAD and leaves the changes list; Cancel keeps it.
 
 - **PANEL-016 — Commit button states**
-  - Given: the Changes tab.
+  - Given: the Changes panel.
   - When: changes exist / none exist.
   - Then: "Commit N changes" is enabled / disabled accordingly.
 
@@ -1844,7 +1770,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 ## History
 
 - **PANEL-019 — History loading / empty / error**
-  - Given: the Commits tab.
+  - Given: the Commits panel.
   - When: history is loading / absent / failed.
   - Then: "Loading history…" / "No history available" / an error message is shown.
 
@@ -1866,7 +1792,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **PANEL-023 — Open a commit's file diff**
   - Given: a commit is expanded.
   - When: the user clicks a file.
-  - Then: a diff tab opens comparing that file in the commit vs its parent.
+  - Then: the panel's viewer shows a diff of that file in the commit vs its parent.
 
 - **PANEL-024 — Merge commits & terminus**
   - Given: a merge commit / the end of history.
@@ -1875,15 +1801,15 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 
 ## Diff panel / viewer
 
-- **PANEL-025 — Diff tabs**
-  - Given: files opened in the diff panel.
-  - When: the user opens/switches/closes tabs.
-  - Then: each file opens in a tab, clicking switches, the X closes (activating MRU or adjacent per setting); right-click offers Close other / Close all; tabs can be reordered; labels show the filename (full path on hover).
+- **PANEL-025 — Diff file switcher**
+  - Given: a panel's diff viewer has shown one or more files.
+  - When: the user opens the viewer header's path breadcrumb.
+  - Then: it lists files recently viewed in that panel; picking one reopens it in the same panel (a file view in Files, its diff in Changes, the commit-scoped diff in Commits).
 
 - **PANEL-026 — Diff view controls**
   - Given: a diff is shown.
-  - When: the user toggles split/unified, line-wrapping, find, or expand.
-  - Then: the layout switches side-by-side/unified, wraps or scrolls long lines, opens an in-file search, or expands the diff to full width (hiding the file browser); a close control closes the panel.
+  - When: the user opens the viewer's "View options" menu and toggles split/unified, line-wrapping, or find.
+  - Then: the layout switches side-by-side/unified, wraps or scrolls long lines, or opens an in-file search; the split and wrap preferences persist across reopen.
 
 - **PANEL-027 — Diff file header**
   - Given: a diff tab.
@@ -1916,16 +1842,16 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - Then: each file is a collapsible section with breadcrumb and +/− stats; expand/collapse-all and a "Commit N changes" button are available.
 
 - **PANEL-033 — Markdown render toggle**
-  - Given: a markdown file in the diff (rich-rendering feature).
-  - When: the toggle is available.
-  - Then: the user can switch between source and rendered views (toggle disabled with a hint when the feature is off).
+  - Given: a markdown file in the viewer.
+  - When: the user toggles between source and rendered views.
+  - Then: it switches between raw source and a rendered preview (rendered by default), which shows any YAML/TOML frontmatter at the top of the file as a key/value table.
 
 ## Terminal panel
 
-- **PANEL-034 — Terminal tabs**
-  - Given: the terminal panel.
-  - When: the user clicks + / switches / double-clicks to rename / closes a tab.
-  - Then: a new "Terminal N" is created / the selected terminal is shown / an inline rename input appears (Enter confirms, Escape cancels) / the tab closes (closing the last one creates a fresh replacement); right-click offers "Close others"; tabs can be reordered.
+- **PANEL-034 — Terminal panels**
+  - Given: a workspace with a terminal panel (one sits in the bottom section by default).
+  - When: the user adds "New terminal" from a section's add-panel menu / switches to a terminal / double-clicks its tab to rename it / closes it.
+  - Then: a new "Terminal N" (numbered across the workspace) is created / the selected terminal is shown / an inline rename input appears (Enter confirms, Escape cancels) / the terminal panel closes.
 
 - **PANEL-035 — Terminal interaction**
   - Given: an active terminal.
@@ -1941,6 +1867,11 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - Given: a terminal is starting.
   - When: the panel mounts.
   - Then: a "Starting terminal…" message is shown.
+
+- **PANEL-058 — Terminal connection indicator**
+  - Given: a terminal panel whose connection drops.
+  - When: its link is reconnecting or lost.
+  - Then: the tab shows a "Reconnecting…" (amber, pulsing) or "Disconnected" (red) indicator; a healthy terminal shows none.
 
 ## Notes panel
 
@@ -2043,16 +1974,16 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 ## Panel state persistence
 
 - **PANEL-056 — Panel state persists**
-  - Given: the user has set folder-expansion, scroll position, active tab, view mode, diff view type, line-wrapping, and diff scope.
-  - When: switching tabs/files and returning.
-  - Then: each of these states is restored.
+  - Given: the user has set folder-expansion, scroll position, active panel, view mode, diff view type, line-wrapping, and diff scope.
+  - When: reloading or switching workspaces and returning.
+  - Then: each of these states is restored (a workspace's section/panel arrangement is remembered per workspace).
 
 ## Plugin panels
 
 - **PANEL-057 — Plugin-contributed panel appears with a badge**
   - Given: the bundled Linear plugin (enabled by default) is loaded and contributes a panel.
-  - When: the user views the Panels list and opens the plugin's panel.
-  - Then: the panel is listed with a "plugin" badge and renders its content when opened.
+  - When: the user opens the plugin's panel from a section's add-panel menu.
+  - Then: the panel is listed with a "plugin" badge and renders its content when added.
 
 ---
 
@@ -2156,8 +2087,8 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 
 - **CMDP-019 — Layout & panel commands**
   - Given: the palette is open on a workspace.
-  - When: the user opens "Toggle layout…" / "Toggle panel visibility…" and runs toggle-left/right/bottom-panel, focus mode, zen mode, or a specific panel toggle.
-  - Then: the corresponding panel/mode toggles (panel toggles keep the palette open; focus/zen close it).
+  - When: the user runs a section toggle (left / bottom / right) or the add-panel command and picks a location and a panel.
+  - Then: the corresponding section expands or collapses, or the chosen panel is added to the chosen section.
 
 - **CMDP-020 — Chat commands**
   - Given: the palette is open on a workspace with a chat panel.
@@ -2176,14 +2107,14 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user opens "Go to workspace…" and selects one.
   - Then: a list with status dots is shown (the current workspace disabled as "Current workspace"); selecting another navigates to it.
 
-- **CMDP-023 — Workspace tab navigation**
-  - Given: 2+ workspace tabs.
-  - When: the user runs Next/Previous workspace tab.
-  - Then: focus moves to the next/previous tab.
+- **CMDP-023 — Workspace cycling**
+  - Given: 2+ workspaces.
+  - When: the user runs Next/Previous workspace.
+  - Then: the active workspace moves to the next/previous one in the sidebar's order.
 
 - **CMDP-024 — Workspace actions sub-page**
   - Given: a workspace.
-  - When: the user opens "Workspace actions…" and runs Commit changes / Create PR / Open PR / Rename / Close / Close others / Close all / Delete.
+  - When: the user opens "Workspace actions…" and runs Commit changes / Create PR / Open PR / Rename / Delete.
   - Then: each performs its action (Commit disabled without changes; Open PR disabled without an open PR; Delete and others as labeled).
 
 - **CMDP-025 — Open-in sub-page**
@@ -2288,18 +2219,6 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user clicks the X on a chip / "Reset all to defaults".
   - Then: that binding / all bindings revert to default.
 
-## Panels
-
-- **SET-012 — Panel zone assignment & hotkey**
-  - Given: the Panels section.
-  - When: the user changes a panel's zone or assigns a panel hotkey.
-  - Then: the panel moves zones / the hotkey is set (with conflict checking); disabled where rules/enabled-state prevent it.
-
-- **SET-013 — Enable/disable & reset panels**
-  - Given: the Panels section.
-  - When: the user toggles a non-builtin panel or clicks "Reset to defaults".
-  - Then: the panel appears/disappears / all panel layout settings reset.
-
 ## Dependencies
 
 - **SET-014 — Claude CLI source mode & status**
@@ -2328,6 +2247,11 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - Given: the Pi section.
   - When: the user adds or removes an env-var name.
   - Then: the variable list updates with a "Setting updated" toast.
+
+- **SET-042 — Authenticate a Pi provider**
+  - Given: the Pi section's Providers area.
+  - When: the user authenticates a provider — through an interactive login terminal or by pasting an API key.
+  - Then: the provider moves to the Connected list; a connected provider offers a Disconnect control.
 
 ## Repositories
 
@@ -2395,7 +2319,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 
 - **SET-029 — Experimental toggles**
   - Given: the Experimental section.
-  - When: the user toggles any feature (Always interrupt and send, Smooth streaming, Per-workspace panel layout, In-place workspaces, Clone workspaces, Review all, Entity mentions, Rich markdown rendering, Pi agent).
+  - When: the user toggles any feature (Always interrupt and send, Smooth streaming, In-place workspaces, Clone workspaces, Entity mentions).
   - Then: each shows "Setting updated".
 
 - **SET-030 — Custom backend command & timeout**
@@ -2454,10 +2378,10 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user picks a radius, scaling, or panel-background option.
   - Then: borders / overall UI size / panel translucency update accordingly.
 
-- **SET-037 — Component gallery & reset theme**
+- **SET-037 — Reset theme**
   - Given: the Theme Builder section.
-  - When: the user clicks the component-gallery button or "Reset to defaults".
-  - Then: the component gallery opens / theme settings reset (with a toast).
+  - When: the user clicks "Reset to defaults".
+  - Then: the theme settings reset (with a toast).
 
 ---
 
@@ -2607,7 +2531,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - The home-page rows and the workspace banner reuse the same PR button component, so
   the WS-PR scenarios (WS-022…WS-032) also describe the home-row PR behavior (HOME-020).
 - Status dots (running / waiting / error / ready / read / unread, plus the two-dot mixed
-  state) use one shared component across tab strips, home rows, agent tabs, peek popovers,
+  state) use one shared component across sidebar rows, home rows, agent panels, peek popovers,
   and the command palette; verify the same color/animation mapping in each surface.
 - Animations (status-pill and subagent-pill "thinking" variants) are randomized per
   appearance; tests should assert that *an* animation is present rather than a specific one.
