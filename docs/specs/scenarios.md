@@ -748,7 +748,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **ADDWS-016 — Agent-type selector options**
   - Given: the form is shown.
   - When: the user opens the agent-type selector.
-  - Then: it lists Claude, Terminal, Pi (only if enabled), and any registered custom agents; re-opening rescans for newly registered agents.
+  - Then: it lists Claude, Terminal, Pi, and any registered custom agents; re-opening rescans for newly registered agents.
 
 - **ADDWS-017 — Select agent type & MRU**
   - Given: the agent-type dropdown is open.
@@ -1110,7 +1110,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **WS-045 — Choose agent type when creating**
   - Given: the "+" chevron menu.
   - When: the user opens it.
-  - Then: it lists Claude, Pi (if enabled), Terminal, and registered custom agents; selecting one creates that type and remembers it.
+  - Then: it lists Claude, Pi, Terminal, and registered custom agents; selecting one creates that type and remembers it.
 
 - **WS-046 — Rename an agent (double-click)**
   - Given: an agent tab.
@@ -2317,12 +2317,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: viewing the Git row.
   - Then: it shows "v{version} — Installed" or a not-installed message.
 
-## Pi (experimental)
-
-- **SET-017 — Pi disabled banner**
-  - Given: pi is not enabled.
-  - When: viewing the Pi section.
-  - Then: a banner links to the Experimental section to enable it.
+## Pi
 
 - **SET-018 — Pi source mode, install, path, versions**
   - Given: the Pi section.
@@ -2373,7 +2368,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **SET-039 — Babysitter agent selector**
   - Given: the CI section with the babysitter enabled.
   - When: the user opens the "Babysitter agent" selector.
-  - Then: it offers "Most recently used" (default), Claude, Pi (when enabled), and any registered terminal agent that accepts automated prompts; choosing one saves with a toast; the selector is disabled when the babysitter is off.
+  - Then: it offers "Most recently used" (default), Claude, Pi, and any registered terminal agent that accepts automated prompts; choosing one saves with a toast; the selector is disabled when the babysitter is off.
 
 ## File browser
 

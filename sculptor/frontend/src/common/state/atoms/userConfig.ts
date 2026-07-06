@@ -191,11 +191,6 @@ export const workspaceBranchDeletionPolicyAtom = atom<"never" | "delete_if_safe"
 // Entity mentions (experimental — off by default)
 export const isEntityMentionsEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableEntityMentions ?? false);
 
-// Pi agent (experimental — off by default). Gates only whether the pi option
-// is offered in the agent-type pickers (the + button menu and the
-// new-workspace form); an already-created pi agent keeps running regardless.
-export const isPiAgentEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enablePiAgent ?? false);
-
 // Frontend plugin system (experimental — off by default). Gates plugin
 // loading at boot and the Plugins settings section. Enabling takes effect
 // immediately (PluginLoader bootstraps when the flag turns on); disabling only

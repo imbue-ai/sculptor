@@ -1,4 +1,4 @@
-import { CheckCircledIcon, CrossCircledIcon, ExclamationTriangleIcon, InfoCircledIcon } from "@radix-ui/react-icons";
+import { CheckCircledIcon, CrossCircledIcon, ExclamationTriangleIcon } from "@radix-ui/react-icons";
 import {
   Box,
   Button,
@@ -6,7 +6,6 @@ import {
   Code,
   Flex,
   IconButton,
-  Link,
   Progress,
   Select,
   Spinner,
@@ -20,7 +19,7 @@ import { type ReactElement, useCallback, useMemo, useState } from "react";
 
 import { ElementIds, UserConfigField } from "../../../api";
 import { dependenciesStatusAtom } from "../../../common/state/atoms/dependenciesStatus";
-import { isPiAgentEnabledAtom, userConfigAtom } from "../../../common/state/atoms/userConfig";
+import { userConfigAtom } from "../../../common/state/atoms/userConfig";
 import { useManagedDependency } from "../../../common/useManagedDependency";
 import { PiProvidersArea } from "./PiProvidersArea.tsx";
 import { SettingRow } from "./SettingRow.tsx";
@@ -28,16 +27,11 @@ import { SettingsSectionLayout } from "./SettingsSection.tsx";
 
 type PiSettingsSectionProps = {
   onSettingChange: (field: UserConfigField, value: unknown) => Promise<void>;
-  onNavigateToExperimental?: () => void;
 };
 
-export const PiSettingsSection = ({
-  onSettingChange,
-  onNavigateToExperimental,
-}: PiSettingsSectionProps): ReactElement => {
+export const PiSettingsSection = ({ onSettingChange }: PiSettingsSectionProps): ReactElement => {
   const dependenciesStatus = useAtomValue(dependenciesStatusAtom);
   const userConfig = useAtomValue(userConfigAtom);
-  const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
   const {
     info: pi,
     displayMode,
@@ -89,31 +83,6 @@ export const PiSettingsSection = ({
 
   return (
     <SettingsSectionLayout>
-      {!isPiAgentEnabled && (
-        <Callout.Root color="yellow" data-testid={ElementIds.PI_SETTINGS_DISABLED_BANNER}>
-          <Callout.Icon>
-            <InfoCircledIcon />
-          </Callout.Icon>
-          <Callout.Text>
-            You have not enabled the pi agent. Enable it in{" "}
-            {onNavigateToExperimental ? (
-              <Link
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  onNavigateToExperimental();
-                }}
-              >
-                Experimental
-              </Link>
-            ) : (
-              "Experimental"
-            )}
-            . If you have any pi agents active, you can configure them here.
-          </Callout.Text>
-        </Callout.Root>
-      )}
-
       <SettingRow title="Binary Source" description="Choose how Sculptor locates the pi binary.">
         <Flex align="center" gap="2">
           <Select.Root value={displayMode} onValueChange={handleModeChange}>

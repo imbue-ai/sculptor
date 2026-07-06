@@ -31,7 +31,7 @@ import {
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { terminalNextIndexAtom, terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
 import { createAgentErrorToastAtom } from "~/common/state/atoms/toasts.ts";
-import { isPiAgentEnabledAtom, userConfigAtom } from "~/common/state/atoms/userConfig.ts";
+import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import { ToastType } from "~/components/Toast.tsx";
 import { resetReviewAllScopeAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
 import { getNextTerminalLabel } from "~/pages/workspace/panels/terminalLabelUtils.ts";
@@ -102,16 +102,14 @@ export function seedFirstVisitTerminal(store: AppStore, workspaceId: string): nu
   return appendTerminalTab(store, workspaceId);
 }
 
-// Resolve a stored/requested agent type against the pi feature flag: "pi" while the
-// pi harness is disabled falls back to Claude (e.g. a remembered type from before
-// the flag was turned off). This is the single definition of that fallback — every
-// surface that turns a stored type into an effective one (the add-panel surfaces
-// via normalizeRecentAgentType, agent creation, the new-workspace form's first-agent
-// seed) resolves through here so they cannot drift. A bare "terminal" passes
-// through: the new-workspace form legitimately stores it, and surfaces that cannot
-// use it layer their own fallback on top (see normalizeRecentAgentType).
-export function resolveStoredAgentType<T extends StoredAgentType>(stored: T, isPiAgentEnabled: boolean): T | "claude" {
-  return stored === "pi" && !isPiAgentEnabled ? "claude" : stored;
+// Resolve a stored/requested agent type into the effective one. Claude, pi, and
+// registered terminal-agent types all pass through unchanged, as does a bare
+// "terminal": the new-workspace form legitimately stores it, and surfaces that
+// cannot use it layer their own fallback on top (see normalizeRecentAgentType).
+// Kept as the single choke point every surface resolves through so their handling
+// of stored types cannot drift.
+export function resolveStoredAgentType<T extends StoredAgentType>(stored: T): T {
+  return stored;
 }
 
 // The stored last-used agent type, normalized for the pinned "New {recent} agent"
@@ -119,12 +117,12 @@ export function resolveStoredAgentType<T extends StoredAgentType>(stored: T, isP
 // new-agent keybinding/command, and the Cmd+K "Add panel" flow. A stored bare
 // "terminal" cannot back an agent row and falls back to Claude — the add-panel
 // model has no bare terminal AGENT; the dedicated "New terminal" row owns terminal
-// creation. A disabled "pi" falls back through resolveStoredAgentType.
-export function normalizeRecentAgentType(stored: StoredAgentType, isPiAgentEnabled: boolean): StoredAgentType {
+// creation.
+export function normalizeRecentAgentType(stored: StoredAgentType): StoredAgentType {
   if (stored === "terminal") {
     return "claude";
   }
-  return resolveStoredAgentType(stored, isPiAgentEnabled);
+  return resolveStoredAgentType(stored);
 }
 
 // Display label for the pinned "New {recent} agent" row, shared by the section "+"
@@ -154,11 +152,11 @@ export function recentAgentLabel(
 // when an unrelated layout write (split-ratio drag) or a registry rebuild (task
 // tick) recomputes an identical list.
 
-// The stored recent agent type, normalized (bare "terminal" / disabled "pi" fall
-// back to Claude — see normalizeRecentAgentType). A string, so Jotai's Object.is
-// guard already dedupes recomputes that land on the same value.
+// The stored recent agent type, normalized (a bare "terminal" falls back to
+// Claude — see normalizeRecentAgentType). A string, so Jotai's Object.is guard
+// already dedupes recomputes that land on the same value.
 export const recentAgentTypeAtom: Atom<StoredAgentType> = atom((get) =>
-  normalizeRecentAgentType(get(lastUsedAgentTypeAtom), get(isPiAgentEnabledAtom)),
+  normalizeRecentAgentType(get(lastUsedAgentTypeAtom)),
 );
 
 function availableStaticPanelListsEqual(
@@ -212,11 +210,10 @@ export type AgentTypeOption = {
   label: string;
 };
 
-// The agent-type sub-menu options: Claude, pi (gated), and each registered
-// terminal-agent program. No bare "Terminal" agent type — terminal creation
-// belongs to the dedicated "New terminal" row.
+// The agent-type sub-menu options: Claude, pi, and each registered terminal-agent
+// program. No bare "Terminal" agent type — terminal creation belongs to the
+// dedicated "New terminal" row.
 export function buildAgentTypeOptions(inputs: {
-  isPiAgentEnabled: boolean;
   registrations: ReadonlyArray<TerminalAgentRegistration>;
 }): ReadonlyArray<AgentTypeOption> {
   const options: Array<AgentTypeOption> = [
@@ -227,16 +224,14 @@ export function buildAgentTypeOptions(inputs: {
       registrationId: undefined,
       label: AGENT_TYPE_LABELS.claude,
     },
-  ];
-  if (inputs.isPiAgentEnabled) {
-    options.push({
+    {
       key: "pi",
       stored: "pi",
       agentType: "pi",
       registrationId: undefined,
       label: AGENT_TYPE_LABELS.pi,
-    });
-  }
+    },
+  ];
 
   for (const registration of inputs.registrations) {
     options.push({
@@ -263,9 +258,7 @@ export async function createAgentInLocation(
   subSection: SubSectionId,
   inputs: CreateAgentInputs,
 ): Promise<string | undefined> {
-  // Any create surface can hand in a remembered "pi" type from before the pi flag
-  // was turned off — resolve the fallback here so no caller has to.
-  const agentType: AgentTypeName = resolveStoredAgentType(inputs.agentType, store.get(isPiAgentEnabledAtom));
+  const agentType: AgentTypeName = resolveStoredAgentType(inputs.agentType);
 
   // Optimistically reflect the chosen harness as the most-recently-used type so the
   // surfaces' "New {recent} agent" label updates immediately; the backend persists

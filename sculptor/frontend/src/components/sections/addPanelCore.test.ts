@@ -36,19 +36,17 @@ afterEach(() => {
 });
 
 describe("resolveStoredAgentType", () => {
-  it("falls back to Claude for 'pi' while the pi harness is disabled", () => {
-    expect(resolveStoredAgentType("pi", false)).toBe("claude");
-    expect(resolveStoredAgentType("pi", true)).toBe("pi");
+  it("passes 'pi' through (pi is always available)", () => {
+    expect(resolveStoredAgentType("pi")).toBe("pi");
   });
 
   it("passes a bare 'terminal' through (a legitimate new-workspace first agent)", () => {
-    expect(resolveStoredAgentType("terminal", false)).toBe("terminal");
-    expect(resolveStoredAgentType("terminal", true)).toBe("terminal");
+    expect(resolveStoredAgentType("terminal")).toBe("terminal");
   });
 
   it("keeps Claude and registered terminal-agent types as-is", () => {
-    expect(resolveStoredAgentType("claude", false)).toBe("claude");
-    expect(resolveStoredAgentType("registered:my-agent", false)).toBe("registered:my-agent");
+    expect(resolveStoredAgentType("claude")).toBe("claude");
+    expect(resolveStoredAgentType("registered:my-agent")).toBe("registered:my-agent");
   });
 });
 
@@ -77,21 +75,16 @@ describe("normalizeRecentAgentType", () => {
     // The new-workspace form's first-agent select can persist "terminal", but the
     // add-panel surfaces have no bare terminal AGENT row — terminal creation
     // belongs to the dedicated "New terminal" row.
-    expect(normalizeRecentAgentType("terminal", true)).toBe("claude");
-    expect(normalizeRecentAgentType("terminal", false)).toBe("claude");
+    expect(normalizeRecentAgentType("terminal")).toBe("claude");
   });
 
-  it("falls back to Claude for 'pi' while the pi harness is disabled", () => {
-    expect(normalizeRecentAgentType("pi", false)).toBe("claude");
-  });
-
-  it("keeps 'pi' while the pi harness is enabled", () => {
-    expect(normalizeRecentAgentType("pi", true)).toBe("pi");
+  it("keeps 'pi' (pi is always available)", () => {
+    expect(normalizeRecentAgentType("pi")).toBe("pi");
   });
 
   it("keeps Claude and registered terminal-agent types as-is", () => {
-    expect(normalizeRecentAgentType("claude", false)).toBe("claude");
-    expect(normalizeRecentAgentType("registered:my-agent", false)).toBe("registered:my-agent");
+    expect(normalizeRecentAgentType("claude")).toBe("claude");
+    expect(normalizeRecentAgentType("registered:my-agent")).toBe("registered:my-agent");
   });
 });
 
@@ -127,29 +120,15 @@ describe("createAgentInLocation placement", () => {
   });
 });
 
-describe("createAgentInLocation pi gating", () => {
-  it("falls back to Claude when a pi agent is requested while the pi harness is disabled", async () => {
-    // Any create surface can hand in a remembered "pi" type from before the flag
-    // was turned off; the core resolves the fallback so no caller has to.
+describe("createAgentInLocation pi agent", () => {
+  it("creates a pi agent when a pi agent is requested (pi is always available)", async () => {
     createWorkspaceAgentMock.mockResolvedValue({ data: { id: "task-pi" } });
     const store = createStore();
     store.set(activeWorkspaceIdAtom, "ws-test");
-    // No user config → isPiAgentEnabledAtom resolves false.
 
     await createAgentInLocation(store, "center", { agentType: "pi" });
 
     expect(createWorkspaceAgentMock).toHaveBeenCalledTimes(1);
-    expect(createWorkspaceAgentMock.mock.calls[0][0].body.agentType).toBe("claude");
-  });
-
-  it("keeps the pi type when the pi harness is enabled", async () => {
-    createWorkspaceAgentMock.mockResolvedValue({ data: { id: "task-pi" } });
-    const store = createStore();
-    store.set(activeWorkspaceIdAtom, "ws-test");
-    store.set(userConfigAtom, { enablePiAgent: true } as unknown as UserConfig);
-
-    await createAgentInLocation(store, "center", { agentType: "pi" });
-
     expect(createWorkspaceAgentMock.mock.calls[0][0].body.agentType).toBe("pi");
   });
 });
@@ -186,18 +165,15 @@ describe("recentAgentTypeAtom", () => {
     expect(store.get(recentAgentTypeAtom)).toBe("claude");
   });
 
-  it("normalizes a stored bare 'terminal' and a disabled 'pi' to Claude", () => {
+  it("normalizes a stored bare 'terminal' to Claude", () => {
     const store = createStore();
     store.set(userConfigAtom, { lastUsedAgentType: "terminal" } as unknown as UserConfig);
     expect(store.get(recentAgentTypeAtom)).toBe("claude");
-
-    store.set(userConfigAtom, { lastUsedAgentType: "pi" } as unknown as UserConfig);
-    expect(store.get(recentAgentTypeAtom)).toBe("claude");
   });
 
-  it("keeps 'pi' while the pi harness is enabled, and registered types as-is", () => {
+  it("keeps 'pi' (pi is always available), and registered types as-is", () => {
     const store = createStore();
-    store.set(userConfigAtom, { lastUsedAgentType: "pi", enablePiAgent: true } as unknown as UserConfig);
+    store.set(userConfigAtom, { lastUsedAgentType: "pi" } as unknown as UserConfig);
     expect(store.get(recentAgentTypeAtom)).toBe("pi");
 
     store.set(userConfigAtom, { lastUsedAgentType: "registered:my-agent" } as unknown as UserConfig);
@@ -287,19 +263,15 @@ describe("availableLocationsAtom", () => {
 describe("buildAgentTypeOptions", () => {
   const registration = { registrationId: "my-agent", displayName: "My Agent" } as TerminalAgentRegistration;
 
-  it("offers only Claude when pi is disabled and nothing is registered", () => {
-    expect(buildAgentTypeOptions({ isPiAgentEnabled: false, registrations: [] })).toEqual([
+  it("offers Claude and pi when nothing is registered (pi is always available)", () => {
+    expect(buildAgentTypeOptions({ registrations: [] })).toEqual([
       { key: "claude", stored: "claude", agentType: "claude", registrationId: undefined, label: "Claude" },
+      { key: "pi", stored: "pi", agentType: "pi", registrationId: undefined, label: "pi" },
     ]);
   });
 
-  it("adds pi while the pi harness is enabled", () => {
-    const options = buildAgentTypeOptions({ isPiAgentEnabled: true, registrations: [] });
-    expect(options.map((option) => option.key)).toEqual(["claude", "pi"]);
-  });
-
   it("maps each registered terminal-agent program to a registered option", () => {
-    const options = buildAgentTypeOptions({ isPiAgentEnabled: false, registrations: [registration] });
+    const options = buildAgentTypeOptions({ registrations: [registration] });
     expect(options).toContainEqual({
       key: "registered:my-agent",
       stored: "registered:my-agent",

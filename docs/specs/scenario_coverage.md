@@ -439,7 +439,7 @@ Every scenario an integration test fully covers — it performs the user action 
 | ADDWS-005 | test_add_workspace_page.py::test_workspace_form_draft_persists_after_navigation; ::test_multiple_new_workspace_tabs_with_independent_drafts |
 | ADDWS-013 | test_worktree_create_happy_path.py::test_worktree_create_with_default_branch_name |
 | ADDWS-015 | test_branch_name_collisions.py::test_worktree_mode_collision_blocks_creation; ::test_clone_mode_collision_blocks_creation |
-| ADDWS-016 | test_add_workspace_agent_type.py::test_agent_type_select_visible_with_claude_default; ::test_pi_option_gated_behind_pi_agent_flag; test_agent_type_menu.py::test_registered_terminal_agent_appears_in_menu_and_creates |
+| ADDWS-016 | test_add_workspace_agent_type.py::test_agent_type_select_visible_with_claude_default; ::test_pi_option_always_listed; test_agent_type_menu.py::test_registered_terminal_agent_appears_in_menu_and_creates |
 | ADDWS-017 | test_add_workspace_agent_type.py::test_first_agent_type_defaults_to_shared_last_used; test_agent_type_menu.py::test_agent_type_menu_creates_terminal_agent_and_remembers_type |
 | ADDWS-021 | test_worktree_create_happy_path.py::test_worktree_create_with_default_branch_name; test_add_workspace_agent_type.py::test_cmd_enter_in_workspace_name_creates_workspace |
 | ADDWS-022 | test_add_workspace_page.py::test_arrow_down_focuses_name_input_when_nothing_focused; ::test_arrow_up_focuses_name_input_when_nothing_focused |
@@ -502,7 +502,7 @@ Every scenario an integration test fully covers — it performs the user action 
 | WS-040 | test_workspace_banner.py::test_banner_shows_diff_stats; ::test_banner_click_navigates_to_changes_all |
 | WS-041 | test_multi_agent_workspace.py::test_multiple_agent_tabs_shown_for_shared_workspace; ::test_single_agent_shows_one_agent_tab |
 | WS-044 | test_multi_agent_workspace.py::test_create_second_agent_in_existing_workspace |
-| WS-045 | test_agent_type_menu.py::test_agent_type_menu_creates_terminal_agent_and_remembers_type; ::test_agent_type_menu_gates_pi_behind_pi_agent_flag; ::test_registered_terminal_agent_appears_in_menu_and_creates |
+| WS-045 | test_agent_type_menu.py::test_agent_type_menu_creates_terminal_agent_and_remembers_type; ::test_agent_type_menu_lists_pi; ::test_registered_terminal_agent_appears_in_menu_and_creates |
 | WS-047 | test_agent_tab_context_menu.py::test_agent_context_menu_has_rename_and_delete; test_agent_diagnostics_context_menu.py::test_agent_diagnostics_disabled_without_session; ::test_agent_diagnostics_copy_session_id_and_transcript_path; ::test_agent_context_menu_copy_name_and_id |
 | WS-048 | test_agent_tab_context_menu.py::test_agent_context_menu_delete; test_multi_agent_workspace.py::test_workspace_survives_when_other_agents_remain |
 | WS-049 | test_mark_unread.py::test_mark_adjacent_tab_unread; test_read_unread_status.py::test_unread_indicator_when_switching_agents_within_workspace |
@@ -617,7 +617,6 @@ Every scenario an integration test fully covers — it performs the user action 
 | SET-013 | test_panels_settings.py::test_disable_hides_panel; ::test_reset_to_defaults_preserves_shortcuts |
 | SET-014 | test_claude_binary_installation.py::test_settings_claude_cli_section_visible; ::test_settings_mode_selector_persists; ::test_settings_managed_mode_shows_install_button |
 | SET-016 | test_claude_binary_installation.py::test_settings_git_section_visible |
-| SET-017 | test_pi_managed_install.py::test_pi_settings_section_visible_with_pi_agent_disabled |
 | SET-028 | test_telemetry_opt_out.py::test_privacy_settings_telemetry_switch; ::test_onboarding_email_with_telemetry_opt_out; ::test_onboarding_skip_account_setup |
 | SET-037 | test_theme_builder.py::test_theme_builder_component_gallery_button; ::test_theme_builder_reset_to_defaults; test_component_gallery_tab.py::test_component_gallery_opens_as_tab |
 | DEV-002 | test_diff_viewer.py::test_gfm_features_render_in_read_only_preview (external anchors target=_blank + rel) |

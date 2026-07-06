@@ -14,12 +14,7 @@ import {
 import { isDismissibleOverlayOpen } from "~/common/overlayUtils.ts";
 import { lastUsedAgentTypeAtom, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { projectsArrayAtom, updateProjectsAtom } from "~/common/state/atoms/projects.ts";
-import {
-  defaultEffortLevelAtom,
-  defaultModelAtom,
-  isDefaultFastModeAtom,
-  isPiAgentEnabledAtom,
-} from "~/common/state/atoms/userConfig.ts";
+import { defaultEffortLevelAtom, defaultModelAtom, isDefaultFastModeAtom } from "~/common/state/atoms/userConfig.ts";
 import { useCreateWorkspace } from "~/common/state/hooks/useCreateWorkspace.ts";
 import { useRepoInfo } from "~/common/state/hooks/useRepoInfo.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
@@ -74,7 +69,6 @@ export const NewWorkspaceForm = ({
   const updateProjects = useSetAtom(updateProjectsAtom);
   const lastSettings = useAtomValue(lastWorkspaceCreationSettingsAtom);
   const lastUsedAgentType = useAtomValue(lastUsedAgentTypeAtom);
-  const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
   const defaultModel = useAtomValue(defaultModelAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
@@ -104,9 +98,9 @@ export const NewWorkspaceForm = ({
   );
   const [agentTypeValue, setAgentTypeValue] = useState<StoredAgentType>(() => {
     const seed = lastSettings?.agentType ?? lastUsedAgentType;
-    // The shared pi-disabled fallback. A bare "terminal" stays: it is a
+    // Normalize the remembered seed. A bare "terminal" stays: it is a
     // legitimate first-agent choice here.
-    return resolveStoredAgentType(seed, isPiAgentEnabled);
+    return resolveStoredAgentType(seed);
   });
   const [userSelectedBranch, setUserSelectedBranch] = useState<string | undefined>(() => lastSettings?.sourceBranch);
   // `null` means "use the auto-filled preview"; any string means the user has

@@ -1660,19 +1660,14 @@ def _make_user_config_with_pi(pi_path: str = "pi") -> UserConfig:
     )
 
 
-def _make_managed_config(claude: str, pi: str, enable_pi_agent: bool = False) -> UserConfig:
-    """A UserConfig with explicit claude + pi binary-mode values.
-
-    ``enable_pi_agent`` gates pi auto-install on startup and defaults to off,
-    matching the product default: a Claude-only user never auto-downloads pi.
-    """
+def _make_managed_config(claude: str, pi: str) -> UserConfig:
+    """A UserConfig with explicit claude + pi binary-mode values."""
     return UserConfig(
         user_email="test@example.com",
         user_id="user-1",
         organization_id="org-1",
         instance_id="inst-1",
         dependency_paths=DependencyPaths(claude=claude, pi=pi),
-        enable_pi_agent=enable_pi_agent,
     )
 
 
@@ -2413,41 +2408,24 @@ class TestCheckInstalledConcurrently:
 class TestAutoInstallLoop:
     """_auto_install_if_needed loops over managed tools (Claude + pi).
 
-    pi auto-install is additionally gated on the ``enable_pi_agent`` experiment:
-    a flag-off user (the default) never auto-downloads pi, while Claude — which is not
-    part of the experiment — auto-installs whenever it is MANAGED and missing. A manual
-    install via ``install_managed`` is never gated (see TestPiInstallManaged).
+    Both Claude and pi auto-install whenever they are MANAGED and missing; neither
+    is gated behind a flag.
     """
 
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
     @patch("sculptor.services.dependency_management_service.get_internal_folder")
-    def test_pi_managed_and_missing_is_auto_installed_when_pi_agent_enabled(
+    def test_pi_managed_and_missing_is_auto_installed(
         self, mock_folder: MagicMock, mock_config: MagicMock, tmp_path: Path
     ) -> None:
-        """pi MANAGED + missing + flag on auto-installs on startup; Claude (CUSTOM) does not."""
+        """pi MANAGED + missing auto-installs on startup; Claude (CUSTOM) does not."""
         mock_folder.return_value = tmp_path
-        mock_config.return_value = _make_managed_config(claude="claude", pi="MANAGED", enable_pi_agent=True)
+        mock_config.return_value = _make_managed_config(claude="claude", pi="MANAGED")
         mock_cg = MagicMock()
         service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
 
         service._auto_install_if_needed()
 
         assert _auto_install_spawn_args(mock_cg) == [(Dependency.PI,)]
-
-    @patch("sculptor.services.dependency_management_service.get_user_config_instance")
-    @patch("sculptor.services.dependency_management_service.get_internal_folder")
-    def test_pi_managed_and_missing_is_not_auto_installed_when_pi_agent_disabled(
-        self, mock_folder: MagicMock, mock_config: MagicMock, tmp_path: Path
-    ) -> None:
-        """pi MANAGED + missing but flag off must NOT auto-download pi — the default for a Claude-only user."""
-        mock_folder.return_value = tmp_path
-        mock_config.return_value = _make_managed_config(claude="claude", pi="MANAGED", enable_pi_agent=False)
-        mock_cg = MagicMock()
-        service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
-
-        service._auto_install_if_needed()
-
-        assert _auto_install_spawn_args(mock_cg) == []
 
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
     @patch("sculptor.services.dependency_management_service.get_internal_folder")
@@ -2466,27 +2444,12 @@ class TestAutoInstallLoop:
 
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
     @patch("sculptor.services.dependency_management_service.get_internal_folder")
-    def test_claude_auto_installs_while_pi_is_gated_off(
+    def test_both_auto_install_when_managed_and_missing(
         self, mock_folder: MagicMock, mock_config: MagicMock, tmp_path: Path
     ) -> None:
-        """Both MANAGED + missing but flag off: Claude installs, pi is skipped — the gate is pi-only."""
+        """Both MANAGED + missing: Claude and pi both auto-install, in registry order."""
         mock_folder.return_value = tmp_path
-        mock_config.return_value = _make_managed_config(claude="MANAGED", pi="MANAGED", enable_pi_agent=False)
-        mock_cg = MagicMock()
-        service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
-
-        service._auto_install_if_needed()
-
-        assert _auto_install_spawn_args(mock_cg) == [(Dependency.CLAUDE,)]
-
-    @patch("sculptor.services.dependency_management_service.get_user_config_instance")
-    @patch("sculptor.services.dependency_management_service.get_internal_folder")
-    def test_both_auto_install_when_pi_agent_enabled(
-        self, mock_folder: MagicMock, mock_config: MagicMock, tmp_path: Path
-    ) -> None:
-        """Both MANAGED + missing + flag on: Claude and pi both auto-install, in registry order."""
-        mock_folder.return_value = tmp_path
-        mock_config.return_value = _make_managed_config(claude="MANAGED", pi="MANAGED", enable_pi_agent=True)
+        mock_config.return_value = _make_managed_config(claude="MANAGED", pi="MANAGED")
         mock_cg = MagicMock()
         service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
 
@@ -2499,9 +2462,9 @@ class TestAutoInstallLoop:
     def test_pi_managed_and_in_range_is_not_auto_installed(
         self, mock_folder: MagicMock, mock_config: MagicMock, tmp_path: Path
     ) -> None:
-        """An already-installed, in-range managed pi is not re-installed (flag on so the gate is open)."""
+        """An already-installed, in-range managed pi is not re-installed."""
         mock_folder.return_value = tmp_path
-        mock_config.return_value = _make_managed_config(claude="claude", pi="MANAGED", enable_pi_agent=True)
+        mock_config.return_value = _make_managed_config(claude="claude", pi="MANAGED")
 
         # Stage the pinned pi so check_installed(PI) reports installed + in range.
         version_dir = tmp_path / "dependencies" / "pi" / f"version-{_PI_RECOMMENDED}" / "pi"

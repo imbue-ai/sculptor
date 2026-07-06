@@ -23,8 +23,6 @@ from sculptor.constants import ElementIDs
 from sculptor.testing.elements.new_workspace_dialog import PlaywrightNewWorkspaceDialog
 from sculptor.testing.elements.terminal import expect_terminal_panel_replaces_chat
 from sculptor.testing.elements.terminal import get_agent_terminal_panel
-from sculptor.testing.elements.user_config import disable_pi_agent
-from sculptor.testing.elements.user_config import enable_pi_agent
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.playwright_utils import blur_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -207,16 +205,12 @@ def test_keep_open_resets_but_retains(sculptor_instance_: SculptorInstance) -> N
 def test_agent_type_picker_defaults_to_claude(sculptor_instance_: SculptorInstance) -> None:
     """The agent-type select defaults to Claude and lists the available types.
 
-    The form's first-agent picker reuses the old page's options: Claude (default)
-    and Terminal are always offered; pi is gated behind the experimental
-    pi-agent flag. (The "no bare Terminal agent type" rule applies to the panel-tab
-    add-dropdown, not to this first-agent select — verified against the rendered
-    form, which DOES offer Terminal here.)
+    The form's first-agent picker reuses the old page's options: Claude (default),
+    pi, and Terminal are all offered. (The "no bare Terminal agent type" rule
+    applies to the panel-tab add-dropdown, not to this first-agent select —
+    verified against the rendered form, which DOES offer Terminal here.)
     """
     page = sculptor_instance_.page
-    # The pi flag is sticky on the shared instance — reset it defensively so the
-    # default-off assertion holds.
-    disable_pi_agent(page)
     _seed_one_workspace(page)
 
     dialog = PlaywrightNewWorkspaceDialog(page)
@@ -228,25 +222,8 @@ def test_agent_type_picker_defaults_to_claude(sculptor_instance_: SculptorInstan
     dialog.get_agent_type_select().click()
     expect(dialog.get_agent_type_option_claude()).to_be_visible()
     expect(dialog.get_agent_type_option_terminal()).to_be_visible()
-    # pi is hidden while the flag is off.
-    expect(dialog.get_agent_type_option_pi()).to_have_count(0)
-
-
-@user_story("to see the pi agent type in the dialog only when pi-agent is enabled")
-def test_agent_type_picker_gates_pi(sculptor_instance_: SculptorInstance) -> None:
-    """The pi option appears in the agent-type select only when pi-agent is enabled."""
-    page = sculptor_instance_.page
-    _seed_one_workspace(page)
-
-    try:
-        enable_pi_agent(page)
-        dialog = PlaywrightNewWorkspaceDialog(page)
-        dialog.open_via_shortcut()
-        dialog.get_agent_type_select().click()
-        expect(dialog.get_agent_type_option_pi()).to_be_visible()
-        page.keyboard.press("Escape")
-    finally:
-        disable_pi_agent(page)
+    # pi is always offered.
+    expect(dialog.get_agent_type_option_pi()).to_be_visible()
 
 
 @user_story("to start typing in the chat immediately after creating a workspace")
