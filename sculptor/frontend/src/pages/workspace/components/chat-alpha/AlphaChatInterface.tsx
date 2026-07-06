@@ -43,6 +43,7 @@ import {
 import { AlphaPromptNavigator } from "./AlphaPromptNavigator.tsx";
 import { AlphaSearchBar } from "./AlphaSearchBar.tsx";
 import { chatToolDensityAtom } from "./atoms.ts";
+import { ChatContextMenu } from "./ChatContextMenu.tsx";
 import { useChatTask } from "./ChatTaskContext.tsx";
 import { useAlphaActivePromptIndex } from "./hooks/useAlphaActivePromptIndex.ts";
 import { useAlphaAutoScroll } from "./hooks/useAlphaAutoScroll.ts";
@@ -535,97 +536,101 @@ export const AlphaChatInterface = ({
               navigateToMatch={navigateToMatch}
             />
           )}
-          <div className={styles.scrollArea}>
-            <div
-              ref={scrollContainerRef}
-              className={styles.scrollContainer}
-              data-testid={ElementIds.ALPHA_CHAT_VIEW}
-              role="log"
-              aria-label="Chat messages"
-              tabIndex={0}
-            >
-              <div className={styles.virtualContent} style={{ height: virtualizer.getTotalSize() }}>
-                <div ref={introRef}>
-                  <AlphaChatIntro />
-                </div>
-                {virtualizer.getVirtualItems().map((virtualItem) => {
-                  const node = filteredNodes[virtualItem.index];
-                  const prevNode = prevNodeMap.get(virtualItem.index);
-                  const isLastMessage = virtualItem.index === filteredNodes.length - 1;
-                  const isAssistant = node.message.role === ChatMessageRole.ASSISTANT;
-                  return (
-                    <div
-                      key={node.message.id}
-                      ref={virtualizer.measureElement}
-                      data-index={virtualItem.index}
-                      aria-setsize={filteredNodes.length}
-                      aria-posinset={virtualItem.index + 1}
-                      aria-live={isLastMessage && isAssistant ? "polite" : undefined}
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "100%",
-                        transform: `translateY(${virtualItem.start}px)`,
-                      }}
-                    >
-                      <AlphaMessageNode
-                        node={node}
-                        prevNode={prevNode}
-                        inProgressMessageId={inProgressMessageId}
-                        toolResultMap={toolResultMap}
-                        subagentMetadataMap={subagentMetadataMap}
-                        searchQuery={effectiveSearchQuery}
-                        activeSearchBlockIndex={activeMatchMessageId === node.message.id ? activeBlockIndex : -1}
-                        activeSearchOccurrence={activeMatchMessageId === node.message.id ? activeOccurrenceInBlock : -1}
-                        isLastMessage={virtualItem.index === filteredNodes.length - 1}
-                        isStreaming={isStreaming && isLastMessage && isAssistant}
-                        taskStatus={taskStatus ?? TaskStatus.RUNNING}
-                        onRetryRequest={handleRetryLastUserMessage}
-                        onOpenDiffFile={handleOpenDiffFile}
-                        messageIndex={virtualItem.index}
-                      />
-                    </div>
-                  );
-                })}
-                {/* Bottom sentinel for the smooth-streaming viewport observer.
+          <ChatContextMenu>
+            <div className={styles.scrollArea}>
+              <div
+                ref={scrollContainerRef}
+                className={styles.scrollContainer}
+                data-testid={ElementIds.ALPHA_CHAT_VIEW}
+                role="log"
+                aria-label="Chat messages"
+                tabIndex={0}
+              >
+                <div className={styles.virtualContent} style={{ height: virtualizer.getTotalSize() }}>
+                  <div ref={introRef}>
+                    <AlphaChatIntro />
+                  </div>
+                  {virtualizer.getVirtualItems().map((virtualItem) => {
+                    const node = filteredNodes[virtualItem.index];
+                    const prevNode = prevNodeMap.get(virtualItem.index);
+                    const isLastMessage = virtualItem.index === filteredNodes.length - 1;
+                    const isAssistant = node.message.role === ChatMessageRole.ASSISTANT;
+                    return (
+                      <div
+                        key={node.message.id}
+                        ref={virtualizer.measureElement}
+                        data-index={virtualItem.index}
+                        aria-setsize={filteredNodes.length}
+                        aria-posinset={virtualItem.index + 1}
+                        aria-live={isLastMessage && isAssistant ? "polite" : undefined}
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: "100%",
+                          transform: `translateY(${virtualItem.start}px)`,
+                        }}
+                      >
+                        <AlphaMessageNode
+                          node={node}
+                          prevNode={prevNode}
+                          inProgressMessageId={inProgressMessageId}
+                          toolResultMap={toolResultMap}
+                          subagentMetadataMap={subagentMetadataMap}
+                          searchQuery={effectiveSearchQuery}
+                          activeSearchBlockIndex={activeMatchMessageId === node.message.id ? activeBlockIndex : -1}
+                          activeSearchOccurrence={
+                            activeMatchMessageId === node.message.id ? activeOccurrenceInBlock : -1
+                          }
+                          isLastMessage={virtualItem.index === filteredNodes.length - 1}
+                          isStreaming={isStreaming && isLastMessage && isAssistant}
+                          taskStatus={taskStatus ?? TaskStatus.RUNNING}
+                          onRetryRequest={handleRetryLastUserMessage}
+                          onOpenDiffFile={handleOpenDiffFile}
+                          messageIndex={virtualItem.index}
+                        />
+                      </div>
+                    );
+                  })}
+                  {/* Bottom sentinel for the smooth-streaming viewport observer.
                     useSmoothStreamingViewportObserver watches this element with
                     an IntersectionObserver and disables smooth streaming when
                     it scrolls off-screen. It is pinned to the bottom of the
                     virtual content so it leaves the viewport exactly when the
                     message tail does. */}
-                <div
-                  ref={bottomSentinelRef}
-                  data-testid={ElementIds.ALPHA_CHAT_BOTTOM_SENTINEL}
-                  aria-hidden="true"
-                  className={styles.bottomSentinel}
+                  <div
+                    ref={bottomSentinelRef}
+                    data-testid={ElementIds.ALPHA_CHAT_BOTTOM_SENTINEL}
+                    aria-hidden="true"
+                    className={styles.bottomSentinel}
+                  />
+                </div>
+              </div>
+              <div className={styles.bottomBar}>
+                <JumpToBottomButton
+                  isVisible={isJumpVisible}
+                  label={jumpLabel}
+                  onClick={(): void => {
+                    exitNavigation();
+                    scrollToBottom();
+                  }}
+                  scrollContainerRef={scrollContainerRef}
+                />
+                <StatusPill
+                  taskStatus={taskStatus ?? null}
+                  isAutoCompacting={isAutoCompacting}
+                  isStreaming={isStreaming}
+                  inProgressChatMessage={smoothInProgressChatMessage}
+                  workingUserMessageId={workingUserMessageId}
+                  pendingBackgroundTaskCount={pendingBackgroundTaskCount}
                 />
               </div>
-            </div>
-            <div className={styles.bottomBar}>
-              <JumpToBottomButton
-                isVisible={isJumpVisible}
-                label={jumpLabel}
-                onClick={(): void => {
-                  exitNavigation();
-                  scrollToBottom();
-                }}
-                scrollContainerRef={scrollContainerRef}
-              />
-              <StatusPill
-                taskStatus={taskStatus ?? null}
-                isAutoCompacting={isAutoCompacting}
-                isStreaming={isStreaming}
-                inProgressChatMessage={smoothInProgressChatMessage}
-                workingUserMessageId={workingUserMessageId}
-                pendingBackgroundTaskCount={pendingBackgroundTaskCount}
+              <VerticalOverlayScrollbar
+                scrollRef={scrollContainerRef}
+                thumbTestId={ElementIds.ALPHA_CHAT_SCROLLBAR_THUMB}
               />
             </div>
-            <VerticalOverlayScrollbar
-              scrollRef={scrollContainerRef}
-              thumbTestId={ElementIds.ALPHA_CHAT_SCROLLBAR_THUMB}
-            />
-          </div>
+          </ChatContextMenu>
           <AlphaPromptNavigator
             userMessages={userMessages}
             scrollContainerRef={scrollContainerRef}
