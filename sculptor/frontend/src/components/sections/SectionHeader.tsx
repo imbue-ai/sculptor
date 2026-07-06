@@ -12,12 +12,13 @@
 
 import { useDraggable } from "@dnd-kit/core";
 import { ContextMenu, Flex, IconButton, Tooltip } from "@radix-ui/themes";
-import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { Maximize2, Minimize2, Plus, X } from "lucide-react";
 import type { ReactElement } from "react";
-import { memo, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
+import { agentRenameTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { sidebarCollapsedAtom } from "~/components/layout/sidebarAtoms.ts";
 import { AgentStatusDot } from "~/components/statusDot";
@@ -73,6 +74,9 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   const recordRecentlyClosed = useSetAtom(recentlyClosedPanelIdsAtom);
   const store = useStore();
   const [isRenaming, setIsRenaming] = useState<boolean>(false);
+  // The command palette's agent rename sets this to the panel id it wants
+  // renamed; the matching tab reacts by entering inline rename below.
+  const [agentRenameTarget, setAgentRenameTarget] = useAtom(agentRenameTargetAtom);
   const labelRef = useRef<HTMLSpanElement>(null);
   const [isLabelTruncated, setIsLabelTruncated] = useState<boolean>(false);
   // The context-menu items shown while the menu is open, resolved fresh on each open
@@ -85,6 +89,18 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
     id: panelId,
     data: { kind: "panel", panelId, from: subSection, index },
   });
+
+  // When the command palette targets THIS tab for rename, flip into inline edit
+  // and clear the atom so a later re-render doesn't re-open the editor. Only
+  // multi-instance panels (agent/terminal) can rename; a target that names a
+  // single-instance panel is dropped so it can't get stuck pending.
+  useEffect(() => {
+    if (agentRenameTarget !== panelId) return;
+    if (definition !== undefined && isMultiInstanceKind(definition.kind)) {
+      setIsRenaming(true);
+    }
+    setAgentRenameTarget(null);
+  }, [agentRenameTarget, panelId, definition, setAgentRenameTarget]);
 
   if (definition === undefined) {
     return null;
