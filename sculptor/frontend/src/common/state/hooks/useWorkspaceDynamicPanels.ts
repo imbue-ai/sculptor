@@ -11,6 +11,7 @@ import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useLayoutEffect, useMemo, useRef } from "react";
 
 import { renameWorkspaceAgent } from "~/api";
+import { queryClient, taskQueryKey } from "~/common/queryClient.ts";
 import { taskAtomFamily, tasksArrayAtom, updateTasksAtom } from "~/common/state/atoms/tasks.ts";
 import { terminalConnectionStatusesAtom, terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
 import { markAgentUnreadAtom } from "~/common/state/atoms/unreadOverrides.ts";
@@ -111,6 +112,9 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
         const current = store.get(taskAtomFamily(task.id));
         if (current) {
           updateTasks({ [task.id]: { ...current, title: newName } });
+          // Dual-write to the TanStack Query cache so useTask observers pick
+          // up the optimistic update without waiting for the WS frame.
+          queryClient.setQueryData(taskQueryKey(task.id), { ...current, title: newName });
         }
         renameWorkspaceAgent({
           path: { workspace_id: workspaceId, agent_id: task.id },

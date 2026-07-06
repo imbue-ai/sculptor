@@ -42,6 +42,7 @@ import { atom } from "jotai";
 import { markWorkspaceAgentUnread, TaskStatus } from "../../../api";
 import type { AgentDotStatus } from "../../../components/statusDot/statusUtils.ts";
 import { getAgentDotStatus } from "../../../components/statusDot/statusUtils.ts";
+import { queryClient, taskQueryKey } from "../../queryClient.ts";
 import { taskAtomFamily } from "./tasks";
 
 // The task fields the override lifecycle depends on. Structurally satisfied by
@@ -134,6 +135,9 @@ export const markAgentUnreadAtom = atom(null, (get, set, target: { workspaceId: 
   }
   setUnreadOverride(target.taskId, task);
   set(taskAtomFamily(target.taskId), { ...task, lastReadAt: null });
+  // Dual-write to the TanStack Query cache so useTask/useMarkRead observers
+  // pick up the optimistic update without waiting for the WS frame.
+  queryClient.setQueryData(taskQueryKey(target.taskId), { ...task, lastReadAt: null });
   markWorkspaceAgentUnread({ path: { workspace_id: target.workspaceId, agent_id: target.taskId } }).catch((error) => {
     // Fire-and-forget: the server-authoritative value will arrive via WebSocket.
     console.warn("Failed to persist mark-unread; the server value will arrive via WebSocket.", error);

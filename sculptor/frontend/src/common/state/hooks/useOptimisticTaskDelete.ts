@@ -6,6 +6,7 @@ import type { CodingAgentTaskView } from "../../../api";
 import { deleteWorkspaceAgent } from "../../../api";
 import { ToastType } from "../../../components/Toast.tsx";
 import { useImbueLocation, useImbueNavigate, useImbueParams } from "../../NavigateUtils.ts";
+import { queryClient, taskIdsQueryKey, taskQueryKey } from "../../queryClient.ts";
 import { optimisticDeleteTaskAtom, rollbackDeleteTaskAtom } from "../atoms/tasks";
 import { deleteErrorToastAtom } from "../atoms/toasts";
 import { agentIdForWorkspaceAtomFamily, setAgentForWorkspaceAtom } from "../atoms/workspaces.ts";
@@ -66,11 +67,26 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
         agent_id: taskId,
       });
 
+      // Dual-write: remove from the TanStack Query cache so useTask observers
+      // see the deletion without waiting for the WS frame.
+      queryClient.setQueryData<CodingAgentTaskView | null>(taskQueryKey(taskId), null);
+      const currentIds = queryClient.getQueryData<ReadonlyArray<string>>(taskIdsQueryKey()) ?? [];
+      queryClient.setQueryData<ReadonlyArray<string>>(
+        taskIdsQueryKey(),
+        currentIds.filter((id) => id !== taskId),
+      );
+
       void deleteWorkspaceAgent({
         path: { workspace_id: workspaceId, agent_id: taskId },
         meta: { skipWsAck: true },
       }).catch(() => {
         setRollbackDelete({ taskId, snapshot });
+        // Rollback: restore the task in the TanStack Query cache.
+        queryClient.setQueryData(taskQueryKey(taskId), snapshot);
+        const restoredIds = queryClient.getQueryData<ReadonlyArray<string>>(taskIdsQueryKey()) ?? [];
+        if (!restoredIds.includes(taskId)) {
+          queryClient.setQueryData(taskIdsQueryKey(), [...restoredIds, taskId]);
+        }
         setDeleteErrorToast({
           title: `Failed to delete "${taskTitle}"`,
           description: "The agent has been restored. Try again or check your connection.",
