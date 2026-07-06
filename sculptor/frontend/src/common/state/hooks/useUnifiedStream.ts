@@ -8,6 +8,7 @@ import { pluginManager } from "~/plugins/pluginManager.tsx";
 import { getRendererIdentity } from "~/plugins/rendererIdentity.ts";
 
 import type { StreamingUpdate } from "../../../api";
+import { syncTasksToQueryCache } from "../../queryClient.ts";
 import { handleBtwUpdateAtom } from "../atoms/btwPopup";
 import { dependenciesStatusAtom } from "../atoms/dependenciesStatus";
 import { notificationsAtom } from "../atoms/notifications";
@@ -121,9 +122,14 @@ export const useUnifiedStream = (): void => {
 
   const onMessage = useCallback(
     (data: StreamingUpdate): void => {
-      // Handle task views (for task list/sidebar)
+      // Handle task views (for task list/sidebar).
+      // Dual-write: Jotai (existing consumers) + TanStack Query cache (new
+      // `useTask(id)` hook; see queryClient.ts `syncTasksToQueryCache`).
+      // The Jotai write stays in place during Phase 1 — nothing breaks if the
+      // cache is out of sync, and callers continue to read from Jotai.
       if (data.taskViewsByTaskId) {
         updateTasks(data.taskViewsByTaskId);
+        syncTasksToQueryCache(data.taskViewsByTaskId);
       }
 
       // Handle task details (for chat pages)

@@ -1,6 +1,8 @@
 import type { QueryKey } from "@tanstack/react-query";
 import { QueryClient } from "@tanstack/react-query";
 
+import type { CodingAgentTaskView } from "../api";
+
 /**
  * The shared TanStack Query client.
  *
@@ -67,6 +69,65 @@ export const workspaceQueryKeyPrefix = (workspaceId: string): QueryKey =>
 
 export const workspaceGitQueryKeyPrefix = (workspaceId: string): QueryKey =>
   [SCULPTOR_QUERY_KEY_PREFIX, "workspace", workspaceId, "git"] as const;
+
+/**
+ * Query key for a single agent task by its id. The WS bridge writes the latest
+ * server-authoritative value here whenever a `taskViewsByTaskId` frame arrives,
+ * so `useTask(id)` never triggers a network fetch — the cache is the single
+ * source of truth, driven by the real-time stream.
+ */
+export const taskQueryKey = (taskId: string): ReadonlyArray<string> =>
+  [SCULPTOR_QUERY_KEY_PREFIX, "task", taskId] as const;
+
+/**
+ * Query key for the ordered list of non-deleted task ids visible in the UI.
+ * Updated by the WS bridge whenever a frame adds or removes agents.
+ *
+ * Kept separate from individual `taskQueryKey`s: consumers that render the
+ * agent-tab list subscribe only to this key, while components that render a
+ * single agent's details subscribe only to `["task", id]`.
+ */
+export const taskIdsQueryKey = (): ReadonlyArray<string> => [SCULPTOR_QUERY_KEY_PREFIX, "taskIds"] as const;
+
+/**
+ * Write a batch of task-view updates into the query cache. Soft-deleted tasks
+ * (isDeleted: true) are set to `null` so observers see the removal, and are
+ * pruned from the task-ids list. Non-deleted tasks are merged into both caches,
+ * preserving the order established by the server.
+ *
+ * Called by the WS bridge (`useUnifiedStream`) on every `taskViewsByTaskId`
+ * frame. Safe to call repeatedly — unchanged tasks are filtered out to avoid
+ * spurious observer notifications.
+ */
+export const syncTasksToQueryCache = (taskViewsByTaskId: Record<string, CodingAgentTaskView>): void => {
+  Object.entries(taskViewsByTaskId).forEach(([id, task]) => {
+    if (task.isDeleted) {
+      queryClient.setQueryData<CodingAgentTaskView | null>(taskQueryKey(id), null);
+    } else {
+      queryClient.setQueryData<CodingAgentTaskView | null>(taskQueryKey(id), task);
+    }
+  });
+
+  const currentIds = queryClient.getQueryData<ReadonlyArray<string>>(taskIdsQueryKey());
+  const currentIdSet = new Set(currentIds);
+  let didIdsChange = currentIds === undefined;
+
+  Object.entries(taskViewsByTaskId).forEach(([id, task]) => {
+    if (task.isDeleted) {
+      if (currentIdSet.has(id)) {
+        currentIdSet.delete(id);
+        didIdsChange = true;
+      }
+    } else if (!currentIdSet.has(id)) {
+      currentIdSet.add(id);
+      didIdsChange = true;
+    }
+  });
+
+  if (didIdsChange) {
+    queryClient.setQueryData<ReadonlyArray<string>>(taskIdsQueryKey(), Array.from(currentIdSet));
+  }
+};
 
 /**
  * Bundle returned by every queryKey helper — workspace-scoped, project-scoped,
