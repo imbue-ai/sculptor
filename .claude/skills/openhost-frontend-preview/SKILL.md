@@ -47,19 +47,23 @@ does not apply — use normal `pnpm run dev` / `just frontend` there instead.
   returns to the preview once its server is back.
 - **Identity meta:** each preview's index.html carries
   `<meta name="sculptor-preview" content="<branch>@<sha>[*]">` (`*` = dirty
-  tree), injected per request by `vite.base.config.ts` under
-  `SCULPTOR_OPENHOST_PROXY`; a tree with no `.git` (e.g. `/app`) reports its
-  serving path instead. The switchboard and the switcher plugin show this label.
+  tree), injected per request by `previewIdentity` in
+  `sculptor/frontend/vite.base.config.ts` under `SCULPTOR_OPENHOST_PROXY`. A
+  tree with no `.git` reports the frontend dir it serves from instead — e.g.
+  `/app/sculptor/frontend` for a preview of the deploy image, which ships no
+  git history. The switchboard and the switcher plugin show this label.
 - **Preview-switcher pill:** the `openhost-preview-switcher` plugin
   (`sculptor/frontend/plugins/`, auto-installed at boot by `openhost-run.sh`)
   renders a bottom-left pill in the deployed app listing live previews in
   51000-51099, and an amber badge with a way back when ON a preview. Switching
   preserves the `#/` route.
-- **HMR keepalive:** the dev server pings every HMR client every 25s (also
-  `SCULPTOR_OPENHOST_PROXY`-gated). Without it the idle HMR websocket gets
-  killed by the edge and Vite hard-reloads the page about once a minute (and on
-  every return from the background). If "random reloads" ever reappear, check
-  the keepalive before suspecting app code.
+- **HMR keepalive:** the dev server sends a no-op custom HMR event to every
+  client every 25s (`previewHmrKeepalive` in
+  `sculptor/frontend/vite.base.config.ts`, also `SCULPTOR_OPENHOST_PROXY`-gated).
+  Without it the idle HMR websocket gets killed by the edge and Vite
+  hard-reloads the page about once a minute (and on every return from the
+  background). If "random reloads" ever reappear, check the keepalive before
+  suspecting app code.
 
 ## Run a preview
 
