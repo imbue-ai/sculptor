@@ -812,44 +812,38 @@ const createWindow = async (): Promise<void> => {
   logger.info("[main] Initial URL:", appUrl);
   await window.loadURL(appUrl);
 
+  // Only show the native context menu on editable fields (inputs, textareas).
+  // Non-editable areas are handled by the renderer's Radix ContextMenu (the
+  // chat's Copy/Paste/Select All menu). Showing a native menu for selected
+  // text in non-editable regions would override the renderer menu.
   window.webContents.on("context-menu", (_event, params) => {
     if (!window) return;
+    if (!params.isEditable) return;
+
     const menuItems: Array<MenuItemConstructorOptions> = [];
 
-    if (params.isEditable) {
-      // Add spelling suggestions when a word is misspelled
-      if (params.misspelledWord) {
-        for (const suggestion of params.dictionarySuggestions) {
-          menuItems.push({
-            label: suggestion,
-            click: () => window.webContents.replaceMisspelling(suggestion),
-          });
-        }
-
-        if (params.dictionarySuggestions.length > 0) {
-          menuItems.push({ type: "separator" });
-        }
+    // Add spelling suggestions when a word is misspelled
+    if (params.misspelledWord) {
+      for (const suggestion of params.dictionarySuggestions) {
         menuItems.push({
-          label: "Add to Dictionary",
-          click: () => window.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord),
+          label: suggestion,
+          click: () => window.webContents.replaceMisspelling(suggestion),
         });
-        menuItems.push({ type: "separator" });
       }
 
-      menuItems.push(
-        { role: "cut" },
-        { role: "copy" },
-        { role: "paste" },
-        { type: "separator" },
-        { role: "selectAll" },
-      );
-    } else if (params.selectionText) {
-      menuItems.push({ role: "copy" }, { type: "separator" }, { role: "selectAll" });
+      if (params.dictionarySuggestions.length > 0) {
+        menuItems.push({ type: "separator" });
+      }
+      menuItems.push({
+        label: "Add to Dictionary",
+        click: () => window.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord),
+      });
+      menuItems.push({ type: "separator" });
     }
 
-    if (menuItems.length > 0) {
-      Menu.buildFromTemplate(menuItems).popup({ window, x: params.x, y: params.y });
-    }
+    menuItems.push({ role: "cut" }, { role: "copy" }, { role: "paste" }, { type: "separator" }, { role: "selectAll" });
+
+    Menu.buildFromTemplate(menuItems).popup({ window, x: params.x, y: params.y });
   });
 
   // This is necessary to prevent the ttyd terminal from blocking window close events.

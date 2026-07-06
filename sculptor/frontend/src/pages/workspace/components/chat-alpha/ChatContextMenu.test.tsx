@@ -1,5 +1,5 @@
 import { Theme } from "@radix-ui/themes";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -93,9 +93,8 @@ describe("ChatContextMenu", () => {
     });
 
     const editor = document.createElement("div");
-    Object.defineProperty(editor, "isContentEditable", { value: true });
+    editor.id = "chat-input";
     document.body.appendChild(editor);
-    editor.focus();
 
     let receivedText = "";
     editor.addEventListener("paste", (e: ClipboardEvent) => {
@@ -111,14 +110,12 @@ describe("ChatContextMenu", () => {
 
     fireEvent.contextMenu(screen.getByTestId("content"));
     const pasteItem = await screen.findByTestId(ElementIds.ALPHA_CHAT_CONTEXT_MENU_PASTE);
-    // Selecting a Radix Menu.Item fires onSelect, then Radix calls e.preventDefault()
-    // on the underlying click — fire directly through the onSelect handler by
-    // dispatching contextmenu first and using fireEvent.click on the item.
     fireEvent.click(pasteItem);
-    // Allow the async readText() handler to resolve.
-    await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(receivedText).toBe("pasted text");
+    await waitFor(() => {
+      expect(receivedText).toBe("pasted text");
+    });
+
     document.body.removeChild(editor);
   });
 });

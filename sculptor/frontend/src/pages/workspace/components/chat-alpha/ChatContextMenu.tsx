@@ -2,6 +2,7 @@ import { ContextMenu } from "@radix-ui/themes";
 import type { ReactElement, ReactNode } from "react";
 
 import { ElementIds } from "~/api";
+import { CHAT_INPUT_ELEMENT_ID } from "~/common/Constants";
 
 type ChatContextMenuProps = {
   children: ReactNode;
@@ -10,21 +11,35 @@ type ChatContextMenuProps = {
 /** Right-click context menu for the chat content area. */
 export const ChatContextMenu = ({ children }: ChatContextMenuProps): ReactElement => {
   const handleCopy = (): void => {
-    void navigator.clipboard.writeText(window.getSelection()?.toString() ?? "");
+    const selectionText = window.getSelection()?.toString();
+    if (!selectionText) return;
+    void navigator.clipboard.writeText(selectionText);
   };
 
   const handlePaste = async (): Promise<void> => {
-    const text = await navigator.clipboard.readText();
+    let text: string;
+    try {
+      text = await navigator.clipboard.readText();
+    } catch (error) {
+      // Clipboard permission denied (or not available); silently ignore
+      // rather than surface an unhandled rejection for a user action.
+      console.error("Failed to read clipboard:", error);
+      return;
+    }
     if (!text) return;
-    const activeElement = document.activeElement;
-    if (activeElement && (activeElement as HTMLElement).isContentEditable) {
-      const pasteEvent = new ClipboardEvent("paste", {
+    // Always target the chat input — `findContentEditable` scanned the
+    // entire DOM and could dispatch to an unrelated editor.
+    const target = document.getElementById(CHAT_INPUT_ELEMENT_ID);
+    if (!(target instanceof HTMLElement) || !target) return;
+    const dataTransfer = new DataTransfer();
+    dataTransfer.setData("text/plain", text);
+    target.dispatchEvent(
+      new ClipboardEvent("paste", {
         bubbles: true,
         cancelable: true,
-        clipboardData: new DataTransfer(),
-      });
-      activeElement.dispatchEvent(pasteEvent);
-    }
+        clipboardData: dataTransfer,
+      }),
+    );
   };
 
   const handleSelectAll = (): void => {
