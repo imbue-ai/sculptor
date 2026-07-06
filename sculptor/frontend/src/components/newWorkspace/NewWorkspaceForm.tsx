@@ -12,7 +12,7 @@ import {
   WorkspaceInitializationStrategy,
 } from "~/api";
 import { isDismissibleOverlayOpen } from "~/common/overlayUtils.ts";
-import { lastUsedAgentTypeAtom, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
+import { lastUsedAgentTypeAtom, parseStoredAgentType, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { isPiAvailableAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { projectsArrayAtom, updateProjectsAtom } from "~/common/state/atoms/projects.ts";
 import { defaultEffortLevelAtom, defaultModelAtom, isDefaultFastModeAtom } from "~/common/state/atoms/userConfig.ts";
@@ -106,6 +106,10 @@ export const NewWorkspaceForm = ({
     // launch (the picker still lists pi as "Install Pi").
     return seed === "pi" && !isPiAvailable ? "claude" : resolveStoredAgentType(seed);
   });
+  // Fast mode and model selection are only available for the Claude harness;
+  // Pi and registered terminal agents manage their own model catalogs and
+  // don't support fast mode. Derived each render (cheap, not stored).
+  const isNonClaudeHarness = parseStoredAgentType(agentTypeValue).agentType !== "claude";
   const [userSelectedBranch, setUserSelectedBranch] = useState<string | undefined>(() => lastSettings?.sourceBranch);
   // `null` means "use the auto-filled preview"; any string means the user has
   // taken over. Both the value and the manual flag collapse into one piece of
@@ -463,6 +467,10 @@ export const NewWorkspaceForm = ({
               rendered so the row reserves its space; hidden via `visibility`
               until the user has typed a prompt so the modal doesn't jump. */}
           <div className={styles.agentSettings} data-visible={!isPromptEmpty} aria-hidden={isPromptEmpty}>
+            {/* Pi and registered terminal agents manage their own model
+                catalogs and don't support fast mode; derive both gates from
+                the selected agent type. Pi supports interactive backchannel
+                (plan mode stays enabled). */}
             <AgentSettingsControls
               model={agentModel}
               onModelChange={setAgentModel}
@@ -472,6 +480,8 @@ export const NewWorkspaceForm = ({
               onFastModeToggle={(): void => setIsAgentFastMode((v) => !v)}
               isPlanMode={isAgentPlanMode}
               onPlanModeToggle={(): void => setIsAgentPlanMode((v) => !v)}
+              canUseFastMode={!isNonClaudeHarness}
+              canSelectModel={!isNonClaudeHarness}
             />
           </div>
         </div>
