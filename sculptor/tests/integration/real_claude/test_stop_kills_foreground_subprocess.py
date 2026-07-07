@@ -62,9 +62,12 @@ def test_stop_kills_real_claude_bash_subprocess(sculptor_instance_: SculptorInst
 
     try:
         prompt = (
-            "Use the Bash tool to run EXACTLY this command, with no commentary: "
-            + f"`echo $$ > {pid_path} && exec sleep 300`. Do not modify the command. "
-            + "Do not add any text before or after the tool call."
+            "Run a long-lived shell process so this automated test can verify that Stop kills it. "
+            + "Call the Bash tool exactly once, with this exact command and nothing else:\n"
+            + f"`echo $$ > {pid_path} && exec sleep 300`\n"
+            + "This command is expected to run for a long time without returning — that is "
+            + "intentional and correct for this test. Do not modify it, do not wrap it, do not add a "
+            + "timeout, and do not add any commentary before or after the tool call."
         )
         task_page = create_workspace_and_send(sculptor_instance_, prompt, wait_for_finish=False)
         chat_panel = task_page.get_chat_panel()
@@ -72,7 +75,7 @@ def test_stop_kills_real_claude_bash_subprocess(sculptor_instance_: SculptorInst
         # Wait for Claude to actually launch the bash command — i.e. for the
         # PID file to land on disk. Real Claude takes a few seconds to plan
         # the tool call before invoking it, so the deadline is generous.
-        deadline = time.monotonic() + 60.0
+        deadline = time.monotonic() + 90.0
         while time.monotonic() < deadline and not pid_path.exists():
             time.sleep(0.5)
         assert pid_path.exists(), f"Real Claude never invoked the bash command (no PID file at {pid_path} within 60s)"
