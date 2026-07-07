@@ -135,8 +135,8 @@ def test_agent_tab_diagnostics_copy_contents(sculptor_instance_: SculptorInstanc
     """The copy items copy real values once the agent has a session.
 
     After a completed run: "Copy agent name" (top level) copies the tab's display
-    name, and inside Diagnostics "Copy claude session id" copies a non-empty id,
-    "Copy claude transcript file path" copies that session's ``.jsonl`` path, and
+    name, and inside Diagnostics "Copy Claude session id" copies a non-empty id,
+    "Copy Claude transcript file path" copies that session's ``.jsonl`` path, and
     "Copy Sculptor transcript file path" copies the task's ``transcript.jsonl``
     artifact path.
     """
@@ -160,7 +160,7 @@ def test_agent_tab_diagnostics_copy_contents(sculptor_instance_: SculptorInstanc
     session_id = _copy_diagnostics_item(
         page, panel_tabs, tabs.first, ElementIDs.TAB_CONTEXT_MENU_COPY_CLAUDE_SESSION_ID
     )
-    assert session_id, "Expected a non-empty claude session id"
+    assert session_id, "Expected a non-empty Claude session id"
 
     transcript_path = _copy_diagnostics_item(
         page, panel_tabs, tabs.first, ElementIDs.TAB_CONTEXT_MENU_COPY_CLAUDE_TRANSCRIPT_PATH
@@ -183,7 +183,7 @@ def test_agent_tab_diagnostics_disabled_without_session(sculptor_instance_: Scul
     """The session/transcript copy items are disabled for an agent that has not run.
 
     A freshly-added second agent has no session yet, so — inside the Diagnostics
-    submenu — "Copy claude session id" is disabled (Radix marks disabled items with
+    submenu — "Copy Claude session id" is disabled (Radix marks disabled items with
     ``data-disabled``).
     """
     page = sculptor_instance_.page

@@ -100,9 +100,9 @@ describe("dynamic panel derivation", () => {
     }
     const diagnosticLabels = diagnostics.items.map((item) => item.label);
     expect(diagnosticLabels).toContain("Copy agent id");
-    expect(diagnosticLabels).toContain("Copy claude session id");
+    expect(diagnosticLabels).toContain("Copy Claude session id");
     // Session id action is disabled until a session exists.
-    const copySession = diagnostics.items.find((item) => item.label === "Copy claude session id");
+    const copySession = diagnostics.items.find((item) => item.label === "Copy Claude session id");
     expect(copySession?.disabled).toBe(true);
   });
 

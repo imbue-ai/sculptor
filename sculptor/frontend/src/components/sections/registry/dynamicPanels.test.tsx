@@ -110,8 +110,8 @@ describe("agent tab context menu", () => {
     if (diagnostics?.kind === "submenu") {
       expect(diagnostics.items.map((item) => item.label)).toEqual([
         "Copy agent id",
-        "Copy claude session id",
-        "Copy claude transcript file path",
+        "Copy Claude session id",
+        "Copy Claude transcript file path",
         "Copy Sculptor transcript file path",
       ]);
     }
@@ -127,8 +127,8 @@ describe("agent tab context menu", () => {
       diagnostics.items.find((item) => item.label === label)?.disabled;
     // Copy agent id needs nothing; the session/transcript items need a session.
     expect(byLabel("Copy agent id")).toBeFalsy();
-    expect(byLabel("Copy claude session id")).toBe(true);
-    expect(byLabel("Copy claude transcript file path")).toBe(true);
+    expect(byLabel("Copy Claude session id")).toBe(true);
+    expect(byLabel("Copy Claude transcript file path")).toBe(true);
   });
 
   it("builds the agent panel id the tab is keyed by", () => {

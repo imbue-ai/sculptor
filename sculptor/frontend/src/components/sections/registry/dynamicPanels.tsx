@@ -166,14 +166,14 @@ function buildAgentContextMenuActions(agent: DynamicAgentInput): ReadonlyArray<P
         },
         {
           kind: "action",
-          label: "Copy claude session id",
+          label: "Copy Claude session id",
           testId: ElementIds.TAB_CONTEXT_MENU_COPY_CLAUDE_SESSION_ID,
           disabled: !sessionId,
           action: () => void (sessionId && copyToClipboard(sessionId)),
         },
         {
           kind: "action",
-          label: "Copy claude transcript file path",
+          label: "Copy Claude transcript file path",
           testId: ElementIds.TAB_CONTEXT_MENU_COPY_CLAUDE_TRANSCRIPT_PATH,
           disabled: !claudeTranscriptPath,
           action: () => void (claudeTranscriptPath && copyToClipboard(claudeTranscriptPath)),
