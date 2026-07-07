@@ -148,14 +148,11 @@
   }
 }
 
-// A row or repo group mid-drag (dnd-kit moves the element itself via transform —
-// there is no floating overlay copy): lift it above its siblings so it doesn't
-// slide beneath them, and give it a solid backdrop so the rows it passes over
-// don't show through.
+// The source row or repo group while its floating copy (SidebarDragPill in the
+// DragOverlay) is being dragged: dimmed so the eye follows the copy — the same
+// treatment as a panel tab mid-drag (SectionHeader's tabDragging).
 .rowDragging {
-  background: var(--gray-a4);
-  position: relative;
-  z-index: 1;
+  opacity: 40%;
 }
 
 .workspaceDot {

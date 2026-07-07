@@ -12,15 +12,15 @@
 // a workspace belongs to its repo, so scoping the row context per group makes
 // cross-repo drops structurally impossible rather than merely rejected.
 
-import type { DragEndEvent } from "@dnd-kit/core";
-import { closestCenter, DndContext } from "@dnd-kit/core";
+import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
+import { closestCenter, DndContext, DragOverlay } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ContextMenu, DropdownMenu, Flex, IconButton, Text, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { ChevronDown, ChevronRight, MoreHorizontal, Plus, Settings, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
-import { memo, useCallback } from "react";
+import { memo, useCallback, useState } from "react";
 
 import type { Workspace } from "~/api";
 import { ElementIds, updateWorkspace } from "~/api";
@@ -42,7 +42,8 @@ import { WorkspaceStatusDots } from "~/components/statusDot";
 import { ToastType } from "~/components/Toast.tsx";
 
 import { collapsedRepoGroupsAtom, isRepoCollapsedAtomFamily, isSidebarDragActiveAtom } from "./navAtoms.ts";
-import { sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
+import { useSidebarDndSensors } from "./sidebarDnd.ts";
+import { WorkspaceRowDragPill } from "./SidebarDragPill.tsx";
 import styles from "./SidebarRepoGroup.module.scss";
 import type { RepoGroup } from "./sidebarWorkspaceOrder.ts";
 import { reorderSidebarWorkspaceAtom } from "./sidebarWorkspaceOrder.ts";
@@ -121,10 +122,13 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   return (
     <ContextMenu.Root>
       <ContextMenu.Trigger>
+        {/* Translate-only (never CSS.Transform): rows and groups vary in height, and
+            the scale component dnd-kit folds into transforms would stretch the
+            element toward the hovered slot's size. */}
         <div
           ref={setNodeRef}
           className={rowClassName}
-          style={{ transform: CSS.Transform.toString(transform), transition }}
+          style={{ transform: CSS.Translate.toString(transform), transition }}
         >
           {isRenaming ? (
             <span className={styles.workspaceRowButton}>
@@ -286,10 +290,22 @@ export const SidebarRepoGroup = ({
     groupListeners?.onKeyDown?.(event);
   };
 
-  const handleRowDragStart = useCallback((): void => setSidebarDragActive(true), [setSidebarDragActive]);
-  const handleRowDragCancel = useCallback((): void => setSidebarDragActive(false), [setSidebarDragActive]);
+  // The dragged row's id, so the DragOverlay can render its floating pill copy.
+  const [draggedWorkspaceId, setDraggedWorkspaceId] = useState<string | null>(null);
+  const handleRowDragStart = useCallback(
+    (event: DragStartEvent): void => {
+      setDraggedWorkspaceId(String(event.active.id));
+      setSidebarDragActive(true);
+    },
+    [setSidebarDragActive],
+  );
+  const handleRowDragCancel = useCallback((): void => {
+    setDraggedWorkspaceId(null);
+    setSidebarDragActive(false);
+  }, [setSidebarDragActive]);
   const handleRowDragEnd = useCallback(
     (event: DragEndEvent): void => {
+      setDraggedWorkspaceId(null);
       setSidebarDragActive(false);
       if (event.over === null || event.over.id === event.active.id) {
         return;
@@ -302,6 +318,7 @@ export const SidebarRepoGroup = ({
     },
     [setSidebarDragActive, reorderWorkspace, group.projectId],
   );
+  const draggedWorkspace = group.workspaces.find((ws) => ws.objectId === draggedWorkspaceId);
 
   // Reference-stable (the rows are memoized on their props): the rename
   // callbacks depend only on reference-stable atom setters and the store.
@@ -346,7 +363,7 @@ export const SidebarRepoGroup = ({
     <div
       ref={setGroupNodeRef}
       className={`${styles.repoGroup} ${isGroupDragging ? styles.rowDragging : ""}`}
-      style={{ transform: CSS.Transform.toString(groupTransform), transition: groupTransition }}
+      style={{ transform: CSS.Translate.toString(groupTransform), transition: groupTransition }}
     >
       <div className={styles.repoHeader}>
         <button
@@ -408,7 +425,6 @@ export const SidebarRepoGroup = ({
         <DndContext
           sensors={rowDndSensors}
           collisionDetection={closestCenter}
-          modifiers={sidebarDndModifiers}
           onDragStart={handleRowDragStart}
           onDragEnd={handleRowDragEnd}
           onDragCancel={handleRowDragCancel}
@@ -431,6 +447,11 @@ export const SidebarRepoGroup = ({
               />
             ))}
           </SortableContext>
+          {/* The floating row copy that follows the cursor; the source row stays in
+              the list, dimmed (mirrors the panel-tab drag overlay). */}
+          <DragOverlay dropAnimation={null}>
+            {draggedWorkspace !== undefined ? <WorkspaceRowDragPill workspace={draggedWorkspace} /> : null}
+          </DragOverlay>
         </DndContext>
       )}
     </div>
