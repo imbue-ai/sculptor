@@ -25,8 +25,8 @@ just start
 ```
 
 `just start` is the fast-QA path: it seeds an onboarded dev config so the app
-skips the welcome flow, then creates a ready workspace on the current repo so you
-land straight in a usable workspace. It's idempotent — safe to re-run.
+skips the welcome flow and lands straight on the new-workspace form for the
+current repo, ready to create a workspace. It's idempotent — safe to re-run.
 
 To exercise the full first-run experience instead (onboarding + repo selection),
 wipe the dev config folder and launch with no initial project:

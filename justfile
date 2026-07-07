@@ -598,7 +598,11 @@ frontend:
     {{ nvm_use }}
     just _patch-electron-app-name "Sculptor (from source)"
     cd "{{justfile_directory()}}/sculptor/frontend"
+    # Start the first-run prompt box empty in the from-source dev app so QA can
+    # type immediately (see homePromptPrefill.ts). The test harness launches
+    # electron:start directly, not via this recipe, so tests keep the prefill.
     env SCULPTOR_ICON_LABEL="src" \
+      SCULPTOR_EMPTY_FIRST_RUN_PROMPT="1" \
       pnpm run electron:start -- --unhandled-rejections=strict --trace-warnings
 
 # Start Electron with the backend running in a Docker container (dev mode).
@@ -689,13 +693,12 @@ backend repo_path=".":
     fi
 
 # Seed a valid (onboarded) dev config up front so the app boots past the welcome
-# flow, then — once the backend is up — a bootstrap window creates a workspace with
-# a waiting agent via the source-built sculpt CLI.
-# Fast QA: skip onboarding and land in a ready workspace on the current repo.
+# flow and lands straight on the new-workspace form for the current repo.
+# Fast QA: skip onboarding and land on the new-workspace form.
 [group("dev")]
 start:
     just _seed-dev-config
-    just tmux-dev "." true
+    just tmux-dev "."
 
 # Wipe the dev config folder and launch with no initial project.
 # Full first-run: exercise the entire onboarding flow, including repo selection.
@@ -713,7 +716,7 @@ _reset-dev-config:
     uv run --project sculptor python sculptor/sculptor/scripts/dev_config.py reset
 
 [group("dev")]
-tmux-dev repo_path="." seed_workspace="false":
+tmux-dev repo_path=".":
     #!/bin/bash
     just stop || true
     echo "Starting tmux development session..."
@@ -744,69 +747,11 @@ tmux-dev repo_path="." seed_workspace="false":
     WORKSPACES_FOLDER_ARG="${SCULPTOR_WORKSPACES_FOLDER:+SCULPTOR_WORKSPACES_FOLDER=\"$SCULPTOR_WORKSPACES_FOLDER\"}"
     tmux send-keys -t {{session_name}}:frontend "cd '{{justfile_directory()}}' && env $SCULPT_UNSETS PATH=\"$DEV_PATH_PREFIX:\$PATH\" SCULPTOR_API_PORT={{SCULPTOR_API_PORT}} SCULPTOR_FRONTEND_PORT={{SCULPTOR_FRONTEND_PORT}} $WORKSPACES_FOLDER_ARG just frontend" Enter
     tmux send-keys -t {{session_name}}:backend "cd '{{justfile_directory()}}' && env $SCULPT_UNSETS PATH=\"$DEV_PATH_PREFIX:\$PATH\" SCULPTOR_API_PORT={{SCULPTOR_API_PORT}} SCULPTOR_FRONTEND_PORT={{SCULPTOR_FRONTEND_PORT}} SCULPTOR_CLAUDE_BINARY_DEFAULT_OVERRIDE=claude$CLAUDE_ENV_VARS $WORKSPACES_FOLDER_ARG just backend {{repo_path}}" Enter
-    # Fast-QA path: once the backend is up, create a ready workspace in its own
-    # window so its progress is visible without blocking the dev servers.
-    if [ "{{seed_workspace}}" = "true" ]; then
-        tmux new-window -t {{session_name}} -n bootstrap `shell echo $$SHELL`
-        tmux send-keys -t {{session_name}}:bootstrap "cd '{{justfile_directory()}}' && just _seed-fast-qa-workspace {{SCULPTOR_API_PORT}}" Enter
-    fi
     echo "Development servers started in tmux session '{{session_name}}'"
     echo "Backend serving repository: {{repo_path}}"
     echo "Use 'tmux attach -t {{session_name}}' to attach to the session"
     echo "Use 'just tmux-stop' to stop the session"
-    # Land on the backend window rather than the transient bootstrap one.
-    tmux select-window -t {{session_name}}:backend
     tmux attach -t {{session_name}} || echo "Failed to attach to tmux session. You can attach manually using 'tmux attach -t {{session_name}}'"
-
-# Wait for the dev backend to accept requests, then create one ready workspace (a
-# worktree with a waiting agent) via the source-built sculpt CLI, so `just start`
-# lands directly in a usable workspace. Idempotent: skips seeding when the repo
-# already has a live workspace, so reruns don't pile up throwaways.
-[group("dev")]
-_seed-fast-qa-workspace api_port:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    # Resolve the source-built sculpt CLI and point it at the dev backend.
-    export PATH="{{justfile_directory()}}/.venv/bin:$PATH"
-    export SCULPT_API_PORT="{{api_port}}"
-    # Drop any SCULPT_* ids leaked from an outer Sculptor session; every sculpt
-    # call below passes --repo/--workspace explicitly, but this keeps the shell clean.
-    unset SCULPT_WORKSPACE_ID SCULPT_PROJECT_ID SCULPT_AGENT_ID
-    repo="{{justfile_directory()}}"
-
-    echo "Waiting for the dev backend on port {{api_port}} to accept sculpt requests..."
-    # `sculpt workspace list --repo` connects, fetches a session token, and
-    # initializes/resolves the project in one call, so a clean exit means the
-    # backend is up AND the repo is registered — a stronger readiness probe than a
-    # bare health check.
-    ready=""
-    for _ in $(seq 1 180); do
-        if sculpt workspace list --repo "$repo" --json >/dev/null 2>&1; then
-            ready=1
-            break
-        fi
-        sleep 1
-    done
-    if [ -z "$ready" ]; then
-        echo "Backend did not become ready in time; skipping workspace seed." >&2
-        exit 1
-    fi
-
-    live_count=$(sculpt workspace list --repo "$repo" --json 2>/dev/null \
-        | python -c 'import sys, json; print(sum(1 for w in json.load(sys.stdin) if not w.get("is_deleted")))')
-    if [ "$live_count" -gt 0 ]; then
-        echo "Repo already has $live_count workspace(s); skipping seed."
-        exit 0
-    fi
-
-    # Worktree workspaces require a source branch; base it on the repo's current
-    # branch so the QA workspace forks from whatever you're working on.
-    source_branch=$(git -C "$repo" rev-parse --abbrev-ref HEAD)
-    echo "Creating a ready workspace off '$source_branch' with a waiting agent..."
-    workspace_id=$(sculpt workspace create --repo "$repo" --name "QA" --branch "$source_branch" --json \
-        | python -c 'import sys, json; print(json.load(sys.stdin)["id"])')
-    sculpt agent create --workspace "$workspace_id" >/dev/null
-    echo "Ready workspace created: $workspace_id"
 
 tmux-stop:
 	tmux kill-session -t {{session_name}} 2>/dev/null && echo "Session '{{session_name}}' terminated" || echo "Session '{{session_name}}' did not exist"
