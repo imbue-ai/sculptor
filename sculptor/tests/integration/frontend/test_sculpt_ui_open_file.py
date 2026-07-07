@@ -227,10 +227,10 @@ def test_open_file_for_inactive_workspace_leaves_viewed_workspace_alone(
     Open-file events arrive over the unified stream for EVERY workspace, but the
     reveal (open/expand the host panel, jump to its section) may only run in the
     workspace the event targets. Here the event targets workspace A while
-    workspace B is being viewed: B's layout must stay untouched — its left
-    section stays collapsed and no viewer mounts, including after a round-trip
-    away and back (so no layout change was persisted for B) — while A surfaces
-    the file in its Files viewer on the next visit.
+    workspace B is being viewed: B's layout must stay untouched — no file viewer
+    mounts in it, including after a round-trip away and back (so no layout change
+    was persisted for B) — while A surfaces the file in its Files viewer on the
+    next visit.
     """
     page = sculptor_instance_.page
 
@@ -240,9 +240,11 @@ def test_open_file_for_inactive_workspace_leaves_viewed_workspace_alone(
     target_workspace_id = _extract_workspace_id_from_url(page.url)
     open_panel(page, "files", sub_section="left")
 
-    # Workspace B (the viewed one): keeps its seeded default — left collapsed.
+    # Workspace B (the viewed one): keeps its seeded default — left expanded with its
+    # explorer, but no file viewer mounted.
     start_task_and_wait_for_ready(page, prompt=_NO_OP_PROMPT, workspace_name="Open File Viewer WS")
-    expect(PlaywrightWorkspaceSection(page, "left").get_header()).to_have_count(0)
+    expect(PlaywrightWorkspaceSection(page, "left").get_header()).to_be_visible()
+    expect(get_diff_panel_from_page(page)).to_have_count(0)
 
     with _temp_readable_file(content="hello from the target workspace\n") as file_path:
         exit_code, _stdout, stderr = _run_sculpt_ui_open_file(
@@ -257,9 +259,9 @@ def test_open_file_for_inactive_workspace_leaves_viewed_workspace_alone(
         navigate_to_workspace(page, "Open File Target WS")
         get_diff_panel_from_page(page).expect_shows_file(Path(file_path).name)
 
-        # Back to B: nothing was opened or persisted for it — the left section
-        # is still collapsed and no viewer is mounted.
+        # Back to B: nothing was opened or persisted for it — the left section keeps
+        # its default expanded explorer and no file viewer is mounted.
         navigate_to_workspace(page, "Open File Viewer WS")
         expect(PlaywrightTaskPage(page=page).get_chat_panel()).to_be_visible(timeout=60_000)
-        expect(PlaywrightWorkspaceSection(page, "left").get_header()).to_have_count(0)
+        expect(PlaywrightWorkspaceSection(page, "left").get_header()).to_be_visible()
         expect(get_diff_panel_from_page(page)).to_have_count(0)

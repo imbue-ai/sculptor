@@ -14,9 +14,9 @@ panel's OWN embedded viewer rather than a page-wide active diff. The discard
 controls only render in the Uncommitted scope, so tests select the Uncommitted
 scope through the picker before discarding.
 
-The Changes panel is seeded into the (collapsed-by-default) left section, so
-opening it reveals it there while the agent chat stays mounted in the center
-section. Tests that observe a chat message after a panel action (the commit
+The Changes panel is seeded into the left section, so opening it reveals it there
+while the agent chat stays mounted in the center section. Tests that observe a
+chat message after a panel action (the commit
 button) read the still-mounted center chat.
 
 The scope picker also drives the scope-dependent diff modes (HEAD-vs-working in
