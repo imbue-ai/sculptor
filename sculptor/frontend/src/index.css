@@ -10,11 +10,14 @@
      gutter, the top-bar minimum height) divide their base px values by this. */
   --app-zoom: 1;
 
-  /* Effective viewport height for the app. Equal to 100vh except when the
-     TanStack devtools panel is docked to the bottom, in which case it
-     subtracts the dock height so layouts using this var shrink to make
-     room. Layout containers that previously used 100vh should use this. */
+  /* Effective viewport height for the app. Uses the DYNAMIC viewport height
+     (dvh) so mobile browser chrome (the address bar) doesn't obscure the bottom
+     of the app — e.g. the chat input — and the layout tracks chrome show/hide;
+     dvh equals vh on desktop/Electron. Subtracts the TanStack devtools dock
+     height when docked at the bottom. The 100vh line is a fallback for browsers
+     without dvh. Layout containers that previously used 100vh should use this. */
   --app-height: calc(100vh - var(--tsqd-bottom-dock-height, 0px));
+  --app-height: calc(100dvh - var(--tsqd-bottom-dock-height, 0px));
 }
 
 /* The app's page background must live on <html> too: during a window resize
@@ -30,6 +33,7 @@ html {
 body {
   margin: 0;
   height: 100vh;
+  height: 100dvh;
   display: flex;
   place-items: center;
   font-family: var(--default-font-family, "Inter", sans-serif);
@@ -39,6 +43,34 @@ body {
 
 button {
   cursor: pointer;
+}
+
+/* iOS Safari auto-zooms the page when a focused form control's font-size is
+   below 16px, and in standalone (home-screen / PWA) mode the user cannot pinch
+   back out — leaving the layout stuck zoomed with controls (e.g. the chat
+   send button) clipped off-screen. Force >= 16px for focusable text inputs on
+   the mobile surface so focusing them never triggers the zoom.
+
+   Gate: coarse pointer (real phones, incl. landscape) OR a viewport <= 767px
+   (matches the app's own mobile breakpoint NARROW_QUERY in useLayoutMode.ts,
+   and — unlike `pointer: coarse` alone — also matches the iOS Simulator, which
+   is driven by a mouse and may report `pointer: fine`). A normal-width desktop
+   window is unaffected; a narrow desktop window is already in the mobile layout.
+
+   16px is the platform threshold (an absolute CSS px), so we can't use
+   --font-size-3: it scales with --scaling and can fall below 16px. This catches
+   Radix inputs (.rt-TextFieldInput / .rt-TextAreaInput, e.g. settings/dialogs)
+   and any class-less native inputs; inputs that set a smaller font-size via
+   their own class are bumped in their component module, and the TipTap chat
+   editor (contenteditable) is handled in Editor.module.scss. */
+@media (pointer: coarse), (width <= 767px) {
+  input,
+  textarea,
+  select,
+  .rt-TextFieldInput,
+  .rt-TextAreaInput {
+    font-size: 16px;
+  }
 }
 
 /* While a panel resize drag is active, route every pointer event back to the

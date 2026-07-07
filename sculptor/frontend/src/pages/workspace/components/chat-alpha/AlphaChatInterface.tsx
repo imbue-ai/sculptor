@@ -15,6 +15,7 @@ import {
   sendWorkspaceAgentMessages,
   TaskStatus,
 } from "~/api";
+import { useIsMobile } from "~/common/hooks/useLayoutMode.ts";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
 import { chatSearchVisibleAtom } from "~/common/state/atoms/chatSearch.ts";
 import { AgentLightboxProvider } from "~/components/AgentLightboxContext.tsx";
@@ -100,6 +101,7 @@ export const AlphaChatInterface = ({
   // `pendingUserQuestion` is null (see below), so the value it sees is unchanged.
   const isAgentBusy =
     (taskStatus === TaskStatus.RUNNING && workingUserMessageId !== null) || pendingUserQuestion !== null;
+  const isMobile = useIsMobile();
   const effectiveQueuedMessages = useMemo(
     () => (isAgentBusy ? omitMessagesAlreadyInChat(queuedChatMessages, chatMessages) : []),
     [chatMessages, isAgentBusy, queuedChatMessages],
@@ -627,12 +629,17 @@ export const AlphaChatInterface = ({
               />
             </div>
           </ChatContextMenu>
-          <AlphaPromptNavigator
-            userMessages={userMessages}
-            scrollContainerRef={scrollContainerRef}
-            activePromptIndex={activePromptIndex.index}
-            onNavigate={handlePromptNavigate}
-          />
+          {/* The prompt-navigator rail is a desktop-only companion to the input
+              (↑↓ keyboard nav); mobile has no hardware arrows, so it's hidden
+              there. The queued-messages strip shows on both. */}
+          {!isMobile && (
+            <AlphaPromptNavigator
+              userMessages={userMessages}
+              scrollContainerRef={scrollContainerRef}
+              activePromptIndex={activePromptIndex.index}
+              onNavigate={handlePromptNavigate}
+            />
+          )}
           <QueuedMessages messages={effectiveQueuedMessages} />
           {taskStatus !== TaskStatus.ERROR &&
             (pendingUserQuestion ? (
@@ -653,7 +660,7 @@ export const AlphaChatInterface = ({
                 editorRef={editorRef}
                 taskId={taskID}
                 workspaceId={workspaceID}
-                showPromptNavHint
+                showPromptNavHint={!isMobile}
               />
             ))}
           {taskStatus === TaskStatus.ERROR && <ErrorInput workspaceId={workspaceID} taskId={taskID} />}

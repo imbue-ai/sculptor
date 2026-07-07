@@ -108,7 +108,11 @@
 "." = 0
 
 [no-raw-html-button]
-"." = 24
+# +13 for the mobile Workspace shell's custom chrome: the agent-switcher pill and
+# the full-bleed left-aligned drawer / agent-sheet / changes-pill rows, whose
+# pill/row geometry fights Radix Button/IconButton's enforced sizing. The
+# icon-only mobile buttons (header, overlays, chat input) DO use Radix IconButton.
+"." = 37
 
 [no-relative-imports]
 "." = 0

@@ -53,6 +53,25 @@ export const FOOTER_REVEAL_WINDOW_MS = 1200;
  *  the viewport top). */
 export const maxScrollOffset = (el: HTMLElement): number => Math.max(0, el.scrollHeight - el.clientHeight);
 
+/** "Near the bottom" distance within which auto-follow (re-)engages. */
+const BOTTOM_THRESHOLD = 200;
+/** On short (mobile) viewports 200px is ~1/4 of the screen, so pin-to-bottom
+ *  re-engages "too early" while the user is still reading — require getting
+ *  closer to the actual bottom there. */
+const MOBILE_BOTTOM_THRESHOLD = 80;
+const SHORT_VIEWPORT_PX = 700;
+
+/**
+ * The at-bottom threshold for this scroll container. Keyed off the container's
+ * own height (layout-driven, not a separate mobile flag), so a short viewport
+ * gets the tighter threshold and desktop is unchanged. Every at-bottom sample
+ * must use this ONE helper: a single call site left on a fixed threshold will
+ * fight the others (one sampler says "at bottom", another says "not") and
+ * re-engage following while the user is reading.
+ */
+export const bottomThresholdFor = (el: HTMLElement): number =>
+  el.clientHeight < SHORT_VIEWPORT_PX ? MOBILE_BOTTOM_THRESHOLD : BOTTOM_THRESHOLD;
+
 /**
  * Pixels from the bottom of the viewport to the bottom of the real content.
  *
