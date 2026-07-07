@@ -1,6 +1,9 @@
 import base64
+import hashlib
 import json
+import os
 import re
+import stat
 import threading
 import uuid
 from collections.abc import Callable
@@ -23,6 +26,7 @@ from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.event_utils import ReadOnlyEvent
 from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
 from sculptor.foundation.progress_tracking.progress_tracking import start_finish_context
+from sculptor.foundation.subprocess_utils import ProcessError
 from sculptor.foundation.time_utils import get_current_time
 from sculptor.interfaces.agents.agent import EnvironmentTypes
 
@@ -89,15 +93,6 @@ _GIT_COMMAND_TIMEOUT = 30.0
 # the maximum a caller is allowed to request.
 _DEFAULT_DIFF_CONTEXT_LINES = 3
 _MAX_DIFF_CONTEXT_LINES = 50
-
-# Shell snippet that produces a unified diff for every untracked file.
-# Used by both the uncommitted diff and the target-branch diff so that new
-# (un-added) files appear in both views.
-_UNTRACKED_FILES_DIFF_CMD = (
-    "git ls-files --others --exclude-standard -z"
-    + " | xargs -0 -I {} find {} -maxdepth 0 -type f -print0"
-    + " | xargs -0 -I {} git --no-pager diff --no-index /dev/null {}"
-)
 
 
 class DefaultWorkspaceService(WorkspaceService):
@@ -882,44 +877,98 @@ class DefaultWorkspaceService(WorkspaceService):
             raise WorkspaceNotFoundError(workspace.object_id)
         return working_dir
 
-    def _run_diff_command(
-        self,
-        command: list[str],
-        cwd: Path,
-        diff_kind: str,
-    ) -> str:
-        """Run a git diff command and return its output.
+    def _run_git_diff(self, working_dir: Path, diff_args: list[str], diff_kind: str) -> str:
+        """Run ``git --no-pager diff <diff_args>`` in *working_dir*, returning stdout.
 
-        Args:
-            command: The git command to run.
-            cwd: Working directory for the command.
-            diff_kind: Human-readable label for the diff type (e.g. "committed", "uncommitted").
-
-        Returns:
-            The diff output, or empty string on failure.
+        Returns "" on a setup failure (e.g. the repo moved). ``git diff`` exits 0
+        normally and 1 under ``--exit-code``/``--no-index``; a higher code is a real
+        error, logged but still returning whatever was captured.
         """
         try:
             returncode, stdout, stderr = run_git_command_local(
                 self.concurrency_group,
-                command,
-                cwd=cwd,
+                ["git", "--no-pager", "diff", *diff_args],
+                cwd=working_dir,
                 check_output=False,
                 timeout=_GIT_COMMAND_TIMEOUT,
                 is_retry_safe=True,
             )
-            # returncode 0 = empty diff, 1 = non-empty diff, >1 = error
-            # 123 = xargs found items (which is fine for our use case)
-            if returncode > 1 and returncode != 123:
-                logger.warning(
-                    "Unexpected returncode for {} diff: returncode={}, stderr={}",
-                    diff_kind,
-                    returncode,
-                    stderr[:500],
-                )
-            return stdout.strip()
         except GitCommandFailure as e:
             logger.warning("Failed to generate {} diff: {}", diff_kind, e)
             return ""
+        if returncode > 1:
+            logger.warning(
+                "Unexpected returncode for {} diff: returncode={}, stderr={}",
+                diff_kind,
+                returncode,
+                stderr[:500],
+            )
+        return stdout
+
+    def _untracked_files_diff(self, working_dir: Path) -> str:
+        """Unified diff for every untracked regular file, each rendered as fully added.
+
+        Reproduces the former shell pipeline::
+
+            git ls-files --others --exclude-standard -z
+              | xargs -0 -I {} find {} -maxdepth 0 -type f -print0
+              | xargs -0 -I {} git --no-pager diff --no-index /dev/null {}
+
+        with bare-``git`` invocations and no shell, so every spawn goes through
+        ``os.posix_spawn`` (SCU-1627). Output is the per-file diffs concatenated in
+        ``git ls-files`` order — byte-for-byte what the pipeline produced.
+        """
+        try:
+            returncode, stdout, _stderr = run_git_command_local(
+                self.concurrency_group,
+                ["git", "ls-files", "--others", "--exclude-standard", "-z"],
+                cwd=working_dir,
+                check_output=False,
+                timeout=_GIT_COMMAND_TIMEOUT,
+                is_retry_safe=True,
+            )
+        except GitCommandFailure as e:
+            logger.debug("Failed to list untracked files for diff: {}", e)
+            return ""
+        if returncode != 0 or not stdout:
+            return ""
+        parts: list[str] = []
+        for rel_path in stdout.split("\x00"):
+            if not rel_path:
+                continue
+            # `find <path> -maxdepth 0 -type f` keeps only regular files, excluding
+            # directories and symlinks; match it with a non-following lstat.
+            try:
+                entry_stat = os.lstat(working_dir / rel_path)
+            except OSError:
+                continue
+            if not stat.S_ISREG(entry_stat.st_mode):
+                continue
+            # `git diff --no-index /dev/null <file>` renders the whole file as added.
+            # It exits 1 because the files differ, which is expected here, not an error.
+            try:
+                _returncode, file_diff, _err = run_git_command_local(
+                    self.concurrency_group,
+                    ["git", "--no-pager", "diff", "--no-index", "/dev/null", rel_path],
+                    cwd=working_dir,
+                    check_output=False,
+                    timeout=_GIT_COMMAND_TIMEOUT,
+                    is_retry_safe=True,
+                )
+            except GitCommandFailure as e:
+                logger.debug("Failed to diff untracked file {}: {}", rel_path, e)
+                continue
+            parts.append(file_diff)
+        return "".join(parts)
+
+    def _compute_diff_with_untracked(self, working_dir: Path, base: str, context_flag: str, diff_kind: str) -> str:
+        """``git diff -M <context> <base>`` against the working tree, plus untracked files.
+
+        Concatenates the tracked diff with each untracked file's add-diff and strips
+        the result, matching the former ``bash -c "git diff …; <untracked>"`` output.
+        """
+        tracked_diff = self._run_git_diff(working_dir, ["-M", context_flag, base], diff_kind)
+        return (tracked_diff + self._untracked_files_diff(working_dir)).strip()
 
     def _create_diff_artifact_local(
         self,
@@ -940,15 +989,8 @@ class DefaultWorkspaceService(WorkspaceService):
             raise ValueError(f"context_lines must be a non-negative integer, got {context_lines!r}")
         context_flag = f"-U{context_lines}"
 
-        # Commands to generate each diff type.
         # -M enables rename detection so renames show as a single entry instead of delete+add.
-        untracked = _UNTRACKED_FILES_DIFF_CMD
-        uncommitted_diff_command = [
-            "bash",
-            "-c",
-            f"git --no-pager diff -M {context_flag} HEAD; {untracked}",
-        ]
-        uncommitted_diff = self._run_diff_command(uncommitted_diff_command, working_dir, "uncommitted")
+        uncommitted_diff = self._compute_diff_with_untracked(working_dir, "HEAD", context_flag, "uncommitted")
 
         # Compute target-branch diff if requested.  Resolve the merge-base once
         # and reuse it both to compute the diff and to expose it on the artifact,
@@ -1006,13 +1048,7 @@ class DefaultWorkspaceService(WorkspaceService):
         # Diff merge-base against the working tree (not HEAD) so uncommitted
         # changes are included.  Also append untracked files, matching the
         # approach used for the uncommitted diff.
-        untracked = _UNTRACKED_FILES_DIFF_CMD
-        diff_command = [
-            "bash",
-            "-c",
-            f"git --no-pager diff -M {context_flag} {merge_base}; {untracked}",
-        ]
-        return self._run_diff_command(diff_command, working_dir, "target-branch")
+        return self._compute_diff_with_untracked(working_dir, merge_base, context_flag, "target-branch")
 
     def _detect_file_errors(self, working_dir: Path) -> dict[str, str]:
         """Detect files that cannot be diffed (e.g., inside nested git repos)."""
@@ -1101,7 +1137,12 @@ class DefaultWorkspaceService(WorkspaceService):
             artifact_path = artifact_dir / ArtifactType.DIFF
             artifact_path.write_text(diff_artifact.model_dump_json(indent=2))
 
-            metadata = {"generated_at": generated_at.isoformat()}
+            # Record the fingerprint of the inputs this diff was generated from, so
+            # maybe_refresh_workspace_diff can skip regenerating while they're unchanged.
+            fingerprint = self._compute_diff_fingerprint(
+                working_dir, target_branch, effective_context_lines, include_target_branch_diff
+            )
+            metadata = {"generated_at": generated_at.isoformat(), "fingerprint": fingerprint}
             metadata_path = artifact_dir / _DIFF_METADATA_FILENAME
             metadata_path.write_text(json.dumps(metadata))
 
@@ -1132,14 +1173,120 @@ class DefaultWorkspaceService(WorkspaceService):
         finally:
             lock.release()
 
+    def _compute_diff_fingerprint(
+        self,
+        working_dir: Path,
+        target_branch: str | None,
+        context_lines: int,
+        include_target_branch_diff: bool,
+    ) -> str | None:
+        """A cheap, content-aware fingerprint of everything the diff depends on.
+
+        Covers HEAD, the merge-base (when a target-branch diff is included), the
+        requested context width and target flag, and the path + size + mtime of
+        every changed and untracked file. Using size+mtime (rather than just
+        ``git status``) is what catches re-editing an already-modified file, so a
+        matching fingerprint genuinely means an identical diff. Returns None when it
+        can't be computed (e.g. no commits yet, or the repo moved), signalling the
+        caller to regenerate rather than risk serving a stale diff.
+        """
+        try:
+            head_rc, head_stdout, _head_err = run_git_command_local(
+                self.concurrency_group,
+                ["git", "rev-parse", "HEAD"],
+                cwd=working_dir,
+                check_output=False,
+                is_retry_safe=False,
+                timeout=_GIT_COMMAND_TIMEOUT,
+            )
+            if head_rc != 0:
+                return None
+            merge_base = ""
+            if include_target_branch_diff and target_branch is not None:
+                merge_base = self._get_merge_base(working_dir, target_branch) or ""
+            changed_rc, changed_stdout, _changed_err = run_git_command_local(
+                self.concurrency_group,
+                ["git", "diff", "--name-only", "-M", "-z", "HEAD"],
+                cwd=working_dir,
+                check_output=False,
+                is_retry_safe=False,
+                timeout=_GIT_COMMAND_TIMEOUT,
+            )
+            untracked_rc, untracked_stdout, _untracked_err = run_git_command_local(
+                self.concurrency_group,
+                ["git", "ls-files", "--others", "--exclude-standard", "-z"],
+                cwd=working_dir,
+                check_output=False,
+                is_retry_safe=False,
+                timeout=_GIT_COMMAND_TIMEOUT,
+            )
+        except (OSError, ProcessError, GitCommandFailure):
+            return None
+        if changed_rc != 0 or untracked_rc != 0:
+            return None
+
+        paths = sorted({p for p in (changed_stdout.split("\x00") + untracked_stdout.split("\x00")) if p})
+        hasher = hashlib.sha256()
+        hasher.update(
+            f"head={head_stdout.strip()}\x00mb={merge_base}\x00ctx={context_lines}\x00tgt={include_target_branch_diff}\x00".encode()
+        )
+        for rel_path in paths:
+            try:
+                entry_stat = os.lstat(working_dir / rel_path)
+                stat_token = f"{entry_stat.st_size}:{entry_stat.st_mtime_ns}"
+            except OSError:
+                stat_token = "absent"
+            hasher.update(f"{rel_path}\x00{stat_token}\x00".encode())
+        return hasher.hexdigest()
+
+    def _read_stored_diff_fingerprint(self, workspace_id: WorkspaceID) -> str | None:
+        """The fingerprint stored alongside the last generated diff artifact, if any."""
+        metadata_path = self._get_workspace_artifact_dir(workspace_id) / _DIFF_METADATA_FILENAME
+        try:
+            metadata = json.loads(metadata_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return None
+        fingerprint = metadata.get("fingerprint")
+        return fingerprint if isinstance(fingerprint, str) else None
+
+    def _diff_artifact_exists(self, workspace_id: WorkspaceID) -> bool:
+        return (self._get_workspace_artifact_dir(workspace_id) / ArtifactType.DIFF).exists()
+
     def maybe_refresh_workspace_diff(
         self,
         workspace_id: WorkspaceID,
     ) -> None:
-        """Regenerate workspace diff if needed. For now, always refreshes."""
-        # Future: could check if files actually changed before regenerating
-        # For now, always refresh.  Always include the target-branch diff so the
-        # frontend "All changes" view stays up-to-date without extra requests.
+        """Regenerate the workspace diff only when its inputs have changed.
+
+        Computes a cheap content-aware fingerprint (see ``_compute_diff_fingerprint``)
+        and skips the fork-heavy regeneration when it matches the fingerprint stored
+        with the last artifact. Falls back to regenerating whenever the fingerprint
+        can't be computed or no artifact exists, so a stale or missing diff is never
+        served. Always includes the target-branch diff so the frontend "All changes"
+        view stays current without extra requests.
+        """
+        try:
+            with self.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+                workspace = transaction.get_workspace(workspace_id)
+                working_dir = (
+                    self.get_workspace_working_directory(workspace, transaction) if workspace is not None else None
+                )
+                target_branch = workspace.target_branch if workspace is not None else None
+            if working_dir is not None:
+                fingerprint = self._compute_diff_fingerprint(
+                    working_dir, target_branch, _DEFAULT_DIFF_CONTEXT_LINES, include_target_branch_diff=True
+                )
+                if (
+                    fingerprint is not None
+                    and fingerprint == self._read_stored_diff_fingerprint(workspace_id)
+                    and self._diff_artifact_exists(workspace_id)
+                ):
+                    logger.debug("Workspace {} diff inputs unchanged; skipping regeneration", workspace_id)
+                    return
+        except Exception:
+            # The fingerprint check is a best-effort optimization; never let it block
+            # a refresh. On any error, fall through and regenerate unconditionally.
+            logger.debug("Diff fingerprint check failed for {}; regenerating", workspace_id, exc_info=True)
         self.refresh_workspace_diff(workspace_id, include_target_branch_diff=True)
 
     def mark_workspace_diff_stale(

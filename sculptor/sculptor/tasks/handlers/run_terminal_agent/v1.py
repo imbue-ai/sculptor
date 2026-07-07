@@ -266,6 +266,7 @@ def _run_terminal_agent_in_environment(
         refresher = PeriodicDiffRefresher(
             working_directory=underlying_env.get_working_directory(),
             on_change=lambda: services.workspace_service.maybe_refresh_workspace_diff(task_state.workspace_id),
+            concurrency_group=environment_concurrency_group,
             interval_seconds=_DIFF_REFRESH_INTERVAL_SECONDS,
         )
         # Idle until shutdown. A dead shell does NOT exit the loop — the

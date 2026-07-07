@@ -86,17 +86,18 @@ def test_git_command_without_cwd_still_uses_posix_spawn(
     assert captured["prefer_posix_spawn"] is True
 
 
-def test_non_git_command_keeps_popen_path(
+def test_non_git_command_is_rejected(
     monkeypatch: pytest.MonkeyPatch, test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
 ) -> None:
-    # Defensive: a command that is not git keeps the original cwd + Popen behavior.
+    # run_git_command_local is git-only by contract (it always routes through
+    # posix_spawn + `git -C`); a non-git command is caller misuse and must raise
+    # rather than silently spawn.
     captured = _captured_call(monkeypatch)
 
-    run_git_command_local(test_root_concurrency_group, ["not-git", "status"], cwd=tmp_path)
+    with pytest.raises(ValueError):
+        run_git_command_local(test_root_concurrency_group, ["not-git", "status"], cwd=tmp_path)
 
-    assert list(captured["command"]) == ["not-git", "status"]
-    assert captured["cwd"] == tmp_path
-    assert captured["prefer_posix_spawn"] is False
+    assert captured == {}, "must reject before spawning"
 
 
 def test_missing_cwd_fails_fast_and_non_retriable(
