@@ -2,6 +2,9 @@
   "offload.toml": {
     "image_id": "im-VAobmo7nI9i7vUn63Y7LZf"
   },
+  ".offload-sidebar-sweep.toml": {
+    "image_id": "im-TgBdkFFVYrrpVxVNS57UFd"
+  },
   "offload-scu1715.toml": {
     "image_id": "im-c7IKfNtofCsJhEXb3RNQUC"
   },
