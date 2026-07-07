@@ -20,8 +20,9 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
     // Functional update: read the latest atom value at apply time so a stale
     // closure can't clobber unrelated task fields that changed since render.
     setTask((prev) => (prev ? { ...prev, lastReadAt: new Date().toISOString() } : prev));
-    markWorkspaceAgentRead({ path: { workspace_id: workspaceID, agent_id: agentID } }).catch(() => {
-      // Fire-and-forget: the server-authoritative value will arrive via WebSocket
+    markWorkspaceAgentRead({ path: { workspace_id: workspaceID, agent_id: agentID } }).catch((error) => {
+      // Fire-and-forget: the server-authoritative value will arrive via WebSocket.
+      console.warn("Failed to persist mark-read; the server value will arrive via WebSocket.", error);
     });
   };
 

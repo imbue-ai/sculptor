@@ -175,7 +175,10 @@ function availableStaticPanelListsEqual(
     a.length === b.length &&
     a.every(
       (panel, index) =>
-        panel.id === b[index].id && panel.displayName === b[index].displayName && panel.icon === b[index].icon,
+        panel.id === b[index].id &&
+        panel.displayName === b[index].displayName &&
+        panel.icon === b[index].icon &&
+        panel.description === b[index].description,
     )
   );
 }

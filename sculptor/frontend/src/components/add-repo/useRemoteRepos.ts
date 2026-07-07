@@ -82,8 +82,9 @@ export const prefetchInitialRemoteRepos = (provider: RemoteProvider): Promise<vo
       staleTime: REMOTE_REPOS_STALE_TIME_MS,
       gcTime: REMOTE_REPOS_GC_TIME_MS,
     })
-    .catch(() => {
-      // Swallow — the hook will retry/handle on mount.
+    .catch((error) => {
+      // Best-effort warm-up: the hook will retry and surface errors on mount.
+      console.warn("Failed to prefetch remote repos; the combobox will retry on mount.", error);
     });
 
 export const useRemoteRepos = (

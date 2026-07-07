@@ -3,7 +3,7 @@ import type { Editor as TipTapEditor } from "@tiptap/react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { posthog } from "posthog-js";
 import type { ReactElement } from "react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 import {
@@ -88,6 +88,8 @@ export const AlphaChatInterface = ({
     if (!open) setToast(null);
   }, []);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  // Links the scroll container to the overlay scrollbar's `aria-controls`.
+  const scrollContainerId = useId();
 
   // Queued message promotion logic. The agent holds queued messages whenever
   // it is mid-turn — either actively running, or paused on an AskUserQuestion /
@@ -540,6 +542,7 @@ export const AlphaChatInterface = ({
             <div className={styles.scrollArea}>
               <div
                 ref={scrollContainerRef}
+                id={scrollContainerId}
                 className={styles.scrollContainer}
                 data-testid={ElementIds.ALPHA_CHAT_VIEW}
                 role="log"
@@ -627,6 +630,7 @@ export const AlphaChatInterface = ({
               </div>
               <VerticalOverlayScrollbar
                 scrollRef={scrollContainerRef}
+                scrollContainerId={scrollContainerId}
                 thumbTestId={ElementIds.ALPHA_CHAT_SCROLLBAR_THUMB}
               />
             </div>

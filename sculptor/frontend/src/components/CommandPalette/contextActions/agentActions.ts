@@ -1,4 +1,4 @@
-import { CircleDot, Trash2 } from "lucide-react";
+import { CircleDot, Pencil, Trash2 } from "lucide-react";
 
 import { ElementIds } from "../../../api";
 import type { AgentAction, AgentActionRuntime } from "./types.ts";
@@ -10,11 +10,11 @@ import type { AgentAction, AgentActionRuntime } from "./types.ts";
  * its extra entries — the copy/diagnostics items — depend on per-agent
  * diagnostics fetched outside the palette; those are not surfaced here.
  *
- * Rename is intentionally absent: agent rename is the panel tab's inline edit
- * (local state in `SectionHeader`), which the palette runtime has no way to
- * trigger. Don't add a rename descriptor here without wiring a real rename
- * flow behind it — a descriptor whose perform goes nowhere still renders as a
- * selectable palette row.
+ * Rename routes through the panel tab's inline edit: its `perform` calls
+ * `runtime.beginRename`, which activates the agent's panel and sets
+ * `agentRenameTargetAtom` so the mounted tab in `SectionHeader` enters its
+ * existing inline-rename mode. Reusing that path keeps the single optimistic
+ * rename mutation and avoids a forked dialog.
  */
 export const buildAgentActions = (runtime: AgentActionRuntime): ReadonlyArray<AgentAction> => [
   {
@@ -26,6 +26,16 @@ export const buildAgentActions = (runtime: AgentActionRuntime): ReadonlyArray<Ag
     perform: (agent): void => runtime.markUnread(agent),
   },
   {
+    id: "rename",
+    title: "Rename",
+    icon: Pencil,
+    separatorBefore: true,
+    testId: ElementIds.TAB_CONTEXT_MENU_RENAME,
+    paletteOrder: 50,
+    paletteTitleSuffix: "name",
+    perform: (agent): void => runtime.beginRename(agent),
+  },
+  {
     id: "delete",
     title: "Delete",
     icon: Trash2,
@@ -33,6 +43,7 @@ export const buildAgentActions = (runtime: AgentActionRuntime): ReadonlyArray<Ag
     separatorBefore: true,
     testId: ElementIds.TAB_CONTEXT_MENU_DELETE,
     paletteSubtitle: "Permanently delete this agent",
+    paletteOrder: 110,
     paletteTitleSuffix: "name",
     perform: (agent): void => runtime.beginDelete(agent),
   },

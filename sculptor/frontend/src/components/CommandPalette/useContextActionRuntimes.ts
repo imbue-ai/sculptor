@@ -1,8 +1,15 @@
 import { useSetAtom } from "jotai";
 import { useMemo } from "react";
 
+import { activateAgentPanelAtom } from "../../common/state/agentPanelPlacement.ts";
 import { markAgentUnreadAtom } from "../../common/state/atoms/unreadOverrides.ts";
-import { agentDeleteTargetAtom, renamingWorkspaceIdAtom, workspaceDeleteTargetAtom } from "./contextActions/atoms.ts";
+import { makeAgentPanelId } from "../sections/registry/dynamicPanels.tsx";
+import {
+  agentDeleteTargetAtom,
+  agentRenameTargetAtom,
+  renamingWorkspaceIdAtom,
+  workspaceDeleteTargetAtom,
+} from "./contextActions/atoms.ts";
 import type { AgentActionRuntime, WorkspaceActionRuntime } from "./contextActions/types.ts";
 import { useGitAndOpenInRuntime } from "./contextActions/useGitAndOpenInRuntime.ts";
 
@@ -17,6 +24,8 @@ export const useContextActionRuntimes = (): {
   const setRenamingWorkspaceId = useSetAtom(renamingWorkspaceIdAtom);
   const setWorkspaceDeleteTarget = useSetAtom(workspaceDeleteTargetAtom);
   const setAgentDeleteTarget = useSetAtom(agentDeleteTargetAtom);
+  const setAgentRenameTarget = useSetAtom(agentRenameTargetAtom);
+  const activateAgentPanel = useSetAtom(activateAgentPanelAtom);
   const markAgentUnread = useSetAtom(markAgentUnreadAtom);
   const gitAndOpenIn = useGitAndOpenInRuntime();
 
@@ -40,9 +49,17 @@ export const useContextActionRuntimes = (): {
         if (agent.workspaceId == null) return;
         markAgentUnread({ workspaceId: agent.workspaceId, taskId: agent.id });
       },
+      // Activate the agent's panel first so its tab is guaranteed mounted, then
+      // hand the panel id to the tab (via agentRenameTargetAtom) to enter inline
+      // rename. Activation is scoped to the active workspace's layout, so it
+      // keys off the task id alone.
+      beginRename: (agent): void => {
+        activateAgentPanel(agent.id);
+        setAgentRenameTarget(makeAgentPanelId(agent.id));
+      },
       beginDelete: (agent): void => setAgentDeleteTarget({ id: agent.id, name: agent.title ?? "" }),
     }),
-    [markAgentUnread, setAgentDeleteTarget],
+    [markAgentUnread, activateAgentPanel, setAgentRenameTarget, setAgentDeleteTarget],
   );
 
   return { workspaceActionRuntime, agentActionRuntime };

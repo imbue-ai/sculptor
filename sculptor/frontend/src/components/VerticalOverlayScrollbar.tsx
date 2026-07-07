@@ -46,6 +46,13 @@ type VerticalOverlayScrollbarProps = {
   scrollRef: RefObject<HTMLElement | null>;
   /** Applied to the draggable thumb so tests (and callers) can target it. */
   thumbTestId?: string;
+  /**
+   * `id` of the scroll container the thumb controls, exposed as the thumb's
+   * `aria-controls`. Wiring it gives the `role="scrollbar"` thumb its expected
+   * relationship to the scrolled region, so it surfaces in accessibility trees
+   * (and Playwright snapshots) instead of reading as empty.
+   */
+  scrollContainerId?: string;
 };
 
 /**
@@ -68,6 +75,7 @@ type VerticalOverlayScrollbarProps = {
 export const VerticalOverlayScrollbar = ({
   scrollRef,
   thumbTestId,
+  scrollContainerId,
 }: VerticalOverlayScrollbarProps): ReactElement | null => {
   const [geometry, setGeometry] = useState<Geometry>(EMPTY_GEOMETRY);
   const [isHovered, setIsHovered] = useState(false);
@@ -189,7 +197,12 @@ export const VerticalOverlayScrollbar = ({
 
   const thumbHeight = computeThumbHeight(geometry);
   const travel = geometry.height - thumbHeight;
-  const thumbTop = travel > 0 ? (geometry.scrollTop / maxScroll) * travel : 0;
+  const scrollFraction = geometry.scrollTop / maxScroll;
+  const thumbTop = travel > 0 ? scrollFraction * travel : 0;
+  // Scroll progress as a 0–100 percentage for the ARIA scrollbar role, which
+  // pairs `aria-valuenow` with `aria-controls`. It rides the same per-scroll
+  // render as `thumbTop`, so no extra work outside the existing update path.
+  const scrollPercent = Math.round(scrollFraction * 100);
   const isActive = isHovered || isDragging;
 
   return createPortal(
@@ -205,6 +218,13 @@ export const VerticalOverlayScrollbar = ({
       <div
         className={styles.thumb}
         data-testid={thumbTestId}
+        role="scrollbar"
+        aria-orientation="vertical"
+        aria-label="Scrollbar"
+        aria-controls={scrollContainerId}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={scrollPercent}
         style={{ height: thumbHeight, transform: `translateY(${thumbTop}px)` }}
         onPointerEnter={(): void => setIsHovered(true)}
         onPointerLeave={(): void => setIsHovered(false)}

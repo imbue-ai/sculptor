@@ -115,8 +115,9 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
         renameWorkspaceAgent({
           path: { workspace_id: workspaceId, agent_id: task.id },
           body: { title: newName },
-        }).catch(() => {
+        }).catch((error) => {
           // Fire-and-forget: server value will arrive via WebSocket.
+          console.warn("Failed to persist agent rename; the server value will arrive via WebSocket.", error);
         });
       },
       // "Mark as unread" on the tab context menu: record the unread override, flip

@@ -34,11 +34,23 @@ import { useAddPanelActions } from "./useAddPanelActions.ts";
 
 // The shared row body rendered inside every dropdown item and sub-trigger: a label
 // with an optional trailing keybinding hint (no leading icons — text-only rows).
-// Hover/active backgrounds come from the wrapping Radix item, so this only lays out
-// the contents.
-const MenuRow = ({ label, shortcut }: { label: string; shortcut?: string }): ReactElement => (
+// When a description is supplied it renders as a second, smaller line under the
+// label; rows without one render exactly as a single title line. Hover/active
+// backgrounds come from the wrapping Radix item, so this only lays out the contents.
+const MenuRow = ({
+  label,
+  shortcut,
+  description,
+}: {
+  label: string;
+  shortcut?: string;
+  description?: string;
+}): ReactElement => (
   <span className={styles.item}>
-    <span className={styles.itemTitle}>{label}</span>
+    <span className={styles.itemText}>
+      <span className={styles.itemTitle}>{label}</span>
+      {description !== undefined && description !== "" && <span className={styles.description}>{description}</span>}
+    </span>
     {shortcut !== undefined && shortcut !== "" && <span className={styles.shortcut}>{shortcut}</span>}
   </span>
 );
@@ -163,7 +175,7 @@ const AddPanelMenuItems = ({
                 actions.openStaticPanel(panel.id, subSection);
               }}
             >
-              <MenuRow label={panel.displayName} />
+              <MenuRow label={panel.displayName} description={panel.description} />
             </DropdownMenu.Item>
           ))}
         </>

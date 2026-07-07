@@ -134,7 +134,8 @@ export const markAgentUnreadAtom = atom(null, (get, set, target: { workspaceId: 
   }
   setUnreadOverride(target.taskId, task);
   set(taskAtomFamily(target.taskId), { ...task, lastReadAt: null });
-  markWorkspaceAgentUnread({ path: { workspace_id: target.workspaceId, agent_id: target.taskId } }).catch(() => {
+  markWorkspaceAgentUnread({ path: { workspace_id: target.workspaceId, agent_id: target.taskId } }).catch((error) => {
     // Fire-and-forget: the server-authoritative value will arrive via WebSocket.
+    console.warn("Failed to persist mark-unread; the server value will arrive via WebSocket.", error);
   });
 });
