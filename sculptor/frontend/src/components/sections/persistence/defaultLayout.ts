@@ -3,7 +3,7 @@
 // agent/terminal ids are resolved by the caller (the bootstrap) from the active
 // task and the first-visit seeded terminal — never hardcoded.
 //
-//   center — the only EXPANDED section: holds the active agent, and is the
+//   center — EXPANDED: holds the active agent, and is the
 //            active sub-section on load.
 //   left   — EXPANDED, with Files/Changes/Commits open and Files active.
 //   bottom — COLLAPSED, with one terminal open.
