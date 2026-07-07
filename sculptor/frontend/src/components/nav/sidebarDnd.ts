@@ -8,12 +8,14 @@ import type { SensorDescriptor, SensorOptions } from "@dnd-kit/core";
 import { KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 
+import { POINTER_DRAG_ACTIVATION_DISTANCE_PX } from "~/components/sections/panelDnd.ts";
+
 // The pointer sensor's distance constraint keeps plain clicks working on the
 // activator (navigate / toggle collapse); the keyboard sensor's sortable coordinate
 // getter moves the dragged item one slot per arrow press.
 export function useSidebarDndSensors(): Array<SensorDescriptor<SensorOptions>> {
   return useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: POINTER_DRAG_ACTIVATION_DISTANCE_PX } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 }

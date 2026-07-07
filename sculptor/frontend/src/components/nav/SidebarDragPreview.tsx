@@ -4,6 +4,7 @@
 // with the same shadow language as the panel-tab drag overlay (TabPill), so the
 // drag reads as "the row itself is moving".
 
+import { Text } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import { ChevronDown } from "lucide-react";
 import type { ReactElement } from "react";
@@ -29,6 +30,10 @@ export const WorkspaceRowDragPreview = ({ workspace }: { workspace: Workspace })
 export const RepoGroupHeaderDragPreview = ({ name }: { name: string }): ReactElement => (
   <div className={`${styles.preview} ${styles.repoHeader}`}>
     <ChevronDown size={16} className={styles.chevron} />
-    <span className={styles.label}>{name}</span>
+    {/* Text truncate, like the real header's repo name (SidebarRepoGroup); the
+        class supplies the overflow containment truncation needs inside a flex row. */}
+    <Text truncate className={styles.label}>
+      {name}
+    </Text>
   </div>
 );

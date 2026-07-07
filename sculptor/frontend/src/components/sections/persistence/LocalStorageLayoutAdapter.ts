@@ -50,12 +50,16 @@ function isValidSnapshot(scope: LayoutScope, value: unknown): boolean {
   }
   const sectionSizes = value.sectionSizes;
   // sidebarOrder may be absent (snapshots written before the field existed hydrate
-  // fine — the reader fills missing fields from the defaults); when present its two
-  // members must have the right kinds or the ordering atoms would crash on them.
+  // fine — the reader fills missing fields from the defaults); when present its
+  // members must have the right kinds — including every per-project id list, which
+  // the ordering atoms iterate — or a corrupt entry would crash the sidebar at read.
   const sidebarOrder = value.sidebarOrder;
   const isValidSidebarOrder =
     sidebarOrder === undefined ||
-    (isObject(sidebarOrder) && Array.isArray(sidebarOrder.repos) && isObject(sidebarOrder.workspaces));
+    (isObject(sidebarOrder) &&
+      Array.isArray(sidebarOrder.repos) &&
+      isObject(sidebarOrder.workspaces) &&
+      Object.values(sidebarOrder.workspaces).every((ids) => Array.isArray(ids)));
   return (
     isObject(sectionSizes) &&
     typeof sectionSizes.left === "number" &&

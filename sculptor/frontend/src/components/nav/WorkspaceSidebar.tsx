@@ -6,7 +6,7 @@ import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { Bug, Command, Home, PanelLeftClose, Plus, Settings } from "lucide-react";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import type { ReactElement } from "react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { Workspace } from "~/api";
 import { ElementIds } from "~/api";
@@ -212,6 +212,18 @@ export const WorkspaceSidebar = (): ReactElement | null => {
     [setSidebarDragActive, reorderRepoGroup],
   );
   const draggedGroup = repoGroups.find((group) => group.projectId === draggedProjectId);
+
+  // dnd-kit does not fire onDragCancel when its context unmounts (see
+  // PanelDndProvider), and collapsing the sidebar renders null below — the
+  // component itself stays mounted, so an unmount-only cleanup would not run.
+  // Without this reset a drag stranded by the collapse leaves
+  // isSidebarDragActiveAtom stuck true, silently disabling the hover peek.
+  useEffect(() => {
+    if (isCollapsed) {
+      return undefined;
+    }
+    return handleGroupDragCancel;
+  }, [isCollapsed, handleGroupDragCancel]);
 
   // JSX and rendering logic
   if (isCollapsed) {

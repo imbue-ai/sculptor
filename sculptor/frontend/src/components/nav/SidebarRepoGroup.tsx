@@ -20,7 +20,7 @@ import { ContextMenu, DropdownMenu, Flex, IconButton, Text, Tooltip } from "@rad
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { ChevronDown, ChevronRight, MoreHorizontal, Plus, Settings, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 
 import type { Workspace } from "~/api";
 import { ElementIds, updateWorkspace } from "~/api";
@@ -319,6 +319,18 @@ export const SidebarRepoGroup = ({
     [setSidebarDragActive, reorderWorkspace, group.projectId],
   );
   const draggedWorkspace = group.workspaces.find((ws) => ws.objectId === draggedWorkspaceId);
+
+  // dnd-kit does not fire onDragCancel when its context unmounts (see
+  // PanelDndProvider), and the rows' context unmounts whenever the group
+  // collapses — which can happen mid-drag (a keyboard drag is parked while the
+  // header stays clickable). Without this reset a stranded drag leaves
+  // isSidebarDragActiveAtom stuck true, silently disabling the hover peek.
+  useEffect(() => {
+    if (isRepoCollapsed) {
+      return undefined;
+    }
+    return handleRowDragCancel;
+  }, [isRepoCollapsed, handleRowDragCancel]);
 
   // Reference-stable (the rows are memoized on their props): the rename
   // callbacks depend only on reference-stable atom setters and the store.

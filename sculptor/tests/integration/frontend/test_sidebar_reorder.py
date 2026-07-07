@@ -13,6 +13,7 @@ from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
+from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import blur_active_element
 from sculptor.testing.playwright_utils import navigate_to_settings_page
@@ -65,6 +66,42 @@ def test_reorder_workspace_row_via_keyboard_drag(
 
     # Step 3: The rendered order reflects the drop.
     expect(rows).to_contain_text(["Reorder WS B", "Reorder WS A", "Reorder WS C"])
+
+
+@user_story("to cancel a sidebar drag with Escape without changing anything")
+def test_escape_cancels_drag_and_releases_drag_state(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """Escape mid-drag leaves the order unchanged and releases the drag state.
+
+    The release matters beyond the drag itself: the hover peek is suppressed
+    while a drag is active, so a cancel that stranded the drag flag would
+    silently disable the peek for the rest of the session.
+
+    Steps:
+    1. Create two workspaces and pick up the first row (Space).
+    2. Press Escape and verify the drag flag clears and the order is unchanged.
+    3. Hover a row and verify the peek popover still opens.
+    """
+    page = sculptor_instance_.page
+
+    # Step 1: Two workspaces; pick up row A.
+    _create_workspaces(page, ["Cancel WS A", "Cancel WS B"])
+    sidebar = PlaywrightTaskPage(page).get_workspace_sidebar()
+    rows = sidebar.get_workspace_rows()
+    expect(rows).to_have_count(2)
+    row_a = sidebar.get_workspace_row_by_name("Cancel WS A")
+    sidebar.pickup_via_keyboard(row_a)
+
+    # Step 2: Escape cancels — flag cleared, order unchanged.
+    page.keyboard.press("Escape")
+    expect(row_a).not_to_have_attribute("data-sidebar-dragging", "true")
+    expect(rows).to_contain_text(["Cancel WS A", "Cancel WS B"])
+
+    # Step 3: The peek popover still opens on hover (drag suppression released).
+    sidebar.get_workspace_row_by_name("Cancel WS B").hover()
+    peek = PlaywrightProjectLayoutPage(page=page).get_workspace_peek_popover()
+    expect(peek).to_be_visible()
 
 
 @user_story("to cycle workspaces with the keyboard in the same order the sidebar shows")
@@ -138,12 +175,18 @@ def test_reorder_repo_groups_via_keyboard_drag(
     groups = sidebar.get_repo_groups()
     expect(groups).to_have_count(2)
     # The initial (alphabetical) order depends on the harness repo's name, so
-    # capture it and assert the drag swaps whatever it was.
+    # capture it and assert the drag swaps whatever it was. The drag itself uses
+    # name-scoped locators: the positional nth(...) locators re-resolve against
+    # the post-drop order, so the helper's guards would check the wrong element.
     top_name = groups.nth(0).inner_text()
     bottom_name = groups.nth(1).inner_text()
 
     # Step 2: Drag the bottom group above the top one.
-    sidebar.reorder_via_keyboard_drag(item=groups.nth(1), target=groups.nth(0), direction="up")
+    sidebar.reorder_via_keyboard_drag(
+        item=sidebar.get_repo_group_by_name(bottom_name),
+        target=sidebar.get_repo_group_by_name(top_name),
+        direction="up",
+    )
 
     # Step 3: The group order is swapped.
     expect(groups).to_contain_text([bottom_name, top_name])

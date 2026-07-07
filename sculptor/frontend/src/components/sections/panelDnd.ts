@@ -25,6 +25,11 @@ export type PanelDropData = { kind: "section-body"; subSection: SubSectionId };
 // ghost and mapped to `undefined` (splice at length) for the real move on drop.
 export const APPEND_INDEX = Number.MAX_SAFE_INTEGER;
 
+// How far the pointer must travel before a press becomes a drag. Shared by every
+// drag pipeline (panel tabs, sidebar rows/groups) so plain clicks keep working on
+// drag activators and the click-vs-drag threshold can't drift between surfaces.
+export const POINTER_DRAG_ACTIVATION_DISTANCE_PX = 5;
+
 // Droppable id for a sub-section's drop target. The expanded section body and the
 // collapsed section's drop rail share this id (never mounted together).
 export function sectionBodyDroppableId(subSection: SubSectionId): string {

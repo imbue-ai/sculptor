@@ -100,6 +100,21 @@ describe("LocalStorageLayoutAdapter", () => {
       }),
     );
     expect(adapter.read(GLOBAL_SCOPE)).toBeUndefined();
+
+    // The per-project id lists are iterated by the ordering atoms, so a
+    // non-array value must also read as "nothing stored" rather than hydrate
+    // and crash the sidebar at startup.
+    localStorage.setItem(
+      "sculptor-layout-global",
+      JSON.stringify({
+        sectionSizes: { left: 25, right: 25, bottom: 25 },
+        sidebarWidthPx: 300,
+        sidebarCollapsed: true,
+        explorerListWidthPx: 260,
+        sidebarOrder: { repos: [], workspaces: { "p-1": "not-a-list" } },
+      }),
+    );
+    expect(adapter.read(GLOBAL_SCOPE)).toBeUndefined();
   });
 
   it("stamps the current snapshot version on writes and strips it on reads", () => {
