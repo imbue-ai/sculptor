@@ -19,6 +19,7 @@ from sculptor.constants import ElementIDs
 from sculptor.testing.elements.new_workspace_dialog import PlaywrightNewWorkspaceDialog
 from sculptor.testing.elements.user_config import enable_in_place_workspaces
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
+from sculptor.testing.playwright_utils import open_new_workspace_form
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -29,7 +30,7 @@ def test_workspace_selection_mode_persists_after_workspace_creation(sculptor_ins
 
     Steps:
     1. Enable the in-place workspaces experimental flag
-    2. On the inline first-run create form, switch from Worktree (default) to In-place
+    2. In the new-workspace dialog, switch from Worktree (default) to In-place
     3. Create the workspace (promptless)
     4. Reopen the new-workspace form via the sidebar's New Workspace button
     5. Verify the mode selector still shows In-place (not Worktree)
@@ -41,9 +42,9 @@ def test_workspace_selection_mode_persists_after_workspace_creation(sculptor_ins
     # offers the In-place option.
     enable_in_place_workspaces(page)
 
-    # Per-test cleanup deletes every workspace, so the empty first-run page hosts
-    # the inline create form (it shares the modal form's field testids). Its
-    # create button only mounts once the form has loaded projects.
+    # Per-test cleanup deletes every workspace; bring up the new-workspace
+    # dialog. Its create button only mounts once the form has loaded projects.
+    open_new_workspace_form(page)
     expect(add_ws_page.get_submit_button()).to_be_visible(timeout=45_000)
 
     # Fill in the workspace name (required field)
@@ -55,9 +56,10 @@ def test_workspace_selection_mode_persists_after_workspace_creation(sculptor_ins
     # Verify In-place mode is selected before creating the workspace
     expect(add_ws_page.get_mode_selector()).to_contain_text("In-place")
 
-    # The inline first-run form pre-seeds the prompt; clear it so the agent is
-    # created without a first message (the form has no model selector, so an
-    # uncleared prompt would start a turn on the default model).
+    # The form carries the `/sculptor:help` onboarding prefill when Home
+    # auto-opened it; clear the prompt so the agent is created without a first
+    # message (the form has no model selector, so an uncleared prompt would
+    # start a turn on the default model).
     add_ws_page.get_task_input().fill("")
     add_ws_page.submit_and_wait_for_chat_panel()
 

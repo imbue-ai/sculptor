@@ -42,7 +42,8 @@ def _start_worktree_task(page: Page, prompt: str) -> PlaywrightTaskPage:
     expect(branch_input).to_be_visible()
     expect(branch_input).not_to_have_value("")
 
-    # Clear the empty-first-run prompt prefill (`/sculptor:help`) so the first agent is
+    # The form carries the `/sculptor:help` onboarding prefill when Home
+    # auto-opened it (zero workspaces); clear the prompt so the first agent is
     # created promptless — otherwise it runs an extra turn with the default model and the
     # message-count assertions below count those extra messages.
     add_workspace_page.get_task_input().fill("")

@@ -28,7 +28,7 @@ const seedWorkspaces = (store: ReturnType<typeof createStore>, ids: ReadonlyArra
   store.set(workspaceIdsAtom, [...ids]);
 };
 
-describe("WorkspaceSidebar empty-state nav buttons", () => {
+describe("WorkspaceSidebar nav buttons", () => {
   let store: ReturnType<typeof createStore>;
 
   beforeEach(() => {
@@ -45,20 +45,22 @@ describe("WorkspaceSidebar empty-state nav buttons", () => {
     queryClient.clear();
   });
 
-  it("disables Search and New Workspace when the workspace list is empty", () => {
-    // An empty (but loaded) list — `isWorkspaceListEmptyAtom` reports true.
+  it("keeps Search and New Workspace enabled when the workspace list is empty", () => {
+    // An empty (but loaded) list — the first-run state. The new-workspace
+    // dialog and the command palette are reachable here, so the buttons stay
+    // live as the reopen paths for the auto-opened dialog.
     store.set(workspaceIdsAtom, []);
     renderWithProviders(<Sidebar />, { store });
 
-    expect(screen.getByTestId(ElementIds.SIDEBAR_CMDK_LINK)).toBeDisabled();
-    expect(screen.getByTestId(ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON)).toBeDisabled();
+    expect(screen.getByTestId(ElementIds.SIDEBAR_CMDK_LINK)).toBeEnabled();
+    expect(screen.getByTestId(ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON)).toBeEnabled();
   });
 
-  it("enables Search and New Workspace once a workspace exists", () => {
+  it("keeps Search and New Workspace enabled once a workspace exists", () => {
     seedWorkspaces(store, ["w1"]);
     renderWithProviders(<Sidebar />, { store });
 
-    expect(screen.getByTestId(ElementIds.SIDEBAR_CMDK_LINK)).not.toBeDisabled();
-    expect(screen.getByTestId(ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON)).not.toBeDisabled();
+    expect(screen.getByTestId(ElementIds.SIDEBAR_CMDK_LINK)).toBeEnabled();
+    expect(screen.getByTestId(ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON)).toBeEnabled();
   });
 });

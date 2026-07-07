@@ -32,6 +32,7 @@ import { useProject } from "~/common/state/hooks/useProjects.ts";
 import { useUnifiedStream } from "~/common/state/hooks/useUnifiedStream";
 import type { AtomToastAtom } from "~/components/AtomToast.tsx";
 import { AtomToast } from "~/components/AtomToast.tsx";
+import { AutoUpdateToasts } from "~/components/AutoUpdateToasts.tsx";
 import { CommandPalette } from "~/components/CommandPalette";
 import { CommandRegistrations } from "~/components/CommandPalette/CommandRegistrations.tsx";
 import { KeyboardShortcutsDialog } from "~/components/KeyboardShortcutsDialog.tsx";
@@ -42,6 +43,7 @@ import { NewWorkspaceModal } from "~/components/newWorkspace/NewWorkspaceModal.t
 import { NotificationToasts } from "~/components/NotificationToasts.tsx";
 import { RepoPathDialog } from "~/components/RepoPathDialog.tsx";
 import { WarningStatusBanner } from "~/components/WarningStatusBanner.tsx";
+import { useAutoUpdateListener } from "~/hooks/useAutoUpdateListener.ts";
 import { useGlobalKeyboardShortcuts } from "~/layouts/hooks/useGlobalKeyboardShortcuts.ts";
 import { useWorkspaceCycleShortcuts } from "~/layouts/hooks/useWorkspaceCycleShortcuts.ts";
 import { PluginLoader } from "~/plugins/PluginLoader.tsx";
@@ -80,6 +82,7 @@ export const AppShell = (): ReactElement => {
   const currentProject = useProject(projectID ?? "");
 
   useUnifiedStream();
+  useAutoUpdateListener();
   useGlobalKeyboardShortcuts();
   // Workspace cycling lives at the shell level (not the workspace-only shortcut set) so
   // Meta+] / Meta+[ and the palette's Next/Previous workspace rows work from Home and
@@ -135,6 +138,7 @@ export const AppShell = (): ReactElement => {
         onClose={() => setIsRepoPathDialogOpen(false)}
       />
       <NotificationToasts />
+      <AutoUpdateToasts />
       {APP_TOASTS.map(({ key, toastAtom, duration }) => (
         <AtomToast key={key} toastAtom={toastAtom} duration={duration} />
       ))}

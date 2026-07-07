@@ -47,8 +47,8 @@ type NewWorkspaceFormProps = {
   /** Repo to pre-select (from a repo group's "+"); overrides the MRU seed. */
   presetProjectId?: string;
   /**
-   * Text to seed the prompt textarea with on mount. Used by the empty
-   * first-run page to default the very first prompt to `/sculptor:help`.
+   * Text to seed the prompt textarea with on mount. Used by the home page's
+   * first-run auto-open to default the very first prompt to `/sculptor:help`.
    * A mount-time snapshot the user can freely edit.
    */
   initialPrompt?: string;

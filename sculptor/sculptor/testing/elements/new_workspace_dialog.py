@@ -16,15 +16,15 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
     The modal hosts the ``NewWorkspaceForm`` inside a ``PaletteDialog``
     (``NEW_WORKSPACE_DIALOG``). It is opened by several entry points — the sidebar's
     "New Workspace" nav button (``SIDEBAR_NEW_WORKSPACE_BUTTON``), the Cmd/Meta+T
-    shortcut (``new_workspace`` keybinding), and the Cmd+K ``nav.new_workspace``
-    command. The per-repo "+" in the sidebar repo groups instead direct-creates a
+    shortcut (``new_workspace`` keybinding), the Cmd+K ``nav.new_workspace``
+    command, and Home's first-run auto-open (fired while the workspace list is
+    empty, with the ``/sculptor:help`` onboarding prompt prefilled). The per-repo
+    "+" in the sidebar repo groups instead direct-creates a
     workspace in that repo, only falling back to this dialog when the branch can't be
     resolved or the create fails.
 
-    The form's field ids are shared with the inline empty-first-run form, so the
-    getters here are mirrored by ``PlaywrightEmptyFirstRun``. Only one form
-    renders at a time, so the field getters resolve page-wide; the create button
-    is the modal's ``NEW_WORKSPACE_CREATE_BUTTON``.
+    Only one form renders at a time, so the field getters resolve page-wide;
+    the create button is the modal's ``NEW_WORKSPACE_CREATE_BUTTON``.
     """
 
     def __init__(self, page: Page) -> None:

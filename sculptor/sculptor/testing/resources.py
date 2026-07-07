@@ -41,6 +41,7 @@ from sculptor.testing.packaged_backend_frontend import PackagedBackendFrontend
 from sculptor.testing.packaged_electron_frontend import PackagedElectronFrontend
 from sculptor.testing.playwright_utils import expect_app_not_onboarding
 from sculptor.testing.playwright_utils import navigate_to_frontend
+from sculptor.testing.playwright_utils import navigate_to_home_page
 from sculptor.testing.port_manager import PortManager
 from sculptor.testing.repo_resources import get_test_project_state
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -117,26 +118,19 @@ def sculptor_instance_(
 def sculptor_instance_empty_first_run_(
     sculptor_instance_: SculptorInstance,
 ) -> SculptorInstance:
-    """Shared instance settled on the empty first-run page.
+    """Shared instance settled on the first-run auto-opened new-workspace dialog.
 
     The shared ``sculptor_instance_`` already deletes every workspace in its
-    per-test cleanup and its browser reset navigates the hash to ``#/ws/new`` with
-    one repo and zero workspaces — the genuine first-run state — so this fixture
-    only waits for that landing to settle on ``EmptyFirstRunPage``.
-
-    The ``#/ws/new`` URL matches the generic ``/ws/:workspaceID`` route with the
-    sentinel id ``"new"`` (there is no dedicated page for it). ``EmptyFirstRunGate``
-    wraps that route and swaps in
-    ``EmptyFirstRunPage`` once the (empty) workspace snapshot flips
-    ``isWorkspaceListEmptyAtom`` true. Before that snapshot arrives the atom is
-    still false (the list is ``undefined`` while loading), so the gate falls
-    through to the routed ``Outlet`` — the AppShell chrome with ``WorkspacePage``,
-    which renders nothing for the unknown ``"new"`` id: a momentarily empty shell,
-    not a distinct page. So wait for the empty-page marker rather than asserting it
-    synchronously.
+    per-test cleanup and its browser reset navigates the hash to ``#/ws/new``
+    with one repo and zero workspaces — the genuine first-run state. The
+    first-run experience lives on Home: landing there with an empty (loaded)
+    workspace list auto-opens the new-workspace dialog with the
+    ``/sculptor:help`` onboarding prompt prefilled. Route Home and wait for the
+    dialog so tests start from the settled first-run surface.
     """
     page = sculptor_instance_.page
-    expect(page.get_by_test_id(ElementIDs.EMPTY_FIRST_RUN_PAGE)).to_be_visible(timeout=45_000)
+    navigate_to_home_page(page)
+    expect(page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)).to_be_visible(timeout=45_000)
     return sculptor_instance_
 
 
@@ -305,8 +299,8 @@ def _get_or_create_shared_instance(
     # Use a longer timeout than the default 30s for this initial check to
     # allow headroom for cold Electron starts on CI.
     t2 = time.monotonic()
-    # The sidebar rail is rendered by AppShell on every in-app destination AND by the
-    # empty-first-run page, but not by the onboarding wizard — so it is the universal
+    # The sidebar rail is rendered by AppShell on every in-app destination, but
+    # not by the onboarding wizard — so it is the universal
     # "app rendered, not onboarding" signal in the new shell.
     app_ready = page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
     try:
@@ -580,7 +574,7 @@ def _create_custom_command_instance(
     )
 
     # Wait for the React SPA to render (the sidebar rail is the new shell's universal
-    # "app rendered" signal — present on every in-app route and the empty-first-run page).
+    # "app rendered" signal — present on every in-app route).
     try:
         expect(page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)).to_be_visible()
     except Exception:

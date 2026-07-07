@@ -59,7 +59,8 @@ def test_branch_switching_with_untracked_file(sculptor_instance_: SculptorInstan
     # Select branch B via the branch selector on the New Workspace page
     add_workspace_page.select_branch(branch_b)
 
-    # Clear the empty-first-run prompt prefill (`/sculptor:help`) so the first agent is
+    # The form carries the `/sculptor:help` onboarding prefill when Home
+    # auto-opened it (zero workspaces); clear the prompt so the first agent is
     # created promptless — otherwise it runs an extra turn with the default model and the
     # message-count assertion below sees 4 messages instead of 2.
     add_workspace_page.get_task_input().fill("")
@@ -102,7 +103,8 @@ def test_in_place_mode_displayed_correctly(sculptor_instance_: SculptorInstance)
     # Switch to in-place mode via the mode selector dropdown.
     add_workspace_page.select_mode(ElementIDs.MODE_OPTION_IN_PLACE)
 
-    # Clear the empty-first-run prompt prefill (`/sculptor:help`) so the first agent is
+    # The form carries the `/sculptor:help` onboarding prefill when Home
+    # auto-opened it (zero workspaces); clear the prompt so the first agent is
     # created promptless — otherwise it runs an extra turn with the default model and the
     # message-count assertion below sees 4 messages instead of 2.
     add_workspace_page.get_task_input().fill("")

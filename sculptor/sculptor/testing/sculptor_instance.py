@@ -316,8 +316,8 @@ class SculptorInstance:
 
         # Wait for the app shell to render — raise if onboarding shows instead (no
         # shared-instance test should trigger onboarding). The sidebar rail is the
-        # universal "app rendered" signal in the new shell (present whether this lands on
-        # the add-workspace form, the empty-first-run page, or a workspace).
+        # universal "app rendered" signal in the new shell (present on every
+        # in-app route).
         app_ready = self.page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
         expect_app_not_onboarding(self.page, app_ready)
 

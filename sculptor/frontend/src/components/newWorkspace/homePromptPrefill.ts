@@ -8,9 +8,9 @@ const HELP_ACTION_NAME = "/help";
 const ONBOARDING_QUESTION = "I just set up Sculptor for the first time. What should I know to get started?";
 
 /**
- * The prompt the empty first-run form starts with: the `/sculptor:help` slash
- * command (sourced from the built-in `/help` action so the command can never
- * drift) followed by the onboarding question, e.g.
+ * The prompt the first-run auto-opened new-workspace dialog starts with: the
+ * `/sculptor:help` slash command (sourced from the built-in `/help` action so
+ * the command can never drift) followed by the onboarding question, e.g.
  * `/sculptor:help I just set up Sculptor for the first time. What should I know to get started?`.
  * This lands a brand-new user's very first workspace in the help flow with
  * context about who is asking.

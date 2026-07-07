@@ -217,29 +217,17 @@ export const WorkspaceSidebar = (): ReactElement | null => {
             onClick={handleOpenHome}
             testId={ElementIds.SIDEBAR_HOME_LINK}
           />
-          {/* Commands (Cmd+K) and New Workspace are inert until the first
-            workspace exists: the palette open-path is gated by
-            `areGlobalShortcutsDisabledAtom` and the new-workspace modal isn't
-            mounted on the first-run page. Reflect that with a real disabled
-            state + tooltip rather than a silent no-op — the inline first-run
-            form is the create affordance while the list is empty. */}
           <NavItem
             icon={Command}
             label="Commands"
-            disabled={isWorkspaceListEmpty}
-            disabledTooltip="Create a workspace to enable commands"
             onClick={toggleCommandPalette}
             testId={ElementIds.SIDEBAR_CMDK_LINK}
           />
           {/* Opens the new-workspace dialog; the per-repo "+" in the repo groups
-            below is the direct-create affordance. Disabled on first run, but with
-            no tooltip: the inline first-run form is the obvious create affordance,
-            so a tooltip pointing back at the sidebar row would just float detached
-            beside the centered form. */}
+            below is the direct-create affordance. */}
           <NavItem
             icon={Plus}
             label="New Workspace"
-            disabled={isWorkspaceListEmpty}
             onClick={() => setNewWorkspaceModal({ open: true })}
             testId={ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON}
           />

@@ -7,14 +7,17 @@ import type { StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 
 /**
- * Open/close state of the new-workspace modal plus the optional repo it should
- * pre-select. `presetProjectId` is set when the dialog is opened from a repo
- * group's "+" so the form lands on that repo. Transient — the modal is
- * ephemeral, so this resets on reload.
+ * Open/close state of the new-workspace modal plus optional seeds for the form.
+ * `presetProjectId` is set when the dialog is opened from a repo group's "+" so
+ * the form lands on that repo. `initialPrompt` pre-fills the prompt textarea —
+ * the home page's first-run auto-open uses it to seed the `/sculptor:help`
+ * onboarding prompt. Transient — the modal is ephemeral, so this resets on
+ * reload.
  */
 export type NewWorkspaceModalState = {
   open: boolean;
   presetProjectId?: string;
+  initialPrompt?: string;
 };
 
 export const newWorkspaceModalAtom: PrimitiveAtom<NewWorkspaceModalState> = atom<NewWorkspaceModalState>({
@@ -60,10 +63,11 @@ export const lastWorkspaceCreationSettingsAtom: WritableAtom<
 );
 
 /**
- * Derived over the live workspace list; gates the empty first-run page
- * and the sidebar empty-workspace special case. `false` while the
- * list is still loading (`undefined`) so the empty state never flashes before
- * the first snapshot arrives.
+ * Derived over the live workspace list; gates the sidebar's empty-workspace
+ * affordances and the home page's first-run auto-open of the new-workspace
+ * dialog. `false` while the list is still loading (`undefined`) so the empty
+ * state never flashes (and the dialog never pops) before the first snapshot
+ * arrives.
  */
 export const isWorkspaceListEmptyAtom: Atom<boolean> = atom<boolean>((get) => {
   const workspaces = get(workspacesArrayAtom);
@@ -71,24 +75,4 @@ export const isWorkspaceListEmptyAtom: Atom<boolean> = atom<boolean>((get) => {
     return false;
   }
   return workspaces.length === 0;
-});
-
-/**
- * True in the empty first-run state, where navigation is deliberately pared
- * back to just the inline form + Settings. The global keyboard
- * shortcuts hook and the command palette's open path read this and no-op while
- * it's set, so Cmd+K and the rest of the shortcuts stay off until the first
- * workspace exists. Kept as a separate, intent-named atom so the
- * shortcut-gating contract is explicit and can diverge from the empty-page
- * render condition — and it does diverge on load: unlike
- * `isWorkspaceListEmptyAtom` (false while the list is still loading, so the
- * empty page never flashes), shortcuts stay DISABLED until the first snapshot
- * arrives. Otherwise a shortcut fired during the load window of a
- * zero-workspace boot (e.g. Cmd/Meta+T) could set `newWorkspaceModalAtom`
- * open right before the first-run swap unmounts the modal's host, leaving a
- * stale open request that pops the dialog over the first created workspace.
- */
-export const areGlobalShortcutsDisabledAtom: Atom<boolean> = atom<boolean>((get) => {
-  const workspaces = get(workspacesArrayAtom);
-  return workspaces === undefined || workspaces.length === 0;
 });

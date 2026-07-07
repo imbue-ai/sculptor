@@ -89,15 +89,14 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         return PlaywrightCommandPaletteElement(locator=palette, page=self._page)
 
     def ensure_workspace_exists(self) -> None:
-        """Leave the empty first-run state so global shortcuts are live.
+        """Create a workspace when the loaded list is empty.
 
-        The empty first-run state deliberately disables the command palette AND
-        every global keyboard shortcut while no workspace exists: ``areGlobalShortcutsDisabled``
-        (derived from an empty workspace list) makes ``useCommandPalette().toggle``
-        and ``usePageLayoutKeyboardShortcuts`` no-op, so the sidebar Cmd+K link,
-        Cmd+K and Cmd+/ all do nothing. The shared instance's per-test cleanup
-        deletes every workspace and lands on the empty first-run page, so a test
-        that opens the palette or fires a shortcut must first create a workspace.
+        The shared instance's per-test cleanup deletes every workspace, but most
+        palette commands and shortcuts the tests drive act on a workspace
+        surface (panels, tabs, agents), so a test that exercises them must first
+        create one. Creating here also keeps the auto-opened first-run
+        new-workspace dialog (Home pops it while the list is empty) out of the
+        way of subsequent clicks.
 
         Idempotent: a no-op once any workspace exists (e.g. a test that already
         ran ``start_task_and_wait_for_ready``), so it never disturbs callers that
@@ -110,25 +109,33 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         from sculptor.testing.playwright_utils import wait_for_workspace_list_loaded
 
         # The momentary is_visible() probe below can't distinguish "list still
-        # loading" (first-run page deliberately not rendered then) from "list
-        # loaded with workspaces" — settle the load first, or a slow runner
-        # skips the create and every later shortcut/palette open silently no-ops.
+        # loading" (the sidebar's empty affordances deliberately don't render
+        # then) from "list loaded with workspaces" — settle the load first, or a
+        # slow runner skips the create and later steps act on the wrong state.
         wait_for_workspace_list_loaded(self._page)
 
-        if self.get_by_test_id(ElementIDs.EMPTY_FIRST_RUN_PAGE).is_visible():
+        sidebar_empty = self.get_by_test_id(ElementIDs.SIDEBAR_NO_WORKSPACES_HINT).first.or_(
+            self.get_by_test_id(ElementIDs.SIDEBAR_ADD_REPO_BUTTON)
+        )
+        if sidebar_empty.is_visible():
             create_zero_agent_workspace(self._page)
-            # Global shortcuts + the Cmd+K palette stay disabled until the workspace
-            # LIST is non-empty (driven by workspacesArrayAtom). The create
-            # above navigates onto the new workspace, but that list atom can lag the
-            # WebSocket sync, so a palette open / shortcut fired immediately can no-op.
-            # Wait for the sidebar row (same workspace list) so callers don't race it.
+            # The create above navigates onto the new workspace, but the
+            # workspace list atom can lag the WebSocket sync. Wait for the
+            # sidebar row (same workspace list) so callers don't race it.
             expect(self.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW).first).to_be_visible()
+            # If Home auto-opened the first-run new-workspace dialog before the
+            # create, it stays open (it only closes on its own create/dismiss)
+            # and its overlay would swallow the caller's next click — close it.
+            new_workspace_dialog = self.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)
+            if new_workspace_dialog.count() > 0:
+                self._page.keyboard.press("Escape")
+                expect(new_workspace_dialog).to_have_count(0)
 
     def open_command_palette(self) -> PlaywrightCommandPaletteElement:
         """Open the command palette by clicking the sidebar Cmd+K link.
 
         Clicks the sidebar ``SIDEBAR_CMDK_LINK``. A workspace is ensured first
-        because the open affordance is disabled in the empty first-run state.
+        because the palette commands the tests then run act on one.
         """
         self.ensure_workspace_exists()
         cmdk_link = self.get_workspace_sidebar().get_cmdk_link()
@@ -141,8 +148,8 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
     def open_command_palette_with_keyboard(self) -> PlaywrightCommandPaletteElement:
         """Open the command palette using its default keyboard shortcut.
 
-        A workspace is ensured first because Cmd+K is suppressed in the empty
-        first-run state.
+        A workspace is ensured first because the palette commands the tests
+        then run act on one.
         """
         self.ensure_workspace_exists()
         mod_key = get_playwright_modifier_key()

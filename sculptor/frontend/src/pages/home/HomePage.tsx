@@ -1,6 +1,7 @@
 import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 
+import { useFirstRunNewWorkspaceModal } from "~/components/newWorkspace/useFirstRunNewWorkspaceModal.ts";
 import { pluginHomeViewsAtom } from "~/plugins/pluginRegistry.ts";
 
 import styles from "./HomePage.module.scss";
@@ -12,6 +13,9 @@ export const HomePage = (): ReactElement => {
   const options = useAtomValue(homeViewOptionsAtom);
   const effectiveId = useAtomValue(effectiveHomeViewIdAtom);
   const pluginHomeViews = useAtomValue(pluginHomeViewsAtom);
+
+  // With no workspaces yet, Home's default state is the create dialog itself.
+  useFirstRunNewWorkspaceModal();
 
   // Only surface the switcher once there is something to switch to: with no
   // plugin home views the page is the recent-workspaces list, exactly as before.
