@@ -105,7 +105,9 @@ describe("agent tab context menu", () => {
       "Diagnostics",
     ]);
 
-    const diagnostics = (definition.contextMenuActions ?? []).find((item) => item.kind === "submenu");
+    const diagnostics = (definition.contextMenuActions ?? []).find(
+      (item) => item.kind === "submenu" && item.label === "Diagnostics",
+    );
     expect(diagnostics?.kind).toBe("submenu");
     if (diagnostics?.kind === "submenu") {
       expect(diagnostics.items.map((item) => item.label)).toEqual([
@@ -119,7 +121,9 @@ describe("agent tab context menu", () => {
 
   it("disables the session / transcript copy actions until diagnostics arrive", () => {
     const [definition] = deriveDynamicPanels([createAgentInput()], []);
-    const diagnostics = (definition.contextMenuActions ?? []).find((item) => item.kind === "submenu");
+    const diagnostics = (definition.contextMenuActions ?? []).find(
+      (item) => item.kind === "submenu" && item.label === "Diagnostics",
+    );
     if (diagnostics?.kind !== "submenu") {
       throw new Error("expected a Diagnostics submenu");
     }

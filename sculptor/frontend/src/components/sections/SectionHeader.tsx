@@ -66,7 +66,7 @@ const renderPanelContextMenuItem = (item: PanelContextMenuItem): ReactElement =>
         <ContextMenu.SubContent>
           {item.items.map((child) => (
             <ContextMenu.Item
-              key={child.testId ?? child.label}
+              key={child.testId}
               data-testid={child.testId}
               disabled={child.disabled}
               color={child.destructive === true ? "red" : undefined}
@@ -398,7 +398,7 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
       <ContextMenu.Trigger>{tabBody}</ContextMenu.Trigger>
       <ContextMenu.Content size="1">
         {menuItems.map((item, index) => (
-          <Fragment key={item.testId ?? item.label}>
+          <Fragment key={item.testId}>
             {index > 0 && item.separatorBefore === true ? <ContextMenu.Separator /> : null}
             {renderPanelContextMenuItem(item)}
           </Fragment>

@@ -20,27 +20,31 @@ export type PanelKind = "static" | "agent" | "terminal";
 
 // A single invocable row in a panel tab's context menu. `icon` renders leading;
 // `destructive` styles it as a danger action (red); `separatorBefore` opens a new
-// visual group above it (suppressed for the menu's first row).
+// visual group above it (suppressed for the menu's first row). `testId` is required:
+// every actionable row is addressed by its stable TAB_CONTEXT_MENU_* id in tests and
+// keyed by it in the renderer, so a row without one would be untestable and unkeyed.
 export type PanelContextMenuAction = {
   kind: "action";
   label: string;
   action: () => void;
+  testId: string;
   icon?: LucideIcon;
   disabled?: boolean;
   destructive?: boolean;
   separatorBefore?: boolean;
-  testId?: string;
 };
 
 // A labeled submenu grouping related actions behind a single trigger (e.g. the agent's
 // Diagnostics copy items), so they don't crowd the top level. One level deep only.
+// `testId` is required for the same reason as PanelContextMenuAction — the trigger is
+// located by it in tests and used as the row's React key.
 export type PanelContextMenuSubmenu = {
   kind: "submenu";
   label: string;
   items: ReadonlyArray<PanelContextMenuAction>;
+  testId: string;
   icon?: LucideIcon;
   separatorBefore?: boolean;
-  testId?: string;
 };
 
 export type PanelContextMenuItem = PanelContextMenuAction | PanelContextMenuSubmenu;

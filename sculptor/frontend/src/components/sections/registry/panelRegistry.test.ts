@@ -94,7 +94,9 @@ describe("dynamic panel derivation", () => {
     expect(agentDef.dotStatus).toBe("read");
     // The id / session / transcript copy actions live in the Diagnostics submenu, not
     // at the top level (which carries Mark-as-unread + Copy agent name).
-    const diagnostics = (agentDef.contextMenuActions ?? []).find((item) => item.kind === "submenu");
+    const diagnostics = (agentDef.contextMenuActions ?? []).find(
+      (item) => item.kind === "submenu" && item.label === "Diagnostics",
+    );
     if (diagnostics?.kind !== "submenu") {
       throw new Error("expected a Diagnostics submenu");
     }
