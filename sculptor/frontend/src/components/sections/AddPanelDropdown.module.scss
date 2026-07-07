@@ -32,8 +32,17 @@
 
 .itemTitle {
   color: var(--gray-12);
-  flex-shrink: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+// When a description shares the row, the title holds its intrinsic width so the
+// description is the element that gives up space and ellipsizes. On a title-only
+// row the base rule lets the title itself ellipsize if it outgrows the menu.
+.itemTitleWithDescription {
+  flex-shrink: 0;
 }
 
 // Secondary text trailing the title on the same row: compact, muted, and

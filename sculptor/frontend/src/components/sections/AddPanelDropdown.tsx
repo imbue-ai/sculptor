@@ -21,6 +21,7 @@ import { type AgentTypeName, ElementIds } from "~/api";
 import { useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
 import { INSTALL_PI_LABEL, usePiAgentOption } from "~/common/state/hooks/usePiAgentOption.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
+import { mergeClasses } from "~/common/Utils.ts";
 
 import {
   availableStaticPanelsAtom,
@@ -35,9 +36,10 @@ import { useAddPanelActions } from "./useAddPanelActions.ts";
 // The shared row body rendered inside every dropdown item and sub-trigger: a label
 // with an optional trailing keybinding hint (no leading icons — text-only rows).
 // When a description is supplied it renders inline after the label on the same row,
-// muted and ellipsized when space runs short; rows without one render exactly as a
-// single title line. Hover/active backgrounds come from the wrapping Radix item, so
-// this only lays out the contents.
+// muted and ellipsized when space runs short; the label then holds its width so the
+// description is what gives way. A row without a description is a single title line
+// that ellipsizes if it outgrows the menu. Hover/active backgrounds come from the
+// wrapping Radix item, so this only lays out the contents.
 const MenuRow = ({
   label,
   shortcut,
@@ -46,15 +48,20 @@ const MenuRow = ({
   label: string;
   shortcut?: string;
   description?: string;
-}): ReactElement => (
-  <span className={styles.item}>
-    <span className={styles.itemText}>
-      <span className={styles.itemTitle}>{label}</span>
-      {description !== undefined && description !== "" && <span className={styles.description}>{description}</span>}
+}): ReactElement => {
+  const hasDescription = description !== undefined && description !== "";
+  return (
+    <span className={styles.item}>
+      <span className={styles.itemText}>
+        <span className={mergeClasses(styles.itemTitle, hasDescription ? styles.itemTitleWithDescription : undefined)}>
+          {label}
+        </span>
+        {hasDescription && <span className={styles.description}>{description}</span>}
+      </span>
+      {shortcut !== undefined && shortcut !== "" && <span className={styles.shortcut}>{shortcut}</span>}
     </span>
-    {shortcut !== undefined && shortcut !== "" && <span className={styles.shortcut}>{shortcut}</span>}
-  </span>
-);
+  );
+};
 
 type AddPanelDropdownProps = {
   subSection: SubSectionId;
