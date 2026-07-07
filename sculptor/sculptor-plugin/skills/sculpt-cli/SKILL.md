@@ -59,8 +59,8 @@ sculpt agent send <agent-id> "And what about Y?" -f
 ```
 
 Exit codes for `--follow`: `0` = turn completed, `2` = the agent stopped to
-ask a question (WAITING). For bounded polling instead, use
-`sculpt agent status <id> --json` (single shot) or `status -f --timeout <s>`.
+ask a question (WAITING). For polling instead, call the single-shot
+`sculpt agent status <id> --json` in your own loop.
 
 ## Models
 

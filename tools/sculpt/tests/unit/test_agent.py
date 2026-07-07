@@ -1460,6 +1460,27 @@ class TestAgentCrossWorkspaceResolution:
 
     @patch("sculpt.commands.agent.fetch_all_agents")
     @respx.mock
+    def test_send_with_stale_env_workspace_still_resolves_globally(
+        self, mock_fetch: Any, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # SCULPT_WORKSPACE_ID points at a workspace that no longer exists (it
+        # was deleted after the shell started); the stale scope must degrade
+        # to a global lookup rather than a hard failure.
+        monkeypatch.setenv("SCULPT_WORKSPACE_ID", "ws_gone999")
+        _mock_session()
+        _mock_workspaces("ws_other111")
+        mock_fetch.return_value = [_make_snapshot(workspace_id="ws_actual456")]
+        route = respx.post(
+            "http://localhost:5050/api/v1/workspaces/ws_actual456/agents/tsk_abc123def456/messages"
+        ).mock(return_value=Response(200, text="null", headers={"content-type": "application/json"}))
+
+        result = runner.invoke(app, ["agent", "send", "tsk_abc123def456", "hello"])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        assert route.called
+
+    @patch("sculpt.commands.agent.fetch_all_agents")
+    @respx.mock
     def test_send_agent_in_env_workspace_stays_local(
         self, mock_fetch: Any, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -1623,6 +1644,24 @@ class TestAgentDeleteConfirmation:
 
         assert result.exit_code != 0
         assert not route.called
+
+    @respx.mock
+    def test_delete_json_without_yes_fails_with_structured_error(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        respx.get("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
+            return_value=Response(200, json=[_task_response_dict()])
+        )
+        route = respx.delete("http://localhost:5050/api/v1/workspaces/ws_test123/agents/tsk_abc123def456").mock(
+            return_value=Response(200, text="null", headers={"content-type": "application/json"})
+        )
+
+        result = runner.invoke(app, ["agent", "delete", "tsk_abc123def456", "-w", "ws_test123", "--json"])
+
+        assert result.exit_code != 0
+        assert not route.called
+        error = json.loads(result.stderr.strip().splitlines()[-1])
+        assert "--yes" in error["error"]
 
     @respx.mock
     def test_delete_prompt_accepted_sends_delete(self, runner: CliRunner) -> None:

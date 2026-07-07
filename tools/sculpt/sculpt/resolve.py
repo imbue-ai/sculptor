@@ -55,7 +55,7 @@ def resolve_agent_id(base_url: str, prefix_or_id: str, json_output: bool) -> str
     try:
         response = resolve_agent_by_prefix.sync_detailed(prefix=prefix_or_id, client=client)
     except httpx.ConnectError:
-        handle_connection_error(json_output)
+        handle_connection_error(json_output, base_url=base_url)
     if response.status_code == HTTPStatus.NOT_FOUND:
         cli_error(
             f"Agent not found for '{prefix_or_id}'",
@@ -341,6 +341,27 @@ def resolve_by_prefix(
         detail="\n".join(lines),
         json_output=json_output,
     )
+
+
+def find_workspace_id(client: Client, workspace_id_or_prefix: str, json_output: bool = False) -> str | None:
+    """Resolve a workspace ID prefix leniently: None on a miss instead of exiting.
+
+    For scope hints like ``SCULPT_WORKSPACE_ID``, where a stale value (the
+    workspace was deleted after the shell started) should mean "no scope"
+    rather than a hard failure. Connection errors still exit.
+    """
+    try:
+        result = list_recent_workspaces.sync(client=client)  # type: ignore[arg-type]
+    except httpx.ConnectError:
+        handle_connection_error(json_output)
+
+    if result is None:
+        return None
+
+    matches = find_prefix_matches(workspace_id_or_prefix, result.workspaces, lambda w: w.object_id)
+    if len(matches) == 1:
+        return matches[0].object_id
+    return None
 
 
 def resolve_workspace_id(client: Client, workspace_id_or_prefix: str, json_output: bool = False) -> str:

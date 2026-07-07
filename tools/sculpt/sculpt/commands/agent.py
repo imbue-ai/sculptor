@@ -59,6 +59,7 @@ from sculpt.formatting import overwrite_lines
 from sculpt.formatting import truncate
 from sculpt.message_formatting import format_message
 from sculpt.resolve import find_prefix_matches
+from sculpt.resolve import find_workspace_id
 from sculpt.resolve import resolve_agent_id
 from sculpt.resolve import resolve_by_prefix
 from sculpt.resolve import resolve_project
@@ -376,8 +377,13 @@ def _resolve_agent_for_action(
         return agent.id, workspace_id, _model_identifier(agent.model)
 
     env_workspace = os.environ.get("SCULPT_WORKSPACE_ID")
-    if env_workspace:
-        workspace_id = resolve_workspace_id(client, env_workspace, json_output)
+    # Resolve the env scope leniently: a stale SCULPT_WORKSPACE_ID (workspace
+    # deleted after this shell started) means "no scope", not a hard failure —
+    # otherwise full IDs would stop working from exactly the shells that most
+    # need the global fallback.
+    env_workspace_id = find_workspace_id(client, env_workspace, json_output) if env_workspace else None
+    if env_workspace_id is not None:
+        workspace_id = env_workspace_id
         agents = _fetch_agents_for_workspace(client, workspace_id, json_output)
         matches = find_prefix_matches(agent_id_arg, agents, lambda a: a.id)
         if len(matches) == 1:
@@ -543,6 +549,11 @@ def delete(
     resolved_id, workspace_id, _ = _resolve_agent_for_action(base_url, client, agent_id, workspace, json_output)
 
     if not yes:
+        # An interactive prompt would corrupt the JSON stream (typer.confirm
+        # writes to stdout) and EOF-abort with plain text in scripts; fail
+        # with the structured error contract instead.
+        if json_output:
+            cli_error("Confirmation required: pass --yes/-y to delete", json_output=True)
         typer.confirm(f"Delete agent {resolved_id}?", abort=True)
 
     try:

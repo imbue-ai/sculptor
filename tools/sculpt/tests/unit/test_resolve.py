@@ -11,6 +11,7 @@ from httpx import ConnectError
 from httpx import Response
 from sculpt.client import Client
 from sculpt.resolve import find_prefix_matches
+from sculpt.resolve import find_workspace_id
 from sculpt.resolve import resolve_by_prefix
 from sculpt.resolve import resolve_project
 from sculpt.resolve import resolve_workspace_id
@@ -449,6 +450,37 @@ def _make_workspace_response(
 
 def _mock_workspaces_response(*object_ids: str) -> dict[str, Any]:
     return {"workspaces": [_make_workspace_response(oid) for oid in object_ids]}
+
+
+class TestFindWorkspaceId:
+    """The lenient variant: a miss means "no scope" (None), never an exit."""
+
+    @respx.mock
+    def test_unique_match_returns_id(self) -> None:
+        client = _make_client()
+        respx.get("http://localhost:5050/api/v1/workspaces/recent").mock(
+            return_value=Response(200, json=_mock_workspaces_response("ws_abc123full", "ws_def456full"))
+        )
+
+        assert find_workspace_id(client, "ws_abc123full") == "ws_abc123full"
+
+    @respx.mock
+    def test_stale_id_returns_none(self) -> None:
+        client = _make_client()
+        respx.get("http://localhost:5050/api/v1/workspaces/recent").mock(
+            return_value=Response(200, json=_mock_workspaces_response("ws_abc123full"))
+        )
+
+        assert find_workspace_id(client, "ws_gone999") is None
+
+    @respx.mock
+    def test_ambiguous_prefix_returns_none(self) -> None:
+        client = _make_client()
+        respx.get("http://localhost:5050/api/v1/workspaces/recent").mock(
+            return_value=Response(200, json=_mock_workspaces_response("ws_abc123", "ws_abc456"))
+        )
+
+        assert find_workspace_id(client, "ws_abc") is None
 
 
 class TestResolveWorkspaceId:

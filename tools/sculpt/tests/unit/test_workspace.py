@@ -579,19 +579,20 @@ class TestWorkspacePathAndBranch:
     def test_list_all_prefers_current_branch_over_source(self, runner: CliRunner) -> None:
         _mock_session()
         _mock_projects_list()
+        # A distinctive source-branch value, so the table-wide negative below
+        # can't collide with unrelated columns (paths, descriptions).
+        workspace = _recent_workspace_dict(current_branch="dev/live-branch")
+        workspace["sourceBranch"] = "distinctive-source-branch"
         respx.get("http://localhost:5050/api/v1/workspaces/recent").mock(
-            return_value=Response(
-                200,
-                json={"workspaces": [_recent_workspace_dict(current_branch="dev/live-branch")]},
-            )
+            return_value=Response(200, json={"workspaces": [workspace]})
         )
 
         result = runner.invoke(app, ["workspace", "list", "--all"])
 
         assert result.exit_code == 0
         assert "dev/live-branch" in result.output
-        # The source branch ("main") is only the fallback when no live branch is known.
-        assert "main" not in result.output
+        # The source branch is only the fallback when no live branch is known.
+        assert "distinctive-source-branch" not in result.output
 
     @respx.mock
     def test_list_all_json_includes_path_and_branch(self, runner: CliRunner) -> None:

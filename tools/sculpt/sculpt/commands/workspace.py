@@ -409,6 +409,11 @@ def delete(
     resolved_id = ws.object_id
 
     if not yes:
+        # An interactive prompt would corrupt the JSON stream (typer.confirm
+        # writes to stdout) and EOF-abort with plain text in scripts; fail
+        # with the structured error contract instead.
+        if json_output:
+            cli_error("Confirmation required: pass --yes/-y to delete", json_output=True)
         typer.confirm(f"Delete workspace {resolved_id}?", abort=True)
 
     try:
