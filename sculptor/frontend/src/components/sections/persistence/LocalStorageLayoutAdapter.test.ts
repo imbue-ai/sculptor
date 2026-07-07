@@ -74,6 +74,34 @@ describe("LocalStorageLayoutAdapter", () => {
     expect(adapter.read(GLOBAL_SCOPE)).toBeUndefined();
   });
 
+  it("hydrates a global snapshot written before sidebarOrder existed", () => {
+    // Older global snapshots lack sidebarOrder; they must still read back (the
+    // layout atoms fill the missing field from the defaults) rather than being
+    // rejected and losing the user's width/collapsed settings.
+    const legacyGlobal = {
+      sectionSizes: { left: 25, right: 25, bottom: 25 },
+      sidebarWidthPx: 300,
+      sidebarCollapsed: true,
+      explorerListWidthPx: 260,
+    };
+    localStorage.setItem("sculptor-layout-global", JSON.stringify(legacyGlobal));
+    expect(adapter.read(GLOBAL_SCOPE)).toEqual(legacyGlobal);
+  });
+
+  it("rejects a global snapshot whose sidebarOrder has the wrong shape", () => {
+    localStorage.setItem(
+      "sculptor-layout-global",
+      JSON.stringify({
+        sectionSizes: { left: 25, right: 25, bottom: 25 },
+        sidebarWidthPx: 300,
+        sidebarCollapsed: true,
+        explorerListWidthPx: 260,
+        sidebarOrder: { repos: "not-a-list", workspaces: {} },
+      }),
+    );
+    expect(adapter.read(GLOBAL_SCOPE)).toBeUndefined();
+  });
+
   it("stamps the current snapshot version on writes and strips it on reads", () => {
     const snapshot = makeWorkspaceLayout("agent:1");
     adapter.write(WS_SCOPE, snapshot);
@@ -152,6 +180,7 @@ describe("LocalStorageLayoutAdapter", () => {
       sidebarWidthPx: 300,
       sidebarCollapsed: true,
       explorerListWidthPx: 260,
+      sidebarOrder: { repos: [], workspaces: {} },
     };
 
     adapter.write(WS_SCOPE, wsOne);
@@ -210,6 +239,7 @@ describe("LocalStorageLayoutAdapter", () => {
       sidebarWidthPx: 300,
       sidebarCollapsed: true,
       explorerListWidthPx: 260,
+      sidebarOrder: { repos: [], workspaces: {} },
     });
     // Before the debounce window elapses nothing is committed to storage, but
     // read() already sees the pending snapshot (read-your-writes).
@@ -223,6 +253,7 @@ describe("LocalStorageLayoutAdapter", () => {
       sidebarWidthPx: 300,
       sidebarCollapsed: true,
       explorerListWidthPx: 260,
+      sidebarOrder: { repos: [], workspaces: {} },
     });
   });
 

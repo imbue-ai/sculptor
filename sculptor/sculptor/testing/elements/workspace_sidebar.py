@@ -5,6 +5,15 @@ from playwright.sync_api import expect
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 
+# Keyboard pickup (focus → Space) is retried: an async focus restore from a menu
+# that just closed can steal the Space press, so it lands on the menu trigger
+# instead of the drag activator (mirrors section_helpers' panel-drag pickup).
+_REORDER_PICKUP_ATTEMPTS = 3
+
+# A reorder drag presses one arrow per slot; the loop stops as soon as the target
+# slot lights up as the drop target, and this bounds a drag that never gets there.
+_REORDER_MAX_ARROW_PRESSES = 6
+
 
 class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
     """Page Object Model for the workspace navigation sidebar.
@@ -41,6 +50,50 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         return self._page.locator(
             f'[data-testid="{ElementIDs.SIDEBAR_REPO_ADD_WORKSPACE}"][data-project-id="{project_id}"]'
         )
+
+    # -- Drag-to-reorder (keyboard-driven) --
+
+    def reorder_via_keyboard_drag(self, item: Locator, target: Locator, direction: str) -> None:
+        """Drag a workspace row or repo-group header to another slot via the KeyboardSensor.
+
+        ``item`` and ``target`` are drag activators of the same sortable list (two
+        workspace rows of one repo group, or two repo-group headers); ``direction``
+        is "up" or "down". Mirrors section_helpers' panel drag: focus the item,
+        Space to pick up, one arrow per slot until ``target``'s slot reports
+        ``data-sidebar-drop-target``, Space to drop.
+
+        The sensor marks the dragged activator with ``data-sidebar-dragging`` on
+        drag start; waiting for it before the first arrow matters because the
+        KeyboardSensor attaches its arrow/end keydown listener on a deferred tick —
+        an arrow pressed earlier is silently dropped. Pickup itself is retried per
+        ``_REORDER_PICKUP_ATTEMPTS``: a stolen-focus Space may have gone to (and
+        opened) another control, so each retry dismisses whatever it opened with
+        Escape and re-focuses the item.
+        """
+        for attempt in range(_REORDER_PICKUP_ATTEMPTS):
+            item.focus()
+            self._page.keyboard.press("Space")  # pick up
+            try:
+                expect(item).to_have_attribute("data-sidebar-dragging", "true", timeout=5_000)
+                break
+            except AssertionError:
+                if attempt == _REORDER_PICKUP_ATTEMPTS - 1:
+                    raise
+                self._page.keyboard.press("Escape")
+
+        arrow = {"up": "ArrowUp", "down": "ArrowDown"}[direction]
+        for _press in range(_REORDER_MAX_ARROW_PRESSES):
+            self._page.keyboard.press(arrow)
+            try:
+                expect(target).to_have_attribute("data-sidebar-drop-target", "true", timeout=1_000)
+                break
+            except AssertionError:
+                continue
+        self._page.keyboard.press("Space")  # drop
+
+        # The drop clears the drag flag once the reorder commits; asserting it here
+        # keeps callers from racing their order assertions against the commit.
+        expect(item).not_to_have_attribute("data-sidebar-dragging", "true")
 
     # -- Workspace rows (mirrors PlaywrightHomePage.get_workspace_rows) --
 

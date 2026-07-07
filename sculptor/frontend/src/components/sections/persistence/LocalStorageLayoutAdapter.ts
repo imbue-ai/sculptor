@@ -49,6 +49,13 @@ function isValidSnapshot(scope: LayoutScope, value: unknown): boolean {
     );
   }
   const sectionSizes = value.sectionSizes;
+  // sidebarOrder may be absent (snapshots written before the field existed hydrate
+  // fine — the reader fills missing fields from the defaults); when present its two
+  // members must have the right kinds or the ordering atoms would crash on them.
+  const sidebarOrder = value.sidebarOrder;
+  const isValidSidebarOrder =
+    sidebarOrder === undefined ||
+    (isObject(sidebarOrder) && Array.isArray(sidebarOrder.repos) && isObject(sidebarOrder.workspaces));
   return (
     isObject(sectionSizes) &&
     typeof sectionSizes.left === "number" &&
@@ -56,7 +63,8 @@ function isValidSnapshot(scope: LayoutScope, value: unknown): boolean {
     typeof sectionSizes.bottom === "number" &&
     typeof value.sidebarWidthPx === "number" &&
     typeof value.sidebarCollapsed === "boolean" &&
-    typeof value.explorerListWidthPx === "number"
+    typeof value.explorerListWidthPx === "number" &&
+    isValidSidebarOrder
   );
 }
 

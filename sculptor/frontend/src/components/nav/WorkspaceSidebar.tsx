@@ -1,3 +1,6 @@
+import type { DragEndEvent } from "@dnd-kit/core";
+import { closestCenter, DndContext } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { IconButton, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { Bug, Command, Home, PanelLeftClose, Plus, Settings } from "lucide-react";
@@ -32,11 +35,13 @@ import { HOME_TAB_ID, SETTINGS_TAB_ID } from "~/components/workspaceTabIds.ts";
 import { getTitleBarLeftPadding } from "~/electron/utils.ts";
 import { WorkspacePeekOverlay } from "~/pages/workspace/components/WorkspacePeekOverlay.tsx";
 
+import { isSidebarDragActiveAtom } from "./navAtoms.ts";
 import navItemStyles from "./NavItem.module.scss";
 import { NavItem } from "./NavItem.tsx";
+import { sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
 import { SidebarFirstRunState } from "./SidebarFirstRunState.tsx";
 import { SidebarRepoGroup } from "./SidebarRepoGroup.tsx";
-import { sidebarWorkspaceGroupsAtom } from "./sidebarWorkspaceOrder.ts";
+import { reorderSidebarRepoGroupAtom, sidebarWorkspaceGroupsAtom } from "./sidebarWorkspaceOrder.ts";
 import styles from "./WorkspaceSidebar.module.scss";
 
 /** Smallest sidebar width the resize handle allows, in pixels. */
@@ -176,6 +181,24 @@ export const WorkspaceSidebar = (): ReactElement | null => {
     [setWidth],
   );
 
+  // Repo groups are drag-sortable (each group's rows have their own context inside
+  // SidebarRepoGroup); a drop commits the new group order to the layout snapshot.
+  const groupDndSensors = useSidebarDndSensors();
+  const setSidebarDragActive = useSetAtom(isSidebarDragActiveAtom);
+  const reorderRepoGroup = useSetAtom(reorderSidebarRepoGroupAtom);
+  const handleGroupDragStart = useCallback((): void => setSidebarDragActive(true), [setSidebarDragActive]);
+  const handleGroupDragCancel = useCallback((): void => setSidebarDragActive(false), [setSidebarDragActive]);
+  const handleGroupDragEnd = useCallback(
+    (event: DragEndEvent): void => {
+      setSidebarDragActive(false);
+      if (event.over === null || event.over.id === event.active.id) {
+        return;
+      }
+      reorderRepoGroup({ activeProjectId: String(event.active.id), overProjectId: String(event.over.id) });
+    },
+    [setSidebarDragActive, reorderRepoGroup],
+  );
+
   // JSX and rendering logic
   if (isCollapsed) {
     return null;
@@ -250,17 +273,28 @@ export const WorkspaceSidebar = (): ReactElement | null => {
           {isWorkspaceListEmpty ? (
             <SidebarFirstRunState projects={projects} onAddRepo={() => setIsAddRepoDialogOpen(true)} />
           ) : null}
-          {repoGroups.map((group) => (
-            <SidebarRepoGroup
-              key={group.projectId}
-              group={group}
-              actions={workspaceActions}
-              openInRuntime={openInRuntime}
-              onWorkspaceClick={handleWorkspaceClick}
-              onWorkspaceHover={handleWorkspaceHover}
-              onBeginDelete={setDeleteTarget}
-            />
-          ))}
+          <DndContext
+            sensors={groupDndSensors}
+            collisionDetection={closestCenter}
+            modifiers={sidebarDndModifiers}
+            onDragStart={handleGroupDragStart}
+            onDragEnd={handleGroupDragEnd}
+            onDragCancel={handleGroupDragCancel}
+          >
+            <SortableContext items={repoGroups.map((group) => group.projectId)} strategy={verticalListSortingStrategy}>
+              {repoGroups.map((group) => (
+                <SidebarRepoGroup
+                  key={group.projectId}
+                  group={group}
+                  actions={workspaceActions}
+                  openInRuntime={openInRuntime}
+                  onWorkspaceClick={handleWorkspaceClick}
+                  onWorkspaceHover={handleWorkspaceHover}
+                  onBeginDelete={setDeleteTarget}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
         </div>
 
         <div className={styles.spacer} />

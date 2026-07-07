@@ -6,7 +6,16 @@
 // the groups, the shared action list, and the delete confirmation — stay in
 // WorkspaceSidebar and arrive as props; per-group state (collapse, rename) is read
 // from its atoms here.
+//
+// The group is itself a sortable item of WorkspaceSidebar's repo-group DndContext
+// (dragged by its header), and it hosts its OWN DndContext for its workspace rows —
+// a workspace belongs to its repo, so scoping the row context per group makes
+// cross-repo drops structurally impossible rather than merely rejected.
 
+import type { DragEndEvent } from "@dnd-kit/core";
+import { closestCenter, DndContext } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { ContextMenu, DropdownMenu, Flex, IconButton, Text, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { ChevronDown, ChevronRight, MoreHorizontal, Plus, Settings, Trash2 } from "lucide-react";
@@ -32,16 +41,11 @@ import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCrea
 import { WorkspaceStatusDots } from "~/components/statusDot";
 import { ToastType } from "~/components/Toast.tsx";
 
-import { collapsedRepoGroupsAtom, isRepoCollapsedAtomFamily } from "./navAtoms.ts";
+import { collapsedRepoGroupsAtom, isRepoCollapsedAtomFamily, isSidebarDragActiveAtom } from "./navAtoms.ts";
+import { sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
 import styles from "./SidebarRepoGroup.module.scss";
-
-// A repo (project) and the workspaces that live in it, as grouped by
-// WorkspaceSidebar.
-export type RepoGroup = {
-  projectId: string;
-  name: string;
-  workspaces: ReadonlyArray<Workspace>;
-};
+import type { RepoGroup } from "./sidebarWorkspaceOrder.ts";
+import { reorderSidebarWorkspaceAtom } from "./sidebarWorkspaceOrder.ts";
 
 /**
  * A single workspace row in the sidebar repo group: the status dot + name (or an
@@ -54,6 +58,10 @@ export type RepoGroup = {
  * the rows whose aggregate flags actually flip — not the whole sidebar. For
  * the memo to hold, every non-primitive prop must be reference-stable across
  * parent renders (memoized action lists, id-taking callbacks).
+ *
+ * The row is a sortable item of its group's DndContext: the row div is the measured
+ * node, and the name button is the focusable drag activator — the hover action
+ * buttons stay outside the listeners so grabbing them can never start a drag.
  */
 const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   workspace,
@@ -81,11 +89,43 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   onBeginDelete: (workspace: Workspace) => void;
 }): ReactElement {
   const status = useAtomValue(workspaceDotStatusAtomFamily(workspace.objectId));
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isOver } =
+    useSortable({
+      id: workspace.objectId,
+      disabled: isRenaming,
+    });
+
+  // Enter navigates from the keyboard, like a click. Space is deliberately NOT
+  // handled here: it falls through to the dnd-kit keyboard sensor's activator
+  // (listeners.onKeyDown), so the drag pipeline (focus row → Space → arrows →
+  // Space) works while Enter can never start a drag. Mid-drag, Enter is the
+  // sensor's drop-commit key, so it is left alone rather than navigating out
+  // from under the drag.
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>): void => {
+    if (event.key === "Enter" && event.target === event.currentTarget && !isDragging) {
+      event.preventDefault();
+      onNavigate(workspace.objectId);
+      return;
+    }
+    listeners?.onKeyDown?.(event);
+  };
+
+  const rowClassName = [
+    styles.workspaceRow,
+    isActive ? styles.workspaceRowActive : "",
+    isDragging ? styles.rowDragging : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <ContextMenu.Root>
       <ContextMenu.Trigger>
-        <div className={`${styles.workspaceRow} ${isActive ? styles.workspaceRowActive : ""}`}>
+        <div
+          ref={setNodeRef}
+          className={rowClassName}
+          style={{ transform: CSS.Transform.toString(transform), transition }}
+        >
           {isRenaming ? (
             <span className={styles.workspaceRowButton}>
               <span className={styles.workspaceDot}>
@@ -101,12 +141,23 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
           ) : (
             <button
               type="button"
+              ref={setActivatorNodeRef}
               className={styles.workspaceRowButton}
+              {...attributes}
+              {...listeners}
+              // After the listeners spread so this composed handler REPLACES the
+              // sensor's raw onKeyDown (it delegates every non-Enter key back to it).
+              onKeyDown={handleKeyDown}
               onClick={() => onNavigate(workspace.objectId)}
               onMouseEnter={() => onHover(workspace.objectId)}
               data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW}
               data-workspace-id={workspace.objectId}
               data-has-unread={String(status.hasUnread)}
+              // Live drag flags for the keyboard-drag pipeline (and its Playwright
+              // driver): the dragged row is marked while the drag is active, and the
+              // row whose slot the drag currently targets is marked as the drop target.
+              data-sidebar-dragging={isDragging ? "true" : undefined}
+              data-sidebar-drop-target={isOver && !isDragging ? "true" : undefined}
               data-workspace-tab
               data-tab-id={workspace.objectId}
             >
@@ -192,6 +243,8 @@ export const SidebarRepoGroup = ({
   const setRenameErrorToast = useSetAtom(workspaceRenameErrorToastAtom);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useAtom(renamingWorkspaceIdAtom);
   const { createFromSidebar, isCreating } = useCreateWorkspaceFromSidebar();
+  const setSidebarDragActive = useSetAtom(isSidebarDragActiveAtom);
+  const reorderWorkspace = useSetAtom(reorderSidebarWorkspaceAtom);
   const store = useStore();
 
   // External hooks
@@ -199,10 +252,56 @@ export const SidebarRepoGroup = ({
   const { workspaceId: activeWorkspaceId } = useImbueLocation();
   const dangerColor = useThemeDangerColor();
 
+  // The group is a sortable item of WorkspaceSidebar's repo-group context: the
+  // whole group (header + rows) is the measured node so its rows travel with it,
+  // and the header button is the drag activator.
+  const {
+    attributes: groupAttributes,
+    listeners: groupListeners,
+    setNodeRef: setGroupNodeRef,
+    setActivatorNodeRef: setGroupActivatorNodeRef,
+    transform: groupTransform,
+    transition: groupTransition,
+    isDragging: isGroupDragging,
+    isOver: isGroupOver,
+  } = useSortable({ id: group.projectId });
+
+  // The rows' own drag context; see the module comment for why it lives per group.
+  const rowDndSensors = useSidebarDndSensors();
+
   // Functions and callbacks
   const handleToggleCollapsed = (): void => {
     setCollapsedRepos((prev) => ({ ...prev, [group.projectId]: !(prev[group.projectId] ?? false) }));
   };
+
+  // Enter toggles collapse from the keyboard, like a click; every other key falls
+  // through to the dnd-kit keyboard sensor so Space picks the group up (see the
+  // matching handler on SidebarWorkspaceRow).
+  const handleHeaderKeyDown = (event: React.KeyboardEvent<HTMLElement>): void => {
+    if (event.key === "Enter" && event.target === event.currentTarget && !isGroupDragging) {
+      event.preventDefault();
+      handleToggleCollapsed();
+      return;
+    }
+    groupListeners?.onKeyDown?.(event);
+  };
+
+  const handleRowDragStart = useCallback((): void => setSidebarDragActive(true), [setSidebarDragActive]);
+  const handleRowDragCancel = useCallback((): void => setSidebarDragActive(false), [setSidebarDragActive]);
+  const handleRowDragEnd = useCallback(
+    (event: DragEndEvent): void => {
+      setSidebarDragActive(false);
+      if (event.over === null || event.over.id === event.active.id) {
+        return;
+      }
+      reorderWorkspace({
+        projectId: group.projectId,
+        activeWorkspaceId: String(event.active.id),
+        overWorkspaceId: String(event.over.id),
+      });
+    },
+    [setSidebarDragActive, reorderWorkspace, group.projectId],
+  );
 
   // Reference-stable (the rows are memoized on their props): the rename
   // callbacks depend only on reference-stable atom setters and the store.
@@ -244,14 +343,26 @@ export const SidebarRepoGroup = ({
   const Chevron = isRepoCollapsed ? ChevronRight : ChevronDown;
 
   return (
-    <div className={styles.repoGroup}>
+    <div
+      ref={setGroupNodeRef}
+      className={`${styles.repoGroup} ${isGroupDragging ? styles.rowDragging : ""}`}
+      style={{ transform: CSS.Transform.toString(groupTransform), transition: groupTransition }}
+    >
       <div className={styles.repoHeader}>
         <button
           type="button"
+          ref={setGroupActivatorNodeRef}
           className={styles.repoHeaderButton}
+          {...groupAttributes}
+          {...groupListeners}
+          // After the listeners spread so this composed handler REPLACES the
+          // sensor's raw onKeyDown (it delegates every non-Enter key back to it).
+          onKeyDown={handleHeaderKeyDown}
           onClick={handleToggleCollapsed}
           data-testid={ElementIds.SIDEBAR_REPO_GROUP}
           data-project-id={group.projectId}
+          data-sidebar-dragging={isGroupDragging ? "true" : undefined}
+          data-sidebar-drop-target={isGroupOver && !isGroupDragging ? "true" : undefined}
         >
           <Chevron size={16} className={styles.repoChevron} />
           <Text className={styles.repoName} truncate>
@@ -293,23 +404,35 @@ export const SidebarRepoGroup = ({
           </Tooltip>
         </Flex>
       </div>
-      {!isRepoCollapsed &&
-        group.workspaces.map((ws) => (
-          <SidebarWorkspaceRow
-            key={ws.objectId}
-            workspace={ws}
-            isRenaming={renamingWorkspaceId === ws.objectId}
-            isActive={ws.objectId === activeWorkspaceId}
-            actions={actions}
-            openInRuntime={openInRuntime}
-            destructiveColor={dangerColor}
-            onNavigate={onWorkspaceClick}
-            onHover={onWorkspaceHover}
-            onRenameCommit={handleRenameCommit}
-            onRenameCancel={handleRenameCancel}
-            onBeginDelete={onBeginDelete}
-          />
-        ))}
+      {!isRepoCollapsed && (
+        <DndContext
+          sensors={rowDndSensors}
+          collisionDetection={closestCenter}
+          modifiers={sidebarDndModifiers}
+          onDragStart={handleRowDragStart}
+          onDragEnd={handleRowDragEnd}
+          onDragCancel={handleRowDragCancel}
+        >
+          <SortableContext items={group.workspaces.map((ws) => ws.objectId)} strategy={verticalListSortingStrategy}>
+            {group.workspaces.map((ws) => (
+              <SidebarWorkspaceRow
+                key={ws.objectId}
+                workspace={ws}
+                isRenaming={renamingWorkspaceId === ws.objectId}
+                isActive={ws.objectId === activeWorkspaceId}
+                actions={actions}
+                openInRuntime={openInRuntime}
+                destructiveColor={dangerColor}
+                onNavigate={onWorkspaceClick}
+                onHover={onWorkspaceHover}
+                onRenameCommit={handleRenameCommit}
+                onRenameCancel={handleRenameCancel}
+                onBeginDelete={onBeginDelete}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
+      )}
     </div>
   );
 };

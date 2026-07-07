@@ -19,3 +19,8 @@ export const collapsedRepoGroupsAtom = atomWithStorage<Record<string, boolean>>(
 export const isRepoCollapsedAtomFamily = atomFamily((projectId: string) =>
   atom((get) => get(collapsedRepoGroupsAtom)[projectId] ?? false),
 );
+
+// True while a sidebar row or repo group is being dragged. Transient (never
+// persisted); the workspace peek overlay reads it to stay closed mid-drag — the
+// pointer sweeps across rows while sorting, which would otherwise pop the peek.
+export const isSidebarDragActiveAtom = atom(false);

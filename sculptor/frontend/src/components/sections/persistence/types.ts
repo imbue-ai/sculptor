@@ -27,6 +27,18 @@ export type WorkspaceLayoutState = {
   activeSubSection: SubSectionId | null;
 };
 
+// The sidebar's user-customized drag order. Both lists are materialized on every
+// reorder (the full visible order is stored, not a delta); ids without a stored
+// position — new workspaces, repos never reordered — follow the stored ones in the
+// default alphabetical order, and stored ids that no longer exist are skipped on
+// read, so the lists never need cleanup.
+export type SidebarOrderState = {
+  // projectIds in custom order.
+  repos: Array<string>;
+  // workspaceIds in custom order, per projectId.
+  workspaces: Partial<Record<string, Array<string>>>;
+};
+
 export type GlobalLayoutState = {
   // Percentages of the workspace content area; the center fills the remainder.
   sectionSizes: { left: number; right: number; bottom: number };
@@ -34,6 +46,7 @@ export type GlobalLayoutState = {
   sidebarCollapsed: boolean;
   // Shared across Files/Changes/Commits.
   explorerListWidthPx: number;
+  sidebarOrder: SidebarOrderState;
 };
 
 export type LayoutScope = { kind: "workspace"; workspaceId: string } | { kind: "global" };
@@ -59,4 +72,5 @@ export const DEFAULT_GLOBAL_LAYOUT: GlobalLayoutState = {
   sidebarWidthPx: 240,
   sidebarCollapsed: false,
   explorerListWidthPx: 240,
+  sidebarOrder: { repos: [], workspaces: {} },
 };
