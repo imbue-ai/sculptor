@@ -1,6 +1,6 @@
 import type { FileOptions, SupportedLanguages } from "@pierre/diffs";
 import { File as PierreFile } from "@pierre/diffs/react";
-import { Box, Flex, Text } from "@radix-ui/themes";
+import { Flex, Text } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 import { useLayoutEffect, useMemo, useRef } from "react";
@@ -19,6 +19,7 @@ import {
   FILE_MARKDOWN_REMARK_PLUGINS,
   safeUrlTransform,
 } from "~/components/MarkdownDiff/markdownPlugins.ts";
+import { VerticalOverlayScrollbar } from "~/components/VerticalOverlayScrollbar.tsx";
 
 import type { MarkdownRenderMode } from "./atoms.ts";
 import { isMarkdownPath, markdownRenderModeAtom } from "./atoms.ts";
@@ -120,6 +121,10 @@ export const ReadOnlyPreview = ({ workspaceId, filePath, renderModeOverride }: R
   const globalMarkdownMode = useAtomValue(markdownRenderModeAtom);
   const markdownMode = renderModeOverride ?? globalMarkdownMode;
   const pierreRef = useRef<HTMLDivElement>(null);
+  // The scroll container (native scrollbar suppressed in CSS); VerticalOverlayScrollbar
+  // draws a persistent vertical bar off it, since a styled native scrollbar renders
+  // nothing at rest under macOS overlay-scrollbar mode.
+  const containerRef = useRef<HTMLDivElement>(null);
   const shouldRenderMarkdown = isMarkdownPath(filePath) && markdownMode === "rendered";
 
   // Inject our override stylesheet into Pierre's shadow DOM (see
@@ -193,22 +198,36 @@ export const ReadOnlyPreview = ({ workspaceId, filePath, renderModeOverride }: R
     // app shell.
     return (
       <div className={styles.wrapper} data-testid={ElementIds.READ_ONLY_PREVIEW}>
-        <Box
+        {/* A plain <div>, not a Radix <Box>: the code branch's scroll container
+            is also a <div>, so switching between a code file and a markdown one
+            reuses the same DOM node instead of swapping element types — which
+            would strand VerticalOverlayScrollbar observing the detached old
+            node (its effect only re-reads on remount). Padding lives in
+            `.markdownBody` instead of a `p` prop for the same reason. */}
+        <div
+          ref={containerRef}
           className={`${styles.container} ${styles.markdownBody}`}
-          p="4"
           data-testid={ElementIds.READ_ONLY_PREVIEW_MARKDOWN}
           data-markdown-body
         >
-          {frontmatter && <FrontmatterBlock frontmatter={frontmatter} />}
-          <ReactMarkdown
-            remarkPlugins={FILE_MARKDOWN_REMARK_PLUGINS}
-            rehypePlugins={FILE_MARKDOWN_REHYPE_PLUGINS}
-            urlTransform={safeUrlTransform}
-            components={READ_ONLY_PREVIEW_COMPONENTS}
-          >
-            {body}
-          </ReactMarkdown>
-        </Box>
+          {/* Single content wrapper so it's always the scroll container's
+              firstElementChild — the element VerticalOverlayScrollbar observes
+              for content growth. Rendering the frontmatter and body as separate
+              direct children would leave later growth (e.g. a late image load)
+              unobserved and the thumb stale. */}
+          <div>
+            {frontmatter && <FrontmatterBlock frontmatter={frontmatter} />}
+            <ReactMarkdown
+              remarkPlugins={FILE_MARKDOWN_REMARK_PLUGINS}
+              rehypePlugins={FILE_MARKDOWN_REHYPE_PLUGINS}
+              urlTransform={safeUrlTransform}
+              components={READ_ONLY_PREVIEW_COMPONENTS}
+            >
+              {body}
+            </ReactMarkdown>
+          </div>
+        </div>
+        <VerticalOverlayScrollbar scrollRef={containerRef} thumbTestId={ElementIds.READ_ONLY_PREVIEW_SCROLLBAR_THUMB} />
       </div>
     );
   }
@@ -228,11 +247,12 @@ export const ReadOnlyPreview = ({ workspaceId, filePath, renderModeOverride }: R
 
   return (
     <div className={styles.wrapper} data-testid={ElementIds.READ_ONLY_PREVIEW}>
-      <div className={styles.container}>
+      <div ref={containerRef} className={styles.container}>
         <div ref={pierreRef}>
           <PierreFile file={fileContents} options={fileOptions} />
         </div>
       </div>
+      <VerticalOverlayScrollbar scrollRef={containerRef} thumbTestId={ElementIds.READ_ONLY_PREVIEW_SCROLLBAR_THUMB} />
       {overflow === "scroll" && <StickyHorizontalScrollbar containerRef={pierreRef} />}
     </div>
   );
