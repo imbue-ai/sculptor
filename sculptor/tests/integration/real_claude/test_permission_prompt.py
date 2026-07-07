@@ -43,8 +43,12 @@ _VERIFY_PROMPT = (
 # would never be satisfied.
 _EDIT_PROMPT = (
     "Do these steps in order:\n"
-    + "1. First use the Write tool to create the file '.claude/README.md' with this exact content:\n"
+    + "1. First use the Write tool to create the file '.claude/README.md'. Its content must be "
+    + "EXACTLY the text between the two markers below, and must NOT include the markers themselves "
+    + "or any of the step text:\n"
+    + "-----BEGIN FILE CONTENT-----\n"
     + "# Test README\n\nInitial content line.\n"
+    + "-----END FILE CONTENT-----\n"
     + "2. Then use the Edit tool on '.claude/README.md' to append the line "
     + "'<!-- EDIT-SENTINEL-37502 -->' at the end of the file, keeping the existing content.\n"
     + "3. Then use the Read tool to read '.claude/README.md' again and confirm both the initial "
