@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 
+import type { ElementIds } from "~/api";
 import type { KeybindingId } from "~/common/keybindings/types.ts";
 
 export type CommandId = string;
@@ -91,6 +92,13 @@ export type Command = {
   keywords?: Array<string>;
   group: CommandGroupId;
   icon?: CommandIcon;
+  /**
+   * Dedicated `data-testid` for this command's row, overriding the shared
+   * `COMMAND_PALETTE_ITEM` id every row otherwise carries. Set it only for the
+   * few commands a test needs to target directly (most tests key off the
+   * always-present `data-command-id` instead).
+   */
+  elementId?: ElementIds;
   /** Show the binding for an existing keybinding registry id alongside this command. */
   shortcut?: KeybindingId;
   /**

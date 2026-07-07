@@ -7,7 +7,12 @@ import {
   PanelLeftIcon,
   PanelRightIcon,
   PuzzleIcon,
+  RotateCcw,
 } from "lucide-react";
+
+import { ElementIds } from "~/api";
+import { confirmationDialogAtom } from "~/common/state/atoms/confirmationDialog.ts";
+import { buildResetLayoutConfirmationContent } from "~/components/confirmationDialogContent.ts";
 
 import type { CommandRuntime } from "../runtime.ts";
 import type { Command, CommandIcon } from "../types.ts";
@@ -145,5 +150,26 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
     when: (ctx) => ctx.route.isWorkspace,
     // Closes the palette (no keepOpen) so the maximized section is visible immediately.
     perform: () => runtime.ui.toggleMaximizeSection(),
+  },
+  {
+    id: "view.reset_layout",
+    title: "Reset to default layout",
+    subtitle: "Restore the default panel arrangement for this workspace",
+    keywords: ["reset", "default", "layout", "arrangement", "restore", "panels", "sections"],
+    group: "panels",
+    icon: RotateCcw,
+    elementId: ElementIds.COMMAND_PALETTE_RESET_LAYOUT,
+    onPage: "view.layout",
+    order: 60,
+    when: (ctx) => ctx.route.isWorkspace,
+    // Discards the user's arrangement, so it opens the shared confirmation dialog
+    // rather than resetting on select; confirming runs the reset. Closes the palette
+    // (no keepOpen) so the dialog isn't stacked on top of it.
+    perform: (): void => {
+      runtime.store.set(confirmationDialogAtom, {
+        ...buildResetLayoutConfirmationContent(),
+        onConfirm: () => runtime.ui.resetLayout(),
+      });
+    },
   },
 ];

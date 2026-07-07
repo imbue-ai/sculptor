@@ -48,6 +48,12 @@ export type CommandRuntime = {
     toggleSidebar: () => void;
     /** Maximize the active section, or restore if one is already maximized. */
     toggleMaximizeSection: () => void;
+    /**
+     * Rebuild the active workspace's panel layout to the default arrangement —
+     * the same seeding a workspace gets on first visit — overwriting the current
+     * (possibly heavily customized) layout. No-op when no workspace is active.
+     */
+    resetLayout: () => void;
     setTheme: (mode: AppearanceMode) => void;
     focusChatInput: () => void;
     showChatSearch: () => void;

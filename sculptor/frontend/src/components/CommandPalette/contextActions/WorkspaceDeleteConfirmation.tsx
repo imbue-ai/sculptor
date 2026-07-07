@@ -11,7 +11,8 @@ import { useCallback } from "react";
 
 import { useImbueLocation } from "~/common/NavigateUtils.ts";
 import { useOptimisticWorkspaceDelete } from "~/common/state/hooks/useOptimisticWorkspaceDelete.ts";
-import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
+import { ConfirmationDialog } from "~/components/ConfirmationDialog.tsx";
+import { buildDeleteConfirmationContent } from "~/components/confirmationDialogContent.ts";
 import { useWorkspaceTabActions } from "~/components/useWorkspaceTabActions.ts";
 
 import { workspaceDeleteTargetAtom } from "./atoms.ts";
@@ -48,11 +49,10 @@ export const WorkspaceDeleteConfirmation = (): ReactElement => {
   );
 
   return (
-    <DeleteConfirmationDialog
+    <ConfirmationDialog
       isOpen={target !== null}
       onOpenChange={handleOpenChange}
-      entityType="workspace"
-      entityName={target?.name ?? ""}
+      {...buildDeleteConfirmationContent({ entityType: "workspace", entityName: target?.name ?? "" })}
       onConfirm={handleConfirm}
     />
   );

@@ -2,6 +2,7 @@ import { getDefaultStore } from "jotai";
 import { Maximize2, Minimize2 } from "lucide-react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { confirmationDialogAtom } from "../../../common/state/atoms/confirmationDialog.ts";
 import { DEFAULT_THEME_BUILDER_SETTINGS, themeBuilderSettingsAtom } from "../../../common/state/atoms/themeBuilder.ts";
 import { chatToolDensityAtom } from "../../../pages/workspace/components/chat-alpha/atoms.ts";
 import { buildChatCommands } from "../builtinCommands/chat.ts";
@@ -71,6 +72,7 @@ const makeRuntime = (overrides: Partial<CommandRuntime> = {}): CommandRuntime =>
       toggleRightPanel: vi.fn(),
       toggleSidebar: vi.fn(),
       toggleMaximizeSection: vi.fn(),
+      resetLayout: vi.fn(),
       setTheme: vi.fn(),
       focusChatInput: vi.fn(),
       showChatSearch: vi.fn(),
@@ -318,6 +320,7 @@ describe("buildPanelCommands", () => {
         "view.toggle_bottom_panel",
         "view.toggle_sidebar",
         "view.maximize_section",
+        "view.reset_layout",
       ].sort(),
     );
   });
@@ -405,6 +408,27 @@ describe("buildPanelCommands", () => {
     const cmds = buildPanelCommands(makeRuntime());
     expect(cmds.find((c) => c.id === "view.toggle_sidebar")!.keepOpen).toBe(true);
     expect(cmds.find((c) => c.id === "view.maximize_section")!.keepOpen).not.toBe(true);
+  });
+
+  it("reset-to-default-layout confirms first, then runs resetLayout only on confirm", () => {
+    const runtime = makeRuntime();
+    runtime.store.set(confirmationDialogAtom, null);
+    const reset = buildPanelCommands(runtime).find((c) => c.id === "view.reset_layout")!;
+    expect(reset.when!(WORKSPACE_CTX)).toBe(true);
+    expect(reset.when!(ROOT_CTX)).toBe(false);
+    expect(reset.onPage).toBe("view.layout");
+
+    // Selecting the command opens the confirmation instead of resetting instantly.
+    runPerform(reset);
+    expect(runtime.ui.resetLayout).not.toHaveBeenCalled();
+    const pending = runtime.store.get(confirmationDialogAtom);
+    expect(pending?.confirmLabel).toBe("Reset layout");
+    expect(pending?.tone).toBe("neutral");
+
+    // Confirming runs the reset.
+    pending?.onConfirm();
+    expect(runtime.ui.resetLayout).toHaveBeenCalledTimes(1);
+    runtime.store.set(confirmationDialogAtom, null);
   });
 
   it("view.maximize_section lives on the view.layout sub-page", () => {

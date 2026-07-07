@@ -1,13 +1,14 @@
 import { ScrollArea, Spinner } from "@radix-ui/themes";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement, RefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { RecentWorkspaceResponse } from "../../../api";
 import { listRecentWorkspaces } from "../../../api";
+import { confirmationDialogAtom } from "../../../common/state/atoms/confirmationDialog.ts";
 import { deletedWorkspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
 import { useOptimisticWorkspaceDelete } from "../../../common/state/hooks/useOptimisticWorkspaceDelete.ts";
-import { DeleteConfirmationDialog } from "../../../components/DeleteConfirmationDialog.tsx";
+import { buildDeleteConfirmationContent } from "../../../components/confirmationDialogContent.ts";
 import { EmptyState } from "./EmptyState.tsx";
 import styles from "./RecentWorkspaces.module.scss";
 import { WorkspaceRow } from "./WorkspaceRow.tsx";
@@ -35,12 +36,11 @@ export const RecentWorkspaces = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
-
   const areaRef = useRef<HTMLDivElement>(null);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
 
   const deletedIds = useAtomValue(deletedWorkspaceIdsAtom);
+  const setConfirmation = useSetAtom(confirmationDialogAtom);
 
   const handleNavigateAfterDelete = useCallback((workspaceId: string): void => {
     setWorkspaces((prev) => prev.filter((ws) => ws.objectId !== workspaceId));
@@ -50,15 +50,17 @@ export const RecentWorkspaces = ({
     onNavigateAfterDelete: handleNavigateAfterDelete,
   });
 
-  const handleDelete = useCallback((workspace: RecentWorkspaceResponse): void => {
-    setDeleteTarget({ id: workspace.objectId, name: workspace.description });
-  }, []);
-
-  const handleDeleteConfirm = useCallback((): void => {
-    if (!deleteTarget) return;
-    executeDelete(deleteTarget.id, deleteTarget.name);
-    setDeleteTarget(null);
-  }, [deleteTarget, executeDelete]);
+  // Deleting is destructive, so raise the shared confirmation dialog with the
+  // optimistic delete captured as its confirm action.
+  const handleDelete = useCallback(
+    (workspace: RecentWorkspaceResponse): void => {
+      setConfirmation({
+        ...buildDeleteConfirmationContent({ entityType: "workspace", entityName: workspace.description }),
+        onConfirm: () => executeDelete(workspace.objectId, workspace.description),
+      });
+    },
+    [setConfirmation, executeDelete],
+  );
 
   // Fetch the recent workspaces once on mount. `isLoading` starts true, so the
   // loading state is already correct without a synchronous setState here; the
@@ -199,56 +201,45 @@ export const RecentWorkspaces = ({
   }
 
   return (
-    <>
-      <div ref={areaRef} className={styles.recentArea} tabIndex={0}>
-        <WorkspaceSearchBar
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          inputRef={searchInputRef}
-          autoFocus={autoFocusSearch}
-          onEscape={(): void => {
-            setSearchQuery("");
-            setFocusedIndex(null);
-            onEscapeToTitle();
-          }}
-        />
-        {sortedWorkspaces.length === 0 ? (
-          <div className={styles.noResults}>No results for &ldquo;{searchQuery}&rdquo;</div>
-        ) : (
-          <ScrollArea type="auto" scrollbars="vertical" className={styles.workspaceList}>
-            {visibleWorkspaces.map((ws, index) => (
-              <WorkspaceRow
-                key={ws.objectId}
-                workspace={ws}
-                isFocused={focusedIndex === index}
-                onClick={(e: React.MouseEvent): void => {
-                  if (e.metaKey) {
-                    onOpenInNewTab(ws);
-                  } else {
-                    onWorkspaceClick(ws);
-                  }
-                }}
-                onOpenInNewTab={(): void => onOpenInNewTab(ws)}
-                onDelete={handleDelete}
-              />
-            ))}
-            {hasMore && (
-              <button className={styles.showMoreButton} onClick={(): void => setVisibleCount((n) => n + PAGE_SIZE)}>
-                Show more ({sortedWorkspaces.length - visibleCount} remaining)
-              </button>
-            )}
-          </ScrollArea>
-        )}
-      </div>
-      <DeleteConfirmationDialog
-        isOpen={deleteTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
+    <div ref={areaRef} className={styles.recentArea} tabIndex={0}>
+      <WorkspaceSearchBar
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        inputRef={searchInputRef}
+        autoFocus={autoFocusSearch}
+        onEscape={(): void => {
+          setSearchQuery("");
+          setFocusedIndex(null);
+          onEscapeToTitle();
         }}
-        entityType="workspace"
-        entityName={deleteTarget?.name ?? ""}
-        onConfirm={handleDeleteConfirm}
       />
-    </>
+      {sortedWorkspaces.length === 0 ? (
+        <div className={styles.noResults}>No results for &ldquo;{searchQuery}&rdquo;</div>
+      ) : (
+        <ScrollArea type="auto" scrollbars="vertical" className={styles.workspaceList}>
+          {visibleWorkspaces.map((ws, index) => (
+            <WorkspaceRow
+              key={ws.objectId}
+              workspace={ws}
+              isFocused={focusedIndex === index}
+              onClick={(e: React.MouseEvent): void => {
+                if (e.metaKey) {
+                  onOpenInNewTab(ws);
+                } else {
+                  onWorkspaceClick(ws);
+                }
+              }}
+              onOpenInNewTab={(): void => onOpenInNewTab(ws)}
+              onDelete={handleDelete}
+            />
+          ))}
+          {hasMore && (
+            <button className={styles.showMoreButton} onClick={(): void => setVisibleCount((n) => n + PAGE_SIZE)}>
+              Show more ({sortedWorkspaces.length - visibleCount} remaining)
+            </button>
+          )}
+        </ScrollArea>
+      )}
+    </div>
   );
 };

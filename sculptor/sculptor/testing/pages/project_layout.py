@@ -56,16 +56,24 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
     def get_settings_page_locator(self) -> Locator:
         return self.get_by_test_id(ElementIDs.SETTINGS_PAGE)
 
-    # -- Delete-confirmation + inline rename (shared across rows and panel tabs) --
+    # -- Confirmation dialog + inline rename (shared across rows and panel tabs) --
+
+    def get_confirmation_dialog(self) -> Locator:
+        """The shared confirm/cancel dialog (workspace/agent/terminal delete, reset layout, …)."""
+        return self._page.get_by_test_id(ElementIDs.CONFIRMATION_DIALOG)
+
+    def confirm_confirmation_dialog(self) -> None:
+        """Click the confirm button in the shared confirmation dialog."""
+        confirm_button = self._page.get_by_test_id(ElementIDs.CONFIRMATION_DIALOG_CONFIRM)
+        expect(confirm_button).to_be_visible()
+        confirm_button.click()
 
     def get_delete_confirmation_dialog(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)
+        return self.get_confirmation_dialog()
 
     def confirm_delete(self) -> None:
         """Click the confirm button in the delete-confirmation dialog."""
-        confirm_button = self._page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CONFIRM)
-        expect(confirm_button).to_be_visible()
-        confirm_button.click()
+        self.confirm_confirmation_dialog()
 
     def get_inline_rename_input(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.INLINE_RENAME_INPUT)

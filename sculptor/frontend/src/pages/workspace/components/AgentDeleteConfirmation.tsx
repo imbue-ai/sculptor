@@ -17,7 +17,8 @@ import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { useOptimisticTaskDelete } from "~/common/state/hooks/useOptimisticTaskDelete.ts";
 import { agentDeleteTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
-import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
+import { ConfirmationDialog } from "~/components/ConfirmationDialog.tsx";
+import { buildDeleteConfirmationContent } from "~/components/confirmationDialogContent.ts";
 import { makeAgentPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
 import { closePanelAtom } from "~/components/sections/sectionActions.ts";
 import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
@@ -90,15 +91,14 @@ export const AgentDeleteConfirmation = (): ReactElement | null => {
   }
 
   return (
-    <DeleteConfirmationDialog
+    <ConfirmationDialog
       isOpen={target !== null}
       onOpenChange={(isOpen) => {
         if (!isOpen) {
           setTarget(null);
         }
       }}
-      entityType="agent"
-      entityName={target?.name ?? ""}
+      {...buildDeleteConfirmationContent({ entityType: "agent", entityName: target?.name ?? "" })}
       onConfirm={handleConfirm}
     />
   );

@@ -13,6 +13,7 @@
 // No splits. `center` is intentionally omitted from `expanded` — it is always
 // expanded (see types.ts / isSectionExpandedAtom).
 
+import { makeAgentPanelId } from "../registry/dynamicPanels.tsx";
 import type { PanelId, SubSectionId } from "../sectionTypes.ts";
 import type { WorkspaceLayoutState } from "./types.ts";
 
@@ -60,4 +61,18 @@ export function buildDefaultWorkspaceLayout({
     splits: {},
     activeSubSection: "center",
   };
+}
+
+// The seeded default for a workspace that has NO agents yet: the standard default
+// arrangement with the center left empty (its empty state offers the add-panel
+// quick actions). Built by stripping a placeholder center panel from the standard
+// default so the two arrangements cannot drift structurally.
+export function buildAgentlessDefaultLayout(terminalPanelId: PanelId): WorkspaceLayoutState {
+  const placeholderPanelId = makeAgentPanelId("placeholder");
+  const layout = buildDefaultWorkspaceLayout({ agentPanelId: placeholderPanelId, terminalPanelId });
+  const placement = { ...layout.placement };
+  delete placement[placeholderPanelId];
+  const activePanel = { ...layout.activePanel };
+  delete activePanel.center;
+  return { ...layout, placement, activePanel, order: { ...layout.order, center: [] } };
 }

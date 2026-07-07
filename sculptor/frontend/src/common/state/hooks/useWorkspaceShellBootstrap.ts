@@ -25,31 +25,18 @@ import { viewedAgentIdAtom } from "~/common/state/atoms/viewedAgent.ts";
 import { useMarkRead } from "~/common/state/hooks/useMarkRead";
 import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
 import { seedFirstVisitTerminal } from "~/components/sections/addPanelCore.ts";
-import { buildDefaultWorkspaceLayout } from "~/components/sections/persistence/defaultLayout.ts";
-import type { WorkspaceLayoutState } from "~/components/sections/persistence/types.ts";
+import {
+  buildAgentlessDefaultLayout,
+  buildDefaultWorkspaceLayout,
+} from "~/components/sections/persistence/defaultLayout.ts";
 import { makeAgentPanelId, makeTerminalPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
 import { consumePendingPanelRevealAtom } from "~/components/sections/sectionActions.ts";
 import { isEmptyLayout, switchActiveWorkspaceAtom, workspaceLayoutFamily } from "~/components/sections/sectionAtoms.ts";
-import type { PanelId } from "~/components/sections/sectionTypes.ts";
 import { activeSectionRingNonceAtom } from "~/components/sections/transientAtoms.ts";
 import { useAddPanelActions } from "~/components/sections/useAddPanelActions.ts";
 import { useArtifactSync } from "~/pages/workspace/hooks/useArtifactSync";
 
 import { useWorkspaceDynamicPanels } from "./useWorkspaceDynamicPanels.ts";
-
-// The seeded default for a workspace that has NO agents yet: the standard default
-// arrangement with the center left empty (its empty state offers the add-panel
-// quick actions). Built by stripping a placeholder center panel from the standard
-// default so the two arrangements cannot drift structurally.
-function buildAgentlessDefaultLayout(terminalPanelId: PanelId): WorkspaceLayoutState {
-  const placeholderPanelId = makeAgentPanelId("placeholder");
-  const layout = buildDefaultWorkspaceLayout({ agentPanelId: placeholderPanelId, terminalPanelId });
-  const placement = { ...layout.placement };
-  delete placement[placeholderPanelId];
-  const activePanel = { ...layout.activePanel };
-  delete activePanel.center;
-  return { ...layout, placement, activePanel, order: { ...layout.order, center: [] } };
-}
 
 // `taskId` is the route's agent id; it is undefined for a workspace with no agents,
 // which renders the shell with an empty center instead of a blank page.

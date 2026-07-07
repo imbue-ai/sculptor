@@ -101,8 +101,8 @@ const longGrepPill: PillData = {
   state: "completed",
   blocks: [
     toolUse("tu-200", "Grep", {
-      pattern: "interface DeleteConfirmationDialogProps[\\s\\S]*?\\}",
-      path: "sculptor/frontend/src/components/DeleteConfirmationDialog.tsx",
+      pattern: "type ConfirmationDialogProps[\\s\\S]*?\\}",
+      path: "sculptor/frontend/src/components/ConfirmationDialog.tsx",
     }),
   ],
   results: [toolResult("tu-200", "Grep", "")],
