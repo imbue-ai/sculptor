@@ -281,6 +281,42 @@ describe("useAlphaAutoScroll", () => {
     expect(result.current.isEngaged).toBe(false);
   });
 
+  it("re-pins to the true bottom when a non-streaming jump landed short (stale measurement)", () => {
+    // A non-streaming jump computes bottomPinOffset from scrollHeight, which is
+    // stale-short while the last message is still remeasuring taller after it
+    // remounts (it grew off-screen while the user was scrolled away). The
+    // bottom-settle window opened by scrollToBottom must re-pin to the true
+    // bottom when the remeasured content grows — otherwise the jump lands short
+    // with no stream and no further scroll to hide the jump-to-bottom button.
+    const el = createMockScrollContainer(0, 2000, 500); // scrolled to the top
+    const ref = { current: el };
+    const virtualizer = createMockVirtualizer();
+
+    const { result } = renderHook(() => useAlphaAutoScroll(ref, false, 10, virtualizer, null, -1, "test-task"));
+
+    // Jump — lands at the (stale, short) content bottom.
+    act(() => {
+      result.current.scrollToBottom();
+    });
+    expectPinnedToBottom(el);
+
+    // The remounted last message remeasures taller: scrollHeight grows.
+    setScrollPosition(el, el.scrollTop, 3000);
+    act(() => {
+      triggerResize();
+    });
+
+    // The bottom-settle window re-pinned to the NEW content bottom.
+    expectPinnedToBottom(el);
+
+    // In the browser the re-pin fires a scroll event that re-samples geometry;
+    // simulate it and confirm the view now reads as at-bottom (button hides).
+    act(() => {
+      el.dispatchEvent(new Event("scroll"));
+    });
+    expect(result.current.isAtBottom).toBe(true);
+  });
+
   it("suppressAutoScroll prevents engage/disengage", () => {
     const el = createMockScrollContainer(1300, 2000, 500);
     const ref = { current: el };

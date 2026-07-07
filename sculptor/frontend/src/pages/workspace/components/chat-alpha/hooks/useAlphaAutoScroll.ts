@@ -215,13 +215,28 @@ export const useAlphaAutoScroll = (
     Virtualizer<HTMLDivElement, Element>["shouldAdjustScrollPositionOnItemSizeChange"] | null
   >(null);
 
-  // Turn-footer reveal window: the timestamp (performance.now) until which the
-  // content observer re-pins to the bottom after a followed turn ends, plus the
-  // content height and viewport size sampled then (the reveal condition below
-  // compares against both). Zeroed on user takeover.
-  const revealFooterUntilRef = useRef(0);
-  const revealFooterBaseHeightRef = useRef(0);
-  const revealFooterViewportRef = useRef("");
+  // Bottom-settle window: the timestamp (performance.now) until which the content
+  // observer re-pins to the bottom as late content lands after a programmatic
+  // bottom-landing, plus the content height and viewport size sampled then (the
+  // re-pin condition below compares against both). Two landings expect late
+  // growth and open it: a followed turn ending (the turn footer mounts a beat
+  // later) and a non-streaming jump-to-bottom (the last message can remeasure
+  // taller after it remounts, so the initial pin lands short). Zeroed on user
+  // takeover.
+  const bottomSettleUntilRef = useRef(0);
+  const bottomSettleBaseHeightRef = useRef(0);
+  const bottomSettleViewportRef = useRef("");
+
+  // Open the bottom-settle window from the current scroll geometry (see the refs
+  // above). Sampling scrollHeight here as the baseline means only growth BEYOND
+  // the landing re-pins — a later shrink or an unrelated reflow does not.
+  const openBottomSettleWindow = useCallback((): void => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    bottomSettleUntilRef.current = performance.now() + FOOTER_REVEAL_WINDOW_MS;
+    bottomSettleBaseHeightRef.current = el.scrollHeight;
+    bottomSettleViewportRef.current = `${el.clientWidth}x${el.clientHeight}`;
+  }, [scrollContainerRef]);
 
   // Mark that the user is actively scrolling, with a debounce to clear it.
   const markUserScrolling = useCallback((): void => {
@@ -242,8 +257,8 @@ export const useAlphaAutoScroll = (
 
     const onUserInput = (): void => {
       markUserScrolling();
-      // A user input ends the footer-reveal window immediately: a takeover wins.
-      revealFooterUntilRef.current = 0;
+      // A user input ends the bottom-settle window immediately: a takeover wins.
+      bottomSettleUntilRef.current = 0;
       // Disengage on user wheel/touch/keydown before the scroll event fires.
       // During streaming the ResizeObserver sets isProgrammaticScroll and scrolls;
       // a user scroll event that saw that flag would be consumed as programmatic
@@ -351,8 +366,8 @@ export const useAlphaAutoScroll = (
       // meaningless for the incoming task. The first user scroll re-samples it.
       machine.setReadingAnchor(null);
       prevScrollTopRef.current = -1;
-      // Cancel any in-flight footer-reveal window from the outgoing task.
-      revealFooterUntilRef.current = 0;
+      // Cancel any in-flight bottom-settle window from the outgoing task.
+      bottomSettleUntilRef.current = 0;
       // The authority (following/anchoring) is reset by the machine's
       // taskSwitched -> restoring transition (dispatched by the persistence
       // hook); this effect only resets auto-scroll's own observations and
@@ -537,14 +552,9 @@ export const useAlphaAutoScroll = (
       if (isFollowing() && messageCount > 0) {
         pinToBottom();
         // The turn footer mounts a beat later and grows the content below the fold;
-        // open a short window so the content observer re-pins to reveal it at the
-        // bottom, matching where focusing the input lands.
-        const el = scrollContainerRef.current;
-        if (el) {
-          revealFooterUntilRef.current = performance.now() + FOOTER_REVEAL_WINDOW_MS;
-          revealFooterBaseHeightRef.current = el.scrollHeight;
-          revealFooterViewportRef.current = `${el.clientWidth}x${el.clientHeight}`;
-        }
+        // open the bottom-settle window so the content observer re-pins to reveal
+        // it at the bottom, matching where focusing the input lands.
+        openBottomSettleWindow();
       }
       // Streaming stopped: leave following/anchoring for userControlled. The
       // leave-anchoring subscription tears down the animation and jump
@@ -672,16 +682,17 @@ export const useAlphaAutoScroll = (
       if (messageCount === 0) return;
       const distance = distanceFromContentBottom(el, virtualizer);
       machine.setGeometryAtBottom(distance <= BOTTOM_THRESHOLD);
-      // Reveal the turn footer that grew the content just after a followed turn ended:
-      // re-pin (down-only) to the grown content bottom, within the window opened at
-      // streaming stop. The two non-obvious guards: still userControlled (a new turn
-      // opened within the window is anchoringTurn and must not be yanked down), and an
-      // unchanged viewport (a resize reflow keeps its own reading-anchor behavior).
+      // Within the bottom-settle window, re-pin (down-only) to the grown content
+      // bottom as late content lands after a programmatic bottom-landing (a turn
+      // footer mounting, or a jumped-to last message remeasuring taller). The two
+      // non-obvious guards: still userControlled (a new turn opened within the
+      // window is anchoringTurn and must not be yanked down), and an unchanged
+      // viewport (a resize reflow keeps its own reading-anchor behavior).
       if (
-        performance.now() < revealFooterUntilRef.current &&
+        performance.now() < bottomSettleUntilRef.current &&
         machine.getState().authority.kind === "userControlled" &&
-        el.scrollHeight > revealFooterBaseHeightRef.current + 1 &&
-        `${el.clientWidth}x${el.clientHeight}` === revealFooterViewportRef.current
+        el.scrollHeight > bottomSettleBaseHeightRef.current + 1 &&
+        `${el.clientWidth}x${el.clientHeight}` === bottomSettleViewportRef.current
       ) {
         pinToBottom();
       }
@@ -713,15 +724,29 @@ export const useAlphaAutoScroll = (
     // other trigger).
     machine.setGeometryAtBottom(true);
     if (isStreaming) {
-      // Follow the stream (also exits anchoring → following).
+      // Follow the stream (also exits anchoring → following, which clears the
+      // reading anchor and re-pins on every content growth via the observer).
       machine.dispatch({ kind: "reachedBottom" });
-    } else if (machine.getState().authority.kind === "anchoringTurn") {
+      return;
+    }
+
+    if (machine.getState().authority.kind === "anchoringTurn") {
       // Not streaming but anchored: the user explicitly went to the bottom, so
       // end the anchored turn. The leave-anchoring subscription clears jump
       // suppression.
       machine.dispatch({ kind: "userScrolled" });
     }
-  }, [messageCount, isStreaming, machine, pinToBottom]);
+    // A non-streaming jump can land short: bottomPinOffset is computed from
+    // scrollHeight, which is stale while the last message is still remounting and
+    // remeasuring taller (the user scrolled away during its own stream, so it grew
+    // off-screen and unmeasured). Nothing would then hide the button — no stream,
+    // and no further scroll to recheck the distance. Abandon the scrolled-up
+    // reading anchor (whose holdAnchor reflow would otherwise pull the view back
+    // off the bottom) and open the bottom-settle window so the content observer
+    // re-pins to the true bottom as the remeasured content lands.
+    machine.setReadingAnchor(null);
+    openBottomSettleWindow();
+  }, [messageCount, isStreaming, machine, pinToBottom, openBottomSettleWindow]);
 
   const scrollToTop = useCallback((): void => {
     if (messageCount === 0) return;
