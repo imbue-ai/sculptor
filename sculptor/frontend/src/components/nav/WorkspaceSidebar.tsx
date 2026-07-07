@@ -184,6 +184,9 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   // Repo groups are drag-sortable (each group's rows have their own context inside
   // SidebarRepoGroup); a drop commits the new group order to the layout snapshot.
   const groupDndSensors = useSidebarDndSensors();
+  // Stamped on the sidebar root as a data flag so the stylesheet can suppress
+  // hover chrome for the whole rail while any sidebar drag is active.
+  const isSidebarDragActive = useAtomValue(isSidebarDragActiveAtom);
   const setSidebarDragActive = useSetAtom(isSidebarDragActiveAtom);
   const reorderRepoGroup = useSetAtom(reorderSidebarRepoGroupAtom);
   const handleGroupDragStart = useCallback((): void => setSidebarDragActive(true), [setSidebarDragActive]);
@@ -225,7 +228,12 @@ export const WorkspaceSidebar = (): ReactElement | null => {
     // (Themes' <Tooltip> reads this provider — `radix-ui` is pinned to the
     // same instance @radix-ui/themes resolves.)
     <TooltipPrimitive.Provider delayDuration={1000} skipDelayDuration={0}>
-      <aside className={styles.sidebar} style={{ width: `${width}px` }} data-testid={ElementIds.WORKSPACE_SIDEBAR}>
+      <aside
+        className={styles.sidebar}
+        style={{ width: `${width}px` }}
+        data-testid={ElementIds.WORKSPACE_SIDEBAR}
+        data-sidebar-drag-active={isSidebarDragActive ? "true" : undefined}
+      >
         {/* Window-controls gutter clears the macOS traffic lights, then the
           collapse toggle. */}
         <div className={styles.windowControls} style={{ paddingLeft: getTitleBarLeftPadding(true) }}>

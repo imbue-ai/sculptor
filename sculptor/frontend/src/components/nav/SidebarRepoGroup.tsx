@@ -420,33 +420,39 @@ export const SidebarRepoGroup = ({
         </Flex>
       </div>
       {!isRepoCollapsed && (
-        <DndContext
-          sensors={rowDndSensors}
-          collisionDetection={closestCenter}
-          modifiers={sidebarDndModifiers}
-          onDragStart={handleRowDragStart}
-          onDragEnd={handleRowDragEnd}
-          onDragCancel={handleRowDragCancel}
-        >
-          <SortableContext items={group.workspaces.map((ws) => ws.objectId)} strategy={verticalListSortingStrategy}>
-            {group.workspaces.map((ws) => (
-              <SidebarWorkspaceRow
-                key={ws.objectId}
-                workspace={ws}
-                isRenaming={renamingWorkspaceId === ws.objectId}
-                isActive={ws.objectId === activeWorkspaceId}
-                actions={actions}
-                openInRuntime={openInRuntime}
-                destructiveColor={dangerColor}
-                onNavigate={onWorkspaceClick}
-                onHover={onWorkspaceHover}
-                onRenameCommit={handleRenameCommit}
-                onRenameCancel={handleRenameCancel}
-                onBeginDelete={onBeginDelete}
-              />
-            ))}
-          </SortableContext>
-        </DndContext>
+        // The rows get their own container (rather than sitting directly in the
+        // group) so restrictToParentElement clamps a dragged row to the rows'
+        // extent — it can slide between its siblings but never up over the
+        // group header.
+        <div className={styles.repoRows}>
+          <DndContext
+            sensors={rowDndSensors}
+            collisionDetection={closestCenter}
+            modifiers={sidebarDndModifiers}
+            onDragStart={handleRowDragStart}
+            onDragEnd={handleRowDragEnd}
+            onDragCancel={handleRowDragCancel}
+          >
+            <SortableContext items={group.workspaces.map((ws) => ws.objectId)} strategy={verticalListSortingStrategy}>
+              {group.workspaces.map((ws) => (
+                <SidebarWorkspaceRow
+                  key={ws.objectId}
+                  workspace={ws}
+                  isRenaming={renamingWorkspaceId === ws.objectId}
+                  isActive={ws.objectId === activeWorkspaceId}
+                  actions={actions}
+                  openInRuntime={openInRuntime}
+                  destructiveColor={dangerColor}
+                  onNavigate={onWorkspaceClick}
+                  onHover={onWorkspaceHover}
+                  onRenameCommit={handleRenameCommit}
+                  onRenameCancel={handleRenameCancel}
+                  onBeginDelete={onBeginDelete}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+        </div>
       )}
     </div>
   );

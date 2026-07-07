@@ -11,6 +11,15 @@
   margin-bottom: var(--space-3);
 }
 
+// The workspace rows of one group, in their own container: a dragged row's
+// movement is clamped to its parent element, so this box (not the whole group)
+// is what keeps a sliding row off the group header. Mirrors .repoGroup's row gap.
+.repoRows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 // Repo header and workspace rows share the same pill height and full width.
 // min-height (rather than vertical padding) keeps the row height stable even
 // though the header contains a taller "+" icon button.
@@ -150,14 +159,23 @@
 
 // A row or repo group mid-drag. There is no floating overlay copy — the element
 // itself slides with the cursor (translate-only transform), so it is lifted above
-// its siblings and given the panel-overlay elevation language (solid background +
-// shadow, per TabPill's overlay variant) to read as "picked up" while the rows it
-// passes over can't show through.
+// its siblings with a solid surface so the rows it passes over can't show
+// through; the shadow carries the "picked up" read.
 .rowDragging {
-  background: var(--gray-3);
+  // The sidebar's own surface color (.sidebar in WorkspaceSidebar.module.scss),
+  // not an elevated tint: an element clamped at the rail's edge sits away from
+  // the pointer, where an off-color surface reads as a stray band.
+  background: var(--gray-2);
   box-shadow: var(--shadow-4);
   position: relative;
   z-index: 1;
+
+  // The pointer rides the dragged element, whose hover style would otherwise
+  // replace the drag surface mid-move — and pop back at the rail's edge where
+  // the clamp separates the element from the pointer.
+  &:hover {
+    background: var(--gray-2);
+  }
 
   // The dragged element keeps keyboard focus for the whole drag (the sensor
   // listens on it); the elevation is the drag indicator, so the focus ring
@@ -187,4 +205,19 @@
   font-size: var(--font-size-1);
   font-style: italic;
   padding: var(--space-1) var(--space-2) var(--space-1) var(--space-5);
+}
+
+// While a sidebar drag is active (data flag on the sidebar root), hover chrome
+// is suppressed rail-wide: the dragged element sweeps the pointer across its
+// siblings, whose hover backgrounds and hover-revealed actions would otherwise
+// flicker in under the moving element. The dragged element keeps its own drag
+// surface, and the active row keeps its persistent accent.
+[data-sidebar-drag-active] .repoHeader:hover,
+[data-sidebar-drag-active] .workspaceRow:not(.rowDragging, .workspaceRowActive):hover {
+  background: transparent;
+}
+
+[data-sidebar-drag-active] .repoHeader .hoverReveal,
+[data-sidebar-drag-active] .workspaceRow .hoverReveal {
+  visibility: hidden;
 }
