@@ -178,6 +178,42 @@ def test_workspaces_have_isolated_agent_tabs(
     expect(tabs).to_have_count(1)
 
 
+@user_story("to return to a workspace and find the agent I was last viewing")
+def test_reentry_preserves_active_agent_selection(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """Re-entering a workspace restores the agent the user last viewed, not the last-created one.
+
+    Selecting an agent by clicking its panel tab flips the active panel without
+    navigating, so the choice lives only in the per-workspace layout. Leaving the
+    workspace and returning must restore that agent — the re-entry activation must
+    not snap focus back to whichever agent the route last pointed at (the
+    most-recently-created one).
+    """
+    page = sculptor_instance_.page
+    center = PlaywrightWorkspaceSection(page, "center")
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+
+    # Workspace A with two agents; adding the second makes "Claude 2" the active tab.
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Agent Persist A")
+    add_agent_and_wait_for_ready(page)
+    expect(panel_tabs.get_panel_tabs()).to_have_count(2)
+    expect(center.get_active_tab()).to_have_text("Claude 2")
+
+    # Switch to the FIRST agent via its tab. This is a tab click, not a navigation,
+    # so the route still points at "Claude 2".
+    panel_tabs.get_panel_tab_by_name("Claude 1").first.click()
+    expect(center.get_active_tab()).to_have_text("Claude 1")
+
+    # Create a second workspace (navigates away), then return to A.
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Agent Persist B")
+    navigate_to_workspace(page, "Agent Persist A")
+    expect(PlaywrightTaskPage(page=page).get_chat_panel()).to_be_visible(timeout=60_000)
+
+    # The agent last viewed in A ("Claude 1") is the active tab again.
+    expect(center.get_active_tab()).to_have_text("Claude 1")
+
+
 @user_story("to have an agent I watch in a side section stay marked read while it streams")
 def test_mark_read_follows_agent_panel_in_active_side_section(
     sculptor_instance_: SculptorInstance,
