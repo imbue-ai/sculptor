@@ -1,5 +1,5 @@
 import { Button, DropdownMenu, Flex, Select, Text, Tooltip } from "@radix-ui/themes";
-import type { ReactElement } from "react";
+import { memo, type ReactElement } from "react";
 
 import type { LlmModel, ModelOption } from "~/api";
 import { ElementIds } from "~/api";
@@ -42,7 +42,10 @@ type ModelSelectorProps = {
 
 const PI_NO_MODELS_COPY = "No models available — please log in to authenticate";
 
-export const ModelSelector = ({
+// Memoized: ChatInput re-renders on draft-flag flips, send state, and task/
+// capability churn. The model props here are atom-backed (stable refs) +
+// useCallback handlers, so memo lets this Radix Select subtree bail out.
+export const ModelSelector = memo(function ModelSelector({
   model,
   onModelChange,
   capabilityValue,
@@ -51,7 +54,7 @@ export const ModelSelector = ({
   onBackendModelChange,
   sourcesBackendModels = false,
   onAuthenticate,
-}: ModelSelectorProps): ReactElement => {
+}: ModelSelectorProps): ReactElement {
   const gate = useCapabilityGate(capabilityValue, ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION);
 
   const models = backendModels ?? [];
@@ -167,7 +170,7 @@ export const ModelSelector = ({
       </Select.Content>
     </Select.Root>
   );
-};
+});
 
 type CascadingProviderMenuProps = {
   groups: ReadonlyArray<{ provider: string; models: ReadonlyArray<ModelOption> }>;
