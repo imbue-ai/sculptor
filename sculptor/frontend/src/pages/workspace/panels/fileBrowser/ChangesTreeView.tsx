@@ -129,7 +129,7 @@ export const ChangesTreeView = ({
       return;
     }
     setFileBrowserState((prev) => {
-      // Snapshots persisted before this field existed read back without it.
+      // A persisted snapshot can omit this field, so coalesce before use.
       const prevAutoExpanded = prev.changesAutoExpandedFolders ?? [];
       const alreadyAutoExpanded = new Set(prevAutoExpanded);
       const newlyAppeared = allFolders.filter((path) => !alreadyAutoExpanded.has(path));
