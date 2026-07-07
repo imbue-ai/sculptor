@@ -1,6 +1,6 @@
 import { Theme } from "@radix-ui/themes";
 import { cleanup, render, screen } from "@testing-library/react";
-import { Provider, createStore } from "jotai";
+import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -25,7 +25,7 @@ afterEach(() => {
 
 // A stub navigate so the component's navigation wiring doesn't throw.
 vi.mock("~/common/NavigateUtils.ts", () => ({
-  useImbueNavigate: () => ({
+  useImbueNavigate: (): Record<string, () => void> => ({
     navigateToWorkspace: (): void => {},
     navigateToAgent: (): void => {},
     navigateToHome: (): void => {},
