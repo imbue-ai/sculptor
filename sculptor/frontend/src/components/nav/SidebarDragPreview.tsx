@@ -1,7 +1,8 @@
 // Non-interactive copies of a sidebar workspace row / repo-group header, drawn in
-// the dnd-kit DragOverlay while one is dragged. Mirrors the panel-tab TabPill
-// "overlay" variant — an elevated pill follows the cursor while the source element
-// dims in place — so sidebar drags read the same as panel-tab drags.
+// the dnd-kit DragOverlay while one is dragged. Each is a full-width replica of the
+// element it copies — same layout, indent, and metrics as the real row — elevated
+// with the same shadow language as the panel-tab drag overlay (TabPill), so the
+// drag reads as "the row itself is moving".
 
 import { useAtomValue } from "jotai";
 import { ChevronDown } from "lucide-react";
@@ -11,12 +12,12 @@ import type { Workspace } from "~/api";
 import { workspaceDotStatusAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { WorkspaceStatusDots } from "~/components/statusDot";
 
-import styles from "./SidebarDragPill.module.scss";
+import styles from "./SidebarDragPreview.module.scss";
 
-export const WorkspaceRowDragPill = ({ workspace }: { workspace: Workspace }): ReactElement => {
+export const WorkspaceRowDragPreview = ({ workspace }: { workspace: Workspace }): ReactElement => {
   const status = useAtomValue(workspaceDotStatusAtomFamily(workspace.objectId));
   return (
-    <div className={styles.pill}>
+    <div className={`${styles.preview} ${styles.workspaceRow}`}>
       <span className={styles.dot}>
         <WorkspaceStatusDots status={status} />
       </span>
@@ -25,8 +26,8 @@ export const WorkspaceRowDragPill = ({ workspace }: { workspace: Workspace }): R
   );
 };
 
-export const RepoGroupDragPill = ({ name }: { name: string }): ReactElement => (
-  <div className={styles.pill}>
+export const RepoGroupHeaderDragPreview = ({ name }: { name: string }): ReactElement => (
+  <div className={`${styles.preview} ${styles.repoHeader}`}>
     <ChevronDown size={16} className={styles.chevron} />
     <span className={styles.label}>{name}</span>
   </div>

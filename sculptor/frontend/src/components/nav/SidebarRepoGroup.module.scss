@@ -148,11 +148,18 @@
   }
 }
 
-// The source row or repo group while its floating copy (SidebarDragPill in the
+// The source row or repo group while its floating copy (SidebarDragPreview in the
 // DragOverlay) is being dragged: dimmed so the eye follows the copy — the same
 // treatment as a panel tab mid-drag (SectionHeader's tabDragging).
 .rowDragging {
   opacity: 40%;
+
+  // The source keeps keyboard focus for the whole drag (the sensor listens on
+  // it), but its focus ring bleeds through the floating copy's anti-aliased
+  // edges; the copy is the drag indicator, so the ring only adds noise here.
+  :focus-visible {
+    outline: none;
+  }
 }
 
 .workspaceDot {

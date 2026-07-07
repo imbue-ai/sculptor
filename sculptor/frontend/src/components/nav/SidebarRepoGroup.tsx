@@ -43,7 +43,7 @@ import { ToastType } from "~/components/Toast.tsx";
 
 import { collapsedRepoGroupsAtom, isRepoCollapsedAtomFamily, isSidebarDragActiveAtom } from "./navAtoms.ts";
 import { useSidebarDndSensors } from "./sidebarDnd.ts";
-import { WorkspaceRowDragPill } from "./SidebarDragPill.tsx";
+import { WorkspaceRowDragPreview } from "./SidebarDragPreview.tsx";
 import styles from "./SidebarRepoGroup.module.scss";
 import type { RepoGroup } from "./sidebarWorkspaceOrder.ts";
 import { reorderSidebarWorkspaceAtom } from "./sidebarWorkspaceOrder.ts";
@@ -450,7 +450,7 @@ export const SidebarRepoGroup = ({
           {/* The floating row copy that follows the cursor; the source row stays in
               the list, dimmed (mirrors the panel-tab drag overlay). */}
           <DragOverlay dropAnimation={null}>
-            {draggedWorkspace !== undefined ? <WorkspaceRowDragPill workspace={draggedWorkspace} /> : null}
+            {draggedWorkspace !== undefined ? <WorkspaceRowDragPreview workspace={draggedWorkspace} /> : null}
           </DragOverlay>
         </DndContext>
       )}

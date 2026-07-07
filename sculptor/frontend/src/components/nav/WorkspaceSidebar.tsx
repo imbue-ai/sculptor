@@ -39,7 +39,7 @@ import { isSidebarDragActiveAtom } from "./navAtoms.ts";
 import navItemStyles from "./NavItem.module.scss";
 import { NavItem } from "./NavItem.tsx";
 import { useSidebarDndSensors } from "./sidebarDnd.ts";
-import { RepoGroupDragPill } from "./SidebarDragPill.tsx";
+import { RepoGroupHeaderDragPreview } from "./SidebarDragPreview.tsx";
 import { SidebarFirstRunState } from "./SidebarFirstRunState.tsx";
 import { SidebarRepoGroup } from "./SidebarRepoGroup.tsx";
 import { reorderSidebarRepoGroupAtom, sidebarWorkspaceGroupsAtom } from "./sidebarWorkspaceOrder.ts";
@@ -307,10 +307,10 @@ export const WorkspaceSidebar = (): ReactElement | null => {
                 />
               ))}
             </SortableContext>
-            {/* The floating header-pill copy that follows the cursor; the source
-                group stays in the list, dimmed (mirrors the panel-tab drag overlay). */}
+            {/* The floating header copy that follows the cursor; the source group
+                stays in the list, dimmed (mirrors the panel-tab drag overlay). */}
             <DragOverlay dropAnimation={null}>
-              {draggedGroup !== undefined ? <RepoGroupDragPill name={draggedGroup.name} /> : null}
+              {draggedGroup !== undefined ? <RepoGroupHeaderDragPreview name={draggedGroup.name} /> : null}
             </DragOverlay>
           </DndContext>
         </div>
