@@ -1,3 +1,5 @@
+import concurrent.futures
+import threading
 from pathlib import Path
 
 import pytest
@@ -5,6 +7,7 @@ import pytest
 import sculptor.services.user_config.user_config as user_config_module
 from sculptor.config.user_config import UserConfig
 from sculptor.services.user_config.user_config import canonicalize_telemetry_flags
+from sculptor.services.user_config.user_config import merge_config
 from sculptor.services.user_config.user_config import save_config
 
 
@@ -73,5 +76,55 @@ def test_initialize_from_file_normalizes_mixed_flags_and_persists(tmp_path: Path
         reloaded = user_config_module.load_config(user_config_module.get_config_path())
         assert reloaded.is_error_reporting_enabled is False
         assert reloaded.is_product_analytics_enabled is False
+    finally:
+        user_config_module.set_user_config_instance(None)
+
+
+# Concurrency regression test: concurrent partial updates to different fields
+# must both be preserved on the singleton and on disk (SCU-710). The test
+# calls ``merge_config`` directly — the same function the PUT handler calls —
+# so it exercises the real locked write path, not a replica.
+
+
+@pytest.mark.parametrize("iteration", range(30))
+def test_concurrent_partial_updates_preserve_both_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, iteration: int
+) -> None:
+    """Two concurrent ``merge_config`` calls each contribute their field.
+
+    Without the internal lock this test loses one of the two writes on
+    disk. ``iteration`` parametrization forces many attempts per pytest
+    run to make a missing lock visible.
+    """
+    config_path = tmp_path / f"config_{iteration}.toml"
+    monkeypatch.setattr(user_config_module, "_CONFIG_PATH", config_path)
+
+    base = _make_config()
+    save_config(base, config_path)
+    user_config_module.set_user_config_instance(base)
+
+    barrier = threading.Barrier(2)
+
+    def update_email() -> None:
+        barrier.wait()
+        merge_config({"userEmail": "thread_a@example.com"})
+
+    def update_user_id() -> None:
+        barrier.wait()
+        merge_config({"userId": "thread_b_user_id"})
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(update_email), pool.submit(update_user_id)]
+            for fut in futures:
+                fut.result(timeout=10)
+
+        final_singleton = user_config_module.get_user_config_instance()
+        assert final_singleton.user_email == "thread_a@example.com"
+        assert final_singleton.user_id == "thread_b_user_id"
+
+        final_on_disk = user_config_module.load_config(config_path)
+        assert final_on_disk.user_email == "thread_a@example.com"
+        assert final_on_disk.user_id == "thread_b_user_id"
     finally:
         user_config_module.set_user_config_instance(None)
