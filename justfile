@@ -129,6 +129,7 @@ quiet_by_default() {
 
 # -------- Sculptor Aliases --------
 alias stop := tmux-stop
+alias start-onboard := source
 alias app := build-desktop-app
 alias pkg := package-desktop-installer
 alias refresh := refresh-assets
@@ -700,10 +701,11 @@ start:
     just _seed-dev-config
     just tmux-dev "."
 
-# Wipe the dev config folder and launch with no initial project.
-# Full first-run: exercise the entire onboarding flow, including repo selection.
+# Wipe the dev state and launch with no initial project so the app behaves like a
+# fresh clone would for a real user — welcome, onboarding, and repo selection.
+# Full flow from source: run Sculptor the way a real user would, not the shortcut.
 [group("dev")]
-start-onboarding:
+source:
     just _reset-dev-config
     just tmux-dev none
 

@@ -28,12 +28,16 @@ just start
 skips the welcome flow and lands straight on the new-workspace form for the
 current repo, ready to create a workspace. It's idempotent — safe to re-run.
 
-To exercise the full first-run experience instead (onboarding + repo selection),
-wipe the dev config folder and launch with no initial project:
+To instead run the app the way a fresh clone behaves for a real user — the full
+first-run flow, welcome through onboarding and repo selection, from source — wipe
+the dev state and launch with no initial project:
 
 ```bash
-just start-onboarding
+just source   # alias: just start-onboard
 ```
+
+Either way, `just stop` tears down the whole session (both frontend and
+backend); only one can run per checkout at a time.
 
 Or run them separately:
 
