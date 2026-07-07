@@ -46,7 +46,7 @@
   }
 
   &.success {
-    background-color: var(--green-2);
+    background-color: var(--green-a2);
     border-color: var(--green-a6);
 
     .title {
@@ -55,7 +55,7 @@
   }
 
   &.error {
-    background-color: var(--red-2);
+    background-color: var(--red-a2);
     border-color: var(--red-a6);
 
     .title {
@@ -64,7 +64,7 @@
   }
 
   &.warning {
-    background-color: var(--yellow-2);
+    background-color: var(--yellow-a2);
     border-color: var(--yellow-a6);
 
     .title {
