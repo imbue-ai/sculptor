@@ -276,9 +276,7 @@ def _list_for_project(client: Client, project_id: str, json_output: bool) -> Non
 
 @workspace_app.command("show")
 def show(
-    workspace_id: str | None = typer.Argument(
-        None, help="Workspace ID or prefix (defaults to SCULPT_WORKSPACE_ID)"
-    ),
+    workspace_id: str | None = typer.Argument(None, help="Workspace ID or prefix (defaults to SCULPT_WORKSPACE_ID)"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     base_url: str | None = typer.Option(None, "--base-url", "-u", help="The Sculptor server URL"),
 ) -> None:

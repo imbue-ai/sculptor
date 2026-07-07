@@ -133,9 +133,7 @@ def _options_from_pending_question(update: dict[str, Any] | None) -> list[str] |
     return labels or None
 
 
-def _snapshot_from_view(
-    task_id: str, view: dict[str, Any], update: dict[str, Any] | None = None
-) -> AgentSnapshot:
+def _snapshot_from_view(task_id: str, view: dict[str, Any], update: dict[str, Any] | None = None) -> AgentSnapshot:
     """Build an AgentSnapshot from a task view dict plus its optional task update."""
     update = update or {}
     return AgentSnapshot(
@@ -214,8 +212,7 @@ async def _fetch_all_agents_async(ws_url: str, timeout: float) -> list[AgentSnap
             task_views = dump.get("taskViewsByTaskId", {})
             task_updates = dump.get("taskUpdateByTaskId", {})
             return [
-                _snapshot_from_view(task_id, view, task_updates.get(task_id))
-                for task_id, view in task_views.items()
+                _snapshot_from_view(task_id, view, task_updates.get(task_id)) for task_id, view in task_views.items()
             ]
     except websockets.exceptions.InvalidStatus as e:
         raise _wrap_invalid_status(e) from e

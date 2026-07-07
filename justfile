@@ -149,8 +149,8 @@ format:
     {{ _quiet_by_default_fn }}
     _do_format() {
       echo "Formatting Python files..."
-      uv run ruff check --select UP006,UP007,I,F401 --fix --force-exclude --config pyproject.toml sculptor/
-      uv run ruff format --force-exclude --config pyproject.toml sculptor/
+      uv run ruff check --select UP006,UP007,I,F401 --fix --force-exclude --config pyproject.toml sculptor/ tools/sculpt/
+      uv run ruff format --force-exclude --config pyproject.toml sculptor/ tools/sculpt/
       echo "Formatting JS/TS files..."
       {{ nvm_use }}
       cd "{{justfile_directory()}}/sculptor/frontend" && pnpm run format .
@@ -167,9 +167,9 @@ lint:
     {{ _quiet_by_default_fn }}
     _do_lint() {
       echo "Checking Python formatting..."
-      uv run ruff format --check --force-exclude --config pyproject.toml sculptor/
+      uv run ruff format --check --force-exclude --config pyproject.toml sculptor/ tools/sculpt/
       echo "Linting Python files..."
-      uv run ruff check --force-exclude --config pyproject.toml sculptor/
+      uv run ruff check --force-exclude --config pyproject.toml sculptor/ tools/sculpt/
       echo "Linting JS/TS files..."
       {{ nvm_use }}
       cd "{{justfile_directory()}}/sculptor/frontend" && pnpm run lint .

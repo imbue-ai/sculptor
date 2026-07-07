@@ -151,7 +151,5 @@ def follow_and_stream_messages(base_url: str, agent_id: str, *, json_output: boo
         messages_cb = on_messages_text
         reconnect_cb = on_reconnect_separator
 
-    exit_reason = follow_agent(
-        base_url, session_token, agent_id, status_cb, messages_cb, reconnect_cb
-    )
+    exit_reason = follow_agent(base_url, session_token, agent_id, status_cb, messages_cb, reconnect_cb)
     handle_exit_reason(exit_reason, json_output)

@@ -159,11 +159,7 @@ def create(
     llm_model = MODEL_MAPPING[model_lower]
 
     selection = resolve_harness_selection(harness, client, json_output)
-    if (
-        prompt
-        and selection is not None
-        and selection.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED)
-    ):
+    if prompt and selection is not None and selection.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
         cli_error("Terminal agents do not take an initial prompt (--prompt)", json_output=json_output)
 
     request = CreateAgentRequest(
@@ -174,9 +170,7 @@ def create(
         sent_via="sculpt",
         agent_type=selection.agent_type if selection is not None else UNSET,
         registration_id=(
-            selection.registration_id
-            if selection is not None and selection.registration_id is not None
-            else UNSET
+            selection.registration_id if selection is not None and selection.registration_id is not None else UNSET
         ),
     )
 
@@ -212,7 +206,9 @@ def create(
 @agent_app.command("list")
 def list_cmd(
     workspace: str | None = typer.Option(None, "--workspace", "-w", help="Workspace ID (or set SCULPT_WORKSPACE_ID)"),
-    status: str | None = typer.Option(None, "--status", "-s", help="Filter by status (BUILDING, ERROR, READY, RUNNING)"),
+    status: str | None = typer.Option(
+        None, "--status", "-s", help="Filter by status (BUILDING, ERROR, READY, RUNNING)"
+    ),
     show_all: bool = typer.Option(False, "--all", help="List agents across all workspaces"),
     repo: str | None = typer.Option(None, "--repo", help="Path to the repository"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
@@ -225,7 +221,9 @@ def list_cmd(
     if status is not None:
         status = status.upper()
         if status not in valid_statuses:
-            cli_error(f"Invalid status '{status}'. Valid options: {', '.join(valid_statuses)}", json_output=json_output)
+            cli_error(
+                f"Invalid status '{status}'. Valid options: {', '.join(valid_statuses)}", json_output=json_output
+            )
 
     session_token = get_session_token_safe(base_url, json_output)
 
@@ -297,9 +295,7 @@ def list_cmd(
         typer.echo("* = this agent (SCULPT_AGENT_ID)", err=True)
 
 
-def _fetch_agents_for_workspace(
-    client: Client, workspace_id: str, json_output: bool
-) -> list[CodingAgentTaskView]:
+def _fetch_agents_for_workspace(client: Client, workspace_id: str, json_output: bool) -> list[CodingAgentTaskView]:
     try:
         result = list_workspace_agents.sync(workspace_id=workspace_id, client=client)
     except httpx.ConnectError:
@@ -508,9 +504,7 @@ def rename(
     """Rename an agent."""
     base_url = base_url or get_default_base_url()
     client = get_authenticated_client(base_url)
-    resolved_agent_id, workspace_id, _ = _resolve_agent_for_action(
-        base_url, client, agent_id, workspace, json_output
-    )
+    resolved_agent_id, workspace_id, _ = _resolve_agent_for_action(base_url, client, agent_id, workspace, json_output)
 
     request = RenameAgentRequest(title=title)
 
@@ -546,9 +540,7 @@ def delete(
     """Delete an agent."""
     base_url = base_url or get_default_base_url()
     client = get_authenticated_client(base_url)
-    resolved_id, workspace_id, _ = _resolve_agent_for_action(
-        base_url, client, agent_id, workspace, json_output
-    )
+    resolved_id, workspace_id, _ = _resolve_agent_for_action(base_url, client, agent_id, workspace, json_output)
 
     if not yes:
         typer.confirm(f"Delete agent {resolved_id}?", abort=True)
@@ -628,9 +620,7 @@ def send(
         return
 
     if json_output:
-        output = AgentSendOutput(
-            sent=True, agent_id=resolved_agent_id, message=message[:_MESSAGE_PREVIEW_MAX_LENGTH]
-        )
+        output = AgentSendOutput(sent=True, agent_id=resolved_agent_id, message=message[:_MESSAGE_PREVIEW_MAX_LENGTH])
         typer.echo(output.model_dump_json())
         return
 
@@ -866,14 +856,10 @@ def interrupt(
     """Interrupt a running agent."""
     base_url = base_url or get_default_base_url()
     client = get_authenticated_client(base_url)
-    resolved_agent_id, workspace_id, _ = _resolve_agent_for_action(
-        base_url, client, agent_id, workspace, json_output
-    )
+    resolved_agent_id, workspace_id, _ = _resolve_agent_for_action(base_url, client, agent_id, workspace, json_output)
 
     try:
-        interrupt_workspace_agent.sync(
-            workspace_id=workspace_id, agent_id=resolved_agent_id, client=client
-        )
+        interrupt_workspace_agent.sync(workspace_id=workspace_id, agent_id=resolved_agent_id, client=client)
     except httpx.ConnectError:
         handle_connection_error(json_output, base_url=base_url)
 

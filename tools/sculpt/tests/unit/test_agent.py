@@ -1443,9 +1443,7 @@ class TestAgentCrossWorkspaceResolution:
         monkeypatch.setenv("SCULPT_WORKSPACE_ID", "ws_env123")
         _mock_session()
         _mock_workspaces("ws_env123")
-        respx.get("http://localhost:5050/api/v1/workspaces/ws_env123/agents").mock(
-            return_value=Response(200, json=[])
-        )
+        respx.get("http://localhost:5050/api/v1/workspaces/ws_env123/agents").mock(return_value=Response(200, json=[]))
         mock_fetch.return_value = [_make_snapshot(workspace_id="ws_actual456")]
         route = respx.post(
             "http://localhost:5050/api/v1/workspaces/ws_actual456/agents/tsk_abc123def456/messages"
@@ -1471,9 +1469,9 @@ class TestAgentCrossWorkspaceResolution:
         respx.get("http://localhost:5050/api/v1/workspaces/ws_env123/agents").mock(
             return_value=Response(200, json=[_task_response_dict(workspace_id="ws_env123")])
         )
-        route = respx.post(
-            "http://localhost:5050/api/v1/workspaces/ws_env123/agents/tsk_abc123def456/messages"
-        ).mock(return_value=Response(200, text="null", headers={"content-type": "application/json"}))
+        route = respx.post("http://localhost:5050/api/v1/workspaces/ws_env123/agents/tsk_abc123def456/messages").mock(
+            return_value=Response(200, text="null", headers={"content-type": "application/json"})
+        )
 
         result = runner.invoke(app, ["agent", "send", "tsk_abc123def456", "hello"])
 
@@ -1484,9 +1482,7 @@ class TestAgentCrossWorkspaceResolution:
 
     @patch("sculpt.commands.agent.fetch_all_agents")
     @respx.mock
-    def test_send_explicit_workspace_mismatch_is_an_error(
-        self, mock_fetch: Any, runner: CliRunner
-    ) -> None:
+    def test_send_explicit_workspace_mismatch_is_an_error(self, mock_fetch: Any, runner: CliRunner) -> None:
         _mock_session()
         _mock_workspaces("ws_other789")
         respx.get("http://localhost:5050/api/v1/workspaces/ws_other789/agents").mock(
@@ -1507,9 +1503,7 @@ class TestAgentCrossWorkspaceResolution:
         monkeypatch.setenv("SCULPT_WORKSPACE_ID", "ws_env123")
         _mock_session()
         _mock_workspaces("ws_env123")
-        respx.get("http://localhost:5050/api/v1/workspaces/ws_env123/agents").mock(
-            return_value=Response(200, json=[])
-        )
+        respx.get("http://localhost:5050/api/v1/workspaces/ws_env123/agents").mock(return_value=Response(200, json=[]))
         mock_fetch.return_value = [_make_snapshot(workspace_id="ws_actual456")]
         route = respx.post(
             "http://localhost:5050/api/v1/workspaces/ws_actual456/agents/tsk_abc123def456/interrupt"
@@ -1523,9 +1517,7 @@ class TestAgentCrossWorkspaceResolution:
 
     @patch("sculpt.commands.agent.fetch_all_agents")
     @respx.mock
-    def test_send_without_workspace_context_resolves_globally(
-        self, mock_fetch: Any, runner: CliRunner
-    ) -> None:
+    def test_send_without_workspace_context_resolves_globally(self, mock_fetch: Any, runner: CliRunner) -> None:
         _mock_session()
         mock_fetch.return_value = [_make_snapshot(workspace_id="ws_actual456")]
         route = respx.post(
@@ -1552,9 +1544,9 @@ class TestAgentSendModelDefault:
         respx.get("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
             return_value=Response(200, json=[_task_response_dict(model="CLAUDE-4-HAIKU")])
         )
-        route = respx.post(
-            "http://localhost:5050/api/v1/workspaces/ws_test123/agents/tsk_abc123def456/messages"
-        ).mock(return_value=Response(200, text="null", headers={"content-type": "application/json"}))
+        route = respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/agents/tsk_abc123def456/messages").mock(
+            return_value=Response(200, text="null", headers={"content-type": "application/json"})
+        )
 
         result = runner.invoke(app, ["agent", "send", "tsk_abc123def456", "hello", "-w", "ws_test123"])
 
@@ -1569,13 +1561,11 @@ class TestAgentSendModelDefault:
         respx.get("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
             return_value=Response(200, json=[_task_response_dict(model="CLAUDE-4-HAIKU")])
         )
-        route = respx.post(
-            "http://localhost:5050/api/v1/workspaces/ws_test123/agents/tsk_abc123def456/messages"
-        ).mock(return_value=Response(200, text="null", headers={"content-type": "application/json"}))
-
-        result = runner.invoke(
-            app, ["agent", "send", "tsk_abc123def456", "hello", "-w", "ws_test123", "-m", "opus"]
+        route = respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/agents/tsk_abc123def456/messages").mock(
+            return_value=Response(200, text="null", headers={"content-type": "application/json"})
         )
+
+        result = runner.invoke(app, ["agent", "send", "tsk_abc123def456", "hello", "-w", "ws_test123", "-m", "opus"])
 
         assert result.exit_code == 0, result.output + (result.stderr or "")
         body = json.loads(route.calls.last.request.content)
@@ -1589,9 +1579,9 @@ class TestAgentSendModelDefault:
         respx.get("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
             return_value=Response(200, json=[_task_response_dict(model=None)])
         )
-        route = respx.post(
-            "http://localhost:5050/api/v1/workspaces/ws_test123/agents/tsk_abc123def456/messages"
-        ).mock(return_value=Response(200, text="null", headers={"content-type": "application/json"}))
+        route = respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/agents/tsk_abc123def456/messages").mock(
+            return_value=Response(200, text="null", headers={"content-type": "application/json"})
+        )
 
         result = runner.invoke(app, ["agent", "send", "tsk_abc123def456", "hello", "-w", "ws_test123"])
 
@@ -1625,9 +1615,9 @@ class TestAgentDeleteConfirmation:
         respx.get("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
             return_value=Response(200, json=[_task_response_dict()])
         )
-        route = respx.delete(
-            "http://localhost:5050/api/v1/workspaces/ws_test123/agents/tsk_abc123def456"
-        ).mock(return_value=Response(200, text="null", headers={"content-type": "application/json"}))
+        route = respx.delete("http://localhost:5050/api/v1/workspaces/ws_test123/agents/tsk_abc123def456").mock(
+            return_value=Response(200, text="null", headers={"content-type": "application/json"})
+        )
 
         result = runner.invoke(app, ["agent", "delete", "tsk_abc123def456", "-w", "ws_test123"], input="n\n")
 
@@ -1641,9 +1631,9 @@ class TestAgentDeleteConfirmation:
         respx.get("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
             return_value=Response(200, json=[_task_response_dict()])
         )
-        route = respx.delete(
-            "http://localhost:5050/api/v1/workspaces/ws_test123/agents/tsk_abc123def456"
-        ).mock(return_value=Response(200, text="null", headers={"content-type": "application/json"}))
+        route = respx.delete("http://localhost:5050/api/v1/workspaces/ws_test123/agents/tsk_abc123def456").mock(
+            return_value=Response(200, text="null", headers={"content-type": "application/json"})
+        )
 
         result = runner.invoke(app, ["agent", "delete", "tsk_abc123def456", "-w", "ws_test123"], input="y\n")
 

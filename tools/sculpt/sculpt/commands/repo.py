@@ -25,9 +25,7 @@ repo_app = typer.Typer(
 
 def _repo_item_from_project(project: Project) -> RepoItem:
     """Build the JSON output model for a single repo from a project."""
-    created_at = (
-        project.created_at.isoformat() if isinstance(project.created_at, datetime.datetime) else None
-    )
+    created_at = project.created_at.isoformat() if isinstance(project.created_at, datetime.datetime) else None
     return RepoItem(
         id=project.object_id,
         name=project.name,

@@ -79,7 +79,7 @@ def repo_path_from_url(url: str | None) -> str:
     if url is None:
         return ""
     if url.startswith("file:///"):
-        return url[len("file://"):]
+        return url[len("file://") :]
     return url
 
 

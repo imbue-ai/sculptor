@@ -49,9 +49,7 @@ class TestResolveProject:
     @respx.mock
     def test_repo_provided_server_error(self) -> None:
         client = _make_client()
-        respx.post("http://localhost:5050/api/v1/projects/initialize").mock(
-            return_value=Response(500)
-        )
+        respx.post("http://localhost:5050/api/v1/projects/initialize").mock(return_value=Response(500))
 
         with pytest.raises(typer.Exit):
             resolve_project(repo="/tmp/my-repo", client=client)
@@ -67,9 +65,7 @@ class TestResolveProject:
             resolve_project(repo="/tmp/my-repo", client=client)
 
     @respx.mock
-    def test_repo_provided_already_added_returns_existing_project(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_repo_provided_already_added_returns_existing_project(self, capsys: pytest.CaptureFixture[str]) -> None:
         """SCU-1309: When --repo points at a path the server already has registered, the
         server returns 409 'This repository is already added to Sculptor.' Previously
         the CLI printed 'Failed to initialize repo (no response)' and exited 1. With
@@ -102,9 +98,7 @@ class TestResolveProject:
         assert "no response" not in captured.err
 
     @respx.mock
-    def test_repo_provided_already_added_no_match_surfaces_detail(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_repo_provided_already_added_no_match_surfaces_detail(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Defensive: if the server says 409 'already added' but no project matches the
         path in list_projects, surface the server's detail rather than the misleading
         'no response' message — the user gets something actionable to debug."""
@@ -126,9 +120,7 @@ class TestResolveProject:
         assert "no response" not in captured.err
 
     @respx.mock
-    def test_repo_provided_400_not_git_repo_surfaces_detail(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_repo_provided_400_not_git_repo_surfaces_detail(self, capsys: pytest.CaptureFixture[str]) -> None:
         """4xx errors from /projects/initialize must surface the server's detail
         instead of the misleading 'no response' (SCU-1309)."""
         client = _make_client()
@@ -151,9 +143,7 @@ class TestResolveProject:
         assert "no response" not in captured.err
 
     @respx.mock
-    def test_repo_provided_404_path_missing_surfaces_detail(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_repo_provided_404_path_missing_surfaces_detail(self, capsys: pytest.CaptureFixture[str]) -> None:
         """404 'Project path does not exist' must surface the detail (SCU-1309)."""
         client = _make_client()
         respx.post("http://localhost:5050/api/v1/projects/initialize").mock(
@@ -170,9 +160,7 @@ class TestResolveProject:
         assert "no response" not in captured.err
 
     @respx.mock
-    def test_repo_provided_409_no_commits_surfaces_detail(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_repo_provided_409_no_commits_surfaces_detail(self, capsys: pytest.CaptureFixture[str]) -> None:
         """The other 409 path ('no commits') is a real error and must surface the
         detail, not be mistakenly funneled through the idempotent 'already added'
         branch."""
@@ -181,10 +169,7 @@ class TestResolveProject:
             return_value=Response(
                 409,
                 json={
-                    "detail": (
-                        "Selected git repository has no commits."
-                        + " Please create an initial commit first."
-                    )
+                    "detail": ("Selected git repository has no commits." + " Please create an initial commit first.")
                 },
             )
         )
@@ -247,17 +232,13 @@ class TestResolveProject:
     @respx.mock
     def test_cwd_fallback_empty_project_list(self) -> None:
         client = _make_client()
-        respx.get("http://localhost:5050/api/v1/projects").mock(
-            return_value=Response(200, json=[])
-        )
+        respx.get("http://localhost:5050/api/v1/projects").mock(return_value=Response(200, json=[]))
 
         with pytest.raises(typer.Exit):
             resolve_project(repo=None, client=client)
 
     @respx.mock
-    def test_cwd_no_match_error_mentions_env_var(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_cwd_no_match_error_mentions_env_var(self, capsys: pytest.CaptureFixture[str]) -> None:
         """SCU-1309: When _resolve_from_cwd can't match the current directory to any
         registered project, the error message must also mention SCULPT_PROJECT_ID.
         Otherwise agents (and humans) are funneled into `--repo`, which then 409s
@@ -526,9 +507,7 @@ class TestResolveWorkspaceId:
     @respx.mock
     def test_no_response(self) -> None:
         client = _make_client()
-        respx.get("http://localhost:5050/api/v1/workspaces/recent").mock(
-            return_value=Response(500)
-        )
+        respx.get("http://localhost:5050/api/v1/workspaces/recent").mock(return_value=Response(500))
 
         with pytest.raises(typer.Exit):
             resolve_workspace_id(client, "ws_abc")

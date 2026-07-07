@@ -157,9 +157,7 @@ class TestWorkspaceCreate:
             return_value=Response(200, json=_workspace_response_dict(strategy="IN_PLACE"))
         )
 
-        result = runner.invoke(
-            app, ["workspace", "create", "--repo", "/tmp/test", "--strategy", "in-place"]
-        )
+        result = runner.invoke(app, ["workspace", "create", "--repo", "/tmp/test", "--strategy", "in-place"])
 
         assert result.exit_code == 0
 
@@ -168,9 +166,9 @@ class TestWorkspaceCreate:
         """When --branch-name is supplied, the CLI sends it through unchanged and skips the preview call."""
         _mock_session()
         _mock_initialize_project()
-        preview_route = respx.get(
-            "http://localhost:5050/api/v1/workspaces/preview-branch-name"
-        ).mock(return_value=Response(200, json={"branchName": "should-not-be-used"}))
+        preview_route = respx.get("http://localhost:5050/api/v1/workspaces/preview-branch-name").mock(
+            return_value=Response(200, json={"branchName": "should-not-be-used"})
+        )
         create_route = respx.post("http://localhost:5050/api/v1/workspaces").mock(
             return_value=Response(200, json=_workspace_response_dict(strategy="WORKTREE"))
         )
@@ -207,9 +205,9 @@ class TestWorkspaceCreate:
         """When --branch-name is omitted for worktree, the CLI auto-fills it via preview-branch-name."""
         _mock_session()
         _mock_initialize_project()
-        preview_route = respx.get(
-            "http://localhost:5050/api/v1/workspaces/preview-branch-name"
-        ).mock(return_value=Response(200, json={"branchName": "dev/auto-generated"}))
+        preview_route = respx.get("http://localhost:5050/api/v1/workspaces/preview-branch-name").mock(
+            return_value=Response(200, json={"branchName": "dev/auto-generated"})
+        )
         create_route = respx.post("http://localhost:5050/api/v1/workspaces").mock(
             return_value=Response(200, json=_workspace_response_dict(strategy="WORKTREE"))
         )
@@ -271,9 +269,7 @@ class TestWorkspaceCreate:
         _mock_session()
         _mock_initialize_project()
 
-        result = runner.invoke(
-            app, ["workspace", "create", "--repo", "/tmp/test", "--strategy", "bogus"]
-        )
+        result = runner.invoke(app, ["workspace", "create", "--repo", "/tmp/test", "--strategy", "bogus"])
 
         assert result.exit_code == 1
         assert "Invalid strategy 'bogus'" in (result.stderr or result.output)
@@ -282,9 +278,7 @@ class TestWorkspaceCreate:
     def test_create_connection_error(self, runner: CliRunner) -> None:
         _mock_session()
         _mock_initialize_project()
-        respx.post("http://localhost:5050/api/v1/workspaces").mock(
-            side_effect=ConnectError("Connection refused")
-        )
+        respx.post("http://localhost:5050/api/v1/workspaces").mock(side_effect=ConnectError("Connection refused"))
 
         result = runner.invoke(app, ["workspace", "create", "--repo", "/tmp/test"])
 
@@ -483,9 +477,7 @@ class TestWorkspaceShowDefault:
     """`workspace show` with no argument targets the shell's own workspace."""
 
     @respx.mock
-    def test_show_no_arg_uses_env_workspace(
-        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_show_no_arg_uses_env_workspace(self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("SCULPT_WORKSPACE_ID", "ws_test123")
         _mock_session()
         _mock_projects_list()
@@ -649,9 +641,7 @@ class TestWorkspaceSelfMarker:
     """`workspace list` flags the calling shell's own workspace (SCULPT_WORKSPACE_ID)."""
 
     @respx.mock
-    def test_list_all_json_flags_only_own_workspace(
-        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_list_all_json_flags_only_own_workspace(self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("SCULPT_WORKSPACE_ID", "ws_test123")
         _mock_session()
         _mock_projects_list()
@@ -786,9 +776,7 @@ class TestWorkspaceRename:
             return_value=Response(200, json={"workspaces": [_recent_workspace_dict()]})
         )
         respx.patch("http://localhost:5050/api/v1/workspaces/ws_test123").mock(
-            return_value=Response(
-                200, json=_workspace_response_dict(description="New description")
-            )
+            return_value=Response(200, json=_workspace_response_dict(description="New description"))
         )
 
         result = runner.invoke(app, ["workspace", "rename", "ws_test123", "New description"])
@@ -804,9 +792,7 @@ class TestWorkspaceRename:
             return_value=Response(200, json={"workspaces": [_recent_workspace_dict()]})
         )
         respx.patch("http://localhost:5050/api/v1/workspaces/ws_test123").mock(
-            return_value=Response(
-                200, json=_workspace_response_dict(description="New description")
-            )
+            return_value=Response(200, json=_workspace_response_dict(description="New description"))
         )
 
         result = runner.invoke(app, ["workspace", "rename", "ws_test123", "New description", "--json"])
@@ -823,9 +809,7 @@ class TestWorkspaceRename:
             return_value=Response(200, json={"workspaces": [_recent_workspace_dict()]})
         )
         respx.patch("http://localhost:5050/api/v1/workspaces/ws_test123").mock(
-            return_value=Response(
-                200, json=_workspace_response_dict(description="Updated")
-            )
+            return_value=Response(200, json=_workspace_response_dict(description="Updated"))
         )
 
         result = runner.invoke(app, ["workspace", "rename", "ws_test", "Updated"])

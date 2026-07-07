@@ -10,7 +10,6 @@ from uuid import uuid4
 import pytest
 import websockets
 import websockets.server
-
 from sculpt.ws_client import AgentNotFoundError
 from sculpt.ws_client import AgentSnapshot
 from sculpt.ws_client import ExitReason
@@ -22,9 +21,7 @@ from sculpt.ws_client import fetch_all_agents
 from sculpt.ws_client import follow_agent
 
 
-def _pending_question_update(
-    *labels: str, chat_messages: list[dict[str, Any]] | None = None
-) -> dict[str, Any]:
+def _pending_question_update(*labels: str, chat_messages: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """A task update dict carrying a pendingUserQuestion with the given option labels."""
     return {
         "chatMessages": chat_messages or [],
@@ -162,9 +159,7 @@ def _make_dump(
     }
 
 
-def _start_ws_server(
-    payload: str | None, delay: float = 0.0
-) -> tuple[str, threading.Event, dict[str, Any]]:
+def _start_ws_server(payload: str | None, delay: float = 0.0) -> tuple[str, threading.Event, dict[str, Any]]:
     """Start a WebSocket server in a background thread that sends the given payload.
 
     Returns (url, shutdown_event, server_info). server_info["last_path"] is
@@ -373,15 +368,19 @@ def test_follow_auto_exit_terminal_state() -> None:
     initial_view = _make_task_view(task_id=task_id, status="RUNNING")
     initial_dump = _make_dump(
         task_views={task_id: initial_view},
-        task_updates={task_id: {"chatMessages": [{"id": "msg_1", "role": "user", "content": [{"type": "text", "text": "hi"}]}]}},
+        task_updates={
+            task_id: {"chatMessages": [{"id": "msg_1", "role": "user", "content": [{"type": "text", "text": "hi"}]}]}
+        },
     )
     update_view = _make_task_view(task_id=task_id, status="READY")
     update_dump = {"taskViewsByTaskId": {task_id: update_view}, "taskUpdateByTaskId": {}}
 
-    url, shutdown = _start_ws_server_with_messages([
-        json.dumps(initial_dump),
-        json.dumps(update_dump),
-    ])
+    url, shutdown = _start_ws_server_with_messages(
+        [
+            json.dumps(initial_dump),
+            json.dumps(update_dump),
+        ]
+    )
     try:
         statuses: list[AgentSnapshot] = []
         all_messages: list[list[dict[str, Any]]] = []
@@ -410,10 +409,12 @@ def test_follow_auto_exit_waiting() -> None:
     update_view = _make_task_view(task_id=task_id, status="WAITING", waiting_detail="Need input")
     update_dump = {"taskViewsByTaskId": {task_id: update_view}, "taskUpdateByTaskId": {}}
 
-    url, shutdown = _start_ws_server_with_messages([
-        json.dumps(initial_dump),
-        json.dumps(update_dump),
-    ])
+    url, shutdown = _start_ws_server_with_messages(
+        [
+            json.dumps(initial_dump),
+            json.dumps(update_dump),
+        ]
+    )
     try:
         statuses: list[AgentSnapshot] = []
 
@@ -444,10 +445,12 @@ def test_follow_new_messages() -> None:
         "taskUpdateByTaskId": {task_id: {"chatMessages": [new_msg]}},
     }
 
-    url, shutdown = _start_ws_server_with_messages([
-        json.dumps(initial_dump),
-        json.dumps(update),
-    ])
+    url, shutdown = _start_ws_server_with_messages(
+        [
+            json.dumps(initial_dump),
+            json.dumps(update),
+        ]
+    )
     try:
         all_messages: list[list[dict[str, Any]]] = []
 
@@ -482,10 +485,12 @@ def test_follow_message_deduplication() -> None:
         "taskUpdateByTaskId": {task_id: {"chatMessages": [msg_a, msg_b, msg_c]}},
     }
 
-    url, shutdown = _start_ws_server_with_messages([
-        json.dumps(initial_dump),
-        json.dumps(update),
-    ])
+    url, shutdown = _start_ws_server_with_messages(
+        [
+            json.dumps(initial_dump),
+            json.dumps(update),
+        ]
+    )
     try:
         all_messages: list[list[dict[str, Any]]] = []
 
@@ -522,11 +527,13 @@ def test_follow_ignores_other_agents() -> None:
         "taskUpdateByTaskId": {},
     }
 
-    url, shutdown = _start_ws_server_with_messages([
-        json.dumps(initial_dump),
-        json.dumps(update_other),
-        json.dumps(update_target),
-    ])
+    url, shutdown = _start_ws_server_with_messages(
+        [
+            json.dumps(initial_dump),
+            json.dumps(update_other),
+            json.dumps(update_target),
+        ]
+    )
     try:
         statuses: list[AgentSnapshot] = []
 
@@ -542,7 +549,6 @@ def test_follow_ignores_other_agents() -> None:
         for s in statuses:
             assert s.task_id == target_id
 
-
     finally:
         shutdown.set()
 
@@ -555,12 +561,14 @@ def test_follow_handles_null_keepalive() -> None:
         "taskUpdateByTaskId": {},
     }
 
-    url, shutdown = _start_ws_server_with_messages([
-        json.dumps(initial_dump),
-        "null",
-        "null",
-        json.dumps(terminal_update),
-    ])
+    url, shutdown = _start_ws_server_with_messages(
+        [
+            json.dumps(initial_dump),
+            "null",
+            "null",
+            json.dumps(terminal_update),
+        ]
+    )
     try:
         result = follow_agent(
             url.replace("ws://", "http://"),
@@ -898,9 +906,7 @@ def test_follow_carries_waiting_options_across_view_only_frames() -> None:
     # View-only frame (changed activity, no update): options must persist.
     frame_view_only = {
         "taskViewsByTaskId": {
-            task_id: _make_task_view(
-                task_id=task_id, waiting_detail="Pick one", current_activity="thinking"
-            )
+            task_id: _make_task_view(task_id=task_id, waiting_detail="Pick one", current_activity="thinking")
         },
         "taskUpdateByTaskId": {},
     }

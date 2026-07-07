@@ -1,7 +1,6 @@
 """Output formatting utilities for the sculpt CLI."""
 
 import datetime
-import json
 import sys
 from collections.abc import Sequence
 from typing import NoReturn
@@ -89,14 +88,11 @@ def cli_error(
 # a wrong port (the app picks a free one and exports SCULPT_API_PORT into its
 # agent shells) is the usual cause outside those shells.
 CONNECTION_HINT = (
-    "Is the Sculptor app running? If it serves a non-default port, set"
-    + " SCULPT_API_PORT or pass --base-url."
+    "Is the Sculptor app running? If it serves a non-default port, set" + " SCULPT_API_PORT or pass --base-url."
 )
 
 
-def handle_connection_error(
-    json_output: bool = False, *, base_url: str | None = None, exit_code: int = 1
-) -> NoReturn:
+def handle_connection_error(json_output: bool = False, *, base_url: str | None = None, exit_code: int = 1) -> NoReturn:
     """Handle a connection error to the Sculptor server."""
     target = f" at {base_url}" if base_url else ""
     cli_error(

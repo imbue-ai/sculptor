@@ -78,7 +78,11 @@ def _post_event(
     """POST one signal event; 204 is silent success, anything else exits 1."""
     agent_id = _resolve_agent_id(agent, json_output)
     client = get_authenticated_client(get_default_base_url())
-    body = SignalEventRequest(event=event) if session_id is None else SignalEventRequest(event=event, session_id=session_id)
+    body = (
+        SignalEventRequest(event=event)
+        if session_id is None
+        else SignalEventRequest(event=event, session_id=session_id)
+    )
     response = _post_signal_with_retries(client, agent_id, body, max_attempts)
     if response is None:
         handle_connection_error(json_output)
