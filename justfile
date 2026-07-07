@@ -1122,6 +1122,9 @@ uninstall-hooks:
 [group("build")]
 build-frontend: install-frontend
     #! /usr/bin/env bash
+    # Without `set -e` a failed `pnpm run build` would fall through to the
+    # unconditional `cp` below and ship a stale dist/.
+    set -euo pipefail
     {{ nvm_use }}
     cd "{{justfile_directory()}}/sculptor/frontend"
     # NOTE: intentionally not calling setup-build-vars here so test/dev builds don't pelt sentry.

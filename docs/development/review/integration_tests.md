@@ -271,6 +271,26 @@ Many tools read configuration the test does not control: a login shell sources t
 
 ---
 
+## Test Environment
+
+### `no_test_only_code_in_production`
+
+**Question:** Does this test depend on behavior gated behind `import.meta.env.DEV` (or `process.env.NODE_ENV`), or on a hook added to production code solely so the test can observe state?
+
+The integration suite builds the frontend with **`vite build` (production)** — `just test-integration` depends on `build-frontend`, which runs `pnpm run build`, and Vite builds at `NODE_ENV=production`. So `import.meta.env.DEV` is `false` and any `if (import.meta.env.DEV)` block is dead-code-eliminated from the bundle the test exercises. A test that relies on DEV-only wiring — a DEV-only data attribute, a DEV-only global, a dev-server-only affordance — will never see it under the production build and will hang until it times out, even though it passes against the local dev server. (This is the SCU-1322 shape: the default TanStack devtools entry stubs itself to `() => null` whenever `NODE_ENV !== "development"`, so the panel only reproduces under the integration build's production bundle.)
+
+More fundamentally, **don't add test-only code to production at all.** A `window.__TEST_*` global or a data attribute that only renders under a test flag ships to users, rots, and couples the test to a special escape hatch instead of the behavior the user actually experiences. Tests should observe the *real* application state.
+
+**What to look for:**
+- A test that depends on an `if (import.meta.env.DEV)` / `if (process.env.NODE_ENV !== "production")` branch — the production build strips it
+- A `window.__SOMETHING__` global, conditional data attribute, or DOM hook added to production code only so a test can read it
+- A test that asserts on a devtools-only / dev-server-only affordance
+- A test that passes locally (dev server) but times out only in the integration suite (production build)
+
+**Fix:** Observe the real DOM and behavior a user sees. If a test legitimately needs a deterministic readiness signal, stamp a stable `data-*` attribute that ships in production (not gated on DEV) and await it with `to_have_attribute` — see the `write-integration-test` skill's note on `data-editor-ready` for the in-repo pattern. If a third-party tool gates itself on `NODE_ENV`, import its explicit production entry rather than relying on the dev default.
+
+---
+
 ## Test Placement
 
 ### `correct_launch_mode_markers`
@@ -369,3 +389,18 @@ Access elements through the POM class hierarchy (`pages/` → `elements/`). Raw 
 - Repeated element-access patterns across multiple tests that should be a single POM method
 
 **Exceptions:** Quick one-off checks in test helpers or conftest fixtures where introducing a POM method would be over-abstraction.
+
+---
+
+### `use_keyboard_shortcut_helper`
+
+**Question:** Is this test firing a keyboard chord with a raw `page.keyboard.press("Meta+...")` instead of the shared `press_keyboard_shortcut()` POM helper?
+
+A chord like `Meta+K` must have its modifier released afterward. On macOS Chromium the modifier `keyup` is intermittently dropped after a chord, leaving the modifier "held" — so the next plain key (e.g. `Escape`) arrives as `Cmd+Escape` and the OS layer can swallow it before the browser sees it. The shared `press_keyboard_shortcut()` helper (`sculptor/sculptor/testing/pages/project_layout.py`) works around this by explicitly releasing every non-trailing key in the chord after the press. A raw `page.keyboard.press("Meta+K")` skips that release and reintroduces the flake — the failure shows up on the *next* interaction, not the chord itself, which makes it hard to trace back.
+
+**What to look for:**
+- `page.keyboard.press("Meta+...")` / `"Control+..."` / any modifier chord in a test or POM method, instead of `press_keyboard_shortcut(...)`
+- A test that presses a chord and then a plain key (Escape, Enter) and intermittently fails on the *second* key
+- A new POM method that re-implements chord-pressing rather than delegating to the existing helper
+
+**Fix:** Route chord presses through `press_keyboard_shortcut()` (or a POM method that already wraps it, e.g. `open_command_palette_with_keyboard`). It releases the modifiers so the following keypress isn't poisoned. Reserve raw `page.keyboard.press(...)` for single, unmodified keys.

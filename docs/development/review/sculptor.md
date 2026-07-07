@@ -313,3 +313,33 @@ virtualizer.scrollToIndex(messageCount - 1, { align: "end" });
 isProgrammaticScrollRef.current = true;
 virtualizer.scrollToIndex(messageCount - 1, { align: "end" });
 ```
+
+---
+
+## `radix_portal_keeps_theme_scope`
+
+**Question:** Does this overlay that portals its content (a Radix `Popover`/`DropdownMenu`/`Dialog`/`Tooltip`/`HoverCard`/`Select`, or a hand-rolled `createPortal`) render that content inside the app's `.radix-themes` scope rather than on `document.body`?
+
+Radix Themes defines every design token — the accent scale, surface/panel backgrounds, scrollbar colors, the `--gray-a*` ramp — on the `.radix-themes` root that `<Theme>` renders. A portal that targets `document.body` lands *outside* that root, so the portaled node resolves all `var(--*)` tokens to their empty/initial values: backgrounds paint transparent, text loses its color scale, and the surface is unreadable or invisible. The trap is that the component looks correct in isolation — Storybook wraps everything in a single `<Theme>` — and only breaks in the full app, where the portal escapes the token scope. `VerticalOverlayScrollbar` is the in-repo exemplar: it portals into the theme root specifically because a `<body>` portal resolves no color and paints the thumb transparent.
+
+**What to look for:**
+- A Radix overlay primitive (or its `*.Portal`) whose content has no explicit `container` — these default to `document.body`
+- A manual `createPortal(node, document.body)` for themed UI
+- An overlay that renders with a transparent or unstyled background only when mounted in the real app, not in Storybook
+
+**Fix:** Portal into the nearest themed ancestor instead of `document.body` — pass a `container` resolved from the trigger via `triggerRef.current?.closest(".radix-themes")` (the shared `THEME_ROOT_SELECTOR` constant). The content then inherits the token scope and paints correctly in the full app. The theme root still sits outside the host's `overflow` clip, so this does not reintroduce clipping.
+
+---
+
+## `use_select_for_flat_option_lists`
+
+**Question:** Is this a flat list of mutually-exclusive options that should be a Radix `Select`, rather than a `DropdownMenu`?
+
+Radix `Select` is the right primitive for picking one value from a flat list of options (a model picker, a branch picker, an enum setting). `DropdownMenu` is for command/action menus — especially true *nested* cascades with submenus. Reaching for `DropdownMenu` to render a flat option list is not just a semantic mismatch: `DropdownMenu`'s open/close lifecycle reopen-flakes in the full app (the menu intermittently fails to reopen after a close), which surfaces as a flaky interaction in integration tests. `Select` does not have this failure mode for flat lists.
+
+**What to look for:**
+- A `DropdownMenu` whose items are all single-value choices with no submenus — a flat option list wearing a menu's clothing
+- A picker built from `DropdownMenu` that an integration test has to retry or that flakes on reopen
+- A new single-select control where `Select` would express the intent directly
+
+**Fix:** Use Radix `Select` for flat, mutually-exclusive option lists. Reserve `DropdownMenu` for action menus and genuine nested cascades (submenus). If you need custom-rendered options beyond what `Select` supports, prefer a `Popover` with an explicit listbox over a `DropdownMenu` pressed into single-select duty.
