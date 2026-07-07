@@ -19,11 +19,11 @@ import type { SubSectionId } from "~/components/sections/sectionTypes.ts";
 export const renamingWorkspaceIdAtom = atom<string | null>(null);
 
 /**
- * The agent PANEL id whose tab should enter inline-rename mode, set by the
- * command palette's agent `beginRename`. The mounted tab in `SectionHeader`
- * observes this, flips into `isRenaming` when it matches its own panel id, and
- * clears the atom so a re-render doesn't re-trigger the edit. Null when no
- * rename is pending.
+ * The agent PANEL id whose tab should be in inline-rename mode, set by the
+ * command palette's agent `beginRename`. The matching tab in `SectionHeader`
+ * derives its rename mode from this atom during render (no effect, no local
+ * mirror) and clears it on commit/cancel alongside the tab's own rename flag.
+ * Null when no rename is pending.
  */
 export const agentRenameTargetAtom = atom<string | null>(null);
 
