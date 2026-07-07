@@ -157,9 +157,7 @@ export const panelRegistryAtom = atom<ReadonlyArray<PanelDefinition>>(buildStati
 // (registeredComponents map / dynamicPanels componentCache; icons are module
 // constants) and `dotStatus` is a scalar, so comparing these fields suppresses
 // spurious re-emits while still re-rendering on a real change (e.g. rename or a
-// dot-status change). A terminal's connection status is deliberately NOT a registry
-// field — the tab reads it from a per-panel atom slice (terminalConnectionStatusByPanelIdAtom),
-// so a connection transition re-renders only that tab's dot instead of rewriting the registry.
+// dot-status change).
 //
 // The callback fields (contextMenuActions / onRequestClose / onRename) are deliberately
 // omitted: every registry derivation rebuilds them as fresh closures, so comparing them
