@@ -7,8 +7,11 @@ import pytest
 import sculptor.services.user_config.user_config as user_config_module
 from sculptor.config.user_config import UserConfig
 from sculptor.services.user_config.user_config import canonicalize_telemetry_flags
+from sculptor.services.user_config.user_config import load_config
+from sculptor.services.user_config.user_config import make_onboarded_user_config
 from sculptor.services.user_config.user_config import merge_config
 from sculptor.services.user_config.user_config import save_config
+from sculptor.services.user_config.user_config import seed_onboarded_config_if_needed
 
 
 def _make_config(
@@ -78,6 +81,84 @@ def test_initialize_from_file_normalizes_mixed_flags_and_persists(tmp_path: Path
         assert reloaded.is_product_analytics_enabled is False
     finally:
         user_config_module.set_user_config_instance(None)
+
+
+def test_make_onboarded_user_config_sets_consent_and_enables_telemetry() -> None:
+    base = _make_config(is_error_reporting_enabled=False, is_product_analytics_enabled=False)
+    assert base.is_privacy_policy_consented is False
+    assert base.is_telemetry_level_set is False
+
+    onboarded = make_onboarded_user_config(base, is_telemetry_enabled=True)
+
+    assert onboarded.is_privacy_policy_consented is True
+    assert onboarded.is_telemetry_level_set is True
+    assert onboarded.is_error_reporting_enabled is True
+    assert onboarded.is_product_analytics_enabled is True
+    # Session recording has no consent toggle and stays off even when telemetry is on.
+    assert onboarded.is_session_recording_enabled is False
+    # Identity fields are carried through untouched.
+    assert onboarded.user_email == base.user_email
+
+
+def test_make_onboarded_user_config_can_disable_telemetry() -> None:
+    onboarded = make_onboarded_user_config(_make_config(), is_telemetry_enabled=False)
+
+    assert onboarded.is_privacy_policy_consented is True
+    assert onboarded.is_telemetry_level_set is True
+    assert onboarded.is_error_reporting_enabled is False
+    assert onboarded.is_product_analytics_enabled is False
+    assert onboarded.is_session_recording_enabled is False
+
+
+def test_seed_onboarded_config_writes_when_missing(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+
+    wrote = seed_onboarded_config_if_needed(config_path, is_telemetry_enabled=False)
+
+    assert wrote is True
+    seeded = load_config(config_path)
+    assert seeded.is_privacy_policy_consented is True
+    assert seeded.is_telemetry_level_set is True
+    assert seeded.is_error_reporting_enabled is False
+    assert seeded.is_product_analytics_enabled is False
+
+
+def test_seed_onboarded_config_is_idempotent_for_onboarded_config(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    assert seed_onboarded_config_if_needed(config_path, is_telemetry_enabled=False) is True
+    original_bytes = config_path.read_bytes()
+
+    # A second call must leave an already-onboarded config exactly as-is.
+    assert seed_onboarded_config_if_needed(config_path, is_telemetry_enabled=True) is False
+    assert config_path.read_bytes() == original_bytes
+
+
+def test_seed_onboarded_config_completes_partially_onboarded_config(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    not_onboarded = _make_config()
+    assert not_onboarded.is_privacy_policy_consented is False
+    save_config(not_onboarded, config_path)
+
+    wrote = seed_onboarded_config_if_needed(config_path, is_telemetry_enabled=False)
+
+    assert wrote is True
+    completed = load_config(config_path)
+    assert completed.is_privacy_policy_consented is True
+    assert completed.is_telemetry_level_set is True
+    # The developer's existing identity is preserved rather than reset to the default.
+    assert completed.user_email == not_onboarded.user_email
+
+
+def test_seed_onboarded_config_overwrites_corrupt_file(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("this is not valid toml = = =")
+
+    wrote = seed_onboarded_config_if_needed(config_path, is_telemetry_enabled=False)
+
+    assert wrote is True
+    recovered = load_config(config_path)
+    assert recovered.is_privacy_policy_consented is True
+    assert recovered.is_telemetry_level_set is True
 
 
 # Concurrency regression test: concurrent partial updates to different fields
