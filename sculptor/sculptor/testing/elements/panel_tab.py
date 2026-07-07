@@ -159,14 +159,6 @@ class PlaywrightPanelTabElement:
         expect(trigger).to_be_visible()
         trigger.hover()
 
-    def get_diagnostics_item_by_text(self, text: str) -> Locator:
-        """Get a diagnostics copy item (rendered by label) inside the open submenu.
-
-        Prefer :meth:`get_menu_item` with a ``TAB_CONTEXT_MENU_*`` testid; this
-        text-based lookup remains for assertions that read an item's visible label.
-        """
-        return self._page.get_by_role("menuitem", name=text)
-
     # Rename
 
     def get_inline_rename_input(self) -> Locator:
