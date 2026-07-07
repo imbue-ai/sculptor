@@ -212,8 +212,8 @@ packaging Sculptor):
 
 ### 3.3 Required external binaries
 
-- **REQ-COMPAT-020 (MUST).** **Claude CLI** is required. Compatibility window: **recommended 2.1.195,
-  minimum 2.1.195, maximum 2.99.99, blocked 2.1.101**; supported platforms **darwin-arm64** and
+- **REQ-COMPAT-020 (MUST).** **Claude CLI** is required. Compatibility window: **recommended 2.1.202,
+  minimum 2.1.202, maximum 2.99.99, blocked 2.1.101**; supported platforms **darwin-arm64** and
   **linux-x64** (`sculptor/sculptor/services/managed_tools.py`). Sculptor can install/manage it and can use a
   user-supplied binary (`SPEC.md` §7.1, §7.10).
 - **REQ-COMPAT-021 [Unspecified].** **Git** is required and is **runtime-detected with no
