@@ -24,6 +24,12 @@ export type FlatFileEntry = {
 export type FileBrowserState = {
   expandedFolders: Array<string>;
   changesExpandedFolders: Array<string>;
+  // Folders the Changes tree has already auto-expanded once. The Changes tree
+  // opens each folder the first time it appears; recording that here (rather than
+  // in a per-mount ref) is what lets a folder the user then collapses stay
+  // collapsed across remounts and later change ticks, while genuinely new changed
+  // folders still open on first sight.
+  changesAutoExpandedFolders: Array<string>;
   viewMode: ViewMode;
   searchQuery: string;
   searchOpen: boolean;
