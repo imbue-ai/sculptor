@@ -186,7 +186,15 @@ class ManualTestHarness:
         # when Chromium's GPU compositor is stubbed out, as it is in --headless=new).
         self._browser = self._playwright.chromium.launch(
             headless=True,
-            args=["--disable-webgl", "--disable-webgl2"],
+            args=[
+                "--disable-webgl",
+                "--disable-webgl2",
+                # Containers mount a tiny (~64MB) /dev/shm. Chromium's renderer uses
+                # /dev/shm for shared memory and crashes with "Target/Page crashed"
+                # once it fills during a long session (especially at device_scale_factor=2).
+                # Redirect that shared memory to disk-backed /tmp instead.
+                "--disable-dev-shm-usage",
+            ],
         )
         self._browser_context = self._browser.new_context(viewport=self._viewport, device_scale_factor=2)
         self._page = self._browser_context.new_page()
