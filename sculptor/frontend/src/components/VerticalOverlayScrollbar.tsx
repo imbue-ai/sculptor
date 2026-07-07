@@ -92,7 +92,8 @@ export const VerticalOverlayScrollbar = ({
   useEffect((): (() => void) | void => {
     const element = scrollRef.current;
     if (!element) return;
-    setPortalTarget(element.closest<HTMLElement>(THEME_ROOT_SELECTOR));
+    const themeRoot = element.closest<HTMLElement>(THEME_ROOT_SELECTOR);
+    setPortalTarget(themeRoot);
 
     const readScrollTop = (): void => {
       setGeometry((prev) => (prev.scrollTop === element.scrollTop ? prev : { ...prev, scrollTop: element.scrollTop }));
@@ -132,6 +133,19 @@ export const VerticalOverlayScrollbar = ({
     resizeObserver.observe(element);
     const content = element.firstElementChild;
     if (content) resizeObserver.observe(content);
+    // A layout shift can MOVE the host without resizing it or the window — e.g.
+    // collapsing an adjacent sidebar grows a container the host lives in and
+    // slides the host sideways. That fires neither the host's own ResizeObserver
+    // nor `window resize`, so the fixed, viewport-positioned overlay would stay
+    // stranded at the host's old x, floating over whatever moved into that space.
+    // Observe the ancestor chain up to the theme root too: whichever ancestor
+    // absorbs the shift resizes, which re-reads the host's rect and repositions
+    // the overlay. The track is `position: fixed` / `pointer-events: none`, so
+    // restyling it can't resize an observed ancestor — no ResizeObserver loop.
+    for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      resizeObserver.observe(ancestor);
+      if (ancestor === themeRoot) break;
+    }
     window.addEventListener("resize", readRect);
 
     return (): void => {
