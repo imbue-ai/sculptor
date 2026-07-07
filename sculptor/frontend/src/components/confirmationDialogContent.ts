@@ -43,3 +43,13 @@ export const buildDeleteConfirmationContent = ({
   confirmLabel: DELETE_CONFIRM_LABEL_BY_TYPE[entityType],
   tone: "danger",
 });
+
+// Copy for resetting a workspace's panel layout back to the default arrangement.
+// Reversible-but-discarding (the user only loses their custom arrangement, no
+// data), so it carries the neutral tone rather than danger.
+export const buildResetLayoutConfirmationContent = (): ConfirmationDialogContent => ({
+  title: "Reset to default layout?",
+  description: "This discards your current panel arrangement for this workspace and restores the default layout.",
+  confirmLabel: "Reset layout",
+  tone: "neutral",
+});

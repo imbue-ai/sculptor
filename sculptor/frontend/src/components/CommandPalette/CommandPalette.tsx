@@ -99,7 +99,7 @@ const PaletteRow = ({
       // cmdk skips onSelect for them.
       disabled={command.disabled}
       className={styles.item}
-      data-testid={ElementIds.COMMAND_PALETTE_ITEM}
+      data-testid={command.elementId ?? ElementIds.COMMAND_PALETTE_ITEM}
       data-command-id={command.id}
       aria-busy={isPending}
     >

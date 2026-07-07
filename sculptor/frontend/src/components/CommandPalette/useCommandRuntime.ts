@@ -16,8 +16,9 @@ import { useUserConfig } from "../../common/state/hooks/useUserConfig.ts";
 import type { AppearanceMode } from "../../common/theme/appearanceModes.ts";
 import { sidebarCollapsedAtom } from "../layout/sidebarAtoms.ts";
 import { newWorkspaceModalAtom } from "../newWorkspace/newWorkspaceAtoms.ts";
+import { resetWorkspaceLayout } from "../sections/resetWorkspaceLayout.ts";
 import { toggleSectionAtom } from "../sections/sectionActions.ts";
-import { workspaceLayoutAtom } from "../sections/sectionAtoms.ts";
+import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "../sections/sectionAtoms.ts";
 import { toSection } from "../sections/sectionTypes.ts";
 import { maximizedSectionAtom } from "../sections/transientAtoms.ts";
 import { type CommandActionId, commandActionsAtom } from "./commandActions.ts";
@@ -129,6 +130,15 @@ export const useCommandRuntime = (): CommandRuntime => {
     const layout = store.get(workspaceLayoutAtom);
     store.set(maximizedSectionAtom, toSection(layout.activeSubSection ?? "center"));
   });
+  // Overwrite the active workspace's layout with a freshly-seeded default. The
+  // command gates this behind a confirmation, so no extra guard here.
+  const uiResetLayout = useEvent((): void => {
+    const workspaceId = store.get(activeWorkspaceIdAtom);
+    if (workspaceId === null) {
+      return;
+    }
+    resetWorkspaceLayout(store, workspaceId);
+  });
   const setTheme = useEvent((mode: AppearanceMode): void => {
     setThemeSettings((prev) => ({ ...prev, appearance: mode }));
   });
@@ -178,6 +188,7 @@ export const useCommandRuntime = (): CommandRuntime => {
         toggleRightPanel: uiToggleRightPanel,
         toggleSidebar: uiToggleSidebar,
         toggleMaximizeSection: uiToggleMaximizeSection,
+        resetLayout: uiResetLayout,
         setTheme,
         focusChatInput: uiFocusChatInput,
         showChatSearch,
@@ -207,6 +218,7 @@ export const useCommandRuntime = (): CommandRuntime => {
       uiToggleRightPanel,
       uiToggleSidebar,
       uiToggleMaximizeSection,
+      uiResetLayout,
       setTheme,
       uiFocusChatInput,
       showChatSearch,
