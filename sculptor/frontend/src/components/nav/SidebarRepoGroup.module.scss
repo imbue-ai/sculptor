@@ -166,6 +166,10 @@
   // not an elevated tint: an element clamped at the rail's edge sits away from
   // the pointer, where an off-color surface reads as a stray band.
   background: var(--gray-2);
+  // Rounds the drag surface and its shadow ring on whichever element carries it:
+  // workspace rows are already rounded, but a dragged repo group is a plain
+  // container whose sharp-cornered box would read as a different treatment.
+  border-radius: var(--radius-2);
   box-shadow: var(--shadow-4);
   position: relative;
   z-index: 1;
