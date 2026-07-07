@@ -34,9 +34,10 @@ import { useAddPanelActions } from "./useAddPanelActions.ts";
 
 // The shared row body rendered inside every dropdown item and sub-trigger: a label
 // with an optional trailing keybinding hint (no leading icons — text-only rows).
-// When a description is supplied it renders as a second, smaller line under the
-// label; rows without one render exactly as a single title line. Hover/active
-// backgrounds come from the wrapping Radix item, so this only lays out the contents.
+// When a description is supplied it renders inline after the label on the same row,
+// muted and ellipsized when space runs short; rows without one render exactly as a
+// single title line. Hover/active backgrounds come from the wrapping Radix item, so
+// this only lays out the contents.
 const MenuRow = ({
   label,
   shortcut,
@@ -203,6 +204,7 @@ export const AddPanelDropdown = ({ subSection, trigger, tooltip }: AddPanelDropd
       )}
       <DropdownMenu.Content
         size="1"
+        className={styles.content}
         data-testid={`${ElementIds.ADD_PANEL_DROPDOWN}-${subSection}`}
         onCloseAutoFocus={(event) => {
           if (openedPanelRef.current) {
