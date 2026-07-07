@@ -17,6 +17,7 @@ import { Outlet } from "react-router-dom";
 import { useSyncActiveTabFromRoute } from "~/common/hooks/useSyncActiveTabFromRoute.ts";
 import { useActiveProjectID } from "~/common/NavigateUtils.ts";
 import { backendStatusAtom } from "~/common/state/atoms/backend.ts";
+import { confirmationDialogAtom } from "~/common/state/atoms/confirmationDialog.ts";
 import {
   commitPromptSendFailedToastAtom,
   createAgentErrorToastAtom,
@@ -30,6 +31,7 @@ import {
 } from "~/common/state/atoms/toasts.ts";
 import { useProject } from "~/common/state/hooks/useProjects.ts";
 import { useUnifiedStream } from "~/common/state/hooks/useUnifiedStream";
+import { AtomConfirmationDialog } from "~/components/AtomConfirmationDialog.tsx";
 import type { AtomToastAtom } from "~/components/AtomToast.tsx";
 import { AtomToast } from "~/components/AtomToast.tsx";
 import { CommandPalette } from "~/components/CommandPalette";
@@ -134,6 +136,9 @@ export const AppShell = (): ReactElement => {
         project={currentProject}
         onClose={() => setIsRepoPathDialogOpen(false)}
       />
+      {/* One shared confirmation dialog any surface can raise by setting the atom
+          (e.g. reset-to-default-layout, the recent/sidebar workspace deletes). */}
+      <AtomConfirmationDialog dialogAtom={confirmationDialogAtom} />
       <NotificationToasts />
       {APP_TOASTS.map(({ key, toastAtom, duration }) => (
         <AtomToast key={key} toastAtom={toastAtom} duration={duration} />
