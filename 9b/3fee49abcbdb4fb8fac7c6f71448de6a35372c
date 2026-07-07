@@ -1,4 +1,7 @@
 {
+  "offload-scu1714b.toml": {
+    "image_id": "im-ZrJ3x4ZIF31fdJ7PlI9iEN"
+  },
   "offload.toml": {
     "image_id": "im-VAobmo7nI9i7vUn63Y7LZf"
   },
