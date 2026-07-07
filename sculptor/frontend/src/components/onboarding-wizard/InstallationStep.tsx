@@ -594,7 +594,7 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
             <Link href="https://github.com/earendil-works/pi" target="_blank" className={styles.inlineLink}>
               Pi
             </Link>{" "}
-            harness — an alternative agent supporting many model providers
+            harness — an alternative harness supporting many model providers
           </Text>
           <DependencyCard
             name="Pi"

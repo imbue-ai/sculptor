@@ -121,7 +121,7 @@ describe("createAgentInLocation placement", () => {
   });
 });
 
-describe("createAgentInLocation pi agent", () => {
+describe("createAgentInLocation pi harness", () => {
   it("creates a pi agent when a pi agent is requested (pi is always available)", async () => {
     createWorkspaceAgentMock.mockResolvedValue({ data: { id: "task-pi" } });
     const store = createStore();

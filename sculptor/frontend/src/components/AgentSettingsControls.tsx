@@ -30,6 +30,11 @@ type AgentSettingsControlsProps = {
    * model's own `supportsFastMode` capability. Defaults to `true`.
    */
   canUseFastMode?: boolean;
+  /**
+   * Gate the model picker on harness support. When false, the picker renders
+   * disabled with a capability-tooltip. Defaults to `true`.
+   */
+  canSelectModel?: boolean;
 };
 
 /**
@@ -39,7 +44,8 @@ type AgentSettingsControlsProps = {
  * prompt textarea without duplicating ChatInput's wiring. The fast-mode
  * toggle is gated on `getModelCapabilities(model).supportsFastMode`
  * here (rather than at every callsite) so consumers only have to pass
- * the selected model.
+ * the selected model. The model picker is gated on `canSelectModel` (false
+ * disables it with a capability tooltip).
  *
  * ChatInput renders a parallel copy of this toolbar block that adds
  * capability-gated disabled states and a backend-model selector it needs in
@@ -57,6 +63,7 @@ export const AgentSettingsControls = ({
   onPlanModeToggle,
   canEnterPlanMode = true,
   canUseFastMode = true,
+  canSelectModel = true,
 }: AgentSettingsControlsProps): ReactElement => {
   const { supportsFastMode: doesSupportFastMode } = getModelCapabilities(model);
   const { navigateToGlobalSettings } = useImbueNavigate();
@@ -85,7 +92,12 @@ export const AgentSettingsControls = ({
       {doesSupportFastMode && canUseFastMode && <FastModeToggle isActive={isFastMode} onToggle={onFastModeToggle} />}
       <EffortSelector effort={effort} onEffortChange={onEffortChange} />
       <Flex pr="1">
-        <ModelSelector model={model} onModelChange={onModelChange} onAuthenticate={handleAuthenticate} />
+        <ModelSelector
+          model={model}
+          onModelChange={onModelChange}
+          capabilityValue={canSelectModel}
+          onAuthenticate={handleAuthenticate}
+        />
       </Flex>
     </Flex>
   );

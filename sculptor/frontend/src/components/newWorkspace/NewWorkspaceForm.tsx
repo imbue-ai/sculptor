@@ -12,7 +12,11 @@ import {
   WorkspaceInitializationStrategy,
 } from "~/api";
 import { isDismissibleOverlayOpen } from "~/common/overlayUtils.ts";
-import { lastUsedAgentTypeAtom, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
+import {
+  lastUsedAgentTypeAtom,
+  resolveEffectiveAgentType,
+  type StoredAgentType,
+} from "~/common/state/atoms/agentTabs.ts";
 import { isPiAvailableAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { projectsArrayAtom, updateProjectsAtom } from "~/common/state/atoms/projects.ts";
 import { defaultEffortLevelAtom, defaultModelAtom, isDefaultFastModeAtom } from "~/common/state/atoms/userConfig.ts";
@@ -117,6 +121,10 @@ export const NewWorkspaceForm = ({
 
   // State and hooks — external
   const { registrations } = useTerminalAgentRegistrations();
+  // Fast mode and model selection are Claude-only. Resolve through the same
+  // helper the create flow uses so a registered agent whose registration was
+  // deleted (and therefore creates a Claude agent) still shows Claude's controls.
+  const isNonClaudeHarness = resolveEffectiveAgentType(agentTypeValue, registrations).agentType !== "claude";
   const { repoInfo, fetchRepoInfo, fetchCurrentBranch } = useRepoInfo(selectedProjectId);
   const { isCreating, createWorkspace } = useCreateWorkspace();
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -463,6 +471,7 @@ export const NewWorkspaceForm = ({
               rendered so the row reserves its space; hidden via `visibility`
               until the user has typed a prompt so the modal doesn't jump. */}
           <div className={styles.agentSettings} data-visible={!isPromptEmpty} aria-hidden={isPromptEmpty}>
+            {/* Pi supports interactive backchannel, so plan mode stays enabled. */}
             <AgentSettingsControls
               model={agentModel}
               onModelChange={setAgentModel}
@@ -472,6 +481,8 @@ export const NewWorkspaceForm = ({
               onFastModeToggle={(): void => setIsAgentFastMode((v) => !v)}
               isPlanMode={isAgentPlanMode}
               onPlanModeToggle={(): void => setIsAgentPlanMode((v) => !v)}
+              canUseFastMode={!isNonClaudeHarness}
+              canSelectModel={!isNonClaudeHarness}
             />
           </div>
         </div>
