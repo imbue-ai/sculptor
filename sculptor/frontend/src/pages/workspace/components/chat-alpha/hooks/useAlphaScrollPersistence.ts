@@ -65,6 +65,7 @@ export const useAlphaScrollPersistence = (
           // reader follows content that grew while away and a position inside
           // the padding (the anchored rest / a max scroll) round-trips.
           distanceFromBottom: distanceFromContentBottom(el, virtualizer),
+          savedAtMs: Date.now(),
         });
       });
     };
