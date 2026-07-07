@@ -2,7 +2,7 @@ import { useSetAtom } from "jotai";
 import { useMemo } from "react";
 
 import { activateAgentPanelAtom } from "../../common/state/agentPanelPlacement.ts";
-import { markAgentUnreadAtom } from "../../common/state/atoms/unreadOverrides.ts";
+import { useMarkUnreadMutation } from "../../common/state/mutations";
 import { makeAgentPanelId } from "../sections/registry/dynamicPanels.tsx";
 import {
   agentDeleteTargetAtom,
@@ -26,7 +26,7 @@ export const useContextActionRuntimes = (): {
   const setAgentDeleteTarget = useSetAtom(agentDeleteTargetAtom);
   const setAgentRenameTarget = useSetAtom(agentRenameTargetAtom);
   const activateAgentPanel = useSetAtom(activateAgentPanelAtom);
-  const markAgentUnread = useSetAtom(markAgentUnreadAtom);
+  const { mutate: markUnreadMutate } = useMarkUnreadMutation();
   const gitAndOpenIn = useGitAndOpenInRuntime();
 
   // Identity-stable (jotai's `useSetAtom` returns stable refs; `gitAndOpenIn`
@@ -42,12 +42,9 @@ export const useContextActionRuntimes = (): {
 
   const agentActionRuntime = useMemo<AgentActionRuntime>(
     () => ({
-      // Shares markAgentUnreadAtom with the panel-tab "Mark as unread" so both
-      // paths record the unread override (which keeps useMarkRead's auto
-      // mark-read from undoing the action) alongside the persisted update.
       markUnread: (agent): void => {
         if (agent.workspaceId == null) return;
-        markAgentUnread({ workspaceId: agent.workspaceId, taskId: agent.id });
+        markUnreadMutate({ workspaceId: agent.workspaceId, agentId: agent.id });
       },
       // Activate the agent's panel first so its tab is guaranteed mounted, then
       // hand the panel id to the tab (via agentRenameTargetAtom) to enter inline
@@ -59,7 +56,7 @@ export const useContextActionRuntimes = (): {
       },
       beginDelete: (agent): void => setAgentDeleteTarget({ id: agent.id, name: agent.title ?? "" }),
     }),
-    [markAgentUnread, activateAgentPanel, setAgentRenameTarget, setAgentDeleteTarget],
+    [markUnreadMutate, activateAgentPanel, setAgentRenameTarget, setAgentDeleteTarget],
   );
 
   return { workspaceActionRuntime, agentActionRuntime };

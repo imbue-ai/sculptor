@@ -70,34 +70,18 @@ export const workspaceQueryKeyPrefix = (workspaceId: string): QueryKey =>
 export const workspaceGitQueryKeyPrefix = (workspaceId: string): QueryKey =>
   [SCULPTOR_QUERY_KEY_PREFIX, "workspace", workspaceId, "git"] as const;
 
-/**
- * Query key for a single agent task by its id. The WS bridge writes the latest
- * server-authoritative value here whenever a `taskViewsByTaskId` frame arrives,
- * so `useTask(id)` never triggers a network fetch — the cache is the single
- * source of truth, driven by the real-time stream.
- */
+/** Query key for a single agent task by its id, populated by the WS bridge. */
 export const taskQueryKey = (taskId: string): ReadonlyArray<string> =>
   [SCULPTOR_QUERY_KEY_PREFIX, "task", taskId] as const;
 
-/**
- * Query key for the ordered list of non-deleted task ids visible in the UI.
- * Updated by the WS bridge whenever a frame adds or removes agents.
- *
- * Kept separate from individual `taskQueryKey`s: consumers that render the
- * agent-tab list subscribe only to this key, while components that render a
- * single agent's details subscribe only to `["task", id]`.
- */
+/** Query key for the ordered list of non-deleted task ids, updated by the WS bridge. */
 export const taskIdsQueryKey = (): ReadonlyArray<string> => [SCULPTOR_QUERY_KEY_PREFIX, "taskIds"] as const;
 
 /**
- * Write a batch of task-view updates into the query cache. Soft-deleted tasks
- * (isDeleted: true) are set to `null` so observers see the removal, and are
- * pruned from the task-ids list. Non-deleted tasks are merged into both caches,
- * preserving the order established by the server.
- *
- * Called by the WS bridge (`useUnifiedStream`) on every `taskViewsByTaskId`
- * frame. Safe to call repeatedly — unchanged tasks are filtered out to avoid
- * spurious observer notifications.
+ * Write a batch of task-view updates into the query cache. Called by the WS
+ * bridge (`useUnifiedStream`) on every `taskViewsByTaskId` frame. Idempotent —
+ * the task-ids list is only rewritten when ids actually change, so repeated
+ * calls with unchanged tasks don't notify observers.
  */
 export const syncTasksToQueryCache = (taskViewsByTaskId: Record<string, CodingAgentTaskView>): void => {
   Object.entries(taskViewsByTaskId).forEach(([id, task]) => {

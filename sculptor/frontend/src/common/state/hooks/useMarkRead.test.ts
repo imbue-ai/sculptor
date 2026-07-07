@@ -9,7 +9,7 @@ import type * as api from "../../../api";
 import type { CodingAgentTaskView } from "../../../api";
 import { queryClient as sharedQueryClient } from "../../queryClient.ts";
 import { taskAtomFamily } from "../atoms/tasks";
-import { markAgentUnreadAtom, resetUnreadOverridesForTesting } from "../atoms/unreadOverrides";
+import { resetUnreadOverridesForTesting, setUnreadOverride } from "../atoms/unreadOverrides";
 import { useMarkRead } from "./useMarkRead";
 
 // Capture calls to the mark-read/mark-unread endpoints without hitting the network.
@@ -103,11 +103,12 @@ describe("useMarkRead", () => {
     act(() => {
       store.set(taskAtomFamily("agent-1"), makeTask("2024-01-01T00:00:06.000Z", "2024-01-01T00:00:01.000Z"));
     });
-    // ...then the user explicitly marks it unread. The real action records an
-    // unread override AND optimistically clears lastReadAt (unreadOverrides.ts);
-    // the override is what the flush guard consults.
+    // ...then the user explicitly marks it unread. The mark-unread mutation
+    // records the override AND clears lastReadAt optimistically.
     act(() => {
-      store.set(markAgentUnreadAtom, { workspaceId: "ws-1", taskId: "agent-1" });
+      const task = store.get(taskAtomFamily("agent-1"))!;
+      setUnreadOverride("agent-1", task);
+      store.set(taskAtomFamily("agent-1"), { ...task, lastReadAt: null });
     });
 
     act(() => {
@@ -137,7 +138,9 @@ describe("useMarkRead", () => {
       store.set(taskAtomFamily("agent-x"), makeTask("2024-01-01T00:00:06.000Z", "2024-01-01T00:00:01.000Z", "agent-x"));
     });
     act(() => {
-      store.set(markAgentUnreadAtom, { workspaceId: "ws-1", taskId: "agent-x" });
+      const task = store.get(taskAtomFamily("agent-x"))!;
+      setUnreadOverride("agent-x", task);
+      store.set(taskAtomFamily("agent-x"), { ...task, lastReadAt: null });
     });
 
     // Switching to agent-y must consult agent-x's state (it is explicitly

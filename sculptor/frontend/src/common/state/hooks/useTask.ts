@@ -4,19 +4,12 @@ import type { CodingAgentTaskView } from "../../../api";
 import { taskIdsQueryKey, taskQueryKey } from "../../queryClient.ts";
 
 /**
- * Subscribe to a single agent task from the TanStack Query cache. The cache is
- * the single source of truth, written by the WS bridge (`syncTasksToQueryCache`
- * in `useUnifiedStream`) whenever a `taskViewsByTaskId` frame arrives.
+ * Subscribe to a single agent task from the TanStack Query cache, populated
+ * by the WS bridge (`syncTasksToQueryCache`) on every `taskViewsByTaskId` frame.
  *
- * `queryFn` is a no-op resolver: the cache is populated entirely by WebSocket
- * pushes, not by network fetches. The `staleTime: Infinity` default on the
- * shared `queryClient` means the no-op resolver never fires unless the cache is
- * empty on mount — in which case it returns `null`.
- *
- * This replaces `useAtomValue(taskAtomFamily(id))` callers. During Phase 1 of
- * the TanStack Query migration the Jotai atom and this hook are both populated
- * by the WS bridge; callers switch over in Phase 2 (mutations) and Phase 3
- * (reads).
+ * `queryFn` is a no-op: the cache is fed entirely by WebSocket pushes, not
+ * network fetches. With `staleTime: Infinity` the no-op never fires unless
+ * the cache is empty on mount, in which case `useTask` returns `null`.
  */
 export const useTask = (taskId: string): CodingAgentTaskView | null => {
   const { data } = useQuery<CodingAgentTaskView | null>({
@@ -30,11 +23,9 @@ export const useTask = (taskId: string): CodingAgentTaskView | null => {
 };
 
 /**
- * Subscribe to the ordered list of non-deleted task ids. Mirrors `taskIdsAtom`
- * — populated by the WS bridge, not by a network fetch.
- *
- * Returns `undefined` until the first WS frame has been processed, matching the
- * atom's semantics so consumers can distinguish "still loading" from "no tasks".
+ * Subscribe to the ordered list of non-deleted task ids, populated by the WS
+ * bridge. Returns `undefined` until the first frame arrives so consumers can
+ * distinguish "still loading" from "no tasks".
  */
 export const useTaskIds = (): ReadonlyArray<string> | undefined => {
   const { data } = useQuery<ReadonlyArray<string>>({

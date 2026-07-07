@@ -67,8 +67,7 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
         agent_id: taskId,
       });
 
-      // Dual-write: remove from the TanStack Query cache so useTask observers
-      // see the deletion without waiting for the WS frame.
+      // Remove from the TanStack Query cache alongside the Jotai write.
       queryClient.setQueryData<CodingAgentTaskView | null>(taskQueryKey(taskId), null);
       const currentIds = queryClient.getQueryData<ReadonlyArray<string>>(taskIdsQueryKey()) ?? [];
       queryClient.setQueryData<ReadonlyArray<string>>(
@@ -81,7 +80,7 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
         meta: { skipWsAck: true },
       }).catch(() => {
         setRollbackDelete({ taskId, snapshot });
-        // Rollback: restore the task in the TanStack Query cache.
+        // Restore the task in the TanStack Query cache.
         queryClient.setQueryData(taskQueryKey(taskId), snapshot);
         const restoredIds = queryClient.getQueryData<ReadonlyArray<string>>(taskIdsQueryKey()) ?? [];
         if (!restoredIds.includes(taskId)) {

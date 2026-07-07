@@ -25,9 +25,7 @@ import {
   taskSupportsSubAgentsAtomFamily,
   taskSupportsToolUseRenderingAtomFamily,
 } from "../atoms/tasks";
-import { useTask as useTaskFromCache } from "./useTask";
-
-export const useTask = useTaskFromCache;
+export { useTask } from "./useTask";
 
 /** Subscribe to only the task's status field. Re-renders only when status changes. */
 export const useTaskStatus = (taskId: string): TaskStatus | undefined => useAtomValue(taskStatusAtomFamily(taskId));

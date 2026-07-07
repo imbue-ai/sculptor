@@ -37,13 +37,9 @@
 //     lastReadAt=null keeps the dot unread on its own, and returning to the agent
 //     is a fresh activation that would clear the override anyway.
 
-import { atom } from "jotai";
-
-import { markWorkspaceAgentUnread, TaskStatus } from "../../../api";
+import { TaskStatus } from "../../../api";
 import type { AgentDotStatus } from "../../../components/statusDot/statusUtils.ts";
 import { getAgentDotStatus } from "../../../components/statusDot/statusUtils.ts";
-import { queryClient, taskQueryKey } from "../../queryClient.ts";
-import { taskAtomFamily } from "./tasks";
 
 // The task fields the override lifecycle depends on. Structurally satisfied by
 // both CodingAgentTaskView and the registry's DynamicAgentInput.
@@ -125,21 +121,3 @@ export function getAgentDotStatusWithUnreadOverride(
   const baseDotStatus = getAgentDotStatus(task.status, task.lastReadAt, task.updatedAt, isFocused);
   return baseDotStatus === "read" && isUnreadOverrideActive(taskId, task) ? "unread" : baseDotStatus;
 }
-
-// The user-facing "Mark as unread" action: record the override, flip the task's
-// lastReadAt optimistically so the dot updates immediately, and persist.
-export const markAgentUnreadAtom = atom(null, (get, set, target: { workspaceId: string; taskId: string }): void => {
-  const task = get(taskAtomFamily(target.taskId));
-  if (task === null) {
-    return;
-  }
-  setUnreadOverride(target.taskId, task);
-  set(taskAtomFamily(target.taskId), { ...task, lastReadAt: null });
-  // Dual-write to the TanStack Query cache so useTask/useMarkRead observers
-  // pick up the optimistic update without waiting for the WS frame.
-  queryClient.setQueryData(taskQueryKey(target.taskId), { ...task, lastReadAt: null });
-  markWorkspaceAgentUnread({ path: { workspace_id: target.workspaceId, agent_id: target.taskId } }).catch((error) => {
-    // Fire-and-forget: the server-authoritative value will arrive via WebSocket.
-    console.warn("Failed to persist mark-unread; the server value will arrive via WebSocket.", error);
-  });
-});
