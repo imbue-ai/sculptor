@@ -148,15 +148,20 @@
   }
 }
 
-// The source row or repo group while its floating copy (SidebarDragPreview in the
-// DragOverlay) is being dragged: dimmed so the eye follows the copy — the same
-// treatment as a panel tab mid-drag (SectionHeader's tabDragging).
+// A row or repo group mid-drag. There is no floating overlay copy — the element
+// itself slides with the cursor (translate-only transform), so it is lifted above
+// its siblings and given the panel-overlay elevation language (solid background +
+// shadow, per TabPill's overlay variant) to read as "picked up" while the rows it
+// passes over can't show through.
 .rowDragging {
-  opacity: 40%;
+  background: var(--gray-3);
+  box-shadow: var(--shadow-4);
+  position: relative;
+  z-index: 1;
 
-  // The source keeps keyboard focus for the whole drag (the sensor listens on
-  // it), but its focus ring bleeds through the floating copy's anti-aliased
-  // edges; the copy is the drag indicator, so the ring only adds noise here.
+  // The dragged element keeps keyboard focus for the whole drag (the sensor
+  // listens on it); the elevation is the drag indicator, so the focus ring
+  // riding along only adds noise.
   :focus-visible {
     outline: none;
   }

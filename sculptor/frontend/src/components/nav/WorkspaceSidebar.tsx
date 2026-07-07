@@ -1,5 +1,5 @@
-import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
-import { closestCenter, DndContext, DragOverlay } from "@dnd-kit/core";
+import type { DragEndEvent } from "@dnd-kit/core";
+import { closestCenter, DndContext } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { IconButton, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
@@ -38,8 +38,7 @@ import { WorkspacePeekOverlay } from "~/pages/workspace/components/WorkspacePeek
 import { isSidebarDragActiveAtom } from "./navAtoms.ts";
 import navItemStyles from "./NavItem.module.scss";
 import { NavItem } from "./NavItem.tsx";
-import { useSidebarDndSensors } from "./sidebarDnd.ts";
-import { RepoGroupHeaderDragPreview } from "./SidebarDragPreview.tsx";
+import { sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
 import { SidebarFirstRunState } from "./SidebarFirstRunState.tsx";
 import { SidebarRepoGroup } from "./SidebarRepoGroup.tsx";
 import { reorderSidebarRepoGroupAtom, sidebarWorkspaceGroupsAtom } from "./sidebarWorkspaceOrder.ts";
@@ -187,22 +186,10 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   const groupDndSensors = useSidebarDndSensors();
   const setSidebarDragActive = useSetAtom(isSidebarDragActiveAtom);
   const reorderRepoGroup = useSetAtom(reorderSidebarRepoGroupAtom);
-  // The dragged group's id, so the DragOverlay can render its floating header pill.
-  const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null);
-  const handleGroupDragStart = useCallback(
-    (event: DragStartEvent): void => {
-      setDraggedProjectId(String(event.active.id));
-      setSidebarDragActive(true);
-    },
-    [setSidebarDragActive],
-  );
-  const handleGroupDragCancel = useCallback((): void => {
-    setDraggedProjectId(null);
-    setSidebarDragActive(false);
-  }, [setSidebarDragActive]);
+  const handleGroupDragStart = useCallback((): void => setSidebarDragActive(true), [setSidebarDragActive]);
+  const handleGroupDragCancel = useCallback((): void => setSidebarDragActive(false), [setSidebarDragActive]);
   const handleGroupDragEnd = useCallback(
     (event: DragEndEvent): void => {
-      setDraggedProjectId(null);
       setSidebarDragActive(false);
       if (event.over === null || event.over.id === event.active.id) {
         return;
@@ -211,7 +198,6 @@ export const WorkspaceSidebar = (): ReactElement | null => {
     },
     [setSidebarDragActive, reorderRepoGroup],
   );
-  const draggedGroup = repoGroups.find((group) => group.projectId === draggedProjectId);
 
   // dnd-kit does not fire onDragCancel when its context unmounts (see
   // PanelDndProvider), and collapsing the sidebar renders null below — the
@@ -302,6 +288,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
           <DndContext
             sensors={groupDndSensors}
             collisionDetection={closestCenter}
+            modifiers={sidebarDndModifiers}
             onDragStart={handleGroupDragStart}
             onDragEnd={handleGroupDragEnd}
             onDragCancel={handleGroupDragCancel}
@@ -319,11 +306,6 @@ export const WorkspaceSidebar = (): ReactElement | null => {
                 />
               ))}
             </SortableContext>
-            {/* The floating header copy that follows the cursor; the source group
-                stays in the list, dimmed (mirrors the panel-tab drag overlay). */}
-            <DragOverlay dropAnimation={null}>
-              {draggedGroup !== undefined ? <RepoGroupHeaderDragPreview name={draggedGroup.name} /> : null}
-            </DragOverlay>
           </DndContext>
         </div>
 
