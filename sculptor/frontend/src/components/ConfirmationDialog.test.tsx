@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ElementIds } from "~/api";
 
-import { DeleteConfirmationDialog } from "./DeleteConfirmationDialog";
+import { ConfirmationDialog } from "./ConfirmationDialog";
 import { POPOVER_FRIENDLY_MODAL_ATTRIBUTE, popoverFriendlyModalGuard } from "./popoverFriendlyModal";
 
 const Wrapper = ({ children }: { children: ReactNode }): ReactElement => <Theme>{children}</Theme>;
@@ -14,38 +14,42 @@ afterEach(() => {
   cleanup();
 });
 
-describe("DeleteConfirmationDialog — popover-friendly marker", () => {
+describe("ConfirmationDialog — popover-friendly marker", () => {
   it("tags the dialog content with the popover-friendly marker while open", () => {
     render(
       <Wrapper>
-        <DeleteConfirmationDialog
+        <ConfirmationDialog
           isOpen
           onOpenChange={(): void => {}}
-          entityType="workspace"
-          entityName="ws-1"
+          title="Delete workspace?"
+          description="This will permanently delete the workspace."
+          confirmLabel="Delete"
+          tone="danger"
           onConfirm={(): void => {}}
         />
       </Wrapper>,
     );
 
-    const content = screen.getByTestId(ElementIds.DELETE_CONFIRMATION_DIALOG);
+    const content = screen.getByTestId(ElementIds.CONFIRMATION_DIALOG);
     expect(content.getAttribute(POPOVER_FRIENDLY_MODAL_ATTRIBUTE)).toBe("true");
   });
 
   it("renders nothing markable when closed", () => {
     render(
       <Wrapper>
-        <DeleteConfirmationDialog
+        <ConfirmationDialog
           isOpen={false}
           onOpenChange={(): void => {}}
-          entityType="workspace"
-          entityName="ws-1"
+          title="Delete workspace?"
+          description="This will permanently delete the workspace."
+          confirmLabel="Delete"
+          tone="danger"
           onConfirm={(): void => {}}
         />
       </Wrapper>,
     );
 
-    expect(screen.queryByTestId(ElementIds.DELETE_CONFIRMATION_DIALOG)).toBeNull();
+    expect(screen.queryByTestId(ElementIds.CONFIRMATION_DIALOG)).toBeNull();
     expect(document.querySelector(`[${POPOVER_FRIENDLY_MODAL_ATTRIBUTE}="true"]`)).toBeNull();
   });
 });

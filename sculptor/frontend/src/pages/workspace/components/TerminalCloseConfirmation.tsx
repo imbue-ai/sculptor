@@ -14,7 +14,8 @@ import { useCallback } from "react";
 import { closeWorkspaceTerminal } from "~/api";
 import { terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
 import { terminalCloseTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
-import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
+import { ConfirmationDialog } from "~/components/ConfirmationDialog.tsx";
+import { buildDeleteConfirmationContent } from "~/components/confirmationDialogContent.ts";
 import { closePanelAtom } from "~/components/sections/sectionActions.ts";
 
 export const TerminalCloseConfirmation = (): ReactElement => {
@@ -51,15 +52,14 @@ export const TerminalCloseConfirmation = (): ReactElement => {
   }, [target, setTerminalTabs, closePanel, setTarget]);
 
   return (
-    <DeleteConfirmationDialog
+    <ConfirmationDialog
       isOpen={target !== null}
       onOpenChange={(isOpen) => {
         if (!isOpen) {
           setTarget(null);
         }
       }}
-      entityType="terminal"
-      entityName={target?.name ?? ""}
+      {...buildDeleteConfirmationContent({ entityType: "terminal", entityName: target?.name ?? "" })}
       onConfirm={handleConfirm}
     />
   );

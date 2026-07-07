@@ -18,7 +18,8 @@ import type { OpenInRuntime } from "~/components/CommandPalette/contextActions/m
 import type { WorkspaceActionRuntime } from "~/components/CommandPalette/contextActions/types.ts";
 import { useGitAndOpenInRuntime } from "~/components/CommandPalette/contextActions/useGitAndOpenInRuntime.ts";
 import { buildWorkspaceActions } from "~/components/CommandPalette/contextActions/workspaceActions.ts";
-import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
+import { ConfirmationDialog } from "~/components/ConfirmationDialog.tsx";
+import { buildDeleteConfirmationContent } from "~/components/confirmationDialogContent.ts";
 import { DevModeIndicator } from "~/components/DevModeIndicator.tsx";
 import { sidebarCollapsedAtom, sidebarWidthAtom } from "~/components/layout/sidebarAtoms.ts";
 import { isWorkspaceListEmptyAtom, newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
@@ -308,13 +309,12 @@ export const WorkspaceSidebar = (): ReactElement | null => {
         <WorkspacePeekOverlay onNavigate={handlePeekNavigate} />
 
         {/* Destructive workspace delete is confirmed before the optimistic removal. */}
-        <DeleteConfirmationDialog
+        <ConfirmationDialog
           isOpen={deleteTarget !== null}
           onOpenChange={(open) => {
             if (!open) setDeleteTarget(null);
           }}
-          entityType="workspace"
-          entityName={deleteTarget?.description ?? ""}
+          {...buildDeleteConfirmationContent({ entityType: "workspace", entityName: deleteTarget?.description ?? "" })}
           onConfirm={handleDeleteConfirm}
         />
 

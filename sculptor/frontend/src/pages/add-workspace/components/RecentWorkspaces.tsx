@@ -7,7 +7,8 @@ import type { RecentWorkspaceResponse } from "../../../api";
 import { listRecentWorkspaces } from "../../../api";
 import { deletedWorkspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
 import { useOptimisticWorkspaceDelete } from "../../../common/state/hooks/useOptimisticWorkspaceDelete.ts";
-import { DeleteConfirmationDialog } from "../../../components/DeleteConfirmationDialog.tsx";
+import { ConfirmationDialog } from "../../../components/ConfirmationDialog.tsx";
+import { buildDeleteConfirmationContent } from "../../../components/confirmationDialogContent.ts";
 import { EmptyState } from "./EmptyState.tsx";
 import styles from "./RecentWorkspaces.module.scss";
 import { WorkspaceRow } from "./WorkspaceRow.tsx";
@@ -240,13 +241,12 @@ export const RecentWorkspaces = ({
           </ScrollArea>
         )}
       </div>
-      <DeleteConfirmationDialog
+      <ConfirmationDialog
         isOpen={deleteTarget !== null}
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null);
         }}
-        entityType="workspace"
-        entityName={deleteTarget?.name ?? ""}
+        {...buildDeleteConfirmationContent({ entityType: "workspace", entityName: deleteTarget?.name ?? "" })}
         onConfirm={handleDeleteConfirm}
       />
     </>
