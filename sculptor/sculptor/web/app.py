@@ -2,6 +2,7 @@ import asyncio
 import base64
 import contextlib
 import datetime
+import gc
 import json
 import logging
 import mimetypes
@@ -15,6 +16,7 @@ import sys
 import threading
 import time
 import traceback
+import tracemalloc
 import urllib.parse
 from asyncio import CancelledError
 from importlib import resources
@@ -4891,6 +4893,141 @@ def get_debug_threads() -> PlainTextResponse:
         # join them with "" — using "\n".join here would double every newline.
         chunks.extend(traceback.format_stack(frame))
         chunks.append("\n")
+    return PlainTextResponse("".join(chunks))
+
+
+@router.get("/api/v1/debug/heap", response_class=PlainTextResponse, include_in_schema=False)
+def get_debug_heap(
+    collect: bool = False,
+    limit: int = 5_000_000,
+    top: int = 30,
+    start_trace: int = 0,
+    stop_trace: bool = False,
+) -> PlainTextResponse:
+    """Heap census for diagnosing backend RSS growth, as plain text.
+
+    Inert until called — there is no always-on tracking. On demand it runs a
+    one-shot ``gc``-based object census (top types by count and aggregate shallow
+    size) plus GC stats, and with ``?collect=true`` forces a full
+    ``gc.collect()`` and reports RSS before vs after. That delta is the decisive
+    probe: a large drop means cyclic garbage was accumulating (a GC-cadence
+    issue, e.g. the incremental collector), while little change means the bytes
+    are live retention, not garbage.
+
+    Allocation-site attribution (the only way to see where ``str``/``bytes``
+    payloads come from) needs tracemalloc. Because the packaged backend is a
+    PyInstaller bundle that ignores ``PYTHONTRACEMALLOC``, start it at runtime
+    instead: ``?start_trace=N`` calls ``tracemalloc.start(N)`` (capturing
+    allocations from that point on); reproduce the growth, then a plain call
+    appends the top allocation sites; ``?stop_trace=true`` turns it back off.
+
+    The census walks ``gc.get_objects()`` in Python and briefly holds the GIL, so
+    ``limit`` caps how many objects are sized to bound that pause (``limit=0`` =
+    full but slower). Note ``gc`` tracks containers (lists/dicts/model instances),
+    not atomic ``str``/``bytes``; their payload bytes show up in RSS and via
+    tracemalloc, not the shallow-size column. Requires the session token.
+    Development only."""
+    # Clamp to non-negative: a negative `top` would slice almost the whole list
+    # (Python's [:n] semantics) and dump a runaway report, and a negative `limit`
+    # would quietly disable the census cap.
+    top = max(0, top)
+    limit = max(0, limit)
+    start_trace = max(0, start_trace)
+
+    process = psutil.Process()
+    started_at = time.monotonic()
+
+    chunks: list[str] = [
+        f"Heap report at {datetime.datetime.now().isoformat()}\n",
+        "=" * 72 + "\n",
+        f"RSS: {process.memory_info().rss / 1024 / 1024:.1f} MiB\n",
+        f"gc.enabled={gc.isenabled()}  gc.get_count()={gc.get_count()}  gc.get_threshold()={gc.get_threshold()}\n",
+    ]
+
+    if collect:
+        rss_before = process.memory_info().rss / 1024 / 1024
+        unreachable = gc.collect()
+        rss_after = process.memory_info().rss / 1024 / 1024
+        chunks.append(
+            f"\ngc.collect(): {unreachable} unreachable objects collected; "
+            + f"RSS {rss_before:.1f} -> {rss_after:.1f} MiB (delta {rss_after - rss_before:+.1f} MiB)\n"
+            + "  Big drop => cyclic garbage was accumulating (GC cadence). "
+            + "Little change => live retention, not collectable garbage.\n"
+        )
+
+    objects = gc.get_objects()
+    total_objects = len(objects)
+    counts: dict[str, int] = {}
+    sizes: dict[str, int] = {}
+    getsizeof = sys.getsizeof
+    scanned = 0
+    for obj in objects:
+        if limit > 0 and scanned >= limit:
+            break
+        scanned += 1
+        obj_type = type(obj)
+        name = f"{obj_type.__module__}.{obj_type.__qualname__}"
+        counts[name] = counts.get(name, 0) + 1
+        try:
+            sizes[name] = sizes.get(name, 0) + getsizeof(obj)
+        except TypeError:
+            # getsizeof raises TypeError when an object's __sizeof__ returns a
+            # non-int; skip that one object rather than aborting the census.
+            pass
+    # Drop our strong reference to the full object list before formatting.
+    del objects
+
+    truncated = 0 < limit < total_objects
+    chunks.append(
+        f"\nTracked objects: {total_objects:,} (sized {scanned:,}"
+        + ("; TRUNCATED — pass ?limit=0 for a full, slower census" if truncated else "")
+        + f"). Census took {time.monotonic() - started_at:.1f}s.\n"
+    )
+
+    chunks.append(f"\nTop {top} types by aggregate shallow size:\n")
+    for name, size in sorted(sizes.items(), key=lambda kv: kv[1], reverse=True)[:top]:
+        chunks.append(f"  {size / 1024 / 1024:10.1f} MiB  n={counts[name]:>12,}  {name}\n")
+
+    chunks.append(f"\nTop {top} types by object count:\n")
+    for name, count in sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:top]:
+        chunks.append(f"  {count:>12,}  {sizes.get(name, 0) / 1024 / 1024:8.1f} MiB  {name}\n")
+
+    if stop_trace and tracemalloc.is_tracing():
+        tracemalloc.stop()
+        chunks.append("\ntracemalloc: stopped.\n")
+    elif start_trace > 0 and not tracemalloc.is_tracing():
+        tracemalloc.start(start_trace)
+        chunks.append(
+            f"\ntracemalloc: STARTED (nframe={start_trace}) — capturing allocations from now on.\n"
+            + "Reproduce the growth, then re-run `sculpt debug heap` to see the top allocation sites.\n"
+        )
+    elif tracemalloc.is_tracing():
+        snapshot = tracemalloc.take_snapshot()
+        traced, peak = tracemalloc.get_traced_memory()
+        chunks.append(
+            f"\ntracemalloc tracing (traced={traced / 1024 / 1024:.1f} MiB, peak={peak / 1024 / 1024:.1f} MiB)."
+            + f" Top {top} allocation sites (file:line):\n"
+        )
+        for stat in snapshot.statistics("lineno")[:top]:
+            chunks.append(f"  {stat.size / 1024 / 1024:10.1f} MiB  count={stat.count:>12,}  {stat.traceback}\n")
+        # Group by full traceback so the leaf line's CALLER chain is visible —
+        # the only way to attribute, e.g., a sys.modules.copy() inside
+        # inspect._signature_fromstr to the code that actually calls
+        # inspect.signature() and retains the result. Capped (and full stacks
+        # are multi-line) so the report stays readable; start_trace's nframe
+        # bounds the depth.
+        traceback_top = min(top, 8)
+        chunks.append(f"\ntracemalloc top {traceback_top} by full traceback (caller chains):\n")
+        for i, stat in enumerate(snapshot.statistics("traceback")[:traceback_top], 1):
+            chunks.append(f"\n#{i}  {stat.size / 1024 / 1024:.1f} MiB  count={stat.count:,}\n")
+            for line in stat.traceback.format():
+                chunks.append(f"    {line}\n")
+    else:
+        chunks.append(
+            "\ntracemalloc: not tracing — pass ?start_trace=N (sculpt debug heap --start-trace) "
+            + "to capture allocation sites at runtime.\n"
+        )
+
     return PlainTextResponse("".join(chunks))
 
 
