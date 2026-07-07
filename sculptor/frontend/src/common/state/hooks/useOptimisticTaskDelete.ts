@@ -6,8 +6,7 @@ import type { CodingAgentTaskView } from "../../../api";
 import { deleteWorkspaceAgent } from "../../../api";
 import { ToastType } from "../../../components/Toast.tsx";
 import { useImbueLocation, useImbueNavigate, useImbueParams } from "../../NavigateUtils.ts";
-import { queryClient, taskIdsQueryKey, taskQueryKey } from "../../queryClient.ts";
-import { optimisticDeleteTaskAtom, rollbackDeleteTaskAtom } from "../atoms/tasks";
+import { getTaskSyncVersion, queryClient, taskIdsQueryKey, taskQueryKey } from "../../queryClient.ts";
 import { deleteErrorToastAtom } from "../atoms/toasts";
 import { agentIdForWorkspaceAtomFamily, setAgentForWorkspaceAtom } from "../atoms/workspaces.ts";
 
@@ -30,8 +29,6 @@ type UseOptimisticTaskDeleteResult = {
 export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): UseOptimisticTaskDeleteResult => {
   const { workspaceId, onNavigateAfterDelete } = inputs;
   const store = useStore();
-  const setOptimisticDelete = useSetAtom(optimisticDeleteTaskAtom);
-  const setRollbackDelete = useSetAtom(rollbackDeleteTaskAtom);
   const setDeleteErrorToast = useSetAtom(deleteErrorToastAtom);
   const setAgentForWorkspace = useSetAtom(setAgentForWorkspaceAtom);
   const { navigateToRoot } = useImbueNavigate();
@@ -44,10 +41,21 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
 
   const execute = useCallback(
     (taskId: string, taskTitle: string): void => {
-      const snapshot = setOptimisticDelete(taskId);
-      if (snapshot === null) {
+      const snapshot = queryClient.getQueryData<CodingAgentTaskView | null>(taskQueryKey(taskId));
+      if (!snapshot) {
         return;
       }
+      const syncVersion = getTaskSyncVersion(taskId);
+
+      // Tombstone the task and drop it from the ids list. The mirror projects
+      // the removal into the Jotai atoms synchronously, so the navigation
+      // callbacks below already see the task gone from every store.
+      queryClient.setQueryData<CodingAgentTaskView | null>(taskQueryKey(taskId), null);
+      const currentIds = queryClient.getQueryData<ReadonlyArray<string>>(taskIdsQueryKey()) ?? [];
+      queryClient.setQueryData<ReadonlyArray<string>>(
+        taskIdsQueryKey(),
+        currentIds.filter((id) => id !== taskId),
+      );
 
       // A deleted agent must not linger as the workspace's saved agent, or the next
       // cold-start redirect targets a dead route. Left cleared on a failed delete —
@@ -67,24 +75,18 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
         agent_id: taskId,
       });
 
-      // Remove from the TanStack Query cache alongside the Jotai write.
-      queryClient.setQueryData<CodingAgentTaskView | null>(taskQueryKey(taskId), null);
-      const currentIds = queryClient.getQueryData<ReadonlyArray<string>>(taskIdsQueryKey()) ?? [];
-      queryClient.setQueryData<ReadonlyArray<string>>(
-        taskIdsQueryKey(),
-        currentIds.filter((id) => id !== taskId),
-      );
-
       void deleteWorkspaceAgent({
         path: { workspace_id: workspaceId, agent_id: taskId },
         meta: { skipWsAck: true },
       }).catch(() => {
-        setRollbackDelete({ taskId, snapshot });
-        // Restore the task in the TanStack Query cache.
-        queryClient.setQueryData(taskQueryKey(taskId), snapshot);
-        const restoredIds = queryClient.getQueryData<ReadonlyArray<string>>(taskIdsQueryKey()) ?? [];
-        if (!restoredIds.includes(taskId)) {
-          queryClient.setQueryData(taskIdsQueryKey(), [...restoredIds, taskId]);
+        // Restore the snapshot unless a WS frame wrote the task while the
+        // request was in flight — the frame holds server truth and must win.
+        if (getTaskSyncVersion(taskId) === syncVersion) {
+          queryClient.setQueryData(taskQueryKey(taskId), snapshot);
+          const restoredIds = queryClient.getQueryData<ReadonlyArray<string>>(taskIdsQueryKey()) ?? [];
+          if (!restoredIds.includes(taskId)) {
+            queryClient.setQueryData(taskIdsQueryKey(), [...restoredIds, taskId]);
+          }
         }
         setDeleteErrorToast({
           title: `Failed to delete "${taskTitle}"`,
@@ -102,8 +104,6 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
     },
     [
       store,
-      setOptimisticDelete,
-      setRollbackDelete,
       setDeleteErrorToast,
       setAgentForWorkspace,
       onNavigateAfterDelete,

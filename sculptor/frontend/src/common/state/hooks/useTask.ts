@@ -1,23 +1,22 @@
-import { useQuery } from "@tanstack/react-query";
+import { skipToken, useQuery } from "@tanstack/react-query";
 
 import type { CodingAgentTaskView } from "../../../api";
 import { taskIdsQueryKey, taskQueryKey } from "../../queryClient.ts";
 
 /**
  * Subscribe to a single agent task from the TanStack Query cache, populated
- * by the WS bridge (`syncTasksToQueryCache`) on every `taskViewsByTaskId` frame.
+ * by the WS bridge (`syncTasksToQueryCache`) on every `taskViewsByTaskId`
+ * frame. `skipToken` makes the query subscription-only — it never fetches,
+ * because the cache is fed entirely by WebSocket pushes. Entries are pinned
+ * (`gcTime: Infinity`) so a quiet task can't be evicted between delta frames.
  *
- * `queryFn` is a no-op: the cache is fed entirely by WebSocket pushes, not
- * network fetches. With `staleTime: Infinity` the no-op never fires unless
- * the cache is empty on mount, in which case `useTask` returns `null`.
+ * Returns `null` for a deleted task (tombstoned by the bridge) and for a task
+ * the stream hasn't delivered.
  */
 export const useTask = (taskId: string): CodingAgentTaskView | null => {
   const { data } = useQuery<CodingAgentTaskView | null>({
     queryKey: taskQueryKey(taskId),
-    queryFn: (): CodingAgentTaskView | null => null,
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    queryFn: skipToken,
   });
   return data ?? null;
 };
@@ -30,10 +29,7 @@ export const useTask = (taskId: string): CodingAgentTaskView | null => {
 export const useTaskIds = (): ReadonlyArray<string> | undefined => {
   const { data } = useQuery<ReadonlyArray<string>>({
     queryKey: taskIdsQueryKey(),
-    queryFn: (): ReadonlyArray<string> => [],
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    queryFn: skipToken,
   });
   return data;
 };

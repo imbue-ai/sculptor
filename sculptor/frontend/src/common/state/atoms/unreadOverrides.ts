@@ -1,6 +1,6 @@
 // Explicit per-agent "Mark as unread" overrides.
 //
-// Marking an agent unread (markAgentUnreadAtom) does three things:
+// Marking an agent unread (useMarkUnreadMutation) does three things:
 //   1. records an override for the task;
 //   2. optimistically clears the task's lastReadAt so every dot derivation
 //      (panel tab, workspace row) flips to unread immediately;

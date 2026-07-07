@@ -467,37 +467,42 @@ General guidelines:
 * Use `useState` if that state exists only within a component.
 * Avoid accessing more state than necessary. For example, if you only need the `userId` create an atom like the following `atom<string>((get) => get(userAtom)!.userId);` to only access the information you need and prevent unnecessary re-renders.
 
-### TanStack Query mutations
+### WebSocket-fed TanStack Query state (agent tasks)
 
-Server-mutating operations (POST/PUT/PATCH/DELETE) that optimistically update the UI use `useMutation` from `@tanstack/react-query`. The cache is the single source of truth — populated by the WebSocket stream, not by network fetches — so mutations follow this pattern:
+Agent-task state lives in the TanStack Query cache as a **push-fed store**, not a fetch cache. The flow is single-writer, one direction:
+
+```
+WS stream ──▶ syncTasksToQueryCache ──▶ query cache ──▶ useTask / useTaskIds
+mutations ──▶ optimistic setQueryData ──┘        └──▶ useTaskQueryMirror ──▶ legacy Jotai atoms
+```
+
+* The WS bridge (`syncTasksToQueryCache` in `queryClient.ts`) is the only writer of authoritative state; it also bumps a per-task **sync version** that mutations use for rollback.
+* Because nothing ever fetches, cache behaviors must be explicitly neutralized: subscription hooks use `queryFn: skipToken` (never a no-op queryFn — it fakes a successful fetch), and the task keys are pinned with `gcTime: Infinity` (the stream sends deltas; an evicted entry would never come back until the task next changes).
+* Legacy Jotai readers are served by `useTaskQueryMirror`, the one place that writes the Jotai task atoms. Never write `taskAtomFamily`/`taskIdsAtom` directly.
+
+Server-mutating operations (POST/PUT/PATCH/DELETE) that optimistically update the UI use `useMutation`, with the shared helpers in `src/common/state/mutations/`:
 
 ```typescript
-export const useMyMutation = (workspaceId: string, agentId: string) =>
+export const useMyRenameMutation = (workspaceId: string) =>
   useMutation({
-    mutationFn: () => myApiCall({ path: { workspace_id: workspaceId, agent_id: agentId } }),
-    onMutate: async (): Promise<{ prev: CodingAgentTaskView | null | undefined }> => {
-      // Snapshot the current cache entry for rollback.
-      const prev = queryClient.getQueryData(taskQueryKey(agentId));
-      if (prev) {
-        // Apply the optimistic update.
-        queryClient.setQueryData(taskQueryKey(agentId), { ...prev, title: newName });
-      }
-      return { prev };
+    mutationFn: (vars: { agentId: string; newTitle: string }) =>
+      myApiCall({ path: { workspace_id: workspaceId, agent_id: vars.agentId }, body: { title: vars.newTitle } }),
+    // Snapshot the entry + sync version, apply the optimistic update.
+    onMutate: (vars) => applyOptimisticTaskUpdate(vars.agentId, (prev) => ({ ...prev, title: vars.newTitle })),
+    // Restore the snapshot — unless a WS frame wrote the task while the
+    // request was in flight (the frame is authoritative and must win).
+    onError: (_e, vars, ctx) => {
+      rollbackOptimisticTaskUpdate(vars.agentId, ctx);
     },
-    onError: (_e, _v, ctx): void => {
-      // Restore the snapshot on failure.
-      if (ctx?.prev !== undefined) {
-        queryClient.setQueryData(taskQueryKey(agentId), ctx.prev);
-      }
-    },
-    // No onSuccess — the server-authoritative value arrives via WS.
+    // No onSuccess — a successful mutation changes the task server-side, so
+    // the WS stream delivers the authoritative value.
   });
 ```
 
 Key rules:
-* Always capture `prev` in `onMutate` and return it as rollback context.
-* Never write the cache in `onSuccess` — the WS stream delivers the authoritative value.
-* Use `queryClient.getQueryData()` / `setQueryData()` for cache reads/writes, not network fetches.
+* Use `applyOptimisticTaskUpdate` / `rollbackOptimisticTaskUpdate` rather than hand-rolling snapshots: the version check is what stops a failed request's stale snapshot from clobbering a newer WS frame.
+* A rollback must undo *everything* `onMutate` did — if the update records side state (e.g. the unread override), the error path clears it too.
+* Never write the cache in `onSuccess`, and don't expect the WS to correct a *failed* mutation: the stream only sends changed tasks, so a failure with no rollback leaves the optimistic value on screen forever.
 * See `src/common/state/mutations/` for the canonical implementations.
 
 ### Hooks

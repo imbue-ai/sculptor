@@ -6,7 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as api from "../../../api";
 import type { CodingAgentTaskView } from "../../../api";
-import { queryClient as sharedQueryClient, taskQueryKey } from "../../queryClient.ts";
+import { TaskStatus } from "../../../api";
+import { queryClient as sharedQueryClient, syncTasksToQueryCache, taskQueryKey } from "../../queryClient.ts";
+import { isUnreadOverrideActive, resetUnreadOverridesForTesting } from "../atoms/unreadOverrides";
 import { useMarkReadMutation, useMarkUnreadMutation, useRestoreTaskMutation, useTaskRenameMutation } from "./index";
 
 // ── Mock API ────────────────────────────────────────────────
@@ -32,13 +34,16 @@ vi.mock("../../../api", async () => {
 
 const WS_ID = "ws-1";
 const AGENT_ID = "agent-1";
+const UPDATED_AT = "2024-01-01T00:00:00.000Z";
+const LATER_UPDATED_AT = "2024-01-01T00:05:00.000Z";
 
 const makeTask = (overrides: Partial<CodingAgentTaskView> = {}): CodingAgentTaskView =>
   ({
     id: AGENT_ID,
     title: "Original Title",
-    status: "READY",
-    updatedAt: "2024-01-01T00:00:00.000Z",
+    status: TaskStatus.READY,
+    isDeleted: false,
+    updatedAt: UPDATED_AT,
     lastReadAt: "2024-01-01T00:00:00.000Z",
     ...overrides,
   }) as unknown as CodingAgentTaskView;
@@ -47,7 +52,6 @@ const flushMicrotasks = async (): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
-/** Wrapper that provides QueryClientProvider. Hooks use `useStore()` with the default store. */
 const makeWrapper = () => {
   return ({ children }: { children: ReactNode }): ReactElement =>
     createElement(QueryClientProvider, { client: sharedQueryClient }, children);
@@ -69,6 +73,9 @@ beforeEach(() => {
   mockRename.mockResolvedValue(undefined);
   mockRestore.mockResolvedValue(undefined);
   sharedQueryClient.removeQueries({ queryKey: ["sculptor"] });
+  // Unread overrides live in a module-level map, so they leak across tests
+  // without an explicit reset.
+  resetUnreadOverridesForTesting();
 });
 
 afterEach(() => {
@@ -81,12 +88,11 @@ afterEach(() => {
 
 describe("useMarkReadMutation", () => {
   it("calls markWorkspaceAgentRead with the correct path", async () => {
-    const task = makeTask();
-    seedTask(task);
-    const { result } = renderHook(() => useMarkReadMutation(WS_ID, AGENT_ID), { wrapper: makeWrapper() });
+    seedTask(makeTask());
+    const { result } = renderHook(() => useMarkReadMutation(), { wrapper: makeWrapper() });
 
     act(() => {
-      result.current.mutate();
+      result.current.mutate({ workspaceId: WS_ID, agentId: AGENT_ID });
     });
     await flushMicrotasks();
 
@@ -97,12 +103,11 @@ describe("useMarkReadMutation", () => {
   });
 
   it("optimistically sets lastReadAt on the cached task", async () => {
-    const task = makeTask({ lastReadAt: "2020-01-01T00:00:00.000Z" });
-    seedTask(task);
-    const { result } = renderHook(() => useMarkReadMutation(WS_ID, AGENT_ID), { wrapper: makeWrapper() });
+    seedTask(makeTask({ lastReadAt: "2020-01-01T00:00:00.000Z" }));
+    const { result } = renderHook(() => useMarkReadMutation(), { wrapper: makeWrapper() });
 
     act(() => {
-      result.current.mutate();
+      result.current.mutate({ workspaceId: WS_ID, agentId: AGENT_ID });
     });
 
     const cached = getCachedTask(AGENT_ID);
@@ -112,19 +117,38 @@ describe("useMarkReadMutation", () => {
 
   it("rolls back the cache when the API call rejects", async () => {
     const originalLastRead = "2020-01-01T00:00:00.000Z";
-    const task = makeTask({ lastReadAt: originalLastRead });
-    seedTask(task);
+    seedTask(makeTask({ lastReadAt: originalLastRead }));
     mockMarkRead.mockRejectedValueOnce(new Error("network"));
 
-    const { result } = renderHook(() => useMarkReadMutation(WS_ID, AGENT_ID), { wrapper: makeWrapper() });
+    const { result } = renderHook(() => useMarkReadMutation(), { wrapper: makeWrapper() });
 
     act(() => {
-      result.current.mutate();
+      result.current.mutate({ workspaceId: WS_ID, agentId: AGENT_ID });
     });
     await flushMicrotasks();
 
     const cached = getCachedTask(AGENT_ID);
     expect(cached?.lastReadAt).toBe(originalLastRead);
+  });
+
+  it("skips the rollback when a WS frame wrote the task while the request was in flight", async () => {
+    seedTask(makeTask({ lastReadAt: "2020-01-01T00:00:00.000Z" }));
+    const serverTask = makeTask({ lastReadAt: null, updatedAt: LATER_UPDATED_AT });
+    mockMarkRead.mockImplementationOnce(() => {
+      // The frame is authoritative: it must survive the failed request's
+      // rollback (the delta stream will not re-send an unchanged task).
+      syncTasksToQueryCache({ [AGENT_ID]: serverTask });
+      return Promise.reject(new Error("network"));
+    });
+
+    const { result } = renderHook(() => useMarkReadMutation(), { wrapper: makeWrapper() });
+
+    act(() => {
+      result.current.mutate({ workspaceId: WS_ID, agentId: AGENT_ID });
+    });
+    await flushMicrotasks();
+
+    expect(getCachedTask(AGENT_ID)).toEqual(serverTask);
   });
 });
 
@@ -134,8 +158,7 @@ describe("useMarkReadMutation", () => {
 
 describe("useMarkUnreadMutation", () => {
   it("calls markWorkspaceAgentUnread with the correct path", async () => {
-    const task = makeTask();
-    seedTask(task);
+    seedTask(makeTask());
     const { result } = renderHook(() => useMarkUnreadMutation(), { wrapper: makeWrapper() });
 
     act(() => {
@@ -149,9 +172,43 @@ describe("useMarkUnreadMutation", () => {
     });
   });
 
-  it("optimistically sets lastReadAt to null on the cached task", async () => {
-    const task = makeTask({ lastReadAt: "2024-06-01T00:00:00.000Z" });
-    seedTask(task);
+  it("records the override and clears lastReadAt optimistically", async () => {
+    seedTask(makeTask({ lastReadAt: "2024-06-01T00:00:00.000Z" }));
+    const { result } = renderHook(() => useMarkUnreadMutation(), { wrapper: makeWrapper() });
+
+    act(() => {
+      result.current.mutate({ workspaceId: WS_ID, agentId: AGENT_ID });
+    });
+
+    expect(getCachedTask(AGENT_ID)?.lastReadAt).toBeNull();
+    expect(isUnreadOverrideActive(AGENT_ID, { status: TaskStatus.READY, updatedAt: UPDATED_AT })).toBe(true);
+  });
+
+  it("keys an idle-agent override to the task's updatedAt at mark time", async () => {
+    seedTask(makeTask());
+    const { result } = renderHook(() => useMarkUnreadMutation(), { wrapper: makeWrapper() });
+
+    act(() => {
+      result.current.mutate({ workspaceId: WS_ID, agentId: AGENT_ID });
+    });
+
+    // A later turn expires the override without an explicit clear.
+    expect(isUnreadOverrideActive(AGENT_ID, { status: TaskStatus.READY, updatedAt: LATER_UPDATED_AT })).toBe(false);
+  });
+
+  it("holds a running agent's override through the rest of its run", async () => {
+    seedTask(makeTask({ status: TaskStatus.RUNNING }));
+    const { result } = renderHook(() => useMarkUnreadMutation(), { wrapper: makeWrapper() });
+
+    act(() => {
+      result.current.mutate({ workspaceId: WS_ID, agentId: AGENT_ID });
+    });
+
+    expect(isUnreadOverrideActive(AGENT_ID, { status: TaskStatus.RUNNING, updatedAt: LATER_UPDATED_AT })).toBe(true);
+  });
+
+  it("preserves the other task fields on the optimistic update", async () => {
+    seedTask(makeTask({ title: "My agent" }));
     const { result } = renderHook(() => useMarkUnreadMutation(), { wrapper: makeWrapper() });
 
     act(() => {
@@ -159,13 +216,25 @@ describe("useMarkUnreadMutation", () => {
     });
 
     const cached = getCachedTask(AGENT_ID);
-    expect(cached?.lastReadAt).toBeNull();
+    expect(cached?.title).toBe("My agent");
+    expect(cached?.updatedAt).toBe(UPDATED_AT);
   });
 
-  it("rolls back the cache when the API call rejects", async () => {
+  it("does nothing for a task the stream has not delivered", async () => {
+    const { result } = renderHook(() => useMarkUnreadMutation(), { wrapper: makeWrapper() });
+
+    act(() => {
+      result.current.mutate({ workspaceId: WS_ID, agentId: "missing-task" });
+    });
+    await flushMicrotasks();
+
+    expect(isUnreadOverrideActive("missing-task", { status: TaskStatus.READY, updatedAt: UPDATED_AT })).toBe(false);
+    expect(mockMarkUnread).not.toHaveBeenCalled();
+  });
+
+  it("rolls back the cache AND clears the override when the API call rejects", async () => {
     const originalLastRead = "2024-06-01T12:00:00.000Z";
-    const task = makeTask({ lastReadAt: originalLastRead });
-    seedTask(task);
+    seedTask(makeTask({ lastReadAt: originalLastRead }));
     mockMarkUnread.mockRejectedValueOnce(new Error("network"));
 
     const { result } = renderHook(() => useMarkUnreadMutation(), { wrapper: makeWrapper() });
@@ -175,8 +244,31 @@ describe("useMarkUnreadMutation", () => {
     });
     await flushMicrotasks();
 
-    const cached = getCachedTask(AGENT_ID);
-    expect(cached?.lastReadAt).toBe(originalLastRead);
+    expect(getCachedTask(AGENT_ID)?.lastReadAt).toBe(originalLastRead);
+    // The persist failed, so the dot must not stay pinned to "unread".
+    expect(isUnreadOverrideActive(AGENT_ID, { status: TaskStatus.READY, updatedAt: UPDATED_AT })).toBe(false);
+  });
+
+  it("keeps the frame and the override when a WS frame wrote the task before the request failed", async () => {
+    seedTask(makeTask());
+    // A frame carrying the committed unread (e.g. the request timed out after
+    // the server applied it).
+    const serverTask = makeTask({ lastReadAt: null });
+    mockMarkUnread.mockImplementationOnce(() => {
+      syncTasksToQueryCache({ [AGENT_ID]: serverTask });
+      return Promise.reject(new Error("timeout"));
+    });
+
+    const { result } = renderHook(() => useMarkUnreadMutation(), { wrapper: makeWrapper() });
+
+    act(() => {
+      result.current.mutate({ workspaceId: WS_ID, agentId: AGENT_ID });
+    });
+    await flushMicrotasks();
+
+    expect(getCachedTask(AGENT_ID)).toEqual(serverTask);
+    // No rollback happened, so the override stays on its normal lifecycle.
+    expect(isUnreadOverrideActive(AGENT_ID, { status: TaskStatus.READY, updatedAt: UPDATED_AT })).toBe(true);
   });
 });
 
@@ -186,8 +278,7 @@ describe("useMarkUnreadMutation", () => {
 
 describe("useTaskRenameMutation", () => {
   it("calls renameWorkspaceAgent with the correct path and body", async () => {
-    const task = makeTask();
-    seedTask(task);
+    seedTask(makeTask());
     const { result } = renderHook(() => useTaskRenameMutation(WS_ID), { wrapper: makeWrapper() });
 
     act(() => {
@@ -203,21 +294,18 @@ describe("useTaskRenameMutation", () => {
   });
 
   it("optimistically updates the title in the cache", async () => {
-    const task = makeTask({ title: "Old Title" });
-    seedTask(task);
+    seedTask(makeTask({ title: "Old Title" }));
     const { result } = renderHook(() => useTaskRenameMutation(WS_ID), { wrapper: makeWrapper() });
 
     act(() => {
       result.current.mutate({ agentId: AGENT_ID, newTitle: "Shiny New Title" });
     });
 
-    const cached = getCachedTask(AGENT_ID);
-    expect(cached?.title).toBe("Shiny New Title");
+    expect(getCachedTask(AGENT_ID)?.title).toBe("Shiny New Title");
   });
 
   it("rolls back the cache when the API call rejects", async () => {
-    const task = makeTask({ title: "Keep Me" });
-    seedTask(task);
+    seedTask(makeTask({ title: "Keep Me" }));
     mockRename.mockRejectedValueOnce(new Error("network"));
 
     const { result } = renderHook(() => useTaskRenameMutation(WS_ID), { wrapper: makeWrapper() });
@@ -227,8 +315,25 @@ describe("useTaskRenameMutation", () => {
     });
     await flushMicrotasks();
 
-    const cached = getCachedTask(AGENT_ID);
-    expect(cached?.title).toBe("Keep Me");
+    expect(getCachedTask(AGENT_ID)?.title).toBe("Keep Me");
+  });
+
+  it("skips the rollback when a WS frame wrote the task while the request was in flight", async () => {
+    seedTask(makeTask({ title: "Old Title" }));
+    const serverTask = makeTask({ title: "Renamed Elsewhere", updatedAt: LATER_UPDATED_AT });
+    mockRename.mockImplementationOnce(() => {
+      syncTasksToQueryCache({ [AGENT_ID]: serverTask });
+      return Promise.reject(new Error("network"));
+    });
+
+    const { result } = renderHook(() => useTaskRenameMutation(WS_ID), { wrapper: makeWrapper() });
+
+    act(() => {
+      result.current.mutate({ agentId: AGENT_ID, newTitle: "Bad Rename" });
+    });
+    await flushMicrotasks();
+
+    expect(getCachedTask(AGENT_ID)).toEqual(serverTask);
   });
 });
 
@@ -253,25 +358,8 @@ describe("useRestoreTaskMutation", () => {
     });
   });
 
-  it("does not modify the cache during onMutate", async () => {
-    const task = makeTask({ title: "Stale" });
-    seedTask(task);
-
-    const { result } = renderHook(() => useRestoreTaskMutation(), { wrapper: makeWrapper() });
-
-    act(() => {
-      result.current.mutate({ workspaceId: WS_ID, agentId: AGENT_ID });
-    });
-
-    // Restore intentionally snapshots without writing — the WS bridge delivers
-    // the authoritative restored task.
-    const cached = getCachedTask(AGENT_ID);
-    expect(cached?.title).toBe("Stale");
-  });
-
-  it("rolls back the cache when the API call rejects", async () => {
-    const prevTask = makeTask({ title: "Was Deleted" });
-    seedTask(prevTask);
+  it("never writes the cache — the WS delivers the restored task", async () => {
+    sharedQueryClient.setQueryData(taskQueryKey(AGENT_ID), null);
     mockRestore.mockRejectedValueOnce(new Error("network"));
 
     const { result } = renderHook(() => useRestoreTaskMutation(), { wrapper: makeWrapper() });
@@ -281,7 +369,27 @@ describe("useRestoreTaskMutation", () => {
     });
     await flushMicrotasks();
 
-    const cached = getCachedTask(AGENT_ID);
-    expect(cached?.title).toBe("Was Deleted");
+    // No optimistic write on mutate, no rollback write on failure.
+    expect(getCachedTask(AGENT_ID)).toBeNull();
+  });
+
+  it("does not clobber a WS-delivered restore when the request fails late", async () => {
+    sharedQueryClient.setQueryData(taskQueryKey(AGENT_ID), null);
+    const restoredTask = makeTask();
+    mockRestore.mockImplementationOnce(() => {
+      // Server committed the restore and streamed it before the HTTP response
+      // failed (e.g. a timeout).
+      syncTasksToQueryCache({ [AGENT_ID]: restoredTask });
+      return Promise.reject(new Error("timeout"));
+    });
+
+    const { result } = renderHook(() => useRestoreTaskMutation(), { wrapper: makeWrapper() });
+
+    act(() => {
+      result.current.mutate({ workspaceId: WS_ID, agentId: AGENT_ID });
+    });
+    await flushMicrotasks();
+
+    expect(getCachedTask(AGENT_ID)).toEqual(restoredTask);
   });
 });
