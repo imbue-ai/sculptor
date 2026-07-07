@@ -45,16 +45,16 @@ def test_reset_layout_command_restores_default(sculptor_instance_: SculptorInsta
     palette.clear_search()
 
     # The reset row carries its own dedicated data-testid (not the shared
-    # COMMAND_PALETTE_ITEM one), so target it directly rather than via command id.
-    reset_row = page.get_by_test_id(ElementIDs.COMMAND_PALETTE_RESET_LAYOUT)
+    # COMMAND_PALETTE_ITEM one); confirm that override is present, then select it.
+    reset_row = palette.get_item_by_command_id("view.reset_layout")
     expect(reset_row).to_be_visible()
-    expect(reset_row).to_have_attribute("data-command-id", "view.reset_layout")
-    reset_row.click()
+    expect(reset_row).to_have_attribute("data-testid", ElementIDs.COMMAND_PALETTE_RESET_LAYOUT)
+    palette.select_by_command_id("view.reset_layout")
 
     # Selecting the command opens a confirmation rather than resetting instantly.
-    dialog = page.get_by_test_id(ElementIDs.CONFIRMATION_DIALOG)
+    dialog = layout.get_confirmation_dialog()
     expect(dialog).to_be_visible()
-    page.get_by_test_id(ElementIDs.CONFIRMATION_DIALOG_CONFIRM).click()
+    layout.confirm_confirmation_dialog()
     expect(dialog).not_to_be_visible()
 
     # The reset restored the default arrangement: the left section is collapsed again,

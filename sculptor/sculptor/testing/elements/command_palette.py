@@ -20,11 +20,16 @@ class PlaywrightCommandPaletteElement(PlaywrightIntegrationTestElement):
         return self._page.get_by_test_id(ElementIDs.COMMAND_PALETTE_ITEM)
 
     def get_item_by_command_id(self, command_id: str) -> Locator:
-        """Locate a row by its registered command id."""
+        """Locate a row by its registered command id.
+
+        Keyed on ``data-command-id`` alone, which every row carries — including
+        the few commands that override the shared ``COMMAND_PALETTE_ITEM`` test
+        id with a dedicated one (e.g. ``view.reset_layout``).
+        """
         # The POM is exempt from the integration-test css-locator ratchet, but
         # the test files that consume it are not — keep all CSS selector usage
         # within this module.
-        return self._page.locator(f'[data-testid="{ElementIDs.COMMAND_PALETTE_ITEM}"][data-command-id="{command_id}"]')
+        return self._page.locator(f'[data-command-id="{command_id}"]')
 
     def get_group_by_id(self, group_id: str) -> Locator:
         """Locate a command group by its registered group id (e.g. 'workspaces')."""
