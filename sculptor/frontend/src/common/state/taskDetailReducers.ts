@@ -1,4 +1,10 @@
-import type { AskUserQuestionData, ChatMessage, SubmittedQuestionAnswers, TaskUpdate } from "../../api";
+import type {
+  AskUserQuestionData,
+  ChatMessage,
+  SubmittedQuestionAnswers,
+  TaskUpdate,
+  WorkflowTaskState,
+} from "../../api";
 
 type ChatMessagesState = {
   completedChatMessages: Array<ChatMessage>;
@@ -9,6 +15,7 @@ type ChatMessagesState = {
   submittedQuestionAnswers: Record<string, SubmittedQuestionAnswers>;
   isInPlanMode: boolean;
   pendingBackgroundTaskIds: Array<string>;
+  workflowTaskStates: Record<string, WorkflowTaskState>;
 };
 
 export const chatMessagesReducer = (currentState: ChatMessagesState, taskUpdate: TaskUpdate): ChatMessagesState => {
@@ -39,6 +46,10 @@ export const chatMessagesReducer = (currentState: ChatMessagesState, taskUpdate:
       taskUpdate.pendingBackgroundTaskIds !== undefined
         ? taskUpdate.pendingBackgroundTaskIds
         : (currentState.pendingBackgroundTaskIds ?? []),
+    // A map (possibly empty) is a full snapshot — replace, don't merge.
+    // null/undefined means unchanged: the backend suppresses the map from
+    // updates where no workflow state changed, since it can grow large.
+    workflowTaskStates: taskUpdate.workflowTaskStates ?? currentState.workflowTaskStates ?? {},
   };
 };
 
