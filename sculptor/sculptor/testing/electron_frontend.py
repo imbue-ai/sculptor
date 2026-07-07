@@ -22,8 +22,8 @@ from tenacity import stop_after_delay
 from tenacity import wait_fixed
 
 from sculptor.testing.frontend_utils import configure_page
+from sculptor.testing.frontend_utils import get_v1_frontend_path
 from sculptor.testing.port_manager import PortManager
-from sculptor.testing.server_utils import get_v1_frontend_path
 from sculptor.testing.subprocess_utils import Forwarder
 
 # electron-forge 7.10+ stopped printing its "Launched Electron app" task

@@ -10,7 +10,6 @@ from collections.abc import Generator
 from collections.abc import Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import attr
 import pytest
@@ -20,18 +19,13 @@ from playwright.sync_api import Page
 from playwright.sync_api import Playwright
 from pytest_playwright.pytest_playwright import ArtifactsRecorder
 
-from sculptor.foundation.git import get_git_repo_root
+from sculptor.testing.electron_frontend import ElectronFrontend
 from sculptor.testing.frontend_utils import configure_page
 from sculptor.testing.playwright_utils import navigate_to_frontend
 from sculptor.testing.port_manager import PortManager
 from sculptor.testing.subprocess_utils import Forwarder
 from sculptor.testing.subprocess_utils import print_colored_line
 from sculptor.utils.build import SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG
-
-if TYPE_CHECKING:
-    # ``electron_frontend`` imports ``get_v1_frontend_path`` from this module, so the
-    # runtime import lives inside ``_make_electron_frontend`` to avoid an import cycle.
-    from sculptor.testing.electron_frontend import ElectronFrontend
 
 LOCAL_HOST_URL = "http://127.0.0.1"
 READY_MESSAGE_V1 = "Server is ready to accept requests!"
@@ -268,14 +262,8 @@ class SculptorFactory:
         custom_backend_cmd: str | None = None,
         extra_env: dict[str, str] | None = None,
         env_unset_keys: tuple[str, ...] = (),
-    ) -> "ElectronFrontend":
-        """Construct an ``ElectronFrontend`` for this factory's backend port.
-
-        The import is function-local because ``electron_frontend`` imports
-        ``get_v1_frontend_path`` from this module (a module-level import cycles).
-        """
-        from sculptor.testing.electron_frontend import ElectronFrontend
-
+    ) -> ElectronFrontend:
+        """Construct an ``ElectronFrontend`` for this factory's backend port."""
         assert self.playwright is not None, "electron launch mode requires a Playwright instance"
         assert self.port_manager is not None, "electron launch mode requires a PortManager"
         return ElectronFrontend(
@@ -368,11 +356,6 @@ class SculptorFactory:
             yield server, page, context, session_token
         finally:
             self._teardown_electron_factory_frontend(electron_frontend, artifacts_recorder, context, page)
-
-
-def get_v1_frontend_path() -> Path:
-    """Returns the path to the frontend directory in v1"""
-    return get_git_repo_root() / "sculptor" / "frontend"
 
 
 def get_testing_environment(

@@ -1,5 +1,20 @@
+from pathlib import Path
+
 from playwright.sync_api import Page
 from playwright.sync_api import expect
+
+from sculptor.foundation.git import get_git_repo_root
+
+
+def get_v1_frontend_path() -> Path:
+    """Returns the path to the frontend directory in v1.
+
+    Lives here (rather than in ``server_utils``) so that ``electron_frontend`` can
+    reach it without importing ``server_utils``, which lets ``server_utils`` import
+    ``ElectronFrontend`` at module scope without an import cycle.
+    """
+    return get_git_repo_root() / "sculptor" / "frontend"
+
 
 # Single source of truth for the browser viewport used by all integration tests.
 # Also applied by _reset_browser_state between tests to undo any per-test resize

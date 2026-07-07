@@ -26,11 +26,11 @@ def test_factory_instance_renders_app(
     sculptor_launch_mode: str,
 ) -> None:
     with sculptor_instance_factory_.spawn_instance() as instance:
-        # The app rendered past onboarding. The backend was started with the test
-        # project (auto_project), so the root loader lands on the Add Workspace
-        # page; its Start Task button is the canonical "app is up" signal.
-        start_task_button = instance.page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
-        expect_app_not_onboarding(instance.page, start_task_button, timeout=_RENDER_TIMEOUT_MS)
+        # The app rendered past onboarding. The sidebar rail is the harness's
+        # universal "app rendered, not onboarding" signal (present on every in-app
+        # destination and the empty-first-run page, but not the onboarding wizard).
+        app_ready = instance.page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
+        expect_app_not_onboarding(instance.page, app_ready, timeout=_RENDER_TIMEOUT_MS)
 
         # Under an electron launch mode the instance must be a real Electron shell,
         # not the browser fallback — that is the whole point of the new path.
