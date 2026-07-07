@@ -19,6 +19,7 @@ import {
   FILE_MARKDOWN_REMARK_PLUGINS,
   safeUrlTransform,
 } from "~/components/MarkdownDiff/markdownPlugins.ts";
+import { VerticalOverlayScrollbar } from "~/components/VerticalOverlayScrollbar.tsx";
 
 import type { MarkdownRenderMode } from "./atoms.ts";
 import { isMarkdownPath, markdownRenderModeAtom } from "./atoms.ts";
@@ -120,6 +121,10 @@ export const ReadOnlyPreview = ({ workspaceId, filePath, renderModeOverride }: R
   const globalMarkdownMode = useAtomValue(markdownRenderModeAtom);
   const markdownMode = renderModeOverride ?? globalMarkdownMode;
   const pierreRef = useRef<HTMLDivElement>(null);
+  // The scroll container (native scrollbar suppressed in CSS); VerticalOverlayScrollbar
+  // draws a persistent vertical bar off it, since a styled native scrollbar renders
+  // nothing at rest under macOS overlay-scrollbar mode.
+  const containerRef = useRef<HTMLDivElement>(null);
   const shouldRenderMarkdown = isMarkdownPath(filePath) && markdownMode === "rendered";
 
   // Inject our override stylesheet into Pierre's shadow DOM (see
@@ -194,6 +199,7 @@ export const ReadOnlyPreview = ({ workspaceId, filePath, renderModeOverride }: R
     return (
       <div className={styles.wrapper} data-testid={ElementIds.READ_ONLY_PREVIEW}>
         <Box
+          ref={containerRef}
           className={`${styles.container} ${styles.markdownBody}`}
           p="4"
           data-testid={ElementIds.READ_ONLY_PREVIEW_MARKDOWN}
@@ -209,6 +215,7 @@ export const ReadOnlyPreview = ({ workspaceId, filePath, renderModeOverride }: R
             {body}
           </ReactMarkdown>
         </Box>
+        <VerticalOverlayScrollbar scrollRef={containerRef} thumbTestId={ElementIds.READ_ONLY_PREVIEW_SCROLLBAR_THUMB} />
       </div>
     );
   }
@@ -228,11 +235,12 @@ export const ReadOnlyPreview = ({ workspaceId, filePath, renderModeOverride }: R
 
   return (
     <div className={styles.wrapper} data-testid={ElementIds.READ_ONLY_PREVIEW}>
-      <div className={styles.container}>
+      <div ref={containerRef} className={styles.container}>
         <div ref={pierreRef}>
           <PierreFile file={fileContents} options={fileOptions} />
         </div>
       </div>
+      <VerticalOverlayScrollbar scrollRef={containerRef} thumbTestId={ElementIds.READ_ONLY_PREVIEW_SCROLLBAR_THUMB} />
       {overflow === "scroll" && <StickyHorizontalScrollbar containerRef={pierreRef} />}
     </div>
   );
