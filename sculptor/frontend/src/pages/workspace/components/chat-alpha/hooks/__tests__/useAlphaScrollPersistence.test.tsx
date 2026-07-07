@@ -44,9 +44,9 @@ const wrapperFor = (store: ReturnType<typeof createStore>) => {
 describe("useAlphaScrollPersistence", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    // The scroll-position atom is sessionStorage-backed (survives page
-    // reloads); clear it so saves from one test don't leak into the next.
-    sessionStorage.clear();
+    // The scroll-position atom is localStorage-backed (survives app
+    // restarts); clear it so saves from one test don't leak into the next.
+    localStorage.clear();
   });
 
   afterEach(() => {
