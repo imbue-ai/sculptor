@@ -132,12 +132,11 @@ from sculptor.services.terminal_agent_registry.registry import get_registration
 from sculptor.services.terminal_agent_registry.registry import load_registrations
 from sculptor.services.user_config.telemetry_info import get_onboarding_telemetry_info
 from sculptor.services.user_config.telemetry_info import get_telemetry_info as get_telemetry_info_impl
-from sculptor.services.user_config.user_config import get_config_path
 from sculptor.services.user_config.user_config import get_privacy_settings_for_telemetry
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.user_config.user_config import get_user_config_instance_if_set
-from sculptor.services.user_config.user_config import save_config
-from sculptor.services.user_config.user_config import set_user_config_instance
+from sculptor.services.user_config.user_config import merge_config
+from sculptor.services.user_config.user_config import replace_config
 from sculptor.services.workspace_service.api import FileNotFoundAtRefError
 from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
@@ -1993,9 +1992,7 @@ def _record_most_recently_used_agent_type(agent_type: AgentTypeName, registratio
     encoded = _encode_stored_agent_type(agent_type, registration_id)
     if config.last_used_agent_type == encoded:
         return
-    updated = config.model_copy(update={"last_used_agent_type": encoded})
-    save_config(updated, get_config_path())
-    set_user_config_instance(updated)
+    merge_config({"lastUsedAgentType": encoded})
 
 
 def _agent_config_for_request(
@@ -3043,8 +3040,7 @@ def save_user_email(
         email_config_request.full_name is not None,
         email_config_request.did_opt_in_to_marketing,
     )
-    save_config(user_config, get_config_path())
-    set_user_config_instance(user_config)
+    replace_config(user_config)
 
     return get_logged_in_or_anonymous_telemetry_info()
 
@@ -3073,8 +3069,7 @@ def skip_account_setup(
         },
     )
 
-    save_config(user_config, get_config_path())
-    set_user_config_instance(user_config)
+    replace_config(user_config)
 
     return get_logged_in_or_anonymous_telemetry_info()
 
@@ -3167,8 +3162,7 @@ def complete_onboarding(request: Request, user_session: UserSession = Depends(ge
         updates.update(get_privacy_settings_for_telemetry(True).model_dump())
     if updates:
         user_config = model_update(user_config, updates)
-        save_config(user_config, get_config_path())
-        set_user_config_instance(user_config)
+        replace_config(user_config)
 
     logger.info("Onboarding completed successfully")
 
@@ -3203,6 +3197,11 @@ def update_user_config(
     """
     old_user_config = get_user_config_instance()
 
+    # Reject telemetry-flag changes — they go through POST /api/v1/config/telemetry.
+    # This read is safe without the lock (GIL-atomic reference read). A
+    # stale read is harmless: if someone else changed telemetry between this
+    # read and ``merge_config`` below, ``merge_config`` does not touch
+    # telemetry flags (the PUT body excludes them), so the result is correct.
     for flag in _TELEMETRY_FLAGS:
         for key in (flag, to_camel(flag)):
             if key not in update_config_request.user_config:
@@ -3214,18 +3213,12 @@ def update_user_config(
                     detail="Use POST /api/v1/config/telemetry to change telemetry consent.",
                 )
 
-    merged = old_user_config.model_dump(by_alias=True) if old_user_config else {}
-    merged.update(update_config_request.user_config)
-    new_user_config = UserConfig.model_validate(merged)
+    # Atomic read-merge-write — lock scope is the module's problem, not ours.
+    new_user_config = merge_config(update_config_request.user_config)
 
-    save_config(new_user_config, get_config_path())
-    set_user_config_instance(new_user_config)
-
-    # Push updated dependencies status when dependency paths change so the
-    # frontend atom reflects the new mode immediately.
-    new_dep = new_user_config.dependency_paths
+    # Dependency-status push is a side effect after the transaction.
     old_dep = old_user_config.dependency_paths if old_user_config else None
-    if new_dep != old_dep:
+    if new_user_config.dependency_paths != old_dep:
         services = get_services_from_request_or_websocket(request)
         services.dependency_management_service.get_status()
 
@@ -3243,14 +3236,7 @@ def set_telemetry(
     This is the only endpoint allowed to change the underlying telemetry
     flags; PUT /api/v1/config rejects requests that would change them.
     """
-    old_user_config = get_user_config_instance()
-    new_user_config = model_update(
-        old_user_config,
-        get_privacy_settings_for_telemetry(set_telemetry_request.enabled).model_dump(),
-    )
-    save_config(new_user_config, get_config_path())
-    set_user_config_instance(new_user_config)
-    return new_user_config
+    return merge_config(get_privacy_settings_for_telemetry(set_telemetry_request.enabled).model_dump(by_alias=True))
 
 
 @router.get("/api/v1/filesystem/list")
