@@ -12,7 +12,11 @@ import {
   WorkspaceInitializationStrategy,
 } from "~/api";
 import { isDismissibleOverlayOpen } from "~/common/overlayUtils.ts";
-import { lastUsedAgentTypeAtom, parseStoredAgentType, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
+import {
+  lastUsedAgentTypeAtom,
+  resolveEffectiveAgentType,
+  type StoredAgentType,
+} from "~/common/state/atoms/agentTabs.ts";
 import { isPiAvailableAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { projectsArrayAtom, updateProjectsAtom } from "~/common/state/atoms/projects.ts";
 import { defaultEffortLevelAtom, defaultModelAtom, isDefaultFastModeAtom } from "~/common/state/atoms/userConfig.ts";
@@ -106,8 +110,6 @@ export const NewWorkspaceForm = ({
     // launch (the picker still lists pi as "Install Pi").
     return seed === "pi" && !isPiAvailable ? "claude" : resolveStoredAgentType(seed);
   });
-  // Fast mode and model selection are only available for the Claude harness.
-  const isNonClaudeHarness = parseStoredAgentType(agentTypeValue).agentType !== "claude";
   const [userSelectedBranch, setUserSelectedBranch] = useState<string | undefined>(() => lastSettings?.sourceBranch);
   // `null` means "use the auto-filled preview"; any string means the user has
   // taken over. Both the value and the manual flag collapse into one piece of
@@ -119,6 +121,10 @@ export const NewWorkspaceForm = ({
 
   // State and hooks — external
   const { registrations } = useTerminalAgentRegistrations();
+  // Fast mode and model selection are Claude-only. Resolve through the same
+  // helper the create flow uses so a registered agent whose registration was
+  // deleted (and therefore creates a Claude agent) still shows Claude's controls.
+  const isNonClaudeHarness = resolveEffectiveAgentType(agentTypeValue, registrations).agentType !== "claude";
   const { repoInfo, fetchRepoInfo, fetchCurrentBranch } = useRepoInfo(selectedProjectId);
   const { isCreating, createWorkspace } = useCreateWorkspace();
   const nameInputRef = useRef<HTMLInputElement>(null);

@@ -6,7 +6,11 @@ import type { EffortLevel, LlmModel, TerminalAgentRegistration } from "~/api";
 import { createWorkspaceAgent, createWorkspaceV2, WorkspaceInitializationStrategy } from "~/api";
 import { HTTPException } from "~/common/Errors.ts";
 import { useImbueNavigate } from "~/common/NavigateUtils.ts";
-import { parseStoredAgentType, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
+import {
+  encodeRegisteredAgentType,
+  resolveEffectiveAgentType,
+  type StoredAgentType,
+} from "~/common/state/atoms/agentTabs.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import { lastWorkspaceCreationSettingsAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 
@@ -101,15 +105,18 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
 
         const workspaceId = workspaceResponse.data.objectId;
 
-        // If the remembered registered agent's registration is no longer present
-        // (deleted since it was picked), fall back to Claude rather than leaving
-        // the just-created workspace with a failed, agentless first-agent create.
-        const { agentType, registrationId } = parseStoredAgentType(args.agentTypeValue);
-        const isMissingRegistration =
-          agentType === "registered" && !args.registrations.some((r) => r.registrationId === registrationId);
-        const effectiveAgentType = isMissingRegistration ? "claude" : agentType;
-        const effectiveRegistrationId = isMissingRegistration ? undefined : registrationId;
-        const effectiveAgentTypeValue: StoredAgentType = isMissingRegistration ? "claude" : args.agentTypeValue;
+        // Resolve the agent type that will actually be created: a registered
+        // agent whose registration is gone (deleted since it was picked) falls
+        // back to Claude rather than leaving the just-created workspace with a
+        // failed, agentless first-agent create.
+        const { agentType: effectiveAgentType, registrationId: effectiveRegistrationId } = resolveEffectiveAgentType(
+          args.agentTypeValue,
+          args.registrations,
+        );
+        const effectiveAgentTypeValue: StoredAgentType =
+          effectiveAgentType === "registered" && effectiveRegistrationId !== undefined
+            ? encodeRegisteredAgentType(effectiveRegistrationId)
+            : effectiveAgentType;
 
         // Only Claude consumes a creation-time prompt, model, and the per-prompt
         // agent settings (effort / fast / plan): terminal/registered agents have

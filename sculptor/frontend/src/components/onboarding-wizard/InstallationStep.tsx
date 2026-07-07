@@ -599,6 +599,7 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
           <DependencyCard
             name="Pi"
             cliName="pi"
+            optional
             status={piStatus}
             installUrl="https://github.com/earendil-works/pi"
             onInstall={() => void triggerPiInstall()}
