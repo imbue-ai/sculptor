@@ -62,7 +62,7 @@ const SHORT_VIEWPORT_PX = 700;
  * reading-anchor restore, the streaming-start engage) must use this one
  * function: during streaming the ResizeObserver re-samples on every token, so
  * a single site using a looser threshold overrides the others and re-engages
- * pin-to-bottom too early on short viewports (BE2).
+ * pin-to-bottom too early on short viewports.
  */
 export const bottomThresholdFor = (el: HTMLElement): number =>
   el.clientHeight < SHORT_VIEWPORT_PX ? MOBILE_BOTTOM_THRESHOLD : BOTTOM_THRESHOLD;

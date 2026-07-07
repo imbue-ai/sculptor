@@ -429,7 +429,7 @@ describe("useAlphaAutoScroll", () => {
 
   it("does not auto-engage at streaming start 100px above the bottom on a short viewport", () => {
     // Same scenario as above, but the scroll container is short (< 700px), so
-    // the at-bottom threshold tightens to 80px (BE2): 100px above the bottom is
+    // the at-bottom threshold tightens to 80px: 100px above the bottom is
     // NOT "at bottom" on mobile, and streaming must not yank the view down.
     const el = createMockScrollContainer(1500, 2000, 500); // distance=0, at bottom
     const ref = { current: el };
