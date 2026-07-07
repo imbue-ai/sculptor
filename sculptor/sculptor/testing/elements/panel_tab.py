@@ -4,14 +4,17 @@ Agents and terminals render as panel tabs in a section header
 (``PANEL_TAB-agent:<taskId>`` / ``PANEL_TAB-terminal:<wsId>:<n>``), created from the
 same section ``+`` add-panel dropdown. This POM consolidates the affordances shared by
 agent and terminal tabs: rename (double-click or context menu), close (→ delete/close
-confirmation), and the agent's diagnostics copy actions. The tabs use the shared
-affordance ids ``TAB_CONTEXT_MENU_*``, ``INLINE_RENAME_INPUT``, and
-``DELETE_CONFIRMATION_*``.
+confirmation via the X button OR the menu's destructive row), and the agent's
+diagnostics copy actions. The tabs use the shared affordance ids ``TAB_CONTEXT_MENU_*``,
+``INLINE_RENAME_INPUT``, and ``DELETE_CONFIRMATION_*``.
 
-The panel-tab context menu offers Rename (for multi-instance panels only) plus the
-agent's flat diagnostics copy items (rendered by label, with Radix ``data-disabled``
-on items that have nothing to copy). Constructed with the ``sub_section`` whose header
-hosts the tabs.
+The panel-tab context menu has a clear hierarchy: Rename, then the agent's own actions
+(Mark as unread, Copy agent name, and a ``Diagnostics`` submenu tucking away the id /
+session id / transcript-path copy items), then the section split options, then a
+destructive row — ``Delete`` for agents, ``Close`` for terminals. Every actionable row
+carries a ``TAB_CONTEXT_MENU_*`` testid; the diagnostics copy items sit behind the
+Diagnostics submenu and render disabled (Radix ``data-disabled``) until their value
+exists. Constructed with the ``sub_section`` whose header hosts the tabs.
 """
 
 from playwright.sync_api import Locator
@@ -29,6 +32,13 @@ from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSecti
 # the hover/menu-open retries the sibling add-panel POM uses for Radix teardown races.
 _DOUBLE_CLICK_RENAME_ATTEMPTS = 4
 _DOUBLE_CLICK_RENAME_TIMEOUT_MS = 3_000
+
+# The context-menu rename gesture (right-click → click Rename) is retried for the same
+# reason as the double-click above: under heavy main-thread contention the click on the
+# Rename row can be dropped, so the inline input never appears. Reopen the menu and
+# retry before giving up.
+_CONTEXT_MENU_RENAME_ATTEMPTS = 4
+_CONTEXT_MENU_RENAME_TIMEOUT_MS = 3_000
 
 
 class PlaywrightPanelTabElement:
@@ -120,19 +130,40 @@ class PlaywrightPanelTabElement:
         """Right-click a tab to open its context menu."""
         tab.click(button="right")
 
+    def get_menu_item(self, test_id: str) -> Locator:
+        """Get an open context-menu row (or submenu trigger) by its testid."""
+        return self._page.get_by_test_id(test_id)
+
     def get_context_menu_rename_item(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_RENAME)
 
     def get_context_menu_mark_unread_item(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_MARK_UNREAD)
 
-    def get_diagnostics_item_by_text(self, text: str) -> Locator:
-        """Get a flat diagnostics copy item (rendered by label) inside an open menu.
+    def get_context_menu_delete_item(self) -> Locator:
+        """Get the destructive Delete row shown on an agent tab's context menu."""
+        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_DELETE)
 
-        The redesigned panel-tab context menu renders the agent diagnostics copy
-        actions as flat menu items by label (no per-item testid / no submenu), so
-        they are matched by their visible text — preferred over brittle row
-        selectors per the integration-test guidance.
+    def get_context_menu_close_item(self) -> Locator:
+        """Get the destructive Close row shown on a terminal tab's context menu."""
+        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_CLOSE)
+
+    def open_diagnostics_submenu(self, tab: Locator) -> None:
+        """Right-click a tab and hover Diagnostics to reveal its copy submenu.
+
+        The id / session id / transcript-path copy items live behind this submenu, so
+        callers open it before locating them by testid.
+        """
+        self.open_context_menu(tab)
+        trigger = self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_DIAGNOSTICS)
+        expect(trigger).to_be_visible()
+        trigger.hover()
+
+    def get_diagnostics_item_by_text(self, text: str) -> Locator:
+        """Get a diagnostics copy item (rendered by label) inside the open submenu.
+
+        Prefer :meth:`get_menu_item` with a ``TAB_CONTEXT_MENU_*`` testid; this
+        text-based lookup remains for assertions that read an item's visible label.
         """
         return self._page.get_by_role("menuitem", name=text)
 
@@ -142,13 +173,26 @@ class PlaywrightPanelTabElement:
         return self._page.get_by_test_id(ElementIDs.INLINE_RENAME_INPUT)
 
     def rename_tab_via_context_menu(self, tab: Locator, new_name: str) -> None:
-        """Open the context menu, click Rename, and commit a new label."""
-        self.open_context_menu(tab)
-        rename_item = self.get_context_menu_rename_item()
-        expect(rename_item).to_be_visible()
-        rename_item.click()
+        """Open the context menu, click Rename, and commit a new label.
+
+        The menu-open + Rename click is retried (see the module note on dropped clicks
+        under contention): once the inline input appears the retry is done. Each attempt
+        reopens a fresh menu, so a dropped earlier click is harmless.
+        """
         rename_input = self.get_inline_rename_input()
-        expect(rename_input).to_be_visible()
+        for _ in range(_CONTEXT_MENU_RENAME_ATTEMPTS):
+            self.open_context_menu(tab)
+            rename_item = self.get_context_menu_rename_item()
+            expect(rename_item).to_be_visible()
+            rename_item.click()
+            try:
+                expect(rename_input).to_be_visible(timeout=_CONTEXT_MENU_RENAME_TIMEOUT_MS)
+                break
+            except AssertionError:
+                continue
+        else:
+            # Out of retries: assert once more so the failure carries the standard message.
+            expect(rename_input).to_be_visible()
         rename_input.fill(new_name)
         rename_input.press("Enter")
         expect(rename_input).not_to_be_visible()

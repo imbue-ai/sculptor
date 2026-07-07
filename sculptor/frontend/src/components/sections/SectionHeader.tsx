@@ -13,9 +13,9 @@
 import { useDraggable } from "@dnd-kit/core";
 import { ContextMenu, Flex, IconButton, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
-import { Maximize2, Minimize2, Plus, X } from "lucide-react";
+import { Maximize2, Minimize2, PanelBottom, PanelRight, Pencil, Plus, Trash2, X } from "lucide-react";
 import type { ReactElement } from "react";
-import { memo, useRef, useState } from "react";
+import { Fragment, memo, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { agentRenameTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
@@ -26,7 +26,7 @@ import { getCollapsedSidebarToggleClearance } from "~/electron/utils.ts";
 import { TerminalTabConnectionDot } from "~/pages/workspace/panels/TerminalConnectionIndicator.tsx";
 
 import { AddPanelDropdown } from "./AddPanelDropdown.tsx";
-import type { PanelContextMenuItem, PanelDefinition } from "./registry/panelRegistry.ts";
+import type { PanelContextMenuAction, PanelContextMenuItem, PanelDefinition } from "./registry/panelRegistry.ts";
 import {
   panelDefinitionByIdAtom,
   panelRegistryAtom,
@@ -47,6 +47,49 @@ import {
   maximizedSectionAtom,
   recentlyClosedPanelIdsAtom,
 } from "./transientAtoms.ts";
+
+// Leading-icon size shared by every panel tab context-menu row (matches the workspace
+// row menu's icons).
+const CONTEXT_MENU_ICON_SIZE = 14;
+
+// Render one composed context-menu item — a leaf action, or a submenu of leaf actions.
+// The caller draws any separator before it (grouping is a menu-level concern), so this
+// only emits the row itself. Destructive rows render in the danger accent (red).
+const renderPanelContextMenuItem = (item: PanelContextMenuItem): ReactElement => {
+  const icon = item.icon !== undefined ? <item.icon size={CONTEXT_MENU_ICON_SIZE} /> : null;
+  if (item.kind === "submenu") {
+    return (
+      <ContextMenu.Sub>
+        <ContextMenu.SubTrigger data-testid={item.testId}>
+          {icon} {item.label}
+        </ContextMenu.SubTrigger>
+        <ContextMenu.SubContent>
+          {item.items.map((child) => (
+            <ContextMenu.Item
+              key={child.testId ?? child.label}
+              data-testid={child.testId}
+              disabled={child.disabled}
+              color={child.destructive === true ? "red" : undefined}
+              onSelect={() => child.action()}
+            >
+              {child.icon !== undefined ? <child.icon size={CONTEXT_MENU_ICON_SIZE} /> : null} {child.label}
+            </ContextMenu.Item>
+          ))}
+        </ContextMenu.SubContent>
+      </ContextMenu.Sub>
+    );
+  }
+  return (
+    <ContextMenu.Item
+      data-testid={item.testId}
+      disabled={item.disabled}
+      color={item.destructive === true ? "red" : undefined}
+      onSelect={() => item.action()}
+    >
+      {icon} {item.label}
+    </ContextMenu.Item>
+  );
+};
 
 type PanelTabProps = {
   panelId: PanelId;
@@ -280,15 +323,18 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   );
 
   // The (possibly stale) slice is only used for the has-a-menu decision — whether a
-  // panel carries context actions at all never changes over its lifetime. The items
-  // themselves render from openMenuActions, resolved fresh on each open.
-  const hasContextMenu = canRename || (definition.contextMenuActions ?? []).length > 0 || splitOptions.length > 0;
+  // panel carries context actions at all never changes over its lifetime (canRename and
+  // onRequestClose are fixed per kind). The items themselves render from openMenuActions,
+  // resolved fresh on each open.
+  const hasContextMenu =
+    canRename ||
+    (definition.contextMenuActions ?? []).length > 0 ||
+    splitOptions.length > 0 ||
+    definition.onRequestClose !== undefined;
 
   if (!hasContextMenu) {
     return tabBody;
   }
-
-  const hasMenuAboveSplits = canRename || openMenuActions.length > 0;
 
   const handleMenuOpenChange = (open: boolean): void => {
     if (open) {
@@ -299,35 +345,63 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
     }
   };
 
+  // The destructive close/delete row, mirroring the tab's close (X) button: it runs the
+  // same onRequestClose (agent delete / terminal close confirmation). Only multi-instance
+  // panels carry onRequestClose — agents "Delete", terminals "Close". Invocation re-reads
+  // the live definition so a suppressed slice re-emit can't strand a stale callback.
+  const destructiveAction: PanelContextMenuAction | undefined =
+    definition.onRequestClose !== undefined
+      ? {
+          kind: "action",
+          label: definition.kind === "terminal" ? "Close" : "Delete",
+          icon: definition.kind === "terminal" ? X : Trash2,
+          destructive: true,
+          separatorBefore: true,
+          testId:
+            definition.kind === "terminal" ? ElementIds.TAB_CONTEXT_MENU_CLOSE : ElementIds.TAB_CONTEXT_MENU_DELETE,
+          action: () => resolveLiveDefinition().onRequestClose?.(),
+        }
+      : undefined;
+
+  // Compose the whole menu in display order: Rename (drives the tab's own inline edit),
+  // the panel's own actions (agent Mark-as-unread / Copy / Diagnostics submenu), the
+  // section split options, then the destructive close/delete. `separatorBefore` groups
+  // them; the first rendered row's separator is suppressed below.
+  const menuItems: ReadonlyArray<PanelContextMenuItem> = [
+    ...(canRename
+      ? [
+          {
+            kind: "action" as const,
+            label: "Rename",
+            icon: Pencil,
+            testId: ElementIds.TAB_CONTEXT_MENU_RENAME,
+            action: () => setIsRenaming(true),
+          },
+        ]
+      : []),
+    ...openMenuActions,
+    ...splitOptions.map((option, index) => ({
+      kind: "action" as const,
+      label: `Create ${option.label} split and move panel`,
+      // The icon points at where the moved panel lands: a horizontal split stacks it
+      // below (bottom), a vertical split places it to the right.
+      icon: option.axis === "horizontal" ? PanelBottom : PanelRight,
+      separatorBefore: index === 0,
+      testId: `${ElementIds.SPLIT_CREATE_OPTION}-${option.axis}`,
+      action: () => splitPanel({ section, panelId, axis: option.axis }),
+    })),
+    ...(destructiveAction !== undefined ? [destructiveAction] : []),
+  ];
+
   return (
     <ContextMenu.Root onOpenChange={handleMenuOpenChange}>
       <ContextMenu.Trigger>{tabBody}</ContextMenu.Trigger>
       <ContextMenu.Content size="1">
-        {canRename && (
-          <ContextMenu.Item data-testid={ElementIds.TAB_CONTEXT_MENU_RENAME} onSelect={() => setIsRenaming(true)}>
-            Rename
-          </ContextMenu.Item>
-        )}
-        {canRename && openMenuActions.length > 0 && <ContextMenu.Separator />}
-        {openMenuActions.map((action) => (
-          <ContextMenu.Item
-            key={action.label}
-            disabled={action.disabled}
-            data-testid={action.testId}
-            onSelect={() => action.action()}
-          >
-            {action.label}
-          </ContextMenu.Item>
-        ))}
-        {hasMenuAboveSplits && splitOptions.length > 0 && <ContextMenu.Separator />}
-        {splitOptions.map((option) => (
-          <ContextMenu.Item
-            key={option.axis}
-            data-testid={`${ElementIds.SPLIT_CREATE_OPTION}-${option.axis}`}
-            onSelect={() => splitPanel({ section, panelId, axis: option.axis })}
-          >
-            Create {option.label} split and move panel
-          </ContextMenu.Item>
+        {menuItems.map((item, index) => (
+          <Fragment key={item.testId ?? item.label}>
+            {index > 0 && item.separatorBefore === true ? <ContextMenu.Separator /> : null}
+            {renderPanelContextMenuItem(item)}
+          </Fragment>
         ))}
       </ContextMenu.Content>
     </ContextMenu.Root>

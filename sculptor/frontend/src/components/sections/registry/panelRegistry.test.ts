@@ -85,18 +85,24 @@ describe("dynamic panel derivation", () => {
     expect(defs[1].defaultSection).toBe("bottom");
   });
 
-  it("gives an agent a status dot and diagnostics context actions", () => {
+  it("gives an agent a status dot and a Diagnostics submenu of copy actions", () => {
     const [agentDef] = deriveDynamicPanels(
       [makeAgent({ taskId: "t1", displayName: "Agent 1", diagnostics: { sessionId: null } })],
       [],
     );
     // READY with lastReadAt == updatedAt derives the calm "read" dot.
     expect(agentDef.dotStatus).toBe("read");
-    const actionLabels = (agentDef.contextMenuActions ?? []).map((a) => a.label);
-    expect(actionLabels).toContain("Copy agent id");
-    expect(actionLabels).toContain("Copy claude session id");
+    // The id / session / transcript copy actions live in the Diagnostics submenu, not
+    // at the top level (which carries Mark-as-unread + Copy agent name).
+    const diagnostics = (agentDef.contextMenuActions ?? []).find((item) => item.kind === "submenu");
+    if (diagnostics?.kind !== "submenu") {
+      throw new Error("expected a Diagnostics submenu");
+    }
+    const diagnosticLabels = diagnostics.items.map((item) => item.label);
+    expect(diagnosticLabels).toContain("Copy agent id");
+    expect(diagnosticLabels).toContain("Copy claude session id");
     // Session id action is disabled until a session exists.
-    const copySession = agentDef.contextMenuActions?.find((a) => a.label === "Copy claude session id");
+    const copySession = diagnostics.items.find((item) => item.label === "Copy claude session id");
     expect(copySession?.disabled).toBe(true);
   });
 

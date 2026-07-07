@@ -10,7 +10,7 @@
 // The base components are registered by registerPanels at app load and looked up at
 // render time, so a cached bound component picks up its base once it registers.
 
-import { Bot, Terminal } from "lucide-react";
+import { Bot, CircleDot, Copy, Stethoscope, Terminal } from "lucide-react";
 import type { ComponentType } from "react";
 import { createElement } from "react";
 
@@ -129,29 +129,63 @@ async function copyToClipboard(text: string): Promise<void> {
   await navigator.clipboard.writeText(text);
 }
 
-// Build an agent's tab context-menu actions: "Mark as unread" first, then the flat
-// diagnostics copy actions. Copy agent id / name are always available; session id
-// and transcript paths are disabled until a session exists.
+// Build an agent's tab context-menu actions: "Mark as unread" and "Copy agent name"
+// at the top level (both always available), then a Diagnostics submenu tucking away
+// the id / session / transcript copy actions. "Copy agent id" is always available;
+// the session id and transcript paths are disabled until a session exists. Rename and
+// the destructive Delete are composed around these by SectionHeader (they drive the
+// tab's own inline rename / close flow), so they aren't built here.
 function buildAgentContextMenuActions(agent: DynamicAgentInput): ReadonlyArray<PanelContextMenuItem> {
   const { sessionId, claudeTranscriptPath, sculptorTranscriptPath } = agent.diagnostics ?? {};
   return [
-    { label: "Mark as unread", action: () => agent.onMarkUnread?.(), testId: ElementIds.TAB_CONTEXT_MENU_MARK_UNREAD },
-    { label: "Copy agent id", action: () => void copyToClipboard(agent.taskId) },
-    { label: "Copy agent name", action: () => void copyToClipboard(agent.displayName) },
     {
-      label: "Copy claude session id",
-      disabled: !sessionId,
-      action: () => void (sessionId && copyToClipboard(sessionId)),
+      kind: "action",
+      label: "Mark as unread",
+      icon: CircleDot,
+      testId: ElementIds.TAB_CONTEXT_MENU_MARK_UNREAD,
+      action: () => agent.onMarkUnread?.(),
     },
     {
-      label: "Copy claude transcript file path",
-      disabled: !claudeTranscriptPath,
-      action: () => void (claudeTranscriptPath && copyToClipboard(claudeTranscriptPath)),
+      kind: "action",
+      label: "Copy agent name",
+      icon: Copy,
+      testId: ElementIds.TAB_CONTEXT_MENU_COPY_AGENT_NAME,
+      action: () => void copyToClipboard(agent.displayName),
     },
     {
-      label: "Copy Sculptor transcript file path",
-      disabled: !sculptorTranscriptPath,
-      action: () => void (sculptorTranscriptPath && copyToClipboard(sculptorTranscriptPath)),
+      kind: "submenu",
+      label: "Diagnostics",
+      icon: Stethoscope,
+      testId: ElementIds.TAB_CONTEXT_MENU_DIAGNOSTICS,
+      items: [
+        {
+          kind: "action",
+          label: "Copy agent id",
+          testId: ElementIds.TAB_CONTEXT_MENU_COPY_AGENT_ID,
+          action: () => void copyToClipboard(agent.taskId),
+        },
+        {
+          kind: "action",
+          label: "Copy claude session id",
+          testId: ElementIds.TAB_CONTEXT_MENU_COPY_CLAUDE_SESSION_ID,
+          disabled: !sessionId,
+          action: () => void (sessionId && copyToClipboard(sessionId)),
+        },
+        {
+          kind: "action",
+          label: "Copy claude transcript file path",
+          testId: ElementIds.TAB_CONTEXT_MENU_COPY_CLAUDE_TRANSCRIPT_PATH,
+          disabled: !claudeTranscriptPath,
+          action: () => void (claudeTranscriptPath && copyToClipboard(claudeTranscriptPath)),
+        },
+        {
+          kind: "action",
+          label: "Copy Sculptor transcript file path",
+          testId: ElementIds.TAB_CONTEXT_MENU_COPY_SCULPTOR_TRANSCRIPT_PATH,
+          disabled: !sculptorTranscriptPath,
+          action: () => void (sculptorTranscriptPath && copyToClipboard(sculptorTranscriptPath)),
+        },
+      ],
     },
   ];
 }

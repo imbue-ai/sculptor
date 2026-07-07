@@ -18,7 +18,32 @@ import type { PanelId, SubSectionId } from "../sectionTypes.ts";
 
 export type PanelKind = "static" | "agent" | "terminal";
 
-export type PanelContextMenuItem = { label: string; action: () => void; disabled?: boolean; testId?: string };
+// A single invocable row in a panel tab's context menu. `icon` renders leading;
+// `destructive` styles it as a danger action (red); `separatorBefore` opens a new
+// visual group above it (suppressed for the menu's first row).
+export type PanelContextMenuAction = {
+  kind: "action";
+  label: string;
+  action: () => void;
+  icon?: LucideIcon;
+  disabled?: boolean;
+  destructive?: boolean;
+  separatorBefore?: boolean;
+  testId?: string;
+};
+
+// A labeled submenu grouping related actions behind a single trigger (e.g. the agent's
+// Diagnostics copy items), so they don't crowd the top level. One level deep only.
+export type PanelContextMenuSubmenu = {
+  kind: "submenu";
+  label: string;
+  items: ReadonlyArray<PanelContextMenuAction>;
+  icon?: LucideIcon;
+  separatorBefore?: boolean;
+  testId?: string;
+};
+
+export type PanelContextMenuItem = PanelContextMenuAction | PanelContextMenuSubmenu;
 
 export type PanelDefinition = {
   id: PanelId;

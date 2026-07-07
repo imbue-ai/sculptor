@@ -80,9 +80,55 @@ describe("agent tab context menu", () => {
     const [definition] = deriveDynamicPanels([createAgentInput({ onMarkUnread })], []);
 
     const [markUnreadItem] = definition.contextMenuActions ?? [];
+    expect(markUnreadItem.kind).toBe("action");
     expect(markUnreadItem.label).toBe("Mark as unread");
-    markUnreadItem.action();
+    if (markUnreadItem.kind === "action") {
+      markUnreadItem.action();
+    }
     expect(onMarkUnread).toHaveBeenCalledTimes(1);
+  });
+
+  it("groups the id / session / transcript copy actions under a Diagnostics submenu", () => {
+    const [definition] = deriveDynamicPanels(
+      [
+        createAgentInput({
+          diagnostics: { sessionId: "sess-1", claudeTranscriptPath: "/c.jsonl", sculptorTranscriptPath: "/s.jsonl" },
+        }),
+      ],
+      [],
+    );
+
+    // The top level stays short: the noisy copy actions are tucked into Diagnostics.
+    expect((definition.contextMenuActions ?? []).map((item) => item.label)).toEqual([
+      "Mark as unread",
+      "Copy agent name",
+      "Diagnostics",
+    ]);
+
+    const diagnostics = (definition.contextMenuActions ?? []).find((item) => item.kind === "submenu");
+    expect(diagnostics?.kind).toBe("submenu");
+    if (diagnostics?.kind === "submenu") {
+      expect(diagnostics.items.map((item) => item.label)).toEqual([
+        "Copy agent id",
+        "Copy claude session id",
+        "Copy claude transcript file path",
+        "Copy Sculptor transcript file path",
+      ]);
+    }
+  });
+
+  it("disables the session / transcript copy actions until diagnostics arrive", () => {
+    const [definition] = deriveDynamicPanels([createAgentInput()], []);
+    const diagnostics = (definition.contextMenuActions ?? []).find((item) => item.kind === "submenu");
+    if (diagnostics?.kind !== "submenu") {
+      throw new Error("expected a Diagnostics submenu");
+    }
+    const byLabel = (label: string): boolean | undefined =>
+      diagnostics.items.find((item) => item.label === label)?.disabled;
+    // Copy agent id needs nothing; the session/transcript items need a session.
+    expect(byLabel("Copy agent id")).toBeFalsy();
+    expect(byLabel("Copy claude session id")).toBe(true);
+    expect(byLabel("Copy claude transcript file path")).toBe(true);
   });
 
   it("builds the agent panel id the tab is keyed by", () => {
