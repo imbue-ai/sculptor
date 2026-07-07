@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from sculptor.agents.default.claude_code_sdk import btw_process_manager as btw_process_manager_module
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import BtwProcessManager
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import NoBtwSessionAvailable
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import get_btw_claude_command
@@ -143,13 +144,18 @@ def test_read_session_id_returns_none_when_both_missing() -> None:
     assert _manager(env).read_session_id() is None
 
 
-def test_wait_for_session_id_returns_immediately_when_already_present() -> None:
+def test_wait_for_session_id_returns_immediately_when_already_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     env = _make_environment(session_id="session-now")
-    start = time.monotonic()
+    # Assert the behavior directly — no polling — rather than measuring elapsed
+    # wall-clock time, which is flaky under CI load (the fast path does no
+    # sleeping, so any timing threshold is really measuring scheduler jitter).
+    sleep_spy = MagicMock()
+    monkeypatch.setattr(btw_process_manager_module.time, "sleep", sleep_spy)
     result = _manager(env).wait_for_session_id(timeout=1.0)
-    elapsed = time.monotonic() - start
     assert result == "session-now"
-    assert elapsed < 0.2, f"wait took {elapsed:.3f}s — should have returned without polling"
+    sleep_spy.assert_not_called()
 
 
 def test_wait_for_session_id_returns_none_after_timeout() -> None:
