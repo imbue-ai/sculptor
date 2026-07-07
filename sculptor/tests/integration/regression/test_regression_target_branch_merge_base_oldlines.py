@@ -47,6 +47,7 @@ from playwright.sync_api import Response
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.diff_viewer import wait_for_full_content_diff_render
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -192,12 +193,28 @@ def test_target_branch_diff_fetches_oldlines_from_merge_base(
         + "merge-base line numbers the diff references (the SCU-1371 crash)."
     )
 
+    # Force unified so the deterministic render anchor has a single shadow-root
+    # body to pierce (the split/unified preference persists across the shared
+    # instance, so a prior test can leave it on either view).
+    diff_panel.ensure_unified_mode()
+
+    # Block until Pierre's full-content render pass — the pass whose merge-base
+    # aligned hunk indices read the fetched old/new line arrays, and where the
+    # crash fires — has run all the way through the LAST hunk. The two-hunk
+    # deletion diff drops the trailing truncate() group, so its last hunk's
+    # final deleted line is truncate's body; the 16-line unchanged gap between
+    # the hunks stays a COLLAPSED (expandable) separator, so gap-only context
+    # like is_even paints in the first partial pass and would let the read fire
+    # too early. Anchoring on the expandable separator plus the last hunk's
+    # deleted line guarantees the whole risky pass has run before errors are read.
+    wait_for_full_content_diff_render(page, "return text[:max_length - 3]")
+
     # With the fix the expandable diff renders correctly, so the changed content
-    # is visible.  Waiting on this auto-retrying condition also gives Shiki's
-    # async highlight pass — where the bug throws renderHunks — time to run,
-    # without a fixed sleep.
+    # is visible.
     expect(diff_panel).to_contain_text("is_even")
 
-    # Defense in depth: Pierre must not have crashed during hunk expansion.
-    render_hunks_errors = [e for e in js_errors if "renderHunks" in e]
+    # Defense in depth: Pierre must not have crashed during hunk expansion. The
+    # crash message names Pierre's renderer: "renderHunks" in older @pierre/diffs
+    # releases, "DiffHunksRenderer" in 1.2.x.
+    render_hunks_errors = [e for e in js_errors if "renderHunks" in e or "DiffHunksRenderer" in e]
     assert not render_hunks_errors, f"Pierre renderHunks crash: {render_hunks_errors[:1]}"

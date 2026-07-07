@@ -219,3 +219,43 @@ def ensure_unified_view(viewer: PlaywrightDiffViewerElement) -> None:
     if split.count() > 0:
         viewer.toggle_view_option_via_menu("split_view")
     expect(viewer.get_unified_diff_views()).to_be_visible()
+
+
+def wait_for_full_content_diff_render(page: Page, last_hunk_text: str) -> None:
+    """Block until Pierre's full-content render pass paints through ``last_hunk_text``.
+
+    Pierre paints the diff twice: first straight from the diff string (a
+    *partial* diff), then again once ``useFileLines`` resolves and the full
+    old/new file lines reach Pierre — the pass whose hunk rows are looked up
+    by index in those arrays, and the pass where an out-of-range index (a
+    too-short old/new lines array) makes ``DiffHunksRenderer`` throw. Only a
+    non-partial diff marks its hunk separators expandable, so a separator
+    carrying ``data-expand-index`` is the signature of that second pass. Its
+    rows then stream in as Shiki tokenises, so additionally wait for the
+    ``div[data-line]`` carrying ``last_hunk_text`` — pass text from the diff's
+    LAST hunk so every hunk's line-array lookups have run by the time this
+    returns.
+
+    The ``<diffs-container>`` custom element and its shadow root are the same
+    in unified and split view, so this matches either ``DIFF_VIEW_UNIFIED`` or
+    ``DIFF_VIEW_SPLIT`` and does not require forcing a particular view first.
+    The shadow root is pierced manually because these are Pierre attributes
+    with no Playwright locator equivalent.
+    """
+    page.wait_for_function(
+        """({ unifiedTestid, splitTestid, text }) => {
+            const view =
+                document.querySelector(`[data-testid="${unifiedTestid}"]`) ??
+                document.querySelector(`[data-testid="${splitTestid}"]`);
+            const shadow = view?.querySelector("diffs-container")?.shadowRoot;
+            if (!shadow?.querySelector("[data-separator][data-expand-index]")) return false;
+            return [...shadow.querySelectorAll("div[data-line]")].some(
+                (line) => line.textContent.includes(text)
+            );
+        }""",
+        arg={
+            "unifiedTestid": ElementIDs.DIFF_VIEW_UNIFIED,
+            "splitTestid": ElementIDs.DIFF_VIEW_SPLIT,
+            "text": last_hunk_text,
+        },
+    )
