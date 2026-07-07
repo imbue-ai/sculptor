@@ -7,6 +7,7 @@
 import type { Virtualizer } from "@tanstack/react-virtual";
 import type { MutableRefObject, RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { flushSync } from "react-dom";
 
 import { ChatMessageRole } from "~/api";
 
@@ -611,18 +612,56 @@ export const useAlphaAutoScroll = (
     [scrollContainerRef, virtualizer, machine, isProgrammaticScroll],
   );
 
+  // Width-reflow sibling of restoreReadingAnchor. A viewport-width change (the
+  // sidebar collapsing/expanding, a panel or window resize) re-wraps every message
+  // at once. Restore the anchor SYNCHRONOUSLY — force the virtualizer to remeasure
+  // the re-wrapped items in this frame (flushSync + measureElement, as the
+  // density-flip handler does), then assign scrollTop before paint — so the
+  // re-layout and its compensating scroll commit together. The deferred (rAF) path
+  // would paint one stale frame first: items re-wrapped at the new width but still
+  // positioned by the old measurements — the visible one-frame text shift.
+  const restoreReadingAnchorSync = useCallback(
+    (anchor: ReadingAnchor): void => {
+      const el = scrollContainerRef.current;
+      if (!el) return;
+      // measureElement refreshes each wrapper's cached size; getVirtualItems()
+      // rebuilds the cumulative measurementsCache from them. flushSync commits the
+      // re-rendered item transforms in this same frame so the DOM matches.
+      flushSync(() => {
+        el.querySelectorAll<HTMLElement>("[data-index]").forEach((node) => virtualizer.measureElement(node));
+      });
+      virtualizer.getVirtualItems();
+      const item = virtualizer.measurementsCache[anchor.messageIndex];
+      if (!item) return;
+      // Keep the virtual-content height in sync so the scrollTop assignment below
+      // isn't clamped by a stale scrollHeight (mirrors the density-flip handler).
+      const contentEl = el.firstElementChild as HTMLElement | null;
+      if (contentEl) contentEl.style.height = `${virtualizer.getTotalSize()}px`;
+      const desired = Math.max(0, item.start - anchor.viewportOffset);
+      if (Math.abs(el.scrollTop - desired) > 1) {
+        isProgrammaticScroll.current = true;
+        el.scrollTop = desired;
+      }
+      machine.setGeometryAtBottom(distanceFromContentBottom(el, virtualizer) <= BOTTOM_THRESHOLD);
+    },
+    [scrollContainerRef, virtualizer, machine, isProgrammaticScroll],
+  );
+
   // Perform the one typed reflow action projectReflow chose for the current
   // authority phase. This is the single executor the unified content observer
   // drives — projectReflow decides, applyReflow performs.
   const applyReflow = useCallback(
-    (el: HTMLElement, distance: number): void => {
+    (el: HTMLElement, distance: number, isWidthReflow: boolean): void => {
       const action = projectReflow(machine.getState());
       switch (action.kind) {
         case "ignore":
           return;
         case "holdAnchor":
-          // Scrolled up and reading — keep the anchor message at its offset.
-          restoreReadingAnchor(action.anchor);
+          // Scrolled up and reading — keep the anchor message at its offset. A
+          // width reflow re-wraps everything at once, so restore synchronously to
+          // avoid a one-frame shift; incremental reflows use the coalesced rAF path.
+          if (isWidthReflow) restoreReadingAnchorSync(action.anchor);
+          else restoreReadingAnchor(action.anchor);
           return;
         case "pinBottom": {
           // Following the live tail — keep the last message's content bottom in
@@ -665,7 +704,7 @@ export const useAlphaAutoScroll = (
         }
       }
     },
-    [machine, virtualizer, messageCount, restoreReadingAnchor, pinToBottom],
+    [machine, virtualizer, messageCount, restoreReadingAnchor, restoreReadingAnchorSync, pinToBottom],
   );
 
   // Unified content-resize observer. One observer, always connected while not
@@ -678,8 +717,17 @@ export const useAlphaAutoScroll = (
     const content = el?.firstElementChild;
     if (!el || !content) return;
 
+    // Track container width so the observer can distinguish a width reflow (the
+    // sidebar/panel/window resizing) from a height-only growth (a streamed token,
+    // an above-fold item). Only the former re-wraps every message and needs the
+    // synchronous, same-frame anchor restore.
+    let prevWidth = el.clientWidth;
+
     const observer = new ResizeObserver(() => {
       if (messageCount === 0) return;
+      const width = el.clientWidth;
+      const isWidthReflow = width !== prevWidth;
+      prevWidth = width;
       const distance = distanceFromContentBottom(el, virtualizer);
       machine.setGeometryAtBottom(distance <= BOTTOM_THRESHOLD);
       // Within the bottom-settle window, re-pin (down-only) to the grown content
@@ -696,7 +744,7 @@ export const useAlphaAutoScroll = (
       ) {
         pinToBottom();
       }
-      applyReflow(el, distance);
+      applyReflow(el, distance, isWidthReflow);
     });
 
     // Initial pin when a stream (re)connects already pinned to the bottom —

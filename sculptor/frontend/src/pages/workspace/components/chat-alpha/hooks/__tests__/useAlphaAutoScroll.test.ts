@@ -317,6 +317,48 @@ describe("useAlphaAutoScroll", () => {
     expect(result.current.isAtBottom).toBe(true);
   });
 
+  it("restores the reading anchor synchronously on a width reflow (no deferred frame)", () => {
+    // A width reflow (sidebar collapse/expand, panel/window resize) re-wraps every
+    // message at once. The anchor restore must land in the same frame —
+    // synchronously in the resize callback — so the re-layout and the compensating
+    // scroll commit together, without the one-frame text shift a deferred (rAF)
+    // restore would leave.
+    const el = createMockScrollContainer(250, 2000, 500);
+    Object.defineProperty(el, "clientWidth", { value: 1200, writable: true, configurable: true });
+    const ref = { current: el };
+    // getVirtualItems returns the top-visible item so a user scroll captures a
+    // reading anchor; measurementsCache holds the reflowed (post-wrap) start.
+    const virtualizer = {
+      scrollToIndex: vi.fn(),
+      measureElement: vi.fn(),
+      getVirtualItems: vi.fn(() => [{ index: 2, start: 300, size: 100 }]),
+      getTotalSize: vi.fn(() => 2000),
+      measurementsCache: [undefined, undefined, { start: 280, size: 100 }] as Array<unknown>,
+      options: { paddingEnd: 0 },
+    } as unknown as Virtualizer<HTMLDivElement, Element>;
+
+    // lastMessageRole=USER so the on-mount pin-to-bottom bails, preserving this
+    // test's scrolled-up premise (otherwise the mount pin flags the next scroll
+    // event as programmatic and no reading anchor is captured).
+    renderHook(() => useAlphaAutoScroll(ref, false, 10, virtualizer, ChatMessageRole.USER, -1, "test-task"));
+
+    // A genuine user scroll captures the reading anchor (index 2, offset 50).
+    act(() => {
+      el.dispatchEvent(new Event("wheel"));
+      el.dispatchEvent(new Event("scroll"));
+    });
+
+    // The container widens: a width reflow, distinct from a height-only growth.
+    Object.defineProperty(el, "clientWidth", { value: 1400, writable: true, configurable: true });
+    act(() => {
+      triggerResize();
+    });
+
+    // Corrected synchronously within the resize callback (no rAF flush): the
+    // reflowed anchor start (280) minus its sampled viewport offset (50) = 230.
+    expect(el.scrollTop).toBe(230);
+  });
+
   it("suppressAutoScroll prevents engage/disengage", () => {
     const el = createMockScrollContainer(1300, 2000, 500);
     const ref = { current: el };
