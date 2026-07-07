@@ -65,6 +65,7 @@ When fixing lint errors, be careful with some common gotchas:
 ## Frontend UI guidelines
 
 - When placing `IconButton` components in a `Flex`, use `gap="2"` because Radix icon buttons apply negative margins on hover to display the hover background.
+- Frontend state follows the **state ownership** rule — one written store per server fact; optimistic writes must have a real failure path (the WS only heals *successful* mutations). Before writing state code, read "State ownership" in `docs/development/style/frontend.md` and copy from `src/common/state/mutations/`, not from older call sites.
 
 ## Frontend type generation
 
