@@ -18,26 +18,25 @@ just clean rebuild
 
 ## Running Locally
 
-Start the frontend and backend in a tmux session:
+`just source` (alias `just start-onboard`) runs the app from source the way a
+fresh clone behaves for a real user — the full first-run flow: welcome,
+onboarding, and repo selection. It resets local dev state each run, so every
+launch is a true first-run.
+
+```bash
+just source
+```
+
+Skip onboarding with `just start` — it seeds an onboarded config and lands
+straight on the new-workspace form for the current repo, preserving your dev
+state:
 
 ```bash
 just start
 ```
 
-`just start` is the fast-QA path: it seeds an onboarded dev config so the app
-skips the welcome flow and lands straight on the new-workspace form for the
-current repo, ready to create a workspace. It's idempotent — safe to re-run.
-
-To instead run the app the way a fresh clone behaves for a real user — the full
-first-run flow, welcome through onboarding and repo selection, from source — wipe
-the dev state and launch with no initial project:
-
-```bash
-just source   # alias: just start-onboard
-```
-
-Either way, `just stop` tears down the whole session (both frontend and
-backend); only one can run per checkout at a time.
+`just stop` tears down the session (both frontend and backend); only one runs
+per checkout at a time.
 
 Or run them separately:
 
