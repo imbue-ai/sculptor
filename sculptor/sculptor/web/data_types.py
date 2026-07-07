@@ -237,6 +237,13 @@ class WorkspaceResponse(SerializableModel):
     created_at: datetime.datetime
     workspace_setup_command: str | None = None
     setup: "WorkspaceSetupSnapshot | None" = None
+    # Absolute path of the workspace's checkout: `<environment_id>/code` for
+    # clone/worktree workspaces, the project's local repo path for in-place ones.
+    # None when the environment hasn't been initialized yet.
+    working_directory: str | None = None
+    # Branch currently checked out in that directory, from the workspace
+    # service's branch scan cache. None when not yet scanned.
+    current_branch: str | None = None
 
 
 class PreviewBranchNameResponse(SerializableModel):
@@ -343,6 +350,13 @@ class RecentWorkspaceResponse(SerializableModel):
     agent_count: int
     is_open: bool
     last_activity_at: datetime.datetime
+    # Absolute path of the workspace's checkout: `<environment_id>/code` for
+    # clone/worktree workspaces, the project's local repo path for in-place ones.
+    # None when the environment hasn't been initialized yet.
+    working_directory: str | None = None
+    # Branch currently checked out in that directory, from the workspace
+    # service's branch scan cache. None when not yet scanned.
+    current_branch: str | None = None
 
 
 class ListWorkspacesResponse(SerializableModel):

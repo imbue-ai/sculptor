@@ -149,6 +149,15 @@ class WorkspaceService(Service, ABC):
     def remove_observer(self, queue: "Queue[StreamingUpdateSourceTypes]") -> None:
         """Unsubscribe a queue previously passed to ``add_observer``."""
 
+    @abstractmethod
+    def get_cached_current_branch(self, workspace_id: WorkspaceID) -> str | None:
+        """Return the branch scanner's cached current branch for a workspace.
+
+        A pure cache read — never forks git, resumes an environment, or starts
+        the scanning machinery. Returns None when the branch is unknown (the
+        workspace hasn't been scanned yet, or the scanner isn't running).
+        """
+
     # Workspace Operations
 
     @abstractmethod
