@@ -35,6 +35,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import shutil
 import signal
 import socket
@@ -43,11 +44,11 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from devices import DEFAULT_PRESET, PRESETS, get_preset  # noqa: E402
+from devices import DEFAULT_PRESET, PRESETS, DevicePreset, get_preset  # noqa: E402
 
 STATE_FILENAME = ".iphone-sim-state.json"
 SERVER_LOG = "frontend-server.log"
@@ -97,7 +98,7 @@ def default_screenshots_dir() -> Path:
     return repo_root() / ".iphone-qa" / "screenshots"
 
 
-def child_env() -> Dict[str, str]:
+def child_env() -> dict[str, str]:
     env = dict(os.environ)
     extra = [p for p in BREW_BINS if Path(p).is_dir()]
     if extra:
@@ -111,8 +112,8 @@ def run(cmd: Sequence[str], check: bool = True, quiet: bool = False) -> subproce
     return subprocess.run(cmd, capture_output=True, text=True, check=check, env=child_env())
 
 
-def simctl(*args: str, check: bool = True, quiet: bool = False) -> subprocess.CompletedProcess:
-    return run(["xcrun", "simctl", *args], check=check, quiet=quiet)
+def simctl(*parts: str, check: bool = True, quiet: bool = False) -> subprocess.CompletedProcess:
+    return run(["xcrun", "simctl", *parts], check=check, quiet=quiet)
 
 
 def have(binary: str) -> bool:
@@ -132,7 +133,7 @@ def http_ready(url: str, timeout: float = 2.0) -> bool:
         return True
     except urllib.error.HTTPError:
         return True  # responded with 4xx/5xx — still a live server
-    except Exception:
+    except (urllib.error.URLError, OSError):
         return False  # connection refused / timeout — not serving
 
 
@@ -144,7 +145,7 @@ class State:
         self.dir = screenshots_dir
         self.dir.mkdir(parents=True, exist_ok=True)
         self.path = self.dir / STATE_FILENAME
-        self.data: Dict[str, object] = {}
+        self.data: dict[str, object] = {}
         if self.path.exists():
             self.data = json.loads(self.path.read_text())
 
@@ -160,11 +161,11 @@ class State:
             raise SystemExit("No device set up. Run `iphone_sim.py setup` first.")
         return str(udid)
 
-    def points(self) -> Sequence[int]:
+    def points(self) -> list[int]:
         pts = self.data.get("points")
-        if not pts:
+        if not isinstance(pts, list):
             raise SystemExit("No device points in state. Run `setup` first.")
-        return pts  # type: ignore[return-value]
+        return [int(x) for x in pts]
 
     def next_counter(self) -> int:
         n = int(self.data.get("counter", 0)) + 1
@@ -180,7 +181,7 @@ def state_for(args: argparse.Namespace) -> State:
 # --------------------------------------------------------------------------- #
 # idb
 # --------------------------------------------------------------------------- #
-def idb_bin(state: State) -> Optional[str]:
+def idb_bin(state: State) -> str | None:
     venv = state.data.get("idb_venv")
     if not venv:
         return None
@@ -188,14 +189,13 @@ def idb_bin(state: State) -> Optional[str]:
     return str(candidate) if candidate.exists() else None
 
 
-def idb(state: State, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+def idb(state: State, *parts: str, check: bool = True) -> subprocess.CompletedProcess:
     binary = idb_bin(state)
     if not binary:
         raise SystemExit(
-            "idb is not installed. Re-run `iphone_sim.py setup` (it creates the "
-            "idb venv and installs idb_companion)."
+            "idb is not installed. Re-run `iphone_sim.py setup` (it creates the idb venv and installs idb_companion)."
         )
-    return run([binary, *args], check=check)
+    return run([binary, *parts], check=check)
 
 
 # --------------------------------------------------------------------------- #
@@ -257,7 +257,7 @@ def stop_server(state: State) -> None:
     state.save()
 
 
-def parse_port(line: str) -> Optional[int]:
+def parse_port(line: str) -> int | None:
     for pat in PORT_PATTERNS:
         m = pat.search(line)
         if m:
@@ -268,24 +268,34 @@ def parse_port(line: str) -> Optional[int]:
 def ensure_server(state: State, command: str, timeout: float) -> str:
     """Launch `command` detached, parse its frontend URL, and keep it alive."""
     if server_alive(state):
-        server = state.data["server"]  # type: ignore[index]
-        url = server.get("url")
+        server = state.data.get("server")
+        url = server.get("url") if isinstance(server, dict) else None
         if url:
             eprint(f"Reusing running server: {url}")
             return str(url)
 
+    # Split into an argv and run without a shell: `--command` can be influenced by
+    # whatever drives this script (e.g. an agent), and shell=True would make that an
+    # injection vector. shlex.split still honors quoting, so `just frontend-custom`
+    # and quoted args work; shell operators (pipes, &&, redirects) intentionally do
+    # not — wrap those in a script and point --command at it if you need them.
+    argv = shlex.split(command)
+    if not argv:
+        raise SystemExit(f"--command is empty: {command!r}")
+
     log_path = state.dir / SERVER_LOG
-    log = open(log_path, "w")
     eprint(f"$ ({command})  [detached, logging to {log_path}]")
-    proc = subprocess.Popen(
-        command,
-        shell=True,
-        cwd=str(repo_root()),
-        stdout=log,
-        stderr=subprocess.STDOUT,
-        start_new_session=True,  # own process group so teardown can kill the tree
-        env=child_env(),
-    )
+    # The child inherits the log fd at spawn; close the parent's copy immediately
+    # (the server is long-lived, so leaving it open would leak an fd per run).
+    with open(log_path, "w") as log:
+        proc = subprocess.Popen(
+            argv,
+            cwd=str(repo_root()),
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,  # own process group so teardown can kill the tree
+            env=child_env(),
+        )
     try:
         pgid = os.getpgid(proc.pid)
     except OSError:
@@ -295,7 +305,7 @@ def ensure_server(state: State, command: str, timeout: float) -> str:
 
     # Tail the log until the frontend URL appears.
     deadline = time.time() + timeout
-    port: Optional[int] = None
+    port: int | None = None
     while time.time() < deadline:
         if proc.poll() is not None:
             tail = "\n".join(log_path.read_text().splitlines()[-25:])
@@ -310,8 +320,7 @@ def ensure_server(state: State, command: str, timeout: float) -> str:
     if not port:
         tail = "\n".join(log_path.read_text().splitlines()[-25:])
         raise SystemExit(
-            f"Timed out after {timeout:.0f}s waiting for the frontend port.\n"
-            f"--- {SERVER_LOG} (tail) ---\n{tail}"
+            f"Timed out after {timeout:.0f}s waiting for the frontend port.\n--- {SERVER_LOG} (tail) ---\n{tail}"
         )
 
     # Confirm the parsed port actually SERVES — not just that we saw it logged.
@@ -330,14 +339,12 @@ def ensure_server(state: State, command: str, timeout: float) -> str:
     if not ready:
         tail = "\n".join(log_path.read_text().splitlines()[-25:])
         raise SystemExit(
-            f"Parsed port {port} from the server output, but {url} never served a "
-            f"response within {timeout:.0f}s.\n"
-            "If a Sculptor instance is already running, attach to it instead of "
-            "launching a new one:  open --port <port>  (or --url <url>).\n"
-            f"--- {SERVER_LOG} (tail) ---\n{tail}"
+            f"Parsed port {port} from the server output, but {url} never served a response within {timeout:.0f}s.\nIf a Sculptor instance is already running, attach to it instead of launching a new one:  open --port <port>  (or --url <url>).\n--- {SERVER_LOG} (tail) ---\n{tail}"
         )
 
-    state.data["server"]["url"] = url  # type: ignore[index]
+    server = state.data.get("server")
+    if isinstance(server, dict):
+        server["url"] = url
     state.save()
     eprint(f"Frontend server ready: {url} (pid={proc.pid})")
     return url
@@ -349,13 +356,13 @@ def ensure_server(state: State, command: str, timeout: float) -> str:
 SPA_MARKERS = ("<title>Sculptor", "apple-mobile-web-app-title", 'id="root"')
 
 
-def _listening_ports() -> Dict[int, str]:
+def _listening_ports() -> dict[int, str]:
     """Map of listening TCP port -> owning process command (via lsof)."""
     try:
         out = run(["lsof", "-nP", "-iTCP", "-sTCP:LISTEN"], check=False, quiet=True).stdout
     except FileNotFoundError:
         return {}
-    ports: Dict[int, str] = {}
+    ports: dict[int, str] = {}
     for line in out.splitlines()[1:]:
         parts = line.split()
         if len(parts) < 2:
@@ -376,7 +383,7 @@ def _fetch(url: str, timeout: float = 1.5):
             return r.status, r.read(16384).decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
         return e.code, ""
-    except Exception:
+    except (urllib.error.URLError, OSError):
         return None, ""
 
 
@@ -415,14 +422,14 @@ def resolve_url(state: State, args: argparse.Namespace) -> str:
             port, kind = found
             eprint(f"Attached to a running Sculptor server on port {port} ({kind} build).")
             if kind == "app":
-                eprint("  NOTE: that looks like a packaged/production build, not a vite dev "
-                       "server — start your branch's dev server to QA your changes, or pass "
-                       "--port/--url explicitly.")
+                eprint(
+                    "  NOTE: that looks like a packaged/production build, not a vite dev server — start your branch's dev server to QA your changes, or pass --port/--url explicitly."
+                )
             return f"http://127.0.0.1:{port}"
-        eprint("No running Sculptor server detected; launching the fallback command "
-               f"({args.command!r}).")
-        eprint("  (Launching from inside a Sculptor agent can be flaky — if it fails, start "
-               "your dev server yourself and re-run, or pass --port/--url.)")
+        eprint(f"No running Sculptor server detected; launching the fallback command ({args.command!r}).")
+        eprint(
+            "  (Launching from inside a Sculptor agent can be flaky — if it fails, start your dev server yourself and re-run, or pass --port/--url.)"
+        )
     return ensure_server(state, args.command, args.server_timeout)
 
 
@@ -442,10 +449,7 @@ def first_ios_runtime(download: bool) -> str:
         run(["xcodebuild", "-downloadPlatform", "iOS"])
         return first_ios_runtime(download=False)
     raise SystemExit(
-        "No iOS simulator runtime is installed.\n"
-        "Install one (≈9 GB, slow) with:\n"
-        "    xcodebuild -downloadPlatform iOS\n"
-        "or re-run setup with --download-runtime to do it automatically."
+        "No iOS simulator runtime is installed.\nInstall one (≈9 GB, slow) with:\n    xcodebuild -downloadPlatform iOS\nor re-run setup with --download-runtime to do it automatically."
     )
 
 
@@ -463,13 +467,11 @@ def ensure_idb(venv: Path) -> None:
             run(["brew", "install", "idb-companion"], check=False)
         if not have("idb_companion"):
             eprint(
-                "WARNING: idb_companion is not on PATH. Taps/swipes will not work "
-                "until you `brew install idb-companion`. Screenshots and openurl "
-                "still work via simctl."
+                "WARNING: idb_companion is not on PATH. Taps/swipes will not work until you `brew install idb-companion`. Screenshots and openurl still work via simctl."
             )
 
 
-def find_device(name: str) -> Optional[dict]:
+def find_device(name: str) -> dict | None:
     out = simctl("list", "devices", "--json", quiet=True).stdout
     for _runtime, devices in json.loads(out).get("devices", {}).items():
         for dev in devices:
@@ -528,7 +530,9 @@ def cmd_setup(args: argparse.Namespace) -> None:
 
 def cmd_serve(args: argparse.Namespace) -> None:
     state = state_for(args)
-    url = ensure_server(state, args.command, args.server_timeout)
+    # resolve_url honors --url/--port (attach) and --launch (force a fresh launch),
+    # falling back to auto-detect and finally to launching --command.
+    url = resolve_url(state, args)
     print(f"server: {url}")
 
 
@@ -547,7 +551,7 @@ def cmd_screenshot(args: argparse.Namespace) -> None:
     report_shot(take_screenshot(state, args.label))
 
 
-def _xy(args: argparse.Namespace, state: State, fx: float, fy: float) -> List[int]:
+def _xy(args: argparse.Namespace, state: State, fx: float, fy: float) -> list[int]:
     if args.frac:
         w, h = state.points()
         return [round(fx * w), round(fy * h)]
@@ -581,42 +585,40 @@ def cmd_describe(args: argparse.Namespace) -> None:
     print(out)
 
 
+def _ahs_tap(state: State, udid: str, preset: DevicePreset, settle: float, name: str, label: str) -> None:
+    """Tap one named Add-to-Home-Screen coordinate and screenshot the result."""
+    x, y = preset.ahs[name]
+    idb(state, "ui", "tap", "--udid", udid, str(x), str(y))
+    time.sleep(settle)
+    report_shot(take_screenshot(state, f"ahs_{label}"))
+
+
+def _ahs_swipe(state: State, udid: str, preset: DevicePreset, settle: float, a: str, b: str, label: str) -> None:
+    """Swipe between two named Add-to-Home-Screen coordinates and screenshot."""
+    x1, y1 = preset.ahs[a]
+    x2, y2 = preset.ahs[b]
+    idb(state, "ui", "swipe", "--udid", udid, "--duration", "0.6",
+        str(x1), str(y1), str(x2), str(y2))
+    time.sleep(settle)
+    report_shot(take_screenshot(state, f"ahs_{label}"))
+
+
 def cmd_add_to_home_screen(args: argparse.Namespace) -> None:
     state = state_for(args)
     udid = state.require_udid()
     preset = get_preset(str(state.get("device", DEFAULT_PRESET)))
     if not preset.ahs:
         raise SystemExit(
-            f"No Add-to-Home-Screen reference coordinates for {preset.key!r}.\n"
-            "SpringBoard/the share sheet aren't in the accessibility tree, so drive "
-            "it manually: `screenshot`, find each target as a fraction, then "
-            "`tap --frac FX FY` step by step (Share -> swipe up -> Add to Home Screen "
-            "-> Add)."
+            f"No Add-to-Home-Screen reference coordinates for {preset.key!r}.\nSpringBoard/the share sheet aren't in the accessibility tree, so drive it manually: `screenshot`, find each target as a fraction, then `tap --frac FX FY` step by step (Share -> swipe up -> Add to Home Screen -> Add)."
         )
 
-    def tap(name: str, label: str) -> None:
-        x, y = preset.ahs[name]
-        idb(state, "ui", "tap", "--udid", udid, str(x), str(y))
-        time.sleep(args.settle)
-        report_shot(take_screenshot(state, f"ahs_{label}"))
-
-    def swipe(a: str, b: str, label: str) -> None:
-        x1, y1 = preset.ahs[a]
-        x2, y2 = preset.ahs[b]
-        idb(state, "ui", "swipe", "--udid", udid, "--duration", "0.6",
-            str(x1), str(y1), str(x2), str(y2))
-        time.sleep(args.settle)
-        report_shot(take_screenshot(state, f"ahs_{label}"))
-
     eprint("AHS coordinates are empirical — VERIFY each screenshot before trusting the next tap.")
-    tap("share_button", "1_share_sheet")
-    swipe("sheet_swipe_from", "sheet_swipe_to", "2_sheet_scrolled")
-    tap("add_to_home_screen", "3_ahs_dialog")
-    tap("add_confirm", "4_added")
+    _ahs_tap(state, udid, preset, args.settle, "share_button", "1_share_sheet")
+    _ahs_swipe(state, udid, preset, args.settle, "sheet_swipe_from", "sheet_swipe_to", "2_sheet_scrolled")
+    _ahs_tap(state, udid, preset, args.settle, "add_to_home_screen", "3_ahs_dialog")
+    _ahs_tap(state, udid, preset, args.settle, "add_confirm", "4_added")
     print(
-        "\nDone. If a screenshot doesn't match the expected step, the coordinates "
-        "drifted — re-derive with `tap --frac`. Next: `launch-icon` to open the "
-        "clip standalone and see the real status bar / safe areas."
+        "\nDone. If a screenshot doesn't match the expected step, the coordinates drifted — re-derive with `tap --frac`. Next: `launch-icon` to open the clip standalone and see the real status bar / safe areas."
     )
 
 
@@ -637,12 +639,7 @@ def cmd_launch_icon(args: argparse.Namespace) -> None:
 
 def cmd_remove_home_screen(args: argparse.Namespace) -> None:
     print(
-        "iOS caches the launch config (meta tags, theme-color, icon) at add-time, "
-        "so after changing index.html's <head> you must REMOVE and RE-ADD the clip "
-        "— reloading isn't enough.\n\n"
-        "Removal isn't reliably scriptable (long-press isn't in the a11y tree). Do it "
-        "by hand in the Simulator: long-press the icon -> 'Remove App' -> 'Delete from "
-        "Home Screen', then run `add-to-home-screen` again."
+        "iOS caches the launch config (meta tags, theme-color, icon) at add-time, so after changing index.html's <head> you must REMOVE and RE-ADD the clip — reloading isn't enough.\n\nRemoval isn't reliably scriptable (long-press isn't in the a11y tree). Do it by hand in the Simulator: long-press the icon -> 'Remove App' -> 'Delete from Home Screen', then run `add-to-home-screen` again."
     )
 
 
@@ -679,8 +676,7 @@ def cmd_detect(args: argparse.Namespace) -> None:
         kind = "dev" if ("/@vite/client" in body or "/src/" in body or "/@react-refresh" in body) else "app"
         hits.append((port, kind, ports.get(port, "?")))
     if not hits:
-        print("No running Sculptor server found. Start your dev server, or use "
-              "`open --port <port>` / `open --launch`.")
+        print("No running Sculptor server found. Start your dev server, or use `open --port <port>` / `open --launch`.")
         return
     chosen = find_running_server()
     print("Running Sculptor servers:")
@@ -714,6 +710,18 @@ def cmd_status(args: argparse.Namespace) -> None:
 # --------------------------------------------------------------------------- #
 # argument parsing
 # --------------------------------------------------------------------------- #
+def add_server_opts(sp: argparse.ArgumentParser) -> None:
+    """Attach the shared server-resolution flags to a subparser (serve/open)."""
+    sp.add_argument("--command", default=DEFAULT_COMMAND,
+                    help=f"Fallback server command to launch if none is running (default: {DEFAULT_COMMAND!r}).")
+    sp.add_argument("--port", type=int, help="Attach to an already-running server on this port.")
+    sp.add_argument("--url", help="Attach to an already-running server at this full URL.")
+    sp.add_argument("--launch", action="store_true",
+                    help="Skip auto-detect and launch --command directly.")
+    sp.add_argument("--server-timeout", type=float, default=180.0,
+                    help="Seconds to wait for the launched server to print its port.")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="iphone_sim.py", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -734,16 +742,6 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--download-runtime", action="store_true",
                    help="Auto-download an iOS runtime if none is installed (~9 GB).")
     s.set_defaults(func=cmd_setup)
-
-    def add_server_opts(sp: argparse.ArgumentParser) -> None:
-        sp.add_argument("--command", default=DEFAULT_COMMAND,
-                        help=f"Fallback server command to launch if none is running (default: {DEFAULT_COMMAND!r}).")
-        sp.add_argument("--port", type=int, help="Attach to an already-running server on this port.")
-        sp.add_argument("--url", help="Attach to an already-running server at this full URL.")
-        sp.add_argument("--launch", action="store_true",
-                        help="Skip auto-detect and launch --command directly.")
-        sp.add_argument("--server-timeout", type=float, default=180.0,
-                        help="Seconds to wait for the launched server to print its port.")
 
     s = sub.add_parser("serve", parents=[common], help="Launch the frontend server and parse its URL.")
     add_server_opts(s)
@@ -798,7 +796,7 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         args.func(args)

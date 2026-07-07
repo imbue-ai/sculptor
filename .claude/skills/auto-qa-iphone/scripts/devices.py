@@ -16,7 +16,6 @@ after every tap when the iOS version or layout changes.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Tuple
 
 
 @dataclass(frozen=True)
@@ -25,17 +24,17 @@ class DevicePreset:
     # Exact device-type name accepted by `xcrun simctl create`.
     sim_name: str
     # (width, height) in logical points.
-    points: Tuple[int, int]
+    points: tuple[int, int]
     # True if the device has a notch / Dynamic Island + home indicator, so
     # env(safe-area-inset-*) are non-zero. Non-notched devices are a useful
     # "insets ~= 0" control.
     notched: bool
     # Reference tap/swipe coordinates (in points) for the Add-to-Home-Screen
     # flow. Empty when not yet measured for this device.
-    ahs: Dict[str, Tuple[int, int]] = field(default_factory=dict)
+    ahs: dict[str, tuple[int, int]] = field(default_factory=dict)
 
 
-PRESETS: Dict[str, DevicePreset] = {
+PRESETS: dict[str, DevicePreset] = {
     "iphone-16-pro": DevicePreset(
         key="iphone-16-pro",
         sim_name="iPhone 16 Pro",
