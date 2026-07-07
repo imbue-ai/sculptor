@@ -49,9 +49,7 @@ const MenuRow = ({
   <span className={styles.item}>
     <span className={styles.itemText}>
       <span className={styles.itemTitle}>{label}</span>
-      {description !== undefined && description !== "" && (
-        <span className={styles.description}>{description}</span>
-      )}
+      {description !== undefined && description !== "" && <span className={styles.description}>{description}</span>}
     </span>
     {shortcut !== undefined && shortcut !== "" && <span className={styles.shortcut}>{shortcut}</span>}
   </span>
