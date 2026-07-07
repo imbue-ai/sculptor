@@ -36,7 +36,7 @@
 "." = 34
 
 [no-inline-imports]
-"." = 65
+"." = 66
 
 [no-integration-css-locators]
 "." = 0

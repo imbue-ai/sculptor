@@ -23,6 +23,7 @@ from tenacity import wait_fixed
 from sculptor.constants import ElementIDs
 from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.state.messages import LLMModel
+from sculptor.testing.backend_url import resolve_backend_api_url
 from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.base import type_into_tiptap
 from sculptor.testing.elements.chat_panel import select_model_by_name
@@ -761,7 +762,7 @@ def upload_file_via_api(page: Page, *, name: str, mime_type: str, content: bytes
     frontend — so this is how an integration test attaches a non-image file the
     UI would refuse. ``page.request`` inherits the page's session cookie.
     """
-    base_url = page.url.split("#")[0].rstrip("/")
+    base_url = resolve_backend_api_url(page)
     response = page.request.post(
         f"{base_url}/api/v1/upload-file",
         multipart={"file": {"name": name, "mimeType": mime_type, "buffer": content}},
@@ -781,7 +782,7 @@ def send_message_via_api(
     pi ignores ``model`` (it reads its own ``models.json``), so the default is
     only a schema-valid placeholder for pi workspaces.
     """
-    base_url = page.url.split("#")[0].rstrip("/")
+    base_url = resolve_backend_api_url(page)
     match = re.search(r"/ws/([^/]+)/agent/([^/?#]+)", page.url)
     assert match is not None, f"could not parse workspace/agent ids from URL: {page.url}"
     workspace_id, agent_id = match.group(1), match.group(2)
@@ -966,7 +967,7 @@ def create_zero_agent_workspace(page: Page, *, description: str | None = None, s
     ``preview-branch-name`` endpoint the Add Workspace form uses) so the worktree
     branch never collides across repeated calls.
     """
-    base_url = page.url.split("#")[0].rstrip("/")
+    base_url = resolve_backend_api_url(page)
 
     projects_response = request_with_retry(page.request.get, f"{base_url}/api/v1/projects/active")
     assert projects_response.ok, f"list active projects failed: {projects_response.status} {projects_response.text()}"

@@ -485,6 +485,13 @@ def _create_packaged_instance(
         is_electron=is_electron,
         default_timeout_ms=default_timeout_ms,
         forwarder=None,
+        # Packaged-electron enforces the session token, so page.request cleanup and
+        # test-body API calls authenticate via the x-session-token cookie set above.
+        # _reset_browser_state clears all cookies before every test and relies on
+        # _restore_session_cookie to re-add this one — which no-ops unless the token
+        # is threaded in here. Without it the cookie is gone for the whole test body
+        # and every page.request 403s.
+        session_token=packaged_frontend.session_token,
     )
 
     setattr(config, "_sculptor_instance", instance)

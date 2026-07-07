@@ -2,10 +2,17 @@
 
 Each helper does a GET + PUT + reload against ``/api/v1/config`` rather than
 driving the settings UI, which has timing issues with Radix controls.
+
+The requests target the backend's HTTP origin resolved via
+:func:`resolve_backend_api_url`, not ``page.url``: in packaged Electron builds
+the renderer origin is ``sculptor://app`` (which serves no ``/api`` and which
+Playwright's ``page.request`` cannot fetch), while the backend runs on a
+separate http origin.
 """
 
 from playwright.sync_api import Page
 
+from sculptor.testing.backend_url import resolve_backend_api_url
 from sculptor.testing.elements.base import wait_for_tiptap_ready
 
 # Under heavy load the backend can transiently return 500 (e.g. SQLite busy),
@@ -20,7 +27,7 @@ def _set_user_config_flag(page: Page, field: str, value: object) -> None:
     This is more reliable than toggling through the settings UI, which has
     timing issues with Radix controls.
     """
-    base_url = page.url.split("#")[0].rstrip("/")
+    base_url = resolve_backend_api_url(page)
     config_url = f"{base_url}/api/v1/config"
 
     response = page.request.get(config_url)
