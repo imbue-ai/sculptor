@@ -16,7 +16,7 @@ import { createElement } from "react";
 
 import type { TaskStatus } from "~/api";
 import { ElementIds } from "~/api";
-import type { TerminalConnectionStatus } from "~/common/state/atoms/terminalTabs.ts";
+import { terminalConnectionStatusByPanelIdAtom } from "~/common/state/atoms/terminalTabs.ts";
 import { clearUnreadOverride, getAgentDotStatusWithUnreadOverride } from "~/common/state/atoms/unreadOverrides.ts";
 
 import type { PanelId } from "../sectionTypes.ts";
@@ -160,11 +160,6 @@ export type DynamicTerminalInput = {
   workspaceId: string;
   index: number;
   displayName: string;
-  // The terminal's live WebSocket connection state, shown as a dot on its panel tab.
-  // Supplied by the sync hook from terminalConnectionStatusesAtom, which holds only
-  // unhealthy states (reconnecting/disconnected) for MOUNTED terminals — healthy,
-  // backgrounded (unmounted), and never-opened terminals leave it undefined.
-  connectionStatus?: TerminalConnectionStatus;
   // Closing a terminal tab kills the backend shell with a confirmation.
   // Supplied by the sync hook; absent for callers that don't wire the close flow.
   onRequestClose?: () => void;
@@ -208,22 +203,25 @@ export function deriveDynamicPanels(
       kind: "terminal",
       defaultSection: "bottom",
       component: getTerminalComponent(terminal.workspaceId, terminal.index),
-      connectionStatus: terminal.connectionStatus,
       onRequestClose: terminal.onRequestClose,
       onRename: terminal.onRename,
     });
   }
 
   // Evict cached components whose task/terminal no longer exists, dropping any
-  // unread override for a deleted agent along with its component. The per-id
-  // definition slice is evicted too — its family is keyed by panel id, so without
-  // this it would grow one entry per agent/terminal forever.
+  // unread override for a deleted agent and any terminal's connection-status slice
+  // along with its component. Every one of these families is keyed by panel id, so
+  // without this they would grow one entry per agent/terminal forever.
   for (const id of [...componentCache.keys()]) {
     if (!liveIds.has(id)) {
       componentCache.delete(id);
       panelDefinitionByIdAtom.remove(id);
       if (id.startsWith(AGENT_PANEL_ID_PREFIX)) {
         clearUnreadOverride(id.slice(AGENT_PANEL_ID_PREFIX.length));
+      }
+
+      if (id.startsWith(TERMINAL_PANEL_ID_PREFIX)) {
+        terminalConnectionStatusByPanelIdAtom.remove(id);
       }
     }
   }
