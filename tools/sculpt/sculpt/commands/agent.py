@@ -148,7 +148,7 @@ def create(
     if not prompt and model != "opus":
         cli_error("--model has no effect without --prompt", json_output=json_output)
 
-    client = get_authenticated_client(base_url)
+    client = get_authenticated_client(base_url, json_output)
     workspace_id = resolve_workspace(workspace, client, json_output)
 
     model_lower = model.lower()
@@ -232,11 +232,11 @@ def list_cmd(
     if show_all:
         scope = "all"
     elif ws_id:
-        client = get_authenticated_client(base_url)
+        client = get_authenticated_client(base_url, json_output)
         resolved_ws_id = resolve_workspace_id(client, ws_id, json_output)
         scope = f"workspace:{resolved_ws_id}"
     else:
-        client = get_authenticated_client(base_url)
+        client = get_authenticated_client(base_url, json_output)
         project_id = resolve_project(repo, client, json_output)
         scope = f"project:{project_id}"
 
@@ -503,7 +503,7 @@ def rename(
 ) -> None:
     """Rename an agent."""
     base_url = base_url or get_default_base_url()
-    client = get_authenticated_client(base_url)
+    client = get_authenticated_client(base_url, json_output)
     resolved_agent_id, workspace_id, _ = _resolve_agent_for_action(base_url, client, agent_id, workspace, json_output)
 
     request = RenameAgentRequest(title=title)
@@ -539,7 +539,7 @@ def delete(
 ) -> None:
     """Delete an agent."""
     base_url = base_url or get_default_base_url()
-    client = get_authenticated_client(base_url)
+    client = get_authenticated_client(base_url, json_output)
     resolved_id, workspace_id, _ = _resolve_agent_for_action(base_url, client, agent_id, workspace, json_output)
 
     if not yes:
@@ -580,7 +580,7 @@ def send(
     """Send a message to an agent."""
     base_url = base_url or get_default_base_url()
 
-    client = get_authenticated_client(base_url)
+    client = get_authenticated_client(base_url, json_output)
     resolved_agent_id, workspace_id, current_model = _resolve_agent_for_action(
         base_url, client, agent_id, workspace, json_output
     )
@@ -855,7 +855,7 @@ def interrupt(
 ) -> None:
     """Interrupt a running agent."""
     base_url = base_url or get_default_base_url()
-    client = get_authenticated_client(base_url)
+    client = get_authenticated_client(base_url, json_output)
     resolved_agent_id, workspace_id, _ = _resolve_agent_for_action(base_url, client, agent_id, workspace, json_output)
 
     try:

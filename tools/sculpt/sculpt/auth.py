@@ -3,11 +3,11 @@
 import os
 
 import httpx
-import typer
 
 from sculpt.client import Client
 from sculpt.client.models import LLMModel
-from sculpt.formatting import CONNECTION_HINT
+from sculpt.formatting import cli_error
+from sculpt.formatting import handle_connection_error
 from sculpt.session import SessionTokenError
 from sculpt.session import get_session_token
 
@@ -40,16 +40,13 @@ MODEL_MAPPING: dict[str, LLMModel] = {
 }
 
 
-def get_authenticated_client(base_url: str) -> Client:
+def get_authenticated_client(base_url: str, json_output: bool = False) -> Client:
     """Create an authenticated client for the Sculptor API."""
     client = build_client(base_url)
     try:
         session_token = get_session_token(client)
     except SessionTokenError as e:
-        typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(code=1) from None
+        cli_error(str(e), json_output=json_output)
     except (httpx.ConnectError, httpx.ConnectTimeout):
-        typer.echo(f"Error: Could not connect to Sculptor server at {base_url}", err=True)
-        typer.echo(CONNECTION_HINT, err=True)
-        raise typer.Exit(code=1) from None
+        handle_connection_error(json_output, base_url=base_url)
     return client.with_headers({"x-session-token": session_token})

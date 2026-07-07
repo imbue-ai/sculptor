@@ -77,7 +77,7 @@ def run_cmd(
         cli_error(f"Invalid model '{model}'. Valid options: {valid}", json_output=json_output)
 
     llm_model = MODEL_MAPPING[model_lower]
-    client = get_authenticated_client(base_url)
+    client = get_authenticated_client(base_url, json_output)
 
     # Resolve the harness up front so a bad or terminal choice fails before we
     # create a workspace. `run` always sends a prompt, so terminal harnesses

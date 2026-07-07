@@ -125,10 +125,12 @@ def _options_from_pending_question(update: dict[str, Any] | None) -> list[str] |
     pending = update.get("pendingUserQuestion")
     if not isinstance(pending, dict):
         return None
-    questions = pending.get("questions") or []
-    if not questions or not isinstance(questions[0], dict):
+    questions = pending.get("questions")
+    if not isinstance(questions, list) or not questions or not isinstance(questions[0], dict):
         return None
-    options = questions[0].get("options") or []
+    options = questions[0].get("options")
+    if not isinstance(options, list):
+        return None
     labels = [o.get("label") for o in options if isinstance(o, dict) and o.get("label")]
     return labels or None
 

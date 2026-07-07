@@ -42,7 +42,7 @@ def list_cmd(
 ) -> None:
     """List all known repos."""
     base_url = base_url or get_default_base_url()
-    client = get_authenticated_client(base_url)
+    client = get_authenticated_client(base_url, json_output)
     projects = fetch_projects(client, json_output)
 
     if json_output:
@@ -75,7 +75,7 @@ def show(
 ) -> None:
     """Show details of a repo."""
     base_url = base_url or get_default_base_url()
-    client = get_authenticated_client(base_url)
+    client = get_authenticated_client(base_url, json_output)
     projects = fetch_projects(client, json_output)
 
     project = resolve_by_prefix(

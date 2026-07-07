@@ -85,7 +85,7 @@ def create(
 ) -> None:
     """Create a new workspace."""
     base_url = base_url or get_default_base_url()
-    client = get_authenticated_client(base_url)
+    client = get_authenticated_client(base_url, json_output)
     project_id = resolve_project(repo, client, json_output)
 
     strategy_enum = resolve_strategy(strategy, json_output=json_output)
@@ -148,7 +148,7 @@ def list_cmd(
 ) -> None:
     """List workspaces."""
     base_url = base_url or get_default_base_url()
-    client = get_authenticated_client(base_url)
+    client = get_authenticated_client(base_url, json_output)
 
     if show_all:
         _list_all(client, json_output)
@@ -282,7 +282,7 @@ def show(
 ) -> None:
     """Show details of a workspace (with no argument: this shell's own workspace)."""
     base_url = base_url or get_default_base_url()
-    client = get_authenticated_client(base_url)
+    client = get_authenticated_client(base_url, json_output)
 
     if workspace_id is None:
         env_value = os.environ.get("SCULPT_WORKSPACE_ID")
@@ -352,7 +352,7 @@ def rename(
 ) -> None:
     """Rename a workspace (update its description)."""
     base_url = base_url or get_default_base_url()
-    client = get_authenticated_client(base_url)
+    client = get_authenticated_client(base_url, json_output)
 
     workspaces = _fetch_recent_workspaces(client, json_output)
     ws = resolve_by_prefix(
@@ -395,7 +395,7 @@ def delete(
 ) -> None:
     """Delete a workspace and all its agents."""
     base_url = base_url or get_default_base_url()
-    client = get_authenticated_client(base_url)
+    client = get_authenticated_client(base_url, json_output)
 
     workspaces = _fetch_recent_workspaces(client, json_output)
     ws = resolve_by_prefix(

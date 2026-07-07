@@ -51,7 +51,7 @@ def resolve_agent_id(base_url: str, prefix_or_id: str, json_output: bool) -> str
         # doesn't match the typed route and falls through to the SPA static
         # handler (returns HTML 200). Short-circuit before the HTTP call.
         cli_error(f"Agent not found for '{prefix_or_id}'", json_output=json_output)
-    client = get_authenticated_client(base_url)
+    client = get_authenticated_client(base_url, json_output)
     try:
         response = resolve_agent_by_prefix.sync_detailed(prefix=prefix_or_id, client=client)
     except httpx.ConnectError:

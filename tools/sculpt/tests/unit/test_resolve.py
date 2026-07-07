@@ -313,7 +313,7 @@ class TestWrongIdKindDetail:
 
     def test_agent_id_where_workspace_expected(self) -> None:
         detail = wrong_id_kind_detail("tsk_abc123", "workspace")
-        assert "looks like a agent ID" in detail or "looks like an agent ID" in detail
+        assert "looks like an agent ID" in detail
         assert "sculpt agent show tsk_abc123" in detail
 
     def test_matching_kind_yields_no_hint(self) -> None:
