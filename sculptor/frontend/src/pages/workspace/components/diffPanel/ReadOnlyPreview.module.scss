@@ -27,6 +27,11 @@
 // border / padding / background — fine for inline code but turns a
 // multi-line fenced block into a single weirdly-styled inline blob.
 .markdownBody {
+  // Inset the rendered markdown from the scroll container's edges. Lives here
+  // rather than a Radix `p` prop so this container can be a plain <div> that
+  // reconciles with the code view's <div> across file switches (see the JSX).
+  padding: var(--space-4);
+
   table {
     border-collapse: collapse;
     margin: 0.75em 0;
