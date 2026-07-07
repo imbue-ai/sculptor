@@ -66,6 +66,8 @@ Everything lives in **Settings → Plugins**:
   at which phase and with what error. A reload button on a failed row retries.
 - **Refresh** — re-scans the extensions directory for newly dropped-in
   extensions without restarting the app.
+- **Add** — the field above the list registers an extension served from a URL
+  (see [Installing an extension](#installing-an-extension) below).
 
 Two global switches sit at the top of the section:
 
@@ -83,16 +85,25 @@ Two global switches sit at the top of the section:
 ## Installing an extension
 
 An extension is a folder containing a `manifest.json` and a JavaScript entry
-module. To install one:
+module. There are two ways to install one:
 
-1. Copy the folder into the extensions directory:
-   `~/.sculptor/plugins/<extension-id>/` (the exact path is shown in
-   **Settings → Plugins**, or run `sculpt plugin dir`).
-2. Click **Refresh** in **Settings → Plugins** (or restart the app).
+**From a folder** — copy it into the extensions directory:
+`~/.sculptor/plugins/<extension-id>/` (the exact path is shown in
+**Settings → Plugins**, or run `sculpt plugin dir`). Then click **Refresh** in
+**Settings → Plugins** (or restart the app).
 
-Alternatively, from inside a workspace, `sculpt plugin load <dir> --persist`
-packages a folder and installs it permanently in one step (this requires the
-**Agent plugin loading** toggle when run by an agent).
+**From a URL** — paste the URL the extension is served from (for example
+`http://localhost:5174/my-plugin`) into the field at the top of
+**Settings → Plugins** and click **Add**. Sculptor fetches the extension's
+`manifest.json` — and everything else it needs — from that address. URL
+sources are saved to your list and re-fetched on launch, so they suit both
+extensions hosted somewhere and local development against a dev server, where
+the running extension picks up your edits without a reinstall.
+
+Either kind can also be added from inside a workspace:
+`sculpt plugin load <dir> --persist` packages a folder and installs it
+permanently in one step, and `sculpt plugin load <url>` registers a URL source
+(this requires the **Agent plugin loading** toggle when run by an agent).
 
 ---
 
