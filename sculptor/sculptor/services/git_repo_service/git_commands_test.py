@@ -4,6 +4,8 @@
 """
 
 import os
+from collections.abc import Mapping
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -21,10 +23,28 @@ def _captured_call(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """Patch run_process_to_completion to capture how git is dispatched."""
     captured: dict[str, Any] = {}
 
-    def fake_run_process_to_completion(self: ConcurrencyGroup, **kwargs: Any) -> FinishedProcess:
-        captured.update(kwargs)
+    # Mirror the keyword arguments run_git_command_local passes (rather than a
+    # `**kwargs: Any` catch-all) so the stub stays fully typed.
+    def fake_run_process_to_completion(
+        self: ConcurrencyGroup,
+        command: Sequence[str],
+        cwd: Path | None = None,
+        timeout: float | None = None,
+        is_checked_after: bool = True,
+        env: Mapping[str, str] | None = None,
+        log_command: bool = True,
+        prefer_posix_spawn: bool = False,
+    ) -> FinishedProcess:
+        captured.update(
+            command=command,
+            cwd=cwd,
+            timeout=timeout,
+            env=env,
+            log_command=log_command,
+            prefer_posix_spawn=prefer_posix_spawn,
+        )
         return FinishedProcess(
-            command=tuple(kwargs["command"]),
+            command=tuple(command),
             returncode=0,
             stdout="ok",
             stderr="",
