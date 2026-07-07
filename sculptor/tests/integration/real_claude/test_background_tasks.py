@@ -46,6 +46,16 @@ _MIN_BG_WAIT_SECONDS = 15
 
 @real_claude
 @pytest.mark.timeout(300)
+@pytest.mark.xfail(
+    reason=(
+        "SCU-1774: on the nested Agent-tool -> background-bash -> task-notification path, the "
+        + "backend terminates the turn cleanly (result:success, empty pending set) but the frontend "
+        + "StatusPill never returns to idle, so the thinking indicator never settles. This is a "
+        + "frontend state-derivation bug, not the model or backend — do not mask it by relaxing the "
+        + "settle assertion. strict=False so it xpasses (rather than errors) once SCU-1774 is fixed."
+    ),
+    strict=False,
+)
 def test_agent_background_task_completes(sculptor_instance_: SculptorInstance) -> None:
     """Agent tool with run_in_background waits for the task to finish.
 

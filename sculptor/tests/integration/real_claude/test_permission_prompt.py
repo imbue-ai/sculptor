@@ -35,11 +35,20 @@ _VERIFY_PROMPT = (
     + "Then tell me the content, starting with FILE-CONTENT:"
 )
 
+# The fresh initial_repo the fixture creates has no '.claude/README.md', so the
+# prompt seeds it with the Write tool first (like _WRITE_PROMPT does), then
+# exercises the Edit tool on that existing '.claude/' file. Reading a
+# non-existent file would error, and an errored tool call renders as
+# data-tool-state='error' (not 'completed'), so assert_has_completed_tool_calls
+# would never be satisfied.
 _EDIT_PROMPT = (
     "Do these steps in order:\n"
-    + "1. First use the Read tool to read the file '.claude/README.md'.\n"
-    + "2. Then use the Edit tool to append a comment '<!-- EDIT-SENTINEL-37502 -->' at the end of '.claude/README.md'.\n"
-    + "3. Then use the Read tool to read '.claude/README.md' again and confirm the edit.\n"
+    + "1. First use the Write tool to create the file '.claude/README.md' with this exact content:\n"
+    + "# Test README\n\nInitial content line.\n"
+    + "2. Then use the Edit tool on '.claude/README.md' to append the line "
+    + "'<!-- EDIT-SENTINEL-37502 -->' at the end of the file, keeping the existing content.\n"
+    + "3. Then use the Read tool to read '.claude/README.md' again and confirm both the initial "
+    + "content and the appended comment are present.\n"
     + "4. Reply with exactly: EDIT-DONE-37502"
 )
 
