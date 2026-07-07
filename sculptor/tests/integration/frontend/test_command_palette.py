@@ -378,7 +378,7 @@ def test_command_palette_show_panel_is_jump_only(sculptor_instance_: SculptorIns
     task_page = start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Cmd+K Show Panel WS")
     left = PlaywrightWorkspaceSection(page, "left")
 
-    # First run: reveals the Files panel (seeded into the collapsed left section).
+    # First run: reveals the Files panel (seeded, open in the left section).
     palette = task_page.open_command_palette()
     palette.type_query("Show Files")
     palette.select_by_command_id("view.toggle_panel.files")
