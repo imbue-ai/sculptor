@@ -91,7 +91,7 @@ def run_cmd(
             json_output=json_output,
         )
 
-    project_id = resolve_project(repo, client)
+    project_id = resolve_project(repo, client, json_output)
 
     strategy_enum = resolve_strategy(strategy, json_output=json_output)
 

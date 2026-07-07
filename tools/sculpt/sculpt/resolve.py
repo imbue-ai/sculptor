@@ -22,6 +22,7 @@ from sculpt.client.models.project import Project
 from sculpt.client.models.project_initialization_request import ProjectInitializationRequest
 from sculpt.formatting import cli_error
 from sculpt.formatting import handle_connection_error
+from sculpt.formatting import truncate
 
 T = TypeVar("T")
 
@@ -56,7 +57,11 @@ def resolve_agent_id(base_url: str, prefix_or_id: str, json_output: bool) -> str
     except httpx.ConnectError:
         handle_connection_error(json_output)
     if response.status_code == HTTPStatus.NOT_FOUND:
-        cli_error(f"Agent not found for '{prefix_or_id}'", json_output=json_output)
+        cli_error(
+            f"Agent not found for '{prefix_or_id}'",
+            detail=wrong_id_kind_detail(prefix_or_id, "agent"),
+            json_output=json_output,
+        )
     if response.status_code == HTTPStatus.CONFLICT:
         # The server's detail string includes the matching ids; surface the full
         # message verbatim so the user can pick a longer prefix.
@@ -86,43 +91,42 @@ def fetch_repo_path_lookup(client: Client) -> dict[str, str]:
     return {p.object_id: repo_path_from_url(p.user_git_repo_url) for p in projects}
 
 
-def fetch_projects(client: Client) -> list[Project]:
+def fetch_projects(client: Client, json_output: bool = False) -> list[Project]:
     """Fetch all projects from the API."""
     try:
         result = list_projects.sync(client=client)  # type: ignore[arg-type]
     except httpx.ConnectError:
-        typer.echo("Error: Could not connect to Sculptor server", err=True)
-        raise typer.Exit(code=1) from None
+        handle_connection_error(json_output)
 
     if result is None:
-        typer.echo("Error: Failed to list repos (no response)", err=True)
-        raise typer.Exit(code=1)
+        cli_error("Failed to list repos", detail="No response from server", json_output=json_output)
 
     return result
 
 
-def resolve_project(repo: str | None, client: Client) -> str:
+def resolve_project(repo: str | None, client: Client, json_output: bool = False) -> str:
     """Resolve a project ID through the priority chain: --repo > env var > cwd.
 
     Args:
         repo: Explicit repo path from --repo flag, or None.
         client: An authenticated API client.
+        json_output: Whether to format errors as JSON.
 
     Returns:
         The resolved project ID string.
     """
     if repo is not None:
-        return _resolve_from_repo(repo, client)
+        return _resolve_from_repo(repo, client, json_output)
 
     project_id = os.environ.get("SCULPT_PROJECT_ID")
     if project_id is not None:
         typer.echo("Using repo from SCULPT_PROJECT_ID", err=True)
         return project_id
 
-    return _resolve_from_cwd(client)
+    return _resolve_from_cwd(client, json_output)
 
 
-def _resolve_from_repo(repo: str, client: Client) -> str:
+def _resolve_from_repo(repo: str, client: Client, json_output: bool = False) -> str:
     absolute_path = os.path.abspath(repo)
     request = ProjectInitializationRequest(project_path=absolute_path)
 
@@ -132,8 +136,7 @@ def _resolve_from_repo(repo: str, client: Client) -> str:
             body=request,
         )
     except httpx.ConnectError:
-        typer.echo("Error: Could not connect to Sculptor server", err=True)
-        raise typer.Exit(code=1) from None
+        handle_connection_error(json_output)
 
     if response.status_code == HTTPStatus.OK:
         parsed = response.parsed
@@ -158,17 +161,11 @@ def _resolve_from_repo(repo: str, client: Client) -> str:
 
     if response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
         parsed = response.parsed
-        typer.echo(f"Error: Validation error - {parsed}", err=True)
-        raise typer.Exit(code=1)
+        cli_error("Validation error", detail=str(parsed), json_output=json_output)
 
     if detail is not None:
-        typer.echo(f"Error: {detail}", err=True)
-    else:
-        typer.echo(
-            f"Error: Failed to initialize repo (status {response.status_code})",
-            err=True,
-        )
-    raise typer.Exit(code=1)
+        cli_error(detail, json_output=json_output)
+    cli_error(f"Failed to initialize repo (status {response.status_code})", json_output=json_output)
 
 
 def _find_existing_project_for_path(client: Client, absolute_path: str) -> str | None:
@@ -227,62 +224,123 @@ def _git_canonical_repo_path(path: str) -> str | None:
     return str(resolved)
 
 
-def _resolve_from_cwd(client: Client) -> str:
+def _resolve_from_cwd(client: Client, json_output: bool = False) -> str:
     cwd = os.getcwd()
     cwd_uri = f"file:///{cwd.lstrip('/')}"
 
-    try:
-        projects = list_projects.sync(client=client)  # type: ignore[arg-type]
-    except httpx.ConnectError:
-        typer.echo("Error: Could not connect to Sculptor server", err=True)
-        raise typer.Exit(code=1) from None
-
-    if projects is None:
-        typer.echo("Error: Failed to list repos (no response)", err=True)
-        raise typer.Exit(code=1)
+    projects = fetch_projects(client, json_output)
 
     for project in projects:
         if project.user_git_repo_url == cwd_uri:
             typer.echo(f"Using repo from current directory: {cwd}", err=True)
             return project.object_id
 
-    typer.echo(
-        f"No repo found for {cwd}. Use --repo to create one, or set"
-        + " SCULPT_PROJECT_ID to an existing project id.",
-        err=True,
+    cli_error(
+        f"No repo found for {cwd}",
+        detail="Use --repo to create one, or set SCULPT_PROJECT_ID to an existing project id.",
+        json_output=json_output,
     )
-    raise typer.Exit(code=1)
 
 
-def resolve_by_prefix(prefix: str, candidates: list[T], id_getter: Callable[[T], str]) -> T:
-    """Find a unique candidate matching the given ID prefix.
+def find_prefix_matches(prefix: str, candidates: list[T], id_getter: Callable[[T], str]) -> list[T]:
+    """Return the candidates whose ID starts with ``prefix``.
 
-    Args:
-        prefix: The user-provided ID prefix.
-        candidates: List of candidate objects to search.
-        id_getter: Callable that extracts the ID string from a candidate.
-
-    Returns:
-        The unique matching candidate.
+    An exact ID match wins outright (returns just that candidate), so a full ID
+    is never reported as ambiguous even when it is a prefix of another ID.
     """
     matches: list[T] = []
     for candidate in candidates:
         candidate_id = id_getter(candidate)
         if candidate_id == prefix:
-            return candidate
+            return [candidate]
         if candidate_id.startswith(prefix):
             matches.append(candidate)
+    return matches
 
-    if len(matches) == 0:
-        typer.echo(f"No resource matches prefix '{prefix}'", err=True)
-        raise typer.Exit(code=1)
 
-    if len(matches) > 1:
-        match_ids = "\n  ".join(id_getter(m) for m in matches)
-        typer.echo(f"Ambiguous prefix '{prefix}'. Matches:\n  {match_ids}", err=True)
-        raise typer.Exit(code=1)
+# ID-type prefixes and the resource noun + CLI command group each belongs to,
+# used to catch e.g. a workspace ID passed where an agent ID is expected.
+_ID_KIND_BY_PREFIX = {
+    "tsk_": ("agent", "sculpt agent"),
+    "ws_": ("workspace", "sculpt workspace"),
+    "prj_": ("repo", "sculpt repo"),
+}
 
-    return matches[0]
+# Ambiguous-prefix errors list at most this many matches before eliding.
+_MAX_AMBIGUOUS_MATCHES_SHOWN = 10
+
+_AMBIGUOUS_LABEL_MAX_LENGTH = 40
+
+
+def wrong_id_kind_detail(prefix: str, resource_noun: str) -> str:
+    """A redirect hint when ``prefix`` carries another resource kind's ID prefix.
+
+    Returns an empty string when the prefix doesn't look like a known ID kind,
+    or already matches the expected kind (a plain not-found, not a mix-up).
+    """
+    for id_prefix, (noun, command_group) in _ID_KIND_BY_PREFIX.items():
+        if prefix.startswith(id_prefix) and noun != resource_noun:
+            article = "an" if noun[0] in "aeiou" else "a"
+            return f"'{prefix}' looks like {article} {noun} ID — try `{command_group} show {prefix}`"
+    return ""
+
+
+def resolve_by_prefix(
+    prefix: str,
+    candidates: list[T],
+    id_getter: Callable[[T], str],
+    *,
+    resource_noun: str = "resource",
+    json_output: bool = False,
+    label_getter: Callable[[T], str | None] | None = None,
+    scope_description: str = "",
+) -> T:
+    """Find a unique candidate matching the given ID prefix, or exit with an error.
+
+    Args:
+        prefix: The user-provided ID prefix.
+        candidates: List of candidate objects to search.
+        id_getter: Callable that extracts the ID string from a candidate.
+        resource_noun: What the candidates are ("agent", "workspace", ...), for
+            error messages.
+        json_output: Whether to format errors as JSON.
+        label_getter: Optional callable extracting a human label (title,
+            description) shown next to each ID in ambiguity errors.
+        scope_description: Where the search looked (e.g. "workspace ws_123"),
+            appended to the not-found message so a scoped miss is
+            distinguishable from the resource not existing at all.
+
+    Returns:
+        The unique matching candidate.
+    """
+    matches = find_prefix_matches(prefix, candidates, id_getter)
+
+    if len(matches) == 1:
+        return matches[0]
+
+    if not matches:
+        scope_suffix = f" in {scope_description}" if scope_description else ""
+        cli_error(
+            f"No {resource_noun} matches '{prefix}'{scope_suffix}",
+            detail=wrong_id_kind_detail(prefix, resource_noun),
+            json_output=json_output,
+        )
+
+    lines = []
+    for match in matches[:_MAX_AMBIGUOUS_MATCHES_SHOWN]:
+        label = label_getter(match) if label_getter is not None else None
+        if label:
+            lines.append(f"  {id_getter(match)}  {truncate(label, _AMBIGUOUS_LABEL_MAX_LENGTH)}")
+        else:
+            lines.append(f"  {id_getter(match)}")
+    elided = len(matches) - _MAX_AMBIGUOUS_MATCHES_SHOWN
+    if elided > 0:
+        lines.append(f"  ... and {elided} more")
+    cli_error(
+        f"Ambiguous prefix '{prefix}' matches {len(matches)} {resource_noun}s",
+        detail="\n".join(lines),
+        json_output=json_output,
+    )
 
 
 def resolve_workspace_id(client: Client, workspace_id_or_prefix: str, json_output: bool = False) -> str:
@@ -306,5 +364,12 @@ def resolve_workspace_id(client: Client, workspace_id_or_prefix: str, json_outpu
     if result is None:
         cli_error("Failed to list workspaces", detail="No response from server", json_output=json_output)
 
-    ws = resolve_by_prefix(workspace_id_or_prefix, result.workspaces, lambda w: w.object_id)
+    ws = resolve_by_prefix(
+        workspace_id_or_prefix,
+        result.workspaces,
+        lambda w: w.object_id,
+        resource_noun="workspace",
+        json_output=json_output,
+        label_getter=lambda w: w.description,
+    )
     return ws.object_id

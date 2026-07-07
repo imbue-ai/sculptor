@@ -25,6 +25,13 @@ class WorkspaceListItem(BaseModel):
     id: str = Field(description="Unique workspace ID")
     repo_id: str = Field(description="Associated repo/project ID")
     repo_path: str = Field(description="Local filesystem path of the repo")
+    working_directory: str | None = Field(
+        default=None,
+        description="The workspace's checkout directory on disk (null until its environment exists)",
+    )
+    current_branch: str | None = Field(
+        default=None, description="Branch currently checked out in the workspace (null when unknown)"
+    )
     description: str | None = Field(description="User-provided description")
     strategy: str = Field(description="Workspace initialization strategy")
     source_branch: str | None = Field(description="Source branch name")
@@ -32,6 +39,10 @@ class WorkspaceListItem(BaseModel):
     is_open: bool = Field(description="Whether the workspace is open")
     created_at: str = Field(description="ISO 8601 datetime of creation")
     last_activity_at: str = Field(description="ISO 8601 datetime of last activity")
+    is_self: bool = Field(
+        default=False,
+        description="Whether this is the calling shell's own workspace (matches SCULPT_WORKSPACE_ID)",
+    )
 
 
 class WorkspaceListProjectItem(BaseModel):
@@ -39,6 +50,13 @@ class WorkspaceListProjectItem(BaseModel):
 
     id: str = Field(description="Unique workspace ID")
     repo_id: str = Field(description="Associated repo/project ID")
+    working_directory: str | None = Field(
+        default=None,
+        description="The workspace's checkout directory on disk (null until its environment exists)",
+    )
+    current_branch: str | None = Field(
+        default=None, description="Branch currently checked out in the workspace (null when unknown)"
+    )
     description: str | None = Field(description="User-provided description")
     strategy: str = Field(description="Workspace initialization strategy")
     source_branch: str | None = Field(description="Source branch the workspace was cut from")
@@ -47,6 +65,10 @@ class WorkspaceListProjectItem(BaseModel):
     )
     requested_branch_name: str | None = Field(description="The workspace's own working branch name")
     is_deleted: bool = Field(description="Whether the workspace has been deleted")
+    is_self: bool = Field(
+        default=False,
+        description="Whether this is the calling shell's own workspace (matches SCULPT_WORKSPACE_ID)",
+    )
 
 
 class WorkspaceShowOutput(BaseModel):
@@ -55,6 +77,13 @@ class WorkspaceShowOutput(BaseModel):
     id: str = Field(description="Unique workspace ID")
     repo_id: str = Field(description="Associated repo/project ID")
     repo_path: str = Field(description="Local filesystem path of the repo")
+    working_directory: str | None = Field(
+        default=None,
+        description="The workspace's checkout directory on disk (null until its environment exists)",
+    )
+    current_branch: str | None = Field(
+        default=None, description="Branch currently checked out in the workspace (null when unknown)"
+    )
     description: str | None = Field(description="User-provided description")
     strategy: str = Field(description="Workspace initialization strategy")
     source_branch: str | None = Field(description="Source branch name")
@@ -108,6 +137,10 @@ class AgentListItem(BaseModel):
     model: str | None = Field(description="LLM model identifier (null for terminal agents)")
     workspace_id: str = Field(description="Parent workspace ID")
     created_at: str = Field(description="ISO 8601 datetime of creation")
+    is_self: bool = Field(
+        default=False,
+        description="Whether this is the calling shell's own agent (matches SCULPT_AGENT_ID)",
+    )
 
 
 class AgentShowOutput(BaseModel):
@@ -130,6 +163,9 @@ class AgentShowOutput(BaseModel):
     task_total: int = Field(description="Total number of tasks")
     current_task_subject: str | None = Field(description="Subject of the in-progress task")
     waiting_detail: str | None = Field(description="Detail about what the agent is waiting for")
+    waiting_options: list[str] | None = Field(
+        description="Answer options of the pending question the agent is waiting on (user-only to answer)"
+    )
     error_detail: str | None = Field(description="Error detail if agent is in error state")
 
 
@@ -164,6 +200,9 @@ class AgentStatusOutput(BaseModel):
     current_activity: str | None = Field(description="What the agent is currently doing")
     last_activity: str | None = Field(description="Last recorded activity")
     waiting_detail: str | None = Field(description="Detail about what the agent is waiting for")
+    waiting_options: list[str] | None = Field(
+        description="Answer options of the pending question the agent is waiting on (user-only to answer)"
+    )
     error_detail: str | None = Field(description="Error detail if agent is in error state")
     task_completed: int = Field(description="Number of completed tasks")
     task_total: int = Field(description="Total number of tasks")

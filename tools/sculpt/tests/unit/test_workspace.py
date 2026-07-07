@@ -92,8 +92,10 @@ def _recent_workspace_dict(
     project_id: str = "prj_test123",
     description: str = "Test workspace",
     project_name: str = "test-project",
+    working_directory: str | None = None,
+    current_branch: str | None = None,
 ) -> dict[str, Any]:
-    return {
+    response = {
         "objectId": object_id,
         "projectId": project_id,
         "description": description,
@@ -106,6 +108,13 @@ def _recent_workspace_dict(
         "isOpen": True,
         "lastActivityAt": "2024-01-15T11:00:00Z",
     }
+    # Older servers omit these fields entirely (the client sees UNSET); only
+    # include them when a test explicitly provides values.
+    if working_directory is not None:
+        response["workingDirectory"] = working_directory
+    if current_branch is not None:
+        response["currentBranch"] = current_branch
+    return response
 
 
 class TestWorkspaceCreate:
@@ -468,6 +477,305 @@ class TestWorkspaceShow:
         result = runner.invoke(app, ["workspace", "show", "nonexistent"])
 
         assert result.exit_code == 1
+
+
+class TestWorkspaceShowDefault:
+    """`workspace show` with no argument targets the shell's own workspace."""
+
+    @respx.mock
+    def test_show_no_arg_uses_env_workspace(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("SCULPT_WORKSPACE_ID", "ws_test123")
+        _mock_session()
+        _mock_projects_list()
+        respx.get("http://localhost:5050/api/v1/workspaces/recent").mock(
+            return_value=Response(200, json={"workspaces": [_recent_workspace_dict()]})
+        )
+
+        result = runner.invoke(app, ["workspace", "show"])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        assert "ws_test123" in result.output
+        assert "Using workspace from SCULPT_WORKSPACE_ID" in result.stderr
+
+    @respx.mock
+    def test_show_no_arg_without_env_errors(self, runner: CliRunner) -> None:
+        # Client auth happens before the env check, so the session endpoint
+        # must respond for the test to reach the WORKSPACE_ID error.
+        _mock_session()
+
+        result = runner.invoke(app, ["workspace", "show"])
+
+        assert result.exit_code == 1
+        assert "SCULPT_WORKSPACE_ID" in result.stderr
+
+
+class TestWorkspacePathAndBranch:
+    """show/list surface the live checkout location and branch when the server provides them."""
+
+    @respx.mock
+    def test_show_renders_path_and_current_branch(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_projects_list()
+        respx.get("http://localhost:5050/api/v1/workspaces/recent").mock(
+            return_value=Response(
+                200,
+                json={
+                    "workspaces": [
+                        _recent_workspace_dict(
+                            working_directory="/tmp/worktrees/foo",
+                            current_branch="dev/feature-x",
+                        )
+                    ]
+                },
+            )
+        )
+
+        result = runner.invoke(app, ["workspace", "show", "ws_test123"])
+
+        assert result.exit_code == 0
+        assert "Path: /tmp/worktrees/foo" in result.output
+        assert "Current Branch: dev/feature-x" in result.output
+
+    @respx.mock
+    def test_show_json_includes_path_and_branch(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_projects_list()
+        respx.get("http://localhost:5050/api/v1/workspaces/recent").mock(
+            return_value=Response(
+                200,
+                json={
+                    "workspaces": [
+                        _recent_workspace_dict(
+                            working_directory="/tmp/worktrees/foo",
+                            current_branch="dev/feature-x",
+                        )
+                    ]
+                },
+            )
+        )
+
+        result = runner.invoke(app, ["workspace", "show", "ws_test123", "--json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["working_directory"] == "/tmp/worktrees/foo"
+        assert data["current_branch"] == "dev/feature-x"
+
+    @respx.mock
+    def test_show_tolerates_older_server_without_fields(self, runner: CliRunner) -> None:
+        """A server that doesn't send workingDirectory/currentBranch yields nulls, not a crash."""
+        _mock_session()
+        _mock_projects_list()
+        respx.get("http://localhost:5050/api/v1/workspaces/recent").mock(
+            return_value=Response(200, json={"workspaces": [_recent_workspace_dict()]})
+        )
+
+        result = runner.invoke(app, ["workspace", "show", "ws_test123", "--json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["working_directory"] is None
+        assert data["current_branch"] is None
+
+        result = runner.invoke(app, ["workspace", "show", "ws_test123"])
+        assert result.exit_code == 0
+        assert "Path:" not in result.output
+
+    @respx.mock
+    def test_list_all_prefers_current_branch_over_source(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_projects_list()
+        respx.get("http://localhost:5050/api/v1/workspaces/recent").mock(
+            return_value=Response(
+                200,
+                json={"workspaces": [_recent_workspace_dict(current_branch="dev/live-branch")]},
+            )
+        )
+
+        result = runner.invoke(app, ["workspace", "list", "--all"])
+
+        assert result.exit_code == 0
+        assert "dev/live-branch" in result.output
+        # The source branch ("main") is only the fallback when no live branch is known.
+        assert "main" not in result.output
+
+    @respx.mock
+    def test_list_all_json_includes_path_and_branch(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_projects_list()
+        respx.get("http://localhost:5050/api/v1/workspaces/recent").mock(
+            return_value=Response(
+                200,
+                json={
+                    "workspaces": [
+                        _recent_workspace_dict(
+                            working_directory="/tmp/worktrees/foo",
+                            current_branch="dev/feature-x",
+                        )
+                    ]
+                },
+            )
+        )
+
+        result = runner.invoke(app, ["workspace", "list", "--all", "--json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data[0]["working_directory"] == "/tmp/worktrees/foo"
+        assert data[0]["current_branch"] == "dev/feature-x"
+
+    @respx.mock
+    def test_list_project_json_includes_path_and_branch(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_initialize_project()
+        workspace = _workspace_response_dict()
+        workspace["workingDirectory"] = "/tmp/worktrees/foo"
+        workspace["currentBranch"] = "dev/feature-x"
+        respx.get("http://localhost:5050/api/v1/projects/prj_test123/workspaces").mock(
+            return_value=Response(200, json=[workspace])
+        )
+
+        result = runner.invoke(app, ["workspace", "list", "--repo", "/tmp/test", "--json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data[0]["working_directory"] == "/tmp/worktrees/foo"
+        assert data[0]["current_branch"] == "dev/feature-x"
+
+
+class TestWorkspaceSelfMarker:
+    """`workspace list` flags the calling shell's own workspace (SCULPT_WORKSPACE_ID)."""
+
+    @respx.mock
+    def test_list_all_json_flags_only_own_workspace(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("SCULPT_WORKSPACE_ID", "ws_test123")
+        _mock_session()
+        _mock_projects_list()
+        respx.get("http://localhost:5050/api/v1/workspaces/recent").mock(
+            return_value=Response(
+                200,
+                json={
+                    "workspaces": [
+                        _recent_workspace_dict(object_id="ws_test123"),
+                        _recent_workspace_dict(object_id="ws_other456"),
+                    ]
+                },
+            )
+        )
+
+        result = runner.invoke(app, ["workspace", "list", "--all", "--json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        flags = {item["id"]: item["is_self"] for item in data}
+        assert flags == {"ws_test123": True, "ws_other456": False}
+
+    @respx.mock
+    def test_list_all_table_marks_own_workspace_with_legend(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("SCULPT_WORKSPACE_ID", "ws_test123")
+        _mock_session()
+        _mock_projects_list()
+        respx.get("http://localhost:5050/api/v1/workspaces/recent").mock(
+            return_value=Response(
+                200,
+                json={
+                    "workspaces": [
+                        _recent_workspace_dict(object_id="ws_test123"),
+                        _recent_workspace_dict(object_id="ws_other456"),
+                    ]
+                },
+            )
+        )
+
+        result = runner.invoke(app, ["workspace", "list", "--all"])
+
+        assert result.exit_code == 0
+        assert "ws_test123 *" in result.output
+        assert "ws_other456 *" not in result.output
+        assert "* = this workspace (SCULPT_WORKSPACE_ID)" in result.stderr
+
+    @respx.mock
+    def test_list_project_json_flags_only_own_workspace(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("SCULPT_WORKSPACE_ID", "ws_test123")
+        _mock_session()
+        _mock_initialize_project()
+        respx.get("http://localhost:5050/api/v1/projects/prj_test123/workspaces").mock(
+            return_value=Response(
+                200,
+                json=[
+                    _workspace_response_dict(object_id="ws_test123"),
+                    _workspace_response_dict(object_id="ws_other456"),
+                ],
+            )
+        )
+
+        result = runner.invoke(app, ["workspace", "list", "--repo", "/tmp/test", "--json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        flags = {item["id"]: item["is_self"] for item in data}
+        assert flags == {"ws_test123": True, "ws_other456": False}
+
+    @respx.mock
+    def test_list_project_table_marks_own_workspace_with_legend(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("SCULPT_WORKSPACE_ID", "ws_test123")
+        _mock_session()
+        _mock_initialize_project()
+        respx.get("http://localhost:5050/api/v1/projects/prj_test123/workspaces").mock(
+            return_value=Response(
+                200,
+                json=[
+                    _workspace_response_dict(object_id="ws_test123"),
+                    _workspace_response_dict(object_id="ws_other456"),
+                ],
+            )
+        )
+
+        result = runner.invoke(app, ["workspace", "list", "--repo", "/tmp/test"])
+
+        assert result.exit_code == 0
+        assert "ws_test123 *" in result.output
+        assert "ws_other456 *" not in result.output
+        assert "* = this workspace (SCULPT_WORKSPACE_ID)" in result.stderr
+
+    @respx.mock
+    def test_list_all_without_env_has_no_marker_or_legend(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_projects_list()
+        respx.get("http://localhost:5050/api/v1/workspaces/recent").mock(
+            return_value=Response(200, json={"workspaces": [_recent_workspace_dict()]})
+        )
+
+        result = runner.invoke(app, ["workspace", "list", "--all"])
+
+        assert result.exit_code == 0
+        assert "*" not in result.output
+        assert "* = this workspace" not in result.stderr
+
+
+class TestWorkspaceConnectionErrorHint:
+    @respx.mock
+    def test_list_connection_error_mentions_port_hint(self, runner: CliRunner) -> None:
+        _mock_session()
+        respx.get("http://localhost:5050/api/v1/workspaces/recent").mock(
+            side_effect=ConnectError("Connection refused")
+        )
+
+        result = runner.invoke(app, ["workspace", "list", "--all"])
+
+        assert result.exit_code == 1
+        assert "SCULPT_API_PORT" in result.stderr
+        assert "--base-url" in result.stderr
 
 
 class TestWorkspaceRename:

@@ -7,6 +7,7 @@ import typer
 
 from sculpt.client import Client
 from sculpt.client.models import LLMModel
+from sculpt.formatting import CONNECTION_HINT
 from sculpt.session import SessionTokenError
 from sculpt.session import get_session_token
 
@@ -49,5 +50,6 @@ def get_authenticated_client(base_url: str) -> Client:
         raise typer.Exit(code=1) from None
     except (httpx.ConnectError, httpx.ConnectTimeout):
         typer.echo(f"Error: Could not connect to Sculptor server at {base_url}", err=True)
+        typer.echo(CONNECTION_HINT, err=True)
         raise typer.Exit(code=1) from None
     return client.with_headers({"x-session-token": session_token})

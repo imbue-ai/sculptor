@@ -85,9 +85,26 @@ def cli_error(
     raise typer.Exit(code=exit_code)
 
 
-def handle_connection_error(json_output: bool = False, *, exit_code: int = 1) -> NoReturn:
+# Guidance for connection failures: the server is the local Sculptor app, and
+# a wrong port (the app picks a free one and exports SCULPT_API_PORT into its
+# agent shells) is the usual cause outside those shells.
+CONNECTION_HINT = (
+    "Is the Sculptor app running? If it serves a non-default port, set"
+    + " SCULPT_API_PORT or pass --base-url."
+)
+
+
+def handle_connection_error(
+    json_output: bool = False, *, base_url: str | None = None, exit_code: int = 1
+) -> NoReturn:
     """Handle a connection error to the Sculptor server."""
-    cli_error("Could not connect to Sculptor server", json_output=json_output, exit_code=exit_code)
+    target = f" at {base_url}" if base_url else ""
+    cli_error(
+        f"Could not connect to Sculptor server{target}",
+        detail=CONNECTION_HINT,
+        json_output=json_output,
+        exit_code=exit_code,
+    )
 
 
 def is_tty() -> bool:

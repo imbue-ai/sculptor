@@ -37,6 +37,10 @@ class AgentSnapshot(pydantic.BaseModel):
     task_total: int
     current_task_subject: str | None
     waiting_detail: str | None
+    # Answer options of the pending AskUserQuestion, from the task update's
+    # server-maintained pendingUserQuestion (None when the agent isn't blocked
+    # on one, or when the connection scope carries no task update).
+    waiting_options: list[str] | None = None
     error_detail: str | None
     updated_at: str
     title: str | None
@@ -108,10 +112,32 @@ def _is_waiting_state(snapshot: AgentSnapshot) -> bool:
     return snapshot.status == "WAITING"
 
 
+def _options_from_pending_question(update: dict[str, Any] | None) -> list[str] | None:
+    """Option labels of the pending AskUserQuestion carried by a task update.
+
+    The server maintains ``pendingUserQuestion`` (set when the agent asks,
+    cleared when the user answers), so its presence is authoritative — no
+    message-history scanning needed. Returns the first question's option
+    labels, or None when nothing is pending.
+    """
+    if not update:
+        return None
+    pending = update.get("pendingUserQuestion")
+    if not isinstance(pending, dict):
+        return None
+    questions = pending.get("questions") or []
+    if not questions or not isinstance(questions[0], dict):
+        return None
+    options = questions[0].get("options") or []
+    labels = [o.get("label") for o in options if isinstance(o, dict) and o.get("label")]
+    return labels or None
+
+
 def _snapshot_from_view(
-    task_id: str, view: dict[str, Any], messages: list[dict[str, Any]] | None = None
+    task_id: str, view: dict[str, Any], update: dict[str, Any] | None = None
 ) -> AgentSnapshot:
-    """Build an AgentSnapshot from a single task view dict."""
+    """Build an AgentSnapshot from a task view dict plus its optional task update."""
+    update = update or {}
     return AgentSnapshot(
         task_id=view.get("id", task_id),
         status=view.get("status", "UNKNOWN"),
@@ -122,6 +148,7 @@ def _snapshot_from_view(
         task_total=view.get("taskTotal", 0),
         current_task_subject=view.get("currentTaskSubject"),
         waiting_detail=view.get("waitingDetail"),
+        waiting_options=_options_from_pending_question(update),
         error_detail=view.get("errorDetail"),
         updated_at=view.get("updatedAt", ""),
         title=view.get("title"),
@@ -132,7 +159,7 @@ def _snapshot_from_view(
         created_at=view.get("createdAt", ""),
         is_deleted=view.get("isDeleted", False),
         artifact_names=view.get("artifactNames", []),
-        messages=messages or [],
+        messages=update.get("chatMessages", []),
     )
 
 
@@ -143,9 +170,8 @@ def _extract_snapshot(task_id: str, dump: dict[str, Any]) -> AgentSnapshot:
 
     view = task_views[task_id]
     update = task_updates.get(task_id, {})
-    messages = update.get("chatMessages", [])
 
-    return _snapshot_from_view(task_id, view, messages)
+    return _snapshot_from_view(task_id, view, update)
 
 
 async def _receive_initial_dump(ws: Any, timeout: float = 30.0) -> dict[str, Any]:
@@ -186,7 +212,11 @@ async def _fetch_all_agents_async(ws_url: str, timeout: float) -> list[AgentSnap
         async with websockets.connect(ws_url, max_size=None) as ws:
             dump = await _receive_initial_dump(ws, timeout=timeout)
             task_views = dump.get("taskViewsByTaskId", {})
-            return [_snapshot_from_view(task_id, view) for task_id, view in task_views.items()]
+            task_updates = dump.get("taskUpdateByTaskId", {})
+            return [
+                _snapshot_from_view(task_id, view, task_updates.get(task_id))
+                for task_id, view in task_views.items()
+            ]
     except websockets.exceptions.InvalidStatus as e:
         raise _wrap_invalid_status(e) from e
 
@@ -224,6 +254,7 @@ def _status_signature(snapshot: AgentSnapshot) -> tuple[Any, ...]:
         snapshot.task_total,
         snapshot.current_task_subject,
         snapshot.waiting_detail,
+        tuple(snapshot.waiting_options) if snapshot.waiting_options is not None else None,
         snapshot.error_detail,
         snapshot.is_deleted,
     )
@@ -245,6 +276,7 @@ async def _follow_loop(
     on_partial: Callable[[dict[str, Any] | None], None],
     last_status_sig: list[tuple[Any, ...]],
     last_partial_sig: list[tuple[Any, ...]],
+    last_waiting_options: list[list[str] | None],
 ) -> ExitReason:
     """Process incremental WebSocket updates until a terminal/waiting state."""
     while True:
@@ -255,9 +287,17 @@ async def _follow_loop(
 
         exit_reason: ExitReason | None = None
 
+        # A frame may carry the view without the update; remember the latest
+        # pending-question state so such view-only snapshots still render it.
+        task_updates = dump.get("taskUpdateByTaskId", {})
+        if task_id in task_updates:
+            last_waiting_options[0] = _options_from_pending_question(task_updates[task_id])
+
         task_views = dump.get("taskViewsByTaskId", {})
         if task_id in task_views:
-            snapshot = _snapshot_from_view(task_id, task_views[task_id])
+            snapshot = _snapshot_from_view(task_id, task_views[task_id]).model_copy(
+                update={"waiting_options": last_waiting_options[0]}
+            )
             sig = _status_signature(snapshot)
             if sig != last_status_sig[0]:
                 last_status_sig[0] = sig
@@ -267,7 +307,6 @@ async def _follow_loop(
             elif _is_waiting_state(snapshot):
                 exit_reason = ExitReason.WAITING
 
-        task_updates = dump.get("taskUpdateByTaskId", {})
         if task_id in task_updates:
             update = task_updates[task_id]
             all_messages = update.get("chatMessages", [])
@@ -308,6 +347,7 @@ async def _follow_agent_async(
     task_id = agent_id
     last_status_sig: list[tuple[Any, ...]] = [()]
     last_partial_sig: list[tuple[Any, ...]] = [()]
+    last_waiting_options: list[list[str] | None] = [None]
     on_partial_cb: Callable[[dict[str, Any] | None], None] = on_partial or (lambda _p: None)
 
     while True:
@@ -320,6 +360,7 @@ async def _follow_agent_async(
                     raise AgentNotFoundError(f"Agent {task_id} not found in scoped frame")
 
                 snapshot = _extract_snapshot(task_id, dump)
+                last_waiting_options[0] = snapshot.waiting_options
 
                 is_reconnect = retry_count > 0
                 if is_reconnect and on_reconnect is not None:
@@ -352,6 +393,7 @@ async def _follow_agent_async(
                     on_partial_cb,
                     last_status_sig,
                     last_partial_sig,
+                    last_waiting_options,
                 )
                 return result
 

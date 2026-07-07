@@ -24,6 +24,7 @@ from sculpt.client.models.agent_type_name import AgentTypeName
 from sculpt.client.models.coding_agent_task_view import CodingAgentTaskView
 from sculpt.client.models.create_agent_request import CreateAgentRequest
 from sculpt.client.models.http_validation_error import HTTPValidationError
+from sculpt.client.models.llm_model import LLMModel
 from sculpt.client.models.rename_agent_request import RenameAgentRequest
 from sculpt.client.models.send_message_request import SendMessageRequest
 from sculpt.client.models.task_status import TaskStatus
@@ -57,6 +58,7 @@ from sculpt.formatting import is_tty
 from sculpt.formatting import overwrite_lines
 from sculpt.formatting import truncate
 from sculpt.message_formatting import format_message
+from sculpt.resolve import find_prefix_matches
 from sculpt.resolve import resolve_agent_id
 from sculpt.resolve import resolve_by_prefix
 from sculpt.resolve import resolve_project
@@ -237,7 +239,7 @@ def list_cmd(
         scope = f"workspace:{resolved_ws_id}"
     else:
         client = get_authenticated_client(base_url)
-        project_id = resolve_project(repo, client)
+        project_id = resolve_project(repo, client, json_output)
         scope = f"project:{project_id}"
 
     try:
@@ -256,6 +258,8 @@ def list_cmd(
 
     agents.sort(key=lambda t: t.created_at, reverse=True)
 
+    self_agent_id = os.environ.get("SCULPT_AGENT_ID")
+
     if json_output:
         items = [
             AgentListItem(
@@ -265,6 +269,7 @@ def list_cmd(
                 model=t.model,
                 workspace_id=t.workspace_id,
                 created_at=t.created_at,
+                is_self=t.task_id == self_agent_id,
             )
             for t in agents
         ]
@@ -278,7 +283,7 @@ def list_cmd(
     headers = ["ID", "STATUS", "MODEL", "WORKSPACE", "CREATED", "TITLE"]
     rows = [
         [
-            t.task_id[:_ID_DISPLAY_PREFIX_LENGTH],
+            t.task_id[:_ID_DISPLAY_PREFIX_LENGTH] + (" *" if t.task_id == self_agent_id else ""),
             t.status,
             _format_model_name(t.model),
             t.workspace_id[:_ID_DISPLAY_PREFIX_LENGTH],
@@ -288,6 +293,8 @@ def list_cmd(
         for t in agents
     ]
     typer.echo(format_table(headers, rows))
+    if any(t.task_id == self_agent_id for t in agents):
+        typer.echo("* = this agent (SCULPT_AGENT_ID)", err=True)
 
 
 def _fetch_agents_for_workspace(
@@ -307,17 +314,128 @@ def _fetch_agents_for_workspace(
     return [a for a in result if isinstance(a, CodingAgentTaskView)]
 
 
+def _model_identifier(model: LLMModel | str | None) -> str | None:
+    """The agent's model as its wire string.
+
+    The generated client parses an unknown model value (from a newer server)
+    as the raw string rather than an ``LLMModel``, so ``.value`` is not safe.
+    """
+    if model is None:
+        return None
+    if isinstance(model, LLMModel):
+        return model.value
+    return str(model)
+
+
+def _fetch_agents_across_workspaces(base_url: str, json_output: bool) -> list[AgentSnapshot]:
+    """Fetch live agent snapshots across all workspaces."""
+    session_token = get_session_token_safe(base_url, json_output)
+    try:
+        snapshots = fetch_all_agents(base_url, session_token, scope="all")
+    except (OSError, websockets.exceptions.WebSocketException):
+        handle_connection_error(json_output, base_url=base_url)
+    return [s for s in snapshots if not s.is_deleted]
+
+
+def _resolve_agent_for_action(
+    base_url: str,
+    client: Client,
+    agent_id_arg: str,
+    workspace_option: str | None,
+    json_output: bool,
+) -> tuple[str, str, str | None]:
+    """Resolve an agent reference for a workspace-scoped endpoint call.
+
+    Returns ``(agent_id, workspace_id, current_model)``. An explicit
+    ``--workspace`` is authoritative: the agent must be inside it, and an ID
+    that lives in a different workspace is an error rather than a silent
+    redirect. Without the flag, ``SCULPT_WORKSPACE_ID`` (set in every Sculptor
+    agent shell) is only a disambiguation scope — an agent with no match there
+    is looked up across all workspaces, so full IDs work from any shell.
+    """
+    if workspace_option is not None:
+        workspace_id = resolve_workspace_id(client, workspace_option, json_output)
+        agents = _fetch_agents_for_workspace(client, workspace_id, json_output)
+        if not find_prefix_matches(agent_id_arg, agents, lambda a: a.id):
+            elsewhere = find_prefix_matches(
+                agent_id_arg,
+                _fetch_agents_across_workspaces(base_url, json_output),
+                lambda s: s.task_id,
+            )
+            if len(elsewhere) == 1:
+                cli_error(
+                    f"Agent {elsewhere[0].task_id} is in workspace {elsewhere[0].workspace_id},"
+                    + f" not {workspace_id}",
+                    json_output=json_output,
+                )
+        agent = resolve_by_prefix(
+            agent_id_arg,
+            agents,
+            lambda a: a.id,
+            resource_noun="agent",
+            json_output=json_output,
+            label_getter=_get_task_title,
+            scope_description=f"workspace {workspace_id}",
+        )
+        return agent.id, workspace_id, _model_identifier(agent.model)
+
+    env_workspace = os.environ.get("SCULPT_WORKSPACE_ID")
+    if env_workspace:
+        workspace_id = resolve_workspace_id(client, env_workspace, json_output)
+        agents = _fetch_agents_for_workspace(client, workspace_id, json_output)
+        matches = find_prefix_matches(agent_id_arg, agents, lambda a: a.id)
+        if len(matches) == 1:
+            agent = matches[0]
+            return agent.id, workspace_id, _model_identifier(agent.model)
+        if len(matches) > 1:
+            resolve_by_prefix(
+                agent_id_arg,
+                agents,
+                lambda a: a.id,
+                resource_noun="agent",
+                json_output=json_output,
+                label_getter=_get_task_title,
+                scope_description=f"workspace {workspace_id} (from SCULPT_WORKSPACE_ID)",
+            )
+        # No match in the shell's own workspace — widen to all workspaces.
+
+    snapshots = _fetch_agents_across_workspaces(base_url, json_output)
+    snapshot = resolve_by_prefix(
+        agent_id_arg,
+        snapshots,
+        lambda s: s.task_id,
+        resource_noun="agent",
+        json_output=json_output,
+        label_getter=lambda s: s.title,
+    )
+    if env_workspace:
+        # The agent resolved outside the shell's own workspace; say where it
+        # actually lives so a cross-workspace action is never silent.
+        typer.echo(f"Agent {snapshot.task_id} is in workspace {snapshot.workspace_id}", err=True)
+    return snapshot.task_id, snapshot.workspace_id, snapshot.model
+
+
+def _agent_id_or_env(agent_id: str | None, json_output: bool) -> str:
+    """Default an omitted AGENT_ID argument to the shell's own agent."""
+    if agent_id:
+        return agent_id
+    env_value = os.environ.get("SCULPT_AGENT_ID")
+    if env_value:
+        typer.echo("Using agent from SCULPT_AGENT_ID", err=True)
+        return env_value
+    cli_error("AGENT_ID is required (or set SCULPT_AGENT_ID)", json_output=json_output)
+
 
 @agent_app.command("show")
 def show(
-    agent_id: str = typer.Argument(..., help="Agent ID or prefix"),
+    agent_id: str | None = typer.Argument(None, help="Agent ID or prefix (defaults to SCULPT_AGENT_ID)"),
     timeout: float = typer.Option(30.0, "--timeout", help="Timeout in seconds for WebSocket connection"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     base_url: str | None = typer.Option(None, "--base-url", "-u", help="The Sculptor server URL"),
 ) -> None:
-    """Show details of an agent."""
+    """Show details of an agent (with no argument: this shell's own agent)."""
     base_url = base_url or get_default_base_url()
-    full_agent_id = resolve_agent_id(base_url, agent_id, json_output)
+    full_agent_id = resolve_agent_id(base_url, _agent_id_or_env(agent_id, json_output), json_output)
     snapshot = _fetch_snapshot(base_url, full_agent_id, timeout, json_output)
 
     if json_output:
@@ -339,6 +457,7 @@ def show(
             task_total=snapshot.task_total,
             current_task_subject=snapshot.current_task_subject,
             waiting_detail=snapshot.waiting_detail,
+            waiting_options=snapshot.waiting_options,
             error_detail=snapshot.error_detail,
         )
         typer.echo(output.model_dump_json(indent=2))
@@ -369,6 +488,8 @@ def show(
         lines.append(progress)
     if snapshot.waiting_detail:
         lines.append(f"Waiting: {snapshot.waiting_detail}")
+    if snapshot.waiting_options:
+        lines.append(f"Options: {' | '.join(snapshot.waiting_options)}")
     if snapshot.error_detail:
         lines.append(f"Error: {snapshot.error_detail}")
     if snapshot.artifact_names:
@@ -387,19 +508,18 @@ def rename(
     """Rename an agent."""
     base_url = base_url or get_default_base_url()
     client = get_authenticated_client(base_url)
-    workspace_id = resolve_workspace(workspace, client, json_output)
-
-    agents = _fetch_agents_for_workspace(client, workspace_id, json_output)
-    agent = resolve_by_prefix(agent_id, agents, lambda a: a.id)
+    resolved_agent_id, workspace_id, _ = _resolve_agent_for_action(
+        base_url, client, agent_id, workspace, json_output
+    )
 
     request = RenameAgentRequest(title=title)
 
     try:
         result = rename_workspace_agent.sync(
-            workspace_id=workspace_id, agent_id=agent.id, client=client, body=request
+            workspace_id=workspace_id, agent_id=resolved_agent_id, client=client, body=request
         )
     except httpx.ConnectError:
-        handle_connection_error(json_output)
+        handle_connection_error(json_output, base_url=base_url)
 
     if result is None:
         cli_error("Failed to rename agent", detail="No response from server", json_output=json_output)
@@ -408,33 +528,35 @@ def rename(
         cli_error("Validation error", detail=str(result), json_output=json_output)
 
     if json_output:
-        output = AgentRenameOutput(id=agent.id, title=title)
+        output = AgentRenameOutput(id=resolved_agent_id, title=title)
         typer.echo(output.model_dump_json())
         return
 
-    typer.echo(f"Agent {agent.id} renamed to '{title}'.")
+    typer.echo(f"Agent {resolved_agent_id} renamed to '{title}'.")
 
 
 @agent_app.command("delete")
 def delete(
     agent_id: str = typer.Argument(..., help="Agent ID or prefix"),
     workspace: str | None = typer.Option(None, "--workspace", "-w", help="Workspace ID (or set SCULPT_WORKSPACE_ID)"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     base_url: str | None = typer.Option(None, "--base-url", "-u", help="The Sculptor server URL"),
 ) -> None:
     """Delete an agent."""
     base_url = base_url or get_default_base_url()
     client = get_authenticated_client(base_url)
-    workspace_id = resolve_workspace(workspace, client, json_output)
+    resolved_id, workspace_id, _ = _resolve_agent_for_action(
+        base_url, client, agent_id, workspace, json_output
+    )
 
-    agents = _fetch_agents_for_workspace(client, workspace_id, json_output)
-    agent = resolve_by_prefix(agent_id, agents, lambda a: a.id)
-    resolved_id = agent.id
+    if not yes:
+        typer.confirm(f"Delete agent {resolved_id}?", abort=True)
 
     try:
         delete_workspace_agent.sync(workspace_id=workspace_id, agent_id=resolved_id, client=client)
     except httpx.ConnectError:
-        handle_connection_error(json_output)
+        handle_connection_error(json_output, base_url=base_url)
 
     if json_output:
         output = AgentDeleteOutput(deleted=True, id=resolved_id)
@@ -449,8 +571,14 @@ def send(
     agent_id: str = typer.Argument(..., help="Agent ID or prefix"),
     message: str = typer.Argument(..., help="Message to send"),
     workspace: str | None = typer.Option(None, "--workspace", "-w", help="Workspace ID (or set SCULPT_WORKSPACE_ID)"),
-    model: str = typer.Option(
-        "opus", "--model", "-m", help="The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable)"
+    model: str | None = typer.Option(
+        None,
+        "--model",
+        "-m",
+        help=(
+            "The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable)."
+            + " Defaults to the agent's current model."
+        ),
     ),
     file: list[str] | None = typer.Option(None, "--file", help="Files to include (repeatable)"),
     follow: bool = typer.Option(False, "--follow", "-f", help="Stream the agent's response after sending"),
@@ -460,17 +588,12 @@ def send(
     """Send a message to an agent."""
     base_url = base_url or get_default_base_url()
 
-    model_lower = model.lower()
-    if model_lower not in MODEL_MAPPING:
-        valid = ", ".join(MODEL_MAPPING.keys())
-        cli_error(f"Invalid model '{model}'. Valid options: {valid}", json_output=json_output)
-
-    llm_model = MODEL_MAPPING[model_lower]
     client = get_authenticated_client(base_url)
-    workspace_id = resolve_workspace(workspace, client, json_output)
+    resolved_agent_id, workspace_id, current_model = _resolve_agent_for_action(
+        base_url, client, agent_id, workspace, json_output
+    )
 
-    agents = _fetch_agents_for_workspace(client, workspace_id, json_output)
-    agent = resolve_by_prefix(agent_id, agents, lambda a: a.id)
+    llm_model = _resolve_send_model(model, current_model, json_output)
 
     request = SendMessageRequest(
         message=message,
@@ -481,10 +604,10 @@ def send(
 
     try:
         response = send_workspace_agent_messages.sync_detailed(
-            workspace_id=workspace_id, agent_id=agent.id, client=client, body=request
+            workspace_id=workspace_id, agent_id=resolved_agent_id, client=client, body=request
         )
     except httpx.ConnectError:
-        handle_connection_error(json_output)
+        handle_connection_error(json_output, base_url=base_url)
 
     if response.status_code.value >= 400:
         detail = ""
@@ -500,29 +623,57 @@ def send(
         )
 
     if follow:
-        typer.echo(f"Message sent to agent {agent.id}. Following response...", err=True)
-        follow_and_stream_messages(base_url, agent.id, json_output=json_output)
+        typer.echo(f"Message sent to agent {resolved_agent_id}. Following response...", err=True)
+        follow_and_stream_messages(base_url, resolved_agent_id, json_output=json_output)
         return
 
     if json_output:
-        output = AgentSendOutput(sent=True, agent_id=agent.id, message=message[:_MESSAGE_PREVIEW_MAX_LENGTH])
+        output = AgentSendOutput(
+            sent=True, agent_id=resolved_agent_id, message=message[:_MESSAGE_PREVIEW_MAX_LENGTH]
+        )
         typer.echo(output.model_dump_json())
         return
 
-    typer.echo(f"Message sent to agent {agent.id}.")
+    typer.echo(f"Message sent to agent {resolved_agent_id}.")
+
+
+def _resolve_send_model(model_option: str | None, current_model: str | None, json_output: bool) -> LLMModel:
+    """Pick the model for an outgoing message.
+
+    An explicit ``--model`` wins. Otherwise reuse the agent's current model, so
+    a plain follow-up never switches the agent to a different model. Terminal
+    agents carry no model; the request field still needs a value, and the
+    server ignores it for them.
+    """
+    if model_option is not None:
+        model_lower = model_option.lower()
+        if model_lower not in MODEL_MAPPING:
+            valid = ", ".join(MODEL_MAPPING.keys())
+            cli_error(f"Invalid model '{model_option}'. Valid options: {valid}", json_output=json_output)
+        return MODEL_MAPPING[model_lower]
+    if current_model:
+        try:
+            return LLMModel(current_model)
+        except ValueError:
+            cli_error(
+                f"The agent's current model '{current_model}' is not recognized by this sculpt"
+                + " version; pass --model explicitly",
+                json_output=json_output,
+            )
+    return MODEL_MAPPING["opus"]
 
 
 @agent_app.command("status")
 def status(
-    agent_id: str = typer.Argument(..., help="Agent ID or prefix"),
+    agent_id: str | None = typer.Argument(None, help="Agent ID or prefix (defaults to SCULPT_AGENT_ID)"),
     follow: bool = typer.Option(False, "--follow", "-f", help="Stream status updates in real-time"),
     timeout: float = typer.Option(10.0, "--timeout", help="Timeout in seconds for WebSocket connection"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     base_url: str | None = typer.Option(None, "--base-url", "-u", help="The Sculptor server URL"),
 ) -> None:
-    """Show lightweight status of an agent."""
+    """Show lightweight status of an agent (with no argument: this shell's own agent)."""
     base_url = base_url or get_default_base_url()
-    agent_id = resolve_agent_id(base_url, agent_id, json_output)
+    agent_id = resolve_agent_id(base_url, _agent_id_or_env(agent_id, json_output), json_output)
 
     if follow:
         session_token = get_session_token_safe(base_url, json_output)
@@ -559,7 +710,7 @@ def status(
 
 @agent_app.command("messages")
 def messages(
-    agent_id: str = typer.Argument(..., help="Agent ID or prefix"),
+    agent_id: str | None = typer.Argument(None, help="Agent ID or prefix (defaults to SCULPT_AGENT_ID)"),
     limit: int | None = typer.Option(None, "--limit", help="Show only the last N messages"),
     tail: int | None = typer.Option(None, "--tail", help="Alias for --limit"),
     follow: bool = typer.Option(False, "--follow", "-f", help="Stream messages in real-time"),
@@ -567,9 +718,9 @@ def messages(
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     base_url: str | None = typer.Option(None, "--base-url", "-u", help="The Sculptor server URL"),
 ) -> None:
-    """Show conversation history for an agent."""
+    """Show conversation history for an agent (with no argument: this shell's own agent)."""
     base_url = base_url or get_default_base_url()
-    agent_id = resolve_agent_id(base_url, agent_id, json_output)
+    agent_id = resolve_agent_id(base_url, _agent_id_or_env(agent_id, json_output), json_output)
 
     effective_limit = limit or tail
 
@@ -660,6 +811,7 @@ def _status_output(snapshot: AgentSnapshot) -> AgentStatusOutput:
         current_activity=snapshot.current_activity,
         last_activity=snapshot.last_activity,
         waiting_detail=snapshot.waiting_detail,
+        waiting_options=snapshot.waiting_options,
         error_detail=snapshot.error_detail,
         task_completed=snapshot.task_completed,
         task_total=snapshot.task_total,
@@ -679,6 +831,8 @@ def _format_status_text(snapshot: AgentSnapshot) -> str:
         lines.append(f"Last Activity: {snapshot.last_activity}")
     if snapshot.waiting_detail:
         lines.append(f"Waiting: {snapshot.waiting_detail}")
+    if snapshot.waiting_options:
+        lines.append(f"Options: {' | '.join(snapshot.waiting_options)}")
     if snapshot.error_detail:
         lines.append(f"Error: {snapshot.error_detail}")
     if snapshot.task_total > 0:
@@ -712,21 +866,20 @@ def interrupt(
     """Interrupt a running agent."""
     base_url = base_url or get_default_base_url()
     client = get_authenticated_client(base_url)
-    workspace_id = resolve_workspace(workspace, client, json_output)
-
-    agents = _fetch_agents_for_workspace(client, workspace_id, json_output)
-    agent = resolve_by_prefix(agent_id, agents, lambda a: a.id)
+    resolved_agent_id, workspace_id, _ = _resolve_agent_for_action(
+        base_url, client, agent_id, workspace, json_output
+    )
 
     try:
         interrupt_workspace_agent.sync(
-            workspace_id=workspace_id, agent_id=agent.id, client=client
+            workspace_id=workspace_id, agent_id=resolved_agent_id, client=client
         )
     except httpx.ConnectError:
-        handle_connection_error(json_output)
+        handle_connection_error(json_output, base_url=base_url)
 
     if json_output:
-        output = AgentInterruptOutput(interrupted=True, id=agent.id)
+        output = AgentInterruptOutput(interrupted=True, id=resolved_agent_id)
         typer.echo(output.model_dump_json())
         return
 
-    typer.echo(f"Agent {agent.id} interrupted.")
+    typer.echo(f"Agent {resolved_agent_id} interrupted.")
