@@ -115,7 +115,10 @@ def test_review_all_diff_stays_visible_when_target_branch_longer_than_head(
     # in the collapsed gap between the hunks and paints in the first partial pass,
     # so it cannot gate this second pass. helpers.py is Modified, so the combined
     # view honors the shared unified/split preference; the anchor pierces either
-    # view's <diffs-container> shadow root, so no view needs forcing here.
+    # view's <diffs-container> shadow root, so no view needs forcing here. The
+    # combined view mounts one diff view per changed file, so the anchor scans
+    # them all and locks onto helpers.py — the only file whose shadow root
+    # carries both the expandable separator and truncate's deleted body.
     wait_for_full_content_diff_render(page, "return text[:max_length - 3]")
 
     # Diff must still be visible afterwards.

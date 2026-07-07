@@ -193,11 +193,6 @@ def test_target_branch_diff_fetches_oldlines_from_merge_base(
         + "merge-base line numbers the diff references (the SCU-1371 crash)."
     )
 
-    # Force unified so the deterministic render anchor has a single shadow-root
-    # body to pierce (the split/unified preference persists across the shared
-    # instance, so a prior test can leave it on either view).
-    diff_panel.ensure_unified_mode()
-
     # Block until Pierre's full-content render pass — the pass whose merge-base
     # aligned hunk indices read the fetched old/new line arrays, and where the
     # crash fires — has run all the way through the LAST hunk. The two-hunk

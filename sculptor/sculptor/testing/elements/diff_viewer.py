@@ -241,17 +241,27 @@ def wait_for_full_content_diff_render(page: Page, last_hunk_text: str) -> None:
     ``DIFF_VIEW_SPLIT`` and does not require forcing a particular view first.
     The shadow root is pierced manually because these are Pierre attributes
     with no Playwright locator equivalent.
+
+    The combined "Review all" view mounts ONE such diff view per changed file,
+    so every ``DIFF_VIEW_*`` on the page is scanned and a SINGLE view must carry
+    both the expandable separator and ``last_hunk_text`` — the signature of the
+    one file whose full-content pass this call is gating. Matching the separator
+    on one file and the text on another would return too early, so both must be
+    found in the same shadow root. The single-file diff panel mounts exactly one
+    view, so this collapses to that view there.
     """
     page.wait_for_function(
         """({ unifiedTestid, splitTestid, text }) => {
-            const view =
-                document.querySelector(`[data-testid="${unifiedTestid}"]`) ??
-                document.querySelector(`[data-testid="${splitTestid}"]`);
-            const shadow = view?.querySelector("diffs-container")?.shadowRoot;
-            if (!shadow?.querySelector("[data-separator][data-expand-index]")) return false;
-            return [...shadow.querySelectorAll("div[data-line]")].some(
-                (line) => line.textContent.includes(text)
+            const views = document.querySelectorAll(
+                `[data-testid="${unifiedTestid}"], [data-testid="${splitTestid}"]`
             );
+            return [...views].some((view) => {
+                const shadow = view.querySelector("diffs-container")?.shadowRoot;
+                if (!shadow?.querySelector("[data-separator][data-expand-index]")) return false;
+                return [...shadow.querySelectorAll("div[data-line]")].some(
+                    (line) => line.textContent.includes(text)
+                );
+            });
         }""",
         arg={
             "unifiedTestid": ElementIDs.DIFF_VIEW_UNIFIED,
