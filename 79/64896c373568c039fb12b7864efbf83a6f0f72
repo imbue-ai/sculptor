@@ -1,5 +1,8 @@
 {
   "offload-electron.toml": {
     "image_id": "im-G2VadX6Jdftm14KjalHpEb"
+  },
+  "offload.toml": {
+    "image_id": "im-G2VadX6Jdftm14KjalHpEb"
   }
 }
