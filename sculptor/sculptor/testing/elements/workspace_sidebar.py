@@ -101,13 +101,13 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         return self._page.get_by_test_id(ElementIDs.INLINE_RENAME_INPUT)
 
     def get_delete_confirmation_dialog(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)
+        return self._page.get_by_test_id(ElementIDs.CONFIRMATION_DIALOG)
 
     def get_delete_confirmation_confirm_button(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CONFIRM)
+        return self._page.get_by_test_id(ElementIDs.CONFIRMATION_DIALOG_CONFIRM)
 
     def get_delete_confirmation_cancel_button(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CANCEL)
+        return self._page.get_by_test_id(ElementIDs.CONFIRMATION_DIALOG_CANCEL)
 
     def confirm_delete(self) -> None:
         """Click the confirm button in the workspace delete-confirmation dialog."""

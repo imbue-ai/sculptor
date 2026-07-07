@@ -6,7 +6,7 @@ same section ``+`` add-panel dropdown. This POM consolidates the affordances sha
 agent and terminal tabs: rename (double-click or context menu), close (→ delete/close
 confirmation), and the agent's diagnostics copy actions. The tabs use the shared
 affordance ids ``TAB_CONTEXT_MENU_*``, ``INLINE_RENAME_INPUT``, and
-``DELETE_CONFIRMATION_*``.
+``CONFIRMATION_DIALOG_*``.
 
 The panel-tab context menu offers Rename (for multi-instance panels only) plus the
 agent's flat diagnostics copy items (rendered by label, with Radix ``data-disabled``
@@ -91,13 +91,13 @@ class PlaywrightPanelTabElement:
         return tab.locator(f'[data-testid^="{ElementIDs.PANEL_TAB_CLOSE}-"]')
 
     def get_delete_confirmation_dialog(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)
+        return self._page.get_by_test_id(ElementIDs.CONFIRMATION_DIALOG)
 
     def get_delete_confirmation_confirm_button(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CONFIRM)
+        return self._page.get_by_test_id(ElementIDs.CONFIRMATION_DIALOG_CONFIRM)
 
     def get_delete_confirmation_cancel_button(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CANCEL)
+        return self._page.get_by_test_id(ElementIDs.CONFIRMATION_DIALOG_CANCEL)
 
     def delete_panel_via_close_button(self, panel_id: str) -> None:
         """Click a panel tab's close button and confirm in the delete/close dialog.

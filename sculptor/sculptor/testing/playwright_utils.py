@@ -358,8 +358,8 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
     # Dismiss any open popover/context menu that might intercept clicks.
     page.keyboard.press("Escape")
 
-    confirm_button = page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CONFIRM)
-    confirm_dialog = page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)
+    confirm_button = page.get_by_test_id(ElementIDs.CONFIRMATION_DIALOG_CONFIRM)
+    confirm_dialog = page.get_by_test_id(ElementIDs.CONFIRMATION_DIALOG)
 
     navigate_to_home_page(page)
 

@@ -385,7 +385,7 @@ def confirm_close_terminal(page: Page) -> None:
     Closing a terminal tab opens a "Close terminal?" confirmation; clicking its
     confirm button kills the backend shell and drops the tab.
     """
-    confirm_button = page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CONFIRM)
+    confirm_button = page.get_by_test_id(ElementIDs.CONFIRMATION_DIALOG_CONFIRM)
     expect(confirm_button).to_be_visible()
     confirm_button.click()
 
