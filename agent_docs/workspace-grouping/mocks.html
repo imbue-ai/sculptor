@@ -1,0 +1,974 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Workspace Grouping — Sculptor sidebar mocks</title>
+<style>
+  /* ---- Radix dark theme tokens (gray accent, dark appearance = app default) ---- */
+  :root {
+    --gray-1: #111113;
+    --gray-2: #18191b;
+    --gray-3: #212225;
+    --gray-4: #272a2d;
+    --gray-5: #2e3135;
+    --gray-6: #363a3f;
+    --gray-7: #43484e;
+    --gray-8: #5a6169;
+    --gray-9: #696e77;
+    --gray-10: #777b84;
+    --gray-11: #b0b4ba;
+    --gray-12: #edeef0;
+    --gray-a2: rgba(255, 255, 255, 0.03);
+    --gray-a3: rgba(255, 255, 255, 0.07);
+    --gray-a4: rgba(255, 255, 255, 0.10);
+
+    /* status-dot hues, straight from StatusDot.module.scss */
+    --red-9: #e5484d;    /* error */
+    --yellow-9: #ffe629; /* waiting */
+    --blue-9: #0090ff;   /* running */
+    --green-9: #30a46c;  /* ready / unread */
+
+    --radius-2: 4px;
+    --radius-3: 6px;
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-5: 24px;
+
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  /* Inline SVGs carry no intrinsic size; give every icon a sane default so a
+     missing size class can't blow one up to fill its container. Specific rules
+     (.navitem svg, .menu svg, .chev, …) override this. */
+  svg { width: 16px; height: 16px; display: block; }
+  html, body {
+    margin: 0;
+    background: #0b0b0c;
+    color: var(--gray-12);
+    font-family: var(--font);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page { max-width: 1240px; margin: 0 auto; padding: 32px 28px 80px; }
+  .page > header h1 { font-size: 22px; font-weight: 650; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .page > header p { color: var(--gray-11); margin: 0; max-width: 760px; line-height: 1.55; }
+  .flag {
+    display: inline-block; margin-bottom: 14px; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.04em; text-transform: uppercase; color: #ffca16;
+    background: rgba(255, 197, 61, 0.12); border: 1px solid rgba(255, 197, 61, 0.28);
+    padding: 3px 9px; border-radius: 999px;
+  }
+
+  /* ---- variant tabs ---- */
+  .tabs { display: flex; gap: 4px; margin: 26px 0 20px; border-bottom: 1px solid var(--gray-4); }
+  .tab {
+    appearance: none; background: transparent; border: none; cursor: pointer;
+    color: var(--gray-11); font-family: inherit; font-size: 13.5px; font-weight: 550;
+    padding: 10px 16px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab:hover { color: var(--gray-12); }
+  .tab.active { color: var(--gray-12); border-bottom-color: var(--blue-9); }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .variant-head { margin: 4px 0 22px; }
+  .variant-head h2 { font-size: 17px; margin: 0 0 6px; font-weight: 620; }
+  .variant-head p { color: var(--gray-11); margin: 0; max-width: 820px; line-height: 1.5; }
+
+  .state-label {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--gray-11);
+    margin: 0 0 10px; display: flex; align-items: center; gap: 8px;
+  }
+  .state-label .pill {
+    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--gray-10); background: var(--gray-3); border: 1px solid var(--gray-5);
+    padding: 2px 7px; border-radius: 999px;
+  }
+  .state-note { color: var(--gray-10); font-size: 12px; margin: 8px 2px 0; line-height: 1.5; max-width: 520px; }
+
+  /* ---- app window chrome ---- */
+  .window {
+    border: 1px solid var(--gray-4); border-radius: 10px; overflow: hidden;
+    background: var(--gray-1); box-shadow: 0 18px 50px rgba(0,0,0,0.45);
+    display: grid; grid-template-columns: 248px 1fr; height: 560px;
+  }
+  .titlebar {
+    grid-column: 1 / -1; height: 0; /* traffic lights float into the sidebar/main top pads */
+  }
+  .traffic { display: flex; gap: 8px; padding: 13px 14px; }
+  .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .traffic .r { background: #ff5f57; }
+  .traffic .y { background: #febc2e; }
+  .traffic .g { background: #28c840; }
+
+  /* ---- sidebar ---- */
+  .sidebar {
+    background: var(--gray-2); border-right: 1px solid var(--gray-4);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .sidebar-scroll { flex: 1; overflow-y: auto; padding: 4px 8px 12px; }
+  .topnav { padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+  .navitem {
+    display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 8px;
+    border-radius: var(--radius-2); color: var(--gray-11); font-size: 13.5px; cursor: pointer;
+  }
+  .navitem:hover { background: var(--gray-a3); color: var(--gray-12); }
+  .navitem svg { width: 16px; height: 16px; flex: none; }
+
+  /* repo section header */
+  .repo-header {
+    display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 0 8px;
+    border-radius: var(--radius-2); cursor: pointer; color: var(--gray-12);
+  }
+  .repo-header:hover { background: var(--gray-a3); }
+  .repo-header .chev { width: 16px; height: 16px; color: var(--gray-10); flex: none; }
+  .repo-header .gh { width: 15px; height: 15px; color: var(--gray-11); flex: none; }
+  .repo-header .name { font-size: 13.5px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .repo-body { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 12px; }
+
+  /* generic workspace row */
+  .ws {
+    display: flex; align-items: center; gap: 8px; min-height: 28px;
+    padding: 0 8px 0 24px; border-radius: var(--radius-2); cursor: pointer; color: var(--gray-12);
+    position: relative;
+  }
+  .ws:hover { background: var(--gray-a3); }
+  .ws .wsname { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .ws.active { background: var(--accent-a3, rgba(0,144,255,0.15)); color: var(--accent-11, #70b8ff); }
+  .ws.muted .wsname { color: var(--gray-11); }
+
+  /* status dots */
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .dot.running { background: var(--blue-9); box-shadow: 0 0 0 3px rgba(0,144,255,0.22); }
+  .dot.waiting { background: var(--yellow-9); }
+  .dot.error { background: var(--red-9); }
+  .dot.ready { background: var(--green-9); }
+  .dot.read { background: var(--gray-8); }
+
+  .row-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--gray-10); opacity: 0; }
+  .ws:hover .row-actions, .grp-header:hover .row-actions { opacity: 1; }
+  .row-actions svg { width: 13px; height: 13px; }
+
+  .count { font-size: 11px; color: var(--gray-10); font-variant-numeric: tabular-nums; }
+  .cli-badge {
+    font-size: 9.5px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--gray-11); background: var(--gray-3); border: 1px solid var(--gray-6);
+    border-radius: 3px; padding: 1px 5px; font-family: var(--mono);
+  }
+
+  /* =====================================================================
+     GROUP CHROME — three variants. Each group sets --g (its hue) inline.
+     Tint / border / text derive from --g via color-mix so one var drives all.
+     ===================================================================== */
+
+  /* group header shared bits */
+  .grp-header {
+    display: flex; align-items: center; gap: 7px; min-height: 28px; padding: 0 8px;
+    border-radius: var(--radius-2); cursor: pointer; position: relative;
+  }
+  .grp-header .chev { width: 15px; height: 15px; color: var(--gray-10); flex: none; }
+  .grp-header .gname {
+    font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    letter-spacing: 0.005em;
+  }
+  .grp-swatch { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--g); }
+
+  /* ---------- Variant A: colored LEFT RAIL ---------- */
+  .vA .group { margin: 2px 0 12px; }
+  .vA .grp-header:hover { background: color-mix(in srgb, var(--g) 12%, transparent); }
+  .vA .grp-header .gname { color: color-mix(in srgb, var(--g) 55%, var(--gray-12)); }
+  .vA .grp-members {
+    margin-left: 15px; padding-left: 0;
+    border-left: 2px solid color-mix(in srgb, var(--g) 55%, transparent);
+  }
+  .vA .grp-members .ws { padding-left: 16px; }
+  .vA .grp-collapsed-preview {
+    display: flex; align-items: center; gap: 3px; margin-left: 15px;
+    padding: 3px 0 0 16px; border-left: 2px solid color-mix(in srgb, var(--g) 55%, transparent);
+  }
+
+  /* ---------- Variant B: TINTED CONTAINER card ---------- */
+  .vB .group {
+    margin: 4px 0 14px; border-radius: 8px;
+    background: color-mix(in srgb, var(--g) 9%, transparent);
+    border: 1px solid color-mix(in srgb, var(--g) 26%, transparent);
+    padding: 3px;
+  }
+  .vB .grp-header { border-radius: 6px; }
+  .vB .grp-header:hover { background: color-mix(in srgb, var(--g) 14%, transparent); }
+  .vB .grp-header .gname { color: color-mix(in srgb, var(--g) 50%, var(--gray-12)); }
+  .vB .grp-members { display: flex; flex-direction: column; gap: 2px; padding: 2px; }
+  .vB .grp-members .ws { padding-left: 22px; }
+  .vB .grp-members .ws:hover { background: color-mix(in srgb, var(--g) 13%, transparent); }
+  .vB .grp-members .ws.active { background: color-mix(in srgb, var(--g) 22%, transparent); color: color-mix(in srgb, var(--g) 55%, var(--gray-12)); }
+  .vB .grp-preview-row {
+    display: flex; align-items: center; gap: 7px; padding: 3px 8px 5px 26px; min-height: 22px;
+  }
+  .vB .grp-preview-row .pv-name { font-size: 12px; color: var(--gray-11); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ---------- Variant C: LABELED DIVIDER ---------- */
+  .vC .group { margin: 6px 0 10px; }
+  .vC .grp-header { min-height: 22px; padding: 0 8px; gap: 8px; }
+  .vC .grp-header:hover { background: transparent; }
+  .vC .grp-header::after {
+    content: ""; flex: 1; height: 1px; margin-left: 2px;
+    background: color-mix(in srgb, var(--g) 40%, transparent);
+  }
+  .vC .grp-header .chev { width: 13px; height: 13px; }
+  .vC .grp-header .glabel {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    color: color-mix(in srgb, var(--g) 60%, var(--gray-11)); white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; max-width: 150px;
+  }
+  .vC .grp-members { margin-top: 2px; display: flex; flex-direction: column; gap: 2px; }
+  .vC .grp-members .ws { padding-left: 22px; }
+  .vC .grp-members .ws::before {
+    content: ""; position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+    width: 4px; height: 4px; border-radius: 50%; background: color-mix(in srgb, var(--g) 60%, transparent);
+  }
+  .vC .grp-count { font-size: 10.5px; color: var(--gray-10); font-variant-numeric: tabular-nums; }
+
+  /* ---- main content placeholder (agent view) ---- */
+  .main { background: var(--gray-1); display: flex; flex-direction: column; overflow: hidden; }
+  .main-header {
+    height: 42px; border-bottom: 1px solid var(--gray-4); display: flex; align-items: center;
+    gap: 10px; padding: 0 16px; color: var(--gray-11); font-size: 13px;
+  }
+  .main-header .mh-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--blue-9); box-shadow: 0 0 0 3px rgba(0,144,255,0.22); }
+  .main-body { flex: 1; padding: 22px 26px; overflow: hidden; }
+  .bubble { max-width: 78%; border-radius: 10px; padding: 12px 14px; font-size: 13px; line-height: 1.6; color: var(--gray-11); }
+  .bubble.user { background: var(--gray-3); margin-left: auto; color: var(--gray-12); }
+  .bubble.agent { background: transparent; border: 1px solid var(--gray-4); margin: 12px 0; }
+  .skeleton { height: 10px; border-radius: 4px; background: var(--gray-3); margin: 9px 0; }
+  .skeleton.w70 { width: 70%; } .skeleton.w90 { width: 90%; } .skeleton.w50 { width: 50%; }
+
+  /* ---- sidebar-only state cards ---- */
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 22px; margin-top: 8px; }
+  .card-sidebar {
+    width: 100%; background: var(--gray-2); border: 1px solid var(--gray-4); border-radius: 10px;
+    padding: 8px; min-height: 60px;
+  }
+
+  /* ---- section headers for the flow blocks (wider than the edge cards) ---- */
+  .section-h { font-size: 13px; font-weight: 600; color: var(--gray-12); margin: 34px 0 4px; }
+  .section-sub { color: var(--gray-10); font-size: 12px; margin: 0 0 16px; max-width: 760px; line-height: 1.55; }
+  .demo-wide { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 26px; align-items: start; }
+
+  /* ---- drag & drop affordances ---- */
+  /* the lifted workspace following the cursor */
+  .drag-chip {
+    display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px;
+    background: var(--gray-3); border: 1px solid var(--gray-7); border-radius: 6px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.55); color: var(--gray-12); font-size: 13px;
+    transform: rotate(-2.5deg); position: absolute; z-index: 5;
+  }
+  /* a group card lit up as the active drop target */
+  .group.drop-active {
+    box-shadow: 0 0 0 2px var(--g);
+    background: color-mix(in srgb, var(--g) 16%, transparent);
+    border-color: color-mix(in srgb, var(--g) 55%, transparent);
+  }
+  /* dashed placeholder row shown where the drop will land / for an empty group */
+  .drop-slot {
+    display: flex; align-items: center; gap: 8px; min-height: 28px; margin: 2px;
+    padding: 0 8px 0 22px; border-radius: var(--radius-2); font-size: 12.5px;
+    border: 1.5px dashed color-mix(in srgb, var(--g) 55%, transparent);
+    color: color-mix(in srgb, var(--g) 55%, var(--gray-11));
+  }
+  /* thin insertion line for reorder-within-group */
+  .insertion { height: 2px; margin: 1px 10px 1px 22px; border-radius: 2px; background: var(--g); position: relative; }
+  .insertion::before { content: ""; position: absolute; left: -3px; top: -2px; width: 6px; height: 6px; border-radius: 50%; background: var(--g); }
+  .ws.ghost { opacity: 0.35; }
+
+  /* ---- context menu ---- */
+  .ctx-wrap { position: relative; }
+  .menu {
+    width: 232px; background: var(--gray-2); border: 1px solid var(--gray-6);
+    border-radius: 8px; padding: 5px; box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    font-size: 13px;
+  }
+  .menu .mi {
+    display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: 5px;
+    color: var(--gray-12); cursor: pointer; position: relative;
+  }
+  .menu .mi:hover { background: var(--gray-a4); }
+  .menu .mi svg { width: 14px; height: 14px; color: var(--gray-11); flex: none; }
+  .menu .mi .kbd { margin-left: auto; font-size: 11px; color: var(--gray-10); font-family: var(--mono); }
+  .menu .mi.danger { color: #ff9592; }
+  .menu .mi.danger svg { color: #ff9592; }
+  .menu .sep { height: 1px; background: var(--gray-5); margin: 5px 6px; }
+  .menu .swatches { display: flex; gap: 8px; padding: 8px 9px 9px; }
+  .menu .sw { width: 18px; height: 18px; border-radius: 50%; cursor: pointer; position: relative; }
+  .menu .sw.sel { box-shadow: 0 0 0 2px var(--gray-2), 0 0 0 3.5px var(--gray-12); }
+  .menu .mtitle { font-size: 11px; font-weight: 600; letter-spacing: 0.03em; color: var(--gray-10); padding: 6px 9px 3px; text-transform: uppercase; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; margin: 4px 2px 22px; color: var(--gray-10); font-size: 12px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+  footer.foot { margin-top: 40px; color: var(--gray-10); font-size: 12px; border-top: 1px solid var(--gray-4); padding-top: 16px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <span class="flag">Experimental · feature-flagged</span>
+    <h1>Workspace Grouping — Sculptor sidebar</h1>
+    <p>
+      Groups collect related workspaces into a named, colored unit inside a repo section
+      (<code>repo&nbsp;›&nbsp;group&nbsp;›&nbsp;workspaces</code>). Modeled after Dia's tab groups.
+      Three end-to-end variants of the group chrome, each shown in real app chrome and with its
+      edge states: collapsed group, single-workspace group, CLI-born group, long-name truncation,
+      and the right-click context menu.
+    </p>
+  </header>
+
+  <div class="legend">
+    <span><i class="dot running" style="width:9px;height:9px;border-radius:50%;display:inline-block"></i> running</span>
+    <span><i class="dot waiting" style="width:9px;height:9px;border-radius:50%;display:inline-block"></i> waiting for input</span>
+    <span><i class="dot ready" style="width:9px;height:9px;border-radius:50%;display:inline-block"></i> unread / ready</span>
+    <span><i class="dot read" style="width:9px;height:9px;border-radius:50%;display:inline-block"></i> read / idle</span>
+    <span><i class="dot error" style="width:9px;height:9px;border-radius:50%;display:inline-block"></i> error</span>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" data-tab="A">Variant A · Colored left rail</button>
+    <button class="tab active" data-tab="B">Variant B · Tinted container</button>
+    <button class="tab" data-tab="C">Variant C · Labeled divider</button>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- VARIANT A -->
+  <!-- ============================================================= -->
+  <section class="panel vA" data-panel="A">
+    <div class="variant-head">
+      <h2>Variant A — Colored left rail</h2>
+      <p>
+        The group is a light header row (chevron · color dot · name · count). Its members indent
+        under a <strong>colored vertical rail</strong> that visually ties them together — the
+        lightest, most "folder-like" read. The color lives in the dot and the rail; the name picks
+        up a tint of it. Collapsed, the rail persists and a stacked status-dot preview hints at the
+        members underneath.
+      </p>
+    </div>
+
+    <p class="state-label"><span class="pill">Full app</span> A repo with two groups and loose workspaces</p>
+    <div class="window">
+      <div class="traffic" style="position:absolute"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+      <!-- sidebar -->
+      <div class="sidebar">
+        <div class="topnav" style="padding-top:34px">
+          <div class="navitem">%HOME% Home</div>
+          <div class="navitem">%CMD% Commands</div>
+          <div class="navitem">%PLUS% New Workspace</div>
+        </div>
+        <div class="sidebar-scroll">
+          <div class="repo-header">%CHEVDOWN% %GH% <span class="name">imbue-ai/sculptor</span></div>
+          <div class="repo-body">
+
+            <!-- Group 1: expanded, blue -->
+            <div class="group" style="--g:#0090ff">
+              <div class="grp-header">%CHEVDOWN% <span class="grp-swatch"></span><span class="gname">SCU‑1685 · CC workflows</span><span class="count" style="margin-left:6px">3</span>
+                <span class="row-actions">%DOTS%</span>
+              </div>
+              <div class="grp-members">
+                <div class="ws active"><span class="dot running"></span><span class="wsname">Workflows UI polish</span></div>
+                <div class="ws"><span class="dot waiting"></span><span class="wsname">Stream‑json parser</span></div>
+                <div class="ws"><span class="dot ready"></span><span class="wsname">Fixture snapshots</span></div>
+              </div>
+            </div>
+
+            <!-- Group 2: collapsed, purple, with preview -->
+            <div class="group" style="--g:#8e4ec6">
+              <div class="grp-header">%CHEVRIGHT% <span class="grp-swatch"></span><span class="gname">New workspace modal</span><span class="count" style="margin-left:6px">4</span>
+                <span class="row-actions">%DOTS%</span>
+              </div>
+              <div class="grp-collapsed-preview">
+                <span class="dot running"></span><span class="dot waiting"></span><span class="dot read"></span><span class="dot read"></span>
+              </div>
+            </div>
+
+            <!-- loose workspaces (ungrouped) -->
+            <div class="ws"><span class="dot read"></span><span class="wsname">Sidebar drag‑and‑drop</span></div>
+            <div class="ws"><span class="dot ready"></span><span class="wsname">Help docs refresh</span></div>
+          </div>
+
+          <div class="repo-header">%CHEVRIGHT% %GH% <span class="name">imbue-ai/docs-site</span></div>
+        </div>
+      </div>
+      <!-- main -->
+      <div class="main">
+        <div class="main-header"><span class="mh-dot"></span> Workflows UI polish · <span style="color:var(--gray-10)">bryden/scu-1685-workflows-ui</span></div>
+        <div class="main-body">
+          <div class="bubble user">Nest the group inside the repo section and keep the rail visible when collapsed.</div>
+          <div class="bubble agent">
+            <div class="skeleton w90"></div><div class="skeleton w70"></div><div class="skeleton w50"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="height:26px"></div>
+    <p class="state-label"><span class="pill">Edge states</span> Collapsed · single workspace · CLI-born · long names · context menu</p>
+    <div class="cards">
+
+      <!-- collapsed -->
+      <div>
+        <div class="state-label" style="font-weight:550">Collapsed group</div>
+        <div class="card-sidebar">
+          <div class="group" style="--g:#30a46c">
+            <div class="grp-header">%CHEVRIGHT% <span class="grp-swatch"></span><span class="gname">Dependency modernization</span><span class="count" style="margin-left:6px">5</span></div>
+            <div class="grp-collapsed-preview">
+              <span class="dot running"></span><span class="dot error"></span><span class="dot read"></span><span class="dot read"></span><span class="dot read"></span>
+            </div>
+          </div>
+        </div>
+        <p class="state-note">Collapsed shows name + count + a stacked status-dot preview of members (Sculptor's analog of Dia's favicon rows). One member has an error → red dot surfaces.</p>
+      </div>
+
+      <!-- single workspace -->
+      <div>
+        <div class="state-label" style="font-weight:550">Group with 1 workspace</div>
+        <div class="card-sidebar">
+          <div class="group" style="--g:#ffc53d">
+            <div class="grp-header">%CHEVDOWN% <span class="grp-swatch"></span><span class="gname">Config race fix</span><span class="count" style="margin-left:6px">1</span></div>
+            <div class="grp-members">
+              <div class="ws muted"><span class="dot read"></span><span class="wsname">Serialize config PUT</span></div>
+            </div>
+          </div>
+        </div>
+        <p class="state-note">A one-member group still reads as a group: rail + header remain so it can grow and stays a drag target.</p>
+      </div>
+
+      <!-- CLI-born -->
+      <div>
+        <div class="state-label" style="font-weight:550">CLI-born group</div>
+        <div class="card-sidebar">
+          <div class="group" style="--g:#12a594">
+            <div class="grp-header">%CHEVDOWN% <span class="grp-swatch"></span><span class="gname">sculpt · nightly deps</span><span class="cli-badge" style="margin-left:6px">CLI</span></div>
+            <div class="grp-members">
+              <div class="ws"><span class="dot running"></span><span class="wsname">bump ruff + mypy</span></div>
+              <div class="ws"><span class="dot ready"></span><span class="wsname">regen lockfile</span></div>
+            </div>
+          </div>
+        </div>
+        <p class="state-note">Any <code>sculpt</code>-created workspace is born in its own new group, tagged <code>CLI</code>. Auto-assigned color from the palette.</p>
+      </div>
+
+      <!-- long names -->
+      <div>
+        <div class="state-label" style="font-weight:550">Long names (truncation)</div>
+        <div class="card-sidebar">
+          <div class="group" style="--g:#e5484d">
+            <div class="grp-header">%CHEVDOWN% <span class="grp-swatch"></span><span class="gname">SCU‑1746 navigation inferability restructure experiment</span></div>
+            <div class="grp-members">
+              <div class="ws"><span class="dot waiting"></span><span class="wsname">Before/after 10‑prompt baseline comparison run</span></div>
+              <div class="ws"><span class="dot read"></span><span class="wsname">Delta analysis — decisions.md writeup</span></div>
+            </div>
+          </div>
+        </div>
+        <p class="state-note">Group and workspace names ellipsize at the rail; full text on hover (tooltip).</p>
+      </div>
+
+      <!-- context menu -->
+      <div>
+        <div class="state-label" style="font-weight:550">Right-click context menu</div>
+        <div class="card-sidebar ctx-wrap" style="min-height:320px">
+          <div class="group" style="--g:#0090ff">
+            <div class="grp-header" style="background:color-mix(in srgb,#0090ff 12%,transparent)">%CHEVDOWN% <span class="grp-swatch"></span><span class="gname">SCU‑1685 · CC workflows</span><span class="count" style="margin-left:6px">3</span></div>
+          </div>
+          <div class="menu" style="position:absolute; left:34px; top:36px">
+            <div class="mi">%PLUS_SM% New workspace in group <span class="kbd">⌥⌘N</span></div>
+            <div class="mi">%EDIT% Rename…</div>
+            <div class="sep"></div>
+            <div class="swatches">
+              <span class="sw sel" style="background:#0090ff"></span>
+              <span class="sw" style="background:#8e4ec6"></span>
+              <span class="sw" style="background:#30a46c"></span>
+              <span class="sw" style="background:#ffc53d"></span>
+              <span class="sw" style="background:#e5484d"></span>
+              <span class="sw" style="background:#12a594"></span>
+            </div>
+            <div class="sep"></div>
+            <div class="mi">%UNGROUP% Ungroup</div>
+          </div>
+        </div>
+        <p class="state-note">Variant A menu is minimal: create-in-group, rename, one-tap color row, ungroup.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+  <!-- VARIANT B -->
+  <!-- ============================================================= -->
+  <section class="panel active vB" data-panel="B">
+    <div class="variant-head">
+      <h2>Variant B — Tinted container</h2>
+      <p>
+        The whole group — header and members — sits inside a <strong>rounded, accent-tinted card</strong>
+        with a faint colored border. This is the most literal read of Dia's group card: the color
+        wraps the members as a container, so a group reads as one object you can drag as a unit.
+        Kept deliberately quiet: no workspace count and no group-level run-state — just the name and
+        its color. A hover <strong>"&#8943;"</strong> on the header (and right-click) opens the group
+        menu. Collapsed, the card shrinks to just its header.
+      </p>
+    </div>
+
+    <p class="state-label"><span class="pill">Full app</span> A repo with two group cards and loose workspaces</p>
+    <div class="window">
+      <div class="traffic" style="position:absolute"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+      <div class="sidebar">
+        <div class="topnav" style="padding-top:34px">
+          <div class="navitem">%HOME% Home</div>
+          <div class="navitem">%CMD% Commands</div>
+          <div class="navitem">%PLUS% New Workspace</div>
+        </div>
+        <div class="sidebar-scroll">
+          <div class="repo-header">%CHEVDOWN% %GH% <span class="name">imbue-ai/sculptor</span></div>
+          <div class="repo-body">
+
+            <!-- expanded card, blue. Hover reveals the "..." group menu trigger. -->
+            <div class="group" style="--g:#0090ff">
+              <div class="grp-header">%CHEVDOWN% <span class="grp-swatch"></span><span class="gname">SCU‑1685 · CC workflows</span>
+                <span class="row-actions">%DOTS%</span>
+              </div>
+              <div class="grp-members">
+                <div class="ws active"><span class="dot running"></span><span class="wsname">Workflows UI polish</span></div>
+                <div class="ws"><span class="dot waiting"></span><span class="wsname">Stream‑json parser</span></div>
+                <div class="ws"><span class="dot ready"></span><span class="wsname">Fixture snapshots</span></div>
+              </div>
+            </div>
+
+            <!-- collapsed card, purple. No count, no run-state — just name + color. -->
+            <div class="group" style="--g:#8e4ec6">
+              <div class="grp-header">%CHEVRIGHT% <span class="grp-swatch"></span><span class="gname">New workspace modal</span>
+                <span class="row-actions">%DOTS%</span>
+              </div>
+            </div>
+
+            <!-- loose workspaces -->
+            <div class="ws"><span class="dot read"></span><span class="wsname">Sidebar drag‑and‑drop</span></div>
+            <div class="ws"><span class="dot ready"></span><span class="wsname">Help docs refresh</span></div>
+          </div>
+
+          <div class="repo-header">%CHEVRIGHT% %GH% <span class="name">imbue-ai/docs-site</span></div>
+        </div>
+      </div>
+      <div class="main">
+        <div class="main-header"><span class="mh-dot"></span> Workflows UI polish · <span style="color:var(--gray-10)">bryden/scu-1685-workflows-ui</span></div>
+        <div class="main-body">
+          <div class="bubble user">Wrap the group members in a tinted card so it reads as one draggable object.</div>
+          <div class="bubble agent">
+            <div class="skeleton w90"></div><div class="skeleton w70"></div><div class="skeleton w50"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="height:26px"></div>
+    <p class="state-label"><span class="pill">Edge states</span> Collapsed · single workspace · CLI-born · long names · context menu</p>
+    <div class="cards">
+
+      <div>
+        <div class="state-label" style="font-weight:550">Collapsed group</div>
+        <div class="card-sidebar">
+          <div class="group" style="--g:#30a46c">
+            <div class="grp-header">%CHEVRIGHT% <span class="grp-swatch"></span><span class="gname">Dependency modernization</span></div>
+          </div>
+        </div>
+        <p class="state-note">Collapses to just the header card — name + color, nothing else. No count, no aggregate run-state; grouping stays quiet until expanded.</p>
+      </div>
+
+      <div>
+        <div class="state-label" style="font-weight:550">Group with 1 workspace</div>
+        <div class="card-sidebar">
+          <div class="group" style="--g:#ffc53d">
+            <div class="grp-header">%CHEVDOWN% <span class="grp-swatch"></span><span class="gname">Config race fix</span>
+              <span class="row-actions">%DOTS%</span>
+            </div>
+            <div class="grp-members">
+              <div class="ws muted"><span class="dot read"></span><span class="wsname">Serialize config PUT</span></div>
+            </div>
+          </div>
+        </div>
+        <p class="state-note">Single member fills a compact card — the tint still frames it as a group and a drop target.</p>
+      </div>
+
+      <div>
+        <div class="state-label" style="font-weight:550">CLI-born group</div>
+        <div class="card-sidebar">
+          <div class="group" style="--g:#12a594">
+            <div class="grp-header">%CHEVDOWN% <span class="grp-swatch"></span><span class="gname">sculpt · nightly deps</span><span class="cli-badge" style="margin-left:6px">CLI</span></div>
+            <div class="grp-members">
+              <div class="ws"><span class="dot running"></span><span class="wsname">bump ruff + mypy</span></div>
+              <div class="ws"><span class="dot ready"></span><span class="wsname">regen lockfile</span></div>
+            </div>
+          </div>
+        </div>
+        <p class="state-note">Teal auto-color + <code>CLI</code> badge distinguish machine-created groups from hand-made ones.</p>
+      </div>
+
+      <div>
+        <div class="state-label" style="font-weight:550">Long names (truncation)</div>
+        <div class="card-sidebar">
+          <div class="group" style="--g:#e5484d">
+            <div class="grp-header">%CHEVDOWN% <span class="grp-swatch"></span><span class="gname">SCU‑1746 navigation inferability restructure experiment</span></div>
+            <div class="grp-members">
+              <div class="ws"><span class="dot waiting"></span><span class="wsname">Before/after 10‑prompt baseline comparison run</span></div>
+              <div class="ws"><span class="dot read"></span><span class="wsname">Delta analysis — decisions.md writeup</span></div>
+            </div>
+          </div>
+        </div>
+        <p class="state-note">Names ellipsize inside the card padding; the border keeps the group edge crisp regardless of length.</p>
+      </div>
+
+      <div>
+        <div class="state-label" style="font-weight:550">Group menu — hover "&#8943;" or right-click</div>
+        <div class="card-sidebar ctx-wrap" style="min-height:330px">
+          <div class="group" style="--g:#0090ff">
+            <div class="grp-header">%CHEVDOWN% <span class="grp-swatch"></span><span class="gname">SCU‑1685 · CC workflows</span>
+              <span class="row-actions" style="opacity:1">%DOTS%</span>
+            </div>
+            <div class="grp-members">
+              <div class="ws"><span class="dot running"></span><span class="wsname">Workflows UI polish</span></div>
+            </div>
+          </div>
+          <div class="menu" style="position:absolute; right:8px; top:34px">
+            <div class="mi">New workspace in group <span class="kbd">⌥⌘N</span></div>
+            <div class="mi">Rename…</div>
+            <div class="mi">Collapse group</div>
+            <div class="sep"></div>
+            <div class="mtitle">Color</div>
+            <div class="swatches" style="flex-wrap:wrap">
+              <span class="sw sel" style="background:#0090ff"></span>
+              <span class="sw" style="background:#8e4ec6"></span>
+              <span class="sw" style="background:#30a46c"></span>
+              <span class="sw" style="background:#ffc53d"></span>
+              <span class="sw" style="background:#e5484d"></span>
+              <span class="sw" style="background:#12a594"></span>
+              <span class="sw" style="background:#e93d82"></span>
+              <span class="sw" style="background:#f76b15"></span>
+            </div>
+            <div class="sep"></div>
+            <div class="mi">Ungroup</div>
+          </div>
+        </div>
+        <p class="state-note">Opened by the hover "&#8943;" on the header or by right-click. Text-only, no leading icons. <strong>Ungroup</strong> replaces delete — a group is only a container, so dissolving it releases the workspaces back to the repo, never deletes them.</p>
+      </div>
+
+    </div>
+
+    <!-- Creating a group & joining an existing one (workspace right-click menu) -->
+    <div class="section-h">Creating &amp; joining groups — the workspace menu</div>
+    <p class="section-sub">Groups are born from a workspace. Right-clicking a loose workspace (or its hover "&#8943;") grows two grouping actions at the top of its menu: <strong>New group from workspace</strong> wraps it in a fresh group; <strong>Add to group &#8250;</strong> opens a submenu of the repo's existing groups (each with its color) plus a <strong>New group…</strong> escape hatch.</p>
+    <div class="demo-wide">
+      <div>
+        <div class="state-label" style="font-weight:550">New group from workspace</div>
+        <div class="card-sidebar ctx-wrap" style="min-height:210px">
+          <div class="ws"><span class="dot ready"></span><span class="wsname">Help docs refresh</span>
+            <span class="row-actions" style="opacity:1">%DOTS%</span>
+          </div>
+          <div class="menu" style="position:absolute; left:20px; top:30px; width:200px">
+            <div class="mi" style="background:var(--gray-a4)">New group from workspace</div>
+            <div class="mi">Add to group <span style="margin-left:auto;color:var(--gray-10)">&#8250;</span></div>
+            <div class="sep"></div>
+            <div class="mi" style="color:var(--gray-10)">Rename…</div>
+            <div class="mi" style="color:var(--gray-10)">Delete workspace</div>
+          </div>
+        </div>
+        <p class="state-note">Wraps the clicked workspace in a new group (auto-named + auto-colored), ready to rename.</p>
+      </div>
+      <div>
+        <div class="state-label" style="font-weight:550">Add to group &#8250; (submenu open)</div>
+        <div class="card-sidebar ctx-wrap" style="min-height:250px">
+          <div class="ws"><span class="dot read"></span><span class="wsname">Sidebar drag‑and‑drop</span>
+            <span class="row-actions" style="opacity:1">%DOTS%</span>
+          </div>
+          <div class="menu" style="position:absolute; left:16px; top:30px; width:190px">
+            <div class="mi">New group from workspace</div>
+            <div class="mi" style="background:var(--gray-a4)">Add to group <span style="margin-left:auto;color:var(--gray-12)">&#8250;</span></div>
+            <div class="sep"></div>
+            <div class="mi" style="color:var(--gray-10)">Rename…</div>
+            <div class="mi" style="color:var(--gray-10)">Delete workspace</div>
+          </div>
+          <div class="menu" style="position:absolute; left:198px; top:52px; width:196px">
+            <div class="mtitle">Move to group</div>
+            <div class="mi"><span class="grp-swatch" style="--g:#0090ff"></span> SCU‑1685 · CC workflows</div>
+            <div class="mi"><span class="grp-swatch" style="--g:#8e4ec6"></span> New workspace modal</div>
+            <div class="mi"><span class="grp-swatch" style="--g:#12a594"></span> sculpt · nightly deps</div>
+            <div class="sep"></div>
+            <div class="mi">New group…</div>
+          </div>
+        </div>
+        <p class="state-note">Existing groups are listed with their color dot; the workspace jumps into whichever you pick.</p>
+      </div>
+    </div>
+
+    <!-- Drag & drop: how groups act as drop targets -->
+    <div class="section-h">Drag &amp; drop</div>
+    <p class="section-sub">Sidebar drag-and-drop is built separately; this shows how groups participate. A group card is a drop target — dropping a workspace onto it adds it as a member. Members reorder within a group, and dragging one out releases it back to the loose list (never deletes it).</p>
+    <div class="cards">
+
+      <div>
+        <div class="state-label" style="font-weight:550">Dragging a workspace into a group</div>
+        <div class="card-sidebar ctx-wrap" style="min-height:170px">
+          <div class="group drop-active" style="--g:#0090ff">
+            <div class="grp-header">%CHEVDOWN% <span class="grp-swatch"></span><span class="gname">SCU‑1685 · CC workflows</span></div>
+            <div class="grp-members">
+              <div class="ws"><span class="dot running"></span><span class="wsname">Workflows UI polish</span></div>
+              <div class="drop-slot">Drop to add to group</div>
+            </div>
+          </div>
+          <div class="drag-chip" style="left:120px; top:104px"><span class="dot ready"></span> Help docs refresh</div>
+        </div>
+        <p class="state-note">The target group lights up with an accent ring + stronger tint, and a dashed slot shows where the workspace will land.</p>
+      </div>
+
+      <div>
+        <div class="state-label" style="font-weight:550">Empty group (awaiting first drop)</div>
+        <div class="card-sidebar">
+          <div class="group" style="--g:#e93d82">
+            <div class="grp-header">%CHEVDOWN% <span class="grp-swatch"></span><span class="gname">Release 0.39 triage</span>
+              <span class="row-actions" style="opacity:1">%DOTS%</span>
+            </div>
+            <div class="grp-members">
+              <div class="drop-slot">Drag workspaces here</div>
+            </div>
+          </div>
+        </div>
+        <p class="state-note">A group created empty (e.g. from the menu, before adding anything) shows a dashed prompt so it never looks broken.</p>
+      </div>
+
+      <div>
+        <div class="state-label" style="font-weight:550">Reordering within a group</div>
+        <div class="card-sidebar ctx-wrap" style="min-height:160px">
+          <div class="group" style="--g:#0090ff">
+            <div class="grp-header">%CHEVDOWN% <span class="grp-swatch"></span><span class="gname">SCU‑1685 · CC workflows</span></div>
+            <div class="grp-members">
+              <div class="ws ghost"><span class="dot running"></span><span class="wsname">Workflows UI polish</span></div>
+              <div class="insertion"></div>
+              <div class="ws"><span class="dot ready"></span><span class="wsname">Fixture snapshots</span></div>
+            </div>
+          </div>
+          <div class="drag-chip" style="left:132px; top:46px"><span class="dot running"></span> Workflows UI polish</div>
+        </div>
+        <p class="state-note">Dragging a member within its group shows an insertion line; the lifted row dims in place.</p>
+      </div>
+
+      <div>
+        <div class="state-label" style="font-weight:550">Dragging out of a group</div>
+        <div class="card-sidebar ctx-wrap" style="min-height:180px">
+          <div class="group" style="--g:#8e4ec6">
+            <div class="grp-header">%CHEVDOWN% <span class="grp-swatch"></span><span class="gname">New workspace modal</span></div>
+            <div class="grp-members">
+              <div class="ws ghost"><span class="dot read"></span><span class="wsname">Harness gating</span></div>
+            </div>
+          </div>
+          <div class="insertion" style="--g:#8e4ec6; margin-left:8px"></div>
+          <div class="ws" style="padding-left:8px"><span class="dot ready"></span><span class="wsname">Help docs refresh</span></div>
+          <div class="drag-chip" style="left:104px; top:104px"><span class="dot read"></span> Harness gating</div>
+        </div>
+        <p class="state-note">Dropping a member below the group (into the loose list) removes it from the group without deleting it.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+  <!-- VARIANT C -->
+  <!-- ============================================================= -->
+  <section class="panel vC" data-panel="C">
+    <div class="variant-head">
+      <h2>Variant C — Labeled divider</h2>
+      <p>
+        The lightest touch: a group is a thin colored rule with a small
+        <strong>uppercase color label</strong>; members sit below, indented, each with a tiny
+        color tick. No container, no rail. This adds almost no visual weight, so a repo with many
+        groups still scans as a clean list. Color lives in the label text and the divider line.
+        Collapsed, the divider stays and shows a member count.
+      </p>
+    </div>
+
+    <p class="state-label"><span class="pill">Full app</span> A repo with two dividers and loose workspaces</p>
+    <div class="window">
+      <div class="traffic" style="position:absolute"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+      <div class="sidebar">
+        <div class="topnav" style="padding-top:34px">
+          <div class="navitem">%HOME% Home</div>
+          <div class="navitem">%CMD% Commands</div>
+          <div class="navitem">%PLUS% New Workspace</div>
+        </div>
+        <div class="sidebar-scroll">
+          <div class="repo-header">%CHEVDOWN% %GH% <span class="name">imbue-ai/sculptor</span></div>
+          <div class="repo-body">
+
+            <!-- divider group, expanded, blue -->
+            <div class="group" style="--g:#0090ff">
+              <div class="grp-header">%CHEVDOWN_SM% <span class="glabel">SCU‑1685 · CC workflows</span><span class="grp-count">3</span>
+                <span class="row-actions" style="margin-left:8px">%DOTS%</span>
+              </div>
+              <div class="grp-members">
+                <div class="ws active"><span class="dot running"></span><span class="wsname">Workflows UI polish</span></div>
+                <div class="ws"><span class="dot waiting"></span><span class="wsname">Stream‑json parser</span></div>
+                <div class="ws"><span class="dot ready"></span><span class="wsname">Fixture snapshots</span></div>
+              </div>
+            </div>
+
+            <!-- divider group, collapsed, purple -->
+            <div class="group" style="--g:#8e4ec6">
+              <div class="grp-header">%CHEVRIGHT_SM% <span class="glabel">New workspace modal</span><span class="grp-count">4</span>
+                <span class="row-actions" style="margin-left:8px">%DOTS%</span>
+              </div>
+            </div>
+
+            <!-- loose workspaces -->
+            <div class="ws" style="padding-left:8px"><span class="dot read"></span><span class="wsname">Sidebar drag‑and‑drop</span></div>
+            <div class="ws" style="padding-left:8px"><span class="dot ready"></span><span class="wsname">Help docs refresh</span></div>
+          </div>
+
+          <div class="repo-header">%CHEVRIGHT% %GH% <span class="name">imbue-ai/docs-site</span></div>
+        </div>
+      </div>
+      <div class="main">
+        <div class="main-header"><span class="mh-dot"></span> Workflows UI polish · <span style="color:var(--gray-10)">bryden/scu-1685-workflows-ui</span></div>
+        <div class="main-body">
+          <div class="bubble user">Keep grouping almost weightless — just a labeled divider, no card.</div>
+          <div class="bubble agent">
+            <div class="skeleton w90"></div><div class="skeleton w70"></div><div class="skeleton w50"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="height:26px"></div>
+    <p class="state-label"><span class="pill">Edge states</span> Collapsed · single workspace · CLI-born · long names · context menu</p>
+    <div class="cards">
+
+      <div>
+        <div class="state-label" style="font-weight:550">Collapsed group</div>
+        <div class="card-sidebar">
+          <div class="group" style="--g:#30a46c">
+            <div class="grp-header">%CHEVRIGHT_SM% <span class="glabel">Dependency modernization</span><span class="grp-count">5</span></div>
+          </div>
+        </div>
+        <p class="state-note">Collapsed = just the labeled rule + a count. Lowest-weight collapsed state of the three; no member preview.</p>
+      </div>
+
+      <div>
+        <div class="state-label" style="font-weight:550">Group with 1 workspace</div>
+        <div class="card-sidebar">
+          <div class="group" style="--g:#ffc53d">
+            <div class="grp-header">%CHEVDOWN_SM% <span class="glabel">Config race fix</span><span class="grp-count">1</span></div>
+            <div class="grp-members">
+              <div class="ws muted"><span class="dot read"></span><span class="wsname">Serialize config PUT</span></div>
+            </div>
+          </div>
+        </div>
+        <p class="state-note">A single member under a rule reads almost like a captioned workspace — cheap enough that one-off groups don't feel heavy.</p>
+      </div>
+
+      <div>
+        <div class="state-label" style="font-weight:550">CLI-born group</div>
+        <div class="card-sidebar">
+          <div class="group" style="--g:#12a594">
+            <div class="grp-header">%CHEVDOWN_SM% <span class="glabel">sculpt · nightly deps</span><span class="cli-badge" style="margin-left:6px">CLI</span></div>
+            <div class="grp-members">
+              <div class="ws"><span class="dot running"></span><span class="wsname">bump ruff + mypy</span></div>
+              <div class="ws"><span class="dot ready"></span><span class="wsname">regen lockfile</span></div>
+            </div>
+          </div>
+        </div>
+        <p class="state-note"><code>CLI</code> badge rides in the label row; auto-color tints the divider so machine groups still separate visually.</p>
+      </div>
+
+      <div>
+        <div class="state-label" style="font-weight:550">Long names (truncation)</div>
+        <div class="card-sidebar">
+          <div class="group" style="--g:#e5484d">
+            <div class="grp-header">%CHEVDOWN_SM% <span class="glabel">SCU‑1746 navigation inferability restructure</span><span class="grp-count">2</span></div>
+            <div class="grp-members">
+              <div class="ws"><span class="dot waiting"></span><span class="wsname">Before/after 10‑prompt baseline comparison run</span></div>
+              <div class="ws"><span class="dot read"></span><span class="wsname">Delta analysis — decisions.md writeup</span></div>
+            </div>
+          </div>
+        </div>
+        <p class="state-note">Label caps at ~150px and ellipsizes; the rule fills the rest of the row so a long name never pushes the divider off-screen.</p>
+      </div>
+
+      <div>
+        <div class="state-label" style="font-weight:550">Right-click context menu</div>
+        <div class="card-sidebar ctx-wrap" style="min-height:300px">
+          <div class="group" style="--g:#0090ff">
+            <div class="grp-header">%CHEVDOWN_SM% <span class="glabel">SCU‑1685 · CC workflows</span><span class="grp-count">3</span></div>
+          </div>
+          <div class="menu" style="position:absolute; left:20px; top:26px">
+            <div class="mi">%PLUS_SM% New workspace in group <span class="kbd">⌥⌘N</span></div>
+            <div class="mi">%EDIT% Rename…</div>
+            <div class="sep"></div>
+            <div class="swatches">
+              <span class="sw sel" style="background:#0090ff"></span>
+              <span class="sw" style="background:#8e4ec6"></span>
+              <span class="sw" style="background:#30a46c"></span>
+              <span class="sw" style="background:#ffc53d"></span>
+              <span class="sw" style="background:#e5484d"></span>
+            </div>
+            <div class="mi" style="padding-top:2px">%PALETTE% More colors…</div>
+            <div class="sep"></div>
+            <div class="mi">%UNGROUP% Ungroup</div>
+          </div>
+        </div>
+        <p class="state-note">Variant C menu keeps a quick 5-swatch row but pushes the full palette behind "More colors…" to stay compact.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <footer class="foot">
+    Mock for the Workspace Grouping feature · dark theme, gray accent (Sculptor default) ·
+    tokens mirror <code>@radix-ui/themes</code> dark scale and <code>StatusDot.module.scss</code>.
+    Rejected variants are kept here as a record of exploration.
+  </footer>
+</div>
+
+<!-- inline SVG icon defs, swapped in by placeholder below -->
+<script>
+  // lucide-style inline icons keyed by the %TOKEN% placeholders used above,
+  // so the markup stays readable and every icon is defined exactly once.
+  const ICONS = {
+    HOME: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5"/><path d="M5 10v10h14V10"/></svg>',
+    CMD: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6a3 3 0 1 1 3 3h-3V6ZM9 6a3 3 0 1 0-3 3h3V6Zm0 12a3 3 0 1 1-3-3h3v3Zm6 0a3 3 0 1 0 3-3h-3v3Z"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>',
+    PLUS: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
+    PLUS_SM: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
+    GH: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.54 2.87 8.39 6.84 9.75.5.1.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.63.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05a9.35 9.35 0 0 1 5 0c1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.81 0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2Z"/></svg>',
+    CHEVDOWN: '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+    CHEVRIGHT: '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>',
+    CHEVDOWN_SM: '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+    CHEVRIGHT_SM: '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>',
+    DOTS: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>',
+    EDIT: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+    UNGROUP: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="8" height="6" rx="1"/><rect x="14" y="14" width="7" height="6" rx="1"/><path d="M7 10v4h4"/></svg>',
+    COLLAPSE: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5-5 5 5"/></svg>',
+    TRASH: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>',
+    PALETTE: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2a10 10 0 1 0 0 20c1 0 1.5-.8 1.5-1.5 0-.5-.3-.9-.6-1.2-.3-.3-.6-.7-.6-1.2 0-.8.7-1.5 1.5-1.5H16a6 6 0 0 0 6-6c0-5-4.5-8-10-8Z"/></svg>',
+  };
+  document.body.innerHTML = document.body.innerHTML.replace(/%([A-Z_]+)%/g, (m, k) => ICONS[k] || m);
+
+  // variant tabs
+  function activate(tab) {
+    document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('active', x.dataset.tab === tab));
+    document.querySelectorAll('.panel').forEach((x) => x.classList.toggle('active', x.dataset.panel === tab));
+  }
+  document.querySelectorAll('.tab').forEach((t) => {
+    t.addEventListener('click', () => { activate(t.dataset.tab); history.replaceState(null, '', '#' + t.dataset.tab); });
+  });
+  // Deep-link: #A / #B / #C opens that variant on load.
+  const initial = (location.hash || '#B').slice(1).toUpperCase();
+  if (['A', 'B', 'C'].includes(initial)) activate(initial);
+</script>
+</body>
+</html>
