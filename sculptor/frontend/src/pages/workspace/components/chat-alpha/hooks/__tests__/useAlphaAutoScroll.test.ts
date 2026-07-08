@@ -281,6 +281,84 @@ describe("useAlphaAutoScroll", () => {
     expect(result.current.isEngaged).toBe(false);
   });
 
+  it("re-pins to the true bottom when a non-streaming jump landed short (stale measurement)", () => {
+    // A non-streaming jump computes bottomPinOffset from scrollHeight, which is
+    // stale-short while the last message is still remeasuring taller after it
+    // remounts (it grew off-screen while the user was scrolled away). The
+    // bottom-settle window opened by scrollToBottom must re-pin to the true
+    // bottom when the remeasured content grows — otherwise the jump lands short
+    // with no stream and no further scroll to hide the jump-to-bottom button.
+    const el = createMockScrollContainer(0, 2000, 500); // scrolled to the top
+    const ref = { current: el };
+    const virtualizer = createMockVirtualizer();
+
+    const { result } = renderHook(() => useAlphaAutoScroll(ref, false, 10, virtualizer, null, -1, "test-task"));
+
+    // Jump — lands at the (stale, short) content bottom.
+    act(() => {
+      result.current.scrollToBottom();
+    });
+    expectPinnedToBottom(el);
+
+    // The remounted last message remeasures taller: scrollHeight grows.
+    setScrollPosition(el, el.scrollTop, 3000);
+    act(() => {
+      triggerResize();
+    });
+
+    // The bottom-settle window re-pinned to the NEW content bottom.
+    expectPinnedToBottom(el);
+
+    // In the browser the re-pin fires a scroll event that re-samples geometry;
+    // simulate it and confirm the view now reads as at-bottom (button hides).
+    act(() => {
+      el.dispatchEvent(new Event("scroll"));
+    });
+    expect(result.current.isAtBottom).toBe(true);
+  });
+
+  it("restores the reading anchor synchronously on a width reflow (no deferred frame)", () => {
+    // A width reflow (sidebar collapse/expand, panel/window resize) re-wraps every
+    // message at once. The anchor restore must land in the same frame —
+    // synchronously in the resize callback — so the re-layout and the compensating
+    // scroll commit together, without the one-frame text shift a deferred (rAF)
+    // restore would leave.
+    const el = createMockScrollContainer(250, 2000, 500);
+    Object.defineProperty(el, "clientWidth", { value: 1200, writable: true, configurable: true });
+    const ref = { current: el };
+    // getVirtualItems returns the top-visible item so a user scroll captures a
+    // reading anchor; measurementsCache holds the reflowed (post-wrap) start.
+    const virtualizer = {
+      scrollToIndex: vi.fn(),
+      measureElement: vi.fn(),
+      getVirtualItems: vi.fn(() => [{ index: 2, start: 300, size: 100 }]),
+      getTotalSize: vi.fn(() => 2000),
+      measurementsCache: [undefined, undefined, { start: 280, size: 100 }] as Array<unknown>,
+      options: { paddingEnd: 0 },
+    } as unknown as Virtualizer<HTMLDivElement, Element>;
+
+    // lastMessageRole=USER so the on-mount pin-to-bottom bails, preserving this
+    // test's scrolled-up premise (otherwise the mount pin flags the next scroll
+    // event as programmatic and no reading anchor is captured).
+    renderHook(() => useAlphaAutoScroll(ref, false, 10, virtualizer, ChatMessageRole.USER, -1, "test-task"));
+
+    // A genuine user scroll captures the reading anchor (index 2, offset 50).
+    act(() => {
+      el.dispatchEvent(new Event("wheel"));
+      el.dispatchEvent(new Event("scroll"));
+    });
+
+    // The container widens: a width reflow, distinct from a height-only growth.
+    Object.defineProperty(el, "clientWidth", { value: 1400, writable: true, configurable: true });
+    act(() => {
+      triggerResize();
+    });
+
+    // Corrected synchronously within the resize callback (no rAF flush): the
+    // reflowed anchor start (280) minus its sampled viewport offset (50) = 230.
+    expect(el.scrollTop).toBe(230);
+  });
+
   it("suppressAutoScroll prevents engage/disengage", () => {
     const el = createMockScrollContainer(1300, 2000, 500);
     const ref = { current: el };
