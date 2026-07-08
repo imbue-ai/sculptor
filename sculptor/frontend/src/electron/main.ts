@@ -20,6 +20,7 @@ import {
   shell,
   webContents,
 } from "electron";
+import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
 import Store from "electron-store";
 
 import type { AnyBackendStatus, SculptorDevInfo } from "../shared/types";
@@ -1139,6 +1140,18 @@ app.whenReady().then(async () => {
 
   // We can only create the window _after_ the handlers have been defined, because createWindow() invokes preload.ts
   // which depends on the handlers.
+  // Install React DevTools extension before creating any window so content
+  // scripts inject into the initial page load (they only target pages loaded
+  // after extension installation).
+  if (IS_DEVELOPMENT && !isInPytest) {
+    try {
+      const ext = await installExtension(REACT_DEVELOPER_TOOLS);
+      logger.info("[main] Installed extension:", ext.name);
+    } catch (err) {
+      logger.error("[main] Failed to install React DevTools:", err);
+    }
+  }
+
   await createWindow();
 
   // Main window exists now, so the migration's transient-window quit suppression
