@@ -104,7 +104,7 @@ export type SubagentMetadata = {
    *  attached (e.g. an orphaned notification) — the timer should stop instead
    *  of ticking forever. Undefined while running or when the task id is
    *  unknown (older persisted sessions), where ticking remains the default. */
-  stillRunning?: boolean;
+  isStillRunning?: boolean;
   /** Subagent run time in seconds. For background agents this is derived from
    *  the timestamp delta between the parent message and the subagent's reply,
    *  because the launch-ack tool_result's durationSeconds is ~0. */
@@ -178,7 +178,7 @@ type MetadataBuilderMessage = {
  * identifies the latter, so both signals are checked.
  *
  * `pendingBackgroundTaskIds` (from the task detail stream) marks which background
- * tasks are still awaiting completion; it feeds SubagentMetadata.stillRunning so a
+ * tasks are still awaiting completion; it feeds SubagentMetadata.isStillRunning so a
  * background agent whose completion signal was lost doesn't tick forever.
  */
 export const buildSubagentMetadataMap = (
@@ -267,13 +267,13 @@ export const buildSubagentMetadataMap = (
   // Normally the completion child (second pass) and the task leaving the
   // pending set arrive together, but when the completion signal is lost
   // (orphaned notification, skipped request) the pill would tick forever —
-  // stillRunning=false lets it settle instead. Entries without a
-  // backgroundTaskId (older persisted sessions) keep stillRunning undefined,
+  // isStillRunning=false lets it settle instead. Entries without a
+  // backgroundTaskId (older persisted sessions) keep isStillRunning undefined,
   // preserving the tick-while-awaiting-response behavior.
   if (pendingBackgroundTaskIds !== undefined) {
     for (const metadata of map.values()) {
       if (metadata.isBackground && metadata.responseText === undefined && metadata.backgroundTaskId !== undefined) {
-        metadata.stillRunning = pendingBackgroundTaskIds.has(metadata.backgroundTaskId);
+        metadata.isStillRunning = pendingBackgroundTaskIds.has(metadata.backgroundTaskId);
       }
     }
   }

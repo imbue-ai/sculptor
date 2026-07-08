@@ -152,7 +152,7 @@ describe("AlphaSubagentPopover", () => {
     });
 
     it("shows a response-unavailable status when the agent finished without a captured response", () => {
-      renderPopover({ metadata: { isBackground: true, stillRunning: false }, isThinking: false });
+      renderPopover({ metadata: { isBackground: true, isStillRunning: false }, isThinking: false });
       expect(screen.getByText(/response wasn't captured/)).toBeTruthy();
     });
 

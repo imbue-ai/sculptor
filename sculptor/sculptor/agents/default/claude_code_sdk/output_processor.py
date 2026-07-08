@@ -825,20 +825,7 @@ class ClaudeOutputProcessor:
 
             elif isinstance(result, ParsedTaskStartedResponse):
                 logger.debug("Background task started: task_id={} tool_use_id={}", result.task_id, result.tool_use_id)
-                self._pending_background_tasks.add(result.task_id)
-                # Record which tool launched this task. Used by task_updated
-                # handling to defer cleanup for tools (e.g. Monitor) that emit
-                # follow-up event-delivery turns. tool_use_map is populated by
-                # _parse_assistant_response, which always emits the tool_use
-                # before the CLI emits task_started.
-                tool_use_info = self.tool_use_map.get(result.tool_use_id)
-                if tool_use_info is not None:
-                    self._task_id_to_tool_name[result.task_id] = tool_use_info[0]
-                self._task_id_to_task_type[result.task_id] = result.task_type
-                if result.tool_use_id:
-                    self._tool_use_id_to_background_task_id[result.tool_use_id] = result.task_id
-                if result.workflow_name:
-                    self._task_id_to_workflow_name[result.task_id] = result.workflow_name
+                self._record_task_started_state(result)
                 self.output_message_queue.put(
                     BackgroundTaskStartedAgentMessage(
                         message_id=AgentMessageID(),
@@ -856,6 +843,11 @@ class ClaudeOutputProcessor:
             elif isinstance(result, ParsedTaskNotificationResponse):
                 logger.debug("Background task completed: task_id={} status={}", result.task_id, result.status)
                 self._pending_background_tasks.discard(result.task_id)
+                # The launch-ack stamp mapping is consumed by the ack's
+                # tool_result, but tools whose ack precedes task_started
+                # (e.g. Workflow) leave their entry behind — clear it here so
+                # the dict doesn't grow for the processor's lifetime.
+                self._tool_use_id_to_background_task_id.pop(result.tool_use_id, None)
                 # If the task was deferred (Monitor's bash exited and we were
                 # waiting on the follow-up turn), the actual notification
                 # arriving supersedes the deferred path — drop the deferred
@@ -1338,6 +1330,29 @@ class ClaudeOutputProcessor:
                 len(self._pending_background_tasks),
                 self._pending_background_tasks,
             )
+
+    def _record_task_started_state(self, result: ParsedTaskStartedResponse) -> None:
+        """Record the per-task state a task_started event establishes.
+
+        Also called by the test dispatcher (_feed_jsonl in
+        output_processor_test), which mirrors _process_output's dispatch —
+        keeping the state mutations in one method prevents the mirror from
+        drifting out of sync with the real handler.
+        """
+        self._pending_background_tasks.add(result.task_id)
+        # Record which tool launched this task. Used by task_updated
+        # handling to defer cleanup for tools (e.g. Monitor) that emit
+        # follow-up event-delivery turns. tool_use_map is populated by
+        # _parse_assistant_response, which always emits the tool_use
+        # before the CLI emits task_started.
+        tool_use_info = self.tool_use_map.get(result.tool_use_id)
+        if tool_use_info is not None:
+            self._task_id_to_tool_name[result.task_id] = tool_use_info[0]
+        self._task_id_to_task_type[result.task_id] = result.task_type
+        if result.tool_use_id:
+            self._tool_use_id_to_background_task_id[result.tool_use_id] = result.task_id
+        if result.workflow_name:
+            self._task_id_to_workflow_name[result.task_id] = result.workflow_name
 
     def _parse_assistant_response(self, result: ParsedAssistantResponse) -> None:
         new_message_id = result.message_id

@@ -10,9 +10,15 @@ import type { SubagentMetadata, SubagentTreeNode } from "~/pages/workspace/utils
 import { AlphaSubagentPill } from "../AlphaSubagentPill.tsx";
 import { ToolNavigationProvider, useToolNavigation } from "../ToolNavigationContext.tsx";
 
-// Avoid timer side effects in tests
+// Avoid timer side effects in tests. The spy records the hook's arguments so
+// tests can assert on the isTicking flag (arg 1) — that flag is what actually
+// starts/stops the live timer.
+const elapsedTimeSpy = vi.hoisted(() => vi.fn());
 vi.mock("../useElapsedTime.ts", () => ({
-  useElapsedTime: (): { elapsed: string } => ({ elapsed: "2.5s" }),
+  useElapsedTime: (...args: Array<unknown>): { elapsed: string } => {
+    elapsedTimeSpy(...args);
+    return { elapsed: "2.5s" };
+  },
 }));
 
 // Avoid complex popover dependencies (only the trigger is under test)
@@ -155,6 +161,23 @@ describe("AlphaSubagentPill", () => {
     it("renders a trigger button that can open the popover", () => {
       renderPill({ subagentMetadataMap: makeMetadataMap() });
       expect(screen.getByRole("button")).toBeInTheDocument();
+    });
+  });
+
+  describe("background liveness", () => {
+    it("keeps the timer ticking while the background task is pending", () => {
+      renderPill({ subagentMetadataMap: makeMetadataMap({ isBackground: true, isStillRunning: true }) });
+      expect(elapsedTimeSpy.mock.lastCall?.[1]).toBe(true);
+    });
+
+    it("stops the timer when the task left the pending set without a response", () => {
+      renderPill({ subagentMetadataMap: makeMetadataMap({ isBackground: true, isStillRunning: false }) });
+      expect(elapsedTimeSpy.mock.lastCall?.[1]).toBe(false);
+    });
+
+    it("keeps ticking when liveness is unknown (no task id — older persisted sessions)", () => {
+      renderPill({ subagentMetadataMap: makeMetadataMap({ isBackground: true }) });
+      expect(elapsedTimeSpy.mock.lastCall?.[1]).toBe(true);
     });
   });
 

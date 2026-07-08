@@ -347,15 +347,7 @@ def _feed_jsonl(processor: ClaudeOutputProcessor, jsonl_dicts: list[dict]) -> No
         elif isinstance(result, ParsedToolResultResponse):
             processor._parse_tool_result_response(result)
         elif isinstance(result, ParsedTaskStartedResponse):
-            processor._pending_background_tasks.add(result.task_id)
-            tool_use_info = processor.tool_use_map.get(result.tool_use_id)
-            if tool_use_info is not None:
-                processor._task_id_to_tool_name[result.task_id] = tool_use_info[0]
-            processor._task_id_to_task_type[result.task_id] = result.task_type
-            if result.tool_use_id:
-                processor._tool_use_id_to_background_task_id[result.tool_use_id] = result.task_id
-            if result.workflow_name:
-                processor._task_id_to_workflow_name[result.task_id] = result.workflow_name
+            processor._record_task_started_state(result)
         elif isinstance(result, ParsedTaskProgressResponse):
             processor._handle_task_progress_response(result)
         elif isinstance(result, ParsedTaskUpdatedResponse):
@@ -380,6 +372,7 @@ def _feed_jsonl(processor: ClaudeOutputProcessor, jsonl_dicts: list[dict]) -> No
                     processor._completed_via_task_updated.add(result.task_id)
         elif isinstance(result, ParsedTaskNotificationResponse):
             processor._pending_background_tasks.discard(result.task_id)
+            processor._tool_use_id_to_background_task_id.pop(result.tool_use_id, None)
             processor._completed_pending_deferred.discard(result.task_id)
             if not processor._completed_pending_deferred:
                 processor._completed_pending_deferred_deadline = None
@@ -648,7 +641,7 @@ class TestDeferredCompletionCleanup:
         assert "task_monitor_1" not in processor._pending_background_tasks
 
 
-def _collect_tool_result_blocks(messages: list) -> list[ToolResultBlock]:
+def _collect_tool_result_blocks(messages: list[object]) -> list[ToolResultBlock]:
     return [
         block
         for message in messages

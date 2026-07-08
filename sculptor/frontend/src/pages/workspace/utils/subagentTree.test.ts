@@ -385,7 +385,7 @@ describe("buildSubagentMetadataMap", () => {
     expect(meta.durationSeconds).toBeCloseTo(120, 0);
   });
 
-  it("computes stillRunning from the pending background task set", () => {
+  it("computes isStillRunning from the pending background task set", () => {
     const makeConverted = (
       toolUseId: string,
       taskId: string,
@@ -409,15 +409,15 @@ describe("buildSubagentMetadataMap", () => {
     ];
     const map = buildSubagentMetadataMap(messages, new Set(["task-running"]));
     // Still in the pending set: running, keep the live timer ticking.
-    expect(map.get("tu_running")!.stillRunning).toBe(true);
+    expect(map.get("tu_running")!.isStillRunning).toBe(true);
     // Left the pending set without a response child (orphaned completion):
     // the timer must settle rather than tick forever.
-    expect(map.get("tu_lost")!.stillRunning).toBe(false);
+    expect(map.get("tu_lost")!.isStillRunning).toBe(false);
     // Response arrived: liveness is moot, leave it unset.
-    expect(map.get("tu_done")!.stillRunning).toBeUndefined();
+    expect(map.get("tu_done")!.isStillRunning).toBeUndefined();
   });
 
-  it("leaves stillRunning unset when the pending set is not provided", () => {
+  it("leaves isStillRunning unset when the pending set is not provided", () => {
     const messages = [
       {
         content: [
@@ -429,7 +429,7 @@ describe("buildSubagentMetadataMap", () => {
       },
     ];
     const map = buildSubagentMetadataMap(messages);
-    expect(map.get("tu_conv")!.stillRunning).toBeUndefined();
+    expect(map.get("tu_conv")!.isStillRunning).toBeUndefined();
   });
 });
 

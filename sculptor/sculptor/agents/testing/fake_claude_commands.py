@@ -1749,7 +1749,7 @@ def handle_background_subagent(args: dict, emit_streaming: bool) -> list[dict]:
     """
     description = args.get("description", "Explore the codebase")
     prompt = args.get("prompt", "Find relevant files")
-    converted = bool(args.get("converted", False))
+    is_converted = bool(args.get("converted", False))
     summary_text = args.get("summary_text", "[FakeClaude] Here is the summary of the background subagent's findings.")
     launched_text = args.get("launched_text", "Background subagent launched. Let me continue while it runs.")
     notification_summary = args.get("notification_summary", f'Agent "{description}" completed')
@@ -1767,7 +1767,7 @@ def handle_background_subagent(args: dict, emit_streaming: bool) -> list[dict]:
     # 1. Main agent: text + Agent tool_use. A converted agent's input has no
     # run_in_background — the harness backgrounds it on its own.
     tool_input: dict = {"prompt": prompt, "description": description}
-    if not converted:
+    if not is_converted:
         tool_input["run_in_background"] = True
     agent_tool_block = make_tool_use_block(
         tool_id=agent_tool_id,

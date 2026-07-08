@@ -177,15 +177,18 @@ def test_converted_background_agent_shows_live_status_and_result(sculptor_instan
     # Open the popover: while the task is pending it must show the user-facing
     # running status, and never the agent-facing launch-ack.
     pill.click()
-    status = page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_POPOVER_STATUS)
+    status = chat_panel.get_subagent_popover_status()
     expect(status).to_be_visible()
     expect(status).to_contain_text("Running in the background")
-    note = page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_POPOVER_NOTE)
+    note = chat_panel.get_subagent_popover_note()
     expect(note).to_be_visible()
     expect(note).to_contain_text("aren't shown")
     expect(status).not_to_contain_text("Async agent launched")
-    # Close the popover so it doesn't interfere with the post-release steps.
+    # Close the popover so it doesn't interfere with the post-release steps,
+    # and confirm the close landed — otherwise the later pill.click() would
+    # toggle the still-open popover closed and fail downstream instead of here.
     page.keyboard.press("Escape")
+    expect(status).not_to_be_visible()
 
     # Release: the task_notification and the follow-up summary turn arrive.
     pause.release()
@@ -196,10 +199,10 @@ def test_converted_background_agent_shows_live_status_and_result(sculptor_instan
     # pill's Response — reopen the popover and check the summary shows and
     # the running status is gone.
     pill.click()
-    response = page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_POPOVER_RESPONSE)
+    response = chat_panel.get_subagent_popover_response()
     expect(response).to_be_visible()
     expect(response).to_contain_text(CONVERTED_NOTIFICATION_SUMMARY)
-    expect(page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_POPOVER_STATUS)).not_to_be_visible()
+    expect(chat_panel.get_subagent_popover_status()).not_to_be_visible()
 
     # The launch-ack must not appear anywhere in the chat.
     expect(chat_panel.get_messages().filter(has_text="Async agent launched")).to_have_count(0)

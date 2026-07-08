@@ -151,11 +151,11 @@ export const AlphaSubagentPill = ({
   // completes in ~0s — that's the launch ack, not the subagent finishing. For
   // background pills, treat the arrival of responseText (derived from the
   // subagent's child messages) as the completion signal, and ignore the
-  // launch-ack's durationSeconds. stillRunning=false stops the timer when the
+  // launch-ack's durationSeconds. isStillRunning=false stops the timer when the
   // task left the pending set without ever delivering a response.
   const isBackground = metadata?.isBackground === true;
   const isThinking = isBackground
-    ? !metadata?.responseText && metadata?.stillRunning !== false
+    ? !metadata?.responseText && metadata?.isStillRunning !== false
     : !metadata?.responseText && !result;
 
   // Timer: always ticking while thinking, frozen once complete
