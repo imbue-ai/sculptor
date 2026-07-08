@@ -726,8 +726,8 @@ tmux-dev repo_path=".":
     echo "Killing existing session if present..."
     tmux kill-session -t {{session_name}} 2>/dev/null || true
     echo "Creating new tmux session..."
-    tmux new-session -d -s {{session_name}} -n frontend `shell echo $$SHELL`
-    tmux new-window -t {{session_name}} -n backend `shell echo $$SHELL`
+    tmux new-session -d -s {{session_name}} -n frontend {{_ENV_SHELL}}
+    tmux new-window -t {{session_name}} -n backend {{_ENV_SHELL}}
     # Collect CLAUDE_* env vars (e.g. CLAUDE_AUTOCOMPACT_PCT_OVERRIDE) so they
     # reach the backend server and its claude child processes.  tmux send-keys
     # types text into a fresh shell that doesn't inherit the caller's env, so
