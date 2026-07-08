@@ -1,0 +1,147 @@
+// Workspace-group card styling. The card element stamps the group's color as
+// data-accent-color, so every accent token below resolves to that group's
+// Radix scale — the tint, border, name, and swatch all follow one attribute.
+
+.groupCard {
+  // Alpha steps composite over the sidebar surface: a3 for the subtle tint,
+  // a6 for the faint colored border (the Radix border step).
+  background: var(--accent-a3);
+  border: 1px solid var(--accent-a6);
+  border-radius: var(--radius-4);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  // Breathing room below the card so the tinted border doesn't sit flush
+  // against the next card or loose row (the section's own gap is only 2px).
+  margin-bottom: var(--space-1);
+  padding: var(--space-1);
+}
+
+// Same pill geometry as the repo header / workspace rows so the rail's row
+// rhythm carries into the card.
+.groupHeader {
+  align-items: center;
+  border-radius: var(--radius-2);
+  display: flex;
+  gap: var(--space-1);
+  min-height: 28px;
+  padding: 0 var(--space-2);
+
+  &:hover {
+    background: var(--accent-a4);
+  }
+}
+
+.groupHeaderButton {
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-grow: 1;
+  gap: var(--space-2);
+  min-height: 28px;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.groupChevron {
+  color: var(--gray-10);
+  flex-shrink: 0;
+}
+
+// The header's color dot, matching the workspace rows' 9px status dots.
+.groupSwatch {
+  background: var(--accent-9);
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+  height: 9px;
+  width: 9px;
+}
+
+.groupName {
+  color: var(--accent-11);
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-medium);
+  overflow: hidden;
+}
+
+// Small uppercase text chip marking CLI-created groups.
+.cliBadge {
+  background: var(--gray-3);
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-1);
+  color: var(--gray-11);
+  flex-shrink: 0;
+  font-family: var(--code-font-family);
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- chip caption; the smallest Radix font-size (--font-size-1, 12px) overpowers the 14px group name
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+  padding: 0 var(--space-1);
+  text-transform: uppercase;
+}
+
+.groupMembers {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+// Trailing hover-revealed "⋯"; mirrors the repo header's action cluster
+// (visibility, not display, so the tooltip anchor keeps its rect — see
+// SidebarRepoGroup.module.scss).
+.rowActions {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+}
+
+.groupHeader .hoverReveal {
+  visibility: hidden;
+}
+
+// The dropdown trigger's open state is read via [aria-expanded] — its
+// data-state is clobbered by the Tooltip sharing the button via asChild.
+.groupHeader:hover .hoverReveal,
+.groupHeader:focus-within .hoverReveal,
+.groupHeader:has([aria-expanded="true"]) .hoverReveal {
+  visibility: visible;
+}
+
+// The group menu's color-swatch row: eight palette dots laid out in a row.
+.swatchRow {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+}
+
+// Each swatch is a real menu item (keyboard-reachable, closes on select)
+// restyled into a color dot. Each stamps its own data-accent-color, so the
+// accent tokens resolve per swatch. Scoped under .swatchRow to out-specify
+// the Radix base menu-item geometry.
+.swatchRow .menuSwatch {
+  background: var(--accent-9);
+  border-radius: var(--radius-full);
+  height: 16px;
+  min-height: 0;
+  padding: 0;
+  width: 16px;
+
+  &[data-highlighted] {
+    background: var(--accent-9);
+    box-shadow:
+      0 0 0 2px var(--color-panel-solid),
+      0 0 0 4px var(--gray-8);
+  }
+}
+
+// The group's current color: ringed like a selected radio.
+.swatchRow .menuSwatchSelected,
+.swatchRow .menuSwatchSelected[data-highlighted] {
+  box-shadow:
+    0 0 0 2px var(--color-panel-solid),
+    0 0 0 4px var(--gray-12);
+}

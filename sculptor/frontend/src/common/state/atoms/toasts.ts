@@ -24,6 +24,11 @@ export const workspaceRenameErrorToastAtom = atom<ErrorToastData | null>(null);
 // the backend; otherwise the failure would only reach the console.
 export const createAgentErrorToastAtom = atom<ErrorToastData | null>(null);
 
+// Surfaced when a workspace-group mutation (create/rename/recolor/membership/
+// ungroup) fails on the backend. Optimistic writes are already rolled back by
+// the mutation hooks, so this is the only signal the change didn't stick.
+export const workspaceGroupErrorToastAtom = atom<ErrorToastData | null>(null);
+
 // Surfaced when the sidebar repo-group "+" direct-create fails on the backend.
 // That flow has no form on screen to show an inline error, so without this the
 // failure would only reach the console while a blank dialog pops open.

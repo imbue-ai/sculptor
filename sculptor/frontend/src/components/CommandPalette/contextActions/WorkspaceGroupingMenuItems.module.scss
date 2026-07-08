@@ -1,0 +1,19 @@
+// Styling for the workspace menu's grouping section (WorkspaceGroupingMenuItems).
+
+// A group's color dot in the "Add to group" submenu. The span stamps its
+// group's data-accent-color, so the accent token resolves per group.
+.groupColorDot {
+  background: var(--accent-9);
+  border-radius: var(--radius-full);
+  display: inline-block;
+  flex-shrink: 0;
+  height: 9px;
+  width: 9px;
+}
+
+// The checkmark marking the workspace's current group; menu items are flex
+// rows, so the auto margin pins it to the right edge.
+.currentGroupCheck {
+  color: var(--gray-11);
+  margin-left: auto;
+}

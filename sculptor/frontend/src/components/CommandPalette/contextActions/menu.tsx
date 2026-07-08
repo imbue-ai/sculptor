@@ -1,4 +1,5 @@
 import { ContextMenu, DropdownMenu } from "@radix-ui/themes";
+import { useAtomValue } from "jotai";
 import { Copy, FolderOpenIcon, GitBranch, Stethoscope } from "lucide-react";
 import type { ComponentType, ReactElement, ReactNode } from "react";
 import { Fragment } from "react";
@@ -6,8 +7,10 @@ import { Fragment } from "react";
 import { ElementIds, type ExternalApp, type Workspace } from "../../../api";
 import { getOpenWithItems } from "../../../common/openInApp/items.tsx";
 import type { AccentColor } from "../../../common/state/atoms/themeBuilder";
+import { isWorkspaceGroupsEnabledAtom } from "../../../common/state/atoms/userConfig.ts";
 import { useWorkspaceBranch } from "../../../common/state/hooks/useWorkspaceBranch.ts";
 import type { WorkspaceAction } from "./types.ts";
+import { WorkspaceGroupingMenuItems } from "./WorkspaceGroupingMenuItems.tsx";
 
 /** Pixel size shared by every icon rendered in these context menus. */
 const ICON_SIZE = 14;
@@ -19,8 +22,9 @@ const ICON_SIZE = 14;
  * right-click context menu or the sidebar row's "..." dropdown — keeping
  * the two menus in lockstep instead of maintaining two divergent lists.
  */
-type WorkspaceMenuComponents = {
+export type WorkspaceMenuComponents = {
   Item: ComponentType<{
+    "data-group-id"?: string;
     "data-testid"?: string;
     color?: AccentColor;
     disabled?: boolean;
@@ -28,6 +32,7 @@ type WorkspaceMenuComponents = {
     children?: ReactNode;
   }>;
   Separator: ComponentType;
+  Label: ComponentType<{ children?: ReactNode }>;
   Sub: ComponentType<{ children?: ReactNode }>;
   SubTrigger: ComponentType<{ "data-testid"?: string; children?: ReactNode }>;
   SubContent: ComponentType<{ children?: ReactNode }>;
@@ -36,6 +41,7 @@ type WorkspaceMenuComponents = {
 const CONTEXT_MENU_COMPONENTS: WorkspaceMenuComponents = {
   Item: ContextMenu.Item as WorkspaceMenuComponents["Item"],
   Separator: ContextMenu.Separator as WorkspaceMenuComponents["Separator"],
+  Label: ContextMenu.Label as WorkspaceMenuComponents["Label"],
   Sub: ContextMenu.Sub as WorkspaceMenuComponents["Sub"],
   SubTrigger: ContextMenu.SubTrigger as WorkspaceMenuComponents["SubTrigger"],
   SubContent: ContextMenu.SubContent as WorkspaceMenuComponents["SubContent"],
@@ -44,6 +50,7 @@ const CONTEXT_MENU_COMPONENTS: WorkspaceMenuComponents = {
 const DROPDOWN_MENU_COMPONENTS: WorkspaceMenuComponents = {
   Item: DropdownMenu.Item as WorkspaceMenuComponents["Item"],
   Separator: DropdownMenu.Separator as WorkspaceMenuComponents["Separator"],
+  Label: DropdownMenu.Label as WorkspaceMenuComponents["Label"],
   Sub: DropdownMenu.Sub as WorkspaceMenuComponents["Sub"],
   SubTrigger: DropdownMenu.SubTrigger as WorkspaceMenuComponents["SubTrigger"],
   SubContent: DropdownMenu.SubContent as WorkspaceMenuComponents["SubContent"],
@@ -144,6 +151,10 @@ const useWorkspaceMenuItems = (
   // (no fetch). Fall back to the source branch when the live branch hasn't
   // arrived yet.
   const branch = useWorkspaceBranch(workspace.objectId)?.currentBranch ?? workspace.sourceBranch ?? null;
+  // Grouping entries lead the menu while the workspace-groups experiment is
+  // on. Gated by mounting (not by hiding inside the section) so the flag-off
+  // menu performs no group-store reads at all.
+  const areWorkspaceGroupsEnabled = useAtomValue(isWorkspaceGroupsEnabledAtom);
   const isOpenInVisible =
     openInRuntime != null && openInRuntime.canOpenInOS() && openInRuntime.isMacUi() && getOpenWithItems().length > 0;
   // Render the Open-in submenu inline, immediately after the `open_pr`
@@ -209,16 +220,21 @@ const useWorkspaceMenuItems = (
       </menu.Sub>
     </>
   );
-  return renderMenuItems({
-    actions,
-    target: workspace,
-    destructiveColor,
-    menu,
-    injectAfter: [
-      ...(openInSub != null ? [{ actionId: "open_pr", content: openInSub }] : []),
-      { actionId: "rename", content: copyGroup },
-    ],
-  });
+  return [
+    ...(areWorkspaceGroupsEnabled
+      ? [<WorkspaceGroupingMenuItems key="workspace-grouping" menu={menu} workspace={workspace} />]
+      : []),
+    ...renderMenuItems({
+      actions,
+      target: workspace,
+      destructiveColor,
+      menu,
+      injectAfter: [
+        ...(openInSub != null ? [{ actionId: "open_pr", content: openInSub }] : []),
+        { actionId: "rename", content: copyGroup },
+      ],
+    }),
+  ];
 };
 
 export const WorkspaceContextMenuContent = ({

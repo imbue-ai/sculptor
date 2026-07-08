@@ -25,6 +25,7 @@ import {
   mentionChipUnreachableToastAtom,
   terminalPromptRejectedToastAtom,
   workspaceDeleteErrorToastAtom,
+  workspaceGroupErrorToastAtom,
   workspaceOpenCloseErrorToastAtom,
   workspaceRenameErrorToastAtom,
 } from "~/common/state/atoms/toasts.ts";
@@ -62,6 +63,7 @@ const APP_TOASTS: ReadonlyArray<{ key: string; toastAtom: AtomToastAtom; duratio
   { key: "workspace-delete-error", toastAtom: workspaceDeleteErrorToastAtom, duration: ERROR_TOAST_DURATION_MS },
   { key: "workspace-open-close-error", toastAtom: workspaceOpenCloseErrorToastAtom, duration: ERROR_TOAST_DURATION_MS },
   { key: "workspace-rename-error", toastAtom: workspaceRenameErrorToastAtom, duration: ERROR_TOAST_DURATION_MS },
+  { key: "workspace-group-error", toastAtom: workspaceGroupErrorToastAtom, duration: ERROR_TOAST_DURATION_MS },
   { key: "mention-chip-unreachable", toastAtom: mentionChipUnreachableToastAtom },
   { key: "terminal-prompt-rejected", toastAtom: terminalPromptRejectedToastAtom },
   { key: "commit-prompt-send-failed", toastAtom: commitPromptSendFailedToastAtom },
