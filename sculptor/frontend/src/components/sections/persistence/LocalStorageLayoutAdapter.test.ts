@@ -152,6 +152,7 @@ describe("LocalStorageLayoutAdapter", () => {
       sidebarWidthPx: 300,
       sidebarCollapsed: true,
       explorerListWidthPx: 260,
+      explorerSidebarHiddenByPanel: { files: true },
     };
 
     adapter.write(WS_SCOPE, wsOne);
@@ -210,6 +211,7 @@ describe("LocalStorageLayoutAdapter", () => {
       sidebarWidthPx: 300,
       sidebarCollapsed: true,
       explorerListWidthPx: 260,
+      explorerSidebarHiddenByPanel: {},
     });
     // Before the debounce window elapses nothing is committed to storage, but
     // read() already sees the pending snapshot (read-your-writes).
@@ -223,6 +225,7 @@ describe("LocalStorageLayoutAdapter", () => {
       sidebarWidthPx: 300,
       sidebarCollapsed: true,
       explorerListWidthPx: 260,
+      explorerSidebarHiddenByPanel: {},
     });
   });
 

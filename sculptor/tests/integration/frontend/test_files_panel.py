@@ -659,6 +659,32 @@ def test_sidebar_toggle_from_viewer_header(sculptor_instance_: SculptorInstance)
     expect(layout.get_list()).to_be_visible()
 
 
+@user_story("to return to a workspace and find the file-browser sidebar hidden the way I left it")
+def test_reentry_preserves_hidden_sidebar(sculptor_instance_: SculptorInstance) -> None:
+    """Hiding the Explorer sidebar stays hidden across a workspace switch.
+
+    The sidebar-visibility toggle is persisted per panel, so remounting the
+    panel on a workspace switch must not reopen a sidebar the user hid.
+    """
+    page = sculptor_instance_.page
+    task_page, files_panel = _open_files_panel_with(
+        page, WRITE_FILES_PROMPT, sub_section="left", workspace_name="Sidebar Hide A"
+    )
+    layout = files_panel.get_explorer_layout()
+    expect(layout.get_list()).to_be_visible()
+    layout.hide_sidebar()
+    expect(layout.get_list()).to_have_count(0)
+
+    # Switch to a second workspace, then return to A.
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Sidebar Hide B")
+    navigate_to_workspace(page, "Sidebar Hide A")
+    expect(task_page.get_chat_panel()).to_be_visible(timeout=60_000)
+
+    # Reveal the Files panel and confirm the sidebar is still hidden.
+    files_panel = get_files_panel_in(open_panel(page, "files", sub_section="left"), page)
+    expect(files_panel.get_explorer_layout().get_list()).to_have_count(0)
+
+
 @user_story("to always see the viewer with an empty state when nothing is selected")
 def test_viewer_always_visible_with_empty_state(sculptor_instance_: SculptorInstance) -> None:
     """With files written but nothing selected, the viewer renders its
