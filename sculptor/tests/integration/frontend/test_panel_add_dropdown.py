@@ -250,27 +250,36 @@ def test_center_click_quick_adds_agent(sculptor_instance_: SculptorInstance) -> 
 
 @user_story("to pin the add-panel menu open in a side section by clicking its +")
 def test_noncenter_click_pins_menu_until_clicked_again(sculptor_instance_: SculptorInstance) -> None:
-    """Clicking a NON-center header `+` pins its menu open (it survives the pointer
-    leaving); clicking the `+` again closes it. (In the center a click quick-adds instead.)"""
+    """A NON-center header `+` opens its menu on HOVER, but that open is transient — the
+    menu closes when the pointer leaves. A CLICK pins it open (it survives the pointer
+    leaving) until the `+` is clicked again. (In the center a click quick-adds instead.)"""
     page = sculptor_instance_.page
     left_dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="left")
+    add_button = left_dropdown.get_add_panel_button()
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Pin Left Menu WS")
     # Bring the left section up so its header `+` renders (Files is seeded there).
     PlaywrightWorkspaceSection(page, "left").expand_section()
 
-    # Click the left `+` to PIN the menu open.
-    left_dropdown.get_add_panel_button().click()
+    # HOVER alone opens the menu, but it is transient: moving the pointer away closes it.
+    # `to_be_hidden` polls until the close grace period has elapsed, so this proves the
+    # transient close deterministically rather than merely observing it hadn't closed yet —
+    # which is what makes the pinned "still visible" assertion below meaningful.
+    add_button.hover()
     expect(left_dropdown.get_content()).to_be_visible()
+    page.mouse.move(5, 5)
+    expect(left_dropdown.get_content()).to_be_hidden()
 
-    # Move the pointer far away from the `+` and the menu — a pinned menu stays open where
-    # a transient hover-opened one would close.
+    # A CLICK pins the menu: unlike the hover-open above, it now survives the pointer moving
+    # far away from the `+` and the menu.
+    add_button.click()
+    expect(left_dropdown.get_content()).to_be_visible()
     page.mouse.move(5, 5)
     expect(left_dropdown.get_content()).to_be_visible()
 
     # Clicking the `+` again unpins and closes it.
-    left_dropdown.get_add_panel_button().click()
-    expect(left_dropdown.get_content()).to_have_count(0)
+    add_button.click()
+    expect(left_dropdown.get_content()).to_be_hidden()
 
 
 @user_story("to add a panel through Cmd+K targeting the center section")

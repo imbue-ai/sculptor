@@ -16,8 +16,8 @@
 
 import { DropdownMenu, IconButton, Tooltip } from "@radix-ui/themes";
 import { Plus } from "lucide-react";
-import type { MouseEvent as ReactMouseEvent, ReactElement } from "react";
-import { useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactElement } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 
@@ -144,6 +144,20 @@ export const SectionAddPanelControl = ({
     setIsOpen(nextOpen);
   };
 
+  // A section header unmounts on collapse / workspace switch / the center quick-add's own
+  // navigation; clear any pending timer so its callback can't setState after unmount.
+  useEffect((): (() => void) => {
+    return (): void => {
+      if (closeTimer.current) {
+        clearTimeout(closeTimer.current);
+      }
+
+      if (tooltipTimer.current) {
+        clearTimeout(tooltipTimer.current);
+      }
+    };
+  }, []);
+
   return (
     <DropdownMenu.Root modal={false} open={isOpen} onOpenChange={handleOpenChange}>
       <Tooltip content={isCenter ? CENTER_TOOLTIP : DEFAULT_TOOLTIP} open={isCenter ? isTooltipOpen : undefined}>
@@ -153,15 +167,21 @@ export const SectionAddPanelControl = ({
             size="1"
             color="gray"
             className={className}
-            aria-label={isCenter ? "Quick-add agent" : "Add panel"}
+            // Keyboard / assistive tech open the menu (this is a menu trigger); a pointer
+            // click quick-adds. Name it for the menu it opens, not just the pointer action.
+            aria-label={isCenter ? "Add agent or panel" : "Add panel"}
             data-testid={`${ElementIds.SECTION_ADD_PANEL_BUTTON}-${subSection}`}
             onPointerEnter={handleEnter}
             onPointerLeave={handleLeave}
             // Flag the pointer-down (capture phase, so the flag is set before Radix's
             // bubble-phase toggle fires onOpenChange) so handleOpenChange drops Radix's
-            // pointer toggle. `activate` is the sole authority for a pointer click.
-            onPointerDownCapture={() => {
-              suppressToggleRef.current = true;
+            // pointer toggle. `activate` is the sole authority for a pointer click. Only a
+            // primary press arms it (mirroring Radix's own `button === 0` guard), so a
+            // right/middle-click can't leave the flag stuck and swallow a later change.
+            onPointerDownCapture={(event: ReactPointerEvent) => {
+              if (event.button === 0) {
+                suppressToggleRef.current = true;
+              }
             }}
             onClick={handleClick}
           >
