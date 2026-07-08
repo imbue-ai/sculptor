@@ -116,7 +116,7 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
               <span className={styles.workspaceName}>{workspace.description ?? "Untitled"}</span>
             </button>
           )}
-          <Flex className={`${styles.rowActions} ${styles.hoverReveal}`} gap="1">
+          <Flex className={`${styles.rowActions} ${styles.hoverReveal}`} gap="2">
             <DropdownMenu.Root>
               <Tooltip content="Workspace actions" side="bottom">
                 <DropdownMenu.Trigger>
@@ -260,7 +260,7 @@ export const SidebarRepoGroup = ({
             {group.name}
           </Text>
         </button>
-        <Flex className={styles.rowActions} gap="1">
+        <Flex className={styles.rowActions} gap="2">
           <DropdownMenu.Root>
             <Tooltip content="Repository actions" side="bottom">
               <DropdownMenu.Trigger>
