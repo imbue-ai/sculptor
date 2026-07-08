@@ -59,6 +59,7 @@ rules = [
     "match-must-assert-never",
 
     # Sculptor-specific custom rules (ratchets/regex/)
+    "no-fire-and-forget-api-catch",
     "no-integration-css-locators",
     "no-integration-non-testid-queries",
     "no-integration-page-evaluate",
@@ -66,9 +67,11 @@ rules = [
     "no-integration-page-reload",
     "no-integration-time-sleep",
     "no-integration-type-method",
+    "no-noop-queryfn",
     "no-pyrefly-ignore",
     "no-pyrefly-ignore-errors",
     "no-raw-html-button",
+    "no-scattered-setquerydata",
     "no-sculptor-copytree",
     "no-sculptor-subprocess",
     "no-unlabeled-pyrefly-ignore",

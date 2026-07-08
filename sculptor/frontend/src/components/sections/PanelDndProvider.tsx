@@ -23,7 +23,7 @@ import type { ReactElement, ReactNode } from "react";
 import { useCallback, useEffect, useRef } from "react";
 
 import type { PanelDragData, PanelDropData } from "./panelDnd.ts";
-import { APPEND_INDEX, sectionBodyDroppableId } from "./panelDnd.ts";
+import { APPEND_INDEX, POINTER_DRAG_ACTIVATION_DISTANCE_PX, sectionBodyDroppableId } from "./panelDnd.ts";
 import {
   getDragPointerCoordinates,
   panelCollisionDetection,
@@ -115,7 +115,7 @@ export const PanelDndProvider = ({ children }: { children: ReactNode }): ReactEl
   }, [setDragPointerHalves, setPanelDragState]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: POINTER_DRAG_ACTIVATION_DISTANCE_PX } }),
     // The directional coordinate getter makes one arrow press jump to the adjacent
     // section, so the keyboard pipeline is the reliable Playwright-drivable drag path.
     useSensor(KeyboardSensor, { coordinateGetter: panelKeyboardCoordinateGetter }),

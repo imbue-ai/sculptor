@@ -25,13 +25,13 @@ export const InlineRenameInput = ({
     if (!isEditing || !inputRef.current) {
       return;
     }
-    // Defer focus to the next animation frame so it runs after Radix UI's
-    // ContextMenu restores focus to the trigger element on close.
-    const focusHandle = requestAnimationFrame(() => {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    });
-    return (): void => cancelAnimationFrame(focusHandle);
+    // Focus is taken synchronously: nothing may compete for focus after this runs,
+    // or the resulting blur cancels the rename. Every Radix menu/dialog surface
+    // that starts a rename therefore suppresses its close-time focus restore
+    // (onCloseAutoFocus + preventDefault) — keep that contract when adding a new
+    // rename entry point.
+    inputRef.current.focus();
+    inputRef.current.select();
   }, [isEditing]);
 
   if (!isEditing) {

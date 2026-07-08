@@ -377,7 +377,7 @@ def test_command_palette_show_panel_is_jump_only(sculptor_instance_: SculptorIns
     task_page = start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Cmd+K Show Panel WS")
     left = PlaywrightWorkspaceSection(page, "left")
 
-    # First run: reveals the Files panel (seeded into the collapsed left section).
+    # First run: reveals the Files panel (seeded, open in the left section).
     palette = task_page.open_command_palette()
     palette.type_query("Show Files")
     palette.select_by_command_id("view.toggle_panel.files")
@@ -423,6 +423,42 @@ def test_command_palette_add_panel_agent_create_navigates(sculptor_instance_: Sc
     expect(palette).not_to_be_visible()
     expect(tabs).to_have_count(2)
     expect(page).not_to_have_url(url_before)
+
+
+@user_story("to rename the current agent from the command palette")
+def test_command_palette_agent_rename_starts_inline_edit(sculptor_instance_: SculptorInstance) -> None:
+    # Regression lock for the palette → inline-rename focus handoff: running the
+    # agent "Rename" command must leave the tab's rename input mounted AND focused
+    # after the palette closes. The palette suppresses its close-time focus restore
+    # while a rename is pending — without that, the restore focuses whatever held
+    # focus before the palette opened, and the resulting blur cancels the rename
+    # instantly. An empty prompt creates a single waiting agent with no LLM run.
+    # Not @release-marked: the helper selects the Fake Claude model, which is
+    # gated off in packaged-release runs.
+    page = sculptor_instance_.page
+    task_page = start_task_and_wait_for_ready(page, prompt="", workspace_name="Cmd+K Agent Rename WS")
+
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    tabs = panel_tabs.get_panel_tabs()
+    expect(tabs).to_have_count(1)
+    task_id = task_page.get_task_id()
+
+    palette = task_page.open_command_palette()
+    # "Agent actions..." pushes the agent.actions sub-page listing the current
+    # agent's actions; the per-action command ids embed the agent's task id.
+    palette.select_by_command_id("agents.actions.open")
+    palette.select_by_command_id(f"agents.action.{task_id}.rename")
+
+    expect(palette).not_to_be_visible()
+    rename_input = panel_tabs.get_inline_rename_input()
+    expect(rename_input).to_be_visible()
+    # Focus is the load-bearing assertion: a blur cancels the rename, and a bare
+    # visibility check could pass transiently even if focus were stolen.
+    expect(rename_input).to_be_focused()
+    rename_input.fill("Palette Renamed Agent")
+    rename_input.press("Enter")
+    expect(rename_input).not_to_be_visible()
+    expect(tabs.first).to_contain_text("Palette Renamed Agent")
 
 
 @user_story("to create a new agent in the current workspace from the command palette")

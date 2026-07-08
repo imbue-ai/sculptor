@@ -7,11 +7,12 @@ until one exists. The prefill lives in the visible, editable prompt field:
 what the user sees is exactly what their first agent receives (the backend
 never authors messages on the user's behalf). The auto-open is an ordinary
 modal open, identical to the explicit entry points: dimmed overlay,
-dismissible via Escape or an outside click. The sidebar shows the empty-state
-"Add a repo" / "No workspaces yet" affordances, and every create entry point
-stays live: a dismissed dialog can be reopened via the sidebar's New Workspace
-button or the Cmd/Meta+T shortcut, and Cmd+K still opens the command palette.
-Creating the first workspace navigates to the full workspace page.
+dismissible via Escape or an outside click. The sidebar shows the persistent
+"Add repo" button and each registered repo as a group with a "No workspaces
+yet" hint, and every create entry point stays live: a dismissed dialog can be
+reopened via the sidebar's New Workspace button or the Cmd/Meta+T shortcut,
+and Cmd+K still opens the command palette. Creating the first workspace
+navigates to the full workspace page.
 
 These tests need a genuinely zero-workspace instance. The shared
 ``sculptor_instance_`` already deletes every workspace in its per-test cleanup,
@@ -57,6 +58,36 @@ def test_sidebar_shows_no_workspaces_hint(sculptor_instance_empty_first_run_: Sc
     page = sculptor_instance_empty_first_run_.page
 
     expect(page.get_by_test_id(ElementIDs.SIDEBAR_NO_WORKSPACES_HINT)).to_be_visible()
+
+
+@user_story("to add a repo straight from the sidebar before I have any workspaces")
+def test_sidebar_add_repo_button_opens_add_repo_dialog(
+    sculptor_instance_empty_first_run_: SculptorInstance,
+) -> None:
+    """The persistent "Add repo" sidebar button is available and opens the dialog.
+
+    Registering a repo is exactly what a user may want to do before any
+    workspace exists, so the button works in the first-run state too.
+    """
+    page = sculptor_instance_empty_first_run_.page
+    sidebar = get_workspace_sidebar(page)
+
+    # Dismiss the auto-opened new-workspace dialog first — its modal overlay
+    # would swallow the sidebar click.
+    page.keyboard.press("Escape")
+    expect(PlaywrightNewWorkspaceDialog(page).get_dialog()).to_have_count(0)
+
+    expect(sidebar.get_add_repo_button()).to_be_enabled()
+
+    add_repo_dialog = sidebar.open_add_repo_dialog()
+    add_repo_dialog.select_local_source()
+    expect(add_repo_dialog.get_path_input()).to_be_visible()
+
+    # Dismiss so the open dialog doesn't leak into the next test on the shared
+    # instance. With no autocomplete dropdown open, Escape bubbles to the Radix
+    # dialog and closes it.
+    page.keyboard.press("Escape")
+    expect(add_repo_dialog.get_path_input()).to_be_hidden()
 
 
 @user_story("to dismiss the first-run create dialog like any other dialog")

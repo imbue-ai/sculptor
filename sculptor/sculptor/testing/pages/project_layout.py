@@ -114,9 +114,10 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         # slow runner skips the create and later steps act on the wrong state.
         wait_for_workspace_list_loaded(self._page)
 
-        sidebar_empty = self.get_by_test_id(ElementIDs.SIDEBAR_NO_WORKSPACES_HINT).first.or_(
-            self.get_by_test_id(ElementIDs.SIDEBAR_ADD_REPO_BUTTON)
-        )
+        # The per-repo "No workspaces yet" hint is the loaded-and-empty signal
+        # (the persistent "Add repo" nav button renders regardless, so it can't
+        # distinguish anything).
+        sidebar_empty = self.get_by_test_id(ElementIDs.SIDEBAR_NO_WORKSPACES_HINT).first
         if sidebar_empty.is_visible():
             create_zero_agent_workspace(self._page)
             # The create above navigates onto the new workspace, but the

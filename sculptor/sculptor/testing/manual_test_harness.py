@@ -47,6 +47,33 @@ _VITE_POLL_REQUEST_TIMEOUT_SECONDS = 2
 _BACKEND_SHUTDOWN_TIMEOUT_SECONDS = 10
 _VITE_SHUTDOWN_TIMEOUT_SECONDS = 5
 
+# Below this /dev/shm size, Chromium's renderer is prone to exhausting shared
+# memory and crashing during long sessions, so we redirect it to disk (see
+# _chromium_shared_memory_args). Docker's default /dev/shm is 64MB; a normal
+# Linux host has half of RAM (gigabytes), so this threshold cleanly separates
+# the two without a container-detection heuristic.
+_SMALL_DEV_SHM_THRESHOLD_BYTES = 256 * 1024 * 1024
+
+
+def _chromium_shared_memory_args() -> list[str]:
+    """Return ``--disable-dev-shm-usage`` only when /dev/shm is too small to trust.
+
+    Containers mount a tiny (~64MB) /dev/shm. Chromium's renderer uses /dev/shm
+    for shared memory and crashes with "Target/Page crashed" once it fills during
+    a long session (especially at device_scale_factor=2). Redirecting that memory
+    to disk-backed /tmp avoids the crash, but disk is slower than tmpfs, so we
+    only pay that cost where /dev/shm is actually constrained — not on macOS
+    (no /dev/shm) or a normally-provisioned Linux host.
+    """
+    try:
+        stats = os.statvfs("/dev/shm")
+    except (FileNotFoundError, OSError):
+        return []
+    total_bytes = stats.f_frsize * stats.f_blocks
+    if total_bytes < _SMALL_DEV_SHM_THRESHOLD_BYTES:
+        return ["--disable-dev-shm-usage"]
+    return []
+
 
 def _make_test_user_config() -> UserConfig:
     """Create a UserConfig with test defaults (mirrors resources.py)."""
@@ -186,7 +213,11 @@ class ManualTestHarness:
         # when Chromium's GPU compositor is stubbed out, as it is in --headless=new).
         self._browser = self._playwright.chromium.launch(
             headless=True,
-            args=["--disable-webgl", "--disable-webgl2"],
+            args=[
+                "--disable-webgl",
+                "--disable-webgl2",
+                *_chromium_shared_memory_args(),
+            ],
         )
         self._browser_context = self._browser.new_context(viewport=self._viewport, device_scale_factor=2)
         self._page = self._browser_context.new_page()

@@ -8,7 +8,9 @@ import {
   EXPLORER_LIST_MAX_WIDTH_PX,
   EXPLORER_LIST_MIN_WIDTH_PX,
   explorerListWidthAtom,
+  explorerSidebarHiddenAtom,
 } from "~/components/sections/sectionAtoms.ts";
+import type { PanelId } from "~/components/sections/sectionTypes.ts";
 
 import { ExplorerLayout } from "./ExplorerLayout";
 
@@ -31,11 +33,12 @@ afterEach(() => {
 
 type JotaiStore = ReturnType<typeof createStore>;
 
-const renderLayout = (store: JotaiStore, listTestId = "list-slot"): void => {
+const renderLayout = (store: JotaiStore, listTestId = "list-slot", panelId: PanelId = "files"): void => {
   render(
     <Provider store={store}>
       <Theme>
         <ExplorerLayout
+          panelId={panelId}
           list={<div data-testid={listTestId}>list</div>}
           detail={(toggle) => (
             <div data-testid="detail-slot">
@@ -126,8 +129,8 @@ describe("ExplorerLayout — drag-resizable shared sidebar", () => {
     // width is one shared atom, so dragging either divider resizes both.
     const store = createStore();
     store.set(explorerListWidthAtom, 240);
-    renderLayout(store, "list-slot-a");
-    renderLayout(store, "list-slot-b");
+    renderLayout(store, "list-slot-a", "files");
+    renderLayout(store, "list-slot-b", "changes");
 
     const [handleA] = screen.getAllByRole("separator", { name: "Resize file list" });
     fireEvent.pointerDown(handleA, { button: 0, clientX: 0, clientY: 0 });
@@ -149,5 +152,40 @@ describe("ExplorerLayout — drag-resizable shared sidebar", () => {
     fireEvent.click(screen.getByTestId(ElementIds.DIFF_HEADER_SHOW_TREE_BTN));
     expect(getResizeHandle()).toBeInTheDocument();
     expect(screen.getByTestId("list-slot")).toBeInTheDocument();
+  });
+
+  it("reads the initial hidden state from the per-panel atom", () => {
+    const store = createStore();
+    store.set(explorerSidebarHiddenAtom("files"), true);
+    renderLayout(store);
+    expect(screen.queryByTestId("list-slot")).not.toBeInTheDocument();
+    expect(screen.getByTestId(ElementIds.DIFF_HEADER_SHOW_TREE_BTN)).toBeInTheDocument();
+  });
+
+  it("persists the hidden state to the per-panel atom when toggled", () => {
+    const store = createStore();
+    renderLayout(store);
+
+    fireEvent.click(screen.getByTestId(ElementIds.FILE_BROWSER_HIDE_TREE_BTN));
+    expect(store.get(explorerSidebarHiddenAtom("files"))).toBe(true);
+
+    fireEvent.click(screen.getByTestId(ElementIds.DIFF_HEADER_SHOW_TREE_BTN));
+    expect(store.get(explorerSidebarHiddenAtom("files"))).toBe(false);
+  });
+
+  it("hides each panel's sidebar independently", () => {
+    // Two panels share one store; hiding one must not hide the other.
+    const store = createStore();
+    renderLayout(store, "list-slot-files", "files");
+    renderLayout(store, "list-slot-changes", "changes");
+
+    // Both panels start visible, so both render a hide button; the first is the
+    // files panel (rendered first).
+    const [hideFilesButton] = screen.getAllByTestId(ElementIds.FILE_BROWSER_HIDE_TREE_BTN);
+    fireEvent.click(hideFilesButton);
+
+    expect(screen.queryByTestId("list-slot-files")).not.toBeInTheDocument();
+    expect(screen.getByTestId("list-slot-changes")).toBeInTheDocument();
+    expect(store.get(explorerSidebarHiddenAtom("changes"))).toBe(false);
   });
 });

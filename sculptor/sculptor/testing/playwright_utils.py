@@ -266,13 +266,11 @@ def open_new_workspace_form(page: Page) -> None:
         page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
     )
     # With zero workspaces on a non-Home route nothing page-level renders (the
-    # workspace route shows an empty shell), but the sidebar shows its first-run
-    # affordances — the loaded-and-empty signal. A multi-repo create-in-sequence
-    # routinely parks here between workspaces (a create-and-delete leaves zero
-    # workspaces), so it must be in the settle set.
-    sidebar_empty = page.get_by_test_id(ElementIDs.SIDEBAR_NO_WORKSPACES_HINT).first.or_(
-        page.get_by_test_id(ElementIDs.SIDEBAR_ADD_REPO_BUTTON)
-    )
+    # workspace route shows an empty shell), but the sidebar shows each repo's
+    # "No workspaces yet" hint — the loaded-and-empty signal. A multi-repo
+    # create-in-sequence routinely parks here between workspaces (a
+    # create-and-delete leaves zero workspaces), so it must be in the settle set.
+    sidebar_empty = page.get_by_test_id(ElementIDs.SIDEBAR_NO_WORKSPACES_HINT).first
 
     # Settle on a known surface before deciding. Without this, a non-waiting
     # is_visible() check on a not-yet-rendered page can race the load and
@@ -937,18 +935,17 @@ def wait_for_workspace_list_loaded(page: Page) -> None:
     "list loaded with workspaces", and on a slow runner it lands in the load
     window and skips workspace creation. Wait for one of the loaded-list
     signals before deciding anything: a sidebar workspace row (loaded,
-    non-empty) or the sidebar's first-run affordances — the per-repo
-    "No workspaces yet" hint, or the "Add a repo" button when no repos are
-    registered either (loaded, empty).
+    non-empty) or a repo group's "No workspaces yet" hint (loaded, empty; the
+    shared instance always has a repo registered). The persistent "Add repo"
+    nav button is deliberately NOT a signal — it renders before the list
+    loads, so it cannot distinguish anything.
 
     Every signal lives in the sidebar, and collapsing unmounts the rail (the
     signals then don't exist in the DOM at all), so expand it first.
     """
     ensure_sidebar_expanded(page)
     workspace_rows = page.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW)
-    sidebar_empty = page.get_by_test_id(ElementIDs.SIDEBAR_NO_WORKSPACES_HINT).or_(
-        page.get_by_test_id(ElementIDs.SIDEBAR_ADD_REPO_BUTTON)
-    )
+    sidebar_empty = page.get_by_test_id(ElementIDs.SIDEBAR_NO_WORKSPACES_HINT)
     expect(workspace_rows.or_(sidebar_empty).first).to_be_visible()
 
 
