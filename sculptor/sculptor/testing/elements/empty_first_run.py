@@ -18,8 +18,9 @@ class PlaywrightEmptyFirstRun(PlaywrightIntegrationTestElement):
     so only this form and Settings are reachable.
 
     The inline form shares the new-workspace form's field ids, so the form
-    getters here mirror ``PlaywrightNewWorkspaceDialog``'s; the sidebar
-    empty-state affordances are unique to this page.
+    getters here mirror ``PlaywrightNewWorkspaceDialog``'s. The sidebar itself
+    is the normal ``WorkspaceSidebar`` (its "Add repo" button and per-repo
+    "No workspaces yet" hint), just rendered while the workspace list is empty.
     """
 
     def __init__(self, page: Page) -> None:
@@ -42,10 +43,10 @@ class PlaywrightEmptyFirstRun(PlaywrightIntegrationTestElement):
     def get_create_button(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.NEW_WORKSPACE_CREATE_BUTTON)
 
-    # -- Sidebar empty-state affordances --
+    # -- Sidebar affordances --
 
     def get_add_repo_button(self) -> Locator:
-        """The "Add a repo" button shown when no repos are registered yet."""
+        """The persistent "Add repo" nav button that opens the add-repo dialog."""
         return self._page.get_by_test_id(ElementIDs.SIDEBAR_ADD_REPO_BUTTON)
 
     def get_no_workspaces_hint(self) -> Locator:

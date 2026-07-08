@@ -26,7 +26,7 @@ def test_agentless_workspace_renders_section_shell(sculptor_instance_: SculptorI
     2. Verify the sidebar and workspace header render.
     3. Verify the center section renders its empty state with quick actions.
     4. Verify the default arrangement was seeded around the empty center: the
-       left section expands to reveal its Files/Changes/Commits tabs.
+       expanded left section shows its Files/Changes/Commits tabs.
     """
     page = sculptor_instance_.page
 
@@ -45,10 +45,9 @@ def test_agentless_workspace_renders_section_shell(sculptor_instance_: SculptorI
     expect(empty_state.get_add_panel_button()).to_be_visible()
     expect(empty_state.get_quick_action("new-agent")).to_be_visible()
 
-    # Step 4: The rest of the default arrangement was seeded — expanding the left
-    # section reveals its seeded explorer tabs.
+    # Step 4: The rest of the default arrangement was seeded — the expanded left
+    # section shows its seeded explorer tabs.
     left = PlaywrightWorkspaceSection(page, "left")
-    left.expand_section()
     expect(left.get_panel_tab("files")).to_be_visible()
     expect(left.get_panel_tab("changes")).to_be_visible()
     expect(left.get_panel_tab("commits")).to_be_visible()

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as api from "../../../api";
 import type { CodingAgentTaskView } from "../../../api";
-import { taskAtomFamily, taskIdsAtom } from "../atoms/tasks";
+import { queryClient, taskIdsQueryKey, taskQueryKey } from "../../queryClient.ts";
 import { deleteErrorToastAtom } from "../atoms/toasts";
 import { useOptimisticTaskDelete } from "./useOptimisticTaskDelete";
 
@@ -42,8 +42,15 @@ const flushMicrotasks = async (): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
+// The hook snapshots and tombstones tasks in the query cache; tests seed the
+// cache the same way the WS bridge does.
+const seedTask = (task: CodingAgentTaskView): void => {
+  queryClient.setQueryData(taskQueryKey(task.id as string), task);
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
+  queryClient.removeQueries({ queryKey: ["sculptor"] });
 });
 
 afterEach(() => {
@@ -56,9 +63,9 @@ describe("useOptimisticTaskDelete", () => {
     // whichever task failed most recently, so retrying the FIRST failure would
     // wrongly target the SECOND task.
     const store = createStore();
-    store.set(taskIdsAtom, ["task-A", "task-B"]);
-    store.set(taskAtomFamily("task-A"), createMockTask("task-A"));
-    store.set(taskAtomFamily("task-B"), createMockTask("task-B"));
+    queryClient.setQueryData(taskIdsQueryKey(), ["task-A", "task-B"]);
+    seedTask(createMockTask("task-A"));
+    seedTask(createMockTask("task-B"));
 
     const wrapper = ({ children }: { children: ReactNode }): ReactElement =>
       createElement(Provider, { store }, children);
@@ -81,8 +88,8 @@ describe("useOptimisticTaskDelete", () => {
     expect(firstRetry).not.toBe(secondRetry);
 
     // Re-seed task-A so its optimistic re-delete proceeds to the API call.
-    store.set(taskAtomFamily("task-A"), createMockTask("task-A"));
-    store.set(taskIdsAtom, ["task-A"]);
+    seedTask(createMockTask("task-A"));
+    queryClient.setQueryData(taskIdsQueryKey(), ["task-A"]);
 
     mockDeleteWorkspaceAgent.mockClear();
     mockDeleteWorkspaceAgent.mockResolvedValue(undefined);

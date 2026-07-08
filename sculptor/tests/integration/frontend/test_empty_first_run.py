@@ -3,10 +3,11 @@
 When the workspace list is genuinely empty, the app gate (``EmptyFirstRunGate``)
 renders ``EmptyFirstRunPage`` in place of every route: the sidebar (open) plus
 the new-workspace form inline in a card. The first prompt defaults to the
-``/sculptor:help`` action text; the sidebar shows the empty-state
-"Add a repo" / "No workspaces yet" affordances; Cmd+K and the global
-shortcuts are off so only the form + Settings are reachable; and
-creating the first workspace navigates to the full workspace page.
+``/sculptor:help`` action text; the sidebar shows the persistent "Add repo"
+button and each registered repo as a group with a "No workspaces yet" hint;
+Cmd+K and the global shortcuts are off so only the form + Settings are
+reachable; and creating the first workspace navigates to the full workspace
+page.
 
 These tests need a genuinely zero-workspace instance. The shared
 ``sculptor_instance_`` already deletes every workspace in its per-test cleanup
@@ -52,6 +53,31 @@ def test_sidebar_shows_no_workspaces_hint(sculptor_instance_empty_first_run_: Sc
     empty = PlaywrightEmptyFirstRun(page)
 
     expect(empty.get_no_workspaces_hint()).to_be_visible()
+
+
+@user_story("to add a repo straight from the sidebar before I have any workspaces")
+def test_sidebar_add_repo_button_opens_add_repo_dialog(
+    sculptor_instance_empty_first_run_: SculptorInstance,
+) -> None:
+    """The persistent "Add repo" sidebar button is available and opens the dialog.
+
+    Unlike "New Workspace", it stays enabled in the first-run state — registering
+    a repo is exactly what the user does before any workspace exists.
+    """
+    page = sculptor_instance_empty_first_run_.page
+    sidebar = get_workspace_sidebar(page)
+
+    expect(sidebar.get_add_repo_button()).to_be_enabled()
+
+    add_repo_dialog = sidebar.open_add_repo_dialog()
+    add_repo_dialog.select_local_source()
+    expect(add_repo_dialog.get_path_input()).to_be_visible()
+
+    # Dismiss so the open dialog doesn't leak into the next test on the shared
+    # instance. With no autocomplete dropdown open, Escape bubbles to the Radix
+    # dialog and closes it.
+    page.keyboard.press("Escape")
+    expect(add_repo_dialog.get_path_input()).to_be_hidden()
 
 
 @user_story("to be unable to escape the first-run form with global shortcuts")

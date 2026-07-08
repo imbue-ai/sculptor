@@ -7,14 +7,13 @@
 // plus diagnostics for its tab context-menu copy actions. Both confirmation
 // dialogs are rendered by the shell (TerminalCloseConfirmation / AgentDeleteConfirmation).
 
-import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { useLayoutEffect, useMemo, useRef } from "react";
 
-import { renameWorkspaceAgent } from "~/api";
-import { taskAtomFamily, tasksArrayAtom, updateTasksAtom } from "~/common/state/atoms/tasks.ts";
+import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
-import { markAgentUnreadAtom } from "~/common/state/atoms/unreadOverrides.ts";
 import { viewedAgentIdAtom } from "~/common/state/atoms/viewedAgent.ts";
+import { useMarkUnreadMutation, useTaskRenameMutation } from "~/common/state/mutations";
 import { agentDeleteTargetAtom, terminalCloseTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
 import type { DynamicAgentInput, DynamicTerminalInput } from "~/components/sections/registry/dynamicPanels.tsx";
 import { deriveDynamicPanels, makeTerminalPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
@@ -59,8 +58,8 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
   const setTerminalTabs = useSetAtom(terminalTabStateAtom);
   const setTerminalCloseTarget = useSetAtom(terminalCloseTargetAtom);
   const setAgentDeleteTarget = useSetAtom(agentDeleteTargetAtom);
-  const updateTasks = useSetAtom(updateTasksAtom);
-  const store = useStore();
+  const { mutate: renameMutate } = useTaskRenameMutation(workspaceId);
+  const { mutate: markUnreadMutate } = useMarkUnreadMutation();
 
   // This workspace's tasks; rebuilt on every task tick — the downstream memos and the
   // registry write guard absorb the churn.
@@ -101,30 +100,22 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
       // dialog never shows an empty name.
       onRequestClose: (): void =>
         setAgentDeleteTarget({ id: task.id, name: task.title ?? task.titleOrSomethingLikeIt }),
-      // Committing an inline tab rename persists the new title. Update the task
-      // optimistically so the tab text changes immediately, then PATCH the backend; the
-      // canonical value arrives back via WebSocket (mirrors markUnread's fire-and-forget).
       onRename: (newName: string): void => {
-        // Read the live task at call time so we only rewrite `title` and don't
-        // clobber fields that changed (via WebSocket) since this closure captured
-        // `task` — mirrors useMarkRead's read-latest-then-merge.
-        const current = store.get(taskAtomFamily(task.id));
-        if (current) {
-          updateTasks({ [task.id]: { ...current, title: newName } });
-        }
-        renameWorkspaceAgent({
-          path: { workspace_id: workspaceId, agent_id: task.id },
-          body: { title: newName },
-        }).catch((error) => {
-          // Fire-and-forget: server value will arrive via WebSocket.
-          console.warn("Failed to persist agent rename; the server value will arrive via WebSocket.", error);
-        });
+        renameMutate({ agentId: task.id, newTitle: newName });
       },
-      // "Mark as unread" on the tab context menu: record the unread override, flip
-      // lastReadAt optimistically, and persist — all owned by markAgentUnreadAtom.
-      onMarkUnread: (): void => store.set(markAgentUnreadAtom, { workspaceId, taskId: task.id }),
+      onMarkUnread: (): void => {
+        markUnreadMutate({ workspaceId, agentId: task.id });
+      },
     }));
-  }, [workspaceTasks, viewedAgentId, diagnosticsByTaskId, setAgentDeleteTarget, updateTasks, store, workspaceId]);
+  }, [
+    workspaceTasks,
+    viewedAgentId,
+    diagnosticsByTaskId,
+    setAgentDeleteTarget,
+    renameMutate,
+    markUnreadMutate,
+    workspaceId,
+  ]);
 
   // Map this workspace's persisted terminal tabs to terminal inputs. Each tab's label
   // already reflects the lowest-available-number reuse the old panel applied

@@ -1,6 +1,8 @@
 import type { QueryKey } from "@tanstack/react-query";
 import { QueryClient } from "@tanstack/react-query";
 
+import type { CodingAgentTaskView } from "../api";
+
 /**
  * The shared TanStack Query client.
  *
@@ -67,6 +69,62 @@ export const workspaceQueryKeyPrefix = (workspaceId: string): QueryKey =>
 
 export const workspaceGitQueryKeyPrefix = (workspaceId: string): QueryKey =>
   [SCULPTOR_QUERY_KEY_PREFIX, "workspace", workspaceId, "git"] as const;
+
+/** Query key for a single agent task by its id, populated by the WS bridge. */
+export const taskQueryKey = (taskId: string): ReadonlyArray<string> =>
+  [SCULPTOR_QUERY_KEY_PREFIX, "task", taskId] as const;
+
+/** Query key for the ordered list of non-deleted task ids, updated by the WS bridge. */
+export const taskIdsQueryKey = (): ReadonlyArray<string> => [SCULPTOR_QUERY_KEY_PREFIX, "taskIds"] as const;
+
+// Task entries are fed exclusively by the WS stream, which sends one full
+// dump at connect and then only *changed* tasks. The default 5-minute gcTime
+// would evict any unobserved, quiet task, and nothing re-delivers it until it
+// next changes — so pin task entries for the app's lifetime (like the Jotai
+// atoms they replace). Deleted tasks stay as tiny `null` tombstones.
+queryClient.setQueryDefaults([SCULPTOR_QUERY_KEY_PREFIX, "task"], { gcTime: Infinity });
+queryClient.setQueryDefaults([SCULPTOR_QUERY_KEY_PREFIX, "taskIds"], { gcTime: Infinity });
+
+// Monotonic count of authoritative (WS) writes per task. Optimistic mutations
+// capture it in `onMutate` and roll back in `onError` only if it is unchanged:
+// if a WS frame wrote the task while the request was in flight, the frame
+// holds server truth (whether or not the mutation committed) and a snapshot
+// restore would clobber it.
+const taskSyncVersionByTaskId = new Map<string, number>();
+
+export const getTaskSyncVersion = (taskId: string): number => taskSyncVersionByTaskId.get(taskId) ?? 0;
+
+/**
+ * Write a batch of task-view updates into the query cache. Called by the WS
+ * bridge (`useUnifiedStream`) on every `taskViewsByTaskId` frame — the single
+ * writer of authoritative task state. Structural sharing keeps unchanged
+ * tasks referentially identical, and the task-ids list is only rewritten when
+ * ids actually change (except the first frame, which writes even an empty
+ * list so consumers can tell "loaded, no tasks" from "still loading").
+ */
+export const syncTasksToQueryCache = (taskViewsByTaskId: Record<string, CodingAgentTaskView>): void => {
+  const currentIds = queryClient.getQueryData<ReadonlyArray<string>>(taskIdsQueryKey());
+  const idSet = new Set(currentIds);
+  let didIdsChange = currentIds === undefined;
+
+  Object.entries(taskViewsByTaskId).forEach(([id, task]) => {
+    queryClient.setQueryData<CodingAgentTaskView | null>(taskQueryKey(id), task.isDeleted ? null : task);
+    taskSyncVersionByTaskId.set(id, getTaskSyncVersion(id) + 1);
+
+    if (task.isDeleted) {
+      if (idSet.delete(id)) {
+        didIdsChange = true;
+      }
+    } else if (!idSet.has(id)) {
+      idSet.add(id);
+      didIdsChange = true;
+    }
+  });
+
+  if (didIdsChange) {
+    queryClient.setQueryData<ReadonlyArray<string>>(taskIdsQueryKey(), Array.from(idSet));
+  }
+};
 
 /**
  * Bundle returned by every queryKey helper — workspace-scoped, project-scoped,

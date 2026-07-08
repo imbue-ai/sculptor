@@ -2,7 +2,7 @@ import { useSetAtom } from "jotai";
 import { useMemo } from "react";
 
 import { activateAgentPanelAtom } from "../../common/state/agentPanelPlacement.ts";
-import { markAgentUnreadAtom } from "../../common/state/atoms/unreadOverrides.ts";
+import { useMarkUnreadMutation } from "../../common/state/mutations";
 import { makeAgentPanelId } from "../sections/registry/dynamicPanels.tsx";
 import { agentDeleteTargetAtom, palettePendingRenameAtom, workspaceDeleteTargetAtom } from "./contextActions/atoms.ts";
 import type { AgentActionRuntime, WorkspaceActionRuntime } from "./contextActions/types.ts";
@@ -20,7 +20,7 @@ export const useContextActionRuntimes = (): {
   const setWorkspaceDeleteTarget = useSetAtom(workspaceDeleteTargetAtom);
   const setAgentDeleteTarget = useSetAtom(agentDeleteTargetAtom);
   const activateAgentPanel = useSetAtom(activateAgentPanelAtom);
-  const markAgentUnread = useSetAtom(markAgentUnreadAtom);
+  const { mutate: markUnreadMutate } = useMarkUnreadMutation();
   const gitAndOpenIn = useGitAndOpenInRuntime();
 
   // Identity-stable (jotai's `useSetAtom` returns stable refs; `gitAndOpenIn`
@@ -39,12 +39,9 @@ export const useContextActionRuntimes = (): {
 
   const agentActionRuntime = useMemo<AgentActionRuntime>(
     () => ({
-      // Shares markAgentUnreadAtom with the panel-tab "Mark as unread" so both
-      // paths record the unread override (which keeps useMarkRead's auto
-      // mark-read from undoing the action) alongside the persisted update.
       markUnread: (agent): void => {
         if (agent.workspaceId == null) return;
-        markAgentUnread({ workspaceId: agent.workspaceId, taskId: agent.id });
+        markUnreadMutate({ workspaceId: agent.workspaceId, agentId: agent.id });
       },
       // Activate the agent's panel immediately so its tab is mounted by the time
       // the rename starts, but stash the rename itself: the palette flushes the
@@ -58,7 +55,7 @@ export const useContextActionRuntimes = (): {
       },
       beginDelete: (agent): void => setAgentDeleteTarget({ id: agent.id, name: agent.title ?? "" }),
     }),
-    [markAgentUnread, activateAgentPanel, setPendingRename, setAgentDeleteTarget],
+    [markUnreadMutate, activateAgentPanel, setPendingRename, setAgentDeleteTarget],
   );
 
   return { workspaceActionRuntime, agentActionRuntime };
