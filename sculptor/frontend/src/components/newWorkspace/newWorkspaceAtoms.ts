@@ -30,8 +30,9 @@ export const newWorkspaceModalAtom: PrimitiveAtom<NewWorkspaceModalState> = atom
 });
 
 /**
- * The "keep open" switch: when on, Create keeps the dialog open
- * for rapid multi-create — the form resets its title/prompt/branch but retains
+ * The "keep open" switch: when on, Create keeps the dialog open for rapid
+ * multi-create — the form resets its title/prompt back to their seeds (blank
+ * when the dialog was opened unseeded) and re-rolls the branch, but retains
  * the repo + agent type. Persisted so the preference survives reloads.
  */
 export const keepNewWorkspaceModalOpenAtom: WritableAtom<boolean, [boolean], void> = atomWithStorage<boolean>(

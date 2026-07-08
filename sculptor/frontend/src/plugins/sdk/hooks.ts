@@ -159,7 +159,9 @@ export type NewWorkspaceModalOptions = {
   /**
    * Called with the new workspace's id per successful create — keep-open mode
    * lets the user create several workspaces from one open dialog, so this can
-   * fire more than once.
+   * fire more than once. Between such creates the form re-seeds its title and
+   * prompt from `initialTitle`/`initialPrompt`, so the dialog stays visibly
+   * about this open request and every report belongs to it.
    */
   onCreated?: (workspaceId: string) => void;
 };

@@ -23,8 +23,11 @@ const createWrapper = (store: Store, pluginId: string) => {
 
 afterEach(() => {
   cleanup();
-  // The per-key setting atoms persist to localStorage (and the atomFamily cache
-  // outlives each test's store), so wipe it to keep tests independent.
+  // The per-key setting atoms persist to localStorage, so wipe it between
+  // tests. This alone does not isolate the atoms themselves: the module-level
+  // atomFamily cache outlives each test's store, and a cached atom reads
+  // storage only once, at creation — so test independence also relies on no
+  // two tests reusing the same (pluginId, key) pair.
   window.localStorage.clear();
 });
 
