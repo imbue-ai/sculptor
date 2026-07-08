@@ -3,6 +3,7 @@ from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.elements.add_repo_dialog import PlaywrightAddRepoDialogElement
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 
 
@@ -29,10 +30,29 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
     def get_new_workspace_button(self) -> Locator:
         return self.get_by_test_id(ElementIDs.SIDEBAR_NEW_WORKSPACE_BUTTON)
 
+    def get_add_repo_button(self) -> Locator:
+        """The persistent "Add repo" button that opens the add-repo dialog."""
+        return self.get_by_test_id(ElementIDs.SIDEBAR_ADD_REPO_BUTTON)
+
+    def open_add_repo_dialog(self) -> PlaywrightAddRepoDialogElement:
+        """Click the "Add repo" button and return the opened add-repo dialog POM."""
+        self.get_add_repo_button().click()
+        dialog_locator = self._page.get_by_test_id(ElementIDs.ADD_REPO_DIALOG)
+        expect(dialog_locator).to_be_visible()
+        return PlaywrightAddRepoDialogElement(locator=dialog_locator, page=self._page)
+
     # -- Repo groups --
 
     def get_repo_groups(self) -> Locator:
         return self.get_by_test_id(ElementIDs.SIDEBAR_REPO_GROUP)
+
+    def get_repo_group_by_name(self, name: str) -> Locator:
+        """A repo group header filtered by its repo name."""
+        return self.get_repo_groups().filter(has_text=name)
+
+    def get_no_workspaces_hint(self) -> Locator:
+        """The "No workspaces yet" hint shown under a repo group with no workspaces."""
+        return self.get_by_test_id(ElementIDs.SIDEBAR_NO_WORKSPACES_HINT)
 
     def get_repo_add_workspace(self, project_id: str) -> Locator:
         # The add-workspace icon is stamped with ``data-project-id``; this raw
