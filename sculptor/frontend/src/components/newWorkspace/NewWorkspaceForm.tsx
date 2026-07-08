@@ -47,11 +47,22 @@ type NewWorkspaceFormProps = {
   /** Repo to pre-select (from a repo group's "+"); overrides the MRU seed. */
   presetProjectId?: string;
   /**
+   * Text to seed the title input with on mount (e.g. a plugin pre-filling a
+   * ticket title). A mount-time snapshot the user can freely edit.
+   */
+  initialTitle?: string;
+  /**
    * Text to seed the prompt textarea with on mount. Used by the empty
    * first-run page to default the very first prompt to `/sculptor:help`.
    * A mount-time snapshot the user can freely edit.
    */
   initialPrompt?: string;
+  /**
+   * Called with the new workspace's id after every successful create —
+   * including each repeat create in keep-open mode. May come from a plugin,
+   * so a throw is contained and never breaks the form's own post-create flow.
+   */
+  onWorkspaceCreated?: (workspaceId: string) => void;
   /** Called after a successful create when "keep open" is off. */
   onCreated: () => void;
 };
@@ -66,7 +77,9 @@ type NewWorkspaceFormProps = {
  */
 export const NewWorkspaceForm = ({
   presetProjectId,
+  initialTitle,
   initialPrompt,
+  onWorkspaceCreated,
   onCreated,
 }: NewWorkspaceFormProps): ReactElement => {
   // State and hooks — atoms
@@ -97,7 +110,7 @@ export const NewWorkspaceForm = ({
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     () => presetProjectId ?? lastSettings?.projectId ?? null,
   );
-  const [workspaceName, setWorkspaceName] = useState<string>("");
+  const [workspaceName, setWorkspaceName] = useState<string>(() => initialTitle ?? "");
   const [prompt, setPrompt] = useState<string>(() => initialPrompt ?? "");
   const [mode, setMode] = useState<WorkspaceInitializationStrategy>(
     () => lastSettings?.initStrategy ?? WorkspaceInitializationStrategy.WORKTREE,
@@ -293,6 +306,15 @@ export const NewWorkspaceForm = ({
       return;
     }
 
+    // Fires on every success, keep-open or not. The callback may come from a
+    // plugin, so contain a throw rather than letting it break the form's own
+    // post-create flow (field reset / dialog close).
+    try {
+      onWorkspaceCreated?.(result.workspaceId);
+    } catch (error) {
+      console.error("onWorkspaceCreated callback failed:", error);
+    }
+
     if (isKeepOpen) {
       // Keep the dialog open for rapid multi-create — reset the
       // per-workspace fields but retain the repo + agent type (+ mode/source)
@@ -324,6 +346,7 @@ export const NewWorkspaceForm = ({
     isAgentFastMode,
     isAgentPlanMode,
     isKeepOpen,
+    onWorkspaceCreated,
     onCreated,
   ]);
 

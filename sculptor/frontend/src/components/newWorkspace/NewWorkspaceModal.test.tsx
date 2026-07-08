@@ -9,9 +9,14 @@ import { newWorkspaceModalAtom } from "./newWorkspaceAtoms.ts";
 import { NewWorkspaceModal } from "./NewWorkspaceModal.tsx";
 
 // The real form pulls in project queries and creation hooks; the modal's
-// open/close contract is what is under test, so stub the form out.
+// open/close contract and its prop pass-through are what is under test, so
+// stub the form out but record the props it receives.
+const { formProps } = vi.hoisted(() => ({ formProps: vi.fn() }));
 vi.mock("~/components/newWorkspace/NewWorkspaceForm.tsx", () => ({
-  NewWorkspaceForm: (): null => null,
+  NewWorkspaceForm: (props: Record<string, unknown>): null => {
+    formProps(props);
+    return null;
+  },
 }));
 
 describe("NewWorkspaceModal", () => {
@@ -19,6 +24,7 @@ describe("NewWorkspaceModal", () => {
   // isn't registered — do it explicitly so each render starts from a fresh DOM.
   afterEach(() => {
     cleanup();
+    formProps.mockClear();
   });
 
   it("renders nothing while the atom holds no open request", () => {
@@ -32,6 +38,28 @@ describe("NewWorkspaceModal", () => {
     store.set(newWorkspaceModalAtom, { open: true });
     renderWithProviders(<NewWorkspaceModal />, { store });
     expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_DIALOG)).toBeTruthy();
+  });
+
+  it("passes the open request's seeds and create callback through to the form", () => {
+    // A plugin's open request (via the SDK's useOpenNewWorkspaceModal) rides
+    // this atom; the form only sees what the modal forwards.
+    const store = createStore();
+    const onWorkspaceCreated = vi.fn();
+    store.set(newWorkspaceModalAtom, {
+      open: true,
+      initialTitle: "Fix the bug",
+      initialPrompt: "Please fix it",
+      onWorkspaceCreated,
+    });
+    renderWithProviders(<NewWorkspaceModal />, { store });
+
+    expect(formProps).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialTitle: "Fix the bug",
+        initialPrompt: "Please fix it",
+        onWorkspaceCreated,
+      }),
+    );
   });
 
   it("closes a stale open request when the host unmounts", () => {

@@ -7,14 +7,22 @@ import type { StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 
 /**
- * Open/close state of the new-workspace modal plus the optional repo it should
- * pre-select. `presetProjectId` is set when the dialog is opened from a repo
- * group's "+" so the form lands on that repo. Transient — the modal is
- * ephemeral, so this resets on reload.
+ * Open/close state of the new-workspace modal plus optional seeds for the form
+ * it hosts. `presetProjectId` is set when the dialog is opened from a repo
+ * group's "+" so the form lands on that repo. This atom is also the seam
+ * plugins use (via the SDK's `useOpenNewWorkspaceModal`) to open the dialog
+ * pre-filled: `initialTitle` / `initialPrompt` seed the form's title and
+ * prompt fields, and `onWorkspaceCreated` fires after each successful create
+ * while the dialog stays associated with this open request (including repeat
+ * creates in keep-open mode). Transient — the modal is ephemeral, so this
+ * resets on reload.
  */
 export type NewWorkspaceModalState = {
   open: boolean;
   presetProjectId?: string;
+  initialTitle?: string;
+  initialPrompt?: string;
+  onWorkspaceCreated?: (workspaceId: string) => void;
 };
 
 export const newWorkspaceModalAtom: PrimitiveAtom<NewWorkspaceModalState> = atom<NewWorkspaceModalState>({
