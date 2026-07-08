@@ -32,6 +32,7 @@ from sculptor.interfaces.agents.artifacts import ArtifactType
 from sculptor.interfaces.agents.artifacts import FileAgentArtifact
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_FROM_SIGTERM
 from sculptor.interfaces.agents.errors import AgentClientError
+from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import AssistantMessageID
 from sculptor.primitives.ids import TaskID
@@ -47,12 +48,16 @@ from sculptor.state.chat_state import TextBlock
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
+from sculptor.state.messages import ModelCatalogState
+from sculptor.state.messages import ModelOption
+from sculptor.state.messages import NOT_FETCHED_YET
 from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.tasks.handlers.run_agent.setup import _drop_already_processed_messages
 from sculptor.tasks.handlers.run_agent.setup import _resolve_title_prediction_thread
 from sculptor.tasks.handlers.run_agent.setup import load_initial_task_state
 from sculptor.tasks.handlers.run_agent.v1 import AgentPaused
 from sculptor.tasks.handlers.run_agent.v1 import _build_agent_path
+from sculptor.tasks.handlers.run_agent.v1 import _eager_fetch_pi_models_into_state
 from sculptor.tasks.handlers.run_agent.v1 import _run_agent_in_environment
 from sculptor.tasks.handlers.run_agent.v1 import _save_messages
 from sculptor.tasks.handlers.run_agent.v1 import _send_user_input_message
@@ -1401,6 +1406,60 @@ def _read_persisted_task_state(local_task: Task, services: ServiceCollectionForT
         task_row = transaction.get_task(local_task.object_id)
         assert task_row is not None
         return AgentTaskStateV2.model_validate(task_row.current_state)
+
+
+class _EmptyProbePiAgent:
+    """Stands in for a PiAgent whose start-time catalog probe finds no models."""
+
+    def fetch_available_models_probe(self, secrets: object) -> tuple[list[ModelOption], None]:
+        return [], None
+
+
+def test_eager_pi_probe_records_fetched_empty_when_no_models(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: AgentExecutionEnvironment,
+    test_settings: SculptorSettings,
+) -> None:
+    """A start-time pi probe that finds no models records fetched-empty [], moving
+    the catalog off its NOT_FETCHED_YET default so the switcher shows the login CTA
+    rather than spinning on 'loading' forever. (The probe returns ([], None) for a
+    genuinely unauthenticated user AND for a best-effort probe failure; both land
+    on the same fetched-empty result, matching today's behavior — distinguishing
+    them is a separate future catalog state.)
+    """
+    task_data = local_task.input_data
+    assert isinstance(task_data, AgentTaskInputsV2)
+    fresh = AgentTaskStateV2(workspace_id=WorkspaceID())
+    assert fresh.available_models is NOT_FETCHED_YET
+    _set_task_state(local_task, fresh, services)
+
+    harness_stub = MagicMock()
+    harness_stub.capabilities.return_value.supports_model_selection = True
+    with (
+        patch("sculptor.tasks.handlers.run_agent.v1.get_harness_for_config", return_value=harness_stub),
+        patch("sculptor.tasks.handlers.run_agent.v1._get_agent_wrapper", return_value=_EmptyProbePiAgent()),
+        patch("sculptor.tasks.handlers.run_agent.v1._build_agent_secrets", return_value={}),
+        patch("sculptor.tasks.handlers.run_agent.v1.PiAgent", _EmptyProbePiAgent),
+    ):
+        evolved = _eager_fetch_pi_models_into_state(
+            task=local_task,
+            task_data=task_data,
+            task_state=fresh,
+            environment=environment,
+            project=project,
+            settings=test_settings,
+            services=services,
+            in_testing=True,
+        )
+
+    # The carried-forward state AND the persisted row are fetched-empty [], not the
+    # NOT_FETCHED_YET sentinel — otherwise finalize_task_setup would later write the
+    # in-memory sentinel back over the DB.
+    assert evolved.available_models == []
+    assert not isinstance(evolved.available_models, ModelCatalogState)
+    assert _read_persisted_task_state(local_task, services).available_models == []
 
 
 def test_queued_followup_is_dispatched_after_resumed_turn_completes(
