@@ -69,7 +69,6 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         """The "No workspaces yet" hint shown under a repo group with no workspaces."""
         return self.get_by_test_id(ElementIDs.SIDEBAR_NO_WORKSPACES_HINT)
 
-
     def get_repo_add_workspace(self, project_id: str) -> Locator:
         # The add-workspace icon is stamped with ``data-project-id``; this raw
         # CSS-attribute scope stays inside the POM so the integration-test
