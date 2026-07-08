@@ -393,3 +393,22 @@ virtualizer.scrollToIndex(messageCount - 1, { align: "end" });
 isProgrammaticScrollRef.current = true;
 virtualizer.scrollToIndex(messageCount - 1, { align: "end" });
 ```
+
+---
+
+## `use_close_auto_focus_for_focus_handoff`
+
+**Question:** Does this Radix menu/dialog action mount or focus focus-sensitive UI (e.g. an inline-edit input) directly from `onSelect` / a palette command's `perform`?
+
+Radix overlays (ContextMenu, DropdownMenu, Dialog — including the command palette) manage focus at close time: while open they trap focus inside the overlay, and on close they restore focus to the trigger (menus) or to the previously-focused element (dialogs). UI that takes focus for itself — like `InlineRenameInput`, which commits/cancels `onBlur` — loses either way: mounted while the overlay is still open, the focus trap yanks focus back and the resulting blur cancels it; mounted as the overlay closes, the focus restore steals focus a beat later. Deferring the `.focus()` by a frame (`requestAnimationFrame`) merely bets on ordering and loses under main-thread contention.
+
+The deterministic shape: the action only records intent (a ref or a pending atom), and the overlay's `onCloseAutoFocus` consumes it — calling `event.preventDefault()` to suppress the focus restore and only then mounting/starting the focus-sensitive UI. The input then mounts strictly after the overlay and its trap are gone, with nothing competing for focus.
+
+**What to look for:**
+- A menu `onSelect` or palette `perform` that sets state which mounts an auto-focusing component (a rename-target atom, `setIsRenaming(true)`) instead of stashing intent for `onCloseAutoFocus`
+- `requestAnimationFrame` / `setTimeout` wrapped around `.focus()` to "run after the menu closes"
+- A new rename entry point that bypasses the existing handoff patterns (`pendingRenameRef` in `SectionHeader`, `palettePendingRenameAtom` in the command palette)
+
+**Fix:** Record intent in `onSelect`/`perform`; in the overlay's `onCloseAutoFocus`, call `event.preventDefault()` and start the focus-sensitive UI. See `SectionHeader`'s panel-tab context menu and the command palette's `palettePendingRenameAtom` for the two reference implementations.
+
+**Exceptions:** Follow-up UI that owns a focus scope (e.g. a menu item opening a Radix Dialog) needs no deferral — the dialog's focus trap wins the handoff on its own. Non-focus side effects (clipboard copies, navigation, atom writes that don't mount focused UI) are unaffected. Menus whose items never hand off focus may keep an unconditional `onCloseAutoFocus={(e) => e.preventDefault()}` (the workspace row menus do) when returning focus to the trigger is not useful.

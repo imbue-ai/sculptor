@@ -10,13 +10,13 @@
 // The base components are registered by registerPanels at app load and looked up at
 // render time, so a cached bound component picks up its base once it registers.
 
-import { Bot, Terminal } from "lucide-react";
+import { Bot, CircleDot, Copy, Stethoscope, Terminal } from "lucide-react";
 import type { ComponentType } from "react";
 import { createElement } from "react";
 
 import type { TaskStatus } from "~/api";
 import { ElementIds } from "~/api";
-import type { TerminalConnectionStatus } from "~/common/state/atoms/terminalTabs.ts";
+import { terminalConnectionStatusByPanelIdAtom } from "~/common/state/atoms/terminalTabs.ts";
 import { clearUnreadOverride, getAgentDotStatusWithUnreadOverride } from "~/common/state/atoms/unreadOverrides.ts";
 
 import type { PanelId } from "../sectionTypes.ts";
@@ -116,7 +116,7 @@ export type DynamicAgentInput = {
   // closePanelAtom (removes the panel from the layout without deleting the agent).
   onRequestClose?: () => void;
   // Committing an inline tab rename persists the new title on the agent;
-  // supplied by the sync hook (renameWorkspaceAgent + optimistic title update).
+  // supplied by the sync hook (useTaskRenameMutation).
   onRename?: (newName: string) => void;
   // "Mark as unread" from the tab context menu: records the unread override and
   // persists it (see unreadOverrides.ts). Supplied by the sync hook
@@ -129,29 +129,63 @@ async function copyToClipboard(text: string): Promise<void> {
   await navigator.clipboard.writeText(text);
 }
 
-// Build an agent's tab context-menu actions: "Mark as unread" first, then the flat
-// diagnostics copy actions. Copy agent id / name are always available; session id
-// and transcript paths are disabled until a session exists.
+// Build an agent's tab context-menu actions: "Mark as unread" and "Copy agent name"
+// at the top level (both always available), then a Diagnostics submenu tucking away
+// the id / session / transcript copy actions. "Copy agent id" is always available;
+// the session id and transcript paths are disabled until a session exists. Rename and
+// the destructive Delete are composed around these by SectionHeader (they drive the
+// tab's own inline rename / close flow), so they aren't built here.
 function buildAgentContextMenuActions(agent: DynamicAgentInput): ReadonlyArray<PanelContextMenuItem> {
   const { sessionId, claudeTranscriptPath, sculptorTranscriptPath } = agent.diagnostics ?? {};
   return [
-    { label: "Mark as unread", action: () => agent.onMarkUnread?.(), testId: ElementIds.TAB_CONTEXT_MENU_MARK_UNREAD },
-    { label: "Copy agent id", action: () => void copyToClipboard(agent.taskId) },
-    { label: "Copy agent name", action: () => void copyToClipboard(agent.displayName) },
     {
-      label: "Copy claude session id",
-      disabled: !sessionId,
-      action: () => void (sessionId && copyToClipboard(sessionId)),
+      kind: "action",
+      label: "Mark as unread",
+      icon: CircleDot,
+      testId: ElementIds.TAB_CONTEXT_MENU_MARK_UNREAD,
+      action: () => agent.onMarkUnread?.(),
     },
     {
-      label: "Copy claude transcript file path",
-      disabled: !claudeTranscriptPath,
-      action: () => void (claudeTranscriptPath && copyToClipboard(claudeTranscriptPath)),
+      kind: "action",
+      label: "Copy agent name",
+      icon: Copy,
+      testId: ElementIds.TAB_CONTEXT_MENU_COPY_AGENT_NAME,
+      action: () => void copyToClipboard(agent.displayName),
     },
     {
-      label: "Copy Sculptor transcript file path",
-      disabled: !sculptorTranscriptPath,
-      action: () => void (sculptorTranscriptPath && copyToClipboard(sculptorTranscriptPath)),
+      kind: "submenu",
+      label: "Diagnostics",
+      icon: Stethoscope,
+      testId: ElementIds.TAB_CONTEXT_MENU_DIAGNOSTICS,
+      items: [
+        {
+          kind: "action",
+          label: "Copy agent id",
+          testId: ElementIds.TAB_CONTEXT_MENU_COPY_AGENT_ID,
+          action: () => void copyToClipboard(agent.taskId),
+        },
+        {
+          kind: "action",
+          label: "Copy Claude session id",
+          testId: ElementIds.TAB_CONTEXT_MENU_COPY_CLAUDE_SESSION_ID,
+          disabled: !sessionId,
+          action: () => void (sessionId && copyToClipboard(sessionId)),
+        },
+        {
+          kind: "action",
+          label: "Copy Claude transcript file path",
+          testId: ElementIds.TAB_CONTEXT_MENU_COPY_CLAUDE_TRANSCRIPT_PATH,
+          disabled: !claudeTranscriptPath,
+          action: () => void (claudeTranscriptPath && copyToClipboard(claudeTranscriptPath)),
+        },
+        {
+          kind: "action",
+          label: "Copy Sculptor transcript file path",
+          testId: ElementIds.TAB_CONTEXT_MENU_COPY_SCULPTOR_TRANSCRIPT_PATH,
+          disabled: !sculptorTranscriptPath,
+          action: () => void (sculptorTranscriptPath && copyToClipboard(sculptorTranscriptPath)),
+        },
+      ],
     },
   ];
 }
@@ -160,11 +194,6 @@ export type DynamicTerminalInput = {
   workspaceId: string;
   index: number;
   displayName: string;
-  // The terminal's live WebSocket connection state, shown as a dot on its panel tab.
-  // Supplied by the sync hook from terminalConnectionStatusesAtom, which holds only
-  // unhealthy states (reconnecting/disconnected) for MOUNTED terminals — healthy,
-  // backgrounded (unmounted), and never-opened terminals leave it undefined.
-  connectionStatus?: TerminalConnectionStatus;
   // Closing a terminal tab kills the backend shell with a confirmation.
   // Supplied by the sync hook; absent for callers that don't wire the close flow.
   onRequestClose?: () => void;
@@ -208,22 +237,25 @@ export function deriveDynamicPanels(
       kind: "terminal",
       defaultSection: "bottom",
       component: getTerminalComponent(terminal.workspaceId, terminal.index),
-      connectionStatus: terminal.connectionStatus,
       onRequestClose: terminal.onRequestClose,
       onRename: terminal.onRename,
     });
   }
 
   // Evict cached components whose task/terminal no longer exists, dropping any
-  // unread override for a deleted agent along with its component. The per-id
-  // definition slice is evicted too — its family is keyed by panel id, so without
-  // this it would grow one entry per agent/terminal forever.
+  // unread override for a deleted agent and any terminal's connection-status slice
+  // along with its component. Every one of these families is keyed by panel id, so
+  // without this they would grow one entry per agent/terminal forever.
   for (const id of [...componentCache.keys()]) {
     if (!liveIds.has(id)) {
       componentCache.delete(id);
       panelDefinitionByIdAtom.remove(id);
       if (id.startsWith(AGENT_PANEL_ID_PREFIX)) {
         clearUnreadOverride(id.slice(AGENT_PANEL_ID_PREFIX.length));
+      }
+
+      if (id.startsWith(TERMINAL_PANEL_ID_PREFIX)) {
+        terminalConnectionStatusByPanelIdAtom.remove(id);
       }
     }
   }

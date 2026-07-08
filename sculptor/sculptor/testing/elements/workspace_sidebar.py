@@ -6,6 +6,15 @@ from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_repo_dialog import PlaywrightAddRepoDialogElement
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 
+# Keyboard pickup (focus → Space) is retried: an async focus restore from a menu
+# that just closed can steal the Space press, so it lands on the menu trigger
+# instead of the drag activator (mirrors section_helpers' panel-drag pickup).
+_REORDER_PICKUP_ATTEMPTS = 3
+
+# A reorder drag presses one arrow per slot; the loop stops as soon as the target
+# slot lights up as the drop target, and this bounds a drag that never gets there.
+_REORDER_MAX_ARROW_PRESSES = 6
+
 
 class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
     """Page Object Model for the workspace navigation sidebar.
@@ -47,7 +56,13 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         return self.get_by_test_id(ElementIDs.SIDEBAR_REPO_GROUP)
 
     def get_repo_group_by_name(self, name: str) -> Locator:
-        """A repo group header filtered by its repo name."""
+        """Get a repo-group header by its repo name.
+
+        Prefer this over positional ``get_repo_groups().nth(...)`` when the
+        list order is about to change (e.g. drag-to-reorder): a positional
+        locator re-resolves against the post-change order, so guards on it
+        check the wrong element.
+        """
         return self.get_repo_groups().filter(has_text=name)
 
     def get_no_workspaces_hint(self) -> Locator:
@@ -61,6 +76,85 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         return self._page.locator(
             f'[data-testid="{ElementIDs.SIDEBAR_REPO_ADD_WORKSPACE}"][data-project-id="{project_id}"]'
         )
+
+    # -- Drag-to-reorder (keyboard-driven) --
+
+    def pickup_via_keyboard(self, item: Locator) -> None:
+        """Pick up a workspace row or repo-group header (focus → Space) and leave
+        the drag parked.
+
+        Pickup is retried per ``_REORDER_PICKUP_ATTEMPTS``: an async focus
+        restore from a menu that just closed can steal the Space press, so each
+        retry dismisses whatever it opened with Escape and re-focuses the item.
+        The sensor marks the activator with ``data-sidebar-dragging`` on drag
+        start, which doubles as the "keydown listeners are live" signal — the
+        KeyboardSensor attaches them on a deferred tick, so an arrow pressed
+        before the flag appears would be silently dropped.
+        """
+        for attempt in range(_REORDER_PICKUP_ATTEMPTS):
+            item.focus()
+            self._page.keyboard.press("Space")  # pick up
+            try:
+                expect(item).to_have_attribute("data-sidebar-dragging", "true", timeout=5_000)
+                return
+            except AssertionError:
+                if attempt == _REORDER_PICKUP_ATTEMPTS - 1:
+                    raise
+                self._page.keyboard.press("Escape")
+
+    def reorder_via_keyboard_drag(self, item: Locator, target: Locator, direction: str) -> None:
+        """Drag a workspace row or repo-group header to another slot via the KeyboardSensor.
+
+        ``item`` and ``target`` are drag activators of the same sortable list (two
+        workspace rows of one repo group, or two repo-group headers); ``direction``
+        is "up" or "down". Mirrors section_helpers' panel drag: pick the item up
+        (``pickup_via_keyboard``), one arrow per slot until ``target``'s slot
+        reports ``data-sidebar-drop-target``, Space to drop.
+
+        Pass stably-identified locators (by-name helpers), not positional
+        ``nth(...)`` ones: positional locators re-resolve against the post-drop
+        order, so the closing guard would check the wrong element.
+        """
+        self.pickup_via_keyboard(item)
+
+        arrow = {"up": "ArrowUp", "down": "ArrowDown"}[direction]
+        # Each arrow press is confirmed applied before the next fires: every press
+        # moves the drag exactly one slot, so a press fired while a slow re-render
+        # is still applying the previous one overshoots the target — and in a
+        # sortable list the target slot then never lights up. Right after pickup no
+        # slot is lit (the drag sits over its own slot), so the first press is
+        # confirmed by any slot lighting up; later presses by the lit slot's
+        # identity changing (rows stamp data-workspace-id, group headers
+        # data-project-id). A drag that exhausts its presses raises rather than
+        # dropping blind, so the failure surfaces here and not as a downstream
+        # order-assertion mismatch.
+        lit_slot = self._page.locator('[data-sidebar-drop-target="true"]')
+        for _press in range(_REORDER_MAX_ARROW_PRESSES):
+            previous_slot_id = None
+            if lit_slot.count() == 1:
+                previous_slot_id = lit_slot.get_attribute("data-workspace-id") or lit_slot.get_attribute(
+                    "data-project-id"
+                )
+            self._page.keyboard.press(arrow)
+            if previous_slot_id is None:
+                expect(lit_slot).to_have_count(1)
+            else:
+                moved_slot = self._page.locator(
+                    f'[data-sidebar-drop-target="true"]'
+                    f':not([data-workspace-id="{previous_slot_id}"]):not([data-project-id="{previous_slot_id}"])'
+                )
+                expect(moved_slot).to_have_count(1)
+            if target.get_attribute("data-sidebar-drop-target") == "true":
+                break
+        else:
+            raise AssertionError(
+                f"keyboard drag never reached the target slot within {_REORDER_MAX_ARROW_PRESSES} presses"
+            )
+        self._page.keyboard.press("Space")  # drop
+
+        # The drop clears the drag flag once the reorder commits; asserting it here
+        # keeps callers from racing their order assertions against the commit.
+        expect(item).not_to_have_attribute("data-sidebar-dragging", "true")
 
     # -- Workspace rows (mirrors PlaywrightHomePage.get_workspace_rows) --
 

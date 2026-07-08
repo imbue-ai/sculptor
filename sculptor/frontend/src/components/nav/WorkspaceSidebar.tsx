@@ -1,9 +1,12 @@
+import type { DragEndEvent } from "@dnd-kit/core";
+import { closestCenter, DndContext } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { IconButton, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { Bug, Command, Home, PanelLeftClose, Plus, Settings } from "lucide-react";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import type { ReactElement } from "react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Workspace } from "~/api";
 import { ElementIds } from "~/api";
@@ -31,10 +34,12 @@ import { HOME_TAB_ID, SETTINGS_TAB_ID } from "~/components/workspaceTabIds.ts";
 import { getTitleBarLeftPadding } from "~/electron/utils.ts";
 import { WorkspacePeekOverlay } from "~/pages/workspace/components/WorkspacePeekOverlay.tsx";
 
+import { adjustSidebarDragCountAtom, isSidebarDragActiveAtom } from "./navAtoms.ts";
 import navItemStyles from "./NavItem.module.scss";
 import { NavItem } from "./NavItem.tsx";
+import { sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
 import { SidebarRepoGroup } from "./SidebarRepoGroup.tsx";
-import { sidebarWorkspaceGroupsAtom } from "./sidebarWorkspaceOrder.ts";
+import { reorderSidebarRepoGroupAtom, sidebarWorkspaceGroupsAtom } from "./sidebarWorkspaceOrder.ts";
 import styles from "./WorkspaceSidebar.module.scss";
 
 /** Smallest sidebar width the resize handle allows, in pixels. */
@@ -173,6 +178,55 @@ export const WorkspaceSidebar = (): ReactElement | null => {
     [setWidth],
   );
 
+  // Repo groups are drag-sortable (each group's rows have their own context inside
+  // SidebarRepoGroup); a drop commits the new group order to the layout snapshot.
+  const groupDndSensors = useSidebarDndSensors();
+  // Stamped on the sidebar root as a data flag so the stylesheet can suppress
+  // hover chrome for the whole rail while any sidebar drag is active.
+  const isSidebarDragActive = useAtomValue(isSidebarDragActiveAtom);
+  const adjustDragCount = useSetAtom(adjustSidebarDragCountAtom);
+  const reorderRepoGroup = useSetAtom(reorderSidebarRepoGroupAtom);
+
+  // Whether the in-flight sidebar drag was started by the group context. Every
+  // drag context adjusts the shared drag count, so end/cancel/cleanup must only
+  // decrement for a drag they own — an unowning cleanup would otherwise release
+  // a row drag still parked in some group.
+  const ownsActiveDragRef = useRef(false);
+  const beginOwnedDrag = useCallback((): void => {
+    if (!ownsActiveDragRef.current) {
+      ownsActiveDragRef.current = true;
+      adjustDragCount(1);
+    }
+  }, [adjustDragCount]);
+  const endOwnedDrag = useCallback((): void => {
+    if (ownsActiveDragRef.current) {
+      ownsActiveDragRef.current = false;
+      adjustDragCount(-1);
+    }
+  }, [adjustDragCount]);
+  const handleGroupDragEnd = useCallback(
+    (event: DragEndEvent): void => {
+      endOwnedDrag();
+      if (event.over === null || event.over.id === event.active.id) {
+        return;
+      }
+      reorderRepoGroup({ activeProjectId: String(event.active.id), overProjectId: String(event.over.id) });
+    },
+    [endOwnedDrag, reorderRepoGroup],
+  );
+
+  // dnd-kit does not fire onDragCancel when its context unmounts (see
+  // PanelDndProvider), and collapsing the sidebar renders null below — the
+  // component itself stays mounted, so an unmount-only cleanup would not run.
+  // Without this release a drag stranded by the collapse holds the shared drag
+  // count forever, silently disabling the hover peek.
+  useEffect(() => {
+    if (isCollapsed) {
+      return undefined;
+    }
+    return endOwnedDrag;
+  }, [isCollapsed, endOwnedDrag]);
+
   // JSX and rendering logic
   if (isCollapsed) {
     return null;
@@ -187,7 +241,12 @@ export const WorkspaceSidebar = (): ReactElement | null => {
     // (Themes' <Tooltip> reads this provider — `radix-ui` is pinned to the
     // same instance @radix-ui/themes resolves.)
     <TooltipPrimitive.Provider delayDuration={1000} skipDelayDuration={0}>
-      <aside className={styles.sidebar} style={{ width: `${width}px` }} data-testid={ElementIds.WORKSPACE_SIDEBAR}>
+      <aside
+        className={styles.sidebar}
+        style={{ width: `${width}px` }}
+        data-testid={ElementIds.WORKSPACE_SIDEBAR}
+        data-sidebar-drag-active={isSidebarDragActive ? "true" : undefined}
+      >
         {/* Window-controls gutter clears the macOS traffic lights, then the
           collapse toggle. */}
         <div className={styles.windowControls} style={{ paddingLeft: getTitleBarLeftPadding(true) }}>
@@ -246,22 +305,33 @@ export const WorkspaceSidebar = (): ReactElement | null => {
           {/* One group per repo, including repos with no workspaces yet (they show
             a "No workspaces yet" hint). Empty until the first repo is added via the
             "Add repo" button in the bottom actions. */}
-          {repoGroups.map((group) => (
-            <SidebarRepoGroup
-              key={group.projectId}
-              group={group}
-              actions={workspaceActions}
-              openInRuntime={openInRuntime}
-              // On first run the per-repo settings/"+" actions are hidden: the
-              // first-run page doesn't mount AppShell, so the "+"'s dialog
-              // fallback and error toast would silently no-op there (same reason
-              // New Workspace/Commands are disabled above).
-              showActions={!isWorkspaceListEmpty}
-              onWorkspaceClick={handleWorkspaceClick}
-              onWorkspaceHover={handleWorkspaceHover}
-              onBeginDelete={setDeleteTarget}
-            />
-          ))}
+          <DndContext
+            sensors={groupDndSensors}
+            collisionDetection={closestCenter}
+            modifiers={sidebarDndModifiers}
+            onDragStart={beginOwnedDrag}
+            onDragEnd={handleGroupDragEnd}
+            onDragCancel={endOwnedDrag}
+          >
+            <SortableContext items={repoGroups.map((group) => group.projectId)} strategy={verticalListSortingStrategy}>
+              {repoGroups.map((group) => (
+                <SidebarRepoGroup
+                  key={group.projectId}
+                  group={group}
+                  actions={workspaceActions}
+                  openInRuntime={openInRuntime}
+                  // On first run the per-repo settings/"+" actions are hidden: the
+                  // first-run page doesn't mount AppShell, so the "+"'s dialog
+                  // fallback and error toast would silently no-op there (same reason
+                  // New Workspace/Commands are disabled above).
+                  showActions={!isWorkspaceListEmpty}
+                  onWorkspaceClick={handleWorkspaceClick}
+                  onWorkspaceHover={handleWorkspaceHover}
+                  onBeginDelete={setDeleteTarget}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
         </div>
 
         <div className={styles.spacer} />
