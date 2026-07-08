@@ -11,7 +11,7 @@ import styles from "./DevModeIndicator.module.scss";
 // dock icon, serialized at full resolution. The browser scales it via CSS.
 // When running in pure-browser dev (Vite dev server, no Electron), that IPC
 // channel is absent, so we fall back to `devIconUrl`: a pre-rendered copy of
-// that dev icon, gated on import.meta.env.DEV.
+// that dev icon. This fallback is only rendered when `import.meta.env.DEV` is true.
 export const DevModeIndicator = (): ReactElement | null => {
   const [devInfo, setDevInfo] = useState<SculptorDevInfo | null>(null);
   const isViteDev = import.meta.env.DEV;
