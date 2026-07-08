@@ -3,38 +3,38 @@ import { useEffect } from "react";
 
 import { spotlightHoverAtom, spotlightScrollTargetAtom } from "./atoms.ts";
 import { clearLinePaint, paintLineRange, scrollLineIntoView, shadowRootOf } from "./spotlightPaint.ts";
+import { usePierreDomVersion } from "./usePierreDomVersion.ts";
 
 type UseSpotlightOverlayOptions = {
-  /** Wraps the Pierre `<diffs-container>` whose shadow root holds the lines. */
-  containerRef: React.RefObject<HTMLDivElement | null>;
+  /**
+   * The visible pane containing the Pierre `<diffs-container>`. Passed as an
+   * element (from a callback ref) so the effects re-run exactly when it mounts.
+   */
+  paneElement: HTMLElement | null;
   /** The file this viewer is currently showing; anchors only match this file. */
   file: string | undefined;
-  /** Overlay work is inert until Pierre has painted its lines. */
-  isHighlighterReady: boolean;
 };
-
-// Pierre streams line rows in as Shiki tokenises, so a freshly-opened file may
-// not have the target row yet. Retry the scroll on a bounded rAF loop until the
-// row appears (or we give up), rather than firing once into an empty container.
-const MAX_SCROLL_ATTEMPTS = 60;
 
 /**
  * Wires a diff/file viewer to the two chip-driven overlays:
- *  - hover a spotlight chip → paint its source lines blue in the matching file
+ *  - hover (or arrow-select) a spotlight chip → paint its source lines blue
  *  - click a spotlight chip → scroll its source line into view once painted
  *
- * Both are no-ops unless the hovered/clicked anchor's file matches this
- * viewer's file, so an unrelated pane never lights up.
+ * Both are no-ops unless the anchor's file matches this viewer's file, so an
+ * unrelated pane never lights up. Both key off `usePierreDomVersion` so they
+ * re-run as Pierre streams rows in — no readiness gate, no polling.
  */
-export const useSpotlightOverlay = ({ containerRef, file, isHighlighterReady }: UseSpotlightOverlayOptions): void => {
+export const useSpotlightOverlay = ({ paneElement, file }: UseSpotlightOverlayOptions): void => {
   const hover = useAtomValue(spotlightHoverAtom);
   const scrollTarget = useAtomValue(spotlightScrollTargetAtom);
   const setScrollTarget = useSetAtom(spotlightScrollTargetAtom);
+  const domVersion = usePierreDomVersion(paneElement, file !== undefined);
 
-  // Hover highlight.
+  // Hover highlight — repaints on every DOM version bump so a Pierre re-render
+  // (which wipes inline styles) doesn't drop the highlight.
   useEffect(() => {
-    const shadowRoot = shadowRootOf(containerRef.current);
-    if (!shadowRoot || !isHighlighterReady) return;
+    const shadowRoot = shadowRootOf(paneElement);
+    if (!shadowRoot) return;
     const isMatch = hover !== null && file !== undefined && hover.file === file;
     if (isMatch) {
       paintLineRange(shadowRoot, hover.lineStart, hover.lineEnd);
@@ -42,24 +42,16 @@ export const useSpotlightOverlay = ({ containerRef, file, isHighlighterReady }: 
     }
     clearLinePaint(shadowRoot);
     return undefined;
-  }, [hover, file, isHighlighterReady, containerRef]);
+  }, [hover, file, paneElement, domVersion]);
 
-  // Click scroll.
+  // Click scroll — retries deterministically as rows stream in: each DOM
+  // version bump re-runs this effect; once the target row exists we scroll and
+  // clear the request so later bumps are no-ops.
   useEffect(() => {
-    if (!scrollTarget || file === undefined || scrollTarget.file !== file || !isHighlighterReady) return;
-
-    let attempts = 0;
-    let frame = 0;
-    const tryScroll = (): void => {
-      const shadowRoot = shadowRootOf(containerRef.current);
-      if (shadowRoot && scrollLineIntoView(shadowRoot, scrollTarget.lineStart)) {
-        setScrollTarget(null);
-        return;
-      }
-      attempts += 1;
-      if (attempts < MAX_SCROLL_ATTEMPTS) frame = requestAnimationFrame(tryScroll);
-    };
-    frame = requestAnimationFrame(tryScroll);
-    return (): void => cancelAnimationFrame(frame);
-  }, [scrollTarget, file, isHighlighterReady, containerRef, setScrollTarget]);
+    if (!scrollTarget || file === undefined || scrollTarget.file !== file) return;
+    const shadowRoot = shadowRootOf(paneElement);
+    if (shadowRoot && scrollLineIntoView(shadowRoot, scrollTarget.lineStart)) {
+      setScrollTarget(null);
+    }
+  }, [scrollTarget, file, paneElement, domVersion, setScrollTarget]);
 };

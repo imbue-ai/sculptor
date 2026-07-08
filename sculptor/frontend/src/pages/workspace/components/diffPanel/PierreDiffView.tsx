@@ -4,7 +4,7 @@ import { FileDiff, PatchDiff } from "@pierre/diffs/react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { Plus } from "lucide-react";
 import type { CSSProperties, ErrorInfo, ReactElement, ReactNode, RefObject } from "react";
-import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { themeCodeThemeAtom } from "~/common/state/atoms/themeBuilder.ts";
@@ -177,6 +177,14 @@ export const PierreDiffView = ({
 
   const pierreRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  // The spotlight hooks need the pane element as STATE (not a ref) so their
+  // effects re-run exactly when it mounts. A callback ref feeds both the
+  // existing wrapperRef (for SplitDiffHandle etc.) and this state.
+  const [paneElement, setPaneElement] = useState<HTMLDivElement | null>(null);
+  const setWrapperNode = useCallback((el: HTMLDivElement | null): void => {
+    wrapperRef.current = el;
+    setPaneElement(el);
+  }, []);
 
   /**
    * Inject our bg-override stylesheet into Pierre's shadow DOM (see
@@ -266,19 +274,17 @@ export const PierreDiffView = ({
   );
 
   const spotlight = useSpotlightCapture({
-    containerRef: pierreRef,
-    boundsRef: wrapperRef,
-    isHighlighterReady,
+    paneElement,
     enabled: spotlightFile !== undefined,
     onCapture: handleSpotlightCapture,
   });
   const handleSpotlightPillMouseDown = spotlight.onButtonMouseDown;
   // Hover-highlight + click-scroll driven by spotlight chips in the chat.
-  useSpotlightOverlay({ containerRef: pierreRef, file: spotlightFile, isHighlighterReady });
+  useSpotlightOverlay({ paneElement, file: spotlightFile });
   // --- end Spotlight capture ----------------------------------------------
 
   return (
-    <div ref={wrapperRef} className={styles.splitWrapper} style={splitStyle}>
+    <div ref={setWrapperNode} className={styles.splitWrapper} style={splitStyle}>
       <div className={styles.scrollColumn}>
         <div
           className={`${styles.container} ${className ?? ""}`}

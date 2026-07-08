@@ -12,12 +12,14 @@ export type SpotlightCaptureResult = {
 };
 
 type UseSpotlightCaptureOptions = {
-  /** Wraps the Pierre `<diffs-container>` whose shadow root holds the lines. */
-  containerRef: React.RefObject<HTMLDivElement | null>;
-  /** The visible pane; the pill right-aligns to its right edge. */
-  boundsRef: React.RefObject<HTMLElement | null>;
-  /** Only attach listeners once Pierre has mounted its highlighter. */
-  isHighlighterReady: boolean;
+  /**
+   * The visible pane — it both hosts the mouse listeners and (recursively)
+   * contains the Pierre `<diffs-container>` whose shadow root holds the lines.
+   * Passed as an element (from a callback ref, so it updates exactly when the
+   * pane mounts) rather than a RefObject, so the listener-attach effect can't
+   * miss the mount the way a one-shot readiness-gated effect did.
+   */
+  paneElement: HTMLElement | null;
   /** Spotlight capture is inert unless the host passes a file to anchor to. */
   enabled: boolean;
   /** Fired when the user completes a click (single line) or drag (range). */
@@ -58,9 +60,7 @@ const sideOf = (el: HTMLElement | null): "old" | "new" | null => {
 };
 
 export const useSpotlightCapture = ({
-  containerRef,
-  boundsRef,
-  isHighlighterReady,
+  paneElement,
   enabled,
   onCapture,
 }: UseSpotlightCaptureOptions): UseSpotlightCaptureResult => {
@@ -81,7 +81,7 @@ export const useSpotlightCapture = ({
   const positionPillAt = useCallback(
     (lineEl: HTMLElement): void => {
       const lineRect = lineEl.getBoundingClientRect();
-      const bounds = boundsRef.current?.getBoundingClientRect();
+      const bounds = paneElement?.getBoundingClientRect();
       // Right-align to the visible pane's right edge so the pill never overlaps
       // the line-number gutter on the left; vertically centre on the line.
       const rightInset = bounds ? Math.max(window.innerWidth - bounds.right + 8, 8) : 8;
@@ -92,38 +92,43 @@ export const useSpotlightCapture = ({
         transform: "translateY(-50%)",
       });
     },
-    [boundsRef],
+    [paneElement],
   );
 
   // Paint the given line range blue (clearing all others), reusing the shared
   // shadow-DOM paint helper so capture and hover-highlight agree on the DOM.
   const paintRange = useCallback(
     (start: number, end: number): void => {
-      const shadowRoot = shadowRootOf(containerRef.current);
+      const shadowRoot = shadowRootOf(paneElement);
       if (shadowRoot) paintLineRange(shadowRoot, start, end);
     },
-    [containerRef],
+    [paneElement],
   );
 
   const clearPaint = useCallback((): void => {
-    const shadowRoot = shadowRootOf(containerRef.current);
+    const shadowRoot = shadowRootOf(paneElement);
     if (shadowRoot) clearLinePaint(shadowRoot);
-  }, [containerRef]);
+  }, [paneElement]);
 
   // Hover tracking: anchor the pill to whatever line the pointer is over.
   // Crucially, we do NOT hide the pill when the pointer moves off a line onto
-  // the gutter or the pill itself — only when it leaves the whole container —
-  // so the user can travel from the line to the pill without it vanishing.
+  // the gutter or the pill itself — only when it leaves the whole pane — so the
+  // user can travel from the line to the pill without it vanishing.
   //
-  // Listeners live on the visible pane (boundsRef), NOT the Pierre wrapper: the
-  // pill is `position: fixed` but rendered as a SIBLING of the Pierre content,
-  // so attaching to the Pierre wrapper would fire `mouseleave` the instant the
+  // Listeners live on the visible pane, NOT the Pierre wrapper: the pill is
+  // `position: fixed` but rendered as a SIBLING of the Pierre content, so
+  // attaching to the Pierre wrapper would fire `mouseleave` the instant the
   // pointer crossed onto the pill (a non-descendant), hiding it — the flicker.
   // The pane encloses both the pill and the Pierre content, so hovering the
   // pill stays "inside" and never triggers a leave.
+  //
+  // Keyed on `paneElement` (a callback-ref state), so the listeners attach the
+  // moment the pane mounts regardless of highlighter-readiness timing. No
+  // readiness gate is needed: the move handler simply finds no `[data-line]`
+  // until Pierre has painted rows, so the pill stays hidden until there's
+  // something to point at.
   useEffect(() => {
-    const pane = boundsRef.current;
-    if (!pane || !isHighlighterReady || !enabled) return;
+    if (!paneElement || !enabled) return;
 
     const handleMove = (e: MouseEvent): void => {
       if (isSelecting) return;
@@ -141,13 +146,13 @@ export const useSpotlightCapture = ({
       setButtonStyle(null);
     };
 
-    pane.addEventListener("mousemove", handleMove, { passive: true });
-    pane.addEventListener("mouseleave", handleLeave);
+    paneElement.addEventListener("mousemove", handleMove, { passive: true });
+    paneElement.addEventListener("mouseleave", handleLeave);
     return (): void => {
-      pane.removeEventListener("mousemove", handleMove);
-      pane.removeEventListener("mouseleave", handleLeave);
+      paneElement.removeEventListener("mousemove", handleMove);
+      paneElement.removeEventListener("mouseleave", handleLeave);
     };
-  }, [boundsRef, isHighlighterReady, enabled, isSelecting, positionPillAt]);
+  }, [paneElement, enabled, isSelecting, positionPillAt]);
 
   // Selection choreography: attach document-level listeners while a drag is in
   // progress so the release can land anywhere (over a line, the gutter, or off
@@ -171,7 +176,7 @@ export const useSpotlightCapture = ({
       if (start === null || end === null) return;
       const lineStart = Math.min(start, end);
       const lineEnd = Math.max(start, end);
-      const shadowRoot = shadowRootOf(containerRef.current);
+      const shadowRoot = shadowRootOf(paneElement);
       const snippet = shadowRoot ? snippetForRange(shadowRoot, lineStart, lineEnd) : "";
       const startEl = shadowRoot?.querySelector(`[data-line="${lineStart}"]`) as HTMLElement | null;
       onCaptureRef.current({ lineStart, lineEnd, snippet, side: sideOf(startEl) });
@@ -183,7 +188,7 @@ export const useSpotlightCapture = ({
       document.removeEventListener("mousemove", handleMove);
       document.removeEventListener("mouseup", handleUp);
     };
-  }, [isSelecting, paintRange, clearPaint, containerRef]);
+  }, [isSelecting, paintRange, clearPaint, paneElement]);
 
   const onButtonMouseDown = useCallback(
     (e: ReactMouseEvent): void => {

@@ -4,7 +4,7 @@ import { Flex, Text } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import { Plus } from "lucide-react";
 import type { ReactElement } from "react";
-import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 
 import { ElementIds } from "~/api";
@@ -137,6 +137,14 @@ export const ReadOnlyPreview = ({
   // draws a persistent vertical bar off it, since a styled native scrollbar renders
   // nothing at rest under macOS overlay-scrollbar mode.
   const containerRef = useRef<HTMLDivElement>(null);
+  // The spotlight hooks need the pane element as STATE (not a ref) so their
+  // effects re-run exactly when it mounts — the code-view branch mounts after
+  // the loading/markdown branches, so a one-shot ref-gated effect missed it.
+  const [paneElement, setPaneElement] = useState<HTMLDivElement | null>(null);
+  const setContainerNode = useCallback((el: HTMLDivElement | null): void => {
+    containerRef.current = el;
+    setPaneElement(el);
+  }, []);
   const shouldRenderMarkdown = isMarkdownPath(filePath) && markdownMode === "rendered";
 
   // Inject our override stylesheet into Pierre's shadow DOM (see
@@ -198,9 +206,7 @@ export const ReadOnlyPreview = ({
   );
 
   const spotlight = useSpotlightCapture({
-    containerRef: pierreRef,
-    boundsRef: containerRef,
-    isHighlighterReady,
+    paneElement,
     // Only the Pierre code view (below) has line rows; the rendered-markdown
     // branch returns before the button is rendered.
     enabled: true,
@@ -208,7 +214,7 @@ export const ReadOnlyPreview = ({
   });
   const handleSpotlightPillMouseDown = spotlight.onButtonMouseDown;
   // Hover-highlight + click-scroll driven by spotlight chips in the chat.
-  useSpotlightOverlay({ containerRef: pierreRef, file: filePath, isHighlighterReady });
+  useSpotlightOverlay({ paneElement, file: filePath });
   // --- end Spotlight capture ----------------------------------------------
 
   if (isPending) {
@@ -292,7 +298,7 @@ export const ReadOnlyPreview = ({
 
   return (
     <div className={styles.wrapper} data-testid={ElementIds.READ_ONLY_PREVIEW}>
-      <div ref={containerRef} className={styles.container}>
+      <div ref={setContainerNode} className={styles.container}>
         {spotlight.buttonStyle && (
           <button
             type="button"
