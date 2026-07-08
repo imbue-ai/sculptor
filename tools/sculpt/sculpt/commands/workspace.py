@@ -15,6 +15,9 @@ from sculpt.client.models.create_workspace_request_v2 import CreateWorkspaceRequ
 from sculpt.client.models.http_validation_error import HTTPValidationError
 from sculpt.client.models.recent_workspace_response import RecentWorkspaceResponse
 from sculpt.client.models.update_workspace_request import UpdateWorkspaceRequest
+from sculpt.commands._group_helpers import add_workspace_to_group
+from sculpt.commands._group_helpers import create_group_for_new_workspace
+from sculpt.commands._group_helpers import resolve_group_for_join
 from sculpt.commands._workspace_helpers import STRATEGY_MAPPING
 from sculpt.commands._workspace_helpers import resolve_requested_branch_name
 from sculpt.commands._workspace_helpers import resolve_strategy
@@ -73,13 +76,34 @@ def create(
         help="Diff/merge target branch (auto-resolved from the repo if omitted)",
     ),
     name: str | None = typer.Option(None, "--name", help="Workspace description"),
+    group: str | None = typer.Option(
+        None,
+        "--group",
+        help="Add the new workspace to this existing group (ID or prefix) instead of auto-creating one",
+    ),
+    no_group: bool = typer.Option(
+        False,
+        "--no-group",
+        help="Skip the default auto-grouping and create the workspace loose",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     base_url: str | None = typer.Option(None, "--base-url", "-u", help="The Sculptor server URL"),
 ) -> None:
     """Create a new workspace."""
     base_url = base_url or get_default_base_url()
+
+    if group is not None and no_group:
+        cli_error("--group and --no-group are mutually exclusive", json_output=json_output)
+
     client = get_authenticated_client(base_url)
     project_id = resolve_project(repo, client)
+
+    # Resolve an explicit --group target before creating anything, so an
+    # unknown group (or the disabled workspace-groups experiment) fails with
+    # no side effects.
+    target_group = None
+    if group is not None:
+        target_group = resolve_group_for_join(client, group, project_id=project_id, json_output=json_output)
 
     strategy_enum = resolve_strategy(strategy, json_output=json_output)
 
@@ -112,6 +136,17 @@ def create(
     if isinstance(result, HTTPValidationError):
         cli_error("Validation error", detail=str(result), json_output=json_output)
 
+    if target_group is not None:
+        group_id = add_workspace_to_group(
+            client, group_id=target_group.object_id, workspace_id=result.object_id, json_output=json_output
+        ).object_id
+    elif no_group:
+        group_id = None
+    else:
+        group_id = create_group_for_new_workspace(
+            client, project_id=project_id, workspace_id=result.object_id, json_output=json_output
+        )
+
     if json_output:
         output = WorkspaceCreateOutput(
             id=result.object_id,
@@ -119,6 +154,7 @@ def create(
             description=result.description,
             strategy=result.initialization_strategy.value,
             source_branch=result.source_branch,
+            group_id=group_id,
         )
         typer.echo(output.model_dump_json(indent=2))
         return
@@ -130,6 +166,8 @@ def create(
         typer.echo(f"Branch: {result.source_branch}")
     if result.description:
         typer.echo(f"Description: {result.description}")
+    if group_id is not None:
+        typer.echo(f"Group: {group_id}")
 
 
 @workspace_app.command("list")

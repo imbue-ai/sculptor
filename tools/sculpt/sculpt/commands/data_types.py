@@ -17,6 +17,9 @@ class WorkspaceCreateOutput(BaseModel):
     description: str | None = Field(description="User-provided description")
     strategy: str = Field(description="Workspace initialization strategy (clone, in-place, or worktree)")
     source_branch: str | None = Field(description="Source branch name")
+    group_id: str | None = Field(
+        description="Workspace group the workspace was placed in (null when created loose)"
+    )
 
 
 class WorkspaceListItem(BaseModel):
@@ -76,6 +79,73 @@ class WorkspaceDeleteOutput(BaseModel):
 
     deleted: bool = Field(description="Always true on success")
     id: str = Field(description="Deleted workspace ID")
+
+
+class GroupCreateOutput(BaseModel):
+    """Output of ``sculpt group create --json``."""
+
+    id: str = Field(description="Unique workspace group ID")
+    repo_id: str = Field(description="Associated repo/project ID")
+    name: str = Field(description="Group display name (server-assigned when not provided)")
+    color: str = Field(description="Radix accent color name (server-assigned when not provided)")
+    created_via_cli: bool = Field(description="Whether the group was created through the sculpt CLI")
+    created_at: str = Field(description="ISO 8601 datetime of creation")
+    workspace_ids: list[str] = Field(description="IDs of the member workspaces")
+
+
+class GroupListItem(BaseModel):
+    """Single item in ``sculpt group list --json``."""
+
+    id: str = Field(description="Unique workspace group ID")
+    repo_id: str = Field(description="Associated repo/project ID")
+    name: str = Field(description="Group display name")
+    color: str = Field(description="Radix accent color name")
+    created_via_cli: bool = Field(description="Whether the group was created through the sculpt CLI")
+    created_at: str = Field(description="ISO 8601 datetime of creation")
+    workspace_ids: list[str] = Field(description="IDs of the member workspaces")
+
+
+class GroupShowOutput(BaseModel):
+    """Output of ``sculpt group show --json``."""
+
+    id: str = Field(description="Unique workspace group ID")
+    repo_id: str = Field(description="Associated repo/project ID")
+    name: str = Field(description="Group display name")
+    color: str = Field(description="Radix accent color name")
+    created_via_cli: bool = Field(description="Whether the group was created through the sculpt CLI")
+    created_at: str = Field(description="ISO 8601 datetime of creation")
+    workspace_ids: list[str] = Field(description="IDs of the member workspaces")
+
+
+class GroupRenameOutput(BaseModel):
+    """Output of ``sculpt group rename --json``."""
+
+    id: str = Field(description="Renamed workspace group ID")
+    name: str = Field(description="New group name")
+
+
+class GroupAddOutput(BaseModel):
+    """Output of ``sculpt group add --json``."""
+
+    group_id: str = Field(description="Target workspace group ID")
+    workspace_id: str = Field(description="Workspace that was added")
+    workspace_ids: list[str] = Field(description="Member workspace IDs after the addition")
+
+
+class GroupRemoveOutput(BaseModel):
+    """Output of ``sculpt group remove --json``."""
+
+    removed: bool = Field(description="Always true on success")
+    group_id: str = Field(description="Source workspace group ID (dissolved if this emptied it)")
+    workspace_id: str = Field(description="Workspace that was removed")
+
+
+class GroupUngroupOutput(BaseModel):
+    """Output of ``sculpt group ungroup --json``."""
+
+    ungrouped: bool = Field(description="Always true on success")
+    id: str = Field(description="Dissolved workspace group ID")
+    released_workspace_ids: list[str] = Field(description="Workspaces released back to the loose list")
 
 
 class RepoItem(BaseModel):
@@ -185,6 +255,9 @@ class RunOutput(BaseModel):
     strategy: str = Field(description="Workspace initialization strategy")
     model: str = Field(description="LLM model identifier")
     prompt: str = Field(description="The task prompt")
+    group_id: str | None = Field(
+        description="Workspace group the workspace was placed in (null when created loose)"
+    )
 
 
 class ErrorOutput(BaseModel):

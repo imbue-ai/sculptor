@@ -12,6 +12,9 @@ from sculpt.client.models.create_workspace_request_v2 import CreateWorkspaceRequ
 from sculpt.client.models.http_validation_error import HTTPValidationError
 from sculpt.client.types import UNSET
 from sculpt.commands._follow_helpers import follow_and_stream_messages
+from sculpt.commands._group_helpers import add_workspace_to_group
+from sculpt.commands._group_helpers import create_group_for_new_workspace
+from sculpt.commands._group_helpers import resolve_group_for_join
 from sculpt.commands._harness_helpers import resolve_harness_selection
 from sculpt.commands._workspace_helpers import STRATEGY_MAPPING
 from sculpt.commands._workspace_helpers import resolve_requested_branch_name
@@ -64,12 +67,25 @@ def run_cmd(
         ),
     ),
     file: list[str] | None = typer.Option(None, "--file", help="Files to include (repeatable)"),
+    group: str | None = typer.Option(
+        None,
+        "--group",
+        help="Add the new workspace to this existing group (ID or prefix) instead of auto-creating one",
+    ),
+    no_group: bool = typer.Option(
+        False,
+        "--no-group",
+        help="Skip the default auto-grouping and create the workspace loose",
+    ),
     follow: bool = typer.Option(False, "--follow", "-f", help="Stream the agent's response after creation"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     base_url: str | None = typer.Option(None, "--base-url", "-u", help="The Sculptor server URL"),
 ) -> None:
     """Create a workspace and agent in one step."""
     base_url = base_url or get_default_base_url()
+
+    if group is not None and no_group:
+        cli_error("--group and --no-group are mutually exclusive", json_output=json_output)
 
     model_lower = model.lower()
     if model_lower not in MODEL_MAPPING:
@@ -92,6 +108,13 @@ def run_cmd(
         )
 
     project_id = resolve_project(repo, client)
+
+    # Resolve an explicit --group target before creating anything, so an
+    # unknown group (or the disabled workspace-groups experiment) fails with
+    # no side effects.
+    target_group = None
+    if group is not None:
+        target_group = resolve_group_for_join(client, group, project_id=project_id, json_output=json_output)
 
     strategy_enum = resolve_strategy(strategy, json_output=json_output)
 
@@ -127,6 +150,17 @@ def run_cmd(
 
     workspace_id = ws_result.object_id
 
+    if target_group is not None:
+        group_id = add_workspace_to_group(
+            client, group_id=target_group.object_id, workspace_id=workspace_id, json_output=json_output
+        ).object_id
+    elif no_group:
+        group_id = None
+    else:
+        group_id = create_group_for_new_workspace(
+            client, project_id=project_id, workspace_id=workspace_id, json_output=json_output
+        )
+
     # Create agent. An omitted --harness sends no agent type, so the server
     # applies the user's most-recently-used harness (the same default the app's
     # "+" button uses).
@@ -158,11 +192,14 @@ def run_cmd(
             strategy=ws_result.initialization_strategy.value,
             model=agent_result.model.value,
             prompt=prompt,
+            group_id=group_id,
         )
         typer.echo(output.model_dump_json(indent=2))
     else:
         typer.echo(f"Workspace: {workspace_id}")
         typer.echo(f"Agent: {agent_result.id}")
+        if group_id is not None:
+            typer.echo(f"Group: {group_id}")
 
     if follow:
         if not json_output:
