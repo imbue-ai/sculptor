@@ -4,8 +4,9 @@ import { createStore } from "jotai";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { ElementIds, type Workspace } from "~/api";
+import { ElementIds, type Project, type Workspace } from "~/api";
 import { queryClient } from "~/common/queryClient";
+import { projectAtomFamily, projectIdsAtom } from "~/common/state/atoms/projects.ts";
 import { workspaceAtomFamily, workspaceIdsAtom } from "~/common/state/atoms/workspaces.ts";
 import { renderWithProviders } from "~/common/testUtils.tsx";
 
@@ -26,6 +27,11 @@ const seedWorkspaces = (store: ReturnType<typeof createStore>, ids: ReadonlyArra
     } as unknown as Workspace);
   }
   store.set(workspaceIdsAtom, [...ids]);
+};
+
+const seedProject = (store: ReturnType<typeof createStore>, id: string): void => {
+  store.set(projectAtomFamily(id), { objectId: id, name: `repo-${id}` } as unknown as Project);
+  store.set(projectIdsAtom, [id]);
 };
 
 describe("WorkspaceSidebar empty-state nav buttons", () => {
@@ -60,5 +66,49 @@ describe("WorkspaceSidebar empty-state nav buttons", () => {
 
     expect(screen.getByTestId(ElementIds.SIDEBAR_CMDK_LINK)).not.toBeDisabled();
     expect(screen.getByTestId(ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON)).not.toBeDisabled();
+  });
+
+  it("keeps the Add repo button enabled even when the workspace list is empty", () => {
+    // Adding a repo is the first-run action, so — unlike New Workspace — it is
+    // never disabled.
+    store.set(workspaceIdsAtom, []);
+    renderWithProviders(<Sidebar />, { store });
+
+    expect(screen.getByTestId(ElementIds.SIDEBAR_ADD_REPO_BUTTON)).not.toBeDisabled();
+  });
+});
+
+describe("WorkspaceSidebar repo groups", () => {
+  let store: ReturnType<typeof createStore>;
+
+  beforeEach(() => {
+    store = createStore();
+  });
+
+  afterEach(() => {
+    cleanup();
+    queryClient.clear();
+  });
+
+  it("renders a repo with no workspaces as a group with a hint and no per-repo actions", () => {
+    // A registered repo before its first workspace exists must still appear in
+    // the sidebar (otherwise a just-added repo silently vanishes). In the empty
+    // first-run state the per-repo "+"/settings actions are hidden: that page
+    // can't host the "+"'s dialog fallback (see WorkspaceSidebar).
+    seedProject(store, "p1");
+    store.set(workspaceIdsAtom, []);
+    renderWithProviders(<Sidebar />, { store });
+
+    expect(screen.getByTestId(ElementIds.SIDEBAR_REPO_GROUP)).toBeVisible();
+    expect(screen.getByTestId(ElementIds.SIDEBAR_NO_WORKSPACES_HINT)).toBeVisible();
+    expect(screen.queryByTestId(ElementIds.SIDEBAR_REPO_ADD_WORKSPACE)).toBeNull();
+  });
+
+  it("shows the per-repo actions once a workspace exists", () => {
+    seedProject(store, "p1");
+    seedWorkspaces(store, ["w1"]);
+    renderWithProviders(<Sidebar />, { store });
+
+    expect(screen.getByTestId(ElementIds.SIDEBAR_REPO_ADD_WORKSPACE)).toBeVisible();
   });
 });

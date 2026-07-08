@@ -76,7 +76,9 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
     window.sculptor
       ?.isCustomCommandMode?.()
       .then(setIsCustomCommandMode)
-      .catch(() => {});
+      .catch((error) => {
+        console.warn("Failed to read custom-command-mode flag; assuming default.", error);
+      });
   }, []);
 
   const [isCustomBackendCleared, setIsCustomBackendCleared] = useState<boolean>(false);

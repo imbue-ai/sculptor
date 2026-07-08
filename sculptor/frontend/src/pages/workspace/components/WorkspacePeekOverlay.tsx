@@ -1,6 +1,8 @@
+import { useStore } from "jotai";
 import { type ReactElement, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
+import { isSidebarDragActiveAtom } from "~/components/nav/navAtoms.ts";
 
 import styles from "./WorkspacePeekOverlay.module.scss";
 import { WorkspacePeekPopover } from "./WorkspacePeekPopover";
@@ -42,6 +44,12 @@ export const WorkspacePeekOverlay = ({ onNavigate }: WorkspacePeekOverlayProps):
   // when visibility changes (which would cause missed mouseout events).
   const isVisibleRef = useRef(false);
   const overlayRef = useRef<HTMLDivElement>(null);
+  // Sorting a sidebar row/group sweeps the pointer across other rows; keep the
+  // peek closed for the whole drag. Tracked in a ref (same reason as
+  // isVisibleRef, and the overlay needn't re-render on drag start/end) — the
+  // effect below keeps it in sync via a store subscription.
+  const isSidebarDragActiveRef = useRef(false);
+  const store = useStore();
 
   const clearTimers = useCallback((): void => {
     if (openTimerRef.current) {
@@ -100,6 +108,7 @@ export const WorkspacePeekOverlay = ({ onNavigate }: WorkspacePeekOverlayProps):
   // changes, which would cause missed mouseout events.
   useEffect((): (() => void) => {
     const handleMouseOver = (e: MouseEvent): void => {
+      if (isSidebarDragActiveRef.current) return;
       const workspaceId = getWorkspaceTabId(e.target);
       if (!workspaceId) return;
 
@@ -146,17 +155,28 @@ export const WorkspacePeekOverlay = ({ onNavigate }: WorkspacePeekOverlayProps):
       }
     };
 
+    // A drag starting dismisses an already-open peek; handleMouseOver keeps it
+    // closed for the rest of the drag via the ref.
+    isSidebarDragActiveRef.current = store.get(isSidebarDragActiveAtom);
+    const unsubscribeDrag = store.sub(isSidebarDragActiveAtom, () => {
+      isSidebarDragActiveRef.current = store.get(isSidebarDragActiveAtom);
+      if (isSidebarDragActiveRef.current) {
+        dismiss();
+      }
+    });
+
     document.addEventListener("mouseover", handleMouseOver);
     document.addEventListener("mouseout", handleMouseOut);
     document.addEventListener("click", handleClick, true);
     document.addEventListener("auxclick", handleClick, true);
     return (): void => {
+      unsubscribeDrag();
       document.removeEventListener("mouseover", handleMouseOver);
       document.removeEventListener("mouseout", handleMouseOut);
       document.removeEventListener("click", handleClick, true);
       document.removeEventListener("auxclick", handleClick, true);
     };
-  }, [clearTimers, scheduleClose, dismiss, getWorkspaceTabId, updatePosition]);
+  }, [clearTimers, scheduleClose, dismiss, getWorkspaceTabId, updatePosition, store]);
 
   // Cleanup timers on unmount
   useEffect(() => clearTimers, [clearTimers]);

@@ -1,9 +1,8 @@
 import { useAtomValue } from "jotai";
 
-import type { CodingAgentTaskView, ModelOption, TaskStatus } from "../../../api";
+import type { ModelOption, TaskStatus } from "../../../api";
 import {
   taskAcceptsAutomatedPromptsAtomFamily,
-  taskAtomFamily,
   taskAvailableModelsAtomFamily,
   taskIsAutoCompactingAtomFamily,
   taskModelAtomFamily,
@@ -26,10 +25,7 @@ import {
   taskSupportsSubAgentsAtomFamily,
   taskSupportsToolUseRenderingAtomFamily,
 } from "../atoms/tasks";
-
-export const useTask = (taskId: string): CodingAgentTaskView | null => {
-  return useAtomValue(taskAtomFamily(taskId));
-};
+export { useTask } from "./useTask";
 
 /** Subscribe to only the task's status field. Re-renders only when status changes. */
 export const useTaskStatus = (taskId: string): TaskStatus | undefined => useAtomValue(taskStatusAtomFamily(taskId));

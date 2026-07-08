@@ -12,8 +12,8 @@ export type SectionId = "left" | "center" | "right" | "bottom";
  * the user opens it from the section "+" / Cmd+K, which drops it into the
  * sub-section they pick. `defaultSection` is recorded on the registry entry but
  * no placement path reads it yet — it is reserved for a future default-placement
- * pass. The legacy `defaultZone` / `defaultShortcut` / `description` fields are
- * accepted but ignored — the docking shell they targeted is gone.
+ * pass. The legacy `defaultZone` / `defaultShortcut` fields are accepted but
+ * ignored — the docking shell they targeted is gone.
  */
 export type PluginPanelDefinition = {
 	/** Stable id; registering twice with the same id replaces the previous one. */
@@ -27,7 +27,7 @@ export type PluginPanelDefinition = {
 	defaultZone?: string;
 	/** @deprecated Ignored — per-panel keybindings were removed. */
 	defaultShortcut?: string;
-	/** @deprecated Ignored. */
+	/** Secondary text shown under the panel's label in the add-panel dropdown. */
 	description?: string;
 	/** Set by the loader to the owning plugin's id; not supplied by plugins. */
 	pluginId?: string;

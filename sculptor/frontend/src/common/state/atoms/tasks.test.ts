@@ -3,19 +3,14 @@ import { describe, expect, it } from "vitest";
 
 import type { CodingAgentTaskView, HarnessCapabilities } from "../../../api";
 import {
-  optimisticDeleteTaskAtom,
-  rollbackDeleteTaskAtom,
   taskAtomFamily,
   taskAvailableModelsAtomFamily,
-  taskIdsAtom,
-  tasksArrayAtom,
   taskSupportsBackgroundTasksAtomFamily,
   taskSupportsCompactionAtomFamily,
   taskSupportsContextResetAtomFamily,
   taskSupportsInteractiveBackchannelAtomFamily,
   taskSupportsSessionResumeAtomFamily,
   taskSupportsToolUseRenderingAtomFamily,
-  updateTasksAtom,
 } from "./tasks";
 
 const createMockTask = (overrides: Partial<CodingAgentTaskView> = {}): CodingAgentTaskView =>
@@ -57,72 +52,6 @@ const createMockTask = (overrides: Partial<CodingAgentTaskView> = {}): CodingAge
     workspaceId: null,
     ...overrides,
   }) as CodingAgentTaskView;
-
-describe("optimisticDeleteTaskAtom", () => {
-  it("returns snapshot and removes task from taskAtomFamily and taskIdsAtom", () => {
-    const store = createStore();
-    const task = createMockTask({ id: "task-1" });
-    store.set(taskAtomFamily("task-1"), task);
-    store.set(taskIdsAtom, ["task-1"]);
-
-    const snapshot = store.set(optimisticDeleteTaskAtom, "task-1");
-
-    expect(snapshot).toEqual(task);
-    expect(store.get(taskAtomFamily("task-1"))).toBeNull();
-    expect(store.get(taskIdsAtom)).toEqual([]);
-  });
-
-  it("returns null when task is already deleted", () => {
-    const store = createStore();
-    store.set(taskIdsAtom, ["task-1"]);
-
-    const snapshot = store.set(optimisticDeleteTaskAtom, "task-1");
-
-    expect(snapshot).toBeNull();
-    expect(store.get(taskIdsAtom)).toEqual(["task-1"]);
-  });
-
-  it("handles undefined taskIdsAtom gracefully", () => {
-    const store = createStore();
-    const task = createMockTask({ id: "task-1" });
-    store.set(taskAtomFamily("task-1"), task);
-
-    const snapshot = store.set(optimisticDeleteTaskAtom, "task-1");
-
-    expect(snapshot).toEqual(task);
-    expect(store.get(taskAtomFamily("task-1"))).toBeNull();
-    expect(store.get(taskIdsAtom)).toEqual([]);
-  });
-});
-
-describe("rollbackDeleteTaskAtom", () => {
-  it("restores task to taskAtomFamily and taskIdsAtom after optimistic delete", () => {
-    const store = createStore();
-    const task = createMockTask({ id: "task-1" });
-    store.set(taskAtomFamily("task-1"), task);
-    store.set(taskIdsAtom, ["task-1"]);
-
-    const snapshot = store.set(optimisticDeleteTaskAtom, "task-1");
-    expect(snapshot).not.toBeNull();
-
-    store.set(rollbackDeleteTaskAtom, { taskId: "task-1", snapshot: snapshot! });
-
-    expect(store.get(taskAtomFamily("task-1"))).toEqual(task);
-    expect(store.get(taskIdsAtom)).toContain("task-1");
-  });
-
-  it("does not create duplicate entries in taskIdsAtom", () => {
-    const store = createStore();
-    const task = createMockTask({ id: "task-1" });
-    store.set(taskAtomFamily("task-1"), task);
-    store.set(taskIdsAtom, ["task-1"]);
-
-    store.set(rollbackDeleteTaskAtom, { taskId: "task-1", snapshot: task });
-
-    const ids = store.get(taskIdsAtom)!;
-    expect(ids.filter((id) => id === "task-1")).toHaveLength(1);
-  });
-});
 
 describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
   it("returns undefined when no task has been written for the id", () => {
@@ -276,50 +205,6 @@ describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
     expect(store.get(taskSupportsInteractiveBackchannelAtomFamily("task-1"))).toBe(false);
 
     unsubscribe();
-  });
-});
-
-describe("updateTasksAtom", () => {
-  it("marks the task list as loaded (undefined -> []) on an empty update", () => {
-    const store = createStore();
-    expect(store.get(tasksArrayAtom)).toBeUndefined();
-
-    // A zero-task instance streams frames whose task-view map is empty; the
-    // first frame must still flip the list from "loading" to "loaded, empty".
-    store.set(updateTasksAtom, {});
-
-    expect(store.get(taskIdsAtom)).toEqual([]);
-    expect(store.get(tasksArrayAtom)).toEqual([]);
-  });
-
-  it("keeps the ids reference stable across empty updates once loaded", () => {
-    const store = createStore();
-    store.set(updateTasksAtom, {});
-    const loadedIds = store.get(taskIdsAtom);
-
-    store.set(updateTasksAtom, {});
-
-    expect(store.get(taskIdsAtom)).toBe(loadedIds);
-  });
-});
-
-describe("stream convergence after optimistic delete", () => {
-  it("remains correctly deleted when stream confirms deletion", () => {
-    const store = createStore();
-    const task = createMockTask({ id: "task-1" });
-    store.set(taskAtomFamily("task-1"), task);
-    store.set(taskIdsAtom, ["task-1"]);
-
-    store.set(optimisticDeleteTaskAtom, "task-1");
-    expect(store.get(taskAtomFamily("task-1"))).toBeNull();
-    expect(store.get(taskIdsAtom)).toEqual([]);
-
-    store.set(updateTasksAtom, { "task-1": { ...task, isDeleted: true } as CodingAgentTaskView });
-
-    expect(store.get(taskAtomFamily("task-1"))).toBeNull();
-    const ids = store.get(taskIdsAtom)!;
-    expect(ids).not.toContain("task-1");
-    expect(store.get(tasksArrayAtom)).toEqual([]);
   });
 });
 

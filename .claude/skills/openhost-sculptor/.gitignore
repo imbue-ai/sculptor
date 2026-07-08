@@ -1,0 +1,5 @@
+# Local OpenHost instance config for this skill (personal host — do not commit).
+# Holds the per-instance values the skill sources at startup. Copy
+# openhost.env.example to openhost.env and fill it in.
+openhost.env
+!openhost.env.example

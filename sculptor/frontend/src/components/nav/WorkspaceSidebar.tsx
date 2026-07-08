@@ -1,14 +1,16 @@
+import type { DragEndEvent } from "@dnd-kit/core";
+import { closestCenter, DndContext } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { IconButton, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { Bug, Command, Home, PanelLeftClose, Plus, Settings } from "lucide-react";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import type { ReactElement } from "react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Workspace } from "~/api";
 import { ElementIds } from "~/api";
 import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
-import { projectsArrayAtom } from "~/common/state/atoms/projects.ts";
 import { agentIdsByWorkspaceAtom, ensurePseudoTabAtom } from "~/common/state/atoms/workspaces.ts";
 import { useOptimisticWorkspaceDelete } from "~/common/state/hooks/useOptimisticWorkspaceDelete.ts";
 import { AddRepoDialog } from "~/components/add-repo/AddRepoDialog.tsx";
@@ -32,11 +34,12 @@ import { HOME_TAB_ID, SETTINGS_TAB_ID } from "~/components/workspaceTabIds.ts";
 import { getTitleBarLeftPadding } from "~/electron/utils.ts";
 import { WorkspacePeekOverlay } from "~/pages/workspace/components/WorkspacePeekOverlay.tsx";
 
+import { adjustSidebarDragCountAtom, isSidebarDragActiveAtom } from "./navAtoms.ts";
 import navItemStyles from "./NavItem.module.scss";
 import { NavItem } from "./NavItem.tsx";
-import { SidebarFirstRunState } from "./SidebarFirstRunState.tsx";
+import { sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
 import { SidebarRepoGroup } from "./SidebarRepoGroup.tsx";
-import { sidebarWorkspaceGroupsAtom } from "./sidebarWorkspaceOrder.ts";
+import { reorderSidebarRepoGroupAtom, sidebarWorkspaceGroupsAtom } from "./sidebarWorkspaceOrder.ts";
 import styles from "./WorkspaceSidebar.module.scss";
 
 /** Smallest sidebar width the resize handle allows, in pixels. */
@@ -57,9 +60,9 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   const width = useAtomValue(sidebarWidthAtom);
   const setWidth = useSetAtom(sidebarWidthAtom);
   const ensurePseudoTab = useSetAtom(ensurePseudoTabAtom);
-  const projects = useAtomValue(projectsArrayAtom);
-  // Grouped + sorted workspace rows, shared with keyboard workspace cycling so the
-  // two can't drift (see sidebarWorkspaceOrder).
+  // Grouped + sorted repo groups (one per repo, including repos with no
+  // workspaces yet), shared with keyboard workspace cycling so the two can't
+  // drift (see sidebarWorkspaceOrder).
   const repoGroups = useAtomValue(sidebarWorkspaceGroupsAtom);
   const setRenamingWorkspaceId = useSetAtom(renamingWorkspaceIdAtom);
   // The workspace→last-agent map is only consulted inside the click handler, so
@@ -67,13 +70,12 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   // would otherwise re-render (and churn the click callbacks) on every agent-id
   // change, with no visual effect.
   const store = useStore();
-  // In the empty first-run state the repo area shows its own
-  // "Add a repo" / "No workspaces yet" affordances; outside it the sidebar is
-  // unchanged.
+  // Gates the disabled state of the "Commands" and "New Workspace" buttons: both
+  // are inert until the first workspace exists (see their NavItems below).
   const isWorkspaceListEmpty = useAtomValue(isWorkspaceListEmptyAtom);
 
-  // Internal state — the add-repo dialog opened from the empty-state
-  // "Add a repo" button (and its toast).
+  // Internal state — the add-repo dialog opened from the "Add repo" nav button
+  // (and its toast).
   const [isAddRepoDialogOpen, setIsAddRepoDialogOpen] = useState<boolean>(false);
   const [addRepoToast, setAddRepoToast] = useState<ToastContent | null>(null);
   // Deleting a workspace is destructive, so it is confirmed first. The trash
@@ -176,6 +178,55 @@ export const WorkspaceSidebar = (): ReactElement | null => {
     [setWidth],
   );
 
+  // Repo groups are drag-sortable (each group's rows have their own context inside
+  // SidebarRepoGroup); a drop commits the new group order to the layout snapshot.
+  const groupDndSensors = useSidebarDndSensors();
+  // Stamped on the sidebar root as a data flag so the stylesheet can suppress
+  // hover chrome for the whole rail while any sidebar drag is active.
+  const isSidebarDragActive = useAtomValue(isSidebarDragActiveAtom);
+  const adjustDragCount = useSetAtom(adjustSidebarDragCountAtom);
+  const reorderRepoGroup = useSetAtom(reorderSidebarRepoGroupAtom);
+
+  // Whether the in-flight sidebar drag was started by the group context. Every
+  // drag context adjusts the shared drag count, so end/cancel/cleanup must only
+  // decrement for a drag they own — an unowning cleanup would otherwise release
+  // a row drag still parked in some group.
+  const ownsActiveDragRef = useRef(false);
+  const beginOwnedDrag = useCallback((): void => {
+    if (!ownsActiveDragRef.current) {
+      ownsActiveDragRef.current = true;
+      adjustDragCount(1);
+    }
+  }, [adjustDragCount]);
+  const endOwnedDrag = useCallback((): void => {
+    if (ownsActiveDragRef.current) {
+      ownsActiveDragRef.current = false;
+      adjustDragCount(-1);
+    }
+  }, [adjustDragCount]);
+  const handleGroupDragEnd = useCallback(
+    (event: DragEndEvent): void => {
+      endOwnedDrag();
+      if (event.over === null || event.over.id === event.active.id) {
+        return;
+      }
+      reorderRepoGroup({ activeProjectId: String(event.active.id), overProjectId: String(event.over.id) });
+    },
+    [endOwnedDrag, reorderRepoGroup],
+  );
+
+  // dnd-kit does not fire onDragCancel when its context unmounts (see
+  // PanelDndProvider), and collapsing the sidebar renders null below — the
+  // component itself stays mounted, so an unmount-only cleanup would not run.
+  // Without this release a drag stranded by the collapse holds the shared drag
+  // count forever, silently disabling the hover peek.
+  useEffect(() => {
+    if (isCollapsed) {
+      return undefined;
+    }
+    return endOwnedDrag;
+  }, [isCollapsed, endOwnedDrag]);
+
   // JSX and rendering logic
   if (isCollapsed) {
     return null;
@@ -190,7 +241,12 @@ export const WorkspaceSidebar = (): ReactElement | null => {
     // (Themes' <Tooltip> reads this provider — `radix-ui` is pinned to the
     // same instance @radix-ui/themes resolves.)
     <TooltipPrimitive.Provider delayDuration={1000} skipDelayDuration={0}>
-      <aside className={styles.sidebar} style={{ width: `${width}px` }} data-testid={ElementIds.WORKSPACE_SIDEBAR}>
+      <aside
+        className={styles.sidebar}
+        style={{ width: `${width}px` }}
+        data-testid={ElementIds.WORKSPACE_SIDEBAR}
+        data-sidebar-drag-active={isSidebarDragActive ? "true" : undefined}
+      >
         {/* Window-controls gutter clears the macOS traffic lights, then the
           collapse toggle. */}
         <div className={styles.windowControls} style={{ paddingLeft: getTitleBarLeftPadding(true) }}>
@@ -232,40 +288,65 @@ export const WorkspaceSidebar = (): ReactElement | null => {
             testId={ElementIds.SIDEBAR_CMDK_LINK}
           />
           {/* Opens the new-workspace dialog; the per-repo "+" in the repo groups
-            below is the direct-create affordance. */}
+            below is the direct-create affordance. Disabled on first run, but with
+            no tooltip: the inline first-run form is the obvious create affordance,
+            so a tooltip pointing back at the sidebar row would just float detached
+            beside the centered form. */}
           <NavItem
             icon={Plus}
             label="New Workspace"
             disabled={isWorkspaceListEmpty}
-            disabledTooltip="Use the form to create your first workspace"
             onClick={() => setNewWorkspaceModal({ open: true })}
             testId={ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON}
           />
         </nav>
 
         <div className={styles.repoList}>
-          {/* Empty first-run repo area. `repoGroups` is built from workspaces, so
-            it's empty here — SidebarFirstRunState renders from `projects`
-            instead. */}
-          {isWorkspaceListEmpty ? (
-            <SidebarFirstRunState projects={projects} onAddRepo={() => setIsAddRepoDialogOpen(true)} />
-          ) : null}
-          {repoGroups.map((group) => (
-            <SidebarRepoGroup
-              key={group.projectId}
-              group={group}
-              actions={workspaceActions}
-              openInRuntime={openInRuntime}
-              onWorkspaceClick={handleWorkspaceClick}
-              onWorkspaceHover={handleWorkspaceHover}
-              onBeginDelete={setDeleteTarget}
-            />
-          ))}
+          {/* One group per repo, including repos with no workspaces yet (they show
+            a "No workspaces yet" hint). Empty until the first repo is added via the
+            "Add repo" button in the bottom actions. */}
+          <DndContext
+            sensors={groupDndSensors}
+            collisionDetection={closestCenter}
+            modifiers={sidebarDndModifiers}
+            onDragStart={beginOwnedDrag}
+            onDragEnd={handleGroupDragEnd}
+            onDragCancel={endOwnedDrag}
+          >
+            <SortableContext items={repoGroups.map((group) => group.projectId)} strategy={verticalListSortingStrategy}>
+              {repoGroups.map((group) => (
+                <SidebarRepoGroup
+                  key={group.projectId}
+                  group={group}
+                  actions={workspaceActions}
+                  openInRuntime={openInRuntime}
+                  // On first run the per-repo settings/"+" actions are hidden: the
+                  // first-run page doesn't mount AppShell, so the "+"'s dialog
+                  // fallback and error toast would silently no-op there (same reason
+                  // New Workspace/Commands are disabled above).
+                  showActions={!isWorkspaceListEmpty}
+                  onWorkspaceClick={handleWorkspaceClick}
+                  onWorkspaceHover={handleWorkspaceHover}
+                  onBeginDelete={setDeleteTarget}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
         </div>
 
         <div className={styles.spacer} />
 
         <nav className={styles.bottomActions}>
+          {/* Grouped with the other global actions rather than the per-workspace
+            top nav. Always enabled — unlike New Workspace, registering a repo is
+            exactly what the user does before any workspace exists, so it stays
+            active in the first-run state too. */}
+          <NavItem
+            icon={Plus}
+            label="Add repo"
+            onClick={() => setIsAddRepoDialogOpen(true)}
+            testId={ElementIds.SIDEBAR_ADD_REPO_BUTTON}
+          />
           <NavItem
             icon={Settings}
             label="Settings"
@@ -284,9 +365,9 @@ export const WorkspaceSidebar = (): ReactElement | null => {
               <span className={navItemStyles.navLabel}>Report a bug</span>
             </button>
           </ReportProblemPopover>
-          <DevModeIndicator />
           <div className={styles.versionRow} data-testid={ElementIds.SIDEBAR_VERSION}>
             <VersionPopover />
+            <DevModeIndicator />
           </div>
         </nav>
 
@@ -316,7 +397,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
           onConfirm={handleDeleteConfirm}
         />
 
-        {/* Empty first-run "Add a repo" flow reuses the standard add-repo dialog. */}
+        {/* The "Add repo" nav button opens the standard add-repo dialog. */}
         <AddRepoDialog open={isAddRepoDialogOpen} onOpenChange={setIsAddRepoDialogOpen} setToast={setAddRepoToast} />
         <Toast
           open={addRepoToast !== null}
