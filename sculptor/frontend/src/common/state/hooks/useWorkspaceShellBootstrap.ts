@@ -26,9 +26,11 @@ import { setAgentForWorkspaceAtom } from "~/common/state/atoms/workspaces.ts";
 import { useMarkRead } from "~/common/state/hooks/useMarkRead";
 import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
 import { seedFirstVisitTerminal } from "~/components/sections/addPanelCore.ts";
+import { seedWorkspaceFromDefault } from "~/components/sections/layoutApply.ts";
 import { buildDefaultWorkspaceLayout } from "~/components/sections/persistence/defaultLayout.ts";
 import type { WorkspaceLayoutState } from "~/components/sections/persistence/types.ts";
 import { makeAgentPanelId, makeTerminalPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
+import { defaultLayoutAtom } from "~/components/sections/savedLayoutAtoms.ts";
 import { consumePendingPanelRevealAtom } from "~/components/sections/sectionActions.ts";
 import { isEmptyLayout, switchActiveWorkspaceAtom, workspaceLayoutFamily } from "~/components/sections/sectionAtoms.ts";
 import type { PanelId } from "~/components/sections/sectionTypes.ts";
@@ -130,10 +132,14 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
     if (isEmptyLayout(store.get(workspaceLayoutFamily(workspaceId)))) {
       const terminalIndex = seedFirstVisitTerminal(store, workspaceId);
       const terminalPanelId = makeTerminalPanelId(workspaceId, terminalIndex);
-      const defaultLayout =
+      const base =
         taskId === undefined
           ? buildAgentlessDefaultLayout(terminalPanelId)
           : buildDefaultWorkspaceLayout({ agentPanelId: makeAgentPanelId(taskId), terminalPanelId });
+      // Compose the default dynamic seeding (agent + terminal above) with whatever
+      // Layout the user set as their new-workspace default (its static panels +
+      // geometry, applied additively). System Default resolves to the plain base.
+      const defaultLayout = seedWorkspaceFromDefault(base, store.get(defaultLayoutAtom));
       switchActiveWorkspace({ workspaceId, defaultLayout });
     } else {
       switchActiveWorkspace({ workspaceId });
