@@ -31,27 +31,27 @@ Integration tests considered:
 
 | Area | Complete | Partial | Missing | Total |
 |------|---------:|--------:|--------:|------:|
-| SHELL | 24 | 12 | 14 | 50 |
+| SHELL | 15 | 8 | 11 | 34 |
 | ROUTE | 1 | 1 | 4 | 6 |
 | HELP | 0 | 2 | 1 | 3 |
-| HOME | 2 | 4 | 14 | 20 |
-| ADDWS | 8 | 14 | 3 | 25 |
+| HOME | 2 | 4 | 15 | 21 |
+| ADDWS | 6 | 14 | 5 | 25 |
 | ADDREPO | 6 | 5 | 2 | 13 |
 | ONB | 11 | 10 | 15 | 36 |
-| WS | 41 | 20 | 18 | 79 |
-| CHAT | 21 | 16 | 9 | 46 |
-| MSG | 15 | 12 | 10 | 37 |
-| PANEL | 23 | 20 | 14 | 57 |
+| WS | 49 | 18 | 15 | 82 |
+| CHAT | 21 | 15 | 8 | 44 |
+| MSG | 13 | 14 | 10 | 37 |
+| PANEL | 24 | 19 | 15 | 58 |
 | CMDP | 4 | 9 | 18 | 31 |
-| SET | 13 | 18 | 10 | 41 |
+| SET | 12 | 16 | 11 | 39 |
 | DEV | 3 | 1 | 0 | 4 |
 | MENT | 5 | 2 | 3 | 10 |
 | SKILL | 2 | 1 | 0 | 3 |
 | ACT | 2 | 3 | 1 | 6 |
-| **Total** | **181** | **150** | **136** | **467** |
+| **Total** | **176** | **142** | **134** | **452** |
 
-**Under the integration-only standard, 39% of scenarios are completely covered, 32% partially, and
-29% not at all.** (Counts are derived directly from the two sections below.)
+**Under the integration-only standard, 39% of scenarios are completely covered, 31% partially, and
+30% not at all.** (Counts are derived directly from the two sections below.)
 
 The per-scenario detail is split into two sections: **Coverage gaps — Partial & Missing** (every
 scenario needing work, with the test to add) and **Complete coverage** (every scenario already fully
@@ -65,24 +65,17 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 
 | Scenario | Status | Existing integration test(s) | Integration tests to add |
 |----------|--------|------------------------------|--------------------------|
-| SHELL-002 | Partial | test_home_page_tab.py::test_home_page_opens_as_tab (uses navigate helper, not the top-bar Home button) | Click the top-bar Home button (and one pressing the Home keybinding); assert a Home tab appears/re-activates with the home page shown. |
-| SHELL-004 | Partial | test_home_page_tab.py::test_clicking_workspace_replaces_home_tab (clicks a workspace row, not a non-active tab) | With 2+ open tabs, click a non-active tab and assert it becomes active and its content renders. |
-| SHELL-005 | Missing | — | With multiple tabs, press Cmd+] and assert the next tab activates, including wrap from last to first. |
-| SHELL-006 | Missing | — | Press Cmd+[ and assert the previous tab activates, including wrap from first to last. |
-| SHELL-008 | Missing | — | Middle-click a non-active tab and assert it closes while the active tab is unchanged. |
-| SHELL-010 | Missing | — | Drag-reorder one tab past another; assert the drop indicator, the order change on release, and an unchanged active tab. |
-| SHELL-011 | Missing | — | Open more tabs than fit; dispatch a wheel event over the tab bar; assert horizontal scroll position changes. |
-| SHELL-012 | Missing | — | With overflowing tabs, activate an off-screen tab (keyboard cycle); assert it scrolls into the viewport. |
-| SHELL-013 | Missing | — | Long-titled tab at constrained width; assert the label is ellipsis-truncated. |
-| SHELL-014 | Partial | test_terminal_agent_signals.py::test_terminal_agent_signals_drive_tab_status_dot | Assert the visual variants: pulsing running vs solid waiting/ready, red error dot, two-dot mixed-status case. |
-| SHELL-015 | Partial | test_workspace_tab_context_menu_icons.py::test_workspace_context_menu_rename; test_tab_context_menus.py::test_terminal_tab_context_menu_close_others | Right-click a workspace tab and assert the full menu set (Close, Close others, Close all, Rename, Delete, git actions). |
-| SHELL-018 | Partial | test_tab_context_menus.py::test_terminal_tab_context_menu_close_others (terminal tabs only) | On workspace tabs, exercise "Close others" and "Close all"; assert all-others/all close and "Close all" lands on the Add Workspace page. |
-| SHELL-019 | Partial | test_restarts.py::test_tasks_persist_on_restart; test_restart_mru.py::test_restart_restores_active_workspace_and_agent | Open 3+ tabs in a specific order with a known active one, restart, assert same tabs/order/active tab. |
-| SHELL-026 | Partial | test_keybindings.py::test_help_dialog_reflects_customized_bindings (opens via Cmd+/, not the Help button) | Click the top-bar Help (?) button and assert the keyboard-shortcuts dialog opens. |
-| SHELL-027 | Missing | — | Hover a top-bar button and assert a tooltip showing the button name plus its keyboard shortcut. |
+| SHELL-002 | Missing | — | Click the sidebar **Home** link (and one pressing the Home keybinding); assert the home page is displayed. |
+| SHELL-005 | Missing | — | With multiple workspaces, press Cmd+] and assert the next sidebar workspace activates, including wrap from last to first. |
+| SHELL-006 | Missing | — | Press Cmd+[ and assert the previous sidebar workspace activates, including wrap from first to last. |
+| SHELL-013 | Missing | — | Long-named workspace row at constrained width; assert the row label is ellipsis-truncated. |
+| SHELL-014 | Partial | test_terminal_agent_signals.py::test_terminal_agent_signals_drive_tab_status_dot (agent-panel tab dot, not the sidebar row) | On a sidebar workspace row, assert the status-dot variants: pulsing running vs solid waiting/ready, red error dot, two-dot mixed-status case. |
+| SHELL-015 | Partial | test_workspace_row_context_menu.py::test_workspace_row_context_menu_rename; test_workspace_row_hover_actions.py::test_workspace_row_dropdown_opens_actions_menu | Assert the full row menu set (Rename, Commit, Open PR, Copy name/branch/id, Delete). |
 | SHELL-033 | Partial | test_regression_terminal_theme_toggle.py::test_terminal_theme_updates_on_toggle (presses Cmd+Shift+D; asserts xterm colors, not the app-level theme) | Press Cmd+Shift+D and assert the app-level light/dark theme flips without a reload. |
-| SHELL-034 | Missing | — | Assert the version number is visible bottom-right on a non-workspace page, and hidden in zen mode. |
+| SHELL-034 | Missing | — | Assert the version number is visible at the bottom of the sidebar. |
 | SHELL-035 | Partial | test_auto_update_browser.py::test_null_initial_state_version_popover | Assert the opened popover shows the diagnostics fields: platform, uptime, active agents, disk, paths, Claude CLI info. |
+| SHELL-052 | Partial | test_sidebar_collapse_resize.py::test_resize_handle_widens_sidebar; ::test_resize_clamps_to_a_minimum_width | Assert the sidebar width persists across a reload. |
+| SHELL-053 | Missing | — | Click a repo group's chevron; assert its workspace rows hide/show and the collapsed state persists. |
 | SHELL-038 | Partial | test_auto_update_browser.py::test_ready_status_shows_persistent_toast; test_auto_update_electron.py::test_update_available_and_ready | Click "Install and restart"; assert the button changes to "Restarting…" and the restart path is invoked. |
 | SHELL-041 | Partial | test_tanstack_devtools_panel.py::test_tanstack_devtools_panel_mounts_with_content (TanStack Devtools only) | Toggle "React Grab" and "TanStack event log" from the version popover and assert each dev tool appears/disappears. |
 | SHELL-042 | Missing | — | Make the backend unresponsive and assert the yellow bottom banner reads "Backend not responding. Please try restarting the app." |
@@ -91,7 +84,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | SHELL-045 | Missing | — | Assert the backend loading splash shows the Sculptor logo, "Loading" message, and progress bar until ready. |
 | SHELL-047 | Missing | — | In dev/from-source mode, assert the bottom-left dev-mode indicator renders and hovering shows a "Running from source" tooltip with the workspace id. |
 | SHELL-048 | Missing | — | Press Cmd+= / Cmd+- / Cmd+0; assert the zoom scales up/down/resets to 100% and persists across restart. |
-| ROUTE-002 | Partial | test_restart_mru.py::test_restart_with_no_mru_lands_on_new; test_add_workspace_page.py::test_workspace_form_draft_persists_after_navigation | Navigate to bare `/ws/new` and assert the URL is rewritten to `/ws/new/{draftId}` with the Add Workspace form displayed. |
+| ROUTE-002 | Partial | test_restart_mru.py::test_restart_with_no_mru_lands_on_home | Navigate to bare `/ws/new` and assert the URL is rewritten to `/ws/new/{draftId}` with the Add Workspace form displayed. |
 | ROUTE-003 | Missing | — | Navigate to an unknown route; assert the Not-Found page shows the logo, "The page you are looking for does not exist.", and a home link. |
 | ROUTE-004 | Missing | — | Force a loader/component to throw; assert the error page renders a generic message plus error details in a scrollable box. |
 | ROUTE-005 | Missing | — | On the route error page, click "Copy Error to Clipboard"; assert the clipboard contains the error text. |
@@ -120,12 +113,14 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | HOME-016 | Missing | — | Hover-click the trash icon (and via context menu) opens the delete-confirmation dialog. |
 | HOME-017 | Missing | — | Assert "Delete workspace?" title, warning naming the workspace, Cancel, and a red default-focused Delete button. |
 | HOME-018 | Missing | — | Open dialog, click Cancel / press Escape; assert dialog closes and row remains. |
-| HOME-019 | Missing | — | Open dialog from a home row, click Delete; assert dialog closes and row disappears. (test_optimistic_deletion.py covers the tab menu, not the home-row dialog.) |
+| HOME-019 | Missing | — | Open dialog from a home row, click Delete; assert dialog closes and row disappears. (test_workspace_optimistic_deletion.py covers the sidebar row, not the home-row dialog.) |
 | HOME-020 | Partial | test_backend_pr_polling.py::test_home_page_shows_pr_badge; ::test_multiple_workspaces_independent_pr_status | Add home-row assertions for "Checking PR…", "Create PR", merged/closed badge, "Assign PR", error button. |
-| ADDWS-001 | Partial | test_add_workspace_page.py (asserts form/submit button) | Delay project fetch; assert the centered spinner before the form. |
+| HOME-021 | Missing | — | With plugin-contributed home views registered, pick a view from the switcher; assert the selected view shows ("Recent workspaces" always first) and the choice persists. |
+| ADDWS-001 | Partial | test_new_workspace_dialog.py::test_form_renders_core_fields (asserts the loaded form fields) | Delay project fetch; assert the skeletons/spinner before the form. |
 | ADDWS-002 | Partial | test_multi_repo.py::test_mru_project_updates_after_creating_workspace | Add the no-MRU case (first project pre-selected). |
-| ADDWS-003 | Partial | test_add_workspace_page.py::test_cmd_i_focuses_prompt_input | Assert placeholder "Untitled workspace (optional)" and autofocus on initial load. |
+| ADDWS-003 | Partial | test_new_workspace_dialog.py::test_form_renders_core_fields (asserts the name input is present) | Assert placeholder "Untitled workspace (optional)" and autofocus on initial load. |
 | ADDWS-004 | Partial | test_worktree_create_happy_path.py::test_worktree_create_with_empty_workspace_name_random_slug | Assert created workspace named "Untitled workspace" (+ whitespace-only case). |
+| ADDWS-005 | Missing | — | Create a workspace, reopen the new-workspace form; assert the repo and agent type default to the most-recently-used values while title/prompt/branch reset. |
 | ADDWS-006 | Partial | test_multi_repo.py::test_create_new_project_from_add_workspace_page; ::test_adding_duplicate_repo_shows_error | Open selector; assert all projects plus an "Add Repository" entry. |
 | ADDWS-007 | Partial | test_multi_repo.py::test_create_workspaces_in_multiple_projects_and_switch | Assert selecting another project reloads the branch selector and clears any branch-name override. |
 | ADDWS-008 | Partial | test_multi_repo.py::test_create_new_project_from_add_workspace_page (adds via Settings UI) | Trigger "Add Repository" from the repo-selector dropdown; assert the new project is auto-selected. |
@@ -137,6 +132,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | ADDWS-018 | Partial | test_worktree_edge_cases.py::test_clone_mode_hidden_when_flag_off | Add the neither-experimental-mode case: selector hidden, defaults to Worktree. |
 | ADDWS-019 | Partial | test_clone_mode_branch_name.py; test_worktree_edge_cases.py::test_clone_mode_hidden_when_flag_off | Switch modes and assert branch fields update live (Clone optional; In-place removes field + disables selector). |
 | ADDWS-020 | Partial | test_branch_name_collisions.py::test_worktree_mode_collision_blocks_creation | Assert the Create button's explanatory disabled tooltips and the "Cmd/Ctrl+↵" ready tooltip. |
+| ADDWS-022 | Missing | — | With nothing focused in the modal, press ArrowDown/ArrowUp; assert focus moves to the workspace-name input. |
 | ADDWS-023 | Partial | test_branch_name_collisions.py::test_worktree_mode_collision_blocks_creation (pre-submit) | Force a submit-time 409; assert toast "Branch '{name}' already exists" and the form stays open. |
 | ADDWS-024 | Missing | — | Force creation to fail; assert "Failed to create workspace"/"Failed to create agent" toast with details. |
 | ADDREPO-001 | Partial | test_multi_repo.py::test_adding_duplicate_repo_shows_error; test_regression_settings_delete_repo_stays_on_page.py::test_adding_repo_stays_on_settings_page; test_add_repo_remote_picker.py (dialog opens on GitHub source) | Assert the source picker defaults to GitHub with a Local Folder option, and that Local Folder shows a focused path input + a Browse button on desktop. |
@@ -176,7 +172,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | ONB-031 | Partial | test_multi_repo.py::test_git_init_dialog_for_non_git_directories (via Add Workspace page, not onboarding) | Add the same flow on the onboarding Add-Repo step; assert "Setting up repository…" and Cancel-returns. |
 | ONB-032 | Partial | test_multi_repo.py::test_empty_repo_initial_commit_dialog (via Settings, not onboarding) | Cover the empty-repo prompt on the onboarding Add-Repo step incl. Cancel-returns. |
 | ONB-033 | Partial | test_multi_repo.py::test_adding_duplicate_repo_shows_error (via Settings) | Add an onboarding-step test for a nonexistent/inaccessible path → error dialog with a Close button. |
-| MENT-001 | Partial | test_at_mention_file_chip_click_opens_tab.py::test_file_chip_click_opens_file_view_tab; ::test_nested_file_chip_click_opens_correct_tab | Add coverage that hovering a file mention chip shows the full-path popover + action hint. |
+| MENT-001 | Partial | test_at_mention_file_chip_click_opens_tab.py::test_file_chip_click_opens_file_view; ::test_nested_file_chip_click_opens_correct_file | Add coverage that hovering a file mention chip shows the full-path popover + action hint. |
 | MENT-002 | Missing | — | Hover a skill mention chip; assert a popover with type badge, skill id, description; chip not clickable. |
 | MENT-003 | Missing | — | Drive an entity mention chip: workspace/agent click navigates; repository/deleted not clickable + strike-through; hover shows detail popover. |
 | MENT-004 | Missing | — | Open agent/workspace/repository detail popovers; assert icon/title/badge/body/meta footer and the deleted "no longer exists" note. |
@@ -205,26 +201,21 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | WS-029 | Partial | test_backend_pr_polling.py::test_closed_not_merged_pr_shows_closed_state | Add the merged-PR case: merge icon + "merged" text; clicking opens browser. |
 | WS-030 | Missing | — | Hover pipeline/review dots; assert tooltip text ("Pipeline running/passed/failed/No pipeline", "Approved/Review pending/No reviewers"). |
 | WS-031 | Missing | — | PR with different target shows "Assign PR"; opening offers "Create PR → {target}" and "switch target to {target}". |
-| WS-032 | Partial | test_pr_button_errors.py::test_github_cli_error_variants; ::test_gitlab_cli_error_variants | Assert warning-triangle vs info icon distinction and the remediation-command copy icon turning to a checkmark briefly. |
-| WS-033 | Partial | test_changes_panel.py::test_switching_to_all_scope_shows_target_branch_diff; test_pr_management.py::test_banner_shows_target_branch_selector_for_non_github_gitlab_origin | Click the selector; assert the dropdown lists branches; select one; assert target updates. |
+| WS-032 | Partial | test_pr_button_errors.py::test_github_cli_error_variants | Assert warning-triangle vs info icon distinction and the remediation-command copy icon turning to a checkmark briefly. |
+| WS-033 | Partial | test_changes_panel.py::test_switching_to_all_scope_shows_target_branch_diff; test_pr_management.py::test_banner_shows_target_branch_selector_for_non_github_origin | Click the selector; assert the dropdown lists branches; select one; assert target updates. |
 | WS-034 | Missing | — | Target differs from PR target → warning color; hover "PR #N targets {branch}"; selecting matching branch updates target. |
 | WS-035 | Missing | — | Click repo segment; assert menu (Open folder, Copy path, Copy relative path, Open in installed apps); each action fires; chosen app remembered. |
-| WS-038 | Partial | test_workspace_banner_overflow.py::test_collapsed_banner_has_no_inert_overflow_menu | Assert collapse priority order at successive widths: PR button → diff summary → repo segment. |
-| WS-039 | Partial | test_regression_copy_branch_name.py::test_copy_branch_name_copies_workspace_branch | Assert the "Copied!" tooltip appears briefly after clicking the banner branch name. |
+| WS-039 | Partial | test_regression_copy_branch_name.py::test_copy_branch_name_copies_workspace_branch | Assert the "Copied!" tooltip appears briefly after clicking the header branch name. |
 | WS-042 | Partial | test_multi_agent_workspace.py::test_workspaces_have_isolated_agent_tabs (click switches) | Add a next/previous-agent keybinding test asserting the view switches. |
 | WS-043 | Missing | — | Hover agent status dot; assert tooltip shows status label + time-since-activity/creation. |
-| WS-046 | Partial | test_agent_tab_context_menu.py::test_agent_context_menu_rename | Add double-click-to-rename + Enter; add Escape-cancels-rename. |
-| WS-050 | Missing | — | Drag an agent tab to a new position; assert the tab order updates. |
+| WS-046 | Partial | test_panel_tab_context_menu.py::test_agent_tab_offers_rename; ::test_terminal_tab_double_click_rename (agent-menu rename opens; terminal double-click renames) | Add double-click-to-rename + Enter on an agent panel tab; add Escape-cancels-rename. |
 | WS-057 | Partial | test_ask_user_question.py::test_ask_user_question_navigation_state; ::test_ask_user_question_next_button | Add Tab/Shift+Tab and arrow-key navigation; assert progress dots show answered/unanswered/current. |
 | WS-060 | Missing | — | Agent errored + workspace deleted → input shows "deleted / cannot be restored" with no restore link. |
 | WS-061 | Partial | test_workspace_peek.py::test_workspace_peek_popover_idle_state; ::test_workspace_peek_popover_waiting_state; ::test_peek_popover_shows_diff_stats | Assert a single popover surfaces status, agent list, PR info, branch, and diff stats together. |
-| WS-062 | Partial | test_workspace_peek.py::test_workspace_peek_popover_hover_mechanics; test_regression_workspace_peek_stuck_on_close.py::test_workspace_peek_dismissed_on_middle_click_close | Assert content swaps instantly within grace period and close-after-delay on leaving all tabs. |
+| WS-062 | Partial | test_workspace_peek.py::test_workspace_peek_popover_hover_mechanics | Assert content swaps instantly within grace period and close-after-delay on leaving all rows. |
 | WS-063 | Missing | — | Workspace with >5 agents shows only 5 + "+N more agents" button that reveals the rest. |
 | WS-064 | Missing | — | Click peek agent row/header closes popover and opens workspace/agent; click branch copies it with "Copied!". |
-| WS-065 | Partial | test_side_toggle.py::test_right_side_toggle_hides_and_shows_panels; test_zen_mode.py::test_focus_mode_hides_panels_but_keeps_chrome | Assert left, bottom, right toggle buttons + focus-mode button all present (and hidden in zen mode). |
-| WS-067 | Missing | — | Empty panel toggle is disabled, shows "Panel is empty" tooltip, does nothing on click. |
-| WS-068 | Missing | — | Hover a panel toggle; assert tooltip shows the panel name and its keybinding. |
-| WS-069 | Partial | test_panel_zones.py::test_inner_vertical_split_height_persists_after_navigation | Assert the expand outcome (the cited fullscreen test only clicks, asserts nothing); add divider-drag-collapses-diff and expand-maximizes-diff+collapses-chat. |
+| WS-065 | Partial | test_section_collapse_expand.py::test_expand_side_section_via_header_toggle (one section toggle) | Assert the header shows left, bottom, and right section toggles (the center section has none). |
 | WS-071 | Partial | test_chat_search_bar.py::test_cmd_f_enter_advances_through_all_matches; ::test_search_bar_does_not_flash_red_while_typing_matching_query | Assert the "0/0" counter with the input turning red when there are no matches. |
 | WS-072 | Partial | test_chat_search_bar.py::test_cmd_f_enter_advances_through_all_matches (Enter nav) | Add Shift+Enter (previous) and up/down arrow navigation. |
 | WS-073 | Missing | — | Press Escape or click close → search bar closes and highlights clear. |
@@ -256,8 +247,6 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | CHAT-039 | Partial | test_stopped_turn_footer.py::test_stopped_turn_footer_shows_duration_after_content_streamed; ::test_turn_footer_shows_metrics_after_completed_turn; test_turn_summary.py::test_turn_footer_shows_file_count_after_write_file | Assert context-usage % in the footer. |
 | CHAT-040 | Partial | test_turn_footer_interactions.py::test_token_popover_shows_breakdown_on_click | Assert the reasoning-tokens line and the context current/threshold values in the popover. |
 | CHAT-043 | Partial | test_alpha_ask_user_question.py::test_alpha_auq_pill_dismissed_state | Assert the dimmed-options styling on the dismissed block. |
-| CHAT-044 | Partial | test_alpha_chat_view.py::test_debug_view_displays_blocks | Assert role, id, timestamp, and tool_use/tool_result names per message. |
-| CHAT-045 | Missing | — | Clicking a debug-view timestamp toggles between relative and absolute formats. |
 | CHAT-046 | Partial | test_pi_capability_gating.py::test_pi_model_switcher_offers_pi_models_and_accepts_a_pick; ::test_fresh_pi_agent_switcher_shows_pi_models_without_a_message | Assert the picker is disabled (with the current model) for a terminal agent; that two-or-more providers cascade into per-provider submenus while a single provider stays flat; that a Pi agent with no authenticated providers shows the "Authenticate a provider" prompt; and that a harness-rejected Pi switch leaves the selection unchanged and shows an error toast. |
 
 ### MSG
@@ -267,7 +256,9 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | MSG-003 | Partial | test_alpha_chat_view.py::test_alpha_view_displays_messages (text only, no timestamp) | Assert a user message renders a human-readable timestamp below the text. |
 | MSG-004 | Partial | test_alpha_chat_view.py::test_alpha_copy_button (button attached only); test_regression_copy_user_message_html.py::test_copy_user_message_with_mention_copies_plain_text | Assert the checkmark-icon feedback (~1.5s) after clicking copy on a user message. |
 | MSG-005 | Partial | test_inline_media_display.py::test_assistant_img_tag_renders_file_preview; test_alpha_chat_chip_rendering.py | Assert the "via {method}" badge for a `sentVia` user message, and a file-attachment preview on a user message. |
-| MSG-006 | Partial | test_markdown_gfm.py::test_markdown_renders_gfm_and_neutralises_unsafe; test_alpha_nested_list_rendering.py::test_nested_ordered_list_round_trip; test_alpha_ordered_list_numbering.py::test_non_sequential_ordered_list_preserves_markers | Add assertions for blockquote and emoji rendering. |
+| MSG-006 | Partial | test_alpha_nested_list_rendering.py::test_nested_ordered_list_round_trip; test_alpha_ordered_list_numbering.py::test_non_sequential_ordered_list_preserves_markers | Add assertions for paragraph/heading, blockquote, and emoji rendering. |
+| MSG-007 | Partial | test_diff_viewer.py::test_gfm_features_render_in_read_only_preview (external anchors target=_blank + rel in the read-only preview, not the chat message surface) | Assert a markdown link in a chat message opens in a new external browser tab. |
+| MSG-008 | Partial | test_diff_viewer.py::test_unsafe_markdown_is_neutralised_in_read_only_preview (images suppressed in the read-only preview, not the chat message surface) | Assert a markdown image in a chat message is not displayed. |
 | MSG-010 | Missing | — | Hover a blockquote, click copy; assert the quoted text (with "> " prefixes) is copied + checkmark feedback. |
 | MSG-011 | Missing | — (no integration test asserts the plain→highlighted token swap) | Assert a fenced code block first renders plain monospace then swaps to colored syntax tokens. |
 | MSG-012 | Missing | — | Hover a code block, click copy; assert the trimmed code is copied + checkmark for ~1.5s. |
@@ -292,25 +283,25 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | Scenario | Status | Existing integration test(s) | Integration tests to add |
 |----------|--------|------------------------------|--------------------------|
 | PANEL-003 | Missing | — | Click the tree/list toggle; assert the same file list renders nested vs flat. |
-| PANEL-005 | Partial | test_file_browser.py::test_refresh_button_reflects_file_operations; ::test_refresh_button_updates_uncommitted_tab_for_external_changes | Assert the refresh icon shows the animated/spinning state while re-fetching. |
+| PANEL-005 | Missing | — | Click the file-tree refresh control; assert the icon shows the animated/spinning state while re-fetching. |
 | PANEL-009 | Missing | — | Focus tree; Up/Down moves selection, Right/Left expand/collapse, Enter opens the focused file. |
-| PANEL-010 | Partial | test_file_browser.py::test_file_tree_shows_status_indicators (A); ::test_moved_file_shows_r_status_without_rename_label (R); test_changes_panel.py::test_diff_header_line_stats_reflect_uncommitted_only (M) | Assert D status + strike-through, per-row +/− stats, folder change-count badge, processing-error badge. |
+| PANEL-010 | Partial | test_files_panel.py::test_file_tree_shows_status_indicators (A); test_changes_panel.py::test_moved_file_shows_r_status_without_rename_label (R); ::test_diff_header_line_stats_reflect_uncommitted_only (M) | Assert D status + strike-through, per-row +/− stats, folder change-count badge, processing-error badge. |
 | PANEL-011 | Missing | — | Agent edits a nested file; assert tree auto-scrolls, expands ancestors, applies highlight/focus styling. |
-| PANEL-012 | Partial | test_file_browser.py::test_copy_file_path_for_absolute_path_file; test_regression_copy_file_path.py::test_copy_file_path_uses_workspace_code_path; test_diff_tab_close_others.py::test_diff_tab_close_others | Assert each menu item acts: Open diff view, View file, Copy relative path, Open in OS, folder Expand all/Collapse all. |
-| PANEL-013 | Partial | test_file_browser.py::test_file_browser_populates_after_workspace_created_without_prompt | Assert the "No files yet" empty state and the animated skeleton/loading rows. |
+| PANEL-012 | Partial | test_diff_viewer.py::test_copy_file_path_for_absolute_path_file (copy-path from the viewer) | Assert each tree context-menu item acts: Open diff view, View file, Copy relative path, Open in OS, folder Expand all/Collapse all. |
+| PANEL-013 | Partial | test_files_panel.py::test_file_browser_populates_after_workspace_created_without_prompt | Assert the "No files yet" empty state and the animated skeleton/loading rows. |
 | PANEL-016 | Partial | test_changes_panel.py::test_commit_button_sends_commit_message (enabled) | Assert the button is disabled (label reflects 0) when no changes exist. |
 | PANEL-018 | Missing | — | Right-click commit button → "Edit prompt…", edit, Save; assert prompt persists and dialog closes. |
 | PANEL-019 | Partial | test_commits_panel.py::test_history_panel_shows_commits; ::test_terminus_visible_with_no_commits | Assert the "Loading history…" and error-message states. |
 | PANEL-022 | Partial | test_commits_panel.py::test_commit_hover_popover_shows_details; ::test_click_dismisses_popover | Click the copy-hash button; assert the hash is copied and the "Copied" indicator shows. |
-| PANEL-025 | Partial | test_file_browser.py::test_multiple_tabs_and_close; ::test_clicking_tab_switches_displayed_file; ::test_cmd_w_closes_active_diff_tab; test_diff_tab_close_others.py::test_diff_tab_close_others | Assert tab drag-reorder, MRU-vs-adjacent close per setting, "Close all" menu item, full-path tooltip on hover. |
-| PANEL-026 | Partial | test_file_browser.py::test_split_view_toggle; ::test_line_wrap_toggle; ::test_in_file_search_bar; ::test_close_diff_panel_button; test_diff_scope_and_fullscreen.py::test_expand_toggle_expands_and_collapses; test_expand_escape.py::test_escape_exits_expand_mode | Assert expand/fullscreen hides the file browser (current tests assert chat-panel hide). |
-| PANEL-027 | Partial | test_file_browser.py::test_diff_file_header_shows_line_stats; test_changes_panel.py::test_diff_header_line_stats_reflect_uncommitted_only; test_commits_panel.py::test_commit_diff_file_header_shows_line_counts | Assert the breadcrumb path and the three-dot file-operations menu in the diff header. |
+| PANEL-025 | Partial | test_recent_files_dropdown.py::test_files_dropdown_switches_file_within_panel; ::test_changes_dropdown_reopens_diff_in_panel; ::test_commits_dropdown_reopens_commit_diff_in_panel (breadcrumb dropdown reopens recently-viewed files) | Assert the full-path tooltip on the breadcrumb entries. |
+| PANEL-026 | Partial | test_diff_viewer.py::test_split_view_toggle; ::test_line_wrap_toggle_flips_and_persists_across_panel_reopen; ::test_find_in_file_finds_matches; ::test_split_view_toggle_persists_across_panel_reopen | Assert the View-options menu exposes all three toggles together and that toggling wraps/scrolls long lines. |
+| PANEL-027 | Partial | test_changes_panel.py::test_diff_header_line_stats_reflect_uncommitted_only; test_commits_panel.py::test_commit_diff_file_header_shows_line_counts | Assert the breadcrumb path and the three-dot file-operations menu in the diff header. |
 | PANEL-028 | Partial | test_commits_panel.py::test_clicking_renamed_file_in_commits_shows_rename_banner | Assert the "Deleted" banner and the "Binary file (cannot display)" message. |
-| PANEL-029 | Missing | — (test_regression_large_diff_crash.py checks no-crash only) | Open a diff over the threshold; assert truncated diff + "Show full diff" button; click → full diff renders. |
-| PANEL-030 | Partial | test_file_browser.py::test_in_file_search_bar; ::test_in_file_search_works_in_file_view | Assert the "X of Y" counter, Enter/Shift+Enter (or arrows) navigation, Escape closing. |
-| PANEL-036 | Partial | test_terminal_agent_basic.py::test_terminal_agent_basic; test_registered_terminal_agent.py (tab data-dot-status read/unread) | Produce output in a non-active tab; assert a pulsing unread dot appears, then clears after switching to it. |
+| PANEL-029 | Missing | — | Open a diff over the threshold; assert truncated diff + "Show full diff" button; click → full diff renders. |
+| PANEL-030 | Partial | test_diff_viewer.py::test_find_in_file_finds_matches | Assert the "X of Y" counter, Enter/Shift+Enter (or arrows) navigation, Escape closing. |
+| PANEL-036 | Partial | test_registered_terminal_agent.py (tab data-dot-status read/unread); test_terminal_panel.py::test_terminal_content_isolated_and_scrollback_survives_switch | Produce output in a non-active terminal tab; assert a pulsing unread dot appears, then clears after switching to it. |
 | PANEL-037 | Missing | — (test_terminal.py references "Starting terminal…" only incidentally in an .or_(), not as a deterministic assertion) | Assert the "Starting terminal…" message renders while a terminal is starting. |
-| PANEL-038 | Partial | test_notes_panel.py::test_enable_notes_panel_reveals_icon_and_renders_editor; ::test_notes_content_is_scoped_per_workspace | Type notes, switch to another panel/tab and back; assert content preserved. |
+| PANEL-038 | Partial | test_notes_panel.py::test_open_notes_panel_renders_editor; ::test_notes_content_is_scoped_per_workspace | Type notes, switch to another panel/tab and back; assert content preserved. |
 | PANEL-039 | Missing | — | Click "Add notes to prompt"; assert notes inserted; with existing prompt text, assert the merge-conflict dialog appears. |
 | PANEL-040 | Missing | — | Copy copies notes when populated, disabled when empty; "Add to prompt" disabled with no notes / no task. |
 | PANEL-041 | Missing | — | Assert skills grouped into Custom/Sculptor/Built-in collapsible headers with a count badge when collapsed. |
@@ -323,8 +314,8 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | PANEL-049 | Missing | — | Agent running, action chip context menu → "Queue message"; assert prompt queued (not auto-submitted). |
 | PANEL-051 | Partial | test_custom_actions.py::test_create_group_from_settings; ::test_delete_group_deletes_actions_from_settings; ::test_delete_group_deletes_actions_from_panel | Assert inline group rename (Enter/blur confirms) and Escape-cancel on group create. |
 | PANEL-052 | Missing | — | Drag an action/group → drop indicator + order updates; move action between groups; built-in items not draggable. |
-| PANEL-056 | Partial | test_file_browser.py::test_split_view_toggle_persists_across_panel_reopen; ::test_line_wrap_toggle_persists_across_panel_reopen; test_panel_zones.py::test_inner_vertical_split_height_persists_after_navigation | Assert folder-expansion, scroll position, active-tab, view-mode (tree/flat), and diff-scope restored after switching tabs/files and returning. |
-| PANEL-057 | Partial | test_bundled_linear_plugin.py::test_bundled_linear_plugin_loads_and_renders | Assert the plugin-contributed panel is listed with a "plugin" badge in the Panels list (not just that it renders). |
+| PANEL-056 | Partial | test_diff_viewer.py::test_split_view_toggle_persists_across_panel_reopen; ::test_line_wrap_toggle_flips_and_persists_across_panel_reopen; test_files_panel.py::test_open_file_survives_panel_tab_switch; ::test_open_file_is_kept_per_workspace_across_workspace_switch | Assert folder-expansion, scroll position, active-tab, view-mode (tree/flat), and diff-scope restored after switching tabs/files and returning. |
+| PANEL-057 | Partial | test_bundled_linear_plugin.py::test_bundled_linear_plugin_loads_and_renders | Assert the plugin-contributed panel is listed with a "plugin" badge in the section add-panel dropdown (not just that it renders). |
 
 ### CMDP
 
@@ -344,12 +335,12 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | CMDP-016 | Missing | — | Run an async command; assert the row shows a spinner and the palette refuses to close until it completes. |
 | CMDP-017 | Partial | test_command_palette.py::test_command_palette_navigates_to_settings; ::test_command_palette_creates_new_agent | Add Open home navigates home, New workspace opens add-workspace, and assert New agent disabled/hidden off a workspace. |
 | CMDP-018 | Partial | test_command_palette.py::test_command_palette_keep_open_command (runs theme.toggle but does NOT assert the appearance changed); ::test_command_palette_subpage_push_pop | Assert running a theme command actually changes the applied appearance. |
-| CMDP-019 | Missing | — | On a workspace, run panel/mode toggles; assert the panel/mode visibly toggled (focus/zen close palette; zone toggles keep it open). |
+| CMDP-019 | Missing | — | On a workspace, run a section toggle (left/bottom/right) or the add-panel command and pick a location and panel; assert the section expands/collapses or the chosen panel is added to the chosen section. |
 | CMDP-020 | Missing | — | On a chat workspace: focus input / open chat search / jump-to-bottom / tool-density toggle with visible outcomes; chat commands hidden without a chat panel. |
 | CMDP-021 | Partial | test_command_palette.py::test_command_palette_report_problem_opens_popover | Add Clear terminal clears the active terminal; Show keyboard shortcuts opens the dialog; terminal command hidden without a terminal panel. |
 | CMDP-022 | Missing | — | With 2+ workspaces, open "Go to workspace…"; assert status dots + current disabled; select another to navigate. |
-| CMDP-023 | Missing | — | With 2+ tabs, run Next/Previous workspace tab; assert the active tab changes. |
-| CMDP-024 | Missing | — | Open "Workspace actions…"; assert the labeled actions list; run one (e.g. Rename) end-to-end. |
+| CMDP-023 | Missing | — | With 2+ workspaces, run Next/Previous workspace; assert the active workspace moves to the next/previous in the sidebar's order. |
+| CMDP-024 | Missing | — | Open "Workspace actions…"; assert the labeled actions list (Commit / Create PR / Open PR / Rename / Delete with their disabled rules); run one (e.g. Rename) end-to-end. |
 | CMDP-025 | Missing | — | On a local backend, open "Open in…"; assert ordering (preferred first) + a disabled-on-remote case + an app launching. |
 | CMDP-026 | Missing | — | In a multi-agent workspace, open "Go to agent…"; assert current disabled; select another to navigate; opener disabled with one agent. |
 | CMDP-027 | Missing | — | Open "Agent actions…" and run each (rename dialog / marked unread / delete confirmation) from the palette. |
@@ -362,13 +353,12 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 
 | Scenario | Status | Existing integration test(s) | Integration tests to add |
 |----------|--------|------------------------------|--------------------------|
-| SET-001 | Partial | test_settings_tab.py::test_settings_opens_as_tab; piecemeal section-clicks across test_settings_integration.py, test_agent_settings.py, test_keybindings.py, test_panels_settings.py, test_claude_binary_installation.py, test_pi_managed_install.py, test_telemetry_opt_out.py, test_theme_builder.py, test_custom_actions.py | One nav test clicking every sidebar item (all 15 sections) asserting active content; cover the mobile dropdown; CI, File Browser, Git, Env-Vars, Experimental are never opened-and-asserted as a nav target. |
+| SET-001 | Partial | test_settings_navigation.py::test_settings_opens_from_sidebar_link; piecemeal section-clicks across test_settings_integration.py, test_agent_settings.py, test_keybindings.py, test_claude_binary_installation.py, test_pi_managed_install.py, test_telemetry_opt_out.py, test_theme_builder.py, test_custom_actions.py | One nav test clicking every sidebar item (all 15 sections) asserting active content; cover the mobile dropdown; CI, File Browser, Git, Env-Vars, Experimental are never opened-and-asserted as a nav target. |
 | SET-002 | Missing | — | Load `/#/settings?section=<x>` and assert it opens directly to that section. |
 | SET-003 | Missing | — | View a non-default section, reopen Settings; assert the last-viewed section is restored. |
 | SET-004 | Partial | test_settings_integration.py::test_env_vars_override_toggle_saves_setting; test_agent_settings.py; test_keybindings.py; test_custom_actions.py (success toast broadly) | Assert the "Failed to update setting" error-toast path (induce a save failure). |
 | SET-005 | Missing | — | In General, pick Light/Dark/System; assert app appearance changes immediately. |
 | SET-006 | Partial | test_auto_update_browser.py::test_channel_switch_calls_ipc_and_shows_pending; ::test_check_for_updates_button; ::test_disabled_status_grays_out_settings_controls; test_auto_update_electron.py::test_channel_switch_stable_to_rc; test_auto_update_disabled_electron.py | Assert the channel-change confirmation toast and the "Install and restart"/"Restarting…" button state from within General. |
-| SET-012 | Partial | test_panels_settings.py::test_zone_select_moves_panel; ::test_diagram_drag_moves_panel; ::test_shortcut_round_trip_panels_to_keybindings; ::test_disabled_panel_shortcut_is_inert | Assert panel-hotkey conflict checking; assert the zone select disabled where rules/enabled-state prevent it. |
 | SET-015 | Partial | test_claude_binary_installation.py::test_settings_install_managed_binary; ::test_onboarding_claude_override_invalid_path | Add a Settings-page custom-path entry + Apply + active-path display test; assert the running progress-bar UI. |
 | SET-018 | Partial | test_pi_managed_install.py::test_pi_settings_managed_shows_managed_controls_and_no_manual_install; ::test_pi_settings_custom_shows_binary_path_and_manual_install; ::test_pi_settings_install_button_invokes_managed_install_and_surfaces_error | Assert install progress bar; distinct status states (outside-pinned/not-installed/no-path); detected-vs-pinned version rows; custom-path Apply + active-path. |
 | SET-019 | Missing | — | In Pi section, add an API-key env-var name then remove it; assert list updates + "Setting updated" toast. |
@@ -380,7 +370,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | SET-025 | Missing | — (test_ci_babysitter.py configures via API, not the Settings UI) | Toggle babysitter, retry-cap 1–10 validation, edit pipeline-failed & merge-conflict prompts (+reset), dependent fields disable when off, save toast. |
 | SET-026 | Missing | — | Split-ratio 20–80%, tab-close behavior, line-wrapping, default diff view, commit prompt (+reset) — each with save toast. |
 | SET-027 | Partial | test_settings_integration.py::test_env_vars_section_shows_setup_instructions; ::test_env_vars_override_toggle_saves_setting; ::test_env_vars_loaded_names_shows_no_vars_without_env_file; test_project_env_vars.py::test_env_var_names_shown_in_settings | Cover the refresh button and the global-vs-repo-specific grouping of the loaded list. |
-| SET-029 | Partial | test_settings_integration.py::test_settings_experimental_has_review_all_toggle; ::test_enable_review_all_via_settings_shows_button (Review All only) | Toggle the other 8 experimental switches via UI and assert the "Setting updated" toast for each. |
+| SET-029 | Missing | — | Toggle each experimental switch (Always interrupt and send, Smooth streaming, In-place workspaces, Clone workspaces, Entity mentions) via UI and assert the "Setting updated" toast for each. |
 | SET-030 | Missing | — | Set custom backend command and readiness timeout in Experimental/Advanced; assert the "restart required" toast. |
 | SET-031 | Partial | test_custom_actions.py::test_create_action_from_settings; ::test_edit_action_from_settings; ::test_delete_action_from_settings; ::test_create_group_from_settings; ::test_delete_group_deletes_actions_from_settings; ::test_builtin_chips | Cover Export ("sculptor-actions.json" download, disabled-when-empty) and Import (file picker, validate+merge+count toast). |
 | SET-032 | Partial | test_custom_actions.py::test_create_action_from_settings; ::test_edit_action_from_settings | Assert Save disabled until valid, Cmd+Enter submits, and the Auto-submit toggle behavior within the dialog. |
@@ -390,8 +380,6 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | SET-036 | Missing | — | Click a radius / scaling / panel-background option and assert the live UI updates. |
 | SET-038 | Partial | test_plugin_loader.py::test_valid_plugin_loads_and_can_be_removed; ::test_plugin_source_can_be_disabled_and_re_enabled | Cover the Refresh rescan of the plugins directory and the displayed directory path. |
 | SET-039 | Partial | test_ci_babysitter.py::test_settings_selector_lists_only_driveable_harnesses | Assert the selector saves with a toast and is disabled when the babysitter is off. |
-| SET-040 | Complete | test_plugins_settings_visibility.py::test_plugins_section_present_and_on_by_default; ::test_global_toggle_hides_management_ui_live | — |
-| SET-041 | Complete | test_plugin_loader.py::test_failed_plugin_can_be_retried | — |
 | DEV-001 | Partial | test_tanstack_devtools_panel.py::test_tanstack_devtools_panel_mounts_with_content (panel mounts only) | Cover header Dock/Float/Close controls, floating drag + resize within viewport, docked resize-from-top-edge + pushes content up, and closing hides it. |
 
 ---
@@ -404,46 +392,35 @@ Every scenario an integration test fully covers — it performs the user action 
 
 | Scenario | Existing integration test(s) |
 |----------|------------------------------|
-| SHELL-001 | test_workspace_tab_enhancements.py::test_cmd_t_opens_new_workspace_page |
-| SHELL-003 | test_settings_tab.py::test_settings_opens_as_tab |
-| SHELL-007 | test_workspace_tab_enhancements.py::test_new_workspace_tab_x_navigates_to_mru_workspace; test_home_page_tab.py::test_home_tab_is_closeable |
-| SHELL-009 | test_workspace_tab_enhancements.py::test_cmd_w_closes_workspace_tab_without_deletion; ::test_cmd_w_on_new_workspace_page_navigates_to_mru_workspace |
-| SHELL-016 | test_workspace_tab_context_menu_icons.py::test_workspace_context_menu_rename; ::test_workspace_context_menu_rename_escape_cancels |
-| SHELL-017 | test_workspace_tab_enhancements.py::test_context_menu_delete_removes_workspace |
-| SHELL-020 | test_closed_workspaces_dropdown.py::test_pill_visibility_toggles_with_closed_workspace_count |
-| SHELL-021 | test_closed_workspaces_dropdown.py::test_dropdown_opens_and_shows_closed_workspace_rows |
-| SHELL-022 | test_closed_workspaces_dropdown.py::test_reopen_workspace_from_dropdown |
-| SHELL-023 | test_closed_workspaces_dropdown.py::test_open_all_reopens_all_closed_workspaces |
-| SHELL-024 | test_closed_workspaces_dropdown.py::test_delete_workspace_from_dropdown |
+| SHELL-001 | test_new_workspace_dialog.py::test_modal_opens_via_shortcut; ::test_modal_opens_via_sidebar_button |
+| SHELL-003 | test_settings_navigation.py::test_settings_opens_from_sidebar_link |
+| SHELL-004 | test_workspace_sidebar_smoke.py::test_sidebar_row_navigates_to_workspace |
+| SHELL-016 | test_workspace_row_context_menu.py::test_workspace_row_context_menu_rename; ::test_workspace_row_context_menu_rename_escape_cancels |
+| SHELL-017 | test_workspace_optimistic_deletion.py::test_workspace_delete_requires_confirmation; ::test_optimistic_workspace_deletion_removes_row_immediately; ::test_deleting_active_workspace_clamps_active_index |
 | SHELL-025 | test_command_palette.py::test_open_command_palette_via_sidebar_cmdk_link |
-| SHELL-028 | test_zen_mode.py::test_zen_mode_hides_chrome_and_panels |
-| SHELL-029 | test_zen_mode.py::test_exit_zen_mode_button_works |
-| SHELL-030 | test_zen_mode.py::test_workspace_tab_navigation_works_in_zen_mode |
-| SHELL-031 | test_zen_mode.py::test_focus_mode_hides_panels_but_keeps_chrome |
-| SHELL-032 | test_zen_mode.py::test_panel_toggle_in_zen_mode_persists_on_exit; test_panels_settings.py::test_regression_focus_mode_toggle |
 | SHELL-036 | test_auto_update_browser.py::test_update_dot_appears_when_ready; ::test_update_dot_appears_when_downloading |
 | SHELL-037 | test_auto_update_browser.py::test_downloading_status_shows_progress |
 | SHELL-039 | test_auto_update_browser.py::test_error_status_shows_error |
 | SHELL-040 | test_auto_update_browser.py::test_dismissed_download_toast_stays_dismissed |
 | SHELL-046 | test_backend_shutdown_stall.py::test_shutdown_stall_recovery_after_timeout; ::test_shutdown_spinner_remains_before_timeout |
-| SHELL-049 | test_workspace_diagnostics_context_menu.py::test_workspace_context_menu_copy_name_branch_id |
-| SHELL-050 | test_workspace_close_vs_delete.py::test_cmd_shift_w_deletes_active_workspace |
-| ROUTE-001 | test_restart_mru.py::test_restart_restores_active_workspace_and_agent; ::test_restart_with_no_mru_lands_on_new |
+| SHELL-049 | test_workspace_row_context_menu.py::test_workspace_row_context_menu_copy_name_branch_id |
+| SHELL-050 | test_keybindings.py::test_delete_workspace_keybinding_opens_confirmation |
+| SHELL-051 | test_sidebar_collapse_resize.py::test_collapse_hides_sidebar_and_shows_expand_icon; ::test_expand_restores_sidebar |
+| SHELL-054 | test_new_workspace_dialog.py::test_repo_plus_direct_creates |
+| ROUTE-001 | test_restart_mru.py::test_restart_restores_active_workspace_and_agent; ::test_restart_with_no_mru_lands_on_home |
 
 ### HOME / ADDWS / ADDREPO
 
 | Scenario | Existing integration test(s) |
 |----------|------------------------------|
 | HOME-002 | test_home_page.py::test_empty_state_shown_for_new_user |
-| HOME-013 | test_home_page.py::test_clicking_workspace_row_navigates_to_workspace; test_home_page_tab.py::test_clicking_workspace_replaces_home_tab |
-| ADDWS-005 | test_add_workspace_page.py::test_workspace_form_draft_persists_after_navigation; ::test_multiple_new_workspace_tabs_with_independent_drafts |
+| HOME-013 | test_home_page.py::test_clicking_workspace_row_navigates_to_workspace |
 | ADDWS-013 | test_worktree_create_happy_path.py::test_worktree_create_with_default_branch_name |
 | ADDWS-015 | test_branch_name_collisions.py::test_worktree_mode_collision_blocks_creation; ::test_clone_mode_collision_blocks_creation |
-| ADDWS-016 | test_add_workspace_agent_type.py::test_agent_type_select_visible_with_claude_default; ::test_pi_option_always_listed; test_agent_type_menu.py::test_registered_terminal_agent_appears_in_menu_and_creates |
-| ADDWS-017 | test_add_workspace_agent_type.py::test_first_agent_type_defaults_to_shared_last_used; test_agent_type_menu.py::test_agent_type_menu_creates_terminal_agent_and_remembers_type |
-| ADDWS-021 | test_worktree_create_happy_path.py::test_worktree_create_with_default_branch_name; test_add_workspace_agent_type.py::test_cmd_enter_in_workspace_name_creates_workspace |
-| ADDWS-022 | test_add_workspace_page.py::test_arrow_down_focuses_name_input_when_nothing_focused; ::test_arrow_up_focuses_name_input_when_nothing_focused |
-| ADDWS-025 | test_add_workspace_page.py::test_workspace_form_branch_state_persists_after_navigation |
+| ADDWS-016 | test_add_workspace_agent_type.py::test_agent_type_select_visible_with_claude_default; ::test_pi_option_always_listed |
+| ADDWS-017 | test_add_workspace_agent_type.py::test_first_agent_type_defaults_to_shared_last_used |
+| ADDWS-021 | test_new_workspace_dialog.py::test_cmd_enter_creates_workspace; test_new_workspace_creation_modes.py::test_worktree_create_with_default_branch_name |
+| ADDWS-025 | test_new_workspace_dialog.py::test_keep_open_resets_but_retains |
 | ADDREPO-007 | test_path_autocomplete_keyboard.py::test_enter_on_directory_highlights_first_subentry; ::test_selected_folder_submit_shows_correct_repo_name |
 | ADDREPO-009 | test_add_repo_remote_picker.py::test_github_picker_happy_path_clones_and_adds_project |
 | ADDREPO-010 | test_add_repo_remote_clone.py::test_add_repo_remote_clone_via_url_fallback; test_add_repo_remote_clone_errors.py::test_url_view_derives_name_from_url; ::test_url_view_ssh_url_clones_with_https_link_in_progress_view |
@@ -498,16 +475,17 @@ Every scenario an integration test fully covers — it performs the user action 
 | WS-021 | test_queued_messages.py::test_interrupt_and_send_queued_message; test_regression_queued_messages_after_restart.py::test_queued_message_dispatched_after_graceful_restart |
 | WS-028 | test_ci_babysitter.py::test_scenario_4_pause_toggle_prevents_prompt; ::test_pause_state_persists_across_restart |
 | WS-036 | test_workspace_banner.py::test_repo_segment_shows_mode_label |
-| WS-037 | test_zen_mode.py::test_zen_mode_hides_chrome_and_panels; ::test_focus_mode_hides_panels_but_keeps_chrome |
+| WS-037 | test_workspace_banner.py::test_branch_name_visible; ::test_banner_shows_diff_stats |
 | WS-040 | test_workspace_banner.py::test_banner_shows_diff_stats; ::test_banner_click_navigates_to_changes_all |
 | WS-041 | test_multi_agent_workspace.py::test_multiple_agent_tabs_shown_for_shared_workspace; ::test_single_agent_shows_one_agent_tab |
 | WS-044 | test_multi_agent_workspace.py::test_create_second_agent_in_existing_workspace |
-| WS-045 | test_agent_type_menu.py::test_agent_type_menu_creates_terminal_agent_and_remembers_type; ::test_agent_type_menu_lists_pi; ::test_registered_terminal_agent_appears_in_menu_and_creates |
-| WS-047 | test_agent_tab_context_menu.py::test_agent_context_menu_has_rename_and_delete; test_agent_diagnostics_context_menu.py::test_agent_diagnostics_disabled_without_session; ::test_agent_diagnostics_copy_session_id_and_transcript_path; ::test_agent_context_menu_copy_name_and_id |
-| WS-048 | test_agent_tab_context_menu.py::test_agent_context_menu_delete; test_multi_agent_workspace.py::test_workspace_survives_when_other_agents_remain |
+| WS-045 | test_panel_add_dropdown.py::test_agent_type_submenu_offers_claude_no_bare_terminal; ::test_agent_type_submenu_offers_pi; ::test_registered_agent_appears_in_submenu_without_restart |
+| WS-047 | test_panel_tab_context_menu.py::test_agent_tab_offers_rename; ::test_agent_tab_mark_unread; ::test_agent_tab_copy_agent_id; ::test_agent_tab_diagnostics_copy_contents; ::test_agent_tab_diagnostics_disabled_without_session |
+| WS-048 | test_panel_optimistic_deletion.py::test_optimistic_agent_deletion_removes_tab_immediately; ::test_optimistic_deletion_last_agent_does_not_auto_create; test_multi_agent_workspace.py::test_workspace_survives_when_other_agents_remain |
 | WS-049 | test_mark_unread.py::test_mark_adjacent_tab_unread; test_read_unread_status.py::test_unread_indicator_when_switching_agents_within_workspace |
-| WS-051 | test_terminal_agent_basic.py::test_terminal_agent_basic |
-| WS-052 | test_terminal_agent_basic.py::test_terminal_agent_basic (switch away/back, scrollback restored); test_terminal_tab_enhancements.py::test_terminal_compact_layout_no_heading |
+| WS-050 | test_panel_drag_and_drop.py::test_drag_panel_from_center_to_right; ::test_drag_panel_to_collapsed_section_expands |
+| WS-051 | test_registered_terminal_agent.py::test_registered_terminal_agent_launches_program |
+| WS-052 | test_terminal_panel.py::test_terminal_content_isolated_and_scrollback_survives_switch |
 | WS-079 | test_terminal_agent_focus.py::test_terminal_agent_tab_switch_focuses_terminal |
 | WS-053 | test_ask_user_question.py::test_ask_user_question_full_flow; test_alpha_ask_user_question.py::test_alpha_auq_pill_shows_answered_summary |
 | WS-054 | test_ask_user_question.py::test_ask_user_question_full_flow |
@@ -515,8 +493,15 @@ Every scenario an integration test fully covers — it performs the user action 
 | WS-056 | test_ask_user_question.py::test_ask_user_question_other_option; ::test_ask_user_question_multiselect_with_other |
 | WS-058 | test_ask_user_question.py::test_ask_user_question_next_button; ::test_ask_user_question_dismiss; test_ask_user_question_continue.py::test_ask_user_question_and_continue |
 | WS-059 | test_error_states.py::test_crash_puts_task_in_error_state |
-| WS-066 | test_side_toggle.py::test_right_side_toggle_hides_and_shows_panels; ::test_bottom_toggle_hides_and_shows_terminal |
+| WS-066 | test_section_collapse_expand.py::test_expand_side_section_via_header_toggle; ::test_toggle_side_section_via_hotkey |
+| WS-069 | test_section_resize.py::test_resize_right_section_changes_width; ::test_resize_clamps_to_a_minimum_width; ::test_resize_does_not_change_active_panel_or_collapse |
 | WS-070 | test_chat_search_bar.py::test_cmd_f_enter_advances_through_all_matches |
+| WS-080 | test_section_active_and_maximize.py::test_maximize_hides_workspace_header_and_restore; ::test_maximize_via_hotkey; ::test_collapse_maximized_section_exits_maximize |
+| WS-081 | test_section_splits.py::test_create_right_split_moves_panel_to_secondary; ::test_create_bottom_split_moves_panel_to_secondary; ::test_one_split_max_removes_create_options |
+| WS-082 | test_section_active_and_maximize.py::test_cycle_sections_pulses_ring; ::test_plain_click_sets_active_without_ring |
+| WS-083 | test_panel_add_dropdown.py::test_dropdown_shows_new_agent_terminal_and_panels; ::test_new_terminal_creates_terminal_panel; ::test_open_single_instance_panel_drops_from_list |
+| WS-084 | test_section_empty_state.py::test_empty_section_shows_add_button_and_quick_actions; ::test_recently_closed_panel_appears_in_quick_actions |
+| WS-085 | test_layout_persistence.py::test_layout_persists_across_reload; ::test_per_workspace_layout_is_isolated |
 | WS-074 | test_workspace_setup_command.py::test_setup_config_prompt_deep_links_to_focused_textarea; test_regression_setup_command_backfill.py; test_regression_setup_command_rerun.py::test_setup_rerun_button_runs_command_again |
 | WS-075 | test_btw.py::test_btw_happy_path_while_main_busy |
 | WS-076 | test_btw.py::test_btw_popup_is_draggable; ::test_btw_popup_closes_on_escape; ::test_btw_empty_shows_inline_toast |
@@ -554,8 +539,6 @@ Every scenario an integration test fully covers — it performs the user action 
 |----------|------------------------------|
 | MSG-001 | test_alpha_chat_mixed_tools.py::test_mixed_write_bash_read_renders_all_types; ::test_text_and_tools_coexist; ::test_bash_with_error_and_write_coexist; test_alpha_chat_view.py::test_alpha_view_displays_tool_calls |
 | MSG-002 | test_alpha_streaming_cursor.py::test_streaming_cursor_visible_during_streaming; ::test_streaming_cursor_hidden_after_completion; ::test_streaming_cursor_visible_during_tool_then_text; ::test_streaming_cursor_absent_after_multiple_turns |
-| MSG-007 | test_markdown_gfm.py::test_markdown_renders_gfm_and_neutralises_unsafe (external anchors target=_blank + rel) |
-| MSG-008 | test_markdown_gfm.py::test_markdown_renders_gfm_and_neutralises_unsafe (images suppressed) |
 | MSG-009 | test_alpha_chat_view.py::test_alpha_file_path_link |
 | MSG-014 | test_alpha_chat_table_wrap_toggle.py::test_table_wrap_toggle_is_per_table_and_does_not_scroll_chat |
 | MSG-019 | test_alpha_tool_pill_pin.py::test_click_pins_popover_open; ::test_click_pinned_pill_again_closes; ::test_escape_closes_pinned_popover; test_alpha_tool_pill_hover.py::test_hover_opens_pill_popover; ::test_hover_leave_closes_popover |
@@ -572,29 +555,30 @@ Every scenario an integration test fully covers — it performs the user action 
 
 | Scenario | Existing integration test(s) |
 |----------|------------------------------|
-| PANEL-001 | test_file_browser.py::test_filter_tabs_switch_between_all_and_changes; ::test_changes_tab_shows_count; test_file_browser_tabs.py::test_tab_switching_shows_correct_content |
-| PANEL-002 | test_file_browser.py::test_review_all_button_opens_combined_diff; ::test_review_all_shows_all_branch_files; test_review_all_visibility.py::test_review_all_visible_with_uncommitted_changes |
-| PANEL-004 | test_file_browser.py::test_collapse_all_folders_button; ::test_collapse_all_changes_folders_button; ::test_collapse_all_commits_button |
-| PANEL-006 | test_file_browser.py::test_file_search; ::test_file_search_filters_visible_rows; ::test_file_search_escape_closes; ::test_file_search_no_matches_shows_empty_state; ::test_file_search_folders_are_collapsible |
-| PANEL-007 | test_file_browser.py::test_folder_expand_and_collapse; ::test_collapse_all_folders_button |
-| PANEL-008 | test_file_browser.py::test_click_file_opens_diff_panel; ::test_changes_tab_click_opens_diff; test_file_open_diff_modes.py::test_browse_tab_opens_file_view |
-| PANEL-014 | test_changes_panel.py::test_scope_switch_toggles_active_scope; test_file_open_diff_modes.py::test_committed_file_visible_in_all_scope_only; test_file_browser_tabs.py::test_tab_switching_shows_correct_content |
-| PANEL-015 | test_changes_panel.py::test_discard_file_removes_from_changes; ::test_discard_cancel_preserves_file; test_discard_preserves_all_tab.py::test_discard_last_uncommitted_keeps_all_tab_populated |
+| PANEL-001 | test_files_panel.py::test_open_files_panel_renders_list_and_viewer; test_changes_panel.py::test_scope_switch_toggles_active_scope; test_commits_panel.py::test_history_panel_shows_commits |
+| PANEL-002 | test_review_all_panel.py::test_scope_picker_defaults_to_all; ::test_review_all_single_instance_opened_via_add_panel_dropdown |
+| PANEL-004 | test_files_panel.py::test_collapse_all_folders |
+| PANEL-006 | test_files_panel.py::test_file_search_filters_visible_rows; ::test_file_search_no_matches_shows_empty_state; ::test_file_search_folders_are_collapsible |
+| PANEL-007 | test_files_panel.py::test_folder_expand_and_collapse |
+| PANEL-008 | test_files_panel.py::test_open_file_shows_read_only_preview; test_diff_viewer.py::test_open_created_file_in_diff_viewer |
+| PANEL-014 | test_changes_panel.py::test_scope_switch_toggles_active_scope; ::test_switching_to_all_scope_shows_target_branch_diff |
+| PANEL-015 | test_changes_panel.py::test_discard_file_removes_from_changes; ::test_discard_cancel_preserves_file; ::test_discard_last_uncommitted_keeps_all_scope_populated |
 | PANEL-017 | test_changes_panel.py::test_commit_button_sends_commit_message |
 | PANEL-020 | test_commits_panel.py::test_commit_entry_shows_metadata_line; ::test_merge_commit_shows_spur |
-| PANEL-021 | test_file_browser.py::test_collapse_all_commits_button; test_commits_panel.py::test_click_file_in_multi_file_commit; ::test_switch_files_within_same_commit |
+| PANEL-021 | test_commits_panel.py::test_click_file_in_multi_file_commit; ::test_switch_files_within_same_commit |
 | PANEL-023 | test_commits_panel.py::test_commit_diff_shows_committed_content_not_uncommitted; ::test_commit_diff_file_header_shows_line_counts; ::test_same_file_two_commits_shows_correct_content |
 | PANEL-024 | test_commits_panel.py::test_merge_commit_shows_spur; ::test_terminus_shows_fork_point_hash; ::test_terminus_visible_with_no_commits |
-| PANEL-031 | test_file_open_diff_modes.py::test_browse_tab_opens_file_view; test_sculpt_ui_open_file.py::test_mode_file_opens_file_view_tab; test_diff_viewer.py::test_open_created_file_in_diff_viewer |
-| PANEL-032 | test_auto_collapse_combined_diff.py::test_many_files_start_collapsed_in_review_all; ::test_few_files_start_expanded_in_review_all; test_file_browser.py::test_review_all_button_opens_combined_diff |
-| PANEL-033 | test_diff_viewer.py::test_markdown_toggle_switches_views; ::test_markdown_toggle_hidden_for_non_markdown_files; ::test_markdown_toggle_disabled_when_flag_off |
-| PANEL-034 | test_terminal.py::test_add_terminal_tab_creates_new_session; ::test_close_terminal_tab_switches_to_neighbor; ::test_terminal_tab_reuses_lowest_available_number; test_terminal_tab_enhancements.py::test_terminal_tab_double_click_rename; ::test_terminal_context_menu_has_close_all_and_rename |
-| PANEL-035 | test_terminal.py::test_opt_left_moves_cursor_back_by_word; ::test_ctrl_c_cancels_input; ::test_ctrl_d_shows_process_exited_message; test_terminal_agent_basic.py::test_terminal_agent_basic |
+| PANEL-031 | test_sculpt_ui_open_file.py::test_mode_file_opens_file_view; test_diff_viewer.py::test_open_created_file_in_diff_viewer |
+| PANEL-032 | test_auto_collapse_combined_diff.py::test_many_files_start_collapsed_in_review_all; ::test_few_files_start_expanded_in_review_all |
+| PANEL-033 | test_diff_viewer.py::test_markdown_toggle_switches_views; ::test_markdown_toggle_hidden_for_non_markdown_files; ::test_yaml_frontmatter_renders_as_metadata_block |
+| PANEL-034 | test_terminal.py::test_add_terminal_tab_creates_new_session; ::test_close_terminal_tab_switches_to_neighbor; test_terminal_panel.py::test_terminal_numbering_reuses_lowest_after_close; test_panel_tab_context_menu.py::test_terminal_tab_double_click_rename |
+| PANEL-035 | test_terminal.py::test_opt_left_moves_cursor_back_by_word; ::test_ctrl_c_cancels_input; ::test_ctrl_d_shows_process_exited_message |
 | PANEL-043 | test_skills_panel.py::test_skills_panel_click_inserts_mention_chip |
 | PANEL-050 | test_custom_actions.py::test_create_action_from_panel; ::test_edit_action_from_settings; ::test_delete_action_from_settings; ::test_builtin_chips |
 | PANEL-053 | test_browser_panel.py::test_browser_panel_navigation_tour; ::test_browser_panel_screenshot; ::test_browser_panel_url_input_polish |
 | PANEL-054 | test_browser_panel.py::test_browser_panel_navigation_tour; ::test_browser_panel_url_input_polish |
-| PANEL-055 | test_browser_panel.py::test_browser_panel_toggle_shows_and_hides_icon; ::test_browser_panel_electron_mode_hides_web_placeholder |
+| PANEL-055 | test_browser_panel.py::test_browser_panel_electron_mode_hides_web_placeholder |
+| PANEL-058 | test_terminal_tab_status.py::test_terminal_tab_shows_reconnecting_then_recovers; ::test_terminal_tab_shows_disconnected_on_unrecoverable_close |
 
 ### CMDP
 
@@ -614,11 +598,13 @@ Every scenario an integration test fully covers — it performs the user action 
 | SET-009 | test_keybindings.py::test_record_new_keybinding; ::test_escape_cancels_recording; ::test_click_outside_cancels_recording; ::test_starting_second_recording_cancels_first |
 | SET-010 | test_keybindings.py::test_duplicate_detection_reassign; ::test_duplicate_detection_cancel |
 | SET-011 | test_keybindings.py::test_clear_keybinding; ::test_reset_all_to_defaults |
-| SET-013 | test_panels_settings.py::test_disable_hides_panel; ::test_reset_to_defaults_preserves_shortcuts |
 | SET-014 | test_claude_binary_installation.py::test_settings_claude_cli_section_visible; ::test_settings_mode_selector_persists; ::test_settings_managed_mode_shows_install_button |
 | SET-016 | test_claude_binary_installation.py::test_settings_git_section_visible |
 | SET-028 | test_telemetry_opt_out.py::test_privacy_settings_telemetry_switch; ::test_onboarding_email_with_telemetry_opt_out; ::test_onboarding_skip_account_setup |
-| SET-037 | test_theme_builder.py::test_theme_builder_component_gallery_button; ::test_theme_builder_reset_to_defaults; test_component_gallery_tab.py::test_component_gallery_opens_as_tab |
+| SET-037 | test_theme_builder.py::test_theme_builder_reset_to_defaults |
+| SET-040 | test_plugins_settings_visibility.py::test_plugins_section_present_and_on_by_default; ::test_global_toggle_hides_management_ui_live |
+| SET-041 | test_plugin_loader.py::test_failed_plugin_can_be_retried |
+| SET-042 | test_pi_login_terminal.py::test_pi_login_terminal_mounts_and_done_unmounts; test_pi_paste_key.py::test_pi_paste_key_connects_provider |
 | DEV-002 | test_diff_viewer.py::test_gfm_features_render_in_read_only_preview (external anchors target=_blank + rel) |
 | DEV-003 | test_diff_viewer.py::test_gfm_features_render_in_read_only_preview (fragment anchors inert + "not supported" title) |
 | DEV-004 | test_diff_viewer.py::test_gfm_features_render_in_read_only_preview (relative anchors inert + "not supported" title) |
