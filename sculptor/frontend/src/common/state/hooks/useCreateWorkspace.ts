@@ -51,7 +51,7 @@ export type CreateWorkspaceError = {
   cause: unknown;
 };
 
-type CreateWorkspaceResult = { ok: true } | { ok: false; error: CreateWorkspaceError };
+type CreateWorkspaceResult = { ok: true; workspaceId: string } | { ok: false; error: CreateWorkspaceError };
 
 type UseCreateWorkspaceReturn = {
   /** True while a create is in flight. */
@@ -171,7 +171,7 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
         });
 
         navigateToAgent(workspaceId, agentResponse.data.id);
-        return { ok: true };
+        return { ok: true, workspaceId };
       } catch (error) {
         console.error("Failed to create workspace:", error);
         const kind: CreateWorkspaceErrorKind =

@@ -48,6 +48,10 @@ export const NewWorkspaceModal = (): ReactElement | undefined => {
     setModalState({ open: false });
   }, [setModalState]);
 
+  // The open request's own per-create callback (e.g. from a plugin's
+  // useOpenNewWorkspaceModal), handed to the form as-is.
+  const handleWorkspaceCreated = modalState.onWorkspaceCreated;
+
   // JSX and rendering logic
   if (!modalState.open) {
     return undefined;
@@ -63,6 +67,9 @@ export const NewWorkspaceModal = (): ReactElement | undefined => {
       <NewWorkspaceForm
         key={modalState.presetProjectId ?? "default"}
         presetProjectId={modalState.presetProjectId}
+        initialTitle={modalState.initialTitle}
+        initialPrompt={modalState.initialPrompt}
+        onWorkspaceCreated={handleWorkspaceCreated}
         onCreated={handleCreated}
       />
     </PaletteDialog>
