@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildBoard } from "./board.ts";
+import { buildBoard, workspaceSeedForIssue } from "./board.ts";
 import type { LinearIssue, LinearState } from "./client.ts";
 
 const state = (name: string, type: string, position = 0): LinearState => ({
@@ -89,5 +89,31 @@ describe("buildBoard", () => {
   it("groups issues with no state under a trailing 'No status' bucket", () => {
     const groups = buildBoard([issue("A", null), issue("B", state("In Progress", "started"))], []);
     expect(groups.map((g) => g.stateName)).toEqual(["In Progress", "No status"]);
+  });
+});
+
+describe("workspaceSeedForIssue", () => {
+  const base = { ...issue("SCU-42", null), title: "Wire up the thing" };
+
+  it("leads the title with the identifier so the derived branch carries it", () => {
+    expect(workspaceSeedForIssue(base).title).toBe("SCU-42: Wire up the thing");
+  });
+
+  it("builds the prompt as assignment line + URL when there is no description", () => {
+    expect(workspaceSeedForIssue(base).prompt).toBe(
+      "Work on Linear issue SCU-42: Wire up the thing\nhttps://linear.app/x/SCU-42",
+    );
+  });
+
+  it("appends the description after a blank line when present", () => {
+    expect(workspaceSeedForIssue({ ...base, description: "Details\nhere." }).prompt).toBe(
+      "Work on Linear issue SCU-42: Wire up the thing\nhttps://linear.app/x/SCU-42\n\nDetails\nhere.",
+    );
+  });
+
+  it("treats an empty description like a missing one", () => {
+    expect(workspaceSeedForIssue({ ...base, description: "" }).prompt).toBe(
+      "Work on Linear issue SCU-42: Wire up the thing\nhttps://linear.app/x/SCU-42",
+    );
   });
 });

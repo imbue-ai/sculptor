@@ -1,10 +1,19 @@
 import { Badge, Box, Button, Flex, Heading, IconButton, Spinner, Text } from "@radix-ui/themes";
-import { useNavigateToWorkspace, usePluginSetting, type WorkspaceView } from "@sculptor/plugin-sdk";
+import {
+  useNavigateToWorkspace,
+  useOpenNewWorkspaceModal,
+  usePluginSetting,
+  useSetPluginSetting,
+  useWorkspaces,
+  type WorkspaceView,
+} from "@sculptor/plugin-sdk";
 import { RefreshCw } from "lucide-react";
-import type { ReactElement } from "react";
+import { useCallback, type ReactElement } from "react";
 
-import { type BoardGroup } from "../linear/board.ts";
+import { type BoardGroup, workspaceSeedForIssue } from "../linear/board.ts";
+import type { LinearIssue } from "../linear/client.ts";
 import { useLinearBoard } from "../linear/useLinearBoard.ts";
+import { ticketAssignmentKey } from "../linear/useTicketAssignment.ts";
 import { BoardTicketRow } from "./BoardTicketRow.tsx";
 import { EmptyState } from "./EmptyState.tsx";
 import { StateIcon } from "./StateIcon.tsx";
@@ -19,7 +28,33 @@ import { StateIcon } from "./StateIcon.tsx";
 export const LinearBoard = (): ReactElement => {
   const [apiKey] = usePluginSetting("apiKey");
   const navigateToWorkspace = useNavigateToWorkspace();
+  const openNewWorkspaceModal = useOpenNewWorkspaceModal();
+  const setPluginSetting = useSetPluginSetting();
+  const workspaces = useWorkspaces();
   const { groups, isFetching, isError, error, refetch } = useLinearBoard(apiKey);
+
+  const handleCreateWorkspace = useCallback(
+    (issue: LinearIssue): void => {
+      const seed = workspaceSeedForIssue(issue);
+      openNewWorkspaceModal({
+        initialTitle: seed.title,
+        initialPrompt: seed.prompt,
+        // Record an explicit assignment so the association holds even if the
+        // user edits the title (and thus the derived branch name) in the modal.
+        onCreated: (workspaceId) => setPluginSetting(ticketAssignmentKey(workspaceId), issue.identifier),
+      });
+    },
+    [openNewWorkspaceModal, setPluginSetting],
+  );
+
+  const handleAssignWorkspace = useCallback(
+    (workspaceId: string, issue: LinearIssue): void => {
+      // Same write as the workspace panel's "assign": the board reads these
+      // keys reactively, so the ticket shows the workspace immediately.
+      setPluginSetting(ticketAssignmentKey(workspaceId), issue.identifier);
+    },
+    [setPluginSetting],
+  );
 
   return (
     <Flex direction="column" style={{ flex: 1, minHeight: 0, background: "var(--gray-2)" }}>
@@ -54,7 +89,10 @@ export const LinearBoard = (): ReactElement => {
             isError={isError}
             error={error}
             refetch={refetch}
+            allWorkspaces={workspaces ?? []}
             onOpenWorkspace={navigateToWorkspace}
+            onCreateWorkspace={handleCreateWorkspace}
+            onAssignWorkspace={handleAssignWorkspace}
           />
         </Box>
       </Box>
@@ -69,7 +107,10 @@ const BoardBody = ({
   isError,
   error,
   refetch,
+  allWorkspaces,
   onOpenWorkspace,
+  onCreateWorkspace,
+  onAssignWorkspace,
 }: {
   apiKey: string;
   groups: ReadonlyArray<BoardGroup<WorkspaceView>>;
@@ -77,7 +118,10 @@ const BoardBody = ({
   isError: boolean;
   error: unknown;
   refetch: () => void;
+  allWorkspaces: ReadonlyArray<WorkspaceView>;
   onOpenWorkspace: (workspaceId: string) => void;
+  onCreateWorkspace: (issue: LinearIssue) => void;
+  onAssignWorkspace: (workspaceId: string, issue: LinearIssue) => void;
 }): ReactElement => {
   if (!apiKey) {
     return <EmptyState message="Add your Linear API key in the plugin settings to see your assigned issues." />;
@@ -112,7 +156,14 @@ const BoardBody = ({
   return (
     <Flex direction="column" gap="4">
       {groups.map((group) => (
-        <BoardGroupSection key={group.key} group={group} onOpenWorkspace={onOpenWorkspace} />
+        <BoardGroupSection
+          key={group.key}
+          group={group}
+          allWorkspaces={allWorkspaces}
+          onOpenWorkspace={onOpenWorkspace}
+          onCreateWorkspace={onCreateWorkspace}
+          onAssignWorkspace={onAssignWorkspace}
+        />
       ))}
     </Flex>
   );
@@ -120,10 +171,16 @@ const BoardBody = ({
 
 const BoardGroupSection = ({
   group,
+  allWorkspaces,
   onOpenWorkspace,
+  onCreateWorkspace,
+  onAssignWorkspace,
 }: {
   group: BoardGroup<WorkspaceView>;
+  allWorkspaces: ReadonlyArray<WorkspaceView>;
   onOpenWorkspace: (workspaceId: string) => void;
+  onCreateWorkspace: (issue: LinearIssue) => void;
+  onAssignWorkspace: (workspaceId: string, issue: LinearIssue) => void;
 }): ReactElement => {
   const total = group.rows.length + group.hiddenCount;
   return (
@@ -139,7 +196,14 @@ const BoardGroupSection = ({
       </Flex>
       <Box style={{ borderBottom: "1px solid var(--gray-a3)" }}>
         {group.rows.map((row) => (
-          <BoardTicketRow key={row.issue.identifier} row={row} onOpenWorkspace={onOpenWorkspace} />
+          <BoardTicketRow
+            key={row.issue.identifier}
+            row={row}
+            allWorkspaces={allWorkspaces}
+            onOpenWorkspace={onOpenWorkspace}
+            onCreateWorkspace={onCreateWorkspace}
+            onAssignWorkspace={onAssignWorkspace}
+          />
         ))}
       </Box>
       {group.hiddenCount > 0 ? (
