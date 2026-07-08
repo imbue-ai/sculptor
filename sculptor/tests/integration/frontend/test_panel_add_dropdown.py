@@ -229,6 +229,50 @@ def test_add_agent_to_right_section_renders_both_chats(sculptor_instance_: Sculp
     expect(page.get_by_test_id(ElementIDs.CHAT_PANEL)).to_have_count(2)
 
 
+@user_story("to quick-add an agent with a single click on the center +")
+def test_center_click_quick_adds_agent(sculptor_instance_: SculptorInstance) -> None:
+    """A plain click on the CENTER header `+` quick-adds a new agent (the recently-used
+    type) without opening the menu — the menu is reachable only by hover in the center."""
+    page = sculptor_instance_.page
+    dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
+    center_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Quick Add Center WS")
+    expect(center_tabs.get_agent_tabs()).to_have_count(1)
+
+    # One click on the center `+` adds a second agent, no menu selection required.
+    dropdown.get_add_panel_button().click()
+
+    expect(center_tabs.get_agent_tabs()).to_have_count(2)
+    # The click quick-added rather than leaving the menu open.
+    expect(dropdown.get_content()).to_have_count(0)
+
+
+@user_story("to pin the add-panel menu open in a side section by clicking its +")
+def test_noncenter_click_pins_menu_until_clicked_again(sculptor_instance_: SculptorInstance) -> None:
+    """Clicking a NON-center header `+` pins its menu open (it survives the pointer
+    leaving); clicking the `+` again closes it. (In the center a click quick-adds instead.)"""
+    page = sculptor_instance_.page
+    left_dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="left")
+
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Pin Left Menu WS")
+    # Bring the left section up so its header `+` renders (Files is seeded there).
+    PlaywrightWorkspaceSection(page, "left").expand_section()
+
+    # Click the left `+` to PIN the menu open.
+    left_dropdown.get_add_panel_button().click()
+    expect(left_dropdown.get_content()).to_be_visible()
+
+    # Move the pointer far away from the `+` and the menu — a pinned menu stays open where
+    # a transient hover-opened one would close.
+    page.mouse.move(5, 5)
+    expect(left_dropdown.get_content()).to_be_visible()
+
+    # Clicking the `+` again unpins and closes it.
+    left_dropdown.get_add_panel_button().click()
+    expect(left_dropdown.get_content()).to_have_count(0)
+
+
 @user_story("to add a panel through Cmd+K targeting the center section")
 def test_cmd_k_add_panel_to_center(sculptor_instance_: SculptorInstance) -> None:
     """Cmd+K → Add panel → Center → New agent creates an agent in center."""

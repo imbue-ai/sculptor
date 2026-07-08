@@ -19,6 +19,13 @@ _AGENT_TYPE_SUBMENU_HOVER_TIMEOUT_MS = 3_000
 # that won't offer a still-open single-instance panel.
 _PANEL_TAB_RENDER_TIMEOUT_MS = 2_000
 
+# The CENTER header `+` opens its menu on HOVER (a click there quick-adds an agent), so
+# opening it is a retried hover — a hover landing while Radix tears down a just-dismissed
+# menu can be swallowed, and ``expect`` alone can't recover a lost hover. Non-center `+`
+# opens on click (which pins the menu), so those use the click-based ``open_radix_toggle``.
+_OPEN_HOVER_ATTEMPTS = 3
+_OPEN_HOVER_TIMEOUT_MS = 3_000
+
 
 class PlaywrightAddPanelDropdownElement:
     """Page Object Model for the section `+` add-panel dropdown.
@@ -114,14 +121,36 @@ class PlaywrightAddPanelDropdownElement:
     # Open / select
 
     def open(self) -> None:
-        """Open the dropdown by clicking this sub-section's header `+`.
+        """Open the add-panel menu for this sub-section.
 
-        The trigger is a Radix dropdown, so opening is idempotent and retried
-        (see ``open_radix_toggle``); the content renders in a portal, so success
-        is confirmed on the content's visibility rather than the trigger state.
+        The header `+` opens its menu on HOVER in every section. In the CENTER a click
+        quick-adds an agent (so the menu is reachable only by hover); elsewhere a click
+        PINS the menu open. This drives the menu the way its section allows — a retried
+        hover for center, the click-based ``open_radix_toggle`` (which pins) for the rest.
+        The content renders in a portal, so success is confirmed on its visibility.
         """
-        open_radix_toggle(self._page, self.get_add_panel_button())
-        expect(self.get_content()).to_be_visible()
+        button = self.get_add_panel_button()
+        content = self.get_content()
+        if section_of(self._sub_section) == "center":
+            for _attempt in range(_OPEN_HOVER_ATTEMPTS):
+                expect(button).to_be_visible()
+                button.hover()
+                try:
+                    expect(content).to_be_visible(timeout=_OPEN_HOVER_TIMEOUT_MS)
+                    # The center menu is hover-transient (a click there quick-adds, so it
+                    # only stays open while the pointer is over the `+` or the menu). Anchor
+                    # the pointer INSIDE the menu now so later steps — moving from the `+`
+                    # across the gap to a row / sub-menu — don't let the close grace period
+                    # lapse and dismiss it mid-interaction.
+                    content.hover()
+                    expect(content).to_be_visible()
+                    return
+                except AssertionError:
+                    continue
+            expect(content).to_be_visible()
+        else:
+            open_radix_toggle(self._page, button)
+            expect(content).to_be_visible()
 
     def select_panel(self, panel_id: str) -> None:
         """Click a single-instance panel option, opening it into this sub-section."""
@@ -235,18 +264,27 @@ def close_seeded_panel(page: Page, panel_id: str) -> None:
 
 
 def create_agent_panel(page: Page, section: str = "center", agent_type: str | None = None) -> None:
-    """Create a new agent via the section `+` add-panel dropdown.
+    """Create a new agent via the section `+` add-panel control.
 
-    New agents ALWAYS land in the center section, regardless of the
-    ``section`` the dropdown was opened from. ``agent_type`` picks a specific type
-    from the agent-type sub-menu (``"claude"`` / ``"pi"``); ``None`` uses the pinned
-    "New {recent} agent" row.
+    ``agent_type`` picks a specific type from the agent-type sub-menu
+    (``"claude"`` / ``"pi"``); ``None`` uses the recently-used type. The new agent
+    lands in the sub-section whose `+` was used.
+
+    In the CENTER, creating a recently-used agent is exactly what a plain click on the
+    header `+` does (it quick-adds), so the common ``center`` + ``None`` case is a single
+    click, no menu. Every other case opens the menu (hover in center, click-to-pin
+    elsewhere) and selects the row.
 
     A collapsed section renders no header `+`, so the section is expanded first
-    (idempotent) even though the new agent still lands in center.
+    (idempotent).
     """
     PlaywrightWorkspaceSection(page, section).expand_section()
     dropdown = PlaywrightAddPanelDropdownElement(page, section)
+    if agent_type is None and section_of(section) == "center":
+        button = dropdown.get_add_panel_button()
+        expect(button).to_be_visible()
+        button.click()
+        return
     dropdown.open()
     if agent_type is None:
         item = dropdown.get_new_agent_item()

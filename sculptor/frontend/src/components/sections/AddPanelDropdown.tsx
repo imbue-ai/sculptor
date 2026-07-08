@@ -14,7 +14,7 @@
 
 import { DropdownMenu, Tooltip } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
-import type { ReactElement } from "react";
+import type { PointerEvent as ReactPointerEvent, ReactElement } from "react";
 import { useRef } from "react";
 
 import { type AgentTypeName, ElementIds } from "~/api";
@@ -192,7 +192,20 @@ const AddPanelMenuItems = ({
   );
 };
 
-export const AddPanelDropdown = ({ subSection, trigger, tooltip }: AddPanelDropdownProps): ReactElement => {
+// The dropdown's `DropdownMenu.Content` + items, shared by the empty-state
+// AddPanelDropdown (click-to-open) and the section-header control
+// (SectionAddPanelControl, hover-to-open). Owns the focus-restore suppression so an
+// opened panel keeps the focus it grabs on mount. Optional pointer handlers let a
+// hover-driven host keep the menu open while the pointer is over it.
+export const AddPanelMenuContent = ({
+  subSection,
+  onPointerEnter,
+  onPointerLeave,
+}: {
+  subSection: SubSectionId;
+  onPointerEnter?: (event: ReactPointerEvent) => void;
+  onPointerLeave?: (event: ReactPointerEvent) => void;
+}): ReactElement => {
   // Selecting an item opens a panel/agent/terminal that manages its own focus
   // (e.g. the Browser panel focuses its URL bar, an agent focuses its composer).
   // Radix's default close behaviour restores focus to the trigger `+`, which lands
@@ -200,6 +213,35 @@ export const AddPanelDropdown = ({ subSection, trigger, tooltip }: AddPanelDropd
   // only when the close was caused by an item selection; Escape / click-outside
   // (no selection) still return focus to the trigger for keyboard users.
   const openedPanelRef = useRef(false);
+  return (
+    <DropdownMenu.Content
+      size="1"
+      className={styles.content}
+      data-testid={`${ElementIds.ADD_PANEL_DROPDOWN}-${subSection}`}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
+      onCloseAutoFocus={(event) => {
+        if (openedPanelRef.current) {
+          openedPanelRef.current = false;
+          event.preventDefault();
+        }
+      }}
+    >
+      <AddPanelMenuItems
+        subSection={subSection}
+        onOpenPanel={() => {
+          openedPanelRef.current = true;
+        }}
+      />
+    </DropdownMenu.Content>
+  );
+};
+
+// The empty-section "Add panel" button's dropdown: a plain click-to-open Radix
+// DropdownMenu. The section-header "+" uses SectionAddPanelControl instead (hover to
+// open, click to quick-add/pin) — this component keeps the simpler behaviour the
+// empty state wants (it already offers its own "New {recent} agent" quick button).
+export const AddPanelDropdown = ({ subSection, trigger, tooltip }: AddPanelDropdownProps): ReactElement => {
   return (
     <DropdownMenu.Root>
       {tooltip !== undefined ? (
@@ -209,24 +251,7 @@ export const AddPanelDropdown = ({ subSection, trigger, tooltip }: AddPanelDropd
       ) : (
         <DropdownMenu.Trigger>{trigger}</DropdownMenu.Trigger>
       )}
-      <DropdownMenu.Content
-        size="1"
-        className={styles.content}
-        data-testid={`${ElementIds.ADD_PANEL_DROPDOWN}-${subSection}`}
-        onCloseAutoFocus={(event) => {
-          if (openedPanelRef.current) {
-            openedPanelRef.current = false;
-            event.preventDefault();
-          }
-        }}
-      >
-        <AddPanelMenuItems
-          subSection={subSection}
-          onOpenPanel={() => {
-            openedPanelRef.current = true;
-          }}
-        />
-      </DropdownMenu.Content>
+      <AddPanelMenuContent subSection={subSection} />
     </DropdownMenu.Root>
   );
 };
