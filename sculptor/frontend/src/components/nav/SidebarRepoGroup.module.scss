@@ -172,7 +172,7 @@
   border-radius: var(--radius-2);
   box-shadow: var(--shadow-4);
   position: relative;
-  z-index: 1;
+  z-index: var(--z-above);
 
   // The pointer rides the dragged element, whose hover style would otherwise
   // replace the drag surface mid-move — and pop back at the rail's edge where

@@ -73,13 +73,9 @@ export const workspaceLayoutAtom: WritableAtom<WorkspaceLayoutState, [WorkspaceL
 
 // Consolidated global layout
 
-// Merge the stored snapshot over the defaults (not `??`): a snapshot written before
-// a field existed lacks it, and the merge fills the gap so adding a global field
-// never needs a snapshot-version bump.
-const globalBaseAtom = atom<GlobalLayoutState>({
-  ...DEFAULT_GLOBAL_LAYOUT,
-  ...layoutPersistenceAdapter.read({ kind: "global" }),
-});
+const globalBaseAtom = atom<GlobalLayoutState>(
+  layoutPersistenceAdapter.read({ kind: "global" }) ?? DEFAULT_GLOBAL_LAYOUT,
+);
 
 export const globalLayoutAtom: WritableAtom<GlobalLayoutState, [GlobalLayoutUpdater], void> = atom(
   (get) => get(globalBaseAtom),

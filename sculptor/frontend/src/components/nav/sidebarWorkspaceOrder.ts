@@ -28,7 +28,8 @@ const EMPTY_SIDEBAR_ORDER: SidebarOrderState = { repos: [], workspaces: {} };
 // Stored-first ordering: items whose keys appear in `storedKeys` come first, in
 // that stored order; the rest keep their incoming (alphabetical) order after them.
 // Stored keys that no longer resolve to an item are skipped, so deletions never
-// require cleaning the stored list.
+// require cleaning the stored list; a key stored twice (a hand-edited or corrupt
+// snapshot) takes its first slot only, so an item is never rendered twice.
 function applyStoredOrder<T>(
   items: ReadonlyArray<T>,
   storedKeys: ReadonlyArray<string> | undefined,
@@ -37,10 +38,18 @@ function applyStoredOrder<T>(
   if (storedKeys === undefined || storedKeys.length === 0) {
     return [...items];
   }
-  const itemsByKey = new Map(items.map((item) => [keyOf(item), item]));
-  const stored = storedKeys.map((key) => itemsByKey.get(key)).filter((item): item is T => item !== undefined);
-  const storedKeySet = new Set(storedKeys);
-  const unstored = items.filter((item) => !storedKeySet.has(keyOf(item)));
+  // Taking each matched item OUT of the map makes duplicate stored keys miss on
+  // their second occurrence, and leaves the map holding exactly the unstored items.
+  const remainingByKey = new Map(items.map((item) => [keyOf(item), item]));
+  const stored: Array<T> = [];
+  for (const key of storedKeys) {
+    const item = remainingByKey.get(key);
+    if (item !== undefined) {
+      stored.push(item);
+      remainingByKey.delete(key);
+    }
+  }
+  const unstored = items.filter((item) => remainingByKey.has(keyOf(item)));
   return [...stored, ...unstored];
 }
 

@@ -20,7 +20,7 @@ import { ContextMenu, DropdownMenu, Flex, IconButton, Text, Tooltip } from "@rad
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { ChevronDown, ChevronRight, MoreHorizontal, Plus, Settings, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
-import { memo, useCallback, useEffect } from "react";
+import { memo, useCallback, useEffect, useRef } from "react";
 
 import type { Workspace } from "~/api";
 import { ElementIds, updateWorkspace } from "~/api";
@@ -41,7 +41,7 @@ import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCrea
 import { WorkspaceStatusDots } from "~/components/statusDot";
 import { ToastType } from "~/components/Toast.tsx";
 
-import { collapsedRepoGroupsAtom, isRepoCollapsedAtomFamily, isSidebarDragActiveAtom } from "./navAtoms.ts";
+import { adjustSidebarDragCountAtom, collapsedRepoGroupsAtom, isRepoCollapsedAtomFamily } from "./navAtoms.ts";
 import { sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
 import styles from "./SidebarRepoGroup.module.scss";
 import type { RepoGroup } from "./sidebarWorkspaceOrder.ts";
@@ -246,9 +246,27 @@ export const SidebarRepoGroup = ({
   const setRenameErrorToast = useSetAtom(workspaceRenameErrorToastAtom);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useAtom(renamingWorkspaceIdAtom);
   const { createFromSidebar, isCreating } = useCreateWorkspaceFromSidebar();
-  const setSidebarDragActive = useSetAtom(isSidebarDragActiveAtom);
+  const adjustDragCount = useSetAtom(adjustSidebarDragCountAtom);
   const reorderWorkspace = useSetAtom(reorderSidebarWorkspaceAtom);
   const store = useStore();
+
+  // Whether the in-flight sidebar drag was started by THIS group's row context.
+  // Every drag context adjusts the shared drag count, so end/cancel/cleanup must
+  // only decrement for a drag they own — an unowning cleanup (collapsing a
+  // different group mid-drag) would otherwise release another context's drag.
+  const ownsActiveDragRef = useRef(false);
+  const beginOwnedDrag = useCallback((): void => {
+    if (!ownsActiveDragRef.current) {
+      ownsActiveDragRef.current = true;
+      adjustDragCount(1);
+    }
+  }, [adjustDragCount]);
+  const endOwnedDrag = useCallback((): void => {
+    if (ownsActiveDragRef.current) {
+      ownsActiveDragRef.current = false;
+      adjustDragCount(-1);
+    }
+  }, [adjustDragCount]);
 
   // External hooks
   const openSettings = useOpenSettings();
@@ -289,11 +307,9 @@ export const SidebarRepoGroup = ({
     groupListeners?.onKeyDown?.(event);
   };
 
-  const handleRowDragStart = useCallback((): void => setSidebarDragActive(true), [setSidebarDragActive]);
-  const handleRowDragCancel = useCallback((): void => setSidebarDragActive(false), [setSidebarDragActive]);
   const handleRowDragEnd = useCallback(
     (event: DragEndEvent): void => {
-      setSidebarDragActive(false);
+      endOwnedDrag();
       if (event.over === null || event.over.id === event.active.id) {
         return;
       }
@@ -303,20 +319,20 @@ export const SidebarRepoGroup = ({
         overWorkspaceId: String(event.over.id),
       });
     },
-    [setSidebarDragActive, reorderWorkspace, group.projectId],
+    [endOwnedDrag, reorderWorkspace, group.projectId],
   );
 
   // dnd-kit does not fire onDragCancel when its context unmounts (see
   // PanelDndProvider), and the rows' context unmounts whenever the group
   // collapses — which can happen mid-drag (a keyboard drag is parked while the
-  // header stays clickable). Without this reset a stranded drag leaves
-  // isSidebarDragActiveAtom stuck true, silently disabling the hover peek.
+  // header stays clickable). Without this release a stranded drag leaves the
+  // shared drag count held forever, silently disabling the hover peek.
   useEffect(() => {
     if (isRepoCollapsed) {
       return undefined;
     }
-    return handleRowDragCancel;
-  }, [isRepoCollapsed, handleRowDragCancel]);
+    return endOwnedDrag;
+  }, [isRepoCollapsed, endOwnedDrag]);
 
   // Reference-stable (the rows are memoized on their props): the rename
   // callbacks depend only on reference-stable atom setters and the store.
@@ -429,9 +445,9 @@ export const SidebarRepoGroup = ({
             sensors={rowDndSensors}
             collisionDetection={closestCenter}
             modifiers={sidebarDndModifiers}
-            onDragStart={handleRowDragStart}
+            onDragStart={beginOwnedDrag}
             onDragEnd={handleRowDragEnd}
-            onDragCancel={handleRowDragCancel}
+            onDragCancel={endOwnedDrag}
           >
             <SortableContext items={group.workspaces.map((ws) => ws.objectId)} strategy={verticalListSortingStrategy}>
               {group.workspaces.map((ws) => (

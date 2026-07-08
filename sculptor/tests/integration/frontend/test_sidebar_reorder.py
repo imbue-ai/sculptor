@@ -27,7 +27,7 @@ from sculptor.testing.utils import get_playwright_modifier_key
 
 
 def _create_workspaces(page: Page, names: list[str]) -> None:
-    """Create one (agent-less) workspace per name; rows render alphabetically."""
+    """Create one workspace per name (agent idle); rows render alphabetically."""
     for name in names:
         start_task_and_wait_for_ready(page, workspace_name=name)
 
@@ -132,8 +132,11 @@ def test_keyboard_cycling_follows_custom_order(
     expect(rows).to_contain_text(["Cycle Order WS B", "Cycle Order WS A", "Cycle Order WS C"])
 
     # The rows stamp their workspace ids; cycling is asserted against the URL.
+    # expect() each attribute first so the one-shot reads below can't race a
+    # re-render.
+    for index in range(3):
+        expect(rows.nth(index)).to_have_attribute("data-workspace-id", re.compile(r".+"))
     row_ids = [rows.nth(index).get_attribute("data-workspace-id") for index in range(3)]
-    assert all(row_ids), f"expected every row to stamp data-workspace-id, got {row_ids}"
 
     # Step 2: Anchor on the top row's workspace (B).
     navigate_to_workspace(page, "Cycle Order WS B")

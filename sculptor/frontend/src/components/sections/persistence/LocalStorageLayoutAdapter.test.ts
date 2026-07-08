@@ -74,10 +74,10 @@ describe("LocalStorageLayoutAdapter", () => {
     expect(adapter.read(GLOBAL_SCOPE)).toBeUndefined();
   });
 
-  it("hydrates a global snapshot written before sidebarOrder existed", () => {
-    // Older global snapshots lack sidebarOrder; they must still read back (the
-    // layout atoms fill the missing field from the defaults) rather than being
-    // rejected and losing the user's width/collapsed settings.
+  it("hydrates a global snapshot written before sidebarOrder existed, filling the default", () => {
+    // Older global snapshots lack sidebarOrder; they must still read back — with
+    // the missing field filled from the defaults — rather than being rejected
+    // and losing the user's width/collapsed settings.
     const legacyGlobal = {
       sectionSizes: { left: 25, right: 25, bottom: 25 },
       sidebarWidthPx: 300,
@@ -85,36 +85,36 @@ describe("LocalStorageLayoutAdapter", () => {
       explorerListWidthPx: 260,
     };
     localStorage.setItem("sculptor-layout-global", JSON.stringify(legacyGlobal));
-    expect(adapter.read(GLOBAL_SCOPE)).toEqual(legacyGlobal);
+    expect(adapter.read(GLOBAL_SCOPE)).toEqual({ ...legacyGlobal, sidebarOrder: { repos: [], workspaces: {} } });
   });
 
-  it("rejects a global snapshot whose sidebarOrder has the wrong shape", () => {
-    localStorage.setItem(
-      "sculptor-layout-global",
-      JSON.stringify({
+  it("degrades a wrong-shape sidebarOrder to the default order, keeping the other settings", () => {
+    // The ordering atoms iterate sidebarOrder's lists, so a corrupt value must
+    // never reach them — but it also must not invalidate the user's width and
+    // collapsed settings, which are fine on their own.
+    const corruptOrders = [
+      { repos: "not-a-list", workspaces: {} },
+      { repos: [], workspaces: { "p-1": "not-a-list" } },
+    ];
+    for (const sidebarOrder of corruptOrders) {
+      localStorage.setItem(
+        "sculptor-layout-global",
+        JSON.stringify({
+          sectionSizes: { left: 25, right: 25, bottom: 25 },
+          sidebarWidthPx: 300,
+          sidebarCollapsed: true,
+          explorerListWidthPx: 260,
+          sidebarOrder,
+        }),
+      );
+      expect(adapter.read(GLOBAL_SCOPE)).toEqual({
         sectionSizes: { left: 25, right: 25, bottom: 25 },
         sidebarWidthPx: 300,
         sidebarCollapsed: true,
         explorerListWidthPx: 260,
-        sidebarOrder: { repos: "not-a-list", workspaces: {} },
-      }),
-    );
-    expect(adapter.read(GLOBAL_SCOPE)).toBeUndefined();
-
-    // The per-project id lists are iterated by the ordering atoms, so a
-    // non-array value must also read as "nothing stored" rather than hydrate
-    // and crash the sidebar at startup.
-    localStorage.setItem(
-      "sculptor-layout-global",
-      JSON.stringify({
-        sectionSizes: { left: 25, right: 25, bottom: 25 },
-        sidebarWidthPx: 300,
-        sidebarCollapsed: true,
-        explorerListWidthPx: 260,
-        sidebarOrder: { repos: [], workspaces: { "p-1": "not-a-list" } },
-      }),
-    );
-    expect(adapter.read(GLOBAL_SCOPE)).toBeUndefined();
+        sidebarOrder: { repos: [], workspaces: {} },
+      });
+    }
   });
 
   it("stamps the current snapshot version on writes and strips it on reads", () => {

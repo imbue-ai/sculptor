@@ -102,17 +102,32 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         self.pickup_via_keyboard(item)
 
         arrow = {"up": "ArrowUp", "down": "ArrowDown"}[direction]
-        # Each arrow press must be confirmed before deciding whether to press again:
-        # every step moves the drag exactly one slot, so a press fired while a slow
-        # re-render is still applying the previous one overshoots the target — and in
-        # a sortable list the target slot then never lights up. Wait (default timeout)
-        # for the preview to settle on SOME slot, then check whether it is the target;
-        # a drag that exhausts its presses raises rather than dropping blind, so the
-        # failure surfaces here and not as a downstream order-assertion mismatch.
-        drop_slot = self._page.locator('[data-sidebar-drop-target="true"]')
+        # Each arrow press is confirmed applied before the next fires: every press
+        # moves the drag exactly one slot, so a press fired while a slow re-render
+        # is still applying the previous one overshoots the target — and in a
+        # sortable list the target slot then never lights up. Right after pickup no
+        # slot is lit (the drag sits over its own slot), so the first press is
+        # confirmed by any slot lighting up; later presses by the lit slot's
+        # identity changing (rows stamp data-workspace-id, group headers
+        # data-project-id). A drag that exhausts its presses raises rather than
+        # dropping blind, so the failure surfaces here and not as a downstream
+        # order-assertion mismatch.
+        lit_slot = self._page.locator('[data-sidebar-drop-target="true"]')
         for _press in range(_REORDER_MAX_ARROW_PRESSES):
+            previous_slot_id = None
+            if lit_slot.count() == 1:
+                previous_slot_id = lit_slot.get_attribute("data-workspace-id") or lit_slot.get_attribute(
+                    "data-project-id"
+                )
             self._page.keyboard.press(arrow)
-            expect(drop_slot).to_have_count(1)
+            if previous_slot_id is None:
+                expect(lit_slot).to_have_count(1)
+            else:
+                moved_slot = self._page.locator(
+                    f'[data-sidebar-drop-target="true"]'
+                    f':not([data-workspace-id="{previous_slot_id}"]):not([data-project-id="{previous_slot_id}"])'
+                )
+                expect(moved_slot).to_have_count(1)
             if target.get_attribute("data-sidebar-drop-target") == "true":
                 break
         else:

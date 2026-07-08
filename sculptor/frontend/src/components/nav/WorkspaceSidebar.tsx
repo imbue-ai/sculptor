@@ -6,7 +6,7 @@ import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { Bug, Command, Home, PanelLeftClose, Plus, Settings } from "lucide-react";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import type { ReactElement } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Workspace } from "~/api";
 import { ElementIds } from "~/api";
@@ -35,7 +35,7 @@ import { HOME_TAB_ID, SETTINGS_TAB_ID } from "~/components/workspaceTabIds.ts";
 import { getTitleBarLeftPadding } from "~/electron/utils.ts";
 import { WorkspacePeekOverlay } from "~/pages/workspace/components/WorkspacePeekOverlay.tsx";
 
-import { isSidebarDragActiveAtom } from "./navAtoms.ts";
+import { adjustSidebarDragCountAtom, isSidebarDragActiveAtom } from "./navAtoms.ts";
 import navItemStyles from "./NavItem.module.scss";
 import { NavItem } from "./NavItem.tsx";
 import { sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
@@ -187,32 +187,48 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   // Stamped on the sidebar root as a data flag so the stylesheet can suppress
   // hover chrome for the whole rail while any sidebar drag is active.
   const isSidebarDragActive = useAtomValue(isSidebarDragActiveAtom);
-  const setSidebarDragActive = useSetAtom(isSidebarDragActiveAtom);
+  const adjustDragCount = useSetAtom(adjustSidebarDragCountAtom);
   const reorderRepoGroup = useSetAtom(reorderSidebarRepoGroupAtom);
-  const handleGroupDragStart = useCallback((): void => setSidebarDragActive(true), [setSidebarDragActive]);
-  const handleGroupDragCancel = useCallback((): void => setSidebarDragActive(false), [setSidebarDragActive]);
+
+  // Whether the in-flight sidebar drag was started by the group context. Every
+  // drag context adjusts the shared drag count, so end/cancel/cleanup must only
+  // decrement for a drag they own — an unowning cleanup would otherwise release
+  // a row drag still parked in some group.
+  const ownsActiveDragRef = useRef(false);
+  const beginOwnedDrag = useCallback((): void => {
+    if (!ownsActiveDragRef.current) {
+      ownsActiveDragRef.current = true;
+      adjustDragCount(1);
+    }
+  }, [adjustDragCount]);
+  const endOwnedDrag = useCallback((): void => {
+    if (ownsActiveDragRef.current) {
+      ownsActiveDragRef.current = false;
+      adjustDragCount(-1);
+    }
+  }, [adjustDragCount]);
   const handleGroupDragEnd = useCallback(
     (event: DragEndEvent): void => {
-      setSidebarDragActive(false);
+      endOwnedDrag();
       if (event.over === null || event.over.id === event.active.id) {
         return;
       }
       reorderRepoGroup({ activeProjectId: String(event.active.id), overProjectId: String(event.over.id) });
     },
-    [setSidebarDragActive, reorderRepoGroup],
+    [endOwnedDrag, reorderRepoGroup],
   );
 
   // dnd-kit does not fire onDragCancel when its context unmounts (see
   // PanelDndProvider), and collapsing the sidebar renders null below — the
   // component itself stays mounted, so an unmount-only cleanup would not run.
-  // Without this reset a drag stranded by the collapse leaves
-  // isSidebarDragActiveAtom stuck true, silently disabling the hover peek.
+  // Without this release a drag stranded by the collapse holds the shared drag
+  // count forever, silently disabling the hover peek.
   useEffect(() => {
     if (isCollapsed) {
       return undefined;
     }
-    return handleGroupDragCancel;
-  }, [isCollapsed, handleGroupDragCancel]);
+    return endOwnedDrag;
+  }, [isCollapsed, endOwnedDrag]);
 
   // JSX and rendering logic
   if (isCollapsed) {
@@ -297,9 +313,9 @@ export const WorkspaceSidebar = (): ReactElement | null => {
             sensors={groupDndSensors}
             collisionDetection={closestCenter}
             modifiers={sidebarDndModifiers}
-            onDragStart={handleGroupDragStart}
+            onDragStart={beginOwnedDrag}
             onDragEnd={handleGroupDragEnd}
-            onDragCancel={handleGroupDragCancel}
+            onDragCancel={endOwnedDrag}
           >
             <SortableContext items={repoGroups.map((group) => group.projectId)} strategy={verticalListSortingStrategy}>
               {repoGroups.map((group) => (

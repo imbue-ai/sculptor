@@ -5,8 +5,8 @@
 // only — no prototype/legacy keys are read or written.
 
 import type { LayoutPersistenceAdapter } from "./LayoutPersistenceAdapter.ts";
-import type { LayoutScope, LayoutSnapshotFor } from "./types.ts";
-import { LAYOUT_SNAPSHOT_VERSION } from "./types.ts";
+import type { LayoutScope, LayoutSnapshotFor, SidebarOrderState } from "./types.ts";
+import { DEFAULT_GLOBAL_LAYOUT, EMPTY_WORKSPACE_LAYOUT, LAYOUT_SNAPSHOT_VERSION } from "./types.ts";
 
 // Exported for the orphaned-key sweep (orphanedLayoutGc.ts), which scans raw
 // localStorage keys for per-workspace snapshots.
@@ -49,17 +49,9 @@ function isValidSnapshot(scope: LayoutScope, value: unknown): boolean {
     );
   }
   const sectionSizes = value.sectionSizes;
-  // sidebarOrder may be absent (snapshots written before the field existed hydrate
-  // fine — the reader fills missing fields from the defaults); when present its
-  // members must have the right kinds — including every per-project id list, which
-  // the ordering atoms iterate — or a corrupt entry would crash the sidebar at read.
-  const sidebarOrder = value.sidebarOrder;
-  const isValidSidebarOrder =
-    sidebarOrder === undefined ||
-    (isObject(sidebarOrder) &&
-      Array.isArray(sidebarOrder.repos) &&
-      isObject(sidebarOrder.workspaces) &&
-      Object.values(sidebarOrder.workspaces).every((ids) => Array.isArray(ids)));
+  // sidebarOrder is deliberately absent here: it may be missing (snapshots written
+  // before the field existed) or corrupt without invalidating the user's other
+  // settings — normalizeSnapshot handles it field-level on read.
   return (
     isObject(sectionSizes) &&
     typeof sectionSizes.left === "number" &&
@@ -67,9 +59,36 @@ function isValidSnapshot(scope: LayoutScope, value: unknown): boolean {
     typeof sectionSizes.bottom === "number" &&
     typeof value.sidebarWidthPx === "number" &&
     typeof value.sidebarCollapsed === "boolean" &&
-    typeof value.explorerListWidthPx === "number" &&
-    isValidSidebarOrder
+    typeof value.explorerListWidthPx === "number"
   );
+}
+
+// The ordering atoms iterate sidebarOrder's lists, so a wrong-kind member (a
+// hand-edited or corrupt entry) must never reach them.
+function isValidSidebarOrder(value: unknown): value is SidebarOrderState {
+  return (
+    isObject(value) &&
+    Array.isArray(value.repos) &&
+    isObject(value.workspaces) &&
+    Object.values(value.workspaces).every((ids) => Array.isArray(ids))
+  );
+}
+
+// Fill fields a stored snapshot lacks from the scope's defaults, so additive
+// schema growth never needs a version bump and read() always returns the full
+// declared shape. A missing or corrupt sidebarOrder degrades to the default
+// order on its own instead of invalidating the user's other settings.
+function normalizeSnapshot<TScope extends LayoutScope>(
+  scope: TScope,
+  snapshot: Record<string, unknown>,
+): LayoutSnapshotFor<TScope> {
+  if (scope.kind === "workspace") {
+    return { ...EMPTY_WORKSPACE_LAYOUT, ...snapshot } as LayoutSnapshotFor<TScope>;
+  }
+  const sidebarOrder = isValidSidebarOrder(snapshot.sidebarOrder)
+    ? snapshot.sidebarOrder
+    : DEFAULT_GLOBAL_LAYOUT.sidebarOrder;
+  return { ...DEFAULT_GLOBAL_LAYOUT, ...snapshot, sidebarOrder } as LayoutSnapshotFor<TScope>;
 }
 
 export class LocalStorageLayoutAdapter implements LayoutPersistenceAdapter {
@@ -91,7 +110,7 @@ export class LocalStorageLayoutAdapter implements LayoutPersistenceAdapter {
     if (pending !== undefined) {
       const snapshot = { ...(pending as Record<string, unknown>) };
       delete snapshot.version;
-      return snapshot as LayoutSnapshotFor<TScope>;
+      return normalizeSnapshot(scope, snapshot);
     }
 
     try {
@@ -110,7 +129,7 @@ export class LocalStorageLayoutAdapter implements LayoutPersistenceAdapter {
       // the in-memory layout state (writes re-stamp it).
       const snapshot = { ...(parsed as Record<string, unknown>) };
       delete snapshot.version;
-      return snapshot as LayoutSnapshotFor<TScope>;
+      return normalizeSnapshot(scope, snapshot);
     } catch {
       // Missing localStorage or corrupt JSON must not break startup.
       return undefined;

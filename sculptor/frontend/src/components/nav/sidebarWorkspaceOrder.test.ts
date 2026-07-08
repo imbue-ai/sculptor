@@ -55,6 +55,14 @@ describe("groupWorkspacesByRepo", () => {
     expect(workspaceIdsOf(groups, "p-alpha")).toEqual(["w-cherry", "w-apple", "w-banana"]);
   });
 
+  it("renders an id stored twice only once, at its first stored slot", () => {
+    const groups = groupWorkspacesByRepo(WORKSPACES, PROJECTS, {
+      repos: [],
+      workspaces: { "p-alpha": ["w-cherry", "w-banana", "w-cherry"] },
+    });
+    expect(workspaceIdsOf(groups, "p-alpha")).toEqual(["w-cherry", "w-banana", "w-apple"]);
+  });
+
   it("renders stored repo positions first, then unstored repos alphabetically", () => {
     const projects = [...PROJECTS, makeProject("p-gamma", "gamma")];
     const workspaces = [...WORKSPACES, makeWorkspace("w-elder", "p-gamma", "elder")];
