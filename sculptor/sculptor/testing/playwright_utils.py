@@ -31,6 +31,7 @@ from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.elements.user_config import enable_clone_workspaces
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.settings_page import PlaywrightSettingsPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.utils import get_playwright_modifier_key
@@ -349,32 +350,28 @@ _MAX_WORKSPACE_DELETE_ITERATIONS = 50
 
 
 def delete_all_workspaces_via_ui(page: Page) -> None:
-    """Delete every workspace through the Home page workspace list.
+    """Delete every workspace through the sidebar workspace rows.
 
-    Workspaces live in the sidebar + Home list now (no tab strip); deleting each
-    Home row via its inline delete button + confirmation removes them all and
-    lands on the empty first-run state.
+    The sidebar is the primary navigation surface in the new shell and lists every
+    workspace on all in-app routes, so deleting each row via its hover-revealed
+    trash icon + confirmation clears them all without routing to the Home list.
     """
     # Dismiss any open popover/context menu that might intercept clicks.
     page.keyboard.press("Escape")
 
-    confirm_button = page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CONFIRM)
-    confirm_dialog = page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)
+    sidebar = get_workspace_sidebar(page)
+    # A collapsed sidebar hides its rows behind the expand icon; expand first so
+    # the rows (and their delete affordances) are reachable.
+    if sidebar.get_expand_icon().count() > 0:
+        sidebar.expand()
 
-    navigate_to_home_page(page)
-
-    # Delete each workspace from the Home page workspace list.
-    # navigate_to_home_page already waits for workspace rows or empty state.
-    workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
+    confirm_dialog = sidebar.get_delete_confirmation_dialog()
+    workspace_rows = sidebar.get_workspace_rows()
 
     for _ in range(_MAX_WORKSPACE_DELETE_ITERATIONS):
         if workspace_rows.count() == 0:
             break
-        delete_button = workspace_rows.first.get_by_test_id(ElementIDs.WORKSPACE_ROW_CONTEXT_MENU_DELETE)
-        expect(delete_button).to_be_visible()
-        delete_button.click()
-        expect(confirm_button).to_be_visible()
-        confirm_button.click()
+        sidebar.delete_workspace_via_row_icon(workspace_rows.first)
         expect(confirm_dialog).to_be_hidden()
     else:
         remaining = workspace_rows.count()
