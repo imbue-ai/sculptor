@@ -9,7 +9,7 @@
 
 import { ContextMenu, DropdownMenu, Flex, IconButton, Text, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
-import { ChevronDown, ChevronRight, MoreHorizontal, Plus, Settings, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
 import { memo, useCallback } from "react";
 
@@ -116,7 +116,7 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
               <span className={styles.workspaceName}>{workspace.description ?? "Untitled"}</span>
             </button>
           )}
-          <Flex className={`${styles.rowActions} ${styles.hoverReveal}`} gap="2">
+          <Flex className={`${styles.rowActions} ${styles.hoverReveal}`} gap="1">
             <DropdownMenu.Root>
               <Tooltip content="Workspace actions" side="bottom">
                 <DropdownMenu.Trigger>
@@ -124,11 +124,12 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
                     variant="ghost"
                     size="1"
                     color="gray"
+                    className={styles.rowActionButton}
                     aria-label="Workspace actions"
                     data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW_MENU}
                     data-workspace-id={workspace.objectId}
                   >
-                    <MoreHorizontal size={13} />
+                    <MoreHorizontal size={12} />
                   </IconButton>
                 </DropdownMenu.Trigger>
               </Tooltip>
@@ -144,12 +145,13 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
                 variant="ghost"
                 size="1"
                 color="gray"
+                className={styles.rowActionButton}
                 onClick={() => onBeginDelete(workspace)}
                 aria-label="Delete workspace"
                 data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW_DELETE}
                 data-workspace-id={workspace.objectId}
               >
-                <Trash2 size={13} />
+                <Trash2 size={12} />
               </IconButton>
             </Tooltip>
           </Flex>
@@ -258,21 +260,32 @@ export const SidebarRepoGroup = ({
             {group.name}
           </Text>
         </button>
-        <Flex className={styles.rowActions} gap="2">
-          <Tooltip content="Repository settings" side="right">
-            <IconButton
-              variant="ghost"
-              size="1"
-              color="gray"
-              className={styles.hoverReveal}
-              onClick={() => openSettings("REPOSITORIES", group.projectId)}
-              aria-label="Repository settings"
-              data-testid={ElementIds.SIDEBAR_REPO_SETTINGS}
-              data-project-id={group.projectId}
-            >
-              <Settings size={13} />
-            </IconButton>
-          </Tooltip>
+        <Flex className={styles.rowActions} gap="1">
+          <DropdownMenu.Root>
+            <Tooltip content="Repository actions" side="bottom">
+              <DropdownMenu.Trigger>
+                <IconButton
+                  variant="ghost"
+                  size="1"
+                  color="gray"
+                  className={`${styles.rowActionButton} ${styles.hoverReveal}`}
+                  aria-label="Repository actions"
+                  data-testid={ElementIds.SIDEBAR_REPO_MENU}
+                  data-project-id={group.projectId}
+                >
+                  <MoreHorizontal size={12} />
+                </IconButton>
+              </DropdownMenu.Trigger>
+            </Tooltip>
+            <DropdownMenu.Content size="1" onCloseAutoFocus={(e): void => e.preventDefault()}>
+              <DropdownMenu.Item
+                onSelect={() => openSettings("REPOSITORIES", group.projectId)}
+                data-testid={ElementIds.SIDEBAR_REPO_SETTINGS}
+              >
+                Configure repo
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
           <Tooltip content="New workspace in this repo" side="right">
             {/* Direct-create in THIS repo (fresh auto branch, last-used or
                 default settings); failures fall back to the dialog
@@ -282,13 +295,14 @@ export const SidebarRepoGroup = ({
               variant="ghost"
               size="1"
               color="gray"
+              className={styles.rowActionButton}
               disabled={isCreating}
               onClick={() => void createFromSidebar(group.projectId)}
               aria-label="New workspace in this repo"
               data-testid={ElementIds.SIDEBAR_REPO_ADD_WORKSPACE}
               data-project-id={group.projectId}
             >
-              <Plus size={13} />
+              <Plus size={12} />
             </IconButton>
           </Tooltip>
         </Flex>

@@ -4,11 +4,13 @@
 
 .repoGroup {
   // A small gap between the repo header and its workspace rows so the focused
-  // workspace pill never overlaps the row above it.
+  // workspace pill never overlaps the row above it. The gap between adjacent
+  // repo groups (margin-bottom) is kept nearly as tight so the sidebar reads as
+  // one compact list rather than widely-spaced sections.
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-1);
 }
 
 // Repo header and workspace rows share the same pill height and full width.
@@ -75,7 +77,8 @@
   box-sizing: border-box;
   color: var(--gray-12);
   display: flex;
-  gap: var(--space-2);
+  // No column gap: the name button runs the full row width when idle, and the
+  // hover-revealed actions supply their own left margin once they appear.
   min-height: 28px;
   // Full width like the repo header; the content is indented past the repo
   // name via padding-left so the hierarchy reads at a glance.
@@ -105,37 +108,80 @@
   text-align: left;
 }
 
-// Trailing action-icon cluster on repo headers and workspace rows. Radix
-// ghost icon buttons bleed negative margins on hover, so keep enough gap
-// that adjacent hover backgrounds don't overlap.
+// Trailing action-icon cluster on repo headers and workspace rows.
 .rowActions {
   align-items: center;
   display: flex;
   flex-shrink: 0;
 }
 
-// Hover-revealed actions: hidden until their row is hovered, keyboard-focused,
-// or anchoring an open dropdown menu. Scoped under the row classes so this
-// out-specifies the Radix IconButton base display.
+// Compact action button matching the panel-tab close control
+// (SectionHeader.module.scss .closeButton): a 16px box with a subtle gray hover
+// fill and none of the Radix ghost negative-margin bleed, so every sidebar row
+// action reads the same as the panel-tab close.
+.rowActionButton {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius-1);
+  color: var(--gray-9);
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  height: var(--space-4);
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  width: var(--space-4);
+
+  &:hover {
+    background-color: var(--gray-a4);
+    color: var(--gray-12);
+  }
+}
+
+// Hover-revealed actions: collapsed to zero width until their row is hovered,
+// keyboard-focused, or anchoring an open menu, so the name runs the full row
+// width and only re-truncates once the actions appear. Scoped under the row
+// classes so this out-specifies the Radix IconButton base sizing.
 .repoHeader .hoverReveal,
 .workspaceRow .hoverReveal {
-  // visibility (not display): a hover-out can hide the trigger while its
+  // max-width:0 (not display:none): a hover-out can hide the trigger while its
   // tooltip is still open, and a display:none anchor collapses to a zero rect
-  // that flings the floating tooltip to the viewport corner. Keeping the
-  // geometry also stops the row from re-flowing on hover.
+  // that flings the floating tooltip to the viewport corner. Keeping the box in
+  // the layout tree preserves the anchor. min-width:0 overrides the Radix
+  // IconButton intrinsic min-width so the box can actually collapse to nothing.
+  max-width: 0;
+  min-width: 0;
+  overflow: hidden;
   visibility: hidden;
 }
 
+// Repo-header actions reveal on hover, on keyboard focus, or while the actions
+// menu is open; their spacing from the name comes from the header row's own
+// column gap. :focus-visible (not :focus-within) so clicking the header to
+// expand — which leaves the collapse button focused — doesn't leave the menu
+// button stuck visible after the pointer leaves; keyboard focus still reveals
+// it. [aria-expanded] keeps it visible while its dropdown is open.
+.repoHeader:hover .hoverReveal,
+.repoHeader:has(:focus-visible) .hoverReveal,
+.repoHeader:has([aria-expanded="true"]) .hoverReveal {
+  max-width: var(--space-8);
+  visibility: visible;
+}
+
+// Workspace-row actions reveal on hover/focus or while anchoring an open menu.
 // The dropdown trigger's open state is read via [aria-expanded] — its
 // data-state is clobbered by the Tooltip that shares the same button via
 // asChild composition. The row's own [data-state] covers the right-click
-// context menu, whose trigger is the row itself.
-.repoHeader:hover .hoverReveal,
-.repoHeader:focus-within .hoverReveal,
+// context menu, whose trigger is the row itself. margin-left gives the revealed
+// icons breathing room from the name (the row carries no column gap of its own).
 .workspaceRow:hover .hoverReveal,
 .workspaceRow:focus-within .hoverReveal,
 .workspaceRow[data-state="open"] .hoverReveal,
 .workspaceRow:has([aria-expanded="true"]) .hoverReveal {
+  margin-left: var(--space-1);
+  max-width: var(--space-8);
   visibility: visible;
 }
 
