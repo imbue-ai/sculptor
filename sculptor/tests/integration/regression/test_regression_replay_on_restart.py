@@ -25,10 +25,13 @@ Those bugs are covered by backend unit tests in
 
 Both tests use ``fake_claude:sleep`` (or the AUQ-emitting equivalent) for a
 deterministic long-running turn so that any replay would keep the agent in
-``RUNNING`` for at least 120 seconds. Each test asserts the post-restart
-status reaches ``READY`` within a generous timeout — only true if the dedup
-cursor correctly recorded the prompt as already-processed and the loop
-therefore had nothing to dispatch.
+``RUNNING`` for at least 120 seconds. The mid-turn test asserts the
+post-restart status reaches ``READY`` within a generous timeout — only true
+if the dedup cursor correctly recorded the prompt as already-processed and
+the loop therefore had nothing to dispatch. The AUQ test instead settles to
+``WAITING`` (the unanswered question survives the restart and pins the
+status), so it discriminates a replay by the AUQ tool block count: a
+replayed chat would re-emit the question as a second tool block.
 
 Note on user-clicked Stop: the Stop button does NOT trigger this bug
 class, because Claude's clean exit on a stdin interrupt control_request
@@ -48,6 +51,7 @@ from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
+from sculptor.testing.elements.ask_user_question import get_ask_user_question_tool_blocks
 from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -155,7 +159,9 @@ def test_chat_does_not_replay_after_shutdown_during_auq_wait(
 
     With the fix, the cursor advances on the wrapper's RequestStopped(chat)
     via ``_handle_completed_agent``'s scan, dedup drops the chat, and the
-    agent stays idle post-restart.
+    agent dispatches nothing post-restart: the restored question pins the
+    task at WAITING with exactly one AUQ tool block (a replay would emit a
+    second one).
     """
     with sculptor_instance_factory_.spawn_instance() as instance:
         start_task_and_wait_for_ready(
@@ -175,12 +181,12 @@ def test_chat_does_not_replay_after_shutdown_during_auq_wait(
 
     with sculptor_instance_factory_.spawn_instance() as instance:
         _open_workspace_after_restart(instance.page)
-        # With the fix: BUILDING → READY (no replay; the historical AUQ
-        # block doesn't pin to WAITING because the derived-status walk
-        # breaks on the persisted RequestStopped) — a read/unread dot. With the
-        # bug: BUILDING → RUNNING → WAITING (Claude re-emits AUQ on the replayed
-        # chat), so the dot would be "running"/"waiting" and the idle dot is
-        # never reached, timing this expect out.
-        expect(_agent_tab(instance.page)).to_have_attribute(
-            "data-dot-status", _IDLE_DOT_STATUS, timeout=_SETTLE_TIMEOUT_MS
-        )
+        # The unanswered question survives the restart, so the task settles to
+        # WAITING either way — the dot can't discriminate a replay here. The
+        # tool block count can: without a replay the single persisted AUQ
+        # ToolUseBlock is restored as-is; a replayed chat would drive
+        # fake_claude to re-emit the question as a SECOND tool block.
+        auq_panel = get_ask_user_question_panel(instance.page)
+        expect(auq_panel).to_be_visible(timeout=_SETTLE_TIMEOUT_MS)
+        expect(_agent_tab(instance.page)).to_have_attribute("data-dot-status", "waiting", timeout=_SETTLE_TIMEOUT_MS)
+        expect(get_ask_user_question_tool_blocks(instance.page)).to_have_count(1)

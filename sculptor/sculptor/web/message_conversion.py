@@ -332,6 +332,15 @@ def convert_agent_messages_to_task_update(
                     completed_chat_messages.append(previously_queued_message)
                     is_promoted = True
                     break
+            # A newly started user turn supersedes any unanswered question left
+            # pending by a non-user stop (shutdown/restart): the user chose to
+            # move on with a fresh prompt instead of answering, so the stale
+            # panel must not linger while the agent works on the new turn.
+            # Promotion only matches queued *chat* messages, so answer-delivery
+            # turns (request_id = the UserQuestionAnswerMessage id) never clear
+            # here — the UserQuestionAnswerMessage branch resolves those.
+            if is_promoted:
+                pending_user_questions.clear()
             # Only update current_request_id for real content requests (matched a
             # queued message) or when idle.  Lifecycle requests like
             # RemoveQueuedMessage emit their own RequestStarted/RequestSuccess pair
@@ -739,10 +748,14 @@ def convert_agent_messages_to_task_update(
                 in_progress_chat_message = _mark_stopped(in_progress_chat_message)
                 in_progress_chat_message = _attach_turn_metrics(in_progress_chat_message, pending_turn_metrics)
                 pending_turn_metrics = None
-                # Clear any pending AUQs — the turn was stopped so the
-                # questions are no longer answerable and the chat input
-                # should reappear.
-                pending_user_questions.clear()
+                # Only a user-initiated stop dismisses pending AUQs — the user is
+                # moving on, so the chat input should reappear. A stop the user
+                # did not ask for (backend shutdown/restart SIGTERM) leaves the
+                # questions pending: they were reconstructed from the persisted
+                # ToolUseBlock above and remain answerable after resume via the
+                # runner's answer-after-turn-ended continuation.
+                if msg.stopped_by_user:
+                    pending_user_questions.clear()
             in_progress_chat_message, current_request_id = _finalize_request(
                 current_request_id,
                 msg.request_id,

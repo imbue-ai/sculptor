@@ -348,12 +348,12 @@ def test_status_is_not_waiting_when_auq_request_failed_without_an_answer() -> No
     assert view.status != TaskStatus.WAITING
 
 
-def test_status_is_not_waiting_when_auq_request_was_stopped_without_an_answer() -> None:
-    """SCU-530 follow-on, SIGTERM variant: same fix must apply when the AUQ
-    request is stopped (e.g. agent received SIGTERM mid-question) rather than
-    failed with a Python error. ``RequestStoppedAgentMessage`` and
-    ``RequestFailureAgentMessage`` are both ``PersistentRequestCompleteAgentMessage``
-    subclasses, so the derived-status fix breaks the reverse walk for either.
+def _make_task_view_with_stopped_auq(stopped_by_user: bool) -> CodingAgentTaskView:
+    """Build a task whose AUQ turn ended in a ``RequestStoppedAgentMessage``.
+
+    Message sequence: chat input → environment acquired → AUQ tool block
+    (+ ephemeral AskUserQuestionAgentMessage) → RequestStopped, with the stop
+    attributed per ``stopped_by_user``.
     """
     task = _make_task()
     view = _make_task_view(task)
@@ -414,8 +414,32 @@ def test_status_is_not_waiting_when_auq_request_was_stopped_without_an_answer() 
         RequestStoppedAgentMessage.model_construct(
             request_id=user_message_id,
             error=_make_serialized_exception(),
+            stopped_by_user=stopped_by_user,
         )
     )
+    return view
+
+
+def test_status_is_waiting_when_auq_request_was_stopped_by_restart_without_an_answer() -> None:
+    """A shutdown/restart SIGTERM must not bury an unanswered question.
+
+    The AUQ ToolUseBlock is persisted and the question is still answerable
+    after resume (the runner's answer-after-turn-ended continuation), so a
+    ``RequestStoppedAgentMessage`` with ``stopped_by_user=False`` keeps the
+    task pinned at WAITING instead of dropping to READY.
+    """
+    view = _make_task_view_with_stopped_auq(stopped_by_user=False)
+
+    assert view.status == TaskStatus.WAITING
+
+
+def test_status_is_not_waiting_when_auq_request_was_stopped_by_user_without_an_answer() -> None:
+    """SCU-530 follow-on, user-stop variant: an explicit user Stop dismisses
+    the question — the user is moving on, so the task must not stay pinned
+    at WAITING. Only stops the user did not ask for (``stopped_by_user=False``)
+    preserve the question.
+    """
+    view = _make_task_view_with_stopped_auq(stopped_by_user=True)
 
     assert view.status != TaskStatus.WAITING
 

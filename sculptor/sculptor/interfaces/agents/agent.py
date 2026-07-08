@@ -382,6 +382,15 @@ class RequestStoppedAgentMessage(PersistentRequestCompleteAgentMessage):
     request_id: AgentMessageID
     # pyrefly: ignore [bad-override]
     error: SerializedException
+    # True when the stop was caused by an explicit user interrupt (Stop button)
+    # that escalated to a signal. False for stops the user did not ask for —
+    # backend shutdown/restart SIGTERM — where any pending AskUserQuestion is
+    # still answerable after resume and must survive state reconstruction
+    # (see message_conversion / derived). Old persisted messages lack this
+    # field and default to False, which matches their overwhelmingly
+    # shutdown-caused origin (a clean user Stop ends the turn via
+    # RequestSuccessAgentMessage(interrupted=True), not this message).
+    stopped_by_user: bool = False
 
 
 ErrorMessageUnion = Annotated[
