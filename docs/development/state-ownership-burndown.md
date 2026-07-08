@@ -79,17 +79,52 @@ segment, …):
 One surface per PR. Order by user-visible risk: failure paths that leave
 permanently stale UI first, hygiene (duplicate paths, dead options) last.
 
+## Classification results (2026-07 judgment pass)
+
+Every `no-fire-and-forget-api-catch` site was judged against the exemption
+test. None is a swallowed rejection; the frozen budget documents them:
+
+- `state/atoms/workspaces.ts` open/close tabs — **sound**. Failure paths
+  clear the pending open/close intent, roll back the guarded insert, and
+  surface a retry toast. The pending-intent overlay + `effectiveOpenTabIdsAtom`
+  derivation is a good example of client-intent state layered over server
+  facts; no change wanted.
+- `useOptimisticWorkspaceDelete.ts` — **handled, but V3**: the rollback
+  restores a snapshot without an interleave check, so a WS workspace frame
+  that lands mid-request can be clobbered. Fix on the workspace surface
+  with the same sync-version approach the task mutations use.
+- `PathAutocomplete.tsx` — **exempt** (fetch fallback, no optimistic
+  write). Separate debt: hand-rolled request-id dedup that
+  `use_tanstack_for_pulled_data` would route through `useQuery`.
+- `RepoSegment.tsx` — **exempt** (error message on failure, no optimistic
+  write).
+- `useOptimisticTaskDelete.ts` — handled with CAS rollback; consolidated
+  behind `useDeleteTaskMutation` so all cache writes live in
+  `state/mutations/`.
+
 ## Known burn-down items
 
-- `useOptimisticTaskDelete.ts` — the two `setQueryData` rollback/tombstone
-  writes should move behind a delete mutation in `state/mutations/`
-  (accounts for the entire `no-scattered-setquerydata` budget).
-- The workspace open/close writes in `state/atoms/workspaces.ts` and
-  `useOptimisticWorkspaceDelete.ts` — same optimistic-write shape as the
-  old task code; classify against V1/V2 and migrate on the same recipe.
-- The Jotai task atoms + `useTaskQueryMirror` — delete both once the last
-  Jotai reader (`tasksArrayAtom` consumers, the per-field selector
-  families) migrates to `useTask`/`useTaskIds`. This is the terminal item.
+- ~~`useOptimisticTaskDelete.ts` `setQueryData` writes~~ — done: delete
+  cache writes live behind `useDeleteTaskMutation`;
+  `no-scattered-setquerydata` budget is `0`.
+- ~~Per-field task selector reads in components~~ — done: the
+  `useTaskHelpers` hooks read the query cache via `select`; only the
+  selector atom families still consumed by Jotai atom graphs remain.
+- `useOptimisticWorkspaceDelete.ts` — add an interleave check to the
+  rollback (V3 above); consider a `workspaceSyncVersion` bumped by
+  `updateWorkspacesAtom`.
+- The Jotai task atoms + `useTaskQueryMirror` — the terminal item, blocked
+  on the remaining Jotai readers, which are no longer components but
+  **atom graphs and the plugin SDK**:
+  - `state/atoms/workspaces.ts`, `state/atoms/mentionDetails.ts`,
+    `state/agentPanelPlacement.ts`, `pages/workspace/panels/workspaceAgentActions.ts`
+    derive from `tasksArrayAtom` / `taskAtomFamily` / four surviving
+    selector families inside Jotai `get(...)` graphs — migrating them means
+    restructuring those derivations, not swapping a hook.
+  - `plugins/sdk/hooks.ts` exposes task state to runtime-loaded plugins —
+    a public API that needs a deprecation path, not a rename.
+  Until those move, the mirror stays, and `taskAtomFamily`/`taskIdsAtom`
+  remain single-writer projections.
 
 ## Exit criteria
 
