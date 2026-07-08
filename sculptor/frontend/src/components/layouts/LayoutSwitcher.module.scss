@@ -1,0 +1,279 @@
+// The Layouts switcher, rendered inside the PaletteDialog shell (which owns the
+// panel chrome + positioning). Mirrors the CommandPalette row language.
+
+.root {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  // Anchor for the absolutely-positioned more-options popover.
+  position: relative;
+}
+
+.header {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+}
+
+.searchInput {
+  background: transparent;
+  border: none;
+  color: var(--gray-12);
+  flex: 1;
+  font-size: var(--font-size-4);
+  font-weight: var(--font-weight-regular);
+  line-height: 24px;
+  min-width: 0;
+  outline: none;
+  padding: 0;
+
+  &::placeholder {
+    color: var(--gray-9);
+  }
+}
+
+.divider {
+  background: var(--gray-a4);
+  flex-shrink: 0;
+  height: 1px;
+}
+
+.list {
+  flex: 1;
+  // Give the switcher palette-like proportions and room for the popover.
+  min-height: 330px;
+  overflow: hidden auto;
+  padding: var(--space-2) var(--space-2) var(--space-3);
+}
+
+.groupHeading {
+  color: var(--gray-10);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-regular);
+  padding: var(--space-3) var(--space-3) var(--space-1);
+}
+
+.empty {
+  color: var(--gray-9);
+  font-size: var(--font-size-2);
+  padding: var(--space-4) var(--space-3);
+  text-align: center;
+}
+
+.row {
+  align-items: center;
+  border-radius: var(--radius-3);
+  color: var(--gray-12);
+  cursor: pointer;
+  display: flex;
+  font-size: var(--font-size-2);
+  gap: var(--space-3);
+  line-height: 1.35;
+  padding: var(--space-2) var(--space-3);
+  user-select: none;
+
+  &:hover {
+    background: var(--gray-a3);
+  }
+}
+
+.rowSelected {
+  background: var(--gray-a4);
+}
+
+.rowIcon {
+  align-items: center;
+  color: var(--gray-11);
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  width: 18px;
+}
+
+.rowBody {
+  align-items: baseline;
+  display: flex;
+  flex: 1;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.rowTitle {
+  color: var(--gray-12);
+  flex-shrink: 0;
+  font-weight: var(--font-weight-regular);
+  white-space: nowrap;
+}
+
+.rowSummary {
+  color: var(--gray-10);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.renameInput {
+  background: var(--gray-a3);
+  border: 1px solid var(--gray-a6);
+  border-radius: var(--radius-2);
+  color: var(--gray-12);
+  flex: 1;
+  font-size: var(--font-size-2);
+  min-width: 0;
+  outline: none;
+  padding: 2px var(--space-2);
+}
+
+.rowTrailing {
+  align-items: center;
+  color: var(--gray-10);
+  display: flex;
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+  justify-content: flex-end;
+}
+
+.rowSelected .rowTrailing {
+  color: var(--gray-11);
+}
+
+.rowMarker {
+  align-items: center;
+  display: flex;
+  gap: var(--space-1);
+}
+
+// Bottom bar (Raycast-style): Save on the left, Apply / More options on the right.
+.bar {
+  align-items: center;
+  border-top: 1px solid var(--gray-a3);
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-3);
+  height: 44px;
+  justify-content: space-between;
+  padding: 0 var(--space-3) 0 var(--space-4);
+}
+
+.barRight {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-1);
+}
+
+// Radix ghost Button base is overridden here to a quiet Raycast toolbar button:
+// reset its ghost margin and box, and pin the compact padding + colors.
+.barButton {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-2);
+  color: var(--gray-11);
+  cursor: pointer;
+  display: flex;
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-regular);
+  gap: var(--space-2);
+  height: auto;
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+
+  &:hover,
+  &.barButtonActive {
+    background: var(--gray-a4);
+  }
+
+  svg {
+    color: var(--gray-10);
+  }
+}
+
+.barKbd {
+  color: var(--gray-10);
+  font-family: inherit;
+  font-size: var(--font-size-1);
+}
+
+.barDivider {
+  background: var(--gray-a4);
+  height: 14px;
+  margin: 0 var(--space-2);
+  width: 1px;
+}
+
+// The ⌘J "more options" popover, anchored above the bar within the panel.
+.popover {
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-a5);
+  border-radius: var(--radius-4);
+  bottom: 52px;
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2);
+  position: absolute;
+  right: var(--space-2);
+  width: 300px;
+  z-index: var(--z-above);
+}
+
+.popoverRow {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-2);
+  color: var(--gray-12);
+  cursor: pointer;
+  display: flex;
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-regular);
+  gap: var(--space-3);
+  height: auto;
+  justify-content: flex-start;
+  margin: 0;
+  padding: var(--space-2);
+  text-align: left;
+  width: 100%;
+
+  svg {
+    color: var(--gray-11);
+    flex-shrink: 0;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 50%;
+  }
+
+  &:hover:not(:disabled),
+  &.popoverRowActive {
+    background: var(--gray-a3);
+  }
+}
+
+.popoverRowDanger {
+  color: var(--red-11);
+
+  svg {
+    color: var(--red-11);
+  }
+}
+
+.popoverShortcut {
+  color: var(--gray-10);
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: var(--font-size-1);
+  margin-left: auto;
+}
+
+.popoverSeparator {
+  background: var(--gray-a3);
+  height: 1px;
+  margin: var(--space-1) var(--space-2);
+}

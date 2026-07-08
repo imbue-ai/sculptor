@@ -16,6 +16,11 @@ import { makeAgentPanelId, makeTerminalPanelId } from "./registry/dynamicPanels.
 export const SYSTEM_DEFAULT_LAYOUT_ID = "system-default";
 export const SYSTEM_DEFAULT_LAYOUT_NAME = "System Default";
 
+// The switcher summary shown for System Default. Fixed (rather than derived from the
+// captured statics) so it can name the dynamic terminal the seeding places, which a
+// static-only capture can't — matching the mock's "Terminal below".
+export const SYSTEM_DEFAULT_LAYOUT_SUMMARY = "Files, Changes & Commits · Terminal below";
+
 function buildSystemDefaultLayout(): SavedLayout {
   // Placeholder ids only exist so buildDefaultWorkspaceLayout can place its center
   // agent + bottom terminal; captureLayout then strips them (they are dynamic), so
