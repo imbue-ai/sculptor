@@ -409,6 +409,12 @@ def test_command_palette_section_toggle_closes_palette(sculptor_instance_: Sculp
     task_page = start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Cmd+K Toggle Section WS")
     right = PlaywrightWorkspaceSection(page, "right")
 
+    # Force the precondition rather than trusting the default layout: the right section
+    # must be collapsed so the toggle command below OPENS it. The command is a raw
+    # toggle, so an already-expanded section would collapse and invert the final assertion.
+    right.collapse_section()
+    expect(right.get_header()).to_have_count(0)
+
     palette = task_page.open_command_palette()
     palette.type_query("Toggle right section")
     expect(palette.get_item_by_command_id("view.toggle_right_panel")).to_be_visible()

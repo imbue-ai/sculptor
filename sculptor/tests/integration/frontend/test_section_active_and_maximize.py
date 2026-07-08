@@ -99,8 +99,14 @@ def test_toggling_section_open_focuses_it_and_pulses_ring(sculptor_instance_: Sc
     center = PlaywrightWorkspaceSection(page, "center")
     right = PlaywrightWorkspaceSection(page, "right")
 
-    # The right section starts collapsed. Make the center active first so the toggle
-    # has to move the active section for the assertion to mean anything.
+    # Force the precondition rather than trusting the default layout: the right section
+    # must be collapsed so the hotkey below OPENS it. The hotkey is a raw toggle, so an
+    # already-expanded section would collapse instead and invert the assertions.
+    right.collapse_section()
+    expect(right.get_header()).to_have_count(0)
+
+    # Make the center active first so the toggle has to move the active section for the
+    # assertion to mean anything.
     center.get_active_tab().click()
     expect(center.get_active_ring()).to_have_attribute("data-active", "true")
 
