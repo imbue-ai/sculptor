@@ -26,34 +26,35 @@
 // Floating "Spotlight" pill shown alongside a hovered line in the Pierre
 // diff/file viewer. Fixed-positioned at the line's vertical centre, right-
 // aligned to the visible pane, outside the shadow DOM so it can receive
-// React events. Blue solid with a plus icon + label in white.
+// React events. Matches the tiptap send button's primary blue.
 .spotlightButton {
   align-items: center;
-  background: var(--blue-9);
+  background: var(--button-primary-bg);
   border: none;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-1);
   color: white;
   cursor: pointer;
   display: inline-flex;
   font-size: var(--font-size-1);
-  font-weight: var(--font-weight-medium);
-  gap: var(--space-1);
+  font-weight: var(--font-weight-bold);
+  gap: 3px;
   line-height: 1;
-  padding: var(--space-1) var(--space-2);
+  // Tight vertical padding (non-token 2px) keeps the pill shorter than a code
+  // line so it sits fully inside the hovered row; icon+label are centred.
+  padding: 2px var(--space-2);
   pointer-events: auto;
   user-select: none;
   white-space: nowrap;
   z-index: var(--z-dropdown);
 
   &:hover {
-    background: var(--blue-10);
+    background: var(--button-primary-bg-hover);
   }
 
-  &:active {
-    background: var(--blue-11);
-  }
-
+  // Pull the leading icon toward the left edge so the optical whitespace
+  // matches the trailing text edge (the plus glyph carries its own inset).
   > svg {
     flex-shrink: 0;
+    margin-left: -2px;
   }
 }

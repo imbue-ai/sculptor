@@ -1,6 +1,8 @@
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { clearLinePaint, paintLineRange, shadowRootOf, snippetForRange } from "./spotlightPaint.ts";
+
 /** Result the hook hands back to the caller when a selection completes. */
 export type SpotlightCaptureResult = {
   lineStart: number;
@@ -55,20 +57,6 @@ const sideOf = (el: HTMLElement | null): "old" | "new" | null => {
   return null;
 };
 
-const shadowRootOf = (container: HTMLElement | null): ShadowRoot | null =>
-  container?.querySelector("diffs-container")?.shadowRoot ?? null;
-
-const snippetForRange = (shadowRoot: ShadowRoot, start: number, end: number): string => {
-  const lines: Array<string> = [];
-  for (const el of shadowRoot.querySelectorAll("[data-line]")) {
-    const n = parseInt(el.getAttribute("data-line") ?? "", 10);
-    if (!Number.isNaN(n) && n >= start && n <= end) {
-      lines.push(el.textContent ?? "");
-    }
-  }
-  return lines.join("\n");
-};
-
 export const useSpotlightCapture = ({
   containerRef,
   boundsRef,
@@ -107,29 +95,19 @@ export const useSpotlightCapture = ({
     [boundsRef],
   );
 
-  // Paint the given line range blue and clear every other line, in one pass
-  // over the shadow root. Re-querying (rather than stashing element refs) keeps
-  // the React Compiler happy and is cheap for the line counts in view.
+  // Paint the given line range blue (clearing all others), reusing the shared
+  // shadow-DOM paint helper so capture and hover-highlight agree on the DOM.
   const paintRange = useCallback(
     (start: number, end: number): void => {
       const shadowRoot = shadowRootOf(containerRef.current);
-      if (!shadowRoot) return;
-      const lo = Math.min(start, end);
-      const hi = Math.max(start, end);
-      for (const el of shadowRoot.querySelectorAll<HTMLElement>("[data-line]")) {
-        const n = parseInt(el.getAttribute("data-line") ?? "", 10);
-        el.style.backgroundColor = !Number.isNaN(n) && n >= lo && n <= hi ? "var(--blue-a5)" : "";
-      }
+      if (shadowRoot) paintLineRange(shadowRoot, start, end);
     },
     [containerRef],
   );
 
   const clearPaint = useCallback((): void => {
     const shadowRoot = shadowRootOf(containerRef.current);
-    if (!shadowRoot) return;
-    for (const el of shadowRoot.querySelectorAll<HTMLElement>("[data-line]")) {
-      el.style.backgroundColor = "";
-    }
+    if (shadowRoot) clearLinePaint(shadowRoot);
   }, [containerRef]);
 
   // Hover tracking: anchor the pill to whatever line the pointer is over.

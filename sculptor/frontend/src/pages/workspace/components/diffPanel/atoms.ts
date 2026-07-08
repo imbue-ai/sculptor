@@ -9,7 +9,14 @@ import type { DiffSelection } from "~/pages/workspace/components/diffViewer/type
 import { getUncommittedFileStatusMap } from "~/pages/workspace/panels/fileBrowser/atoms.ts";
 import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
 
-import type { DiffPanelTabState, DiffScope, DiffTab, SingleFileDiffTab, SpotlightData } from "./types.ts";
+import type {
+  DiffPanelTabState,
+  DiffScope,
+  DiffTab,
+  SingleFileDiffTab,
+  SpotlightAnchor,
+  SpotlightData,
+} from "./types.ts";
 import { COMMIT_DIFF_PREFIX, FILE_VIEW_PREFIX, TARGET_BRANCH_DIFF_PREFIX } from "./types.ts";
 
 // The single-instance panel (and its default section) that hosts the active diff/
@@ -39,6 +46,39 @@ export const splitDiffColumnRatioAtom = atom(50);
  * target (the chat input). No prop threading through the component tree.
  */
 export const spotlightInsertAtom = atom<SpotlightData | null>(null);
+
+/**
+ * The spotlight anchor the user is currently HOVERING (via a chip in the chat
+ * input or a sent message). The diff/file viewer showing that file paints the
+ * referenced lines blue; a mismatch or null paints nothing. Cleared on
+ * mouse-leave. Read-only signal — no navigation.
+ */
+export const spotlightHoverAtom = atom<SpotlightAnchor | null>(null);
+
+/**
+ * Clear the hover highlight ONLY if it currently points at `anchor`. Used on
+ * chip mouse-leave, deselect, and unmount (e.g. backspace-delete while hovered)
+ * so a chip never wipes a highlight another chip has since taken over.
+ */
+export const clearSpotlightHoverForAnchorAtom = atom(null, (get, set, anchor: SpotlightAnchor) => {
+  const current = get(spotlightHoverAtom);
+  if (
+    current !== null &&
+    current.file === anchor.file &&
+    current.lineStart === anchor.lineStart &&
+    current.lineEnd === anchor.lineEnd
+  ) {
+    set(spotlightHoverAtom, null);
+  }
+});
+
+/**
+ * A one-shot request to scroll a spotlight's source line into view, set when a
+ * chip is CLICKED (alongside opening the file). The viewer showing that file
+ * scrolls to the line once Pierre has painted it, then clears the atom.
+ * `requestedAt` lets a repeat click on the same anchor re-fire the scroll.
+ */
+export const spotlightScrollTargetAtom = atom<(SpotlightAnchor & { requestedAt: number }) | null>(null);
 
 const DEFAULT_DIFF_PANEL_TAB_STATE: DiffPanelTabState = {
   activeTab: null,
@@ -203,7 +243,7 @@ type SetActiveFileView = {
   workspaceId: string;
   filePath: string;
   /** Set by the quick-open-rendered-markdown path; see {@link FileViewTab}. */
-  markdownMode?: "rendered";
+  markdownMode?: "rendered" | "raw";
 };
 
 type SetActiveCommitDiff = {
@@ -369,7 +409,7 @@ export const resetReviewAllScopeAtom = atom(null, (get, set) => {
 /** Open (or activate) a read-only file view tab. */
 export const openFileViewTabAtom = atom(
   null,
-  (_get, set, params: { workspaceId: string; filePath: string; markdownMode?: "rendered" }) => {
+  (_get, set, params: { workspaceId: string; filePath: string; markdownMode?: "rendered" | "raw" }) => {
     set(setActiveDiffTabAtom, { kind: "file-view", ...params });
   },
 );

@@ -35,6 +35,7 @@ import { StickyHorizontalScrollbar } from "./StickyHorizontalScrollbar.tsx";
 import type { SpotlightData } from "./types.ts";
 import { usePierreHighlighterReady } from "./usePierreHighlighterReady.ts";
 import { type SpotlightCaptureResult, useSpotlightCapture } from "./useSpotlightCapture.ts";
+import { useSpotlightOverlay } from "./useSpotlightOverlay.ts";
 
 type ReadOnlyPreviewProps = {
   workspaceId: string;
@@ -206,6 +207,8 @@ export const ReadOnlyPreview = ({
     onCapture: handleSpotlightCapture,
   });
   const handleSpotlightPillMouseDown = spotlight.onButtonMouseDown;
+  // Hover-highlight + click-scroll driven by spotlight chips in the chat.
+  useSpotlightOverlay({ containerRef: pierreRef, file: filePath, isHighlighterReady });
   // --- end Spotlight capture ----------------------------------------------
 
   if (isPending) {

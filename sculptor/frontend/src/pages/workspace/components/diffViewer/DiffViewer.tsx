@@ -213,17 +213,20 @@ export const DiffViewer = ({
 
   const [markdownMode, setMarkdownMode] = useAtom(markdownRenderModeAtom);
 
-  // A quick-opened file-view can carry an explicit "rendered" request (see the
-  // DiffSelection type). It overrides the persisted global render-mode WITHOUT
-  // writing it — the user's preference survives the quick look — and stays in
-  // force until the user toggles the mode, which records a dismissal. A repeat
-  // request (newer `openedAt`) re-applies the override.
+  // A quick-opened file-view can carry an explicit render-mode request (see the
+  // DiffSelection type): "rendered" from the quick-open icon, "raw" from a
+  // spotlight line-reference click (source view so line numbers align). It
+  // overrides the persisted global render-mode WITHOUT writing it — the user's
+  // preference survives the quick look — and stays in force until the user
+  // toggles the mode. A repeat request (newer `openedAt`) re-applies it.
   const [renderOverrideDismissedAt, setRenderOverrideDismissedAt] = useState<number | null>(null);
-  const isQuickOpenRenderActive =
+  const quickOpenRenderMode: MarkdownRenderMode | null =
     selection?.kind === "file-view" &&
-    selection.markdownMode === "rendered" &&
-    (renderOverrideDismissedAt === null || (selection.openedAt ?? 0) > renderOverrideDismissedAt);
-  const effectiveMarkdownMode: MarkdownRenderMode = isQuickOpenRenderActive ? "rendered" : markdownMode;
+    (selection.markdownMode === "rendered" || selection.markdownMode === "raw") &&
+    (renderOverrideDismissedAt === null || (selection.openedAt ?? 0) > renderOverrideDismissedAt)
+      ? selection.markdownMode
+      : null;
+  const effectiveMarkdownMode: MarkdownRenderMode = quickOpenRenderMode ?? markdownMode;
 
   // ReadOnlyPreview is the only path that supports rendered markdown — used for
   // file-view selections and "no diff" states. Hide the toggle elsewhere.
@@ -450,7 +453,7 @@ export const DiffViewer = ({
             <ReadOnlyPreview
               workspaceId={workspaceId}
               filePath={content.filePath}
-              renderModeOverride={isQuickOpenRenderActive ? "rendered" : undefined}
+              renderModeOverride={quickOpenRenderMode ?? undefined}
               spotlightScope="file-view"
             />
           </Flex>

@@ -3,7 +3,7 @@ import classnames from "classnames";
 import { useAtomValue, useSetAtom } from "jotai";
 import { Folder, Highlighter } from "lucide-react";
 import type { ComponentType, ElementType, MouseEvent, ReactElement, ReactNode } from "react";
-import { createElement, useCallback } from "react";
+import { createElement, useCallback, useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
 
 import { ElementIds } from "~/api";
@@ -11,7 +11,12 @@ import { useImbueNavigate } from "~/common/NavigateUtils";
 import { projectAtomFamily } from "~/common/state/atoms/projects";
 import { taskAtomFamily } from "~/common/state/atoms/tasks";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces";
-import { openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atoms";
+import {
+  clearSpotlightHoverForAnchorAtom,
+  openFileViewTabAtom,
+  spotlightHoverAtom,
+  spotlightScrollTargetAtom,
+} from "~/pages/workspace/components/diffPanel/atoms";
 import { revealFolderAtom } from "~/pages/workspace/panels/fileBrowser/atoms";
 import { getFileIcon } from "~/pages/workspace/panels/fileBrowser/fileIcons";
 
@@ -272,17 +277,49 @@ const SpotlightMentionChip = ({
 }): ReactElement => {
   const { workspaceID } = useParams<{ workspaceID?: string }>();
   const openFileViewTab = useSetAtom(openFileViewTabAtom);
+  const setSpotlightHover = useSetAtom(spotlightHoverAtom);
+  const clearSpotlightHoverForAnchor = useSetAtom(clearSpotlightHoverForAnchorAtom);
+  const setSpotlightScrollTarget = useSetAtom(spotlightScrollTargetAtom);
   const isClickable = Boolean(workspaceID);
   const label = spotlightLabel(file, lineStart, lineEnd, side);
+  // Stable anchor identity so the highlight effects below don't churn each render.
+  const anchor = useMemo(() => ({ file, lineStart, lineEnd }), [file, lineStart, lineEnd]);
 
   const handleClick = useCallback(
     (e: MouseEvent) => {
       if (!workspaceID) return;
       e.stopPropagation();
-      openFileViewTab({ workspaceId: workspaceID, filePath: file });
+      // Open in the SOURCE (raw) view — a markdown file would otherwise open
+      // rendered, where line numbers don't line up with the spotlight anchor.
+      openFileViewTab({ workspaceId: workspaceID, filePath: file, markdownMode: "raw" });
+      // Ask the viewer showing this file to scroll the source line into view
+      // once Pierre has painted it.
+      setSpotlightScrollTarget({ file, lineStart, lineEnd, requestedAt: Date.now() });
+      // The click navigates away from the chip, so drop any hover highlight.
+      setSpotlightHover(null);
     },
-    [file, workspaceID, openFileViewTab],
+    [file, lineStart, lineEnd, workspaceID, openFileViewTab, setSpotlightScrollTarget, setSpotlightHover],
   );
+
+  const handleMouseEnter = useCallback((): void => {
+    setSpotlightHover(anchor);
+  }, [anchor, setSpotlightHover]);
+
+  const handleMouseLeave = useCallback((): void => {
+    clearSpotlightHoverForAnchor(anchor);
+  }, [anchor, clearSpotlightHoverForAnchor]);
+
+  // Arrow-key selection (tiptap NodeSelection) enters the same "attention"
+  // state as a mouse hover, so mirror the line highlight while selected.
+  useEffect(() => {
+    if (!selected) return undefined;
+    setSpotlightHover(anchor);
+    return (): void => clearSpotlightHoverForAnchor(anchor);
+  }, [selected, anchor, setSpotlightHover, clearSpotlightHoverForAnchor]);
+
+  // Clear any lingering highlight if the chip is removed while hovered/selected
+  // (e.g. backspace-delete) — unmount fires no mouseleave.
+  useEffect(() => (): void => clearSpotlightHoverForAnchor(anchor), [anchor, clearSpotlightHoverForAnchor]);
 
   return (
     <ChipHoverCard
@@ -294,6 +331,8 @@ const SpotlightMentionChip = ({
           className={classnames(isClickable ? styles.clickableMention : styles.mention, entityStyles.spotlightChip)}
           data-testid={ElementIds.SPOTLIGHT_CHIP}
           onClick={isClickable ? handleClick : undefined}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
           aria-disabled={isClickable ? undefined : true}
         >
           <Highlighter style={ICON_STYLE} />

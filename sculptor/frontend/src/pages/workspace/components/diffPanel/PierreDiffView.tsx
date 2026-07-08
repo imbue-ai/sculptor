@@ -22,6 +22,7 @@ import { StickyHorizontalScrollbar } from "./StickyHorizontalScrollbar.tsx";
 import type { DiffViewType, SpotlightData } from "./types.ts";
 import { usePierreHighlighterReady } from "./usePierreHighlighterReady.ts";
 import { type SpotlightCaptureResult, useSpotlightCapture } from "./useSpotlightCapture.ts";
+import { useSpotlightOverlay } from "./useSpotlightOverlay.ts";
 
 type PierreDiffViewProps = {
   diffString: string;
@@ -272,6 +273,8 @@ export const PierreDiffView = ({
     onCapture: handleSpotlightCapture,
   });
   const handleSpotlightPillMouseDown = spotlight.onButtonMouseDown;
+  // Hover-highlight + click-scroll driven by spotlight chips in the chat.
+  useSpotlightOverlay({ containerRef: pierreRef, file: spotlightFile, isHighlighterReady });
   // --- end Spotlight capture ----------------------------------------------
 
   return (

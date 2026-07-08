@@ -22,11 +22,12 @@ export type FileViewTab = {
   /** Actual file path used for fetching content. */
   realPath: string;
   viewedAt: number;
-  /** When set, this open explicitly requested rendered markdown (the viewer
-   *  header's quick-open icon). The viewer honors it for THIS open only —
-   *  without rewriting the user's global render-mode preference — until the
-   *  user toggles the mode. */
-  markdownMode?: "rendered";
+  /** When set, this open explicitly requested a specific markdown render mode
+   *  (`"rendered"` from the viewer's quick-open icon; `"raw"` from a spotlight
+   *  line-reference click, which wants the source view so line numbers line up).
+   *  The viewer honors it for THIS open only — without rewriting the user's
+   *  global render-mode preference — until the user toggles the mode. */
+  markdownMode?: "rendered" | "raw";
 };
 
 export type CommitFileDiffTab = {
@@ -60,6 +61,16 @@ export type DiffScope = "uncommitted" | "vs-target-branch";
  * no diff context; a commit-diff spotlight carries a `git show <hash>` hint).
  */
 export type SpotlightScope = "file-view" | "uncommitted-diff" | "target-branch-diff" | "commit-diff";
+
+/**
+ * A line-level anchor into a file — the shared shape used to highlight and
+ * scroll to a spotlight's source line when its chip is hovered or clicked.
+ */
+export type SpotlightAnchor = {
+  file: string;
+  lineStart: number;
+  lineEnd: number;
+};
 
 /**
  * A line-level reference the user "spotlights" on a diff or file pane. It is a

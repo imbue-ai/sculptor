@@ -27,11 +27,12 @@ export type DiffSelection =
       kind: "file-view";
       filePath: string;
       tabFilePath?: string;
-      /** When set, this open explicitly requested rendered markdown (the
-       *  quick-open icon). The viewer honors it for this open only — the
-       *  user's global render-mode preference is not rewritten — until the
-       *  user toggles the mode. */
-      markdownMode?: "rendered";
+      /** When set, this open explicitly requested a markdown render mode:
+       *  `"rendered"` (quick-open icon) or `"raw"` (spotlight line-reference
+       *  click, which wants source view). The viewer honors it for this open
+       *  only — the user's global render-mode preference is not rewritten —
+       *  until the user toggles the mode. */
+      markdownMode?: "rendered" | "raw";
       /** When the request above was made; a repeat request (same file, newer
        *  timestamp) re-applies a previously dismissed render-mode override. */
       openedAt?: number;
