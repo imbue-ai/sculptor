@@ -53,9 +53,10 @@
   color: var(--accent-11);
 }
 
-// Dim the leading icon in step with the disabled label. Kept flat (and after
-// `.navIcon`, at equal specificity to the active rule so disabled wins) so
-// selector specificity stays in source order for stylelint.
+// Dim the leading icon in step with the disabled label. The `:disabled`
+// pseudo-class makes this more specific than `.navItemActive .navIcon`, so it
+// wins for an active-and-disabled row. Kept flat and after the active rule so
+// specificity stays non-descending in source order for stylelint.
 .navItem:disabled .navIcon {
   color: var(--gray-8);
 }
