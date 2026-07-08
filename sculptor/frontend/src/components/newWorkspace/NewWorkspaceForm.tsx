@@ -58,6 +58,12 @@ type NewWorkspaceFormProps = {
    */
   initialPrompt?: string;
   /**
+   * Name to seed the branch-name field with on mount, putting it in
+   * manually-edited mode — the user can still shuffle back to the auto
+   * preview. The form's existing exists/invalid validation applies unchanged.
+   */
+  initialBranchName?: string;
+  /**
    * Called with the new workspace's id after every successful create —
    * including each repeat create in keep-open mode, where the title/prompt
    * re-seed from `initialTitle`/`initialPrompt` between creates so the open
@@ -82,6 +88,7 @@ export const NewWorkspaceForm = ({
   presetProjectId,
   initialTitle,
   initialPrompt,
+  initialBranchName,
   onWorkspaceCreated,
   onCreated,
 }: NewWorkspaceFormProps): ReactElement => {
@@ -130,7 +137,7 @@ export const NewWorkspaceForm = ({
   // `null` means "use the auto-filled preview"; any string means the user has
   // taken over. Both the value and the manual flag collapse into one piece of
   // state so they can never disagree.
-  const [branchNameOverride, setBranchNameOverride] = useState<string | null>(null);
+  const [branchNameOverride, setBranchNameOverride] = useState<string | null>(() => initialBranchName ?? null);
   const [shuffleNonce, setShuffleNonce] = useState<number>(0);
   const [isLoadingProjects, setIsLoadingProjects] = useState<boolean>(true);
   const [toast, setToast] = useState<ToastContent | null>(null);
@@ -321,17 +328,17 @@ export const NewWorkspaceForm = ({
     if (isKeepOpen) {
       // Keep the dialog open for rapid multi-create — reset the
       // per-workspace fields but retain the repo + agent type (+ mode/source)
-      // and the per-prompt agent settings. Title and prompt reset back to
-      // their seeds, not to blank: every create from a seeded open request
-      // reports to the same `onWorkspaceCreated`, so the fields must keep
-      // saying what that request is (an unseeded open falls back to blank
-      // either way). Plan mode is the exception: it is a per-task choice, so
-      // it resets to off rather than silently carrying into the next
-      // workspace.
+      // and the per-prompt agent settings. Title, prompt, and branch name
+      // reset back to their seeds, not to blank/auto: every create from a
+      // seeded open request reports to the same `onWorkspaceCreated`, so the
+      // fields must keep saying what that request is (an unseeded open falls
+      // back to blank fields and the auto branch preview either way). Plan
+      // mode is the exception: it is a per-task choice, so it resets to off
+      // rather than silently carrying into the next workspace.
       setWorkspaceName(initialTitle ?? "");
       setPrompt(initialPrompt ?? "");
       setIsAgentPlanMode(false);
-      setBranchNameOverride(null);
+      setBranchNameOverride(initialBranchName ?? null);
       setShuffleNonce((prev) => prev + 1);
       nameInputRef.current?.focus();
     } else {
@@ -355,6 +362,7 @@ export const NewWorkspaceForm = ({
     isKeepOpen,
     initialTitle,
     initialPrompt,
+    initialBranchName,
     onWorkspaceCreated,
     onCreated,
   ]);

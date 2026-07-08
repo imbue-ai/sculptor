@@ -10,8 +10,9 @@ import {
 import { RefreshCw } from "lucide-react";
 import { useCallback, type ReactElement } from "react";
 
-import { type BoardGroup, workspaceSeedForIssue } from "../linear/board.ts";
+import type { BoardGroup } from "../linear/board.ts";
 import type { LinearIssue } from "../linear/client.ts";
+import { workspaceSeedForIssue } from "../linear/templates.ts";
 import { useLinearBoard } from "../linear/useLinearBoard.ts";
 import { ticketAssignmentKey } from "../linear/useTicketAssignment.ts";
 import { BoardTicketRow } from "./BoardTicketRow.tsx";
@@ -27,6 +28,12 @@ import { StateIcon } from "./StateIcon.tsx";
  */
 export const LinearBoard = (): ReactElement => {
   const [apiKey] = usePluginSetting("apiKey");
+  // Seed templates for "Create workspace…" (see LinearSettings); blank means
+  // the defaults in linear/templates.ts. Read here, at click time, rather than
+  // baked into any cached query.
+  const [titleTemplate] = usePluginSetting("template:title");
+  const [branchTemplate] = usePluginSetting("template:branch");
+  const [promptTemplate] = usePluginSetting("template:prompt");
   const navigateToWorkspace = useNavigateToWorkspace();
   const openNewWorkspaceModal = useOpenNewWorkspaceModal();
   const setPluginSetting = useSetPluginSetting();
@@ -35,16 +42,23 @@ export const LinearBoard = (): ReactElement => {
 
   const handleCreateWorkspace = useCallback(
     (issue: LinearIssue): void => {
-      const seed = workspaceSeedForIssue(issue);
+      const seed = workspaceSeedForIssue(issue, {
+        title: titleTemplate,
+        branch: branchTemplate,
+        prompt: promptTemplate,
+      });
       openNewWorkspaceModal({
         initialTitle: seed.title,
         initialPrompt: seed.prompt,
+        // `undefined` when there is no branch template: the host derives the
+        // branch from the title as usual.
+        initialBranchName: seed.branchName,
         // Record an explicit assignment so the association holds even if the
         // user edits the title (and thus the derived branch name) in the modal.
         onCreated: (workspaceId) => setPluginSetting(ticketAssignmentKey(workspaceId), issue.identifier),
       });
     },
-    [openNewWorkspaceModal, setPluginSetting],
+    [openNewWorkspaceModal, setPluginSetting, titleTemplate, branchTemplate, promptTemplate],
   );
 
   const handleAssignWorkspace = useCallback(

@@ -597,18 +597,24 @@ export type NewWorkspaceModalOptions = {
 	/** Pre-fills the first-agent prompt textarea. */
 	initialPrompt?: string;
 	/**
+	 * Pre-fills the new-branch-name field; when omitted the host derives the
+	 * branch from the title as usual. The host validates the name, and the user
+	 * can edit it or re-roll back to the derived one.
+	 */
+	initialBranchName?: string;
+	/**
 	 * Called with the new workspace's id per successful create — keep-open mode
 	 * lets the user create several workspaces from one open dialog, so this can
-	 * fire more than once. Between such creates the form re-seeds its title and
-	 * prompt from `initialTitle`/`initialPrompt`, so the dialog stays visibly
-	 * about this open request and every report belongs to it.
+	 * fire more than once. Between such creates the form re-seeds its fields
+	 * from the `initial*` options, so the dialog stays visibly about this open
+	 * request and every report belongs to it.
 	 */
 	onCreated?: (workspaceId: string) => void;
 };
 /**
  * Returns a stable function that opens the host's own new-workspace dialog —
- * the same one behind Cmd/Meta+T — optionally pre-filled with a title and
- * prompt. The user remains in control: they can edit every field or cancel
+ * the same one behind Cmd/Meta+T — optionally pre-filled with a title, prompt,
+ * and branch name. The user remains in control: they can edit every field or cancel
  * without creating anything. `onCreated` reports the created workspace's id
  * (e.g. to record a plugin-side association, or to follow up with
  * `useNavigateToWorkspace`).

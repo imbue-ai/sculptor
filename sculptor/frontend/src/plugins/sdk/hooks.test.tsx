@@ -40,13 +40,19 @@ describe("useOpenNewWorkspaceModal", () => {
     });
 
     act(() => {
-      result.current({ initialTitle: "Fix the bug", initialPrompt: "Please fix it", onCreated });
+      result.current({
+        initialTitle: "Fix the bug",
+        initialPrompt: "Please fix it",
+        initialBranchName: "fix/the-bug",
+        onCreated,
+      });
     });
 
     expect(store.get(newWorkspaceModalAtom)).toEqual({
       open: true,
       initialTitle: "Fix the bug",
       initialPrompt: "Please fix it",
+      initialBranchName: "fix/the-bug",
       onWorkspaceCreated: onCreated,
     });
   });
@@ -65,6 +71,7 @@ describe("useOpenNewWorkspaceModal", () => {
     expect(state.open).toBe(true);
     expect(state.initialTitle).toBeUndefined();
     expect(state.initialPrompt).toBeUndefined();
+    expect(state.initialBranchName).toBeUndefined();
     expect(state.onWorkspaceCreated).toBeUndefined();
   });
 });
