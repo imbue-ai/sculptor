@@ -1,7 +1,7 @@
 import { useAtom } from "jotai";
 import { FolderTree } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 
 import { ElementIds } from "~/api";
 import { ResizeHandle } from "~/components/sections/ResizeHandle.tsx";
@@ -9,12 +9,19 @@ import {
   EXPLORER_LIST_MAX_WIDTH_PX,
   EXPLORER_LIST_MIN_WIDTH_PX,
   explorerListWidthAtom,
+  explorerSidebarHiddenAtom,
 } from "~/components/sections/sectionAtoms.ts";
+import type { PanelId } from "~/components/sections/sectionTypes.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 
 import styles from "./ExplorerLayout.module.scss";
 
 type ExplorerLayoutProps = {
+  /**
+   * The panel this scaffold backs ("files" / "changes" / "commits"). Keys the
+   * persisted, per-panel sidebar-visibility state so each panel is independent.
+   */
+  panelId: PanelId;
   /** The master list (file tree / changes browser / commit history). */
   list: ReactNode;
   /**
@@ -37,9 +44,10 @@ type ExplorerLayoutProps = {
  * It takes the list and viewer as slots — there is no shared "active diff"
  * singleton, so each panel embeds its own instance with its own selection.
  */
-export const ExplorerLayout = ({ list, detail }: ExplorerLayoutProps): ReactElement => {
-  // Sidebar visibility is per-instance UI state (each panel can hide its own).
-  const [isSidebarHidden, setIsSidebarHidden] = useState(false);
+export const ExplorerLayout = ({ panelId, list, detail }: ExplorerLayoutProps): ReactElement => {
+  // Sidebar visibility is persisted per panel, so hiding one panel's list
+  // leaves the others alone and the choice survives remounts / workspace switches.
+  const [isSidebarHidden, setIsSidebarHidden] = useAtom(explorerSidebarHiddenAtom(panelId));
 
   const [listWidthPx, setListWidthPx] = useAtom(explorerListWidthAtom);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -54,7 +62,10 @@ export const ExplorerLayout = ({ list, detail }: ExplorerLayoutProps): ReactElem
     return measured ? measured : listWidthPx;
   }, [listWidthPx]);
 
-  const toggleSidebar = useCallback((): void => setIsSidebarHidden((hidden) => !hidden), []);
+  const toggleSidebar = useCallback(
+    (): void => setIsSidebarHidden(!isSidebarHidden),
+    [isSidebarHidden, setIsSidebarHidden],
+  );
 
   // The sidebar toggle lives in the viewer header in both states: solid while
   // the sidebar is visible, dim while collapsed.

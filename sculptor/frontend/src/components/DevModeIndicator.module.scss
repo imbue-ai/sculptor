@@ -6,21 +6,13 @@
 }
 
 .icon {
-  // Sized to sit inline with the version text in the sidebar footer. The image
-  // itself is already recolored on a canvas using the same algorithm as
-  // devIcon.ts, so no CSS filter is needed.
+  // Sized to sit inline with the version text in the sidebar footer. Both the
+  // Electron dock icon and the pre-rendered browser-fallback icon are already
+  // recolored, so no CSS filter is needed.
   display: block;
   flex-shrink: 0;
   height: var(--space-4);
   width: var(--space-4);
-}
-
-.dot {
-  background-color: var(--accent-9);
-  border-radius: 50%;
-  flex-shrink: 0;
-  height: 6px;
-  width: 6px;
 }
 
 .tooltipContent {

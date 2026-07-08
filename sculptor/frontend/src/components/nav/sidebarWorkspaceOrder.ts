@@ -11,15 +11,21 @@ import { workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 
 import type { RepoGroup } from "./SidebarRepoGroup.tsx";
 
-// Group workspaces by repo (project). Every workspace has a projectId, but the
-// project record itself may not have loaded yet — those fall back to an "Other"
-// group name (see the `?? "Other"` below) so nothing disappears.
+// Build the sidebar's repo groups. Seeds a group for every known project first,
+// so a repo with no workspaces still shows (e.g. one just added, before its first
+// workspace is created), then files each workspace under its project. A workspace
+// whose project record hasn't loaded yet falls back to an "Other" group name (see
+// the `?? "Other"` below) so nothing disappears.
 export function groupWorkspacesByRepo(
   workspaces: ReadonlyArray<Workspace>,
   projects: ReadonlyArray<Project>,
 ): ReadonlyArray<RepoGroup> {
   const projectsById = new Map(projects.map((project) => [project.objectId, project]));
   const byProject = new Map<string, Array<Workspace>>();
+  for (const project of projects) {
+    byProject.set(project.objectId, []);
+  }
+
   for (const ws of workspaces) {
     const list = byProject.get(ws.projectId) ?? [];
     list.push(ws);

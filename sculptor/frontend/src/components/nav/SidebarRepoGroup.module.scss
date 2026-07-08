@@ -1,6 +1,4 @@
-// Repo-group styling shared by SidebarRepoGroup and the first-run empty state
-// (SidebarFirstRunState), which renders bare repo headers with these same classes so
-// they match populated groups exactly.
+// Repo-group styling for SidebarRepoGroup.
 
 .repoGroup {
   // A small gap between the repo header and its workspace rows so the focused
@@ -40,21 +38,6 @@
   gap: var(--space-2);
   min-width: 0;
   padding: 0;
-}
-
-// First-run repo headers are inert: no collapse toggle, no actions. Drop the
-// interactive affordances the populated header carries so the row doesn't invite
-// a click that does nothing — no hover highlight and no pointer cursor.
-.repoHeaderStatic {
-  cursor: default;
-
-  &:hover {
-    background: transparent;
-  }
-
-  .repoHeaderButton {
-    cursor: default;
-  }
 }
 
 .repoChevron {

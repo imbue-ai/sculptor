@@ -1,10 +1,12 @@
 import type { Atom, PrimitiveAtom } from "jotai";
 import { atom } from "jotai";
 import { atomFamily } from "jotai/utils";
-import { isEqual } from "lodash";
 
 import type { CodingAgentTaskView, ModelOption, TaskStatus } from "../../../api";
-import { removeTaskSettings } from "./draftAgentSettings.ts";
+
+// The task atoms are legacy read models: the TanStack Query cache is the
+// written store for task state, and useTaskQueryMirror projects it into these
+// atoms for the remaining Jotai readers. Nothing else should write them.
 
 export const taskAtomFamily = atomFamily<string, PrimitiveAtom<CodingAgentTaskView | null>>(() =>
   atom<CodingAgentTaskView | null>(null),
@@ -21,69 +23,6 @@ export const tasksArrayAtom = atom<ReadonlyArray<CodingAgentTaskView> | undefine
     .map((id) => get(taskAtomFamily(id)))
     .filter((task): task is CodingAgentTaskView => task !== null && !task.isDeleted);
 });
-
-export const updateTasksAtom = atom(null, (get, set, updates: Record<string, CodingAgentTaskView>) => {
-  const seenIds = new Set(get(taskIdsAtom));
-  let didIdsChange = false;
-
-  Object.entries(updates).forEach(([id, task]) => {
-    if (task.isDeleted) {
-      if (seenIds.has(id)) {
-        seenIds.delete(id);
-        didIdsChange = true;
-      }
-      set(taskAtomFamily(id), null);
-      removeTaskSettings(id);
-      return;
-    }
-
-    // Skip atom update when the task data hasn't changed to avoid unnecessary re-renders.
-    const current = get(taskAtomFamily(id));
-    if (!isEqual(current, task)) {
-      set(taskAtomFamily(id), task);
-    }
-
-    if (!seenIds.has(id)) {
-      seenIds.add(id);
-      didIdsChange = true;
-    }
-  });
-
-  // Write even when nothing changed if the list is still undefined: every
-  // stream frame carries a task-view map, so the first one — empty in a
-  // zero-task instance — marks the list as loaded. Consumers rely on the
-  // undefined → array transition to tell "still loading" from "no tasks"
-  // (e.g. WorkspacePage's agentless-workspace gate).
-  if (didIdsChange || get(taskIdsAtom) === undefined) {
-    set(taskIdsAtom, Array.from(seenIds));
-  }
-});
-
-export const optimisticDeleteTaskAtom = atom(null, (get, set, taskId: string): CodingAgentTaskView | null => {
-  const task = get(taskAtomFamily(taskId));
-  if (task === null) {
-    return null;
-  }
-  const snapshot = task;
-  set(taskAtomFamily(taskId), null);
-  const currentIds = get(taskIdsAtom) ?? [];
-  set(
-    taskIdsAtom,
-    currentIds.filter((id) => id !== taskId),
-  );
-  return snapshot;
-});
-
-export const rollbackDeleteTaskAtom = atom(
-  null,
-  (get, set, { taskId, snapshot }: { taskId: string; snapshot: CodingAgentTaskView }): void => {
-    set(taskAtomFamily(taskId), snapshot);
-    const currentIds = get(taskIdsAtom) ?? [];
-    if (!currentIds.includes(taskId)) {
-      set(taskIdsAtom, [...currentIds, taskId]);
-    }
-  },
-);
 
 // Fine-grained derived atoms for commonly-read task fields.
 // Components subscribing to these only re-render when the specific field changes.
