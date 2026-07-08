@@ -5,6 +5,7 @@ import { createElement, useRef } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { CodingAgentTaskView, ModelOption } from "../../../api";
+import { ModelCatalogState } from "../../../api";
 import { queryClient, syncTasksToQueryCache } from "../../queryClient.ts";
 import { useTaskAvailableModels, useTaskStatus } from "./useTaskHelpers.ts";
 
@@ -92,14 +93,15 @@ describe("useTaskStatus", () => {
 });
 
 describe("useTaskAvailableModels", () => {
-  it("returns a referentially stable empty list across unrelated updates", async () => {
-    // No backend catalog (Claude): availableModels is absent, so the select must
-    // fall back to the shared EMPTY constant — one stable array identity rather
-    // than a fresh `[]` each frame.
+  it("returns the stable NOT_FETCHED_YET sentinel while the catalog is absent", async () => {
+    // Catalog not fetched yet: availableModels is absent, so the select must fall
+    // back to NOT_FETCHED_YET (a stable primitive) rather than an empty array —
+    // distinguishing "not fetched" from "fetched, empty" is what lets the switcher
+    // show a loading state instead of flashing the login CTA at startup.
     const task = createMockTask({ id: "task-1", availableModels: undefined, status: "RUNNING" });
     await writeTasksAndFlush({ "task-1": task });
 
-    const seen: Array<ReadonlyArray<ModelOption>> = [];
+    const seen: Array<ReadonlyArray<ModelOption> | ModelCatalogState> = [];
     renderHook(
       () => {
         seen.push(useTaskAvailableModels("task-1"));
@@ -110,10 +112,10 @@ describe("useTaskAvailableModels", () => {
 
     await writeTasksAndFlush({ "task-1": { ...task, status: "WAITING" } as CodingAgentTaskView });
 
-    // Every observed value is the same reference (both the absent-data coalesce
-    // and the select fallback return the shared EMPTY constant).
+    // Every observed value is the same sentinel (both the absent-data coalesce
+    // and the select fallback yield NOT_FETCHED_YET).
     const first = seen[0];
-    expect(first).toEqual([]);
+    expect(first).toBe(ModelCatalogState.NOT_FETCHED_YET);
     seen.forEach((value) => expect(value).toBe(first));
   });
 });

@@ -1,6 +1,7 @@
 import { skipToken, useQuery } from "@tanstack/react-query";
 
 import type { CodingAgentTaskView, ModelOption, TaskStatus } from "../../../api";
+import { ModelCatalogState } from "../../../api";
 import { taskQueryKey } from "../../queryClient.ts";
 export { useTask } from "./useTask";
 
@@ -12,11 +13,6 @@ export { useTask } from "./useTask";
 // selector families used to provide. These hooks are the narrow accessors for
 // `harnessCapabilities.<field>`: a mistyped capability key would read
 // `undefined` and gate open, so every capability read goes through one here.
-
-// A stable reference for the "no backend catalog" case (Claude), so the
-// availableModels select keeps one identity across unrelated task updates
-// instead of yielding a fresh array each recompute.
-const EMPTY_MODEL_OPTIONS: ReadonlyArray<ModelOption> = [];
 
 // Subscribe to a single task, projecting one field through `pick`. The cache is
 // subscription-only (`skipToken`), matching useTask; `pick` runs on every cached
@@ -47,9 +43,10 @@ export const useTaskModel = (taskId: string): string | undefined =>
 export const useTaskWorkspaceId = (taskId: string): string | undefined =>
   useTaskField(taskId, (task) => task?.workspaceId ?? undefined);
 
-/** Subscribe to the harness's backend-sourced model list (pi); empty for Claude. */
-export const useTaskAvailableModels = (taskId: string): ReadonlyArray<ModelOption> =>
-  useTaskField(taskId, (task) => task?.availableModels ?? EMPTY_MODEL_OPTIONS);
+/** Subscribe to the harness's backend-sourced model catalog (pi): the fetched
+ *  list (empty for Claude), or NOT_FETCHED_YET while the start-time probe runs. */
+export const useTaskAvailableModels = (taskId: string): ReadonlyArray<ModelOption> | ModelCatalogState =>
+  useTaskField(taskId, (task) => task?.availableModels ?? ModelCatalogState.NOT_FETCHED_YET);
 
 /** Subscribe to the model_id the switcher should show selected for a backend list (pi). */
 export const useTaskSelectedModelId = (taskId: string): string | undefined =>
