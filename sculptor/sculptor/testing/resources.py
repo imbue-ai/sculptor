@@ -127,6 +127,11 @@ def sculptor_instance_empty_first_run_(
     workspace list auto-opens the new-workspace dialog with the
     ``/sculptor:help`` onboarding prompt prefilled. Route Home and wait for the
     dialog so tests start from the settled first-run surface.
+
+    The boot from ``#/ws/new`` sometimes redirects itself to Home (the empty
+    workspace shell falls through), in which case the dialog is already open
+    and the Home click inside ``navigate_to_home_page`` is a same-route no-op —
+    which is why that helper must not dismiss overlays on its way in.
     """
     page = sculptor_instance_.page
     navigate_to_home_page(page)
