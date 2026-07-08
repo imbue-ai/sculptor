@@ -116,13 +116,11 @@ def navigate_to_home_page(page: Page) -> None:
     rail.
     """
     ensure_sidebar_expanded(page)
-    # No Escape guard here, deliberately: with zero workspaces Home auto-opens
-    # the (non-modal) new-workspace dialog, and the app may already be sitting
-    # on Home with it up — an Escape would dismiss the very dialog first-run
-    # callers are about to assert on, and the click below then no-ops on the
-    # same route without remounting Home to re-offer it. Non-modal dialogs
-    # don't intercept the click; callers with a modal dialog up close it
-    # themselves.
+    # No blanket overlay-dismissal here: an open dialog's overlay would block
+    # the click below, but an Escape could equally destroy state a caller is
+    # about to assert on (e.g. the first-run auto-opened dialog, which a
+    # same-route click can't re-offer). Callers with a dialog up close it
+    # themselves before navigating.
     sidebar_home_link = page.get_by_test_id(ElementIDs.SIDEBAR_HOME_LINK)
     expect(sidebar_home_link).to_be_visible()
     sidebar_home_link.click()

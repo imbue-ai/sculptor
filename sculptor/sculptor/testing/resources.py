@@ -41,7 +41,6 @@ from sculptor.testing.packaged_backend_frontend import PackagedBackendFrontend
 from sculptor.testing.packaged_electron_frontend import PackagedElectronFrontend
 from sculptor.testing.playwright_utils import expect_app_not_onboarding
 from sculptor.testing.playwright_utils import navigate_to_frontend
-from sculptor.testing.playwright_utils import navigate_to_home_page
 from sculptor.testing.port_manager import PortManager
 from sculptor.testing.repo_resources import get_test_project_state
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -129,12 +128,15 @@ def sculptor_instance_empty_first_run_(
     dialog so tests start from the settled first-run surface.
 
     The boot from ``#/ws/new`` sometimes redirects itself to Home (the empty
-    workspace shell falls through), in which case the dialog is already open
-    and the Home click inside ``navigate_to_home_page`` is a same-route no-op —
-    which is why that helper must not dismiss overlays on its way in.
+    workspace shell falls through), in which case the auto-opened modal is
+    already up — its overlay would swallow a sidebar click, and dismissing it
+    first would kill the very dialog this fixture waits for (a same-route
+    click doesn't remount Home to re-offer it). Route Home with a hash-only
+    assignment instead: it needs no click, and a same-value assignment is a
+    no-op, so both boot landings converge on Home with the auto-open pending.
     """
     page = sculptor_instance_.page
-    navigate_to_home_page(page)
+    page.evaluate("window.location.hash = '/home'")
     expect(page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)).to_be_visible(timeout=45_000)
     return sculptor_instance_
 

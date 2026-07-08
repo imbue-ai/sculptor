@@ -47,20 +47,12 @@ describe("NewWorkspaceModal", () => {
     expect(screen.getByTestId("stub-form").getAttribute("data-initial-prompt")).toBe("/sculptor:help hello");
   });
 
-  it("renders an explicit open as a modal dialog (with overlay)", () => {
+  it("renders every open as a modal dialog (with overlay)", () => {
+    // The first-run auto-open and the explicit entry points share one modal
+    // look and dismissal behavior — there is no special non-modal variant.
     const store = createStore();
     store.set(newWorkspaceModalAtom, { open: true });
     renderWithProviders(<NewWorkspaceModal />, { store });
     expect(screen.getByTestId(ElementIds.PALETTE_DIALOG_OVERLAY)).toBeTruthy();
-  });
-
-  it("renders a first-run open non-modally (no overlay)", () => {
-    // The auto-open is an offer, not a gate: no overlay, background stays
-    // interactive, so a dialog the user never asked for can't block a click.
-    const store = createStore();
-    store.set(newWorkspaceModalAtom, { open: true, firstRun: true });
-    renderWithProviders(<NewWorkspaceModal />, { store });
-    expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_DIALOG)).toBeTruthy();
-    expect(screen.queryByTestId(ElementIds.PALETTE_DIALOG_OVERLAY)).toBeNull();
   });
 });

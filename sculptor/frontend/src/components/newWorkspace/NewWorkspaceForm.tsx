@@ -49,7 +49,8 @@ type NewWorkspaceFormProps = {
   /**
    * Text to seed the prompt textarea with on mount. Used by the home page's
    * first-run auto-open to default the very first prompt to `/sculptor:help`.
-   * A mount-time snapshot the user can freely edit.
+   * A mount-time snapshot the user can freely edit — what the field shows is
+   * exactly what the first agent receives.
    */
   initialPrompt?: string;
   /** Called after a successful create when "keep open" is off. */
@@ -510,6 +511,10 @@ export const NewWorkspaceForm = ({
             <Button
               onClick={(): void => void handleSubmit()}
               disabled={isSubmitDisabled}
+              // The backend create (worktree + first agent) takes a few
+              // seconds; show that work is happening rather than a silently
+              // disabled button.
+              loading={isCreating}
               aria-label="Create workspace"
               data-testid={ElementIds.NEW_WORKSPACE_CREATE_BUTTON}
               size="2"

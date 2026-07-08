@@ -12,7 +12,7 @@ import { PaletteDialog } from "~/components/PaletteDialog/PaletteDialog.tsx";
  * `newWorkspaceModalAtom`, set by the creation entry points — the Cmd+K command,
  * the Cmd/Meta+T shortcut, the sidebar's New Workspace button, a repo group's
  * "+" (with that repo preset), and the home page's first-run auto-open (with
- * the onboarding prompt preset). Mounted in AppShell, the layout hosting every
+ * the onboarding prompt prefilled). Mounted in AppShell, the layout hosting every
  * page route, so it is reachable everywhere. Renders the PaletteDialog shell
  * around the form, remounting the form on each open (keyed on the preset repo)
  * so its local field state starts fresh from the MRU seed every time.
@@ -45,10 +45,6 @@ export const NewWorkspaceModal = (): ReactElement | undefined => {
       open={modalState.open}
       onOpenChange={handleOpenChange}
       title="New workspace"
-      // The first-run auto-open is an offer, not a gate: it renders without an
-      // overlay so the sidebar and every other affordance stay clickable, and
-      // an open request the user never made can't steal their next click.
-      modal={!modalState.firstRun}
       testId={ElementIds.NEW_WORKSPACE_DIALOG}
     >
       <NewWorkspaceForm

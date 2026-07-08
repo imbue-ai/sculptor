@@ -1,7 +1,9 @@
-import { useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
+import { useEffect } from "react";
 
-import { useFirstRunNewWorkspaceModal } from "~/components/newWorkspace/useFirstRunNewWorkspaceModal.ts";
+import { HOME_PROMPT_PREFILL } from "~/components/newWorkspace/homePromptPrefill.ts";
+import { isWorkspaceListEmptyAtom, newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { pluginHomeViewsAtom } from "~/plugins/pluginRegistry.ts";
 
 import styles from "./HomePage.module.scss";
@@ -13,9 +15,22 @@ export const HomePage = (): ReactElement => {
   const options = useAtomValue(homeViewOptionsAtom);
   const effectiveId = useAtomValue(effectiveHomeViewIdAtom);
   const pluginHomeViews = useAtomValue(pluginHomeViewsAtom);
+  const isWorkspaceListEmpty = useAtomValue(isWorkspaceListEmptyAtom);
+  const setNewWorkspaceModal = useSetAtom(newWorkspaceModalAtom);
 
-  // With no workspaces yet, Home's default state is the create dialog itself.
-  useFirstRunNewWorkspaceModal();
+  // First-run create affordance: with no workspaces yet, Home's default state
+  // is the create dialog itself — an ordinary modal open, dismiss and reopen
+  // like any other — prefilled with the /sculptor:help onboarding prompt.
+  // The prefill lives HERE, in the visible and editable prompt field, so what
+  // the user sees is exactly what their first agent receives — the backend
+  // never authors messages on the user's behalf.
+  // `isWorkspaceListEmptyAtom` stays false while the list is loading, so a
+  // boot with existing workspaces never flashes it.
+  useEffect(() => {
+    if (isWorkspaceListEmpty) {
+      setNewWorkspaceModal({ open: true, initialPrompt: HOME_PROMPT_PREFILL });
+    }
+  }, [isWorkspaceListEmpty, setNewWorkspaceModal]);
 
   // Only surface the switcher once there is something to switch to: with no
   // plugin home views the page is the recent-workspaces list, exactly as before.
