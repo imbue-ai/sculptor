@@ -138,7 +138,11 @@ export const SectionAddPanelControl = ({
       return;
     }
 
-    if (!nextOpen) {
+    if (nextOpen) {
+      // A Radix-driven open (e.g. keyboard, right after a hover-out) must cancel any close
+      // the hover-out scheduled — otherwise that timer fires and closes the just-opened menu.
+      clearCloseTimer();
+    } else {
       pinnedRef.current = false;
       clearTooltipTimer();
       setIsTooltipOpen(false);
