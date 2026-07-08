@@ -90,6 +90,31 @@ def test_cycle_sections_pulses_ring(sculptor_instance_: SculptorInstance) -> Non
     expect(right_ring).to_have_attribute("data-active", "true")
 
 
+@user_story("to focus a section when I toggle it open")
+def test_toggling_section_open_focuses_it_and_pulses_ring(sculptor_instance_: SculptorInstance) -> None:
+    """Toggling a collapsed section open makes it the active section and pulses its ring."""
+    page = sculptor_instance_.page
+
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Toggle Open Focus WS")
+    center = PlaywrightWorkspaceSection(page, "center")
+    right = PlaywrightWorkspaceSection(page, "right")
+
+    # The right section starts collapsed. Make the center active first so the toggle
+    # has to move the active section for the assertion to mean anything.
+    center.get_active_tab().click()
+    expect(center.get_active_ring()).to_have_attribute("data-active", "true")
+
+    # Toggle the right section open via its keyboard shortcut -> it becomes the active
+    # section and its ring pulses visible (a deliberate jump, like the section-cycle).
+    toggle_section_via_hotkey(page, "right")
+    right_ring = right.get_active_ring()
+    # Assert the ring pulse FIRST — data-ring-visible clears after RING_VISIBLE_MS, so
+    # it must be caught before the fade; data-active persists and is checked after.
+    expect(right_ring).to_have_attribute("data-ring-visible", "true")
+    expect(right_ring).to_have_attribute("data-active", "true")
+    expect(center.get_active_ring()).not_to_have_attribute("data-active", "true")
+
+
 @user_story("to maximize a section so it covers the workspace content")
 def test_maximize_hides_workspace_header_and_restore(sculptor_instance_: SculptorInstance) -> None:
     """Maximizing hides the workspace header but keeps the section header; restore brings it back."""
