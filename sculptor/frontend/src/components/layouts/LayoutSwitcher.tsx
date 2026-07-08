@@ -125,6 +125,13 @@ export const LayoutSwitcher = (): ReactElement => {
 
   const close = useCallback((): void => setOpen(false), [setOpen]);
 
+  // Opening the save dialog closes the switcher so the two don't stack on the
+  // same centered shell.
+  const openSave = useCallback((): void => {
+    setSaveOpen(true);
+    close();
+  }, [setSaveOpen, close]);
+
   // ── Actions ────────────────────────────────────────────────────────────────
   const apply = useCallback(
     (layout: SavedLayout): void => {
@@ -342,7 +349,7 @@ export const LayoutSwitcher = (): ReactElement => {
       if (isMod && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "s") {
         event.preventDefault();
         event.stopPropagation();
-        setSaveOpen(true);
+        openSave();
         return;
       }
 
@@ -416,7 +423,7 @@ export const LayoutSwitcher = (): ReactElement => {
 
     window.addEventListener("keydown", handler, { capture: true });
     return (): void => window.removeEventListener("keydown", handler, { capture: true });
-  }, [apply, applyAndTidy, cancelRename, close, deleteLayout, openPopover, setSaveOpen]);
+  }, [apply, applyAndTidy, cancelRename, close, deleteLayout, openPopover, openSave]);
 
   // Focus the search input on open, and the rename input when a rename starts.
   useEffect(() => {
@@ -481,7 +488,7 @@ export const LayoutSwitcher = (): ReactElement => {
           size="1"
           color="gray"
           className={styles.barButton}
-          onClick={() => setSaveOpen(true)}
+          onClick={openSave}
           data-testid={ElementIds.LAYOUTS_SWITCHER_SAVE_BUTTON}
         >
           <Plus size={13} />

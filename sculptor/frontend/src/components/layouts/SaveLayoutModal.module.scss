@@ -1,0 +1,148 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-5) var(--space-4);
+}
+
+.titleInput {
+  background: transparent;
+  border: none;
+  color: var(--gray-12);
+  font-size: var(--font-size-6);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.005em;
+  line-height: 1.25;
+  outline: none;
+  padding: 0;
+  width: 100%;
+
+  &::placeholder {
+    color: var(--gray-9);
+  }
+}
+
+.caption {
+  color: var(--gray-10);
+  font-size: var(--font-size-2);
+}
+
+// Mini preview: solid cells = saved (static) panels; dashed = agents/terminals,
+// which a layout never touches.
+.preview {
+  border: 1px solid var(--gray-a4);
+  border-radius: var(--radius-3);
+  display: grid;
+  gap: var(--space-1);
+  grid-template:
+    "l c r" 1fr "l b r" 30px / 26% 1fr 20%;
+  height: 168px;
+  padding: var(--space-1);
+}
+
+.cell {
+  border-radius: var(--radius-2);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cellSaved {
+  background: var(--gray-a2);
+  border: 1px solid var(--gray-a5);
+}
+
+.cellStays {
+  border: 1px dashed var(--gray-a5);
+}
+
+.cellLeft {
+  grid-area: l;
+}
+
+.cellCenter {
+  grid-area: c;
+}
+
+.cellRight {
+  grid-area: r;
+}
+
+.cellBottom {
+  align-items: center;
+  flex-direction: row;
+  grid-area: b;
+  justify-content: center;
+}
+
+.cellTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: var(--space-2);
+}
+
+.tab {
+  background: var(--gray-a3);
+  border-radius: var(--radius-1);
+  color: var(--gray-11);
+  font-size: var(--font-size-1);
+  padding: 2px var(--space-2);
+  white-space: nowrap;
+}
+
+.tabActive {
+  background: var(--gray-a5);
+  color: var(--gray-12);
+}
+
+.fill {
+  align-items: center;
+  color: var(--gray-9);
+  display: flex;
+  flex: 1;
+  font-size: var(--font-size-1);
+  gap: var(--space-2);
+  justify-content: center;
+
+  svg {
+    color: var(--gray-8);
+  }
+}
+
+.legend {
+  color: var(--gray-9);
+  font-size: var(--font-size-1);
+}
+
+.footer {
+  align-items: center;
+  border-top: 1px solid var(--gray-a3);
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-3);
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+}
+
+.switchLabel {
+  align-items: center;
+  color: var(--gray-10);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: var(--font-size-1);
+  gap: var(--space-2);
+  user-select: none;
+}
+
+.footerRight {
+  align-items: center;
+  display: flex;
+  gap: var(--space-3);
+}
+
+.saveHint {
+  color: var(--gray-8);
+  font-size: var(--font-size-1);
+}
