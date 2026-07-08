@@ -22,3 +22,37 @@
 
   @include thin-scrollbar;
 }
+
+// Floating "+" Spotlight button shown alongside a hovered or pinned line in
+// the Pierre diff/file viewer. Fixed-positioned at the line gutter, outside
+// the shadow DOM so it can receive React events.
+.spotlightButton {
+  align-items: center;
+  background: var(--accent-9);
+  border: none;
+  border-radius: var(--radius-full);
+  color: var(--accent-contrast);
+  cursor: pointer;
+  display: flex;
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-medium);
+  height: 20px;
+  justify-content: center;
+  line-height: 1;
+  opacity: 85%;
+  padding: 0;
+  pointer-events: auto;
+  transition: opacity var(--duration-fast) ease;
+  user-select: none;
+  width: 20px;
+  z-index: var(--z-dropdown);
+
+  &:hover {
+    background: var(--accent-10);
+    opacity: 100%;
+  }
+
+  &:active {
+    background: var(--accent-11);
+  }
+}

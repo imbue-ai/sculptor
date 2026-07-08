@@ -9,7 +9,7 @@ import type { DiffSelection } from "~/pages/workspace/components/diffViewer/type
 import { getUncommittedFileStatusMap } from "~/pages/workspace/panels/fileBrowser/atoms.ts";
 import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
 
-import type { DiffPanelTabState, DiffScope, DiffTab, SingleFileDiffTab } from "./types.ts";
+import type { DiffPanelTabState, DiffScope, DiffTab, SingleFileDiffTab, SpotlightData } from "./types.ts";
 import { COMMIT_DIFF_PREFIX, FILE_VIEW_PREFIX, TARGET_BRANCH_DIFF_PREFIX } from "./types.ts";
 
 // The single-instance panel (and its default section) that hosts the active diff/
@@ -28,6 +28,17 @@ export const diffScopeAtomFamily = atomFamily((_workspaceId: string) => atom<Dif
 
 /** Ratio (0–100) controlling the left/right column split in side-by-side diffs. */
 export const splitDiffColumnRatioAtom = atom(50);
+
+/**
+ * Cross-panel spotlight insertion: set by PierreDiffView when the user clicks
+ * the `+` button on a line, consumed by ChatInput which inserts the mention
+ * node into the TipTap editor and then resets the atom to null.
+ *
+ * This is the same pattern as `openFileViewTabAtom` — a write-once / read-once
+ * signal between a trigger surface (the diff pane) and the actor that owns the
+ * target (the chat input). No prop threading through the component tree.
+ */
+export const spotlightInsertAtom = atom<SpotlightData | null>(null);
 
 const DEFAULT_DIFF_PANEL_TAB_STATE: DiffPanelTabState = {
   activeTab: null,

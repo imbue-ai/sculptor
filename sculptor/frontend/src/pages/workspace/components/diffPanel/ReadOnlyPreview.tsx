@@ -1,9 +1,9 @@
 import type { FileOptions, SupportedLanguages } from "@pierre/diffs";
 import { File as PierreFile } from "@pierre/diffs/react";
 import { Flex, Text } from "@radix-ui/themes";
-import { useAtomValue } from "jotai";
-import type { ReactElement } from "react";
-import { useLayoutEffect, useMemo, useRef } from "react";
+import { useAtomValue, useSetAtom } from "jotai";
+import type { MouseEvent as ReactMouseEvent, ReactElement } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 
 import { ElementIds } from "~/api";
@@ -22,7 +22,8 @@ import {
 import { VerticalOverlayScrollbar } from "~/components/VerticalOverlayScrollbar.tsx";
 
 import type { MarkdownRenderMode } from "./atoms.ts";
-import { isMarkdownPath, markdownRenderModeAtom } from "./atoms.ts";
+import { isMarkdownPath, markdownRenderModeAtom, spotlightInsertAtom } from "./atoms.ts";
+import pierreStyles from "./PierreDiffView.module.scss";
 import {
   adoptPierreOverrideSheet,
   createPierreOverrideSheet,
@@ -30,20 +31,19 @@ import {
 } from "./pierreShadowStyles.ts";
 import styles from "./ReadOnlyPreview.module.scss";
 import { StickyHorizontalScrollbar } from "./StickyHorizontalScrollbar.tsx";
+import type { SpotlightData } from "./types.ts";
 import { usePierreHighlighterReady } from "./usePierreHighlighterReady.ts";
+import { useSpotlightCapture } from "./useSpotlightCapture.ts";
 
-// react-markdown hands its components map a renderer-internal `node` prop
-// alongside the regular HTML attributes. We deliberately destructure only
-// the documented props (no `...rest` spread) — otherwise React serialises
-// `node` as `node="[object Object]"` in the DOM. `MarkdownAnchor` itself
-// holds the link-routing contract (target=_blank for external, click
-// preventDefault for fragment / relative).
-const READ_ONLY_PREVIEW_COMPONENTS: Components = {
-  a: ({ children, href, title }) => (
-    <MarkdownAnchor href={href} title={title}>
-      {children}
-    </MarkdownAnchor>
-  ),
+type ReadOnlyPreviewProps = {
+  workspaceId: string;
+  filePath: string;
+  /** When set, wins over the persisted global render-mode preference — used by
+   *  the quick-open-rendered-markdown path so one explicit open never rewrites
+   *  the preference itself. */
+  renderModeOverride?: MarkdownRenderMode;
+  /** Enables spotlight capture on code files (skipped for rendered markdown). */
+  spotlightScope?: SpotlightData["scope"];
 };
 
 // The shared Pierre background override plus the native-scrollbar hide (this
@@ -99,16 +99,26 @@ const getLanguageFromPath = (filePath: string): SupportedLanguages | undefined =
   return EXTENSION_LANGUAGE_MAP[ext];
 };
 
-type ReadOnlyPreviewProps = {
-  workspaceId: string;
-  filePath: string;
-  /** When set, wins over the persisted global render-mode preference — used by
-   *  the quick-open-rendered-markdown path so one explicit open never rewrites
-   *  the preference itself. */
-  renderModeOverride?: MarkdownRenderMode;
+// react-markdown hands its components map a renderer-internal `node` prop
+// alongside the regular HTML attributes. We deliberately destructure only
+// the documented props (no `...rest` spread) — otherwise React serialises
+// `node` as `node="[object Object]"` in the DOM. `MarkdownAnchor` itself
+// holds the link-routing contract (target=_blank for external, click
+// preventDefault for fragment / relative).
+const READ_ONLY_PREVIEW_COMPONENTS: Components = {
+  a: ({ children, href, title }) => (
+    <MarkdownAnchor href={href} title={title}>
+      {children}
+    </MarkdownAnchor>
+  ),
 };
 
-export const ReadOnlyPreview = ({ workspaceId, filePath, renderModeOverride }: ReadOnlyPreviewProps): ReactElement => {
+export const ReadOnlyPreview = ({
+  workspaceId,
+  filePath,
+  renderModeOverride,
+  spotlightScope = "file-view",
+}: ReadOnlyPreviewProps): ReactElement => {
   const { data: content, isPending, isError: hasError } = useWorkspaceFileContent(workspaceId, filePath, null);
   const overflow = useAtomValue(fileBrowserLineWrappingAtom);
   const appTheme = useAtomValue(appThemeAtom);
@@ -165,6 +175,54 @@ export const ReadOnlyPreview = ({ workspaceId, filePath, renderModeOverride }: R
     () => (shouldRenderMarkdown && content != null ? parseFrontmatter(content) : null),
     [shouldRenderMarkdown, content],
   );
+
+  // --- Spotlight capture (code-view branch only) --------------------------
+  const setSpotlight = useSetAtom(spotlightInsertAtom);
+  const spotlight = useSpotlightCapture({
+    containerRef: pierreRef,
+    isHighlighterReady,
+  });
+
+  const handleSpotlightCommit = useCallback((): void => {
+    const lineStart = spotlight.dragEndLine ?? spotlight.dragStartLine ?? spotlight.hoveredLine?.line;
+    const lineEnd = spotlight.dragEndLine ?? spotlight.dragStartLine ?? spotlight.hoveredLine?.line;
+    if (lineStart === null || lineStart === undefined || lineEnd === null || lineEnd === undefined) return;
+    const start = Math.min(lineStart, lineEnd);
+    const end = Math.max(lineStart, lineEnd);
+    const capture = spotlight.resolveCapture(filePath, start, end);
+    if (!capture) return;
+    setSpotlight({
+      file: filePath,
+      lineStart: start,
+      lineEnd: end,
+      side: null,
+      snippet: capture.snippet,
+      snippetCapturedAt: new Date().toISOString(),
+      scope: spotlightScope,
+    });
+  }, [spotlight, filePath, spotlightScope, setSpotlight]);
+
+  const handleSpotlightButtonMouseDown = useCallback(
+    (e: ReactMouseEvent): void => {
+      spotlight.onButtonMouseDown(e);
+    },
+    [spotlight],
+  );
+
+  const handleSpotlightButtonMouseUp = useCallback(
+    (e: ReactMouseEvent): void => {
+      spotlight.onButtonMouseUp(e);
+      if (!spotlight.isDragging) {
+        handleSpotlightCommit();
+      }
+    },
+    [spotlight, handleSpotlightCommit],
+  );
+
+  const activeLine = spotlight.hoveredLine?.line ?? null;
+  const activeRect = spotlight.hoveredLine?.rect;
+  const isSpotlightButtonVisible = activeLine !== null && activeRect && isHighlighterReady;
+  // --- end Spotlight capture ----------------------------------------------
 
   if (isPending) {
     return (
@@ -248,6 +306,23 @@ export const ReadOnlyPreview = ({ workspaceId, filePath, renderModeOverride }: R
   return (
     <div className={styles.wrapper} data-testid={ElementIds.READ_ONLY_PREVIEW}>
       <div ref={containerRef} className={styles.container}>
+        {isSpotlightButtonVisible && (
+          <button
+            type="button"
+            data-testid={ElementIds.SPOTLIGHT_LINE_HOVER_BUTTON}
+            className={pierreStyles.spotlightButton}
+            style={{
+              position: "fixed",
+              left: `${activeRect.left - 28}px`,
+              top: `${activeRect.top + activeRect.height / 2 - 10}px`,
+              opacity: spotlight.isDragging ? 1 : undefined,
+            }}
+            onMouseDown={handleSpotlightButtonMouseDown}
+            onMouseUp={handleSpotlightButtonMouseUp}
+          >
+            +
+          </button>
+        )}
         <div ref={pierreRef}>
           <PierreFile file={fileContents} options={fileOptions} />
         </div>

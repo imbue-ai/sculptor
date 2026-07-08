@@ -1,15 +1,22 @@
 import type { FileDiffMetadata, FileDiffOptions } from "@pierre/diffs";
 import { getSingularPatch, processFile } from "@pierre/diffs";
 import { FileDiff, PatchDiff } from "@pierre/diffs/react";
-import { useAtomValue } from "jotai";
-import type { CSSProperties, ErrorInfo, ReactElement, ReactNode, RefObject } from "react";
+import { useAtomValue, useSetAtom } from "jotai";
+import type {
+  CSSProperties,
+  ErrorInfo,
+  MouseEvent as ReactMouseEvent,
+  ReactElement,
+  ReactNode,
+  RefObject,
+} from "react";
 import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
 import { ElementIds } from "~/api";
 import { themeCodeThemeAtom } from "~/common/state/atoms/themeBuilder.ts";
 import { getShikiThemes } from "~/common/theme/shikiThemes.ts";
 
-import { splitDiffColumnRatioAtom } from "./atoms.ts";
+import { splitDiffColumnRatioAtom, spotlightInsertAtom } from "./atoms.ts";
 import styles from "./PierreDiffView.module.scss";
 import {
   adoptPierreOverrideSheet,
@@ -18,8 +25,9 @@ import {
 } from "./pierreShadowStyles.ts";
 import { SplitDiffHandle } from "./SplitDiffHandle.tsx";
 import { StickyHorizontalScrollbar } from "./StickyHorizontalScrollbar.tsx";
-import type { DiffViewType } from "./types.ts";
+import type { DiffViewType, SpotlightData } from "./types.ts";
 import { usePierreHighlighterReady } from "./usePierreHighlighterReady.ts";
+import { useSpotlightCapture } from "./useSpotlightCapture.ts";
 
 type PierreDiffViewProps = {
   diffString: string;
@@ -37,6 +45,14 @@ type PierreDiffViewProps = {
    * multiple diffs (e.g. the combined "Review all" view).
    */
   hideHandle?: boolean;
+  /** The file path this diff/file view is showing. Enables spotlight capture. */
+  spotlightFile?: string;
+  /** Which diff side the view is anchored to, if any (null for plain file views). */
+  spotlightSide?: "old" | "new" | null;
+  /** Which pane the spotlight capture came from — drives the system-reminder shape. Defaults to "file-view". */
+  spotlightScope?: SpotlightData["scope"];
+  /** Commit hash — set only when scope is "commit-diff". */
+  spotlightCommitRef?: string;
 };
 
 /**
@@ -109,6 +125,10 @@ export const PierreDiffView = ({
   oldLines,
   newLines,
   hideHandle = false,
+  spotlightFile,
+  spotlightSide,
+  spotlightScope = "file-view",
+  spotlightCommitRef,
 }: PierreDiffViewProps): ReactElement => {
   const splitRatio = useAtomValue(splitDiffColumnRatioAtom);
   const codeTheme = useAtomValue(themeCodeThemeAtom);
@@ -227,6 +247,58 @@ export const PierreDiffView = ({
 
   const hasScrollbar = overflow === "scroll";
 
+  // --- Spotlight capture --------------------------------------------------
+  const setSpotlight = useSetAtom(spotlightInsertAtom);
+  const spotlight = useSpotlightCapture({
+    containerRef: pierreRef,
+    isHighlighterReady,
+  });
+
+  const handleSpotlightCommit = useCallback((): void => {
+    if (!spotlightFile) return;
+    const lineStart = spotlight.dragEndLine ?? spotlight.dragStartLine ?? spotlight.hoveredLine?.line;
+    const lineEnd = spotlight.dragEndLine ?? spotlight.dragStartLine ?? spotlight.hoveredLine?.line;
+    if (lineStart === null || lineStart === undefined || lineEnd === null || lineEnd === undefined) return;
+    const start = Math.min(lineStart, lineEnd);
+    const end = Math.max(lineStart, lineEnd);
+    const capture = spotlight.resolveCapture(spotlightFile, start, end);
+    if (!capture) return;
+    setSpotlight({
+      file: spotlightFile,
+      lineStart: start,
+      lineEnd: end,
+      side: spotlightSide ?? null,
+      snippet: capture.snippet,
+      snippetCapturedAt: new Date().toISOString(),
+      scope: spotlightScope,
+      commitRef: spotlightCommitRef,
+    });
+  }, [spotlight, spotlightFile, spotlightSide, spotlightScope, spotlightCommitRef, setSpotlight]);
+
+  const activeLine = spotlight.hoveredLine?.line ?? null;
+  const activeRect = spotlight.hoveredLine?.rect;
+
+  const isSpotlightButtonVisible =
+    spotlightFile !== undefined && activeLine !== null && activeRect && isHighlighterReady;
+
+  const handleSpotlightButtonMouseDown = useCallback(
+    (e: ReactMouseEvent): void => {
+      spotlight.onButtonMouseDown(e);
+    },
+    [spotlight],
+  );
+
+  const handleSpotlightButtonMouseUp = useCallback(
+    (e: ReactMouseEvent): void => {
+      spotlight.onButtonMouseUp(e);
+      if (!spotlight.isDragging) {
+        handleSpotlightCommit();
+      }
+    },
+    [spotlight, handleSpotlightCommit],
+  );
+  // --- end Spotlight capture ----------------------------------------------
+
   return (
     <div ref={wrapperRef} className={styles.splitWrapper} style={splitStyle}>
       <div className={styles.scrollColumn}>
@@ -234,6 +306,23 @@ export const PierreDiffView = ({
           className={`${styles.container} ${className ?? ""}`}
           data-testid={viewType === "unified" ? ElementIds.DIFF_VIEW_UNIFIED : ElementIds.DIFF_VIEW_SPLIT}
         >
+          {isSpotlightButtonVisible && (
+            <button
+              type="button"
+              data-testid={ElementIds.SPOTLIGHT_LINE_HOVER_BUTTON}
+              className={styles.spotlightButton}
+              style={{
+                position: "fixed",
+                left: `${activeRect.left - 28}px`,
+                top: `${activeRect.top + activeRect.height / 2 - 10}px`,
+                opacity: spotlight.isDragging ? 1 : undefined,
+              }}
+              onMouseDown={handleSpotlightButtonMouseDown}
+              onMouseUp={handleSpotlightButtonMouseUp}
+            >
+              +
+            </button>
+          )}
           <div ref={pierreRef}>
             {isHighlighterReady &&
               (fileDiffMetadata ? (

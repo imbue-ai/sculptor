@@ -1,7 +1,7 @@
 import { Flex, Text } from "@radix-ui/themes";
 import classnames from "classnames";
 import { useAtomValue, useSetAtom } from "jotai";
-import { Folder } from "lucide-react";
+import { Folder, Highlighter } from "lucide-react";
 import type { ComponentType, ElementType, MouseEvent, ReactElement, ReactNode } from "react";
 import { createElement, useCallback } from "react";
 import { useParams } from "react-router-dom";
@@ -69,6 +69,13 @@ export type MentionChipProps =
       entityType: EntityType;
       entityId: string;
       entityDisplayName: string;
+    } & SharedChipProps)
+  | ({
+      kind: "spotlight";
+      file: string;
+      lineStart: number;
+      lineEnd: number;
+      side: "old" | "new" | null;
     } & SharedChipProps);
 
 type WrapperElement = NonNullable<SharedChipProps["wrapperElement"]>;
@@ -239,6 +246,95 @@ const FileMentionChip = ({
   );
 };
 
+const spotlightLabel = (file: string, lineStart: number, lineEnd: number, side: "old" | "new" | null): string => {
+  const range = lineStart === lineEnd ? `${lineStart}` : `${lineStart}-${lineEnd}`;
+  return side ? `${file}:${range} (${side})` : `${file}:${range}`;
+};
+
+const SpotlightMentionChip = ({
+  file,
+  lineStart,
+  lineEnd,
+  side,
+  Wrapper,
+  wrapperProps,
+  selected,
+  suppressHover,
+}: {
+  file: string;
+  lineStart: number;
+  lineEnd: number;
+  side: "old" | "new" | null;
+  Wrapper: WrapperElement;
+  wrapperProps?: Record<string, unknown>;
+  selected?: boolean;
+  suppressHover?: boolean;
+}): ReactElement => {
+  const { workspaceID } = useParams<{ workspaceID?: string }>();
+  const openFileViewTab = useSetAtom(openFileViewTabAtom);
+  const isClickable = Boolean(workspaceID);
+  const label = spotlightLabel(file, lineStart, lineEnd, side);
+
+  const handleClick = useCallback(
+    (e: MouseEvent) => {
+      if (!workspaceID) return;
+      e.stopPropagation();
+      openFileViewTab({ workspaceId: workspaceID, filePath: file });
+    },
+    [file, workspaceID, openFileViewTab],
+  );
+
+  return (
+    <ChipHoverCard
+      selected={selected}
+      suppressHover={suppressHover}
+      trigger={
+        <Wrapper
+          {...wrapperProps}
+          className={classnames(isClickable ? styles.clickableMention : styles.mention, entityStyles.spotlightChip)}
+          data-testid={ElementIds.SPOTLIGHT_CHIP}
+          onClick={isClickable ? handleClick : undefined}
+          aria-disabled={isClickable ? undefined : true}
+        >
+          <Highlighter style={ICON_STYLE} />
+          <span className={styles.fileLabel}>{label}</span>
+        </Wrapper>
+      }
+      content={
+        <Flex
+          direction="column"
+          gap="1"
+          style={{
+            padding: "var(--space-1) var(--space-2)",
+            maxWidth: "min(720px, var(--radix-popper-available-width, 100vw))",
+            minWidth: 0,
+          }}
+        >
+          <Flex align="start" gap="1" style={{ minWidth: 0 }}>
+            <Highlighter style={{ ...ICON_STYLE, flexShrink: 0, color: "var(--gray-12)", marginTop: "2px" }} />
+            <Text
+              as="div"
+              size="1"
+              style={{
+                fontFamily: "var(--code-font-family)",
+                color: "var(--gray-12)",
+                minWidth: 0,
+                wordBreak: "break-all",
+              }}
+            >
+              {label}
+            </Text>
+          </Flex>
+          <Text as="div" size="1" style={{ color: "var(--gray-10)" }}>
+            Click to open at line {lineStart === lineEnd ? lineStart : `${lineStart}-${lineEnd}`}
+            {side && ` (${side})`}
+          </Text>
+        </Flex>
+      }
+    />
+  );
+};
+
 // Per-entity-type detail pane, used both as this chip's HoverCard content and
 // as the entity picker's right-hand pane. Keeping the routing in one place
 // here means a future fourth entity type is a single-switch change.
@@ -347,7 +443,7 @@ const EntityMentionChip = ({
 // `kind` is optional for file / skill callers because the legacy call sites
 // pass only an `id` string; inferring from the leading character preserves
 // back-compat with zero caller churn.
-const resolveKind = (props: MentionChipProps): "file" | "skill" | "entity" => {
+const resolveKind = (props: MentionChipProps): "file" | "skill" | "entity" | "spotlight" => {
   if (props.kind !== undefined) return props.kind;
   return "id" in props && props.id.startsWith("/") ? "skill" : "file";
 };
@@ -355,6 +451,22 @@ const resolveKind = (props: MentionChipProps): "file" | "skill" | "entity" => {
 export const MentionChip = (props: MentionChipProps): ReactElement => {
   const Wrapper = (props.wrapperElement ?? "span") as WrapperElement;
   const kind = resolveKind(props);
+
+  if (kind === "spotlight") {
+    const spotlightProps = props as Extract<MentionChipProps, { kind: "spotlight" }>;
+    return (
+      <SpotlightMentionChip
+        file={spotlightProps.file}
+        lineStart={spotlightProps.lineStart}
+        lineEnd={spotlightProps.lineEnd}
+        side={spotlightProps.side}
+        Wrapper={Wrapper}
+        wrapperProps={spotlightProps.wrapperProps}
+        selected={spotlightProps.selected}
+        suppressHover={spotlightProps.suppressHover}
+      />
+    );
+  }
 
   if (kind === "entity") {
     const entityProps = props as Extract<MentionChipProps, { kind: "entity" }>;

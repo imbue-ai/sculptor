@@ -77,6 +77,11 @@ import { FileUpload } from "../../../components/FileUpload.tsx";
 import { Toast, type ToastContent, ToastType } from "../../../components/Toast.tsx";
 import { TooltipIconButton } from "../../../components/TooltipIconButton.tsx";
 import { SettingsSection } from "../../settings/sections.ts";
+import {
+  buildSpotlightSystemReminder,
+  extractSpotlightsFromMarkdown,
+} from "../components/chat-alpha/spotlightUtils.ts";
+import { spotlightInsertAtom } from "../components/diffPanel/atoms.ts";
 import { stripHtml } from "../utils/utils.ts";
 import styles from "./ChatInput.module.scss";
 
@@ -381,10 +386,16 @@ export const ChatInput = ({
     setIsSending(true);
     setLastSendError(null);
     try {
+      let message = promptDraft?.replace(/\u200B/g, "\u00A0").replace(/(\n\n\u00A0)+$/, "");
+      const spotlights = extractSpotlightsFromMarkdown(promptDraft ?? "");
+      const reminder = buildSpotlightSystemReminder(spotlights);
+      if (reminder && message) {
+        message = `${reminder}\n${message}`;
+      }
       await sendWorkspaceAgentMessages({
         path: { workspace_id: workspaceID, agent_id: taskID },
         body: {
-          message: promptDraft?.replace(/\u200B/g, "\u00A0").replace(/(\n\n\u00A0)+$/, ""),
+          message,
           model: localModel,
           files: attachedFiles,
           // The plan-mode toggle is gated (disabled-with-tooltip) for harnesses
@@ -651,6 +662,49 @@ export const ChatInput = ({
       insertSkillRef.current = null;
     };
   }, [insertSkillRef, editorRef]);
+
+  // Subscribe to spotlightInsertAtom: when PierreDiffView fires a capture,
+  // insert the spotlight mention node at the current cursor position and
+  // clear the atom. Cross-panel pattern — same shape as openFileViewTabAtom.
+  const spotlightData = useAtomValue(spotlightInsertAtom);
+  const setSpotlightData = useSetAtom(spotlightInsertAtom);
+
+  useEffect(() => {
+    if (!spotlightData) return;
+    const editor = editorRef.current;
+    if (!editor) return;
+    const range =
+      spotlightData.lineStart === spotlightData.lineEnd
+        ? `${spotlightData.lineStart}`
+        : `${spotlightData.lineStart}-${spotlightData.lineEnd}`;
+    const label = spotlightData.side
+      ? `${spotlightData.file}:${range} (${spotlightData.side})`
+      : `${spotlightData.file}:${range}`;
+    editor
+      .chain()
+      .focus()
+      .insertContent([
+        {
+          type: "mention",
+          attrs: {
+            id: label,
+            label,
+            mentionSuggestionChar: "!",
+            spotlightFile: spotlightData.file,
+            spotlightLineStart: String(spotlightData.lineStart),
+            spotlightLineEnd: String(spotlightData.lineEnd),
+            spotlightSide: spotlightData.side ?? null,
+            spotlightSnippet: spotlightData.snippet,
+            spotlightSnippetCapturedAt: spotlightData.snippetCapturedAt,
+            spotlightScope: spotlightData.scope,
+            spotlightCommitRef: spotlightData.commitRef ?? null,
+          },
+        },
+        { type: "text", text: " " },
+      ])
+      .run();
+    setSpotlightData(null);
+  }, [spotlightData, editorRef, setSpotlightData]);
 
   // Seed the per-task stored preferences from the user default the first
   // time this task is seen after userConfig has loaded. Once set, user

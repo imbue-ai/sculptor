@@ -53,3 +53,36 @@ export type DiffPanelTabState = {
 export type DiffViewType = "unified" | "split";
 
 export type DiffScope = "uncommitted" | "vs-target-branch";
+
+/**
+ * Which pane a spotlight was captured from. Drives both the diff side semantics
+ * and the shape of the agent-facing system-reminder (a file-view spotlight has
+ * no diff context; a commit-diff spotlight carries a `git show <hash>` hint).
+ */
+export type SpotlightScope = "file-view" | "uncommitted-diff" | "target-branch-diff" | "commit-diff";
+
+/**
+ * A line-level reference the user "spotlights" on a diff or file pane. It is a
+ * pure pointer + a snapshot of what was there at capture time — any prose the
+ * user types around the resulting chip is just their prompt, not owned by the
+ * spotlight. One schema, two consumers: the front-end renders the chip from it,
+ * and the send path expands it into a `<system-reminder>` for the agent.
+ */
+export type SpotlightData = {
+  /** Repo-relative file path. */
+  file: string;
+  /** First selected line (1-based). */
+  lineStart: number;
+  /** Last selected line (equals `lineStart` for a single-line spotlight). */
+  lineEnd: number;
+  /** Diff side; `null` for a plain file view (no old/new distinction). */
+  side: "old" | "new" | null;
+  /** Literal line content captured at click time — the anchor-drift defense. */
+  snippet: string;
+  /** ISO 8601 timestamp of the capture moment. */
+  snippetCapturedAt: string;
+  /** Which pane the capture came from. */
+  scope: SpotlightScope;
+  /** Commit hash — set only when `scope === "commit-diff"`. */
+  commitRef?: string;
+};

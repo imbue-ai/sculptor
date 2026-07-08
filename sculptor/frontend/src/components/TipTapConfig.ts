@@ -215,6 +215,41 @@ export const createTipTapExtensions = ({
             renderHTML: (attributes: Record<string, unknown>): Record<string, string> =>
               attributes.entityDisplayName ? { "data-entity-display-name": String(attributes.entityDisplayName) } : {},
           },
+          // Spotlight chip attrs — serialized as data-spotlight-* on the
+          // `<span data-sculptor-node>` wrapper, parsed back into the Mention
+          // node on draft restore. Snippet escapes HTML via `escapeHtmlAttr`.
+          spotlightFile: {
+            default: null,
+            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-file"),
+          },
+          spotlightLineStart: {
+            default: null,
+            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-line-start"),
+          },
+          spotlightLineEnd: {
+            default: null,
+            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-line-end"),
+          },
+          spotlightSide: {
+            default: null,
+            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-side"),
+          },
+          spotlightSnippet: {
+            default: null,
+            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-snippet"),
+          },
+          spotlightSnippetCapturedAt: {
+            default: null,
+            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-snippet-captured-at"),
+          },
+          spotlightScope: {
+            default: null,
+            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-scope"),
+          },
+          spotlightCommitRef: {
+            default: null,
+            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-commit-ref"),
+          },
         };
       },
       addNodeView() {
@@ -246,19 +281,23 @@ export const createTipTapExtensions = ({
           const attrs = selection.node.attrs;
           const id = attrs.id;
           const entityType = attrs.entityType;
+          // Spotlight chips are always clickable (open the file at line).
+          const isSpotlight = typeof attrs.spotlightFile === "string";
           // Skill chips (`/foo`) have no click action — let Enter bubble to
           // the chat's send-message binding. Entity repository chips are
           // also non-clickable (see EntityMentionChip.isClickable).
-          const isSkill = typeof id === "string" && id.startsWith("/");
+          const isSkill = !isSpotlight && typeof id === "string" && id.startsWith("/");
           const isRepository = entityType === "repository";
-          if (isSkill || isRepository) return false;
+          if (!isSpotlight && (isSkill || isRepository)) return false;
           // File mentions carry the ElementIds.MENTION_SPAN testid; entity
-          // mentions carry ELEMENT_IDS.ENTITY_MENTION_CHIP. Query for either.
+          // mentions carry ELEMENT_IDS.ENTITY_MENTION_CHIP; spotlight chips
+          // carry ElementIds.SPOTLIGHT_CHIP. Query for any.
           const dom = view.nodeDOM(selection.from);
           const chip =
             dom instanceof HTMLElement
               ? (dom.querySelector<HTMLElement>(`[data-testid="${ElementIds.MENTION_SPAN}"]`) ??
-                dom.querySelector<HTMLElement>(`[data-testid="${ElementIds.ENTITY_MENTION_CHIP}"]`))
+                dom.querySelector<HTMLElement>(`[data-testid="${ElementIds.ENTITY_MENTION_CHIP}"]`) ??
+                dom.querySelector<HTMLElement>(`[data-testid="${ElementIds.SPOTLIGHT_CHIP}"]`))
               : null;
           if (!chip) return false;
           chip.click();
@@ -288,6 +327,25 @@ export const createTipTapExtensions = ({
               entityDisplayName: element.getAttribute("data-entity-display-name"),
             }),
           },
+          // Spotlight variant — listed before the generic sculptor-node rule
+          // so a spotlight span (which also carries data-sculptor-node) is
+          // never mis-parsed as a plain file mention. Populates all spotlight
+          // attrs from the data-spotlight-* attributes set by renderMarkdown.
+          {
+            tag: "span[data-sculptor-node][data-spotlight-file]",
+            getAttrs: (element: HTMLElement): Record<string, string | null> => ({
+              id: element.getAttribute("data-spotlight-file"),
+              mentionSuggestionChar: "!",
+              spotlightFile: element.getAttribute("data-spotlight-file"),
+              spotlightLineStart: element.getAttribute("data-spotlight-line-start"),
+              spotlightLineEnd: element.getAttribute("data-spotlight-line-end"),
+              spotlightSide: element.getAttribute("data-spotlight-side"),
+              spotlightSnippet: element.getAttribute("data-spotlight-snippet"),
+              spotlightSnippetCapturedAt: element.getAttribute("data-spotlight-snippet-captured-at"),
+              spotlightScope: element.getAttribute("data-spotlight-scope"),
+              spotlightCommitRef: element.getAttribute("data-spotlight-commit-ref"),
+            }),
+          },
           // Sculptor draft serialisation format (file + skill chips only —
           // entity chips serialise to the `+[…]` markdown shorthand which is
           // re-hydrated by the `+[…]` scanner in TipTapViewer).
@@ -310,6 +368,27 @@ export const createTipTapExtensions = ({
         ];
       },
       renderMarkdown(node): string {
+        const spotlightFile = node.attrs?.spotlightFile as string | null | undefined;
+        if (spotlightFile) {
+          const lineStart = Number(node.attrs?.spotlightLineStart ?? 0);
+          const lineEnd = Number(node.attrs?.spotlightLineEnd ?? 0);
+          const side = (node.attrs?.spotlightSide as string | null) ?? "";
+          const snippet = (node.attrs?.spotlightSnippet as string) ?? "";
+          const capturedAt = (node.attrs?.spotlightSnippetCapturedAt as string) ?? "";
+          const scope = (node.attrs?.spotlightScope as string) ?? "";
+          const commitRef = (node.attrs?.spotlightCommitRef as string) ?? "";
+          const range = lineStart === lineEnd ? `${lineStart}` : `${lineStart}-${lineEnd}`;
+          const label = side ? `${spotlightFile}:${range} (${side})` : `${spotlightFile}:${range}`;
+          const fileAttr = ` data-spotlight-file="${escapeHtmlAttr(spotlightFile)}"`;
+          const lsAttr = ` data-spotlight-line-start="${lineStart}"`;
+          const leAttr = ` data-spotlight-line-end="${lineEnd}"`;
+          const sideAttr = side ? ` data-spotlight-side="${escapeHtmlAttr(side)}"` : "";
+          const snippetAttr = snippet ? ` data-spotlight-snippet="${escapeHtmlAttr(snippet)}"` : "";
+          const catAttr = capturedAt ? ` data-spotlight-snippet-captured-at="${escapeHtmlAttr(capturedAt)}"` : "";
+          const scopeAttr = scope ? ` data-spotlight-scope="${escapeHtmlAttr(scope)}"` : "";
+          const refAttr = commitRef ? ` data-spotlight-commit-ref="${escapeHtmlAttr(commitRef)}"` : "";
+          return `<span data-sculptor-node${fileAttr}${lsAttr}${leAttr}${sideAttr}${snippetAttr}${catAttr}${scopeAttr}${refAttr}>${label}</span>`;
+        }
         const entityType = node.attrs?.entityType as string | null | undefined;
         if (entityType) {
           // Entity chips round-trip as a compact `+[type:id|displayName]`
@@ -358,6 +437,28 @@ export const createTipTapExtensions = ({
         class: styles.mention,
       },
       renderHTML({ options, node }) {
+        // Spotlight variant: render with the SPOTLIGHT_CHIP testid and
+        // data-spotlight-* attrs. `class` intentionally stays on `styles.mention`
+        // for static HTML callers — the live NodeView replaces this anyway.
+        if (node.attrs.spotlightFile) {
+          const label = node.attrs.id ?? "";
+          const attrs: Record<string, string> = {
+            ...options.HTMLAttributes,
+            "data-testid": ElementIds.SPOTLIGHT_CHIP,
+            "data-spotlight-file": String(node.attrs.spotlightFile ?? ""),
+            "data-spotlight-line-start": String(node.attrs.spotlightLineStart ?? ""),
+            "data-spotlight-line-end": String(node.attrs.spotlightLineEnd ?? ""),
+            "data-spotlight-side": String(node.attrs.spotlightSide ?? ""),
+            "data-spotlight-snippet": String(node.attrs.spotlightSnippet ?? ""),
+            "data-spotlight-snippet-captured-at": String(node.attrs.spotlightSnippetCapturedAt ?? ""),
+            "data-spotlight-scope": String(node.attrs.spotlightScope ?? ""),
+          };
+          if (node.attrs.spotlightCommitRef) {
+            attrs["data-spotlight-commit-ref"] = String(node.attrs.spotlightCommitRef);
+          }
+          return ["span", attrs, label];
+        }
+
         // Entity variant: render with the entity testid + data-* attrs and
         // use the display name as text content. `class` intentionally stays
         // on `styles.mention` for static HTML callers (tests, getHTML()) —

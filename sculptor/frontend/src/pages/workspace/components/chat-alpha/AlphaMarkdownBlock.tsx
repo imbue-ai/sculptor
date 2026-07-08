@@ -100,6 +100,10 @@ type ParsedSculptorSpan = {
   id: string;
   skillDescription: string | null;
   skillType: SkillType | null;
+  spotlightFile?: string | null;
+  spotlightLineStart?: string | null;
+  spotlightLineEnd?: string | null;
+  spotlightSide?: string | null;
 };
 
 const extractSculptorSpans = (content: string): { processedContent: string; spans: Array<ParsedSculptorSpan> } => {
@@ -116,6 +120,10 @@ const extractSculptorSpans = (content: string): { processedContent: string; span
       id: span.textContent ?? "",
       skillDescription: span.getAttribute("data-skill-description"),
       skillType: span.getAttribute("data-skill-type") as SkillType | null,
+      spotlightFile: span.getAttribute("data-spotlight-file"),
+      spotlightLineStart: span.getAttribute("data-spotlight-line-start"),
+      spotlightLineEnd: span.getAttribute("data-spotlight-line-end"),
+      spotlightSide: span.getAttribute("data-spotlight-side"),
     });
     return `+[sculptorChip:${index}|x]`;
   });
@@ -148,14 +156,27 @@ const renderChips = (children: ReactNode, spans: ReadonlyArray<ParsedSculptorSpa
         // sentinel slipped past extraction).
         const parsed = spans[parseInt(match[1], 10)];
         if (parsed) {
-          parts.push(
-            <MentionChip
-              key={`sculptor-${matchIndex}`}
-              id={parsed.id}
-              skillDescription={parsed.skillDescription}
-              skillType={parsed.skillType}
-            />,
-          );
+          if (parsed.spotlightFile) {
+            parts.push(
+              <MentionChip
+                key={`spotlight-${matchIndex}`}
+                kind="spotlight"
+                file={parsed.spotlightFile}
+                lineStart={parseInt(parsed.spotlightLineStart ?? "0", 10)}
+                lineEnd={parseInt(parsed.spotlightLineEnd ?? "0", 10)}
+                side={(parsed.spotlightSide as "old" | "new" | null) || null}
+              />,
+            );
+          } else {
+            parts.push(
+              <MentionChip
+                key={`sculptor-${matchIndex}`}
+                id={parsed.id}
+                skillDescription={parsed.skillDescription}
+                skillType={parsed.skillType}
+              />,
+            );
+          }
         }
       } else {
         parts.push(

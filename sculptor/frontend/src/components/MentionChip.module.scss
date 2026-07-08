@@ -39,3 +39,13 @@
   color: var(--gray-9);
   pointer-events: none;
 }
+
+// Spotlight chip: a line-level reference into a diff/file. Shares the
+// `.mention` palette so it reads as one family with the other chips, but
+// caps its width like the entity chip so a `path:line (side)` label never
+// dominates a multi-chip message, and uses the monospace code font because
+// the label is a file:line coordinate.
+.spotlightChip {
+  font-family: var(--code-font-family);
+  max-width: 240px; // stylelint-disable-line sculptor/no-hardcoded-values
+}

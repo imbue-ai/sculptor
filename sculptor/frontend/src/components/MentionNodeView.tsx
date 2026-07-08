@@ -101,8 +101,23 @@ export const MentionNodeView = ({ node, editor, getPos }: NodeViewProps): ReactE
   };
 
   // Dispatch by which attribute set the node carries. Entity chips are
-  // identified by a non-null `entityType`; otherwise fall through to the
-  // file/skill chip, whose variant is inferred from the leading `/` of `id`.
+  // identified by a non-null `entityType`; spotlight chips carry
+  // `spotlightFile`; otherwise fall through to the file/skill chip, whose
+  // variant is inferred from the leading `/` of `id`.
+  const spotlightFile = node.attrs.spotlightFile as string | null | undefined;
+  if (spotlightFile) {
+    return (
+      <MentionChip
+        kind="spotlight"
+        file={spotlightFile}
+        lineStart={Number(node.attrs.spotlightLineStart ?? 0)}
+        lineEnd={Number(node.attrs.spotlightLineEnd ?? 0)}
+        side={(node.attrs.spotlightSide as "old" | "new" | null) ?? null}
+        {...sharedProps}
+      />
+    );
+  }
+
   if (node.attrs.entityType) {
     return (
       <MentionChip
