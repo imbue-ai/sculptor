@@ -1654,6 +1654,19 @@
           "ToolResultBlock": {
             "additionalProperties": true,
             "properties": {
+              "backgroundTaskId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Set when this tool call launched a background task (an Agent/Task call converted to an async agent, or a run_in_background Bash): the CLI task id, matchable against pending_background_task_ids. When set, `content` is only the launch acknowledgment \u2014 the tool's real outcome arrives later via the task's notification, not in this block.",
+                "title": "Backgroundtaskid"
+              },
               "content": {
                 "anyOf": [
                   {

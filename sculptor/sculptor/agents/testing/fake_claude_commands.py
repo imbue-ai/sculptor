@@ -1717,11 +1717,15 @@ def handle_background_subagent(args: dict, emit_streaming: bool) -> list[dict]:
 
     Produces the JSONL sequence:
     1. Main agent assistant message with text + Agent tool_use
-    2. Agent tool_result (immediate "Async agent launched" response)
-    3. task_started event
+    2. task_started event
+    3. Agent tool_result (immediate "Async agent launched" response)
     4. Main agent "launched" text and turn end (result/success)
     5. task_notification
     6. New request cycle (init + summary text)
+
+    task_started precedes the launch-ack tool_result — the real CLI's
+    ordering, which the output processor relies on to stamp the ack's
+    ToolResultBlock with the background task id.
 
     When ``pause_path`` is set, the handler flushes the messages produced
     through step 4 to stdout, then blocks until the sentinel file appears
@@ -1734,13 +1738,18 @@ def handle_background_subagent(args: dict, emit_streaming: bool) -> list[dict]:
 
     Args:
         args: Optional: "description", "prompt", "summary_text", "launched_text",
-              "notification_summary", "pause_path".  ("subagent_result" is
-              accepted for backward compatibility with older tests but no
-              longer emitted — real Claude does not stream the subagent's
-              reply to the parent.)
+              "notification_summary", "pause_path", "converted".
+              ("subagent_result" is accepted for backward compatibility with
+              older tests but no longer emitted — real Claude does not stream
+              the subagent's reply to the parent.)
+              "converted": when true, model an Agent call the harness converts
+              to a background task: the tool_use input carries NO
+              run_in_background flag, so the task_started/launch-ack pair is
+              the only background signal.
     """
     description = args.get("description", "Explore the codebase")
     prompt = args.get("prompt", "Find relevant files")
+    converted = bool(args.get("converted", False))
     summary_text = args.get("summary_text", "[FakeClaude] Here is the summary of the background subagent's findings.")
     launched_text = args.get("launched_text", "Background subagent launched. Let me continue while it runs.")
     notification_summary = args.get("notification_summary", f'Agent "{description}" completed')
@@ -1755,11 +1764,15 @@ def handle_background_subagent(args: dict, emit_streaming: bool) -> list[dict]:
     task_id = generate_id("task")
     session_id = generate_id("session")
 
-    # 1. Main agent: text + Agent tool_use
+    # 1. Main agent: text + Agent tool_use. A converted agent's input has no
+    # run_in_background — the harness backgrounds it on its own.
+    tool_input: dict = {"prompt": prompt, "description": description}
+    if not converted:
+        tool_input["run_in_background"] = True
     agent_tool_block = make_tool_use_block(
         tool_id=agent_tool_id,
         tool_name="Agent",
-        tool_input={"prompt": prompt, "description": description, "run_in_background": True},
+        tool_input=tool_input,
     )
     messages: list[dict] = []
     if emit_streaming:
@@ -1777,11 +1790,9 @@ def handle_background_subagent(args: dict, emit_streaming: bool) -> list[dict]:
         )
     )
 
-    # 2. Agent tool_result (immediate "launched" response)
-    raw_result = f"Async agent launched successfully.\nagentId: {subagent_msg_id}"
-    messages.append(make_tool_result_message(tool_use_id=agent_tool_id, content=raw_result))
-
-    # 3. task_started event
+    # 2. task_started event — the CLI emits this BEFORE the launch-ack
+    # tool_result, and the output processor depends on that ordering to stamp
+    # the ack with the background task id.
     messages.append(
         make_task_started_message(
             task_id=task_id,
@@ -1790,6 +1801,10 @@ def handle_background_subagent(args: dict, emit_streaming: bool) -> list[dict]:
             task_type="agent",
         )
     )
+
+    # 3. Agent tool_result (immediate "launched" response)
+    raw_result = f"Async agent launched successfully.\nagentId: {subagent_msg_id}"
+    messages.append(make_tool_result_message(tool_use_id=agent_tool_id, content=raw_result))
 
     # 4. Main agent "launched" text and turn end.  The subagent's reply is
     # NOT emitted here — real Claude streams subagent content to its own

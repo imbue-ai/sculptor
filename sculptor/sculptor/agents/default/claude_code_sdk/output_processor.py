@@ -347,6 +347,13 @@ class ClaudeOutputProcessor:
         # type, so record it here to route subagent completions to deferred
         # cleanup (see SCU-1669) and to gate workflow progress handling.
         self._task_id_to_task_type: dict[str, str] = {}
+        # tool_use_id -> task_id for tool calls that launched a background
+        # task. The CLI emits task_started BEFORE the launch-ack tool_result,
+        # so when the result arrives we stamp its background_task_id — the
+        # frontend needs this to tell a launch-ack apart from a real result
+        # (an Agent call auto-converted to an async agent has no
+        # run_in_background flag in its input to detect it by).
+        self._tool_use_id_to_background_task_id: dict[str, str] = {}
         # Per-task Workflow state, keyed by task_id. The CLI's
         # workflow_progress payloads are deltas (and absent on pure
         # token-tick batches), so the accumulated tree lives here and is
@@ -828,6 +835,8 @@ class ClaudeOutputProcessor:
                 if tool_use_info is not None:
                     self._task_id_to_tool_name[result.task_id] = tool_use_info[0]
                 self._task_id_to_task_type[result.task_id] = result.task_type
+                if result.tool_use_id:
+                    self._tool_use_id_to_background_task_id[result.tool_use_id] = result.task_id
                 if result.workflow_name:
                     self._task_id_to_workflow_name[result.task_id] = result.workflow_name
                 self.output_message_queue.put(
@@ -1384,6 +1393,13 @@ class ClaudeOutputProcessor:
             if start_time is not None:
                 duration = now - start_time
                 block = block.model_copy(update={"duration_seconds": duration})
+            # task_started precedes the launch-ack tool_result, so a recorded
+            # mapping means this block is that ack: stamp the task id so the
+            # frontend can render live background status instead of treating
+            # the ack as the tool's real result.
+            background_task_id = self._tool_use_id_to_background_task_id.pop(block.tool_use_id, None)
+            if background_task_id is not None:
+                block = block.model_copy(update={"background_task_id": background_task_id})
             new_blocks.append(block)
             tool_info = self.tool_use_map.get(block.tool_use_id, None)
             if tool_info and not block.is_error:

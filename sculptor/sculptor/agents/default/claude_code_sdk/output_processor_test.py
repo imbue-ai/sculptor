@@ -37,6 +37,7 @@ from sculptor.interfaces.agents.agent import BackgroundTaskNotificationAgentMess
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
+from sculptor.interfaces.agents.agent import ResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import WarningAgentMessage
 from sculptor.interfaces.agents.agent import WorkflowTaskProgressAgentMessage
 from sculptor.interfaces.agents.errors import AgentClientError
@@ -56,6 +57,7 @@ from sculptor.state.claude_state import ParsedTaskNotificationResponse
 from sculptor.state.claude_state import ParsedTaskProgressResponse
 from sculptor.state.claude_state import ParsedTaskStartedResponse
 from sculptor.state.claude_state import ParsedTaskUpdatedResponse
+from sculptor.state.claude_state import ParsedToolResultResponse
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.workflow_state import WorkflowAgentProgress
 from sculptor.web.message_conversion import convert_agent_messages_to_task_update
@@ -342,12 +344,16 @@ def _feed_jsonl(processor: ClaudeOutputProcessor, jsonl_dicts: list[dict]) -> No
             processor._parse_init_response(result)
         elif isinstance(result, ParsedAssistantResponse):
             processor._parse_assistant_response(result)
+        elif isinstance(result, ParsedToolResultResponse):
+            processor._parse_tool_result_response(result)
         elif isinstance(result, ParsedTaskStartedResponse):
             processor._pending_background_tasks.add(result.task_id)
             tool_use_info = processor.tool_use_map.get(result.tool_use_id)
             if tool_use_info is not None:
                 processor._task_id_to_tool_name[result.task_id] = tool_use_info[0]
             processor._task_id_to_task_type[result.task_id] = result.task_type
+            if result.tool_use_id:
+                processor._tool_use_id_to_background_task_id[result.tool_use_id] = result.task_id
             if result.workflow_name:
                 processor._task_id_to_workflow_name[result.task_id] = result.workflow_name
         elif isinstance(result, ParsedTaskProgressResponse):
@@ -640,6 +646,87 @@ class TestDeferredCompletionCleanup:
         assert processor._completed_pending_deferred == set()
         assert processor._completed_pending_deferred_deadline is None
         assert "task_monitor_1" not in processor._pending_background_tasks
+
+
+def _collect_tool_result_blocks(messages: list) -> list[ToolResultBlock]:
+    return [
+        block
+        for message in messages
+        if isinstance(message, ResponseBlockAgentMessage)
+        for block in message.content
+        if isinstance(block, ToolResultBlock)
+    ]
+
+
+class TestBackgroundLaunchAckStamp:
+    """The CLI emits task_started BEFORE the launch-ack tool_result, so the
+    emitted ToolResultBlock must carry background_task_id. That stamp is the
+    frontend's only way to recognize an Agent call the harness converted to a
+    background (async) agent — the input carries no run_in_background flag to
+    detect it by (SCU-1792).
+    """
+
+    def test_converted_agent_launch_ack_is_stamped_with_task_id(self) -> None:
+        processor = _make_processor_for_jsonl_test()
+        _feed_jsonl(
+            processor,
+            [
+                make_init_message(session_id="s1"),
+                make_assistant_message(
+                    message_id="msg_1",
+                    content_blocks=[
+                        make_tool_use_block(
+                            tool_id="toolu_agent_1",
+                            tool_name="Agent",
+                            # No run_in_background — the harness converts the call.
+                            tool_input={"subagent_type": "Explore", "prompt": "Investigate"},
+                        )
+                    ],
+                ),
+                make_task_started_message(
+                    task_id="task_agent_1",
+                    tool_use_id="toolu_agent_1",
+                    description="Investigate",
+                    task_type="local_agent",
+                ),
+                make_tool_result_message(
+                    tool_use_id="toolu_agent_1",
+                    content="Async agent launched successfully.\nagentId: abc123",
+                ),
+            ],
+        )
+
+        blocks = _collect_tool_result_blocks(_drain_queue(processor.output_message_queue))
+        assert len(blocks) == 1
+        assert blocks[0].background_task_id == "task_agent_1"
+
+    def test_foreground_tool_result_is_not_stamped(self) -> None:
+        processor = _make_processor_for_jsonl_test()
+        _feed_jsonl(
+            processor,
+            [
+                make_init_message(session_id="s1"),
+                make_assistant_message(
+                    message_id="msg_1",
+                    content_blocks=[
+                        make_tool_use_block(
+                            tool_id="toolu_agent_1",
+                            tool_name="Agent",
+                            tool_input={"subagent_type": "Explore", "prompt": "Investigate"},
+                        )
+                    ],
+                ),
+                # No task_started — the subagent ran synchronously.
+                make_tool_result_message(
+                    tool_use_id="toolu_agent_1",
+                    content="The investigation found nothing of note.",
+                ),
+            ],
+        )
+
+        blocks = _collect_tool_result_blocks(_drain_queue(processor.output_message_queue))
+        assert len(blocks) == 1
+        assert blocks[0].background_task_id is None
 
 
 class TestWorkflowTaskProgress:
