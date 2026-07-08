@@ -2,14 +2,8 @@ import type { FileDiffMetadata, FileDiffOptions } from "@pierre/diffs";
 import { getSingularPatch, processFile } from "@pierre/diffs";
 import { FileDiff, PatchDiff } from "@pierre/diffs/react";
 import { useAtomValue, useSetAtom } from "jotai";
-import type {
-  CSSProperties,
-  ErrorInfo,
-  MouseEvent as ReactMouseEvent,
-  ReactElement,
-  ReactNode,
-  RefObject,
-} from "react";
+import { Plus } from "lucide-react";
+import type { CSSProperties, ErrorInfo, ReactElement, ReactNode, RefObject } from "react";
 import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
 import { ElementIds } from "~/api";
@@ -27,7 +21,7 @@ import { SplitDiffHandle } from "./SplitDiffHandle.tsx";
 import { StickyHorizontalScrollbar } from "./StickyHorizontalScrollbar.tsx";
 import type { DiffViewType, SpotlightData } from "./types.ts";
 import { usePierreHighlighterReady } from "./usePierreHighlighterReady.ts";
-import { useSpotlightCapture } from "./useSpotlightCapture.ts";
+import { type SpotlightCaptureResult, useSpotlightCapture } from "./useSpotlightCapture.ts";
 
 type PierreDiffViewProps = {
   diffString: string;
@@ -249,54 +243,35 @@ export const PierreDiffView = ({
 
   // --- Spotlight capture --------------------------------------------------
   const setSpotlight = useSetAtom(spotlightInsertAtom);
+
+  const handleSpotlightCapture = useCallback(
+    (result: SpotlightCaptureResult): void => {
+      if (!spotlightFile) return;
+      setSpotlight({
+        file: spotlightFile,
+        lineStart: result.lineStart,
+        lineEnd: result.lineEnd,
+        // Prefer the side derived from the captured line's `data-line-type`
+        // (accurate for modified files where both sides are present); fall
+        // back to the per-file hint for added/deleted single-side diffs.
+        side: result.side ?? spotlightSide ?? null,
+        snippet: result.snippet,
+        snippetCapturedAt: new Date().toISOString(),
+        scope: spotlightScope,
+        commitRef: spotlightCommitRef,
+      });
+    },
+    [spotlightFile, spotlightSide, spotlightScope, spotlightCommitRef, setSpotlight],
+  );
+
   const spotlight = useSpotlightCapture({
     containerRef: pierreRef,
+    boundsRef: wrapperRef,
     isHighlighterReady,
+    enabled: spotlightFile !== undefined,
+    onCapture: handleSpotlightCapture,
   });
-
-  const handleSpotlightCommit = useCallback((): void => {
-    if (!spotlightFile) return;
-    const lineStart = spotlight.dragEndLine ?? spotlight.dragStartLine ?? spotlight.hoveredLine?.line;
-    const lineEnd = spotlight.dragEndLine ?? spotlight.dragStartLine ?? spotlight.hoveredLine?.line;
-    if (lineStart === null || lineStart === undefined || lineEnd === null || lineEnd === undefined) return;
-    const start = Math.min(lineStart, lineEnd);
-    const end = Math.max(lineStart, lineEnd);
-    const capture = spotlight.resolveCapture(spotlightFile, start, end);
-    if (!capture) return;
-    setSpotlight({
-      file: spotlightFile,
-      lineStart: start,
-      lineEnd: end,
-      side: spotlightSide ?? null,
-      snippet: capture.snippet,
-      snippetCapturedAt: new Date().toISOString(),
-      scope: spotlightScope,
-      commitRef: spotlightCommitRef,
-    });
-  }, [spotlight, spotlightFile, spotlightSide, spotlightScope, spotlightCommitRef, setSpotlight]);
-
-  const activeLine = spotlight.hoveredLine?.line ?? null;
-  const activeRect = spotlight.hoveredLine?.rect;
-
-  const isSpotlightButtonVisible =
-    spotlightFile !== undefined && activeLine !== null && activeRect && isHighlighterReady;
-
-  const handleSpotlightButtonMouseDown = useCallback(
-    (e: ReactMouseEvent): void => {
-      spotlight.onButtonMouseDown(e);
-    },
-    [spotlight],
-  );
-
-  const handleSpotlightButtonMouseUp = useCallback(
-    (e: ReactMouseEvent): void => {
-      spotlight.onButtonMouseUp(e);
-      if (!spotlight.isDragging) {
-        handleSpotlightCommit();
-      }
-    },
-    [spotlight, handleSpotlightCommit],
-  );
+  const handleSpotlightPillMouseDown = spotlight.onButtonMouseDown;
   // --- end Spotlight capture ----------------------------------------------
 
   return (
@@ -306,21 +281,16 @@ export const PierreDiffView = ({
           className={`${styles.container} ${className ?? ""}`}
           data-testid={viewType === "unified" ? ElementIds.DIFF_VIEW_UNIFIED : ElementIds.DIFF_VIEW_SPLIT}
         >
-          {isSpotlightButtonVisible && (
+          {spotlight.buttonStyle && (
             <button
               type="button"
               data-testid={ElementIds.SPOTLIGHT_LINE_HOVER_BUTTON}
               className={styles.spotlightButton}
-              style={{
-                position: "fixed",
-                left: `${activeRect.left - 28}px`,
-                top: `${activeRect.top + activeRect.height / 2 - 10}px`,
-                opacity: spotlight.isDragging ? 1 : undefined,
-              }}
-              onMouseDown={handleSpotlightButtonMouseDown}
-              onMouseUp={handleSpotlightButtonMouseUp}
+              style={spotlight.buttonStyle}
+              onMouseDown={handleSpotlightPillMouseDown}
             >
-              +
+              <Plus size={12} strokeWidth={2.5} />
+              <span>Spotlight</span>
             </button>
           )}
           <div ref={pierreRef}>

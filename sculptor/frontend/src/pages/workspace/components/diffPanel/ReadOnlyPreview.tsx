@@ -2,7 +2,8 @@ import type { FileOptions, SupportedLanguages } from "@pierre/diffs";
 import { File as PierreFile } from "@pierre/diffs/react";
 import { Flex, Text } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
-import type { MouseEvent as ReactMouseEvent, ReactElement } from "react";
+import { Plus } from "lucide-react";
+import type { ReactElement } from "react";
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 
@@ -33,7 +34,7 @@ import styles from "./ReadOnlyPreview.module.scss";
 import { StickyHorizontalScrollbar } from "./StickyHorizontalScrollbar.tsx";
 import type { SpotlightData } from "./types.ts";
 import { usePierreHighlighterReady } from "./usePierreHighlighterReady.ts";
-import { useSpotlightCapture } from "./useSpotlightCapture.ts";
+import { type SpotlightCaptureResult, useSpotlightCapture } from "./useSpotlightCapture.ts";
 
 type ReadOnlyPreviewProps = {
   workspaceId: string;
@@ -178,50 +179,33 @@ export const ReadOnlyPreview = ({
 
   // --- Spotlight capture (code-view branch only) --------------------------
   const setSpotlight = useSetAtom(spotlightInsertAtom);
+
+  const handleSpotlightCapture = useCallback(
+    (result: SpotlightCaptureResult): void => {
+      setSpotlight({
+        file: filePath,
+        lineStart: result.lineStart,
+        lineEnd: result.lineEnd,
+        // Plain file views have no diff side.
+        side: null,
+        snippet: result.snippet,
+        snippetCapturedAt: new Date().toISOString(),
+        scope: spotlightScope,
+      });
+    },
+    [filePath, spotlightScope, setSpotlight],
+  );
+
   const spotlight = useSpotlightCapture({
     containerRef: pierreRef,
+    boundsRef: containerRef,
     isHighlighterReady,
+    // Only the Pierre code view (below) has line rows; the rendered-markdown
+    // branch returns before the button is rendered.
+    enabled: true,
+    onCapture: handleSpotlightCapture,
   });
-
-  const handleSpotlightCommit = useCallback((): void => {
-    const lineStart = spotlight.dragEndLine ?? spotlight.dragStartLine ?? spotlight.hoveredLine?.line;
-    const lineEnd = spotlight.dragEndLine ?? spotlight.dragStartLine ?? spotlight.hoveredLine?.line;
-    if (lineStart === null || lineStart === undefined || lineEnd === null || lineEnd === undefined) return;
-    const start = Math.min(lineStart, lineEnd);
-    const end = Math.max(lineStart, lineEnd);
-    const capture = spotlight.resolveCapture(filePath, start, end);
-    if (!capture) return;
-    setSpotlight({
-      file: filePath,
-      lineStart: start,
-      lineEnd: end,
-      side: null,
-      snippet: capture.snippet,
-      snippetCapturedAt: new Date().toISOString(),
-      scope: spotlightScope,
-    });
-  }, [spotlight, filePath, spotlightScope, setSpotlight]);
-
-  const handleSpotlightButtonMouseDown = useCallback(
-    (e: ReactMouseEvent): void => {
-      spotlight.onButtonMouseDown(e);
-    },
-    [spotlight],
-  );
-
-  const handleSpotlightButtonMouseUp = useCallback(
-    (e: ReactMouseEvent): void => {
-      spotlight.onButtonMouseUp(e);
-      if (!spotlight.isDragging) {
-        handleSpotlightCommit();
-      }
-    },
-    [spotlight, handleSpotlightCommit],
-  );
-
-  const activeLine = spotlight.hoveredLine?.line ?? null;
-  const activeRect = spotlight.hoveredLine?.rect;
-  const isSpotlightButtonVisible = activeLine !== null && activeRect && isHighlighterReady;
+  const handleSpotlightPillMouseDown = spotlight.onButtonMouseDown;
   // --- end Spotlight capture ----------------------------------------------
 
   if (isPending) {
@@ -306,21 +290,16 @@ export const ReadOnlyPreview = ({
   return (
     <div className={styles.wrapper} data-testid={ElementIds.READ_ONLY_PREVIEW}>
       <div ref={containerRef} className={styles.container}>
-        {isSpotlightButtonVisible && (
+        {spotlight.buttonStyle && (
           <button
             type="button"
             data-testid={ElementIds.SPOTLIGHT_LINE_HOVER_BUTTON}
             className={pierreStyles.spotlightButton}
-            style={{
-              position: "fixed",
-              left: `${activeRect.left - 28}px`,
-              top: `${activeRect.top + activeRect.height / 2 - 10}px`,
-              opacity: spotlight.isDragging ? 1 : undefined,
-            }}
-            onMouseDown={handleSpotlightButtonMouseDown}
-            onMouseUp={handleSpotlightButtonMouseUp}
+            style={spotlight.buttonStyle}
+            onMouseDown={handleSpotlightPillMouseDown}
           >
-            +
+            <Plus size={12} strokeWidth={2.5} />
+            <span>Spotlight</span>
           </button>
         )}
         <div ref={pierreRef}>
