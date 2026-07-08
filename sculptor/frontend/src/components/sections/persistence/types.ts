@@ -36,8 +36,10 @@ export type GlobalLayoutState = {
   explorerListWidthPx: number;
   // Whether each Explorer panel's list sidebar is hidden, keyed by panel id.
   // Per-panel (unlike the shared width) so hiding one panel's list leaves the
-  // others alone. A panel absent from the map defaults to visible.
-  explorerSidebarHiddenByPanel: Partial<Record<PanelId, boolean>>;
+  // others alone. A panel absent from the map defaults to visible. Optional
+  // because global snapshots persisted before this field existed load without
+  // it; readers must optional-chain (the compiler enforces it via this `?`).
+  explorerSidebarHiddenByPanel?: Partial<Record<PanelId, boolean>>;
 };
 
 export type LayoutScope = { kind: "workspace"; workspaceId: string } | { kind: "global" };
