@@ -557,11 +557,10 @@ class _ReactionWakeMessage:
     Enqueued on `_input_agent_messages` when a completion is surfaced, and
     serviced by `_run_wake_turn` as an ordinary prompt turn. Deliberately NOT a
     `Message` union member: the wake is internal scheduling, not user chat, and
-    it must never reach pi through any channel but this FIFO. Sculptor being the
-    ONLY turn-initiator is the SCU-1776 fix — the extensions' pi-side
-    `sendUserMessage` wake-up spliced reaction turns into an in-flight run,
-    deferring `agent_end` (the sole turn boundary) so queued user messages
-    starved and Stop escalated to SIGTERM.
+    it must never reach pi through any channel but this FIFO — Sculptor is the
+    only turn-initiator. A pi-side wake-up (`sendUserMessage`) queues into an
+    in-flight run and defers `agent_end`, the wrapper's sole turn boundary,
+    starving queued user messages (SCU-1776).
     """
 
     text: str
