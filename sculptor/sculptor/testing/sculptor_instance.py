@@ -408,6 +408,7 @@ class SculptorInstance:
         flags_to_reset_to_false = (
             "enableInPlaceWorkspaces",
             "enableCloneWorkspaces",
+            "enableWorkspaceGroups",
         )
         # The recorded most-recently-used harness (see the docstring); reset to
         # None so an agent-type-less create defaults to Claude.

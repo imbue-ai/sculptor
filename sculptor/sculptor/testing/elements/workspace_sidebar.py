@@ -156,6 +156,39 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         # keeps callers from racing their order assertions against the commit.
         expect(item).not_to_have_attribute("data-sidebar-dragging", "true")
 
+    def drag_workspace_into_group_via_keyboard(self, item: Locator, group_card: Locator, direction: str) -> None:
+        """Drag a workspace row from outside a group onto that group's card via
+        the KeyboardSensor.
+
+        The same drive as ``reorder_via_keyboard_drag`` (pickup, one arrow per
+        droppable slot, Space to drop), but the stop condition is the card's
+        membership drop affordance: ``group_card`` stamps ``data-drop-active``
+        while an outside row's drag hovers any part of it (the card body, a
+        member row, or its dashed drop slot), and dropping on any of those adds
+        the dragged workspace to the group. Watching the card instead of one
+        specific slot keeps the drive agnostic to which of the three droppables
+        the arrow lands on.
+        """
+        self.pickup_via_keyboard(item)
+
+        arrow = {"up": "ArrowUp", "down": "ArrowDown"}[direction]
+        for _press in range(_REORDER_MAX_ARROW_PRESSES):
+            self._page.keyboard.press(arrow)
+            try:
+                expect(group_card).to_have_attribute("data-drop-active", "true", timeout=2_000)
+                break
+            except AssertionError:
+                continue
+        else:
+            raise AssertionError(
+                f"keyboard drag never lit the group card's drop affordance within {_REORDER_MAX_ARROW_PRESSES} presses"
+            )
+        self._page.keyboard.press("Space")  # drop
+
+        # The drop clears the drag flag; asserting it here keeps callers from
+        # racing their membership assertions against the drop commit.
+        expect(item).not_to_have_attribute("data-sidebar-dragging", "true")
+
     # -- Workspace rows (mirrors PlaywrightHomePage.get_workspace_rows) --
 
     def get_workspace_rows(self) -> Locator:
@@ -273,6 +306,112 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         expect(delete_icon).to_be_visible()
         delete_icon.click()
         self.confirm_delete()
+
+    # -- Workspace-group cards --
+    #
+    # A workspace group (the experimental workspace-groups feature) renders as
+    # an accent-tinted card nested inside its repo section: a header (chevron +
+    # color swatch + name + hover "⋯" menu trigger) wrapping the member
+    # workspace rows, which are ordinary ``SIDEBAR_WORKSPACE_ROW`` elements.
+    # The card stamps its identity and state as data attributes
+    # (``data-group-id``, ``data-accent-color``, ``data-collapsed``,
+    # ``data-drop-active``), so tests assert state through attributes rather
+    # than styles.
+
+    def get_group_cards(self) -> Locator:
+        return self.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_GROUP_CARD)
+
+    def get_group_card_by_name(self, name: str) -> Locator:
+        """Get a group card by its header name.
+
+        Filters on the header's text (not the whole card's) so a member
+        workspace whose name contains ``name`` can never match the card.
+        """
+        header = self._page.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_GROUP_HEADER).filter(has_text=name)
+        return self.get_group_cards().filter(has=header)
+
+    def get_group_header(self, group_card: Locator) -> Locator:
+        """The card's header button: the drag activator and collapse toggle."""
+        return group_card.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_GROUP_HEADER)
+
+    def get_group_chevron(self, group_card: Locator) -> Locator:
+        """The collapse chevron; it sits inside the header button, so clicking it toggles collapse."""
+        return group_card.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_GROUP_CHEVRON)
+
+    def get_group_member_rows(self, group_card: Locator) -> Locator:
+        """The workspace rows rendered inside the card (its members; empty while collapsed)."""
+        return group_card.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW)
+
+    def get_group_menu_trigger(self, group_card: Locator) -> Locator:
+        """The hover-revealed "⋯" trigger on the group header."""
+        return group_card.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_GROUP_MENU_TRIGGER)
+
+    def open_group_menu(self, group_card: Locator) -> None:
+        """Hover the group header and click its "⋯" trigger to open the group menu."""
+        self.get_group_header(group_card).hover()
+        trigger = self.get_group_menu_trigger(group_card)
+        expect(trigger).to_be_visible()
+        trigger.click()
+
+    # -- Group menu items (portaled to the page, like the row context menu) --
+
+    def get_group_menu_rename(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.WORKSPACE_GROUP_MENU_RENAME)
+
+    def get_group_menu_collapse(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.WORKSPACE_GROUP_MENU_COLLAPSE)
+
+    def get_group_menu_ungroup(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.WORKSPACE_GROUP_MENU_UNGROUP)
+
+    def get_group_menu_swatch(self, color: str) -> Locator:
+        # The swatch row renders one item per palette color, each stamped with
+        # ``data-color``; this raw CSS-attribute scope stays inside the POM so
+        # the integration-test css-locator ratchet is honoured at call sites.
+        return self._page.locator(f'[data-testid="{ElementIDs.WORKSPACE_GROUP_MENU_SWATCH}"][data-color="{color}"]')
+
+    # -- Workspace-row grouping menu items --
+    #
+    # The workspace row's context/dropdown menu gains a grouping section while
+    # the workspace-groups flag is on: "New group from workspace", the "Add to
+    # group" submenu (one entry per existing group plus "New group…"), and
+    # "Remove from group" on member rows.
+
+    def get_workspace_menu_new_group(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.WORKSPACE_MENU_NEW_GROUP)
+
+    def get_workspace_menu_add_to_group_trigger(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.WORKSPACE_MENU_ADD_TO_GROUP)
+
+    def get_workspace_menu_add_to_group_items(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.WORKSPACE_MENU_ADD_TO_GROUP_ITEM)
+
+    def get_workspace_menu_remove_from_group(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.WORKSPACE_MENU_REMOVE_FROM_GROUP)
+
+    def create_group_from_workspace(self, workspace_row: Locator) -> None:
+        """Right-click a row and pick "New group from workspace"."""
+        self.open_row_context_menu(workspace_row)
+        new_group_item = self.get_workspace_menu_new_group()
+        expect(new_group_item).to_be_visible()
+        new_group_item.click()
+
+    def add_workspace_to_group_via_menu(self, workspace_row: Locator, group_name: str) -> None:
+        """Right-click a row, hover "Add to group", and pick the named group from the submenu."""
+        self.open_row_context_menu(workspace_row)
+        trigger = self.get_workspace_menu_add_to_group_trigger()
+        expect(trigger).to_be_visible()
+        trigger.hover()
+        group_item = self.get_workspace_menu_add_to_group_items().filter(has_text=group_name)
+        expect(group_item).to_be_visible()
+        group_item.click()
+
+    def remove_workspace_from_group_via_menu(self, workspace_row: Locator) -> None:
+        """Right-click a member row and pick "Remove from group"."""
+        self.open_row_context_menu(workspace_row)
+        remove_item = self.get_workspace_menu_remove_from_group()
+        expect(remove_item).to_be_visible()
+        remove_item.click()
 
     # -- Bottom links + chrome --
 

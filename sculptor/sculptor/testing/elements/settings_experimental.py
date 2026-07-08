@@ -1,3 +1,4 @@
+from playwright.sync_api import Locator
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
@@ -6,6 +7,22 @@ from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 
 class PlaywrightExperimentalSettingsElement(PlaywrightIntegrationTestElement):
     """Page Object Model for the Experimental Settings section."""
+
+    def get_workspace_groups_toggle(self) -> Locator:
+        """The "Workspace Groups" switch (a Radix Switch stamping ``data-state``)."""
+        return self._page.get_by_test_id(ElementIDs.SETTINGS_ENABLE_WORKSPACE_GROUPS_TOGGLE)
+
+    def enable_workspace_groups(self) -> None:
+        """Enable the experimental "Workspace Groups" setting.
+
+        Asserts the switch starts unchecked before clicking: the shared
+        instance resets the flag between tests, so a checked switch here means
+        a leaked flag (and blindly clicking would toggle the feature back off).
+        """
+        toggle = self.get_workspace_groups_toggle()
+        expect(toggle).to_have_attribute("data-state", "unchecked")
+        toggle.click()
+        expect(toggle).to_have_attribute("data-state", "checked")
 
     def enable_always_interrupt(self) -> None:
         """Enable the 'Always interrupt and send' setting.
