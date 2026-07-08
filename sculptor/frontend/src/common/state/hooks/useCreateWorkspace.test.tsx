@@ -79,18 +79,28 @@ describe("useCreateWorkspace", () => {
     expect(store.get(createAgentErrorToastAtom)).toBeNull();
   });
 
-  it("does not yank the user when they have left the workspace root", async () => {
+  it("does not yank the user when they leave the workspace root mid-create", async () => {
     // A keep-open multi-create or the user opening an agent themselves moves
-    // them off `#/ws/<id>`; the late background focus must not pull them back.
-    vi.mocked(createWorkspaceAgent).mockResolvedValue({
-      data: { id: "agent_1" },
-    } as unknown as Awaited<ReturnType<typeof createWorkspaceAgent>>);
-    window.location.hash = "#/ws/ws_1/agent/their_own_agent";
+    // them off `#/ws/<id>` while the background create is still in flight;
+    // the late focus must read the route at resolution time and stand down.
+    // Hold the agent create open, move the user, then release it.
+    let resolveAgentCreate!: (value: Awaited<ReturnType<typeof createWorkspaceAgent>>) => void;
+    const deferredAgentCreate = new Promise<Awaited<ReturnType<typeof createWorkspaceAgent>>>((resolve) => {
+      resolveAgentCreate = resolve;
+    });
+    vi.mocked(createWorkspaceAgent).mockReturnValue(deferredAgentCreate as ReturnType<typeof createWorkspaceAgent>);
     const { result } = renderCreateWorkspaceHook();
 
     await result.current.createWorkspace(CREATE_ARGS);
+    expect(createWorkspaceAgent).toHaveBeenCalled();
 
-    await waitFor(() => expect(createWorkspaceAgent).toHaveBeenCalled());
+    window.location.hash = "#/ws/ws_1/agent/their_own_agent";
+    resolveAgentCreate({ data: { id: "agent_1" } } as unknown as Awaited<ReturnType<typeof createWorkspaceAgent>>);
+
+    // The analytics capture fires after the response and before the focus
+    // guard — once it lands, the continuation has run through the guard.
+    const { posthog } = await import("posthog-js");
+    await waitFor(() => expect(posthog.capture).toHaveBeenCalled());
     expect(navigateToAgent).not.toHaveBeenCalled();
   });
 
