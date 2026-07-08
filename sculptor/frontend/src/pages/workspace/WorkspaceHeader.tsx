@@ -226,6 +226,16 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
         />
       </Flex>
 
+      {/* Workspace title — only when the left sidebar is collapsed, since the sidebar
+          otherwise shows the workspace name. Mirrors the sidebar's label source and
+          "Untitled" fallback. Allowed to shrink/truncate so a long name doesn't push
+          the branch pill and right-side controls out of the overflow-hidden bar. */}
+      {isSidebarCollapsed && (
+        <span className={styles.workspaceTitle} data-testid={ElementIds.WORKSPACE_HEADER_TITLE}>
+          {workspace.description ?? "Untitled"}
+        </span>
+      )}
+
       {/* Branch pill: a real button so it is focusable and Enter/Space-activatable
           for free; the visible label is the branch name, so the aria-label spells
           out what pressing it does. */}
