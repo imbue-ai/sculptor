@@ -17,6 +17,7 @@ import {
   spotlightHoverAtom,
   spotlightScrollTargetAtom,
 } from "~/pages/workspace/components/diffPanel/atoms";
+import { spotlightBarColor, spotlightColorIndex } from "~/pages/workspace/components/diffPanel/spotlightPalette";
 import { revealFolderAtom } from "~/pages/workspace/panels/fileBrowser/atoms";
 import { getFileIcon } from "~/pages/workspace/panels/fileBrowser/fileIcons";
 
@@ -251,6 +252,7 @@ const FileMentionChip = ({
   );
 };
 
+// TODO: maybe "getSpotlightLabel"?
 const spotlightLabel = (file: string, lineStart: number, lineEnd: number, side: "old" | "new" | null): string => {
   const range = lineStart === lineEnd ? `${lineStart}` : `${lineStart}-${lineEnd}`;
   return side ? `${file}:${range} (${side})` : `${file}:${range}`;
@@ -283,7 +285,10 @@ const SpotlightMentionChip = ({
   const isClickable = Boolean(workspaceID);
   const label = spotlightLabel(file, lineStart, lineEnd, side);
   // Stable anchor identity so the highlight effects below don't churn each render.
+  // TODO: is this necessary? pre-existing pattern elsewhere in codebase?
   const anchor = useMemo(() => ({ file, lineStart, lineEnd }), [file, lineStart, lineEnd]);
+  // Rotating accent that binds this chip to its line-range highlight/gutter bar.
+  const accentColor = spotlightBarColor(spotlightColorIndex(anchor));
 
   const handleClick = useCallback(
     (e: MouseEvent) => {
@@ -329,13 +334,14 @@ const SpotlightMentionChip = ({
         <Wrapper
           {...wrapperProps}
           className={classnames(isClickable ? styles.clickableMention : styles.mention, entityStyles.spotlightChip)}
+          style={{ borderLeft: `3px solid ${accentColor}` }}
           data-testid={ElementIds.SPOTLIGHT_CHIP}
           onClick={isClickable ? handleClick : undefined}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
           aria-disabled={isClickable ? undefined : true}
         >
-          <Highlighter style={ICON_STYLE} />
+          <Highlighter style={{ ...ICON_STYLE, color: accentColor }} />
           <span className={styles.fileLabel}>{label}</span>
         </Wrapper>
       }

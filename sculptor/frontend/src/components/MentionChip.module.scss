@@ -47,5 +47,6 @@
 // the label is a file:line coordinate.
 .spotlightChip {
   font-family: var(--code-font-family);
+  // TODO: see if max-width can be avoided to avoid ignoring no-hardcoded-values
   max-width: 240px; // stylelint-disable-line sculptor/no-hardcoded-values
 }

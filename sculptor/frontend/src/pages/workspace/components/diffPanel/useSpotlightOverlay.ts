@@ -3,6 +3,7 @@ import { useEffect } from "react";
 
 import { spotlightHoverAtom, spotlightScrollTargetAtom } from "./atoms.ts";
 import { clearLinePaint, paintLineRange, scrollLineIntoView, shadowRootOf } from "./spotlightPaint.ts";
+import { spotlightColorIndex, spotlightHighlightColor } from "./spotlightPalette.ts";
 import { usePierreDomVersion } from "./usePierreDomVersion.ts";
 
 type UseSpotlightOverlayOptions = {
@@ -37,7 +38,9 @@ export const useSpotlightOverlay = ({ paneElement, file }: UseSpotlightOverlayOp
     if (!shadowRoot) return;
     const isMatch = hover !== null && file !== undefined && hover.file === file;
     if (isMatch) {
-      paintLineRange(shadowRoot, hover.lineStart, hover.lineEnd);
+      // Same rotating color the chip carries, so the painted rows read as
+      // "this chip's lines".
+      paintLineRange(shadowRoot, hover.lineStart, hover.lineEnd, spotlightHighlightColor(spotlightColorIndex(hover)));
       return (): void => clearLinePaint(shadowRoot);
     }
     clearLinePaint(shadowRoot);

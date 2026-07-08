@@ -11,16 +11,18 @@ export const shadowRootOf = (container: HTMLElement | null): ShadowRoot | null =
   container?.querySelector("diffs-container")?.shadowRoot ?? null;
 
 /**
- * Paint the inclusive line range blue and clear every other line, in a single
- * sweep. Re-querying (rather than tracking element refs) keeps the React
- * Compiler happy and is cheap for the line counts on screen.
+ * Paint the inclusive line range with `color` and clear every other line, in a
+ * single sweep. Re-querying (rather than tracking element refs) keeps the React
+ * Compiler happy and is cheap for the line counts on screen. `color` is the
+ * spotlight's rotating highlight color (see spotlightPalette.ts) so the painted
+ * rows match the chip that owns them.
  */
-export const paintLineRange = (shadowRoot: ShadowRoot, start: number, end: number): void => {
+export const paintLineRange = (shadowRoot: ShadowRoot, start: number, end: number, color: string): void => {
   const lo = Math.min(start, end);
   const hi = Math.max(start, end);
   for (const el of shadowRoot.querySelectorAll<HTMLElement>("[data-line]")) {
     const n = parseInt(el.getAttribute("data-line") ?? "", 10);
-    el.style.backgroundColor = !Number.isNaN(n) && n >= lo && n <= hi ? "var(--blue-a5)" : "";
+    el.style.backgroundColor = !Number.isNaN(n) && n >= lo && n <= hi ? color : "";
   }
 };
 

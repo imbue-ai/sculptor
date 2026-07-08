@@ -2,6 +2,7 @@ import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { clearLinePaint, paintLineRange, shadowRootOf, snippetForRange } from "./spotlightPaint.ts";
+import { spotlightHighlightColor } from "./spotlightPalette.ts";
 
 /** Result the hook hands back to the caller when a selection completes. */
 export type SpotlightCaptureResult = {
@@ -100,7 +101,9 @@ export const useSpotlightCapture = ({
   const paintRange = useCallback(
     (start: number, end: number): void => {
       const shadowRoot = shadowRootOf(paneElement);
-      if (shadowRoot) paintLineRange(shadowRoot, start, end);
+      // The drag preview uses the base palette color; the final chip + its
+      // hover-highlight resolve their own rotating color from the anchor.
+      if (shadowRoot) paintLineRange(shadowRoot, start, end, spotlightHighlightColor(0));
     },
     [paneElement],
   );
