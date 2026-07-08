@@ -1,13 +1,19 @@
 """Integration tests for background subagent (Agent tool with run_in_background) rendering.
 
 Verifies that background subagent calls are rendered as an AlphaSubagentPill,
-not as a generic tool pill; and that a task_notification arriving mid-turn does
-not split the surrounding tool batches into separate messages.
+not as a generic tool pill; that a task_notification arriving mid-turn does
+not split the surrounding tool batches into separate messages; and that an
+Agent call the harness converts to a background task (no run_in_background in
+its input — SCU-1792) gets live background status instead of the agent-facing
+launch-ack.
 """
+
+import json
 
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.fake_claude_pause import FakeClaudePause
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -113,3 +119,87 @@ def test_mid_turn_notification_does_not_split_assistant_messages(sculptor_instan
     expect(pill_rows).to_have_count(2)
     expect(pill_rows.first.get_by_test_id(ElementIDs.ALPHA_CHAT_TOOL_PILL)).to_have_count(3)
     expect(pill_rows.last.get_by_test_id(ElementIDs.ALPHA_CHAT_TOOL_PILL)).to_have_count(3)
+
+
+CONVERTED_SUMMARY_TEXT = "[SCU-1792] converted subagent finished"
+CONVERTED_NOTIFICATION_SUMMARY = "Converted agent findings: all good."
+
+
+@user_story("to verify that a harness-converted background agent shows live status instead of the launch-ack")
+def test_converted_background_agent_shows_live_status_and_result(sculptor_instance_: SculptorInstance) -> None:
+    """An Agent call converted to a background task (no run_in_background in
+    its input) must render as a live background subagent pill: while the task
+    runs the popover says so in user-facing terms, and the agent-facing
+    launch-ack ("Async agent launched... agentId: ...") never surfaces.
+
+    The only signal that the call went to the background is the
+    background_task_id the backend stamps on the launch-ack ToolResultBlock
+    (from the preceding task_started). Without the stamp, the pill freezes at
+    ~0.0s and the popover shows the launch-ack as the agent's Response.
+    """
+    page = sculptor_instance_.page
+    pause = FakeClaudePause()
+
+    converted_command = (
+        "fake_claude:background_subagent `"
+        + json.dumps(
+            {
+                "description": "Investigate the repo",
+                "prompt": "Investigate the repository layout",
+                "converted": True,
+                "summary_text": CONVERTED_SUMMARY_TEXT,
+                "notification_summary": CONVERTED_NOTIFICATION_SUMMARY,
+                "pause_path": str(pause.release_path),
+            }
+        )
+        + "`"
+    )
+
+    task_page = start_task_and_wait_for_ready(
+        sculptor_page=page,
+        prompt=converted_command,
+        wait_for_agent_to_finish=False,
+    )
+    chat_panel = task_page.get_chat_panel()
+
+    # The "launched" text marks entry into the wait window: FakeClaude flushed
+    # the turn (tool_use → task_started → launch-ack → result/success) and is
+    # blocked on the sentinel before emitting the task_notification.
+    messages = chat_panel.get_messages()
+    expect(messages.filter(has_text="Background subagent launched").first).to_be_visible()
+
+    # The converted call must render as a subagent pill, not a generic tool
+    # pill showing the launch-ack.
+    pill = chat_panel.get_subagent_pills()
+    expect(pill).to_have_count(1)
+    expect(chat_panel.get_tool_pills().filter(has_text="Async agent launched")).to_have_count(0)
+
+    # Open the popover: while the task is pending it must show the user-facing
+    # running status, and never the agent-facing launch-ack.
+    pill.click()
+    status = page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_POPOVER_STATUS)
+    expect(status).to_be_visible()
+    expect(status).to_contain_text("Running in the background")
+    note = page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_POPOVER_NOTE)
+    expect(note).to_be_visible()
+    expect(note).to_contain_text("aren't shown")
+    expect(status).not_to_contain_text("Async agent launched")
+    # Close the popover so it doesn't interfere with the post-release steps.
+    page.keyboard.press("Escape")
+
+    # Release: the task_notification and the follow-up summary turn arrive.
+    pause.release()
+    expect(messages.filter(has_text=CONVERTED_SUMMARY_TEXT).first).to_be_visible()
+    expect(chat_panel.get_thinking_indicator()).not_to_be_visible()
+
+    # The completion child synthesized from the notification becomes the
+    # pill's Response — reopen the popover and check the summary shows and
+    # the running status is gone.
+    pill.click()
+    response = page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_POPOVER_RESPONSE)
+    expect(response).to_be_visible()
+    expect(response).to_contain_text(CONVERTED_NOTIFICATION_SUMMARY)
+    expect(page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_POPOVER_STATUS)).not_to_be_visible()
+
+    # The launch-ack must not appear anywhere in the chat.
+    expect(chat_panel.get_messages().filter(has_text="Async agent launched")).to_have_count(0)
