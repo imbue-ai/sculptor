@@ -1,4 +1,4 @@
-import { Badge, Flex, Skeleton, Tooltip } from "@radix-ui/themes";
+import { Badge, Flex, Skeleton, Text, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import { GitBranchIcon, PanelBottom, PanelLeft, PanelRight } from "lucide-react";
 import type { ReactElement } from "react";
@@ -226,15 +226,19 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
         />
       </Flex>
 
-      {/* Workspace title — only when the left sidebar is collapsed, since the sidebar
-          otherwise shows the workspace name. Mirrors the sidebar's label source, and
-          falls back to "Untitled" for a null/blank name so this prominent slot never
-          renders empty. Allowed to shrink/truncate so a long name doesn't push the
-          branch pill and right-side controls out of the overflow-hidden bar. */}
+      {/* Only shown when the sidebar is collapsed — it otherwise carries the name.
+          "Untitled" guards a blank name so this slot never renders empty. */}
       {isSidebarCollapsed && (
-        <span className={styles.workspaceTitle} data-testid={ElementIds.WORKSPACE_HEADER_TITLE}>
+        <Text
+          as="span"
+          size="1"
+          weight="medium"
+          truncate
+          className={styles.workspaceTitle}
+          data-testid={ElementIds.WORKSPACE_HEADER_TITLE}
+        >
           {(workspace.description ?? "").trim() || "Untitled"}
-        </span>
+        </Text>
       )}
 
       {/* Branch pill: a real button so it is focusable and Enter/Space-activatable

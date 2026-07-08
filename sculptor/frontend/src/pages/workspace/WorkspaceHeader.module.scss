@@ -10,20 +10,12 @@
   padding: var(--space-1) var(--space-4);
 }
 
-// Workspace title in the header (shown only when the sidebar is collapsed).
-// Mirrors the branch pill's text metrics (same font-size and inherited
-// line-height) so the two read as one row: the header centers its items, and
-// matching type metrics make that center-alignment coincide with a shared
-// baseline. min-width:0 + ellipsis so it truncates instead of pushing the rest
-// of the bar.
+// Type and truncation come from the Radix <Text size weight truncate>; this
+// only adds the flex-specific min-width:0 so the title can shrink and ellipsize
+// (a flex item's default min-width:auto would otherwise let it push the rest of
+// the bar off the overflow-hidden header).
 .workspaceTitle {
-  color: var(--gray-12);
-  font-size: var(--font-size-1);
-  font-weight: var(--font-weight-medium);
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 // A <button>, so neutralize the UA button chrome; the inner spans carry their
