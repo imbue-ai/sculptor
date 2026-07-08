@@ -397,6 +397,32 @@ def test_command_palette_show_panel_is_jump_only(sculptor_instance_: SculptorIns
     expect(task_page.get_file_browser()).to_be_visible()
 
 
+@user_story("to have the palette close after I toggle a section from Cmd+K")
+def test_command_palette_section_toggle_closes_palette(sculptor_instance_: SculptorInstance) -> None:
+    # Regression lock for the view.toggle_{left,right,bottom}_panel commands: unlike
+    # the jump-only "Show X" panel reveals, the section toggles act on chrome behind
+    # the palette, so the palette must CLOSE to reveal the result. The right section
+    # starts collapsed; toggling it from Cmd+K opens it and dismisses the palette.
+    # Not @release-marked: start_task_and_wait_for_ready selects the Fake Claude model,
+    # which is gated off in packaged-release runs.
+    page = sculptor_instance_.page
+    task_page = start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Cmd+K Toggle Section WS")
+    right = PlaywrightWorkspaceSection(page, "right")
+
+    # Force the precondition rather than trusting the default layout: the right section
+    # must be collapsed so the toggle command below OPENS it. The command is a raw
+    # toggle, so an already-expanded section would collapse and invert the final assertion.
+    right.collapse_section()
+    expect(right.get_header()).to_have_count(0)
+
+    palette = task_page.open_command_palette()
+    palette.type_query("Toggle right section")
+    expect(palette.get_item_by_command_id("view.toggle_right_panel")).to_be_visible()
+    palette.select_by_command_id("view.toggle_right_panel")
+    expect(palette).not_to_be_visible()
+    expect(right.get_header()).to_be_visible()
+
+
 @user_story("to create and land on a new agent via the palette's Add panel flow")
 def test_command_palette_add_panel_agent_create_navigates(sculptor_instance_: SculptorInstance) -> None:
     # Regression lock for the addpanel.panels.new_agent row: it must share the
