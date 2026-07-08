@@ -3,7 +3,7 @@ import { closestCenter, DndContext } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { IconButton, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { Bug, Command, Home, PanelLeftClose, Plus, Settings } from "lucide-react";
+import { Bug, Command, Home, PanelLeftClose, PanelsTopLeft, Plus, Settings } from "lucide-react";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -23,6 +23,7 @@ import { buildWorkspaceActions } from "~/components/CommandPalette/contextAction
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
 import { DevModeIndicator } from "~/components/DevModeIndicator.tsx";
 import { sidebarCollapsedAtom, sidebarWidthAtom } from "~/components/layout/sidebarAtoms.ts";
+import { layoutsSwitcherOpenAtom } from "~/components/layouts/layoutUiAtoms.ts";
 import { isWorkspaceListEmptyAtom, newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { ReportProblemPopover } from "~/components/ReportProblemPopover.tsx";
 import { layoutPersistenceAdapter } from "~/components/sections/persistence/LocalStorageLayoutAdapter.ts";
@@ -87,7 +88,8 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   const { navigateToWorkspace, navigateToAgent, navigateToHome, navigateToGlobalSettings } = useImbueNavigate();
   const setNewWorkspaceModal = useSetAtom(newWorkspaceModalAtom);
   const { toggle: toggleCommandPalette } = useCommandPalette();
-  const { workspaceId: activeWorkspaceId, isHomeRoute, isSettingsRoute } = useImbueLocation();
+  const { workspaceId: activeWorkspaceId, isHomeRoute, isSettingsRoute, isWorkspaceRoute } = useImbueLocation();
+  const setLayoutsSwitcherOpen = useSetAtom(layoutsSwitcherOpenAtom);
   const { navigateToNextTab } = useWorkspaceTabActions();
   const gitAndOpenIn = useGitAndOpenInRuntime();
   // Deleting a workspace updates the sidebar optimistically and rolls back with
@@ -346,6 +348,16 @@ export const WorkspaceSidebar = (): ReactElement | null => {
             label="Add repo"
             onClick={() => setIsAddRepoDialogOpen(true)}
             testId={ElementIds.SIDEBAR_ADD_REPO_BUTTON}
+          />
+          {/* Opens the Layouts switcher for the current workspace. Disabled off a
+            workspace route, where there is no arrangement to switch. */}
+          <NavItem
+            icon={PanelsTopLeft}
+            label="Layouts"
+            disabled={!isWorkspaceRoute}
+            disabledTooltip="Open a workspace to switch layouts"
+            onClick={() => setLayoutsSwitcherOpen(true)}
+            testId={ElementIds.SIDEBAR_LAYOUTS_LINK}
           />
           <NavItem
             icon={Settings}

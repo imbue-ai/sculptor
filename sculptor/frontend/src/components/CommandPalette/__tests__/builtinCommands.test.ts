@@ -63,6 +63,8 @@ const makeRuntime = (overrides: Partial<CommandRuntime> = {}): CommandRuntime =>
       toAgent: vi.fn(),
     },
     openNewWorkspaceModal: vi.fn(),
+    openLayoutsModal: vi.fn(),
+    openSaveLayoutModal: vi.fn(),
     ui: {
       toggleHelpDialog: vi.fn(),
       toggleDevPanel: vi.fn(),
