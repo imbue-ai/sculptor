@@ -95,8 +95,8 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         palette commands and shortcuts the tests drive act on a workspace
         surface (panels, tabs, agents), so a test that exercises them must first
         create one. Creating here also keeps the auto-opened first-run
-        new-workspace dialog (Home pops it while the list is empty) out of the
-        way of subsequent clicks.
+        new-workspace dialog (Home pops it on a boot with zero workspaces)
+        out of the way of subsequent clicks.
 
         Idempotent: a no-op once any workspace exists (e.g. a test that already
         ran ``start_task_and_wait_for_ready``), so it never disturbs callers that

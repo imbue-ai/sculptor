@@ -14,6 +14,10 @@ reopened via the sidebar's New Workspace button or the Cmd/Meta+T shortcut,
 and Cmd+K still opens the command palette. Creating the first workspace
 navigates to the full workspace page.
 
+The offer is boot-only: once any workspace has existed in the session,
+deleting the last one lands on a plain empty Home with no dialog — the offer
+teaches a brand-new user how to start, it does not chase every empty list.
+
 These tests need a genuinely zero-workspace instance. The shared
 ``sculptor_instance_`` already deletes every workspace in its per-test cleanup,
 so ``sculptor_instance_empty_first_run_`` routes Home and waits for the
@@ -175,3 +179,35 @@ def test_creating_first_workspace_navigates_to_workspace(
     sidebar = get_workspace_sidebar(page)
     expect(sidebar.get_workspace_rows()).to_have_count(1)
     expect(sidebar.get_no_workspaces_hint()).to_have_count(0)
+
+
+@user_story("to delete my last workspace without the create dialog popping over the empty page")
+def test_deleting_last_workspace_does_not_reopen_dialog(
+    sculptor_instance_empty_first_run_: SculptorInstance,
+) -> None:
+    """Emptying the list by deletion never re-triggers the first-run offer.
+
+    The offer fires only on a boot whose first workspace snapshot is empty.
+    Once a workspace has existed in the session, deleting the last one lands
+    on a plain empty Home — a surprise modal there would fight the user's
+    deliberate delete (and swallow whatever they click next).
+    """
+    page = sculptor_instance_empty_first_run_.page
+    dialog = PlaywrightNewWorkspaceDialog(page)
+
+    dialog.create_and_wait_for_chat_panel(workspace_name="Only WS")
+
+    # Delete the (active) workspace's row directly — not via the
+    # delete_all_workspaces_via_ui helper, whose defensive dialog dismissal
+    # would mask the very regression this test guards against. Removing the
+    # active workspace's last row navigates to Home.
+    sidebar = get_workspace_sidebar(page)
+    rows = sidebar.get_workspace_rows()
+    sidebar.delete_workspace_via_row_icon(rows.first)
+    expect(rows).to_have_count(0)
+
+    # The per-repo hint reappearing means the emptied list has rendered — the
+    # same store update a regressed offer would pop the dialog on — so a
+    # plain zero-count check on the dialog afterwards is race-free.
+    expect(sidebar.get_no_workspaces_hint()).to_be_visible()
+    expect(dialog.get_dialog()).to_have_count(0)

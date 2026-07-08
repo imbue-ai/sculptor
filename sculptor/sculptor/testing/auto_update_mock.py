@@ -191,8 +191,8 @@ class MockSculptorElectronAPI:
         self._page.wait_for_function(ready_predicate, timeout=_READY_PREDICATE_TIMEOUT_MS)
 
         # The reload boots onto Home with zero workspaces (this fixture runs
-        # right after per-test cleanup), which re-offers the first-run
-        # new-workspace dialog once the workspace snapshot arrives. Settle it
+        # right after per-test cleanup), and that boot-empty snapshot
+        # auto-opens the first-run new-workspace dialog. Settle it
         # before handing the page to the test — its modal overlay would
         # otherwise swallow the test's first click (e.g. the VERSION trigger)
         # at an unpredictable moment.

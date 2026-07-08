@@ -76,8 +76,8 @@ class TerminalSocketCapture:
         self._page.evaluate("localStorage.setItem('__sculptor_terminal_socket_capture', 'true')")
         full_spa_reload(self._page)
         # The reload boots onto Home with zero workspaces (this fixture runs
-        # right after per-test cleanup), which re-offers the first-run
-        # new-workspace dialog once the workspace snapshot arrives. Settle it
+        # right after per-test cleanup), and that boot-empty snapshot
+        # auto-opens the first-run new-workspace dialog. Settle it
         # before handing the page to the test, so the offer can't pop
         # mid-test with a prefilled prompt (or swallow a click) at an
         # unpredictable moment.

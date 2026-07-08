@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Workspace } from "~/api";
-import { workspaceAtomFamily, workspaceIdsAtom } from "~/common/state/atoms/workspaces.ts";
+import { updateWorkspacesAtom, workspaceIdsAtom } from "~/common/state/atoms/workspaces.ts";
 import { renderWithProviders } from "~/common/testUtils.tsx";
 import { HOME_PROMPT_PREFILL } from "~/components/newWorkspace/homePromptPrefill.ts";
 import { newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
@@ -20,6 +20,17 @@ vi.mock("./HomeViewSwitcher.tsx", () => ({
   HomeViewSwitcher: (): ReactElement => <div data-testid="stub-view-switcher" />,
 }));
 
+const mockWorkspace = (overrides: Partial<Workspace> & Pick<Workspace, "objectId">): Workspace =>
+  ({
+    projectId: "p1",
+    organizationReference: "org-1",
+    description: `ws-${overrides.objectId}`,
+    initializationStrategy: "CLONE",
+    isOpen: true,
+    isDeleted: false,
+    ...overrides,
+  }) as Workspace;
+
 describe("HomePage first-run auto-open", () => {
   // vitest runs with `globals: false`, so RTL's automatic post-test cleanup
   // isn't registered — do it explicitly so each render starts from a fresh DOM.
@@ -27,9 +38,9 @@ describe("HomePage first-run auto-open", () => {
     cleanup();
   });
 
-  it("offers the create dialog with the onboarding prompt when the list is empty", () => {
+  it("offers the create dialog with the onboarding prompt when the boot snapshot is empty", () => {
     const store = createStore();
-    store.set(workspaceIdsAtom, []);
+    store.set(updateWorkspacesAtom, []);
     renderWithProviders(<HomePage />, { store });
 
     expect(store.get(newWorkspaceModalAtom)).toEqual({ open: true, initialPrompt: HOME_PROMPT_PREFILL });
@@ -45,14 +56,23 @@ describe("HomePage first-run auto-open", () => {
 
   it("does not offer when workspaces exist", () => {
     const store = createStore();
-    store.set(workspaceAtomFamily("w1"), {
-      objectId: "w1",
-      description: "ws-w1",
-      projectId: "p1",
-    } as unknown as Workspace);
-    store.set(workspaceIdsAtom, ["w1"]);
+    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "w1" })]);
     renderWithProviders(<HomePage />, { store });
 
+    expect(store.get(newWorkspaceModalAtom)).toEqual({ open: false });
+  });
+
+  it("does not offer after the last workspace is deleted mid-session", () => {
+    // Deleting the last workspace lands the user on an empty Home. The offer
+    // is an onboarding affordance for a boot with zero workspaces — popping
+    // the dialog over a deliberate delete would fight the user's intent.
+    const store = createStore();
+    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "w1" })]);
+    renderWithProviders(<HomePage />, { store });
+
+    act(() => {
+      store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "w1", isDeleted: true })]);
+    });
     expect(store.get(newWorkspaceModalAtom)).toEqual({ open: false });
   });
 
@@ -66,7 +86,7 @@ describe("HomePage first-run auto-open", () => {
     renderWithProviders(<HomePage />, { store });
 
     act(() => {
-      store.set(workspaceIdsAtom, []);
+      store.set(updateWorkspacesAtom, []);
     });
     expect(store.get(newWorkspaceModalAtom)).toEqual({ open: true, presetProjectId: "p1" });
   });

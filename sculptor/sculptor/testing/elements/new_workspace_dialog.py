@@ -79,7 +79,7 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
     def get_form(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.NEW_WORKSPACE_FORM)
 
-    # -- Form fields (shared with the /ws/new page and the inline first-run form) --
+    # -- Form fields (the same NewWorkspaceForm regardless of how the dialog opened) --
 
     def get_workspace_name_input(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)

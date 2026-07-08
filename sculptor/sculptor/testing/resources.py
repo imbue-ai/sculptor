@@ -122,13 +122,15 @@ def sculptor_instance_empty_first_run_(
     The shared ``sculptor_instance_``'s per-test reset ends settled on Home
     with one repo and zero workspaces, having already waited out and dismissed
     the first-run offer so ordinary tests never race its modal overlay. The
-    offer fires whenever Home mounts over an empty (loaded) workspace list,
-    and the reset's dismissal spent this mount's offer — so remount Home by
+    offer fires whenever Home mounts over an empty (loaded) workspace list on
+    a boot that has never had a workspace — this reset's fresh boot is exactly
+    that, and its dismissal spent this mount's offer — so remount Home by
     hopping through Settings and back. The hops are hash-only navigations
     within the running SPA (no reboot — a full reload would re-race the whole
-    boot path for nothing), and the workspace list is already loaded and
-    empty, so returning to Home re-offers the dialog immediately with the
-    ``/sculptor:help`` onboarding prompt prefilled.
+    boot path for nothing; and it must not create a workspace first, which
+    would latch the offer off for the session), and the workspace list is
+    already loaded and empty, so returning to Home re-offers the dialog
+    immediately with the ``/sculptor:help`` onboarding prompt prefilled.
     """
     page = sculptor_instance_.page
     page.evaluate("window.location.hash = '/settings'")

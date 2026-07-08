@@ -4,7 +4,7 @@ import { atomWithStorage } from "jotai/utils";
 
 import type { WorkspaceInitializationStrategy } from "~/api";
 import type { StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
-import { workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
+import { hasEverHadWorkspacesAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 
 /**
  * Open/close state of the new-workspace modal plus optional seeds for the form.
@@ -63,15 +63,18 @@ export const lastWorkspaceCreationSettingsAtom: WritableAtom<
 );
 
 /**
- * Derived over the live workspace list; gates the home page's first-run
- * auto-open of the new-workspace dialog. `false` while the list is still
- * loading (`undefined`) so the dialog never flashes on a boot that turns out
- * to have workspaces — the offer waits for the stream's first snapshot.
+ * Gates the home page's first-run auto-open of the new-workspace dialog:
+ * true only while the loaded workspace list is empty AND no workspace has
+ * ever existed this session. `false` while the list is still loading
+ * (`undefined`) so the dialog never flashes on a boot that turns out to have
+ * workspaces — the offer waits for the stream's first snapshot. Deleting the
+ * last workspace keeps it false (`hasEverHadWorkspacesAtom` has latched):
+ * the offer is an onboarding affordance, not an empty-list reflex.
  */
-export const isWorkspaceListEmptyAtom: Atom<boolean> = atom<boolean>((get) => {
+export const shouldOfferFirstRunWorkspaceAtom: Atom<boolean> = atom<boolean>((get) => {
   const workspaces = get(workspacesArrayAtom);
   if (workspaces === undefined) {
     return false;
   }
-  return workspaces.length === 0;
+  return workspaces.length === 0 && !get(hasEverHadWorkspacesAtom);
 });

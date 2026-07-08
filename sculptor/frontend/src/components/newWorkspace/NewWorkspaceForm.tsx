@@ -331,10 +331,10 @@ export const NewWorkspaceForm = ({
 
   // Effects — Cmd+Enter creates from anywhere in the form. An overlay open over
   // the form (e.g. the Add Repository dialog or an open Select) owns Cmd+Enter for
-  // its own action. The form's OWN host modal is ignored: when rendered inside the
-  // new-workspace dialog the form is itself within a `role="dialog"`, so without the
-  // ignore it would always treat its own modal as a blocker and Cmd+Enter would
-  // never fire. The inline first-run form has no host dialog, so the ignore is null.
+  // its own action. The form's OWN host modal is ignored: the form renders inside
+  // the new-workspace dialog and is therefore itself within a `role="dialog"`, so
+  // without the ignore it would always treat its own modal as a blocker and
+  // Cmd+Enter would never fire.
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent): void => {
       if (e.key !== "Enter" || !isModifierPressed(e)) return;

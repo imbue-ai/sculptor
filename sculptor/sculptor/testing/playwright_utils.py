@@ -119,8 +119,8 @@ def navigate_to_home_page(page: Page) -> None:
     # An open new-workspace dialog's overlay would swallow the click below
     # (and the sidebar-expand click too, so dismiss before expanding). A
     # caller with the dialog up cannot click the sidebar at all, so dismissal
-    # is always the precondition here — e.g. deleting the last workspace while
-    # parked on Home re-offers the first-run dialog over the page.
+    # is always the precondition here — e.g. a test that opened the dialog
+    # (Cmd/Meta+T, a repo "+") or a zero-workspace boot's first-run offer.
     dialog = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)
     if dialog.count() > 0:
         page.keyboard.press("Escape")
@@ -144,7 +144,9 @@ def settle_first_run_offer(page: Page) -> None:
     (the per-test browser reset, mock installs that reload the SPA) call this
     to wait for the offer and dismiss it, so what follows starts from a
     settled, modal-free Home. Only valid when the offer is guaranteed to fire
-    — a boot over a non-empty list would time out here.
+    — a boot over a non-empty list would time out here, and so would a
+    session that merely deleted its way back to zero workspaces (the offer is
+    boot-only; once a workspace has existed in the session it never fires).
     """
     new_workspace_dialog = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)
     expect(new_workspace_dialog).to_be_visible(timeout=30_000)
@@ -356,10 +358,10 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
     The sidebar is the primary navigation surface in the new shell and lists every
     workspace on all in-app routes, so deleting each row via its hover-revealed
     trash icon + confirmation clears them all without routing to the Home list.
-    When the deletions themselves land the app on Home (removing the active
-    workspace's last row navigates there), Home reacts to the empty list by
-    auto-opening the new-workspace dialog — a modal whose overlay would swallow
-    a caller's next click — so it is dismissed before returning.
+    Emptying the list this way never pops the first-run new-workspace offer:
+    the offer fires only on a boot whose first workspace snapshot is empty,
+    and a session with rows to delete has already seen a non-empty list — so
+    this returns settled with no modal to dismiss.
     """
     # Dismiss any open popover/context menu that might intercept clicks.
     page.keyboard.press("Escape")
@@ -373,7 +375,6 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
     confirm_dialog = sidebar.get_delete_confirmation_dialog()
     workspace_rows = sidebar.get_workspace_rows()
 
-    did_delete_rows = False
     for _ in range(_MAX_WORKSPACE_DELETE_ITERATIONS):
         row_count = workspace_rows.count()
         if row_count == 0:
@@ -384,7 +385,6 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
         # trail the dialog closing by a render under load — wait for the count
         # to drop so the next iteration can't re-target the same row.
         expect(workspace_rows).to_have_count(row_count - 1)
-        did_delete_rows = True
     else:
         remaining = workspace_rows.count()
         logger.error(
@@ -396,21 +396,14 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
             f"Could not delete all workspace rows after {_MAX_WORKSPACE_DELETE_ITERATIONS} iterations ({remaining} remaining)"
         )
 
-    # Sidebar deletions only navigate when the ACTIVE workspace's row goes; if
-    # that landed us on Home with the list now empty, the first-run auto-open
-    # pops the new-workspace dialog on the same store update — wait for it with
-    # a real timeout so a slow frame can't leave the modal to land after we
-    # return and swallow the caller's next click. On any other route (e.g. the
-    # post-reset workspace shell) the offer never fires, and when the list was
-    # already empty on entry it may have been opened-and-dismissed earlier on
-    # this same Home mount, so only a momentary check is warranted.
+    # Deleting rows never triggers the first-run offer (it fires only on a
+    # boot-empty snapshot), but a caller that entered with zero workspaces on
+    # a fresh boot may have had the offer pop after the Escape above — leave
+    # no modal behind in that case either.
     new_workspace_dialog = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)
-    if did_delete_rows and "#/home" in page.url:
-        expect(new_workspace_dialog).to_be_visible()
-    elif not new_workspace_dialog.is_visible():
-        return
-    page.keyboard.press("Escape")
-    expect(new_workspace_dialog).to_have_count(0)
+    if new_workspace_dialog.is_visible():
+        page.keyboard.press("Escape")
+        expect(new_workspace_dialog).to_have_count(0)
 
 
 _workspace_name_counter = itertools.count(1)
@@ -528,10 +521,9 @@ def start_task_and_wait_for_ready(
     # Click create workspace
     submit_button.click()
 
-    # When created via the modal, its overlay backdrop lingers through the close
-    # animation and intercepts pointer events on the workspace beneath (e.g. the model
-    # selector). Wait for the dialog to fully close before interacting. The inline
-    # first-run form has no dialog, so this resolves instantly there.
+    # The modal's overlay backdrop lingers through the close animation and
+    # intercepts pointer events on the workspace beneath (e.g. the model
+    # selector). Wait for the dialog to fully close before interacting.
     expect(sculptor_page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)).to_have_count(0, timeout=60_000)
 
     # A terminal first agent has no chat surface — wait for the terminal

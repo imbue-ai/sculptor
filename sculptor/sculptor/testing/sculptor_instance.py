@@ -336,9 +336,11 @@ class SculptorInstance:
         workspace_rows = self.page.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW)
         if workspace_rows.count() > 0:
             logger.debug("Stale workspace row(s) after reset — deleting via UI")
-            # Ends settled: deleting the last row empties the list on Home,
-            # which pops the first-run offer — the helper waits it out and
-            # dismisses it before returning.
+            # Return without settle_first_run_offer: this boot's first snapshot
+            # had rows, so the boot-only offer never fires on it and the settle
+            # below would time out. (A test that needs the offer after a leaked
+            # reset — sculptor_instance_empty_first_run_ — fails loudly on its
+            # own wait; the leak itself is the bug to chase then.)
             delete_all_workspaces_via_ui(self.page)
             return
 
