@@ -118,26 +118,29 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
             ? encodeRegisteredAgentType(effectiveRegistrationId)
             : effectiveAgentType;
 
-        // Only Claude consumes a creation-time prompt, model, and the per-prompt
-        // agent settings (effort / fast / plan): terminal/registered agents have
-        // no model concept, and pi selects from its own catalog in-task, so it
-        // starts on pi's defaults rather than Claude settings it would ignore.
-        // The prompt gate mirrors the backend, which rejects a prompt for
-        // terminal/registered agents and requires a model alongside any prompt —
-        // sending one would fail the agent create after the workspace already
-        // exists, orphaning an agentless workspace. Non-Claude agents start in
-        // the waiting state instead.
+        // Claude and pi both take an initial prompt; terminal/registered agents
+        // do not — the backend rejects a prompt for them (422), which would fail
+        // the agent create after the workspace already exists and orphan it.
         const isClaudeAgent = effectiveAgentType === "claude";
+        const isPiAgent = effectiveAgentType === "pi";
+        const initialPrompt = isClaudeAgent || isPiAgent ? args.prompt.trim() || undefined : undefined;
+        // Claude seeds its model at create and consumes the per-prompt agent
+        // settings (effort / fast / plan). pi ignores all of them: it picks its
+        // model from its own in-task catalog and enters plan mode from the chat.
+        // The backend still requires a model whenever a prompt is present, so pi
+        // rides a placeholder default in that case only — the same Claude
+        // model_name every live pi message already carries and pi discards.
+        const shouldSendModel = isClaudeAgent || (isPiAgent && initialPrompt !== undefined);
         const agentResponse = await createWorkspaceAgent({
           path: { workspace_id: workspaceId },
           body: {
-            model: isClaudeAgent ? (args.defaultModel as LlmModel) : undefined,
+            model: shouldSendModel ? (args.defaultModel as LlmModel) : undefined,
             effort: isClaudeAgent ? args.effort : undefined,
             fastMode: isClaudeAgent ? args.fastMode : undefined,
             enterPlanMode: isClaudeAgent ? args.enterPlanMode : undefined,
             agentType: effectiveAgentType,
             registrationId: effectiveRegistrationId,
-            prompt: isClaudeAgent ? args.prompt.trim() || undefined : undefined,
+            prompt: initialPrompt,
           },
         });
 
