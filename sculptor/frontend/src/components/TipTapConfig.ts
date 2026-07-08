@@ -217,22 +217,27 @@ export const createTipTapExtensions = ({
           },
           // Spotlight chip attrs — serialized as data-spotlight-* on the
           // `<span data-sculptor-node>` wrapper, parsed back into the Mention
-          // node on draft restore. Snippet escapes HTML via `escapeHtmlAttr`.
+          // node on draft restore. The two line ranges are stored as flat
+          // start/end pairs (absent = null range). Snippet escapes HTML.
           spotlightFile: {
             default: null,
             parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-file"),
           },
-          spotlightLineStart: {
+          spotlightPreviousStart: {
             default: null,
-            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-line-start"),
+            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-previous-start"),
           },
-          spotlightLineEnd: {
+          spotlightPreviousEnd: {
             default: null,
-            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-line-end"),
+            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-previous-end"),
           },
-          spotlightSide: {
+          spotlightCurrentStart: {
             default: null,
-            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-side"),
+            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-current-start"),
+          },
+          spotlightCurrentEnd: {
+            default: null,
+            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-current-end"),
           },
           spotlightSnippet: {
             default: null,
@@ -246,9 +251,17 @@ export const createTipTapExtensions = ({
             default: null,
             parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-scope"),
           },
-          spotlightCommitRef: {
+          spotlightCommitHash: {
             default: null,
-            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-commit-ref"),
+            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-commit-hash"),
+          },
+          spotlightCapturedBranch: {
+            default: null,
+            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-captured-branch"),
+          },
+          spotlightCapturedHeadCommit: {
+            default: null,
+            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-captured-head-commit"),
           },
         };
       },
@@ -337,13 +350,16 @@ export const createTipTapExtensions = ({
               id: element.getAttribute("data-spotlight-file"),
               mentionSuggestionChar: "!",
               spotlightFile: element.getAttribute("data-spotlight-file"),
-              spotlightLineStart: element.getAttribute("data-spotlight-line-start"),
-              spotlightLineEnd: element.getAttribute("data-spotlight-line-end"),
-              spotlightSide: element.getAttribute("data-spotlight-side"),
+              spotlightPreviousStart: element.getAttribute("data-spotlight-previous-start"),
+              spotlightPreviousEnd: element.getAttribute("data-spotlight-previous-end"),
+              spotlightCurrentStart: element.getAttribute("data-spotlight-current-start"),
+              spotlightCurrentEnd: element.getAttribute("data-spotlight-current-end"),
               spotlightSnippet: element.getAttribute("data-spotlight-snippet"),
               spotlightSnippetCapturedAt: element.getAttribute("data-spotlight-snippet-captured-at"),
               spotlightScope: element.getAttribute("data-spotlight-scope"),
-              spotlightCommitRef: element.getAttribute("data-spotlight-commit-ref"),
+              spotlightCommitHash: element.getAttribute("data-spotlight-commit-hash"),
+              spotlightCapturedBranch: element.getAttribute("data-spotlight-captured-branch"),
+              spotlightCapturedHeadCommit: element.getAttribute("data-spotlight-captured-head-commit"),
             }),
           },
           // Sculptor draft serialisation format (file + skill chips only —
@@ -370,24 +386,40 @@ export const createTipTapExtensions = ({
       renderMarkdown(node): string {
         const spotlightFile = node.attrs?.spotlightFile as string | null | undefined;
         if (spotlightFile) {
-          const lineStart = Number(node.attrs?.spotlightLineStart ?? 0);
-          const lineEnd = Number(node.attrs?.spotlightLineEnd ?? 0);
-          const side = (node.attrs?.spotlightSide as string | null) ?? "";
+          const previousStart = node.attrs?.spotlightPreviousStart as string | null;
+          const previousEnd = node.attrs?.spotlightPreviousEnd as string | null;
+          const currentStart = node.attrs?.spotlightCurrentStart as string | null;
+          const currentEnd = node.attrs?.spotlightCurrentEnd as string | null;
           const snippet = (node.attrs?.spotlightSnippet as string) ?? "";
           const capturedAt = (node.attrs?.spotlightSnippetCapturedAt as string) ?? "";
           const scope = (node.attrs?.spotlightScope as string) ?? "";
-          const commitRef = (node.attrs?.spotlightCommitRef as string) ?? "";
-          const range = lineStart === lineEnd ? `${lineStart}` : `${lineStart}-${lineEnd}`;
-          const label = side ? `${spotlightFile}:${range} (${side})` : `${spotlightFile}:${range}`;
-          const fileAttr = ` data-spotlight-file="${escapeHtmlAttr(spotlightFile)}"`;
-          const lsAttr = ` data-spotlight-line-start="${lineStart}"`;
-          const leAttr = ` data-spotlight-line-end="${lineEnd}"`;
-          const sideAttr = side ? ` data-spotlight-side="${escapeHtmlAttr(side)}"` : "";
-          const snippetAttr = snippet ? ` data-spotlight-snippet="${escapeHtmlAttr(snippet)}"` : "";
-          const catAttr = capturedAt ? ` data-spotlight-snippet-captured-at="${escapeHtmlAttr(capturedAt)}"` : "";
-          const scopeAttr = scope ? ` data-spotlight-scope="${escapeHtmlAttr(scope)}"` : "";
-          const refAttr = commitRef ? ` data-spotlight-commit-ref="${escapeHtmlAttr(commitRef)}"` : "";
-          return `<span data-sculptor-node${fileAttr}${lsAttr}${leAttr}${sideAttr}${snippetAttr}${catAttr}${scopeAttr}${refAttr}>${label}</span>`;
+          const commitHash = (node.attrs?.spotlightCommitHash as string) ?? "";
+          const capturedBranch = (node.attrs?.spotlightCapturedBranch as string) ?? "";
+          const capturedHeadCommit = (node.attrs?.spotlightCapturedHeadCommit as string) ?? "";
+          // Label: just the file + line range — no diff side. The old/new/changed
+          // status is a live property of the file's diff, shown in the hover
+          // (computed centrally), not baked onto the chip at capture time.
+          const hasPrevious = previousStart !== null && previousStart !== "";
+          const hasCurrent = currentStart !== null && currentStart !== "";
+          const primaryStart = hasCurrent ? currentStart : previousStart;
+          const primaryEnd = hasCurrent ? currentEnd : previousEnd;
+          const range = primaryEnd && primaryEnd !== primaryStart ? `${primaryStart}-${primaryEnd}` : `${primaryStart}`;
+          const label = `${spotlightFile}:${range}`;
+          const attr = (name: string, value: string): string =>
+            value ? ` data-spotlight-${name}="${escapeHtmlAttr(value)}"` : "";
+          const attrs =
+            attr("file", spotlightFile) +
+            attr("previous-start", hasPrevious ? String(previousStart) : "") +
+            attr("previous-end", hasPrevious ? String(previousEnd ?? previousStart) : "") +
+            attr("current-start", hasCurrent ? String(currentStart) : "") +
+            attr("current-end", hasCurrent ? String(currentEnd ?? currentStart) : "") +
+            attr("snippet", snippet) +
+            attr("snippet-captured-at", capturedAt) +
+            attr("scope", scope) +
+            attr("commit-hash", commitHash) +
+            attr("captured-branch", capturedBranch) +
+            attr("captured-head-commit", capturedHeadCommit);
+          return `<span data-sculptor-node${attrs}>${label}</span>`;
         }
         const entityType = node.attrs?.entityType as string | null | undefined;
         if (entityType) {
@@ -446,16 +478,20 @@ export const createTipTapExtensions = ({
             ...options.HTMLAttributes,
             "data-testid": ElementIds.SPOTLIGHT_CHIP,
             "data-spotlight-file": String(node.attrs.spotlightFile ?? ""),
-            "data-spotlight-line-start": String(node.attrs.spotlightLineStart ?? ""),
-            "data-spotlight-line-end": String(node.attrs.spotlightLineEnd ?? ""),
-            "data-spotlight-side": String(node.attrs.spotlightSide ?? ""),
-            "data-spotlight-snippet": String(node.attrs.spotlightSnippet ?? ""),
-            "data-spotlight-snippet-captured-at": String(node.attrs.spotlightSnippetCapturedAt ?? ""),
             "data-spotlight-scope": String(node.attrs.spotlightScope ?? ""),
           };
-          if (node.attrs.spotlightCommitRef) {
-            attrs["data-spotlight-commit-ref"] = String(node.attrs.spotlightCommitRef);
-          }
+          const optionalAttr = (attr: string, value: unknown): void => {
+            if (value !== null && value !== undefined && value !== "") attrs[attr] = String(value);
+          };
+          optionalAttr("data-spotlight-previous-start", node.attrs.spotlightPreviousStart);
+          optionalAttr("data-spotlight-previous-end", node.attrs.spotlightPreviousEnd);
+          optionalAttr("data-spotlight-current-start", node.attrs.spotlightCurrentStart);
+          optionalAttr("data-spotlight-current-end", node.attrs.spotlightCurrentEnd);
+          optionalAttr("data-spotlight-snippet", node.attrs.spotlightSnippet);
+          optionalAttr("data-spotlight-snippet-captured-at", node.attrs.spotlightSnippetCapturedAt);
+          optionalAttr("data-spotlight-commit-hash", node.attrs.spotlightCommitHash);
+          optionalAttr("data-spotlight-captured-branch", node.attrs.spotlightCapturedBranch);
+          optionalAttr("data-spotlight-captured-head-commit", node.attrs.spotlightCapturedHeadCommit);
           return ["span", attrs, label];
         }
 

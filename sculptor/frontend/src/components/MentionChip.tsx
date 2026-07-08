@@ -13,11 +13,14 @@ import { taskAtomFamily } from "~/common/state/atoms/tasks";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces";
 import {
   clearSpotlightHoverForAnchorAtom,
+  openCommitDiffTabAtom,
   openFileViewTabAtom,
   spotlightHoverAtom,
   spotlightScrollTargetAtom,
 } from "~/pages/workspace/components/diffPanel/atoms";
 import { spotlightBarColor, spotlightColorIndex } from "~/pages/workspace/components/diffPanel/spotlightPalette";
+import type { LineRange, SpotlightAnchor, SpotlightScope } from "~/pages/workspace/components/diffPanel/types";
+import { spotlightPrimaryRange } from "~/pages/workspace/components/diffPanel/types";
 import { revealFolderAtom } from "~/pages/workspace/panels/fileBrowser/atoms";
 import { getFileIcon } from "~/pages/workspace/panels/fileBrowser/fileIcons";
 
@@ -79,9 +82,9 @@ export type MentionChipProps =
   | ({
       kind: "spotlight";
       file: string;
-      lineStart: number;
-      lineEnd: number;
-      side: "old" | "new" | null;
+      previousFileLines: LineRange | null;
+      currentFileLines: LineRange | null;
+      scope: SpotlightScope;
     } & SharedChipProps);
 
 type WrapperElement = NonNullable<SharedChipProps["wrapperElement"]>;
@@ -253,25 +256,31 @@ const FileMentionChip = ({
 };
 
 // TODO: maybe "getSpotlightLabel"?
-const spotlightLabel = (file: string, lineStart: number, lineEnd: number, side: "old" | "new" | null): string => {
-  const range = lineStart === lineEnd ? `${lineStart}` : `${lineStart}-${lineEnd}`;
-  return side ? `${file}:${range} (${side})` : `${file}:${range}`;
+const rangeText = (range: LineRange | null): string => {
+  if (range === null) return "";
+  return range.firstLine === range.lastLine ? `${range.firstLine}` : `${range.firstLine}-${range.lastLine}`;
 };
+
+// The chip face is a pure location — `file:lineRange`, no diff side. The
+// old/new/changed status is a live property of the file's diff, shown in the
+// hover (computed centrally), not baked onto the chip at capture time.
+const spotlightLabel = (anchor: SpotlightAnchor): string =>
+  `${anchor.file}:${rangeText(spotlightPrimaryRange(anchor))}`;
 
 const SpotlightMentionChip = ({
   file,
-  lineStart,
-  lineEnd,
-  side,
+  previousFileLines,
+  currentFileLines,
+  scope,
   Wrapper,
   wrapperProps,
   selected,
   suppressHover,
 }: {
   file: string;
-  lineStart: number;
-  lineEnd: number;
-  side: "old" | "new" | null;
+  previousFileLines: LineRange | null;
+  currentFileLines: LineRange | null;
+  scope: SpotlightScope;
   Wrapper: WrapperElement;
   wrapperProps?: Record<string, unknown>;
   selected?: boolean;
@@ -279,14 +288,17 @@ const SpotlightMentionChip = ({
 }): ReactElement => {
   const { workspaceID } = useParams<{ workspaceID?: string }>();
   const openFileViewTab = useSetAtom(openFileViewTabAtom);
+  const openCommitDiffTab = useSetAtom(openCommitDiffTabAtom);
   const setSpotlightHover = useSetAtom(spotlightHoverAtom);
   const clearSpotlightHoverForAnchor = useSetAtom(clearSpotlightHoverForAnchorAtom);
   const setSpotlightScrollTarget = useSetAtom(spotlightScrollTargetAtom);
   const isClickable = Boolean(workspaceID);
-  const label = spotlightLabel(file, lineStart, lineEnd, side);
   // Stable anchor identity so the highlight effects below don't churn each render.
-  // TODO: is this necessary? pre-existing pattern elsewhere in codebase?
-  const anchor = useMemo(() => ({ file, lineStart, lineEnd }), [file, lineStart, lineEnd]);
+  const anchor = useMemo<SpotlightAnchor>(
+    () => ({ file, previousFileLines, currentFileLines, scope }),
+    [file, previousFileLines, currentFileLines, scope],
+  );
+  const label = spotlightLabel(anchor);
   // Rotating accent that binds this chip to its line-range highlight/gutter bar.
   const accentColor = spotlightBarColor(spotlightColorIndex(anchor));
 
@@ -294,16 +306,21 @@ const SpotlightMentionChip = ({
     (e: MouseEvent) => {
       if (!workspaceID) return;
       e.stopPropagation();
-      // Open in the SOURCE (raw) view — a markdown file would otherwise open
-      // rendered, where line numbers don't line up with the spotlight anchor.
-      openFileViewTab({ workspaceId: workspaceID, filePath: file, markdownMode: "raw" });
+      // A commit spotlight references content AS OF that commit, so route to the
+      // commit diff; every other scope opens the working-tree file view. Open
+      // markdown in SOURCE (raw) view so line numbers line up with the anchor.
+      if (scope.kind === "commit-diff") {
+        openCommitDiffTab({ workspaceId: workspaceID, commitHash: scope.commitHash, filePath: file });
+      } else {
+        openFileViewTab({ workspaceId: workspaceID, filePath: file, markdownMode: "raw" });
+      }
       // Ask the viewer showing this file to scroll the source line into view
       // once Pierre has painted it.
-      setSpotlightScrollTarget({ file, lineStart, lineEnd, requestedAt: Date.now() });
+      setSpotlightScrollTarget({ ...anchor, requestedAt: Date.now() });
       // The click navigates away from the chip, so drop any hover highlight.
       setSpotlightHover(null);
     },
-    [file, lineStart, lineEnd, workspaceID, openFileViewTab, setSpotlightScrollTarget, setSpotlightHover],
+    [anchor, file, scope, workspaceID, openFileViewTab, openCommitDiffTab, setSpotlightScrollTarget, setSpotlightHover],
   );
 
   const handleMouseEnter = useCallback((): void => {
@@ -371,8 +388,7 @@ const SpotlightMentionChip = ({
             </Text>
           </Flex>
           <Text as="div" size="1" style={{ color: "var(--gray-10)" }}>
-            Click to open at line {lineStart === lineEnd ? lineStart : `${lineStart}-${lineEnd}`}
-            {side && ` (${side})`}
+            Click to open
           </Text>
         </Flex>
       }
@@ -502,9 +518,9 @@ export const MentionChip = (props: MentionChipProps): ReactElement => {
     return (
       <SpotlightMentionChip
         file={spotlightProps.file}
-        lineStart={spotlightProps.lineStart}
-        lineEnd={spotlightProps.lineEnd}
-        side={spotlightProps.side}
+        previousFileLines={spotlightProps.previousFileLines}
+        currentFileLines={spotlightProps.currentFileLines}
+        scope={spotlightProps.scope}
         Wrapper={Wrapper}
         wrapperProps={spotlightProps.wrapperProps}
         selected={spotlightProps.selected}

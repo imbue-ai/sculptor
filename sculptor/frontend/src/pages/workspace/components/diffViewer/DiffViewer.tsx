@@ -32,7 +32,7 @@ import { LargeDiffGate } from "~/pages/workspace/components/diffPanel/LargeDiffG
 import { PierreDiffView } from "~/pages/workspace/components/diffPanel/PierreDiffView.tsx";
 import { ReadOnlyPreview } from "~/pages/workspace/components/diffPanel/ReadOnlyPreview.tsx";
 import { RenameBanner } from "~/pages/workspace/components/diffPanel/RenameBanner.tsx";
-import type { DiffViewType, SpotlightData } from "~/pages/workspace/components/diffPanel/types.ts";
+import type { DiffViewType, SpotlightScope } from "~/pages/workspace/components/diffPanel/types.ts";
 import { useFileLines } from "~/pages/workspace/components/diffPanel/useFileLines.ts";
 import { useInFileSearch } from "~/pages/workspace/components/diffPanel/useInFileSearch.ts";
 import { useScrollPreservation } from "~/pages/workspace/components/diffPanel/useScrollPreservation.ts";
@@ -60,9 +60,7 @@ const renderDiffContent = ({
   oldLines,
   newLines,
   spotlightFile,
-  spotlightSide,
   spotlightScope,
-  spotlightCommitRef,
 }: {
   diffString: string;
   viewType: DiffViewType;
@@ -71,9 +69,7 @@ const renderDiffContent = ({
   oldLines?: Array<string>;
   newLines?: Array<string>;
   spotlightFile?: string;
-  spotlightSide?: "old" | "new" | null;
-  spotlightScope: SpotlightData["scope"];
-  spotlightCommitRef?: string;
+  spotlightScope: SpotlightScope;
 }): ReactElement => {
   return (
     <LargeDiffGate diffString={diffString}>
@@ -86,9 +82,7 @@ const renderDiffContent = ({
           oldLines={isTruncated ? undefined : oldLines}
           newLines={isTruncated ? undefined : newLines}
           spotlightFile={spotlightFile}
-          spotlightSide={spotlightSide}
           spotlightScope={spotlightScope}
-          spotlightCommitRef={spotlightCommitRef}
         />
       )}
     </LargeDiffGate>
@@ -368,12 +362,10 @@ export const DiffViewer = ({
         />
       );
     }
-    if (!diffString)
-      return <ReadOnlyPreview workspaceId={workspaceId} filePath={filePath} spotlightScope="file-view" />;
+    if (!diffString) return <ReadOnlyPreview workspaceId={workspaceId} filePath={filePath} />;
 
     // Added or deleted files have only one side, so a side-by-side split is meaningless.
     const effectiveViewType = status === "A" || status === "D" ? "unified" : viewType;
-    const spotlightSide = status === "A" ? "new" : status === "D" ? "old" : undefined;
     const diffProps = {
       diffString,
       viewType: effectiveViewType,
@@ -382,10 +374,9 @@ export const DiffViewer = ({
       oldLines,
       newLines,
       spotlightFile: filePath,
-      spotlightSide: spotlightSide as "old" | "new" | null | undefined,
       spotlightScope: (content.isTargetBranchDiff
-        ? "target-branch-diff"
-        : "uncommitted-diff") as SpotlightData["scope"],
+        ? { kind: "target-branch-diff" }
+        : { kind: "uncommitted-diff" }) as SpotlightScope,
     };
 
     if (status === "D") {
@@ -454,7 +445,6 @@ export const DiffViewer = ({
               workspaceId={workspaceId}
               filePath={content.filePath}
               renderModeOverride={quickOpenRenderMode ?? undefined}
-              spotlightScope="file-view"
             />
           </Flex>
         </>
@@ -493,9 +483,9 @@ export const DiffViewer = ({
                   overflow,
                   themeType: appTheme,
                   spotlightFile: content.filePath,
-                  spotlightSide: commitFileStatus === "A" ? "new" : commitFileStatus === "D" ? "old" : undefined,
-                  spotlightScope: "commit-diff",
-                  spotlightCommitRef: content.commitHash ?? undefined,
+                  spotlightScope: (content.commitHash
+                    ? { kind: "commit-diff", commitHash: content.commitHash }
+                    : { kind: "file-view" }) as SpotlightScope,
                 })}
               </>
             ) : (

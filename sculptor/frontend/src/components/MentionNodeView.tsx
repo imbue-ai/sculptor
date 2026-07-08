@@ -6,6 +6,7 @@ import type { ReactElement } from "react";
 import { useCallback, useSyncExternalStore } from "react";
 
 import { disambiguateFileNames } from "~/pages/workspace/components/chat-alpha/chipRowUtils.ts";
+import { lineRangeFromStrings, spotlightScopeFromStrings } from "~/pages/workspace/components/diffPanel/types.ts";
 
 import type { EntityType } from "./EntityMentionSuggestion";
 import { MentionChip } from "./MentionChip";
@@ -110,9 +111,18 @@ export const MentionNodeView = ({ node, editor, getPos }: NodeViewProps): ReactE
       <MentionChip
         kind="spotlight"
         file={spotlightFile}
-        lineStart={Number(node.attrs.spotlightLineStart ?? 0)}
-        lineEnd={Number(node.attrs.spotlightLineEnd ?? 0)}
-        side={(node.attrs.spotlightSide as "old" | "new" | null) ?? null}
+        previousFileLines={lineRangeFromStrings(
+          node.attrs.spotlightPreviousStart as string | null,
+          node.attrs.spotlightPreviousEnd as string | null,
+        )}
+        currentFileLines={lineRangeFromStrings(
+          node.attrs.spotlightCurrentStart as string | null,
+          node.attrs.spotlightCurrentEnd as string | null,
+        )}
+        scope={spotlightScopeFromStrings(
+          node.attrs.spotlightScope as string | null,
+          node.attrs.spotlightCommitHash as string | null,
+        )}
         {...sharedProps}
       />
     );

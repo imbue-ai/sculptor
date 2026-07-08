@@ -7,7 +7,7 @@
  * this one place.
  */
 
-import type { SpotlightAnchor } from "./types.ts";
+import type { LineRange, SpotlightAnchor } from "./types.ts";
 
 /**
  * Eight hues stepping periwinkle-blue → teal (215° → 155°), staying in the
@@ -19,14 +19,16 @@ export const SPOTLIGHT_SATURATION_PERCENT = 72;
 export const SPOTLIGHT_LIGHTNESS_PERCENT = 56;
 /** Alpha for the full-row line highlight; the solid gutter bar / chip accent uses no alpha. */
 export const SPOTLIGHT_HIGHLIGHT_ALPHA = 0.18;
-
 /**
  * Stable string identity of an anchor — the basis for its deterministic color.
- * NOTE: when the two-range representational refactor lands, this becomes
- * `file | previousRange | currentRange | scope.kind | commitHash`; today it
- * keys on the single {file, lineStart, lineEnd} anchor.
+ * Keys on the file, both side-ranges, and the scope so two spotlights on the
+ * same lines from different panes still read as distinct.
  */
-const anchorIdentity = (anchor: SpotlightAnchor): string => `${anchor.file}|${anchor.lineStart}-${anchor.lineEnd}`;
+const anchorIdentity = (anchor: SpotlightAnchor): string => {
+  const range = (r: LineRange | null): string => (r ? `${r.firstLine}-${r.lastLine}` : "");
+  const commit = anchor.scope.kind === "commit-diff" ? anchor.scope.commitHash : "";
+  return `${anchor.file}|${range(anchor.previousFileLines)}|${range(anchor.currentFileLines)}|${anchor.scope.kind}|${commit}`;
+};
 
 /** djb2 string hash → non-negative integer. */
 const hashString = (value: string): number => {

@@ -156,7 +156,6 @@ const ExpandableFileDiff = ({
   // getBaseRef) only when the merge-base is unknown.
   const baseRefOverride = scope === "vs-target-branch" ? mergeBaseRef : "HEAD";
   const { oldLines, newLines } = useFileLines(workspaceId, filePath, previousFilePath, fileStatus, baseRefOverride);
-  const spotlightSide = fileStatus === "A" ? "new" : fileStatus === "D" ? "old" : undefined;
   return (
     <LargeDiffGate diffString={diffString}>
       {({ visibleDiff, isTruncated }) => (
@@ -170,8 +169,7 @@ const ExpandableFileDiff = ({
           newLines={isTruncated ? undefined : newLines}
           hideHandle
           spotlightFile={filePath}
-          spotlightSide={spotlightSide}
-          spotlightScope={scope === "vs-target-branch" ? "target-branch-diff" : "uncommitted-diff"}
+          spotlightScope={scope === "vs-target-branch" ? { kind: "target-branch-diff" } : { kind: "uncommitted-diff" }}
         />
       )}
     </LargeDiffGate>

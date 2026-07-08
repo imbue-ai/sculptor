@@ -32,7 +32,6 @@ import {
 } from "./pierreShadowStyles.ts";
 import styles from "./ReadOnlyPreview.module.scss";
 import { StickyHorizontalScrollbar } from "./StickyHorizontalScrollbar.tsx";
-import type { SpotlightData } from "./types.ts";
 import { usePierreHighlighterReady } from "./usePierreHighlighterReady.ts";
 import { type SpotlightCaptureResult, useSpotlightCapture } from "./useSpotlightCapture.ts";
 import { useSpotlightOverlay } from "./useSpotlightOverlay.ts";
@@ -44,8 +43,6 @@ type ReadOnlyPreviewProps = {
    *  the quick-open-rendered-markdown path so one explicit open never rewrites
    *  the preference itself. */
   renderModeOverride?: MarkdownRenderMode;
-  /** Enables spotlight capture on code files (skipped for rendered markdown). */
-  spotlightScope?: SpotlightData["scope"];
 };
 
 // The shared Pierre background override plus the native-scrollbar hide (this
@@ -115,12 +112,7 @@ const READ_ONLY_PREVIEW_COMPONENTS: Components = {
   ),
 };
 
-export const ReadOnlyPreview = ({
-  workspaceId,
-  filePath,
-  renderModeOverride,
-  spotlightScope = "file-view",
-}: ReadOnlyPreviewProps): ReactElement => {
+export const ReadOnlyPreview = ({ workspaceId, filePath, renderModeOverride }: ReadOnlyPreviewProps): ReactElement => {
   const { data: content, isPending, isError: hasError } = useWorkspaceFileContent(workspaceId, filePath, null);
   const overflow = useAtomValue(fileBrowserLineWrappingAtom);
   const appTheme = useAtomValue(appThemeAtom);
@@ -193,16 +185,18 @@ export const ReadOnlyPreview = ({
     (result: SpotlightCaptureResult): void => {
       setSpotlight({
         file: filePath,
-        lineStart: result.lineStart,
-        lineEnd: result.lineEnd,
-        // Plain file views have no diff side.
-        side: null,
+        previousFileLines: result.previousFileLines,
+        currentFileLines: result.currentFileLines,
+        // A plain file view has no diff axis; capture uses the file-view scope.
+        scope: { kind: "file-view" },
         snippet: result.snippet,
         snippetCapturedAt: new Date().toISOString(),
-        scope: spotlightScope,
+        // Branch/HEAD are stamped by ChatInput from workspace git state at insert time.
+        capturedBranch: "",
+        capturedHeadCommit: "",
       });
     },
-    [filePath, spotlightScope, setSpotlight],
+    [filePath, setSpotlight],
   );
 
   const spotlight = useSpotlightCapture({

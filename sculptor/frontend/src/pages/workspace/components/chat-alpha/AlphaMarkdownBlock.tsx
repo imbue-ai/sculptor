@@ -11,6 +11,7 @@ import type { EntityType } from "~/components/EntityMentionSuggestion";
 import { MentionChip } from "~/components/MentionChip";
 import type { SkillType } from "~/components/skillBadge";
 import { openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
+import { lineRangeFromStrings, spotlightScopeFromStrings } from "~/pages/workspace/components/diffPanel/types.ts";
 import { useWorkspaceCodePath } from "~/pages/workspace/hooks/useWorkspaceCodePath.ts";
 
 import { AlphaBlockquote } from "./AlphaBlockquote.tsx";
@@ -101,9 +102,12 @@ type ParsedSculptorSpan = {
   skillDescription: string | null;
   skillType: SkillType | null;
   spotlightFile?: string | null;
-  spotlightLineStart?: string | null;
-  spotlightLineEnd?: string | null;
-  spotlightSide?: string | null;
+  spotlightPreviousStart?: string | null;
+  spotlightPreviousEnd?: string | null;
+  spotlightCurrentStart?: string | null;
+  spotlightCurrentEnd?: string | null;
+  spotlightScope?: string | null;
+  spotlightCommitHash?: string | null;
 };
 
 const extractSculptorSpans = (content: string): { processedContent: string; spans: Array<ParsedSculptorSpan> } => {
@@ -121,9 +125,12 @@ const extractSculptorSpans = (content: string): { processedContent: string; span
       skillDescription: span.getAttribute("data-skill-description"),
       skillType: span.getAttribute("data-skill-type") as SkillType | null,
       spotlightFile: span.getAttribute("data-spotlight-file"),
-      spotlightLineStart: span.getAttribute("data-spotlight-line-start"),
-      spotlightLineEnd: span.getAttribute("data-spotlight-line-end"),
-      spotlightSide: span.getAttribute("data-spotlight-side"),
+      spotlightPreviousStart: span.getAttribute("data-spotlight-previous-start"),
+      spotlightPreviousEnd: span.getAttribute("data-spotlight-previous-end"),
+      spotlightCurrentStart: span.getAttribute("data-spotlight-current-start"),
+      spotlightCurrentEnd: span.getAttribute("data-spotlight-current-end"),
+      spotlightScope: span.getAttribute("data-spotlight-scope"),
+      spotlightCommitHash: span.getAttribute("data-spotlight-commit-hash"),
     });
     return `+[sculptorChip:${index}|x]`;
   });
@@ -162,9 +169,9 @@ const renderChips = (children: ReactNode, spans: ReadonlyArray<ParsedSculptorSpa
                 key={`spotlight-${matchIndex}`}
                 kind="spotlight"
                 file={parsed.spotlightFile}
-                lineStart={parseInt(parsed.spotlightLineStart ?? "0", 10)}
-                lineEnd={parseInt(parsed.spotlightLineEnd ?? "0", 10)}
-                side={(parsed.spotlightSide as "old" | "new" | null) || null}
+                previousFileLines={lineRangeFromStrings(parsed.spotlightPreviousStart, parsed.spotlightPreviousEnd)}
+                currentFileLines={lineRangeFromStrings(parsed.spotlightCurrentStart, parsed.spotlightCurrentEnd)}
+                scope={spotlightScopeFromStrings(parsed.spotlightScope, parsed.spotlightCommitHash)}
               />,
             );
           } else {

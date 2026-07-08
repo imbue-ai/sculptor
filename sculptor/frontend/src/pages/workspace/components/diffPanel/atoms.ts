@@ -13,11 +13,23 @@ import type {
   DiffPanelTabState,
   DiffScope,
   DiffTab,
+  LineRange,
   SingleFileDiffTab,
   SpotlightAnchor,
   SpotlightData,
 } from "./types.ts";
 import { COMMIT_DIFF_PREFIX, FILE_VIEW_PREFIX, TARGET_BRANCH_DIFF_PREFIX } from "./types.ts";
+
+/** Structural equality of two line ranges (or both absent). */
+const lineRangesEqual = (a: LineRange | null, b: LineRange | null): boolean =>
+  a === b || (a !== null && b !== null && a.firstLine === b.firstLine && a.lastLine === b.lastLine);
+
+/** Two anchors point at the same lines in the same file from the same pane. */
+const spotlightAnchorsEqual = (a: SpotlightAnchor, b: SpotlightAnchor): boolean =>
+  a.file === b.file &&
+  a.scope.kind === b.scope.kind &&
+  lineRangesEqual(a.previousFileLines, b.previousFileLines) &&
+  lineRangesEqual(a.currentFileLines, b.currentFileLines);
 
 // The single-instance panel (and its default section) that hosts the active diff/
 // file-view tab in the section shell. file-view tabs surface in the Files panel;
@@ -62,12 +74,7 @@ export const spotlightHoverAtom = atom<SpotlightAnchor | null>(null);
  */
 export const clearSpotlightHoverForAnchorAtom = atom(null, (get, set, anchor: SpotlightAnchor) => {
   const current = get(spotlightHoverAtom);
-  if (
-    current !== null &&
-    current.file === anchor.file &&
-    current.lineStart === anchor.lineStart &&
-    current.lineEnd === anchor.lineEnd
-  ) {
+  if (current !== null && spotlightAnchorsEqual(current, anchor)) {
     set(spotlightHoverAtom, null);
   }
 });

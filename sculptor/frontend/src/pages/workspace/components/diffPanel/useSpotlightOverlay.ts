@@ -2,8 +2,9 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useEffect } from "react";
 
 import { spotlightHoverAtom, spotlightScrollTargetAtom } from "./atoms.ts";
-import { clearLinePaint, paintLineRange, scrollLineIntoView, shadowRootOf } from "./spotlightPaint.ts";
+import { clearLinePaint, paintAnchorRanges, scrollLineIntoView, shadowRootOf } from "./spotlightPaint.ts";
 import { spotlightColorIndex, spotlightHighlightColor } from "./spotlightPalette.ts";
+import { spotlightPrimaryRange } from "./types.ts";
 import { usePierreDomVersion } from "./usePierreDomVersion.ts";
 
 type UseSpotlightOverlayOptions = {
@@ -38,22 +39,27 @@ export const useSpotlightOverlay = ({ paneElement, file }: UseSpotlightOverlayOp
     if (!shadowRoot) return;
     const isMatch = hover !== null && file !== undefined && hover.file === file;
     if (isMatch) {
-      // Same rotating color the chip carries, so the painted rows read as
-      // "this chip's lines".
-      paintLineRange(shadowRoot, hover.lineStart, hover.lineEnd, spotlightHighlightColor(spotlightColorIndex(hover)));
+      // Same rotating color the chip carries, and side-aware ranges so a
+      // `changed` chip lights up both its red and green rows while `old`/`new`
+      // light only their side.
+      paintAnchorRanges(
+        shadowRoot,
+        hover.previousFileLines,
+        hover.currentFileLines,
+        spotlightHighlightColor(spotlightColorIndex(hover)),
+      );
       return (): void => clearLinePaint(shadowRoot);
     }
     clearLinePaint(shadowRoot);
     return undefined;
   }, [hover, file, paneElement, domVersion]);
 
-  // Click scroll — retries deterministically as rows stream in: each DOM
-  // version bump re-runs this effect; once the target row exists we scroll and
-  // clear the request so later bumps are no-ops.
+  // Click scroll — retries deterministically as rows stream in.
   useEffect(() => {
     if (!scrollTarget || file === undefined || scrollTarget.file !== file) return;
     const shadowRoot = shadowRootOf(paneElement);
-    if (shadowRoot && scrollLineIntoView(shadowRoot, scrollTarget.lineStart)) {
+    const primary = spotlightPrimaryRange(scrollTarget);
+    if (primary !== null && shadowRoot && scrollLineIntoView(shadowRoot, primary.firstLine)) {
       setScrollTarget(null);
     }
   }, [scrollTarget, file, paneElement, domVersion, setScrollTarget]);

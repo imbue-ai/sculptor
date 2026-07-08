@@ -19,7 +19,7 @@ import {
 } from "./pierreShadowStyles.ts";
 import { SplitDiffHandle } from "./SplitDiffHandle.tsx";
 import { StickyHorizontalScrollbar } from "./StickyHorizontalScrollbar.tsx";
-import type { DiffViewType, SpotlightData } from "./types.ts";
+import type { DiffViewType, SpotlightScope } from "./types.ts";
 import { usePierreHighlighterReady } from "./usePierreHighlighterReady.ts";
 import { type SpotlightCaptureResult, useSpotlightCapture } from "./useSpotlightCapture.ts";
 import { useSpotlightOverlay } from "./useSpotlightOverlay.ts";
@@ -42,12 +42,12 @@ type PierreDiffViewProps = {
   hideHandle?: boolean;
   /** The file path this diff/file view is showing. Enables spotlight capture. */
   spotlightFile?: string;
-  /** Which diff side the view is anchored to, if any (null for plain file views). */
-  spotlightSide?: "old" | "new" | null;
-  /** Which pane the spotlight capture came from — drives the system-reminder shape. Defaults to "file-view". */
-  spotlightScope?: SpotlightData["scope"];
-  /** Commit hash — set only when scope is "commit-diff". */
-  spotlightCommitRef?: string;
+  /** Which pane the capture came from — drives navigation + reminder shape. Defaults to file-view. */
+  spotlightScope?: SpotlightScope;
+  /** Branch checked out at capture time (agent world-snapshot). TODO: source from workspace git state. */
+  spotlightCapturedBranch?: string;
+  /** HEAD commit at capture time (agent world-snapshot). TODO: source from workspace git state. */
+  spotlightCapturedHeadCommit?: string;
 };
 
 /**
@@ -121,9 +121,9 @@ export const PierreDiffView = ({
   newLines,
   hideHandle = false,
   spotlightFile,
-  spotlightSide,
-  spotlightScope = "file-view",
-  spotlightCommitRef,
+  spotlightScope = { kind: "file-view" },
+  spotlightCapturedBranch,
+  spotlightCapturedHeadCommit,
 }: PierreDiffViewProps): ReactElement => {
   const splitRatio = useAtomValue(splitDiffColumnRatioAtom);
   const codeTheme = useAtomValue(themeCodeThemeAtom);
@@ -258,19 +258,16 @@ export const PierreDiffView = ({
       if (!spotlightFile) return;
       setSpotlight({
         file: spotlightFile,
-        lineStart: result.lineStart,
-        lineEnd: result.lineEnd,
-        // Prefer the side derived from the captured line's `data-line-type`
-        // (accurate for modified files where both sides are present); fall
-        // back to the per-file hint for added/deleted single-side diffs.
-        side: result.side ?? spotlightSide ?? null,
+        previousFileLines: result.previousFileLines,
+        currentFileLines: result.currentFileLines,
+        scope: spotlightScope,
         snippet: result.snippet,
         snippetCapturedAt: new Date().toISOString(),
-        scope: spotlightScope,
-        commitRef: spotlightCommitRef,
+        capturedBranch: spotlightCapturedBranch ?? "",
+        capturedHeadCommit: spotlightCapturedHeadCommit ?? "",
       });
     },
-    [spotlightFile, spotlightSide, spotlightScope, spotlightCommitRef, setSpotlight],
+    [spotlightFile, spotlightScope, spotlightCapturedBranch, spotlightCapturedHeadCommit, setSpotlight],
   );
 
   const spotlight = useSpotlightCapture({
