@@ -85,7 +85,11 @@ describe("LocalStorageLayoutAdapter", () => {
       explorerListWidthPx: 260,
     };
     localStorage.setItem("sculptor-layout-global", JSON.stringify(legacyGlobal));
-    expect(adapter.read(GLOBAL_SCOPE)).toEqual({ ...legacyGlobal, sidebarOrder: { repos: [], workspaces: {} } });
+    expect(adapter.read(GLOBAL_SCOPE)).toEqual({
+      ...legacyGlobal,
+      sidebarOrder: { repos: [], workspaces: {} },
+      explorerSidebarHiddenByPanel: {},
+    });
   });
 
   it("degrades a wrong-shape sidebarOrder to the default order, keeping the other settings", () => {
@@ -113,6 +117,7 @@ describe("LocalStorageLayoutAdapter", () => {
         sidebarCollapsed: true,
         explorerListWidthPx: 260,
         sidebarOrder: { repos: [], workspaces: {} },
+        explorerSidebarHiddenByPanel: {},
       });
     }
   });
@@ -196,6 +201,7 @@ describe("LocalStorageLayoutAdapter", () => {
       sidebarCollapsed: true,
       explorerListWidthPx: 260,
       sidebarOrder: { repos: [], workspaces: {} },
+      explorerSidebarHiddenByPanel: { files: true },
     };
 
     adapter.write(WS_SCOPE, wsOne);
@@ -255,6 +261,7 @@ describe("LocalStorageLayoutAdapter", () => {
       sidebarCollapsed: true,
       explorerListWidthPx: 260,
       sidebarOrder: { repos: [], workspaces: {} },
+      explorerSidebarHiddenByPanel: {},
     });
     // Before the debounce window elapses nothing is committed to storage, but
     // read() already sees the pending snapshot (read-your-writes).
@@ -269,6 +276,7 @@ describe("LocalStorageLayoutAdapter", () => {
       sidebarCollapsed: true,
       explorerListWidthPx: 260,
       sidebarOrder: { repos: [], workspaces: {} },
+      explorerSidebarHiddenByPanel: {},
     });
   });
 

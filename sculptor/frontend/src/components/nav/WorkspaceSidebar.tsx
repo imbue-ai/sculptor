@@ -11,7 +11,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Workspace } from "~/api";
 import { ElementIds } from "~/api";
 import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
-import { projectsArrayAtom } from "~/common/state/atoms/projects.ts";
 import { agentIdsByWorkspaceAtom, ensurePseudoTabAtom } from "~/common/state/atoms/workspaces.ts";
 import { useOptimisticWorkspaceDelete } from "~/common/state/hooks/useOptimisticWorkspaceDelete.ts";
 import { AddRepoDialog } from "~/components/add-repo/AddRepoDialog.tsx";
@@ -39,7 +38,6 @@ import { adjustSidebarDragCountAtom, isSidebarDragActiveAtom } from "./navAtoms.
 import navItemStyles from "./NavItem.module.scss";
 import { NavItem } from "./NavItem.tsx";
 import { sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
-import { SidebarFirstRunState } from "./SidebarFirstRunState.tsx";
 import { SidebarRepoGroup } from "./SidebarRepoGroup.tsx";
 import { reorderSidebarRepoGroupAtom, sidebarWorkspaceGroupsAtom } from "./sidebarWorkspaceOrder.ts";
 import styles from "./WorkspaceSidebar.module.scss";
@@ -62,9 +60,9 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   const width = useAtomValue(sidebarWidthAtom);
   const setWidth = useSetAtom(sidebarWidthAtom);
   const ensurePseudoTab = useSetAtom(ensurePseudoTabAtom);
-  const projects = useAtomValue(projectsArrayAtom);
-  // Grouped + sorted workspace rows, shared with keyboard workspace cycling so the
-  // two can't drift (see sidebarWorkspaceOrder).
+  // Grouped + sorted repo groups (one per repo, including repos with no
+  // workspaces yet), shared with keyboard workspace cycling so the two can't
+  // drift (see sidebarWorkspaceOrder).
   const repoGroups = useAtomValue(sidebarWorkspaceGroupsAtom);
   const setRenamingWorkspaceId = useSetAtom(renamingWorkspaceIdAtom);
   // The workspace→last-agent map is only consulted inside the click handler, so
@@ -72,13 +70,12 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   // would otherwise re-render (and churn the click callbacks) on every agent-id
   // change, with no visual effect.
   const store = useStore();
-  // In the empty first-run state the repo area shows its own
-  // "Add a repo" / "No workspaces yet" affordances; outside it the sidebar is
-  // unchanged.
+  // Gates the disabled state of the "Commands" and "New Workspace" buttons: both
+  // are inert until the first workspace exists (see their NavItems below).
   const isWorkspaceListEmpty = useAtomValue(isWorkspaceListEmptyAtom);
 
-  // Internal state — the add-repo dialog opened from the empty-state
-  // "Add a repo" button (and its toast).
+  // Internal state — the add-repo dialog opened from the "Add repo" nav button
+  // (and its toast).
   const [isAddRepoDialogOpen, setIsAddRepoDialogOpen] = useState<boolean>(false);
   const [addRepoToast, setAddRepoToast] = useState<ToastContent | null>(null);
   // Deleting a workspace is destructive, so it is confirmed first. The trash
@@ -291,24 +288,23 @@ export const WorkspaceSidebar = (): ReactElement | null => {
             testId={ElementIds.SIDEBAR_CMDK_LINK}
           />
           {/* Opens the new-workspace dialog; the per-repo "+" in the repo groups
-            below is the direct-create affordance. */}
+            below is the direct-create affordance. Disabled on first run, but with
+            no tooltip: the inline first-run form is the obvious create affordance,
+            so a tooltip pointing back at the sidebar row would just float detached
+            beside the centered form. */}
           <NavItem
             icon={Plus}
             label="New Workspace"
             disabled={isWorkspaceListEmpty}
-            disabledTooltip="Use the form to create your first workspace"
             onClick={() => setNewWorkspaceModal({ open: true })}
             testId={ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON}
           />
         </nav>
 
         <div className={styles.repoList}>
-          {/* Empty first-run repo area. `repoGroups` is built from workspaces, so
-            it's empty here — SidebarFirstRunState renders from `projects`
-            instead. */}
-          {isWorkspaceListEmpty ? (
-            <SidebarFirstRunState projects={projects} onAddRepo={() => setIsAddRepoDialogOpen(true)} />
-          ) : null}
+          {/* One group per repo, including repos with no workspaces yet (they show
+            a "No workspaces yet" hint). Empty until the first repo is added via the
+            "Add repo" button in the bottom actions. */}
           <DndContext
             sensors={groupDndSensors}
             collisionDetection={closestCenter}
@@ -324,6 +320,11 @@ export const WorkspaceSidebar = (): ReactElement | null => {
                   group={group}
                   actions={workspaceActions}
                   openInRuntime={openInRuntime}
+                  // On first run the per-repo settings/"+" actions are hidden: the
+                  // first-run page doesn't mount AppShell, so the "+"'s dialog
+                  // fallback and error toast would silently no-op there (same reason
+                  // New Workspace/Commands are disabled above).
+                  showActions={!isWorkspaceListEmpty}
                   onWorkspaceClick={handleWorkspaceClick}
                   onWorkspaceHover={handleWorkspaceHover}
                   onBeginDelete={setDeleteTarget}
@@ -336,6 +337,16 @@ export const WorkspaceSidebar = (): ReactElement | null => {
         <div className={styles.spacer} />
 
         <nav className={styles.bottomActions}>
+          {/* Grouped with the other global actions rather than the per-workspace
+            top nav. Always enabled — unlike New Workspace, registering a repo is
+            exactly what the user does before any workspace exists, so it stays
+            active in the first-run state too. */}
+          <NavItem
+            icon={Plus}
+            label="Add repo"
+            onClick={() => setIsAddRepoDialogOpen(true)}
+            testId={ElementIds.SIDEBAR_ADD_REPO_BUTTON}
+          />
           <NavItem
             icon={Settings}
             label="Settings"
@@ -354,9 +365,9 @@ export const WorkspaceSidebar = (): ReactElement | null => {
               <span className={navItemStyles.navLabel}>Report a bug</span>
             </button>
           </ReportProblemPopover>
-          <DevModeIndicator />
           <div className={styles.versionRow} data-testid={ElementIds.SIDEBAR_VERSION}>
             <VersionPopover />
+            <DevModeIndicator />
           </div>
         </nav>
 
@@ -386,7 +397,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
           onConfirm={handleDeleteConfirm}
         />
 
-        {/* Empty first-run "Add a repo" flow reuses the standard add-repo dialog. */}
+        {/* The "Add repo" nav button opens the standard add-repo dialog. */}
         <AddRepoDialog open={isAddRepoDialogOpen} onOpenChange={setIsAddRepoDialogOpen} setToast={setAddRepoToast} />
         <Toast
           open={addRepoToast !== null}

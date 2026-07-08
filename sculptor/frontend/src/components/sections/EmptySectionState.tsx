@@ -124,7 +124,7 @@ const EmptySectionStateComponent = ({ subSection }: EmptySectionStateProps): Rea
 
         {isSplitPane && (
           <Button
-            variant="ghost"
+            variant="outline"
             color="gray"
             size="1"
             className={styles.closeSplit}

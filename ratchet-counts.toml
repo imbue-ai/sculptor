@@ -29,6 +29,12 @@
 [no-eval-usage]
 "." = 0
 
+# Frozen at the 2026-07 state-ownership baseline (all pre-existing sites are
+# pure fire-and-forget with no optimistic local write, or tracked in
+# docs/development/state-ownership-burndown.md). Reduce only.
+[no-fire-and-forget-api-catch]
+"." = 6
+
 [no-implicit-string-concat]
 "." = 0
 
@@ -77,6 +83,9 @@
 [no-namedtuple-usage]
 "." = 0
 
+[no-noop-queryfn]
+"." = 0
+
 [no-numpy-default-rng]
 "." = 0
 
@@ -112,6 +121,11 @@
 
 [no-relative-imports]
 "." = 0
+
+# Both sites are useOptimisticTaskDelete's tombstone/rollback writes — the
+# first burn-down item in docs/development/state-ownership-burndown.md.
+[no-scattered-setquerydata]
+"." = 2
 
 [no-sculptor-copytree]
 "." = 1

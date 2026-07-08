@@ -38,7 +38,18 @@
   padding: var(--space-1) var(--space-3);
 }
 
-// The split-half escape hatch, spaced below the Quick add block.
+// The split-half escape hatch, spaced below the Quick add block. Outlined
+// secondary action mirroring the primary Add panel button's launcher look
+// (border, softer radius, roomier padding) but one notch dimmer, so it reads
+// as subordinate to the filled primary above.
 .closeSplit {
+  border: 1px solid var(--gray-a5);
+  border-radius: var(--radius-3);
+  // The outline Button variant draws its own inset ring; the launcher border
+  // above replaces it so both launcher buttons share the same border token.
+  box-shadow: none;
+  color: var(--gray-11);
+  height: auto;
   margin-top: var(--space-4);
+  padding: var(--space-1) var(--space-3);
 }

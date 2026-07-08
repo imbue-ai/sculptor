@@ -9,12 +9,23 @@ import type { SubSectionId } from "~/components/sections/sectionTypes.ts";
  * invoked from anywhere — including the command palette runtime — drive the
  * same UI flows the right-click menu drives.
  *
- * Agent rename has no atom here on purpose: it's the panel tab's inline edit,
- * driven by local state in `SectionHeader`, and isn't palette-triggerable.
+ * Agent rename reaches the panel tab's inline edit through
+ * `agentRenameTargetAtom`: the palette runtime activates the agent's panel and
+ * sets this atom to the panel id, and the mounted tab in `SectionHeader` reacts
+ * by entering its existing inline-rename mode.
  */
 
 /** Read by the sidebar workspace rows to switch into inline-rename mode. */
 export const renamingWorkspaceIdAtom = atom<string | null>(null);
+
+/**
+ * The agent PANEL id whose tab should be in inline-rename mode, set by the
+ * command palette's agent `beginRename`. The matching tab in `SectionHeader`
+ * derives its rename mode from this atom during render (no effect, no local
+ * mirror) and clears it on commit/cancel alongside the tab's own rename flag.
+ * Null when no rename is pending.
+ */
+export const agentRenameTargetAtom = atom<string | null>(null);
 
 export const workspaceDeleteTargetAtom = atom<{ id: string; name: string } | null>(null);
 

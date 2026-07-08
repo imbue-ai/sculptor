@@ -12,12 +12,13 @@
 
 import { useDraggable } from "@dnd-kit/core";
 import { ContextMenu, Flex, IconButton, Tooltip } from "@radix-ui/themes";
-import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { Maximize2, Minimize2, Plus, X } from "lucide-react";
 import type { ReactElement } from "react";
-import { memo, useState } from "react";
+import { memo, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
+import { agentRenameTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { sidebarCollapsedAtom } from "~/components/layout/sidebarAtoms.ts";
 import { AgentStatusDot } from "~/components/statusDot";
@@ -73,6 +74,11 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   const recordRecentlyClosed = useSetAtom(recentlyClosedPanelIdsAtom);
   const store = useStore();
   const [isRenaming, setIsRenaming] = useState<boolean>(false);
+  // The command palette's agent rename sets this to the panel id it wants
+  // renamed; the matching tab derives its rename mode from it below.
+  const [agentRenameTarget, setAgentRenameTarget] = useAtom(agentRenameTargetAtom);
+  const labelRef = useRef<HTMLSpanElement>(null);
+  const [isLabelTruncated, setIsLabelTruncated] = useState<boolean>(false);
   // The context-menu items shown while the menu is open, resolved fresh on each open
   // (see resolveLiveDefinition below).
   const [openMenuActions, setOpenMenuActions] = useState<ReadonlyArray<PanelContextMenuItem>>([]);
@@ -89,6 +95,11 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   }
 
   const canRename = isMultiInstanceKind(definition.kind);
+  // Renaming is active from the tab's own entry points (double-click, context
+  // menu) or when the command palette targets this tab through the atom. The
+  // atom is consumed as derived render state — no effect, no local mirror —
+  // and commit/cancel clear it alongside the local flag.
+  const isRenameActive = (isRenaming || agentRenameTarget === panelId) && canRename;
 
   // `definition` comes through the equality-guarded per-id slice, which deliberately
   // suppresses callback-only changes (see panelDefinitionEqual) — so its callbacks and
@@ -157,8 +168,17 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
     }
   };
 
-  const handleRenameCommit = (newName: string): void => {
+  // Leaves rename mode however it was entered: resets the tab's own flag and
+  // releases a palette rename target pointing at this tab.
+  const stopRenaming = (): void => {
     setIsRenaming(false);
+    if (agentRenameTarget === panelId) {
+      setAgentRenameTarget(null);
+    }
+  };
+
+  const handleRenameCommit = (newName: string): void => {
+    stopRenaming();
     // Persist the new name on the underlying entity (agent title / terminal label).
     // Only multi-instance panels supply onRename; static panels cannot be renamed
     // so this is a no-op for them. InlineRenameInput already trims and drops
@@ -176,15 +196,35 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
     setActivatorNodeRef(node);
   };
 
+  // The label ellipsis-clips at a fixed max-width, so a tooltip is only useful when the
+  // text is actually cut off. Truncation is measured on hover (scrollWidth vs
+  // clientWidth) rather than via a ResizeObserver: the tab strip re-renders heavily
+  // during drags, and measuring at hover time reads layout exactly when the tooltip
+  // could appear — no observer to keep alive across those churny re-renders.
+  const labelSpan = (
+    <span
+      ref={labelRef}
+      className={styles.label}
+      onMouseEnter={() => {
+        const el = labelRef.current;
+        if (el !== null) {
+          setIsLabelTruncated(el.scrollWidth > el.clientWidth);
+        }
+      }}
+    >
+      {definition.displayName}
+    </span>
+  );
+
   const tabBody = (
     <div
       ref={setTabRef}
       className={tabClassName}
       {...attributes}
-      {...(isRenaming ? {} : listeners)}
+      {...(isRenameActive ? {} : listeners)}
       // After the listeners spread so this composed handler REPLACES the sensor's
       // raw onKeyDown (it delegates every non-Enter key back to it).
-      onKeyDown={isRenaming ? undefined : handleKeyDown}
+      onKeyDown={isRenameActive ? undefined : handleKeyDown}
       role="tab"
       aria-selected={isActive}
       data-testid={`${ElementIds.PANEL_TAB}-${panelId}`}
@@ -213,15 +253,17 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
           {getTabStatusIcon(definition.connectionStatus)}
         </div>
       )}
-      {isRenaming && canRename ? (
+      {isRenameActive ? (
         <InlineRenameInput
           value={definition.displayName}
           onCommit={handleRenameCommit}
-          onCancel={() => setIsRenaming(false)}
+          onCancel={stopRenaming}
           isEditing
         />
+      ) : isLabelTruncated ? (
+        <Tooltip content={definition.displayName}>{labelSpan}</Tooltip>
       ) : (
-        <span className={styles.label}>{definition.displayName}</span>
+        labelSpan
       )}
       <IconButton
         variant="ghost"

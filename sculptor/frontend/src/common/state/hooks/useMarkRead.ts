@@ -1,39 +1,43 @@
-import { useAtomValue, useSetAtom, useStore } from "jotai";
+/**
+ * Auto mark-read: marks the viewed agent read on activation and schedules
+ * debounced re-reads on `updatedAt` changes. The optimistic-update/rollback
+ * logic lives in `useMarkReadMutation`; this hook only decides *when* to fire
+ * it — including flushing a still-pending debounced read when the user leaves
+ * the agent. Firing the mutation from the unmount cleanup is safe: mutations
+ * run to completion after unmount (only mutate-time callbacks are dropped,
+ * and none are used here).
+ */
+
 import { useEffect, useRef } from "react";
 
-import { markWorkspaceAgentRead } from "../../../api";
-import { taskAtomFamily } from "../atoms/tasks";
+import type { CodingAgentTaskView } from "../../../api";
+import { queryClient, taskQueryKey } from "../../queryClient.ts";
 import { clearUnreadOverride, isUnreadOverrideActive } from "../atoms/unreadOverrides";
+import { useMarkReadMutation } from "../mutations";
+import { useTask } from "./useTask";
 
 const DEBOUNCE_MS = 1000;
 
 export const useMarkRead = (workspaceID: string, agentID: string): void => {
-  const task = useAtomValue(taskAtomFamily(agentID));
-  const setTask = useSetAtom(taskAtomFamily(agentID));
-  const store = useStore();
+  const task = useTask(agentID);
+  const { mutate: markReadMutate } = useMarkReadMutation();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // True while a debounced mark-read is scheduled but hasn't fired yet, so the
   // cleanup below can flush it when the user leaves this agent.
   const hasPendingReadRef = useRef(false);
 
+  // The ids are bound as mutation variables at call time, so the cleanup's
+  // closure marks the *departing* agent even though the hook has already
+  // re-rendered for the next one by the time the cleanup runs.
   const markRead = (): void => {
-    // Functional update: read the latest atom value at apply time so a stale
-    // closure can't clobber unrelated task fields that changed since render.
-    setTask((prev) => (prev ? { ...prev, lastReadAt: new Date().toISOString() } : prev));
-    markWorkspaceAgentRead({ path: { workspace_id: workspaceID, agent_id: agentID } }).catch(() => {
-      // Fire-and-forget: the server-authoritative value will arrive via WebSocket
-    });
+    markReadMutate({ workspaceId: workspaceID, agentId: agentID });
   };
 
-  // Whether the user's explicit "Mark as unread" is still in force for THIS agent
-  // (see unreadOverrides.ts for the override's lifetime). Read the task from the
-  // store, not the rendered `task`: on an agent switch the hook re-renders to the
-  // new agent before the departing agent's cleanup runs, so a render-scoped value
-  // would be the wrong agent; the cleanup's `agentID` closure still points at the
-  // departing one.
+  // Read the latest task from the cache (not the rendered `task`): the
+  // decision must reflect updates that arrived after this closure was created.
   const isExplicitlyUnread = (): boolean => {
-    const latest = store.get(taskAtomFamily(agentID));
-    return latest !== null && isUnreadOverrideActive(agentID, latest);
+    const latest = queryClient.getQueryData<CodingAgentTaskView | null>(taskQueryKey(agentID));
+    return !!latest && isUnreadOverrideActive(agentID, latest);
   };
 
   // Mark as read on mount / agent change, and flush a still-pending debounced
@@ -85,13 +89,7 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
       hasPendingReadRef.current = false;
-      // Skip while the user's explicit "Mark as unread" is still active — don't
-      // undo their action. The override holds through the update that scheduled
-      // this timer when the user marked the agent unread after it, and through
-      // every streaming tick (including the completion) of a run the agent was
-      // marked unread during. Once the override expires — the next agent turn
-      // after the mark, or after the marked run completes — the normal auto
-      // mark-read resumes for the agent being viewed.
+      // Skip while the user's explicit "Mark as unread" override is active.
       if (isExplicitlyUnread()) {
         return;
       }

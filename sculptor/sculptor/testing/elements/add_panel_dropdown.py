@@ -131,7 +131,7 @@ class PlaywrightAddPanelDropdownElement:
 
 
 # Panels the default workspace layout seeds OPEN on a workspace's first visit:
-# Files/Changes/Commits live in the (collapsed) left section, Files active.
+# Files/Changes/Commits live in the left section, Files active.
 # A single-instance panel can only live in ONE section at a time, and the add-panel
 # dropdown only offers panels not already open anywhere, so to land a seeded panel in
 # a DIFFERENT section the helper first closes it from its seeded section (which a
@@ -185,8 +185,8 @@ def open_panel(page: Page, panel_id: str, sub_section: str = "center") -> Locato
         expect(home_root).to_be_visible()
         return home_root
 
-    # Open into an explicitly-requested section. Non-center sections start collapsed, so
-    # their PanelSection — and the header `+` / tabs — aren't mounted; expand first.
+    # Open into an explicitly-requested section. A collapsed section's PanelSection —
+    # and its header `+` / tabs — aren't mounted; expand first (idempotent).
     section = PlaywrightWorkspaceSection(page, sub_section)
     section.expand_section()
     existing_tab = section.get_panel_tab(panel_id)
@@ -213,8 +213,8 @@ def open_panel(page: Page, panel_id: str, sub_section: str = "center") -> Locato
 def close_seeded_panel(page: Page, panel_id: str) -> None:
     """Close a default-seeded single-instance panel from its seeded section.
 
-    The default layout seeds Files/Changes/Commits OPEN in the (collapsed) left
-    section, so they are not offered by the add-panel dropdown until closed.
+    The default layout seeds Files/Changes/Commits OPEN in the left section, so
+    they are not offered by the add-panel dropdown until closed.
     Expands the seeded section to render the tab's close button (page-wide by panel id)
     and clicks it; a single-instance close removes the panel silently (no confirmation),
     which both returns it to the dropdown's re-add list and records it as recently-closed

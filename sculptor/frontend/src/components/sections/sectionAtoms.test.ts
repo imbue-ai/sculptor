@@ -11,6 +11,7 @@ import {
   EXPLORER_LIST_MAX_WIDTH_PX,
   EXPLORER_LIST_MIN_WIDTH_PX,
   explorerListWidthAtom,
+  explorerSidebarHiddenAtom,
   globalLayoutAtom,
   isSectionExpandedAtom,
   panelsInSubSectionAtom,
@@ -158,6 +159,36 @@ describe("global clamping write atoms", () => {
     expect(store.get(explorerListWidthAtom)).toBe(EXPLORER_LIST_MIN_WIDTH_PX);
     store.set(explorerListWidthAtom, 10_000);
     expect(store.get(explorerListWidthAtom)).toBe(EXPLORER_LIST_MAX_WIDTH_PX);
+  });
+});
+
+describe("explorer sidebar visibility (per-panel, persisted)", () => {
+  it("defaults to visible and hides each panel independently", () => {
+    const store = createStore();
+    expect(store.get(explorerSidebarHiddenAtom("files"))).toBe(false);
+
+    store.set(explorerSidebarHiddenAtom("files"), true);
+    expect(store.get(explorerSidebarHiddenAtom("files"))).toBe(true);
+    expect(store.get(explorerSidebarHiddenAtom("changes"))).toBe(false);
+  });
+
+  it("reads and writes when a snapshot persisted before the field existed lacks it", () => {
+    const store = createStore();
+    // Stand in for a pre-upgrade global snapshot: everything except the map.
+    store.set(globalLayoutAtom, {
+      sectionSizes: DEFAULT_GLOBAL_LAYOUT.sectionSizes,
+      sidebarWidthPx: DEFAULT_GLOBAL_LAYOUT.sidebarWidthPx,
+      sidebarCollapsed: DEFAULT_GLOBAL_LAYOUT.sidebarCollapsed,
+      explorerListWidthPx: DEFAULT_GLOBAL_LAYOUT.explorerListWidthPx,
+      sidebarOrder: DEFAULT_GLOBAL_LAYOUT.sidebarOrder,
+    });
+
+    // The absent map coalesces to "visible" on read...
+    expect(store.get(explorerSidebarHiddenAtom("files"))).toBe(false);
+    // ...and a write seeds the map without crashing on the missing key.
+    store.set(explorerSidebarHiddenAtom("files"), true);
+    expect(store.get(explorerSidebarHiddenAtom("files"))).toBe(true);
+    expect(store.get(globalLayoutAtom).explorerSidebarHiddenByPanel).toEqual({ files: true });
   });
 });
 

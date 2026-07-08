@@ -19,6 +19,7 @@ export default function activate(api: PluginHostApi): () => void {
     id: PLUGIN_ID,
     displayName: "Linear",
     icon: Hash,
+    description: "Linear issues linked to this workspace",
     component: LinearPanel,
   });
   const disposeSettings = api.registerSettings(LinearSettings);
