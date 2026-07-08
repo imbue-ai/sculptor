@@ -6,7 +6,9 @@ Each agent in Sculptor has its own conversation, task context, and set of pendin
 
 ## Opening multiple agents
 
-The agent tab bar sits below the chat panel, between the chat and the terminal. Each tab is a separate agent session.
+The agent tab bar sits below the chat panel, between the chat and the terminal.
+
+<!-- test: added line for rendering check --> Each tab is a separate agent session.
 
 ![Agent tabs between the chat and the terminal](images/agent_tabs.png)
 

@@ -13,3 +13,5 @@ From there, [create a workspace](workspaces.md), prompt an agent, review its
 happy.
 
 Your account email is shown later under **Settings > Account**.
+
+<!-- test: added line for rendering check -->
