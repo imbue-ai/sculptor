@@ -212,10 +212,16 @@ Log file: {setup_state.log_path}
 # (ids are space-free) so each command line carries a single quoted literal — two adjacent
 # "..." literals here would trip the no-implicit-string-concat ratchet.
 _AUTO_RENAME_REMINDER = """<system-reminder>
-This is the first message in a new Sculptor workspace, whose workspace and agent both have auto-generated placeholder names. Once you understand what this task is about, give them a concise, descriptive name (3-6 words) that reflects the task by running BOTH of these commands once:
+This is the first message in a new Sculptor workspace. Its workspace and agent both have auto-generated placeholder names. Once you understand what this task is about, give them concise, descriptive names (3-6 words each) and set them by running BOTH of these commands once:
 
-  sculpt workspace rename $SCULPT_WORKSPACE_ID "<name>"
-  sculpt agent rename $SCULPT_AGENT_ID "<name>"
+  sculpt workspace rename $SCULPT_WORKSPACE_ID "<workspace name>"
+  sculpt agent rename $SCULPT_AGENT_ID "<agent name>"
+
+The two names capture different things:
+- The workspace name is the overall task or goal, e.g. "Add graph visualization".
+- The agent name is the specific action you are taking toward it, e.g. "Find graph visualization library".
+
+If a .sculptor/naming.md file exists in the repo, read it first and follow any naming conventions it specifies (they override the guidance above).
 
 Do this early and only once. Do not ask the user about it, do not mention it in your reply, and do not let it delay the real work. If a command fails, ignore it and carry on with the task.
 </system-reminder>

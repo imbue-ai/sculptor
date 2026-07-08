@@ -202,6 +202,13 @@ def test_get_user_instructions_emits_auto_rename_reminder_when_enabled_and_first
     # The reminder references env vars that the agent's shell already exposes, not literal ids.
     assert "$SCULPT_WORKSPACE_ID" in result
     assert "$SCULPT_AGENT_ID" in result
+    # Workspace and agent names are distinct: task/goal vs specific action.
+    assert '"<workspace name>"' in result
+    assert '"<agent name>"' in result
+    assert "overall task or goal" in result
+    assert "specific action" in result
+    # A repo can override the defaults via .sculptor/naming.md, which the agent reads itself.
+    assert ".sculptor/naming.md" in result
     assert "hello" in result
 
 
