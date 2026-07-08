@@ -74,6 +74,54 @@ describe("LocalStorageLayoutAdapter", () => {
     expect(adapter.read(GLOBAL_SCOPE)).toBeUndefined();
   });
 
+  it("hydrates a global snapshot written before sidebarOrder existed, filling the default", () => {
+    // Older global snapshots lack sidebarOrder; they must still read back — with
+    // the missing field filled from the defaults — rather than being rejected
+    // and losing the user's width/collapsed settings.
+    const legacyGlobal = {
+      sectionSizes: { left: 25, right: 25, bottom: 25 },
+      sidebarWidthPx: 300,
+      sidebarCollapsed: true,
+      explorerListWidthPx: 260,
+    };
+    localStorage.setItem("sculptor-layout-global", JSON.stringify(legacyGlobal));
+    expect(adapter.read(GLOBAL_SCOPE)).toEqual({
+      ...legacyGlobal,
+      sidebarOrder: { repos: [], workspaces: {} },
+      explorerSidebarHiddenByPanel: {},
+    });
+  });
+
+  it("degrades a wrong-shape sidebarOrder to the default order, keeping the other settings", () => {
+    // The ordering atoms iterate sidebarOrder's lists, so a corrupt value must
+    // never reach them — but it also must not invalidate the user's width and
+    // collapsed settings, which are fine on their own.
+    const corruptOrders = [
+      { repos: "not-a-list", workspaces: {} },
+      { repos: [], workspaces: { "p-1": "not-a-list" } },
+    ];
+    for (const sidebarOrder of corruptOrders) {
+      localStorage.setItem(
+        "sculptor-layout-global",
+        JSON.stringify({
+          sectionSizes: { left: 25, right: 25, bottom: 25 },
+          sidebarWidthPx: 300,
+          sidebarCollapsed: true,
+          explorerListWidthPx: 260,
+          sidebarOrder,
+        }),
+      );
+      expect(adapter.read(GLOBAL_SCOPE)).toEqual({
+        sectionSizes: { left: 25, right: 25, bottom: 25 },
+        sidebarWidthPx: 300,
+        sidebarCollapsed: true,
+        explorerListWidthPx: 260,
+        sidebarOrder: { repos: [], workspaces: {} },
+        explorerSidebarHiddenByPanel: {},
+      });
+    }
+  });
+
   it("stamps the current snapshot version on writes and strips it on reads", () => {
     const snapshot = makeWorkspaceLayout("agent:1");
     adapter.write(WS_SCOPE, snapshot);
@@ -152,6 +200,7 @@ describe("LocalStorageLayoutAdapter", () => {
       sidebarWidthPx: 300,
       sidebarCollapsed: true,
       explorerListWidthPx: 260,
+      sidebarOrder: { repos: [], workspaces: {} },
       explorerSidebarHiddenByPanel: { files: true },
     };
 
@@ -211,6 +260,7 @@ describe("LocalStorageLayoutAdapter", () => {
       sidebarWidthPx: 300,
       sidebarCollapsed: true,
       explorerListWidthPx: 260,
+      sidebarOrder: { repos: [], workspaces: {} },
       explorerSidebarHiddenByPanel: {},
     });
     // Before the debounce window elapses nothing is committed to storage, but
@@ -225,6 +275,7 @@ describe("LocalStorageLayoutAdapter", () => {
       sidebarWidthPx: 300,
       sidebarCollapsed: true,
       explorerListWidthPx: 260,
+      sidebarOrder: { repos: [], workspaces: {} },
       explorerSidebarHiddenByPanel: {},
     });
   });

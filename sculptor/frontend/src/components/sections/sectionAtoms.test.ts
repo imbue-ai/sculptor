@@ -180,6 +180,7 @@ describe("explorer sidebar visibility (per-panel, persisted)", () => {
       sidebarWidthPx: DEFAULT_GLOBAL_LAYOUT.sidebarWidthPx,
       sidebarCollapsed: DEFAULT_GLOBAL_LAYOUT.sidebarCollapsed,
       explorerListWidthPx: DEFAULT_GLOBAL_LAYOUT.explorerListWidthPx,
+      sidebarOrder: DEFAULT_GLOBAL_LAYOUT.sidebarOrder,
     });
 
     // The absent map coalesces to "visible" on read...
