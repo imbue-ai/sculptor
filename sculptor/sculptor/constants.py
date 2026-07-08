@@ -437,6 +437,9 @@ class ElementIDs(StrEnum):
     # Model-picker empty state when a pi agent has no authenticated providers.
     PI_PICKER_EMPTY_STATE = "pi-picker-empty-state"
     PI_PICKER_LOGIN_CTA = "pi-picker-login-cta"
+    # Model-picker placeholder while the start-time catalog probe is still in
+    # flight (catalog NOT_FETCHED_YET), shown instead of the empty-state CTA.
+    PI_PICKER_LOADING = "pi-picker-loading"
     # Failed-turn error block CTA that deep-links into the pi login flow.
     PI_ERROR_LOGIN_CTA = "pi-error-login-cta"
 

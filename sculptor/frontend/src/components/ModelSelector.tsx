@@ -2,7 +2,7 @@ import { Button, DropdownMenu, Flex, Select, Text, Tooltip } from "@radix-ui/the
 import type { ReactElement } from "react";
 
 import type { LlmModel, ModelOption } from "~/api";
-import { ElementIds } from "~/api";
+import { ElementIds, ModelCatalogState } from "~/api";
 import {
   getModelShortName,
   getProviderDisplayName,
@@ -22,9 +22,10 @@ type ModelSelectorProps = {
   /** The active task's `supports_model_selection` capability. When false the
    *  switcher renders disabled-with-tooltip (the current model still shows). */
   capabilityValue?: boolean;
-  /** A harness-supplied model list (pi). Options are keyed by model_id and
-   *  `selectedModelId` is shown selected. */
-  backendModels?: ReadonlyArray<ModelOption>;
+  /** The pi catalog for the switcher: the fetched list (keyed by model_id, with
+   *  `selectedModelId` shown selected), or `NOT_FETCHED_YET` while the start-time
+   *  probe is still in flight — which renders a loading state, not the login CTA. */
+  backendModels?: ReadonlyArray<ModelOption> | ModelCatalogState;
   /** The model_id to show selected when the harness sources a backend list (pi). */
   selectedModelId?: string;
   /** The out-of-band change handler for a backend model list (pi). Called with
@@ -54,7 +55,8 @@ export const ModelSelector = ({
 }: ModelSelectorProps): ReactElement => {
   const gate = useCapabilityGate(capabilityValue, ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION);
 
-  const models = backendModels ?? [];
+  const models = Array.isArray(backendModels) ? backendModels : [];
+  const isCatalogNotFetched = backendModels === ModelCatalogState.NOT_FETCHED_YET;
   const hasBackendModels = sourcesBackendModels && models.length > 0;
   const providerGroups = hasBackendModels ? groupModelsByProvider(models) : [];
 
@@ -82,6 +84,24 @@ export const ModelSelector = ({
           </Select.Root>
         </span>
       </Tooltip>
+    );
+  }
+
+  if (sourcesBackendModels && isCatalogNotFetched) {
+    // The start-time catalog probe is still in flight (catalog NOT_FETCHED_YET):
+    // show a quiet, disabled placeholder — never the login CTA, which would
+    // otherwise flash for an authenticated user until the real catalog lands. Only
+    // a fetched-but-empty catalog (below) means "no providers, please log in".
+    return (
+      <Select.Root size="1" value="" disabled>
+        <Select.Trigger className={styles.trigger} data-testid={ElementIds.PI_PICKER_LOADING} variant="ghost">
+          <Flex align="center">
+            <Text size="1" color="gray">
+              Loading models…
+            </Text>
+          </Flex>
+        </Select.Trigger>
+      </Select.Root>
     );
   }
 
