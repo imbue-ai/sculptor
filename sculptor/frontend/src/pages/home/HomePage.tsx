@@ -26,10 +26,13 @@ export const HomePage = (): ReactElement => {
   // never authors messages on the user's behalf.
   // `isWorkspaceListEmptyAtom` stays false while the list is loading, so a
   // boot with existing workspaces never flashes it; the offer therefore
-  // trails the stream's first snapshot.
+  // trails the stream's first snapshot. An already-open dialog wins over the
+  // offer: the user may have opened it during the load window (Cmd/Meta+T, a
+  // repo's "+" fallback), and replacing their open request would drop its
+  // preset repo — remounting the form and discarding anything typed.
   useEffect(() => {
     if (isWorkspaceListEmpty) {
-      setNewWorkspaceModal({ open: true, initialPrompt: HOME_PROMPT_PREFILL });
+      setNewWorkspaceModal((prev) => (prev.open ? prev : { open: true, initialPrompt: HOME_PROMPT_PREFILL }));
     }
   }, [isWorkspaceListEmpty, setNewWorkspaceModal]);
 
