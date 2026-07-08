@@ -30,15 +30,11 @@ from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSecti
 # clicks and no ``dblclick`` fires — the inline rename never starts. Retry the gesture
 # this many times, waiting this long for the input each time, before giving up. Mirrors
 # the hover/menu-open retries the sibling add-panel POM uses for Radix teardown races.
+# The context-menu rename path needs no such retry: the menu enters rename mode via
+# its onCloseAutoFocus handler, which is deterministic once the Rename row's click
+# lands.
 _DOUBLE_CLICK_RENAME_ATTEMPTS = 4
 _DOUBLE_CLICK_RENAME_TIMEOUT_MS = 3_000
-
-# The context-menu rename gesture (right-click → click Rename) is retried for the same
-# reason as the double-click above: under heavy main-thread contention the click on the
-# Rename row can be dropped, so the inline input never appears. Reopen the menu and
-# retry before giving up.
-_CONTEXT_MENU_RENAME_ATTEMPTS = 4
-_CONTEXT_MENU_RENAME_TIMEOUT_MS = 3_000
 
 
 class PlaywrightPanelTabElement:
@@ -167,24 +163,19 @@ class PlaywrightPanelTabElement:
     def rename_tab_via_context_menu(self, tab: Locator, new_name: str) -> None:
         """Open the context menu, click Rename, and commit a new label.
 
-        The menu-open + Rename click is retried (see the module note on dropped clicks
-        under contention): once the inline input appears the retry is done. Each attempt
-        reopens a fresh menu, so a dropped earlier click is harmless.
+        A single attempt suffices: the menu defers entering rename mode to its
+        onCloseAutoFocus handler, so the inline input mounts (and keeps focus)
+        deterministically once the Rename row's click lands.
         """
+        self.open_context_menu(tab)
+        rename_item = self.get_context_menu_rename_item()
+        expect(rename_item).to_be_visible()
+        rename_item.click()
         rename_input = self.get_inline_rename_input()
-        for _ in range(_CONTEXT_MENU_RENAME_ATTEMPTS):
-            self.open_context_menu(tab)
-            rename_item = self.get_context_menu_rename_item()
-            expect(rename_item).to_be_visible()
-            rename_item.click()
-            try:
-                expect(rename_input).to_be_visible(timeout=_CONTEXT_MENU_RENAME_TIMEOUT_MS)
-                break
-            except AssertionError:
-                continue
-        else:
-            # Out of retries: assert once more so the failure carries the standard message.
-            expect(rename_input).to_be_visible()
+        expect(rename_input).to_be_visible()
+        # Assert focus explicitly: a blur cancels the rename, and ``fill`` would mask
+        # a focus loss by refocusing the input itself.
+        expect(rename_input).to_be_focused()
         rename_input.fill(new_name)
         rename_input.press("Enter")
         expect(rename_input).not_to_be_visible()

@@ -125,6 +125,11 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   // The context-menu items shown while the menu is open, resolved fresh on each open
   // (see resolveLiveDefinition below).
   const [openMenuActions, setOpenMenuActions] = useState<ReadonlyArray<PanelContextMenuItem>>([]);
+  // Set when the menu's Rename item is selected. Rename must start only after the
+  // menu has fully closed: Radix restores focus to the tab on close, which would
+  // blur — and cancel — a freshly mounted rename input. The menu's onCloseAutoFocus
+  // consumes this to suppress that focus restore and enter rename mode.
+  const pendingRenameRef = useRef<boolean>(false);
   const section = toSection(subSection);
   const existingSplit = useAtomValue(sectionSplitForSectionAtom(section));
   const splitPanel = useSetAtom(splitSectionAtom);
@@ -375,7 +380,11 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
             label: "Rename",
             icon: Pencil,
             testId: ElementIds.TAB_CONTEXT_MENU_RENAME,
-            action: () => setIsRenaming(true),
+            // Only records the intent — the menu's onCloseAutoFocus starts the
+            // rename once the menu is gone (see pendingRenameRef).
+            action: (): void => {
+              pendingRenameRef.current = true;
+            },
           },
         ]
       : []),
@@ -396,7 +405,21 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   return (
     <ContextMenu.Root onOpenChange={handleMenuOpenChange}>
       <ContextMenu.Trigger>{tabBody}</ContextMenu.Trigger>
-      <ContextMenu.Content size="1">
+      <ContextMenu.Content
+        size="1"
+        // When Rename was selected, keep Radix from returning focus to the tab and
+        // enter rename mode now that the menu is closed — the inline input can then
+        // take focus with nothing competing for it. Every other close reason keeps
+        // the default focus restore.
+        onCloseAutoFocus={(event): void => {
+          if (pendingRenameRef.current) {
+            pendingRenameRef.current = false;
+            event.preventDefault();
+            setIsRenaming(true);
+          }
+        }}
+      >
+        {/* eslint-disable-next-line react-hooks/refs -- pendingRenameRef is only written in the Rename item's onSelect action and consumed in onCloseAutoFocus above, both event-time; the menu-item array indirection hides that from the analyzer. */}
         {menuItems.map((item, index) => (
           <Fragment key={item.testId}>
             {index > 0 && item.separatorBefore === true ? <ContextMenu.Separator /> : null}
