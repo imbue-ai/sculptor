@@ -69,6 +69,7 @@ export const NewWorkspaceModal = (): ReactElement | undefined => {
         presetProjectId={modalState.presetProjectId}
         initialTitle={modalState.initialTitle}
         initialPrompt={modalState.initialPrompt}
+        initialBranchName={modalState.initialBranchName}
         onWorkspaceCreated={onWorkspaceCreated}
         onCreated={handleCreated}
       />

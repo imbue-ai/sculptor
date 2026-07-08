@@ -49,6 +49,7 @@ describe("NewWorkspaceModal", () => {
       open: true,
       initialTitle: "Fix the bug",
       initialPrompt: "Please fix it",
+      initialBranchName: "fix/the-bug",
       onWorkspaceCreated,
     });
     renderWithProviders(<NewWorkspaceModal />, { store });
@@ -57,6 +58,7 @@ describe("NewWorkspaceModal", () => {
       expect.objectContaining({
         initialTitle: "Fix the bug",
         initialPrompt: "Please fix it",
+        initialBranchName: "fix/the-bug",
         onWorkspaceCreated,
       }),
     );

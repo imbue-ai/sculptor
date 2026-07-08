@@ -27,8 +27,13 @@ vi.mock("../linear/useLinearBoard.ts", () => ({ useLinearBoard: vi.fn() }));
 
 const Wrapper = ({ children }: { children: ReactNode }): ReactElement => <Theme>{children}</Theme>;
 
+// The board reads several settings (the API key plus the three new-workspace
+// templates), so the mocked `usePluginSetting` serves values from a per-test
+// key/value map rather than one blanket return value.
+let settings: Record<string, string> = {};
+
 const setApiKey = (key: string): void => {
-  vi.mocked(usePluginSetting).mockReturnValue([key, vi.fn()]);
+  settings["apiKey"] = key;
 };
 const setBoard = (overrides: Partial<LinearBoardData>): void => {
   vi.mocked(useLinearBoard).mockReturnValue({
@@ -84,7 +89,8 @@ const groupWithUnworkedTicket = (): BoardGroup<WorkspaceView> => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  setApiKey("");
+  settings = {};
+  vi.mocked(usePluginSetting).mockImplementation((key: string) => [settings[key] ?? "", vi.fn()]);
   setBoard({});
   vi.mocked(useWorkspaces).mockReturnValue([]);
   vi.mocked(useOpenNewWorkspaceModal).mockReturnValue(vi.fn());
@@ -141,10 +147,33 @@ describe("LinearBoard", () => {
     expect(options.initialPrompt).toBe(
       "Work on Linear issue SCU-42: Wire up the thing\nhttps://linear.app/x/SCU-42\n\nSome details.",
     );
+    // No branch template is configured, so the host derives the branch from
+    // the title.
+    expect(options.initialBranchName).toBeUndefined();
     // The modal reports the created workspace's id; the board pins the ticket
     // to it via the same assignment key the workspace panel uses.
     options.onCreated?.("w9");
     expect(setSetting).toHaveBeenCalledWith("assignment:w9", "SCU-42");
+  });
+
+  it("seeds the modal from the configured templates, including the branch name", async () => {
+    const openModal = vi.fn();
+    vi.mocked(useOpenNewWorkspaceModal).mockReturnValue(openModal);
+    setApiKey("k");
+    settings["template:title"] = "[{identifier}] {title}";
+    settings["template:branch"] = "linear/{identifierLower}-{titleSlug}";
+    settings["template:prompt"] = "Fix {identifier} ({url})";
+    setBoard({ groups: [groupWithUnworkedTicket()] });
+    renderBoard();
+
+    await userEvent.click(screen.getByRole("button", { name: /No workspace/ }));
+    await userEvent.click(await screen.findByText("Create workspace…"));
+
+    expect(openModal).toHaveBeenCalledTimes(1);
+    const options = openModal.mock.calls[0][0] as NewWorkspaceModalOptions;
+    expect(options.initialTitle).toBe("[SCU-42] Wire up the thing");
+    expect(options.initialBranchName).toBe("linear/scu-42-wire-up-the-thing");
+    expect(options.initialPrompt).toBe("Fix SCU-42 (https://linear.app/x/SCU-42)");
   });
 
   it("writes the assignment when an existing workspace is picked from the submenu", async () => {

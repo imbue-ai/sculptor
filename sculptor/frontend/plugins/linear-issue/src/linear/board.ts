@@ -23,30 +23,6 @@ export type BoardGroup<T extends WorkspaceLink> = {
   hiddenCount: number;
 };
 
-/** Pre-fill values for the host's new-workspace modal, derived from a ticket. */
-export type WorkspaceSeed = {
-  title: string;
-  prompt: string;
-};
-
-/**
- * Build the new-workspace title and prompt for a ticket. The title leads with
- * the identifier because the host derives the branch name from the title — so
- * the generated branch carries the ticket id, which is also how the board
- * associates branches back to tickets. The prompt is a short self-contained
- * brief: the assignment, the issue URL, and the description when there is one.
- */
-export const workspaceSeedForIssue = (issue: LinearIssue): WorkspaceSeed => {
-  const promptLines = [`Work on Linear issue ${issue.identifier}: ${issue.title}`, issue.url];
-  if (issue.description) {
-    promptLines.push("", issue.description);
-  }
-  return {
-    title: `${issue.identifier}: ${issue.title}`,
-    prompt: promptLines.join("\n"),
-  };
-};
-
 // Group order: active work first, terminal states last. Anything Linear adds
 // that we don't know sorts after the known types but before nothing.
 const TYPE_ORDER: Record<string, number> = {
