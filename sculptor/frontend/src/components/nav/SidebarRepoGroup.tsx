@@ -409,7 +409,7 @@ export const SidebarRepoGroup = ({
           </Text>
         </button>
         {showActions && (
-          <Flex className={styles.rowActions} gap="2">
+          <Flex className={styles.rowActions}>
             <DropdownMenu.Root>
               <Tooltip content="Repository actions" side="bottom">
                 <DropdownMenu.Trigger>
@@ -430,6 +430,7 @@ export const SidebarRepoGroup = ({
                 <DropdownMenu.Item
                   onSelect={() => openSettings("REPOSITORIES", group.projectId)}
                   data-testid={ElementIds.SIDEBAR_REPO_SETTINGS}
+                  data-project-id={group.projectId}
                 >
                   Configure repo
                 </DropdownMenu.Item>
