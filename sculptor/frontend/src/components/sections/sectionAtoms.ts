@@ -14,7 +14,7 @@ import { atomFamily, selectAtom } from "jotai/utils";
 
 import { isSectionExpanded, openPanelsInSubSection } from "./layoutQueries.ts";
 import { layoutPersistenceAdapter } from "./persistence/LocalStorageLayoutAdapter.ts";
-import type { GlobalLayoutState, WorkspaceLayoutState } from "./persistence/types.ts";
+import type { GlobalLayoutState, SectionSizes, WorkspaceLayoutState } from "./persistence/types.ts";
 import { DEFAULT_GLOBAL_LAYOUT, EMPTY_WORKSPACE_LAYOUT } from "./persistence/types.ts";
 import { SECTION_SIZE_MAX_PERCENT, SECTION_SIZE_MIN_PERCENT } from "./sectionGeometry.ts";
 import type { PanelId, SectionId, SectionSplit, SubSectionId } from "./sectionTypes.ts";
@@ -124,25 +124,28 @@ export const isActiveSubSectionAtom = atomFamily((subSection: SubSectionId) =>
   selectAtom(workspaceLayoutAtom, (layout) => layout.activeSubSection === subSection),
 );
 
-// Global slices
+// Per-workspace section sizes
 
-function sectionSizesEqual(a: GlobalLayoutState["sectionSizes"], b: GlobalLayoutState["sectionSizes"]): boolean {
+function sectionSizesEqual(a: SectionSizes, b: SectionSizes): boolean {
   return a.left === b.left && a.right === b.right && a.bottom === b.bottom;
 }
 
-export const sectionSizesAtom: Atom<GlobalLayoutState["sectionSizes"]> = selectAtom(
-  globalLayoutAtom,
-  (global) => global.sectionSizes,
+// The section size percentages of the ACTIVE workspace. Per-workspace (not global)
+// so switching workspaces restores each one's own sizes and applying a Layout can
+// set sizes without touching every other workspace.
+export const sectionSizesAtom: Atom<SectionSizes> = selectAtom(
+  workspaceLayoutAtom,
+  (layout) => layout.sectionSizes,
   sectionSizesEqual,
 );
 
-// Write a section's global size percentage (clamped). Resizing in one workspace
-// changes the size everywhere.
+// Write a section's size percentage (clamped) into the active workspace's layout.
+// Resizing now only affects the workspace it happens in.
 export const setSectionSizeAtom = atom(
   null,
   (_get, set, params: { side: "left" | "right" | "bottom"; percent: number }) => {
     const clamped = Math.max(SECTION_SIZE_MIN_PERCENT, Math.min(SECTION_SIZE_MAX_PERCENT, params.percent));
-    set(globalLayoutAtom, (prev) => ({
+    set(workspaceLayoutAtom, (prev) => ({
       ...prev,
       sectionSizes: { ...prev.sectionSizes, [params.side]: clamped },
     }));

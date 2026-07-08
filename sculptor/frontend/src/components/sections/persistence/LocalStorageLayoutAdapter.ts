@@ -39,6 +39,9 @@ function isValidSnapshot(scope: LayoutScope, value: unknown): boolean {
   }
 
   if (scope.kind === "workspace") {
+    // sectionSizes is deliberately not required: it moved here from the global
+    // store, so snapshots written before the move lack it — normalizeSnapshot
+    // fills the default. The other fields have always been present.
     return (
       isObject(value.placement) &&
       isObject(value.order) &&
@@ -48,15 +51,12 @@ function isValidSnapshot(scope: LayoutScope, value: unknown): boolean {
       "activeSubSection" in value
     );
   }
-  const sectionSizes = value.sectionSizes;
-  // sidebarOrder is deliberately absent here: it may be missing (snapshots written
-  // before the field existed) or corrupt without invalidating the user's other
-  // settings — normalizeSnapshot handles it field-level on read.
+  // sidebarOrder and the saved-layout fields are deliberately absent here: they may
+  // be missing (snapshots written before they existed) or corrupt without
+  // invalidating the user's other settings — normalizeSnapshot handles them
+  // field-level on read. A now-orphaned sectionSizes on an old global snapshot is
+  // ignored rather than validated.
   return (
-    isObject(sectionSizes) &&
-    typeof sectionSizes.left === "number" &&
-    typeof sectionSizes.right === "number" &&
-    typeof sectionSizes.bottom === "number" &&
     typeof value.sidebarWidthPx === "number" &&
     typeof value.sidebarCollapsed === "boolean" &&
     typeof value.explorerListWidthPx === "number"

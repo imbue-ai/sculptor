@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sidebarCollapsedAtom, sidebarWidthAtom } from "../layout/sidebarAtoms.ts";
 import { layoutPersistenceAdapter } from "./persistence/LocalStorageLayoutAdapter.ts";
 import type { WorkspaceLayoutState } from "./persistence/types.ts";
-import { DEFAULT_GLOBAL_LAYOUT, EMPTY_WORKSPACE_LAYOUT } from "./persistence/types.ts";
+import { DEFAULT_GLOBAL_LAYOUT, DEFAULT_SECTION_SIZES, EMPTY_WORKSPACE_LAYOUT } from "./persistence/types.ts";
 import {
   activePanelIdInSubSectionAtom,
   activeWorkspaceIdAtom,
@@ -122,18 +122,26 @@ describe("narrow read slices", () => {
   });
 });
 
-describe("global slices are shared across workspaces", () => {
-  it("sectionSizes are identical regardless of active workspace", () => {
+describe("section sizes are per-workspace", () => {
+  it("keeps each workspace's sizes isolated across a switch", () => {
     const store = createStore();
-    store.set(globalLayoutAtom, { ...DEFAULT_GLOBAL_LAYOUT, sectionSizes: { left: 10, right: 15, bottom: 20 } });
+    store.set(activeWorkspaceIdAtom, "ws-sizes-1");
+    store.set(setSectionSizeAtom, { side: "left", percent: 12 });
+    expect(store.get(sectionSizesAtom).left).toBe(12);
 
-    store.set(activeWorkspaceIdAtom, "ws-shared-1");
-    expect(store.get(sectionSizesAtom)).toEqual({ left: 10, right: 15, bottom: 20 });
+    // A workspace never sized starts at the defaults, unaffected by ws-sizes-1.
+    store.set(activeWorkspaceIdAtom, "ws-sizes-2");
+    expect(store.get(sectionSizesAtom).left).toBe(DEFAULT_SECTION_SIZES.left);
+    store.set(setSectionSizeAtom, { side: "left", percent: 30 });
+    expect(store.get(sectionSizesAtom).left).toBe(30);
 
-    store.set(activeWorkspaceIdAtom, "ws-shared-2");
-    expect(store.get(sectionSizesAtom)).toEqual({ left: 10, right: 15, bottom: 20 });
+    // Returning to ws-sizes-1 restores its own size, not ws-sizes-2's.
+    store.set(activeWorkspaceIdAtom, "ws-sizes-1");
+    expect(store.get(sectionSizesAtom).left).toBe(12);
   });
+});
 
+describe("global slices are shared across workspaces", () => {
   it("sidebar atoms are writable slices of the global snapshot", () => {
     const store = createStore();
     store.set(sidebarWidthAtom, 333);
@@ -176,7 +184,6 @@ describe("explorer sidebar visibility (per-panel, persisted)", () => {
     const store = createStore();
     // Stand in for a pre-upgrade global snapshot: everything except the map.
     store.set(globalLayoutAtom, {
-      sectionSizes: DEFAULT_GLOBAL_LAYOUT.sectionSizes,
       sidebarWidthPx: DEFAULT_GLOBAL_LAYOUT.sidebarWidthPx,
       sidebarCollapsed: DEFAULT_GLOBAL_LAYOUT.sidebarCollapsed,
       explorerListWidthPx: DEFAULT_GLOBAL_LAYOUT.explorerListWidthPx,

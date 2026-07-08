@@ -15,6 +15,7 @@
 
 import type { PanelId, SubSectionId } from "../sectionTypes.ts";
 import type { WorkspaceLayoutState } from "./types.ts";
+import { DEFAULT_SECTION_SIZES } from "./types.ts";
 
 // The left explorer panels, in tab order, with Files active.
 const DEFAULT_LEFT_PANEL_IDS: ReadonlyArray<PanelId> = ["files", "changes", "commits"];
@@ -58,6 +59,7 @@ export function buildDefaultWorkspaceLayout({
       bottom: false,
     },
     splits: {},
+    sectionSizes: DEFAULT_SECTION_SIZES,
     activeSubSection: "center",
   };
 }

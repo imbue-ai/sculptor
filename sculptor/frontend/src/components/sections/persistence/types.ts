@@ -10,7 +10,20 @@ import type { PanelId, SectionId, SectionSplit, SubSectionId } from "../sectionT
 // (snapshots written before the stamp existed) and reject any OTHER version
 // as "nothing stored" so the layout falls back to its defaults instead of
 // hydrating a shape the atoms can't handle.
+//
+// The section-sizes move (global → per-workspace) and the saved-layout fields
+// are deliberately NOT a version bump: they are additive/tolerated shape growth
+// (a workspace snapshot missing sectionSizes reads back with the default; a
+// global snapshot's now-orphaned sectionSizes is inert), and a bump would reset
+// every user's whole layout on upgrade.
 export const LAYOUT_SNAPSHOT_VERSION = 1;
+
+// Percentages of the workspace content area occupied by the surrounding sections;
+// the center fills the remainder. Per-workspace (see WorkspaceLayoutState) so a
+// Layout can capture and restore sizes without rewriting every other workspace's.
+export type SectionSizes = { left: number; right: number; bottom: number };
+
+export const DEFAULT_SECTION_SIZES: SectionSizes = { left: 20, right: 20, bottom: 30 };
 
 export type WorkspaceLayoutState = {
   // Open-panel set + placement: a panel's presence here means it is "open".
@@ -23,8 +36,48 @@ export type WorkspaceLayoutState = {
   expanded: Partial<Record<SectionId, boolean>>;
   // Split state per section (absent = unsplit). Ratio rides here (per-workspace).
   splits: Partial<Record<SectionId, SectionSplit>>;
+  // Per-section size percentages. Moved here from the global store so applying a
+  // Layout restores this workspace's sizes without touching others. A snapshot
+  // written before this field existed reads back as DEFAULT_SECTION_SIZES.
+  sectionSizes: SectionSizes;
   // The active sub-section (the focused pane); null → defaults to center on load.
   activeSubSection: SubSectionId | null;
+  // The Layout last applied to this workspace, if any. A pointer only — the
+  // arrangement is a detached copy, so it diverges freely and the pointer just
+  // marks the "Current" row and backs a light dirty check. Undefined once the
+  // user has never applied a Layout (or after the pointed-to Layout is deleted).
+  appliedLayoutId?: string;
+};
+
+// The captured subset of a workspace arrangement that a Layout stores. Only STATIC
+// panels are recorded in placement/order/activePanel (agent/terminal ids are
+// instance-bound and unportable — see design.md Rule 1); the geometry fields are
+// captured whole. maximizedSection comes from the transient maximize atom, not the
+// persisted layout, so it is captured separately here.
+export type CapturedLayout = {
+  placement: Partial<Record<PanelId, SubSectionId>>;
+  order: Partial<Record<SubSectionId, Array<PanelId>>>;
+  activePanel: Partial<Record<SubSectionId, PanelId>>;
+  expanded: Partial<Record<SectionId, boolean>>;
+  splits: Partial<Record<SectionId, SectionSplit>>;
+  sectionSizes: SectionSizes;
+  maximizedSection: SectionId | null;
+  activeSubSection: SubSectionId | null;
+};
+
+// Schema version for a SavedLayout's captured shape, independent of the snapshot
+// stamp above. Bumped only if the captured shape changes incompatibly; a layout
+// with an unrecognized version is skipped on read (see savedLayoutAtoms).
+export const SAVED_LAYOUT_VERSION = 1;
+
+// A named, reusable arrangement the user can switch between and set as the
+// new-workspace default. A portable template, not a snapshot of one workspace
+// (see design.md): it captures structure + stateless content only.
+export type SavedLayout = {
+  id: string;
+  name: string;
+  captured: CapturedLayout;
+  version: number;
 };
 
 // The sidebar's user-customized drag order. Both lists are materialized on every
@@ -40,8 +93,6 @@ export type SidebarOrderState = {
 };
 
 export type GlobalLayoutState = {
-  // Percentages of the workspace content area; the center fills the remainder.
-  sectionSizes: { left: number; right: number; bottom: number };
   sidebarWidthPx: number;
   sidebarCollapsed: boolean;
   // Shared across Files/Changes/Commits.
@@ -53,6 +104,18 @@ export type GlobalLayoutState = {
   // because global snapshots persisted before this field existed load without
   // it; readers must optional-chain (the compiler enforces it via this `?`).
   explorerSidebarHiddenByPanel?: Partial<Record<PanelId, boolean>>;
+  // The user's named Layouts. Optional because global snapshots persisted before
+  // this field existed load without it; readers default to []. System Default is
+  // NOT stored here — it is synthesized from buildDefaultWorkspaceLayout.
+  savedLayouts?: ReadonlyArray<SavedLayout>;
+  // Which SavedLayout new workspaces seed from and "switch to default" applies.
+  // Undefined (or pointing at a since-deleted id) resolves to System Default.
+  defaultLayoutId?: string;
+  // Layout ids in most-recently-applied order (front = most recent), across all
+  // workspaces. Orders the switcher list (PyCharm ⌘E semantics) and, with the
+  // active workspace's appliedLayoutId, decides the opening highlight. Optional
+  // for the same back-compat reason as the fields above.
+  layoutMru?: ReadonlyArray<string>;
 };
 
 export type LayoutScope = { kind: "workspace"; workspaceId: string } | { kind: "global" };
@@ -70,11 +133,11 @@ export const EMPTY_WORKSPACE_LAYOUT: WorkspaceLayoutState = {
   activePanel: {},
   expanded: {},
   splits: {},
+  sectionSizes: DEFAULT_SECTION_SIZES,
   activeSubSection: null,
 };
 
 export const DEFAULT_GLOBAL_LAYOUT: GlobalLayoutState = {
-  sectionSizes: { left: 20, right: 20, bottom: 30 },
   sidebarWidthPx: 240,
   sidebarCollapsed: false,
   explorerListWidthPx: 240,
