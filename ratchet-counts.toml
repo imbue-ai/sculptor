@@ -122,7 +122,7 @@
 # the full-bleed left-aligned drawer / agent-sheet / changes-pill rows, whose
 # pill/row geometry fights Radix Button/IconButton's enforced sizing. The
 # icon-only mobile buttons (header, overlays, chat input) DO use Radix IconButton.
-"." = 35
+"." = 37
 
 [no-relative-imports]
 "." = 0
