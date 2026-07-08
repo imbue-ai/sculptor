@@ -660,6 +660,10 @@ def convert_agent_messages_to_task_update(
             cleared_message = _add_context_cleared_to_message(None, msg)
             completed_message_by_id[cleared_message.id] = cleared_message
             completed_chat_messages.append(cleared_message)
+            # A cleared context wipes the session that asked — any pending
+            # question (including one preserved across a non-user stop) can no
+            # longer be answered against it.
+            pending_user_questions.clear()
 
         elif isinstance(msg, TurnMetricsAgentMessage):
             pending_turn_metrics = msg.turn_metrics

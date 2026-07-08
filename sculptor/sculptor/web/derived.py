@@ -36,6 +36,7 @@ from sculptor.foundation.pydantic_serialization import build_discriminator
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingDoneAgentMessage
+from sculptor.interfaces.agents.agent import ContextClearedMessage
 from sculptor.interfaces.agents.agent import EnvironmentAcquiredRunnerMessage
 from sculptor.interfaces.agents.agent import EnvironmentReleasedRunnerMessage
 from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
@@ -596,6 +597,11 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
         started_request_ids: set[AgentMessageID] = set()
         for msg in reversed(self._messages):
             if isinstance(msg, UserQuestionAnswerMessage):
+                break
+            if isinstance(msg, ContextClearedMessage):
+                # A cleared context wipes the session that asked — any older
+                # question (including one preserved across a non-user stop)
+                # can no longer be answered against it.
                 break
             if isinstance(msg, RequestStartedAgentMessage):
                 started_request_ids.add(msg.request_id)

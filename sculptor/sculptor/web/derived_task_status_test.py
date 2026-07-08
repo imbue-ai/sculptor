@@ -8,9 +8,11 @@ from sculptor.database.models import TaskID
 from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
+from sculptor.interfaces.agents.agent import ContextClearedMessage
 from sculptor.interfaces.agents.agent import EnvironmentAcquiredRunnerMessage
 from sculptor.interfaces.agents.agent import HelloAgentConfig
 from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
+from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
 from sculptor.interfaces.agents.agent import RequestStoppedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.agent import TerminalAgentConfig
@@ -440,6 +442,50 @@ def test_status_is_not_waiting_when_auq_request_was_stopped_by_user_without_an_a
     preserve the question.
     """
     view = _make_task_view_with_stopped_auq(stopped_by_user=True)
+
+    assert view.status != TaskStatus.WAITING
+
+
+def test_status_is_not_waiting_when_preserved_auq_is_superseded_by_new_chat_turn() -> None:
+    """A newer user prompt that actually began processing supersedes a
+    question preserved across a non-user stop — the user chose to move on
+    instead of answering, so the task must not stay pinned at WAITING.
+    """
+    view = _make_task_view_with_stopped_auq(stopped_by_user=False)
+
+    new_chat_id = AgentMessageID()
+    view.add_message(ChatInputUserMessage(message_id=new_chat_id, text="Never mind, do something else"))
+    view.add_message(
+        RequestStartedAgentMessage.model_construct(
+            message_id=AgentMessageID(),
+            request_id=new_chat_id,
+        )
+    )
+
+    assert view.status != TaskStatus.WAITING
+
+
+def test_status_stays_waiting_when_chat_is_queued_but_not_started_behind_preserved_auq() -> None:
+    """A queued-but-unstarted prompt (typed while the question was pending)
+    does NOT supersede the question — only a prompt the agent actually began
+    processing does. The task keeps advertising WAITING so the user knows the
+    question still blocks the queue.
+    """
+    view = _make_task_view_with_stopped_auq(stopped_by_user=False)
+
+    view.add_message(ChatInputUserMessage(message_id=AgentMessageID(), text="Queued while waiting"))
+
+    assert view.status == TaskStatus.WAITING
+
+
+def test_status_is_not_waiting_when_preserved_auq_is_followed_by_context_clear() -> None:
+    """A cleared context wipes the session that asked — a question preserved
+    across a non-user stop can no longer be answered against it, so the task
+    must not stay pinned at WAITING.
+    """
+    view = _make_task_view_with_stopped_auq(stopped_by_user=False)
+
+    view.add_message(ContextClearedMessage(message_id=AgentMessageID()))
 
     assert view.status != TaskStatus.WAITING
 
