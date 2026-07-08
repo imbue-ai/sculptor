@@ -18,6 +18,7 @@ import {
   configuredDefaultModelAtom,
   defaultEffortLevelAtom,
   isAlwaysInterruptAndSendAtom,
+  isAutoRenameEnabledAtom,
   isCloneWorkspacesEnabledAtom,
   isDefaultFastModeAtom,
   isEntityMentionsEnabledAtom,
@@ -123,6 +124,7 @@ export const SettingsPage = (): ReactElement => {
   const isInPlaceWorkspacesEnabled = useAtomValue(isInPlaceWorkspacesEnabledAtom);
   const isCloneWorkspacesEnabled = useAtomValue(isCloneWorkspacesEnabledAtom);
   const isEntityMentionsEnabled = useAtomValue(isEntityMentionsEnabledAtom);
+  const isAutoRenameEnabled = useAtomValue(isAutoRenameEnabledAtom);
   const isSmoothStreamingEnabled = useAtomValue(isSmoothStreamingUserPreferenceAtom);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
@@ -490,6 +492,16 @@ export const SettingsPage = (): ReactElement => {
                         handleSettingChange(UserConfigField.ENABLE_ENTITY_MENTIONS, checked)
                       }
                       data-testid={ElementIds.SETTINGS_ENABLE_ENTITY_MENTIONS_TOGGLE}
+                    />
+                  </SettingRow>
+                  <SettingRow
+                    title="Auto-name workspace & agent"
+                    description="After your first message, the agent names this workspace and itself based on the task."
+                  >
+                    <Switch
+                      checked={isAutoRenameEnabled}
+                      onCheckedChange={(checked) => handleSettingChange(UserConfigField.ENABLE_AUTO_RENAME, checked)}
+                      data-testid={ElementIds.SETTINGS_ENABLE_AUTO_RENAME_TOGGLE}
                     />
                   </SettingRow>
                   <CustomBackendSection setToast={setToast} />

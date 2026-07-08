@@ -595,6 +595,7 @@ class ClaudeProcessManager:
                 env_var_names=env_var_names,
                 is_first_message=is_first_message,
                 setup_state=setup_state,
+                enable_auto_rename=get_user_config_instance().enable_auto_rename,
             )
             filename = str(self.environment.get_state_path() / f"user_instructions_{message.message_id}.txt")
             self.environment.write_file(filename, user_instructions)

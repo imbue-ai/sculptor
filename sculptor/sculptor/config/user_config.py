@@ -272,6 +272,10 @@ class UserConfig(SerializableModel):
         default=False,
         description="When enabled, typing % in the chat input opens entity mention completions for repositories, workspaces, and agents",
     )
+    enable_auto_rename: bool = Field(
+        default=False,
+        description="When enabled, a first-message system reminder asks the agent to rename its workspace and itself to a concise, task-derived name (via the sculpt CLI) once it understands the task. Experimental; off by default.",
+    )
     enable_frontend_plugins: bool = Field(
         default=True,
         description="When enabled, the frontend plugin system loads runtime plugins and shows the plugin-management UI in the Plugins settings section. On by default. The Plugins settings section itself is always present (it hosts the toggle for this flag); this flag gates loading plugins and the management UI, not the section's visibility. Enabling applies immediately; disabling takes effect after an app reload (already-loaded plugins are not unloaded mid-session).",

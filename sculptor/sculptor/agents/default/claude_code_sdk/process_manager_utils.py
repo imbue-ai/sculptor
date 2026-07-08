@@ -205,6 +205,24 @@ Log file: {setup_state.log_path}
 """
 
 
+# Injected on the first message of an auto-rename-enabled workspace. Asks the agent to give
+# the workspace and itself descriptive names once it understands the task. References the
+# SCULPT_WORKSPACE_ID / SCULPT_AGENT_ID env vars (always present in the agent's shell), so no
+# ids need threading in here; the agent's bash expands them. The id vars are left unquoted
+# (ids are space-free) so each command line carries a single quoted literal — two adjacent
+# "..." literals here would trip the no-implicit-string-concat ratchet.
+_AUTO_RENAME_REMINDER = """<system-reminder>
+This is the first message in a new Sculptor workspace, whose workspace and agent both have auto-generated placeholder names. Once you understand what this task is about, give them a concise, descriptive name (3-6 words) that reflects the task by running BOTH of these commands once:
+
+  sculpt workspace rename $SCULPT_WORKSPACE_ID "<name>"
+  sculpt agent rename $SCULPT_AGENT_ID "<name>"
+
+Do this early and only once. Do not ask the user about it, do not mention it in your reply, and do not let it delay the real work. If a command fails, ignore it and carry on with the task.
+</system-reminder>
+
+"""
+
+
 def get_user_instructions(
     message: ChatInputUserMessage | ResumeAgentResponseRunnerMessage | UserQuestionAnswerMessage,
     file_paths: tuple[str, ...],
@@ -212,6 +230,7 @@ def get_user_instructions(
     env_var_names: Sequence[str] = (),
     is_first_message: bool = False,
     setup_state: SetupReminderState | None = None,
+    enable_auto_rename: bool = False,
 ) -> str:
     if isinstance(message, ChatInputUserMessage):
         user_instructions = _strip_and_unescape_html(message.text)
@@ -248,6 +267,8 @@ The user has configured the following environment variables for this agent: {", 
             user_instructions = env_var_instructions + user_instructions
         if is_first_message and setup_state is not None:
             user_instructions = _build_setup_reminder(setup_state) + user_instructions
+        if is_first_message and enable_auto_rename:
+            user_instructions = _AUTO_RENAME_REMINDER + user_instructions
         if skill_invocation_match is not None:
             skill_name = skill_invocation_match.group(1)
             if skill_name not in _CLAUDE_CLI_BUILTINS:

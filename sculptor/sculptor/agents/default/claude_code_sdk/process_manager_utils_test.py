@@ -184,6 +184,49 @@ def test_get_user_instructions_env_var_reminder_block_ordering() -> None:
     assert env_idx < attach_idx < plan_idx < text_idx
 
 
+# A marker that only appears in the auto-rename reminder body.
+_AUTO_RENAME_MARKER = "sculpt workspace rename"
+
+
+def test_get_user_instructions_emits_auto_rename_reminder_when_enabled_and_first_message() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=True,
+        enable_auto_rename=True,
+    )
+    assert "<system-reminder>" in result
+    assert _AUTO_RENAME_MARKER in result
+    assert "sculpt agent rename" in result
+    # The reminder references env vars that the agent's shell already exposes, not literal ids.
+    assert "$SCULPT_WORKSPACE_ID" in result
+    assert "$SCULPT_AGENT_ID" in result
+    assert "hello" in result
+
+
+def test_get_user_instructions_no_auto_rename_reminder_when_flag_disabled() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=True,
+        enable_auto_rename=False,
+    )
+    assert _AUTO_RENAME_MARKER not in result
+
+
+def test_get_user_instructions_no_auto_rename_reminder_when_not_first_message() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=False,
+        enable_auto_rename=True,
+    )
+    assert _AUTO_RENAME_MARKER not in result
+
+
 _SETUP_RUNNING_PREAMBLE = "A workspace setup command is currently running."
 _SETUP_FAILED_PREAMBLE = "The workspace setup command exited non-zero."
 
