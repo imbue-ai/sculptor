@@ -88,11 +88,23 @@ export type SubagentMetadata = {
   subagentType?: string;
   prompt?: string;
   responseText?: string;
-  /** True when the Agent tool_use had run_in_background=true. The immediate
-   *  "Async agent launched" tool_result is then internal book-keeping rather
-   *  than the agent's real response; the response and run time come from the
-   *  subagent's own child messages instead. */
+  /** True when the agent runs as a background task — either the Agent
+   *  tool_use had run_in_background=true, or the harness converted the call
+   *  to a background task (detected via backgroundTaskId on the tool_result).
+   *  The immediate "Async agent launched" tool_result is then internal
+   *  book-keeping rather than the agent's real response; the response and run
+   *  time come from the subagent's own child messages instead. */
   isBackground?: boolean;
+  /** The CLI's background-task id, stamped by the backend on the launch-ack
+   *  tool_result. Matchable against the pending-background-task set to tell
+   *  whether the agent is still running. */
+  backgroundTaskId?: string;
+  /** For background agents without a response yet: false when the task is no
+   *  longer pending, meaning it finished but its completion child never
+   *  attached (e.g. an orphaned notification) — the timer should stop instead
+   *  of ticking forever. Undefined while running or when the task id is
+   *  unknown (older persisted sessions), where ticking remains the default. */
+  stillRunning?: boolean;
   /** Subagent run time in seconds. For background agents this is derived from
    *  the timestamp delta between the parent message and the subagent's reply,
    *  because the launch-ack tool_result's durationSeconds is ~0. */
@@ -157,12 +169,22 @@ type MetadataBuilderMessage = {
  * and tool_result blocks. This gives us the prompt (from tool_use input) and response
  * (from tool_result content) for each subagent invocation.
  *
- * Background Agent tool_uses (run_in_background=true) get special handling: their
- * immediate "Async agent launched" tool_result is internal book-keeping, so we ignore
- * it and instead derive responseText + durationSeconds from the subagent's own child
- * messages (parentToolUseId === the Agent's tool_use id).
+ * Background Agent tool_uses get special handling: their immediate "Async agent
+ * launched" tool_result is internal book-keeping, so we ignore it and instead derive
+ * responseText + durationSeconds from the subagent's own child messages
+ * (parentToolUseId === the Agent's tool_use id). An agent runs in the background
+ * either because the call asked for it (run_in_background=true in the input) or
+ * because the harness converted it — only the tool_result's backgroundTaskId stamp
+ * identifies the latter, so both signals are checked.
+ *
+ * `pendingBackgroundTaskIds` (from the task detail stream) marks which background
+ * tasks are still awaiting completion; it feeds SubagentMetadata.stillRunning so a
+ * background agent whose completion signal was lost doesn't tick forever.
  */
-export const buildSubagentMetadataMap = (messages: Array<MetadataBuilderMessage>): Map<string, SubagentMetadata> => {
+export const buildSubagentMetadataMap = (
+  messages: Array<MetadataBuilderMessage>,
+  pendingBackgroundTaskIds?: ReadonlySet<string>,
+): Map<string, SubagentMetadata> => {
   const map = new Map<string, SubagentMetadata>();
   // toolUseId → creation time of the message that contained the Agent tool_use.
   // Used to compute background subagent run time from the subagent's reply time.
@@ -191,6 +213,13 @@ export const buildSubagentMetadataMap = (messages: Array<MetadataBuilderMessage>
         const toolUseId = block.toolUseId as string | undefined;
         if (toolUseId && map.has(toolUseId)) {
           const existing = map.get(toolUseId)!;
+          // A backgroundTaskId stamp means this call launched a background
+          // task — the harness converted it to an async agent even if the
+          // input never asked for run_in_background.
+          if (typeof block.backgroundTaskId === "string" && block.backgroundTaskId.length > 0) {
+            existing.isBackground = true;
+            existing.backgroundTaskId = block.backgroundTaskId;
+          }
           // Background agents' immediate tool_result is the launch-ack
           // ("Async agent launched...") — internal book-keeping, not the
           // subagent's response. Skip it; the real response is filled in
@@ -230,6 +259,21 @@ export const buildSubagentMetadataMap = (messages: Array<MetadataBuilderMessage>
       const startMs = parentStartTime.get(parentId);
       if (startMs !== undefined && endMs > startMs) {
         existing.durationSeconds = (endMs - startMs) / 1000;
+      }
+    }
+  }
+
+  // Third pass: liveness for background agents that have no response yet.
+  // Normally the completion child (second pass) and the task leaving the
+  // pending set arrive together, but when the completion signal is lost
+  // (orphaned notification, skipped request) the pill would tick forever —
+  // stillRunning=false lets it settle instead. Entries without a
+  // backgroundTaskId (older persisted sessions) keep stillRunning undefined,
+  // preserving the tick-while-awaiting-response behavior.
+  if (pendingBackgroundTaskIds !== undefined) {
+    for (const metadata of map.values()) {
+      if (metadata.isBackground && metadata.responseText === undefined && metadata.backgroundTaskId !== undefined) {
+        metadata.stillRunning = pendingBackgroundTaskIds.has(metadata.backgroundTaskId);
       }
     }
   }

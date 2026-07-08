@@ -33,6 +33,7 @@ const makeToolResult = (
   toolUseId: string,
   toolName: string,
   text?: string,
+  backgroundTaskId?: string,
 ): {
   type: "tool_result";
   toolUseId: string;
@@ -40,6 +41,7 @@ const makeToolResult = (
   invocationString: string;
   isError: boolean;
   content: { contentType: "generic"; text: string };
+  backgroundTaskId?: string;
 } => ({
   type: "tool_result" as const,
   toolUseId,
@@ -47,6 +49,7 @@ const makeToolResult = (
   invocationString: "",
   isError: false,
   content: text ? { contentType: "generic", text } : { contentType: "generic", text: "" },
+  ...(backgroundTaskId !== undefined ? { backgroundTaskId } : {}),
 });
 
 const makeTextBlock = (text: string): { type: "text"; text: string } => ({
@@ -335,6 +338,98 @@ describe("buildSubagentMetadataMap", () => {
     const map = buildSubagentMetadataMap(messages);
     expect(map.get("tu_fg")!.isBackground).toBeFalsy();
     expect(map.get("tu_bg")!.isBackground).toBe(true);
+  });
+
+  // SCU-1792: an Agent call the harness converts to an async agent has NO
+  // run_in_background in its input — the only signal is the backgroundTaskId
+  // the backend stamps on the launch-ack tool_result. Without it the ack text
+  // ("Async agent launched... internal ID - do not mention to user...") leaks
+  // into the popover as the Response and the pill freezes at ~0.0s.
+  it("treats a harness-converted agent (backgroundTaskId stamp, no input flag) as background", () => {
+    const messages = [
+      {
+        content: [
+          makeToolUse("tu_conv", "Agent", { subagent_type: "Explore", prompt: "Investigate the repo" }),
+          makeToolResult("tu_conv", "Agent", "Async agent launched successfully.\nagentId: abc123", "task-1"),
+        ],
+        parentToolUseId: null,
+        approximateCreationTime: "2026-07-08T12:00:00Z",
+      },
+    ];
+    const map = buildSubagentMetadataMap(messages);
+    const meta = map.get("tu_conv")!;
+    expect(meta.isBackground).toBe(true);
+    expect(meta.backgroundTaskId).toBe("task-1");
+    expect(meta.responseText).toBeUndefined();
+  });
+
+  it("derives responseText and duration for a converted agent from its child messages", () => {
+    const messages = [
+      {
+        content: [
+          makeToolUse("tu_conv", "Agent", { prompt: "Investigate" }),
+          makeToolResult("tu_conv", "Agent", "Async agent launched successfully.", "task-1"),
+        ],
+        parentToolUseId: null,
+        approximateCreationTime: "2026-07-08T12:00:00Z",
+      },
+      {
+        content: [{ type: "text", text: "Investigation complete." }],
+        parentToolUseId: "tu_conv",
+        approximateCreationTime: "2026-07-08T12:02:00Z",
+      },
+    ];
+    const map = buildSubagentMetadataMap(messages);
+    const meta = map.get("tu_conv")!;
+    expect(meta.responseText).toBe("Investigation complete.");
+    expect(meta.durationSeconds).toBeCloseTo(120, 0);
+  });
+
+  it("computes stillRunning from the pending background task set", () => {
+    const makeConverted = (
+      toolUseId: string,
+      taskId: string,
+    ): { content: Array<Record<string, unknown>>; parentToolUseId: null; approximateCreationTime: string } => ({
+      content: [
+        makeToolUse(toolUseId, "Agent", { prompt: "Work" }),
+        makeToolResult(toolUseId, "Agent", "Async agent launched successfully.", taskId),
+      ],
+      parentToolUseId: null,
+      approximateCreationTime: "2026-07-08T12:00:00Z",
+    });
+    const messages = [
+      makeConverted("tu_running", "task-running"),
+      makeConverted("tu_lost", "task-lost"),
+      makeConverted("tu_done", "task-done"),
+      {
+        content: [{ type: "text", text: "Done." }],
+        parentToolUseId: "tu_done",
+        approximateCreationTime: "2026-07-08T12:01:00Z",
+      },
+    ];
+    const map = buildSubagentMetadataMap(messages, new Set(["task-running"]));
+    // Still in the pending set: running, keep the live timer ticking.
+    expect(map.get("tu_running")!.stillRunning).toBe(true);
+    // Left the pending set without a response child (orphaned completion):
+    // the timer must settle rather than tick forever.
+    expect(map.get("tu_lost")!.stillRunning).toBe(false);
+    // Response arrived: liveness is moot, leave it unset.
+    expect(map.get("tu_done")!.stillRunning).toBeUndefined();
+  });
+
+  it("leaves stillRunning unset when the pending set is not provided", () => {
+    const messages = [
+      {
+        content: [
+          makeToolUse("tu_conv", "Agent", { prompt: "Work" }),
+          makeToolResult("tu_conv", "Agent", "Async agent launched successfully.", "task-1"),
+        ],
+        parentToolUseId: null,
+        approximateCreationTime: "2026-07-08T12:00:00Z",
+      },
+    ];
+    const map = buildSubagentMetadataMap(messages);
+    expect(map.get("tu_conv")!.stillRunning).toBeUndefined();
   });
 });
 

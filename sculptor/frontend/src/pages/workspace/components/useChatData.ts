@@ -32,6 +32,7 @@ export type ChatData = {
   isAutoCompacting: boolean;
   pendingUserQuestion: AskUserQuestionData | null;
   pendingBackgroundTaskCount: number;
+  pendingBackgroundTaskIds: Array<string>;
   bottomSentinelRef: React.MutableRefObject<HTMLDivElement | null>;
 };
 
@@ -131,6 +132,7 @@ export const useChatData = ({ taskID, workspaceID, appendTextRef, insertSkillRef
     isAutoCompacting,
     pendingUserQuestion,
     pendingBackgroundTaskCount: pendingBackgroundTaskIds.length,
+    pendingBackgroundTaskIds,
     bottomSentinelRef,
   };
 };

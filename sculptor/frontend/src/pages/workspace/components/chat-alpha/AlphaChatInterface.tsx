@@ -77,6 +77,7 @@ export const AlphaChatInterface = ({
   isAutoCompacting,
   pendingUserQuestion,
   pendingBackgroundTaskCount,
+  pendingBackgroundTaskIds,
   bottomSentinelRef,
 }: AlphaChatInterfaceProps): ReactElement => {
   // The PANEL's agent identity, seeded by ChatPanelContent — never the route's.
@@ -116,12 +117,14 @@ export const AlphaChatInterface = ({
   // Build message tree and filter out tool-result-only messages
   const messageTree = useMemo(() => buildSubagentTree(effectiveChatMessages), [effectiveChatMessages]);
   const toolResultMap = useMemo(() => buildToolResultMap(effectiveChatMessages), [effectiveChatMessages]);
+  const pendingBackgroundTaskIdSet = useMemo(() => new Set(pendingBackgroundTaskIds), [pendingBackgroundTaskIds]);
   const subagentMetadataMap = useMemo(
     () =>
       buildSubagentMetadataMap(
         effectiveChatMessages as unknown as Array<{ content: Array<{ type?: string; [key: string]: unknown }> }>,
+        pendingBackgroundTaskIdSet,
       ),
-    [effectiveChatMessages],
+    [effectiveChatMessages, pendingBackgroundTaskIdSet],
   );
 
   const filteredNodes = useMemo(
