@@ -34,6 +34,13 @@
   flex-shrink: 0;
 }
 
+// Tint the leading icon with the accent color when the row is selected, matching
+// the accent label. The icon sets an explicit color (rather than inheriting
+// currentColor), so the active state has to restate it here.
+.navItemActive .navIcon {
+  color: var(--accent-11);
+}
+
 .navLabel {
   overflow: hidden;
   text-overflow: ellipsis;

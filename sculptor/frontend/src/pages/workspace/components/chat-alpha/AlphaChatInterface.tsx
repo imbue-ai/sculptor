@@ -176,7 +176,9 @@ export const AlphaChatInterface = ({
 
   // Set true before any programmatic scroll of the chat container so
   // ChatScrollProvider doesn't dismiss popovers on it. Cleared by
-  // useAlphaAutoScroll.handleScroll after it consumes the scroll event.
+  // useAlphaAutoScroll.handleScroll in a microtask after the flagged scroll
+  // event, so every listener of that event (including the persistence save
+  // handler) sees the classification.
   const isProgrammaticScrollRef = useRef(false);
 
   // Single owner of scroll state (authority + layout settle + suppression).
@@ -214,7 +216,14 @@ export const AlphaChatInterface = ({
 
   // Scroll position persistence per task
   const filteredMessageRefs = useMemo(() => filteredNodes.map((n) => ({ id: n.message.id })), [filteredNodes]);
-  useAlphaScrollPersistence(scrollContainerRef, virtualizer, taskID, filteredMessageRefs, scrollMachine);
+  useAlphaScrollPersistence(
+    scrollContainerRef,
+    virtualizer,
+    taskID,
+    filteredMessageRefs,
+    scrollMachine,
+    isProgrammaticScrollRef,
+  );
 
   // Prompt navigation: ArrowUp/Down to cycle through user prompts
   const filteredChatMessages = useMemo(() => filteredNodes.map((n) => n.message), [filteredNodes]);
