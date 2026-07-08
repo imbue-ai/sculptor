@@ -59,8 +59,11 @@ type NewWorkspaceFormProps = {
   initialPrompt?: string;
   /**
    * Called with the new workspace's id after every successful create —
-   * including each repeat create in keep-open mode. May come from a plugin,
-   * so a throw is contained and never breaks the form's own post-create flow.
+   * including each repeat create in keep-open mode, where the title/prompt
+   * re-seed from `initialTitle`/`initialPrompt` between creates so the open
+   * dialog stays visibly about the request this callback belongs to. May come
+   * from a plugin, so a throw is contained and never breaks the form's own
+   * post-create flow.
    */
   onWorkspaceCreated?: (workspaceId: string) => void;
   /** Called after a successful create when "keep open" is off. */
@@ -318,11 +321,15 @@ export const NewWorkspaceForm = ({
     if (isKeepOpen) {
       // Keep the dialog open for rapid multi-create — reset the
       // per-workspace fields but retain the repo + agent type (+ mode/source)
-      // and the per-prompt agent settings. Plan mode is the exception: it is
-      // a per-task choice, so it resets to off rather than silently carrying
-      // into the next workspace.
-      setWorkspaceName("");
-      setPrompt("");
+      // and the per-prompt agent settings. Title and prompt reset back to
+      // their seeds, not to blank: every create from a seeded open request
+      // reports to the same `onWorkspaceCreated`, so the fields must keep
+      // saying what that request is (an unseeded open falls back to blank
+      // either way). Plan mode is the exception: it is a per-task choice, so
+      // it resets to off rather than silently carrying into the next
+      // workspace.
+      setWorkspaceName(initialTitle ?? "");
+      setPrompt(initialPrompt ?? "");
       setIsAgentPlanMode(false);
       setBranchNameOverride(null);
       setShuffleNonce((prev) => prev + 1);
@@ -346,6 +353,8 @@ export const NewWorkspaceForm = ({
     isAgentFastMode,
     isAgentPlanMode,
     isKeepOpen,
+    initialTitle,
+    initialPrompt,
     onWorkspaceCreated,
     onCreated,
   ]);

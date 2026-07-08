@@ -6,6 +6,14 @@ import type { ReactElement } from "react";
 import type { BoardRow } from "../linear/board.ts";
 import type { LinearIssue } from "../linear/client.ts";
 
+// Width of the trailing "No workspace" slot, matching the workspace indicators
+// so the trailing column stays aligned down the board.
+const WORKSPACE_SLOT_MIN_WIDTH_PX = 120;
+
+// Height cap (with scroll) for the assign submenu: it lists every workspace,
+// and long-lived installs can have far more than fit on screen.
+const ASSIGN_SUBMENU_MAX_HEIGHT_PX = 320;
+
 /**
  * One ticket on the board: its identifier and title (opening the issue in Linear
  * on click), with a trailing indicator of whether a Sculptor workspace is
@@ -26,8 +34,12 @@ export const BoardTicketRow = ({
   onAssignWorkspace,
 }: {
   row: BoardRow<WorkspaceView>;
-  /** Every workspace the assign menu can offer (not just this ticket's). */
-  allWorkspaces: ReadonlyArray<WorkspaceView>;
+  /**
+   * Every workspace the assign menu can offer (not just this ticket's);
+   * `undefined` while the workspace list hasn't loaded yet, which the assign
+   * submenu renders as a loading placeholder rather than "No workspaces".
+   */
+  allWorkspaces: ReadonlyArray<WorkspaceView> | undefined;
   onOpenWorkspace: (workspaceId: string) => void;
   onCreateWorkspace: (issue: LinearIssue) => void;
   onAssignWorkspace: (workspaceId: string, issue: LinearIssue) => void;
@@ -100,7 +112,7 @@ const NoWorkspaceMenu = ({
   onAssignWorkspace,
 }: {
   issue: LinearIssue;
-  allWorkspaces: ReadonlyArray<WorkspaceView>;
+  allWorkspaces: ReadonlyArray<WorkspaceView> | undefined;
   onCreateWorkspace: (issue: LinearIssue) => void;
   onAssignWorkspace: (workspaceId: string, issue: LinearIssue) => void;
 }): ReactElement => (
@@ -110,7 +122,7 @@ const NoWorkspaceMenu = ({
         size="1"
         variant="ghost"
         color="gray"
-        style={{ flexShrink: 0, minWidth: 120, justifyContent: "flex-end" }}
+        style={{ flexShrink: 0, minWidth: WORKSPACE_SLOT_MIN_WIDTH_PX, justifyContent: "flex-end" }}
       >
         No workspace
         <ChevronDown size={13} />
@@ -120,23 +132,45 @@ const NoWorkspaceMenu = ({
       <DropdownMenu.Item onSelect={() => onCreateWorkspace(issue)}>Create workspace…</DropdownMenu.Item>
       <DropdownMenu.Sub>
         <DropdownMenu.SubTrigger>Assign workspace</DropdownMenu.SubTrigger>
-        {/* Capped height with scroll: the submenu lists every workspace, and
-            long-lived installs can have far more than fit on screen. */}
-        <DropdownMenu.SubContent style={{ maxHeight: 320, overflowY: "auto" }}>
-          {allWorkspaces.length === 0 ? (
-            <DropdownMenu.Item disabled>No workspaces</DropdownMenu.Item>
-          ) : (
-            allWorkspaces.map((workspace) => (
-              <DropdownMenu.Item key={workspace.id} onSelect={() => onAssignWorkspace(workspace.id, issue)}>
-                {workspace.description}
-              </DropdownMenu.Item>
-            ))
-          )}
+        <DropdownMenu.SubContent style={{ maxHeight: ASSIGN_SUBMENU_MAX_HEIGHT_PX, overflowY: "auto" }}>
+          <AssignSubmenuItems issue={issue} allWorkspaces={allWorkspaces} onAssignWorkspace={onAssignWorkspace} />
         </DropdownMenu.SubContent>
       </DropdownMenu.Sub>
     </DropdownMenu.Content>
   </DropdownMenu.Root>
 );
+
+/**
+ * The assign submenu's body: a loading placeholder while the workspace list is
+ * still `undefined` (the SDK hasn't delivered the first batch), a "No
+ * workspaces" placeholder for a loaded-but-empty list, and otherwise one item
+ * per workspace.
+ */
+const AssignSubmenuItems = ({
+  issue,
+  allWorkspaces,
+  onAssignWorkspace,
+}: {
+  issue: LinearIssue;
+  allWorkspaces: ReadonlyArray<WorkspaceView> | undefined;
+  onAssignWorkspace: (workspaceId: string, issue: LinearIssue) => void;
+}): ReactElement => {
+  if (allWorkspaces === undefined) {
+    return <DropdownMenu.Item disabled>Loading workspaces…</DropdownMenu.Item>;
+  }
+  if (allWorkspaces.length === 0) {
+    return <DropdownMenu.Item disabled>No workspaces</DropdownMenu.Item>;
+  }
+  return (
+    <>
+      {allWorkspaces.map((workspace) => (
+        <DropdownMenu.Item key={workspace.id} onSelect={() => onAssignWorkspace(workspace.id, issue)}>
+          {workspace.description}
+        </DropdownMenu.Item>
+      ))}
+    </>
+  );
+};
 
 const WorkspaceIndicator = ({
   workspaces,

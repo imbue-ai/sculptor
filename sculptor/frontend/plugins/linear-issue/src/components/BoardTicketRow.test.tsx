@@ -85,6 +85,16 @@ describe("BoardTicketRow", () => {
     expect(placeholder.closest("[role='menuitem']")?.getAttribute("aria-disabled")).toBe("true");
   });
 
+  it("shows a disabled loading placeholder while the workspace list is undefined", async () => {
+    // `undefined` is the SDK's "not loaded yet" state, distinct from an empty list.
+    renderRow({ allWorkspaces: undefined });
+    await userEvent.click(screen.getByRole("button", { name: /No workspace/ }));
+    await userEvent.click(await screen.findByText("Assign workspace"));
+    const placeholder = await screen.findByText("Loading workspaces…");
+    expect(placeholder.closest("[role='menuitem']")?.getAttribute("aria-disabled")).toBe("true");
+    expect(screen.queryByText("No workspaces")).toBeNull();
+  });
+
   it("labels the open button with the single workspace and navigates to it on click", async () => {
     const onOpen = vi.fn();
     renderRow({ row: row([workspace("w1", "My workspace")]), onOpenWorkspace: onOpen });

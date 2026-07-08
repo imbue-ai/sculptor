@@ -89,7 +89,7 @@ export const LinearBoard = (): ReactElement => {
             isError={isError}
             error={error}
             refetch={refetch}
-            allWorkspaces={workspaces ?? []}
+            allWorkspaces={workspaces}
             onOpenWorkspace={navigateToWorkspace}
             onCreateWorkspace={handleCreateWorkspace}
             onAssignWorkspace={handleAssignWorkspace}
@@ -118,7 +118,8 @@ const BoardBody = ({
   isError: boolean;
   error: unknown;
   refetch: () => void;
-  allWorkspaces: ReadonlyArray<WorkspaceView>;
+  /** `undefined` while the SDK's workspace list is still loading. */
+  allWorkspaces: ReadonlyArray<WorkspaceView> | undefined;
   onOpenWorkspace: (workspaceId: string) => void;
   onCreateWorkspace: (issue: LinearIssue) => void;
   onAssignWorkspace: (workspaceId: string, issue: LinearIssue) => void;
@@ -177,7 +178,7 @@ const BoardGroupSection = ({
   onAssignWorkspace,
 }: {
   group: BoardGroup<WorkspaceView>;
-  allWorkspaces: ReadonlyArray<WorkspaceView>;
+  allWorkspaces: ReadonlyArray<WorkspaceView> | undefined;
   onOpenWorkspace: (workspaceId: string) => void;
   onCreateWorkspace: (issue: LinearIssue) => void;
   onAssignWorkspace: (workspaceId: string, issue: LinearIssue) => void;
