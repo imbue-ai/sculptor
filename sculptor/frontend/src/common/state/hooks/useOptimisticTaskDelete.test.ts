@@ -1,3 +1,4 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { renderHook } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
@@ -48,6 +49,16 @@ const seedTask = (task: CodingAgentTaskView): void => {
   queryClient.setQueryData(taskQueryKey(task.id as string), task);
 };
 
+const getCachedTask = (id: string): CodingAgentTaskView | null | undefined =>
+  queryClient.getQueryData<CodingAgentTaskView | null>(taskQueryKey(id));
+
+// The hook uses both a Jotai store (workspace mapping, toasts) and a TanStack
+// mutation (the delete request), so both providers are required.
+const makeWrapper =
+  (store: ReturnType<typeof createStore>) =>
+  ({ children }: { children: ReactNode }): ReactElement =>
+    createElement(Provider, { store }, createElement(QueryClientProvider, { client: queryClient }, children));
+
 beforeEach(() => {
   vi.clearAllMocks();
   queryClient.removeQueries({ queryKey: ["sculptor"] });
@@ -67,10 +78,9 @@ describe("useOptimisticTaskDelete", () => {
     seedTask(createMockTask("task-A"));
     seedTask(createMockTask("task-B"));
 
-    const wrapper = ({ children }: { children: ReactNode }): ReactElement =>
-      createElement(Provider, { store }, children);
-
-    const { result } = renderHook(() => useOptimisticTaskDelete({ workspaceId: "ws-1" }), { wrapper });
+    const { result } = renderHook(() => useOptimisticTaskDelete({ workspaceId: "ws-1" }), {
+      wrapper: makeWrapper(store),
+    });
 
     // Both initial deletes reject -> two error toasts (each set on the same atom).
     mockDeleteWorkspaceAgent.mockRejectedValue(new Error("network"));
@@ -102,5 +112,29 @@ describe("useOptimisticTaskDelete", () => {
     expect(mockDeleteWorkspaceAgent).toHaveBeenCalledWith(
       expect.objectContaining({ path: expect.objectContaining({ agent_id: "task-A" }) }),
     );
+  });
+
+  it("tombstones the task before the navigation callback observes it", () => {
+    // The removal must be visible in every store by the time callbacks run, so
+    // a callback reading the cache sees the tombstone, not the live task.
+    const store = createStore();
+    queryClient.setQueryData(taskIdsQueryKey(), ["task-A"]);
+    seedTask(createMockTask("task-A"));
+    mockDeleteWorkspaceAgent.mockResolvedValue(undefined);
+
+    let observedDuringCallback: CodingAgentTaskView | null | undefined = createMockTask("task-A");
+    const onNavigateAfterDelete = vi.fn((taskId: string): void => {
+      observedDuringCallback = getCachedTask(taskId);
+    });
+
+    const { result } = renderHook(() => useOptimisticTaskDelete({ workspaceId: "ws-1", onNavigateAfterDelete }), {
+      wrapper: makeWrapper(store),
+    });
+
+    result.current.execute("task-A", "Task A");
+
+    expect(onNavigateAfterDelete).toHaveBeenCalledOnce();
+    expect(observedDuringCallback).toBeNull();
+    expect(queryClient.getQueryData<ReadonlyArray<string>>(taskIdsQueryKey())).toEqual([]);
   });
 });

@@ -273,3 +273,43 @@ def initialize_from_file() -> bool:
     else:
         logger.info("No config file found at {}, will require onboarding", config_path)
         return False
+
+
+def make_onboarded_user_config(base: UserConfig, is_telemetry_enabled: bool) -> UserConfig:
+    """Return a copy of ``base`` with onboarding marked complete.
+
+    Records privacy-policy consent and sets the telemetry level to the given
+    consent — the same two flags ``complete_onboarding`` persists once a user
+    finishes the welcome flow. Used to fabricate a ready-to-run config (e.g. for
+    local dev/QA) without walking the onboarding UI.
+    """
+    return model_update(
+        base,
+        {
+            "is_privacy_policy_consented": True,
+            "is_telemetry_level_set": True,
+            **get_privacy_settings_for_telemetry(is_telemetry_enabled).model_dump(),
+        },
+    )
+
+
+def seed_onboarded_config_if_needed(config_path: Path, is_telemetry_enabled: bool) -> bool:
+    """Idempotently ensure ``config_path`` holds a valid, onboarded config.
+
+    Returns True when a config was written, False when an existing valid,
+    already-onboarded config was left untouched. Safe to re-run: a config that
+    already loads and has completed onboarding is preserved so local
+    customizations survive repeated launches, while a missing or corrupt one is
+    (re)written from the anonymized default.
+    """
+    existing: UserConfig | None = None
+    if config_path.exists():
+        try:
+            existing = load_config(config_path)
+        except (ValidationError, InvalidConfigError, tomllib.TOMLDecodeError):
+            existing = None
+    if existing is not None and existing.is_privacy_policy_consented and existing.is_telemetry_level_set:
+        return False
+    base = existing if existing is not None else get_default_user_config_instance()
+    save_config(make_onboarded_user_config(base, is_telemetry_enabled), config_path)
+    return True

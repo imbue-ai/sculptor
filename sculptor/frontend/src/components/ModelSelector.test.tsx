@@ -4,7 +4,7 @@ import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { ElementIds, LlmModel, type ModelOption } from "~/api";
+import { ElementIds, LlmModel, ModelCatalogState, type ModelOption } from "~/api";
 import { groupModelsByProvider, routeModelChange } from "~/common/modelConstants.ts";
 
 import { ModelSelectOptions } from "./ModelSelectOptions";
@@ -188,6 +188,28 @@ describe("ModelSelector", () => {
     expect(emptyState).toHaveTextContent("No models available — please log in to authenticate");
     expect(screen.getByTestId(ElementIds.PI_PICKER_LOGIN_CTA)).toBeInTheDocument();
     expect(screen.queryByTestId(ElementIds.MODEL_SELECTOR)).not.toBeInTheDocument();
+  });
+
+  it("shows a loading state, not the login CTA, while the pi catalog is not yet fetched", () => {
+    render(
+      withStore(
+        <ModelSelector
+          model={LlmModel.CLAUDE_4_OPUS_200K}
+          onModelChange={() => {}}
+          capabilityValue={true}
+          sourcesBackendModels={true}
+          backendModels={ModelCatalogState.NOT_FETCHED_YET}
+          onAuthenticate={() => {}}
+        />,
+      ),
+    );
+    // Until the start-time probe lands, an authenticated user's catalog is
+    // NOT_FETCHED_YET — the switcher shows a loading placeholder and must NOT flash
+    // the "please log in" CTA (that empty-state is reserved for a fetched-but-empty
+    // catalog, i.e. real no-auth).
+    expect(screen.getByTestId(ElementIds.PI_PICKER_LOADING)).toBeInTheDocument();
+    expect(screen.queryByTestId(ElementIds.PI_PICKER_EMPTY_STATE)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(ElementIds.PI_PICKER_LOGIN_CTA)).not.toBeInTheDocument();
   });
 
   it("invokes onAuthenticate when the login CTA is clicked", () => {

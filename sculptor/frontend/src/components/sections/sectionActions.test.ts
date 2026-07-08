@@ -70,6 +70,34 @@ describe("collapse/expand invariants", () => {
     expect(store.get(workspaceLayoutAtom).expanded.left).toBe(true);
     expect(store.get(maximizedSectionAtom)).toBe("left");
   });
+
+  it("toggling a section open focuses it and pulses the active-section ring", () => {
+    const store = storeWith({ activeSubSection: "center", expanded: { left: false } });
+    const nonceBefore = store.get(activeSectionRingNonceAtom);
+    store.set(toggleSectionAtom, { section: "left" });
+    const layout = store.get(workspaceLayoutAtom);
+    expect(layout.expanded.left).toBe(true);
+    expect(layout.activeSubSection).toBe("left");
+    expect(store.get(activeSectionRingNonceAtom)).toBe(nonceBefore + 1);
+  });
+
+  it("toggling a split section open focuses its primary half", () => {
+    const store = storeWith({
+      activeSubSection: "center",
+      expanded: { left: false },
+      splits: { left: { axis: "horizontal", ratio: 0.5 } },
+    });
+    store.set(toggleSectionAtom, { section: "left" });
+    expect(store.get(workspaceLayoutAtom).activeSubSection).toBe("left");
+  });
+
+  it("collapsing a section does not pulse the active-section ring", () => {
+    const store = storeWith({ expanded: { left: true }, activeSubSection: "left" });
+    const nonceBefore = store.get(activeSectionRingNonceAtom);
+    store.set(toggleSectionAtom, { section: "left" });
+    expect(store.get(workspaceLayoutAtom).activeSubSection).toBe("center");
+    expect(store.get(activeSectionRingNonceAtom)).toBe(nonceBefore);
+  });
 });
 
 describe("single-instance invariant", () => {

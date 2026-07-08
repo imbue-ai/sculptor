@@ -26,7 +26,9 @@ from sculptor.primitives.ids import UserSettingsID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.state.messages import AgentMessageSource
 from sculptor.state.messages import LLMModel
+from sculptor.state.messages import ModelCatalog
 from sculptor.state.messages import ModelOption
+from sculptor.state.messages import NOT_FETCHED_YET
 
 TaskID = AgentTaskID
 
@@ -202,8 +204,11 @@ class AgentTaskStateV2(BaseTaskState):
     terminal_shell_pid: int | None = None
     # pi agents only: the curated model catalog the agent fetched from pi at
     # start (get_available_models), surfaced by the pi harness's
-    # get_available_models so the chat switcher offers pi's real models.
-    available_models: list[ModelOption] = []
+    # get_available_models so the chat switcher offers pi's real models. Defaults
+    # to NOT_FETCHED_YET (the probe has not run) — distinct from a fetched-but-
+    # empty [] (authenticated, no providers), so the switcher can tell a loading
+    # catalog from a genuinely empty one instead of flashing the login CTA.
+    available_models: ModelCatalog = NOT_FETCHED_YET
     # pi agents only: the model pi reported as current at start (get_state.model),
     # surfaced by the pi harness's get_selected_model_id as the switcher's value.
     current_model: ModelOption | None = None

@@ -31,6 +31,7 @@ from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.elements.user_config import enable_clone_workspaces
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.settings_page import PlaywrightSettingsPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.utils import get_playwright_modifier_key
@@ -326,36 +327,34 @@ _MAX_WORKSPACE_DELETE_ITERATIONS = 50
 
 
 def delete_all_workspaces_via_ui(page: Page) -> None:
-    """Delete every workspace through the Home page workspace list.
+    """Delete every workspace through the sidebar workspace rows.
 
-    Workspaces live in the sidebar + Home list now (no tab strip); deleting each
-    Home row via its inline delete button + confirmation removes them all and
-    lands on the empty Home list. Home reacts to the list turning empty by
+    The sidebar is the primary navigation surface in the new shell and lists every
+    workspace on all in-app routes, so deleting each row via its hover-revealed
+    trash icon + confirmation clears them all without routing to the Home list.
+    When the deletions themselves land the app on Home (removing the active
+    workspace's last row navigates there), Home reacts to the empty list by
     auto-opening the new-workspace dialog — a modal whose overlay would swallow
     a caller's next click — so it is dismissed before returning.
     """
     # Dismiss any open popover/context menu that might intercept clicks.
     page.keyboard.press("Escape")
 
-    confirm_button = page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CONFIRM)
-    confirm_dialog = page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)
+    sidebar = get_workspace_sidebar(page)
+    # A collapsed sidebar hides its rows behind the expand icon; expand first so
+    # the rows (and their delete affordances) are reachable.
+    if sidebar.get_expand_icon().count() > 0:
+        sidebar.expand()
 
-    navigate_to_home_page(page)
-
-    # Delete each workspace from the Home page workspace list.
-    # navigate_to_home_page already waits for workspace rows or empty state.
-    workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
+    confirm_dialog = sidebar.get_delete_confirmation_dialog()
+    workspace_rows = sidebar.get_workspace_rows()
 
     did_delete_rows = False
     for _ in range(_MAX_WORKSPACE_DELETE_ITERATIONS):
         row_count = workspace_rows.count()
         if row_count == 0:
             break
-        delete_button = workspace_rows.first.get_by_test_id(ElementIDs.WORKSPACE_ROW_CONTEXT_MENU_DELETE)
-        expect(delete_button).to_be_visible()
-        delete_button.click()
-        expect(confirm_button).to_be_visible()
-        confirm_button.click()
+        sidebar.delete_workspace_via_row_icon(workspace_rows.first)
         expect(confirm_dialog).to_be_hidden()
         # The row is removed optimistically on confirm, but its unmount can
         # trail the dialog closing by a render under load — wait for the count
@@ -373,16 +372,16 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
             f"Could not delete all workspace rows after {_MAX_WORKSPACE_DELETE_ITERATIONS} iterations ({remaining} remaining)"
         )
 
-    # The list is now empty on Home, so the first-run auto-open pops the
-    # new-workspace dialog. When THIS call emptied the list, the pop is
-    # guaranteed (the effect fires on the same store update that removed the
-    # rows) — wait for it with a real timeout so a slow WS frame can't leave
-    # the modal to land after we return and swallow the caller's next click.
-    # When the list was already empty on entry, the offer may have been
-    # opened-and-dismissed earlier on this same Home mount and will not
-    # re-fire, so only a momentary check is warranted.
+    # Sidebar deletions only navigate when the ACTIVE workspace's row goes; if
+    # that landed us on Home with the list now empty, the first-run auto-open
+    # pops the new-workspace dialog on the same store update — wait for it with
+    # a real timeout so a slow frame can't leave the modal to land after we
+    # return and swallow the caller's next click. On any other route (e.g. the
+    # post-reset workspace shell) the offer never fires, and when the list was
+    # already empty on entry it may have been opened-and-dismissed earlier on
+    # this same Home mount, so only a momentary check is warranted.
     new_workspace_dialog = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)
-    if did_delete_rows:
+    if did_delete_rows and "#/home" in page.url:
         expect(new_workspace_dialog).to_be_visible()
     elif not new_workspace_dialog.is_visible():
         return

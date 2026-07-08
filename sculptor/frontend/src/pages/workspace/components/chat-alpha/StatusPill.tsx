@@ -110,16 +110,13 @@ export const StatusPill = ({
     pendingBackgroundTaskCount,
   });
 
-  // Hide the Stop affordance entirely when the harness can't honor a mid-turn
-  // interrupt (pi drops InterruptProcessUserMessage) — a dead Stop button is
-  // worse than none. `?? true` keeps it visible until the task loads; Claude
-  // reports true, pi false. `canStop` gates both the clickable button and the
-  // `isCancellable` mirror that arms the Ctrl+C keybinding, so neither path
-  // fires for a non-interruptible harness.
+  // Gate the Stop affordance on the harness's interrupt capability: while the
+  // turn is cancellable the control always renders, but a harness reporting
+  // `false` gets a disabled-with-tooltip button rather than a dead one.
+  // `?? true` keeps it enabled until the task's capabilities load. `canStop`
+  // mirrors the same condition into the atom that arms the Ctrl+C keybinding.
   const canBeInterrupted = useTaskSupportsInterruption(taskID) ?? true;
   const canStop = isCancellable && canBeInterrupted;
-  // When the agent is cancellable but the harness can't honor a mid-turn
-  // interrupt, the Stop control is shown disabled-with-tooltip rather than hidden.
   const stopGate = useCapabilityGate(canBeInterrupted, ElementIds.CAPABILITY_DISABLED_STOP);
 
   // Pull tasks from the PLAN artifact. When tasks exist and the pill is
