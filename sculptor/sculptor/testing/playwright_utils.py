@@ -348,7 +348,8 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
 
     did_delete_rows = False
     for _ in range(_MAX_WORKSPACE_DELETE_ITERATIONS):
-        if workspace_rows.count() == 0:
+        row_count = workspace_rows.count()
+        if row_count == 0:
             break
         delete_button = workspace_rows.first.get_by_test_id(ElementIDs.WORKSPACE_ROW_CONTEXT_MENU_DELETE)
         expect(delete_button).to_be_visible()
@@ -356,6 +357,10 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
         expect(confirm_button).to_be_visible()
         confirm_button.click()
         expect(confirm_dialog).to_be_hidden()
+        # The row is removed optimistically on confirm, but its unmount can
+        # trail the dialog closing by a render under load — wait for the count
+        # to drop so the next iteration can't re-target the same row.
+        expect(workspace_rows).to_have_count(row_count - 1)
         did_delete_rows = True
     else:
         remaining = workspace_rows.count()
