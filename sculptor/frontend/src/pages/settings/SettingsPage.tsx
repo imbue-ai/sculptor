@@ -495,7 +495,7 @@ export const SettingsPage = (): ReactElement => {
                     />
                   </SettingRow>
                   <SettingRow
-                    title="Auto-name workspace & agent"
+                    title="Auto-name workspace and agent"
                     description="After your first message, the agent names this workspace and itself based on the task."
                   >
                     <Switch
