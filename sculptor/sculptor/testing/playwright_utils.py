@@ -116,12 +116,17 @@ def navigate_to_home_page(page: Page) -> None:
     ``ensure_sidebar_expanded`` restores it when a prior step collapsed the
     rail.
     """
+    # An open new-workspace dialog's overlay would swallow the click below
+    # (and the sidebar-expand click too, so dismiss before expanding). A
+    # caller with the dialog up cannot click the sidebar at all, so dismissal
+    # is always the precondition here — e.g. deleting the last workspace while
+    # parked on Home re-offers the first-run dialog over the page.
+    dialog = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)
+    if dialog.count() > 0:
+        page.keyboard.press("Escape")
+        expect(dialog).to_have_count(0)
+
     ensure_sidebar_expanded(page)
-    # No blanket overlay-dismissal here: an open dialog's overlay would block
-    # the click below, but an Escape could equally destroy state a caller is
-    # about to assert on (e.g. the first-run auto-opened dialog, which a
-    # same-route click can't re-offer). Callers with a dialog up close it
-    # themselves before navigating.
     sidebar_home_link = page.get_by_test_id(ElementIDs.SIDEBAR_HOME_LINK)
     expect(sidebar_home_link).to_be_visible()
     sidebar_home_link.click()
@@ -754,6 +759,12 @@ def navigate_to_settings_page(page: Page, **_kwargs: object) -> PlaywrightSettin
         # next iteration, whose Escape dismisses it.
         settings_button.click(timeout=5_000)
         expect(settings_page_marker).to_be_visible(timeout=5_000)
+        # Landing is not enough: the first-run offer's open state is global
+        # (the dialog is hosted in AppShell), so an offer that fires while the
+        # route change is in flight survives it and lands ON TOP of Settings,
+        # where it would swallow the caller's first click. Require a clear
+        # surface too — a failure retries the body, whose Escape dismisses it.
+        expect(page.get_by_test_id(ElementIDs.PALETTE_DIALOG_OVERLAY)).to_have_count(0)
 
     retry(
         stop=stop_after_delay(30),

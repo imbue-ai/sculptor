@@ -30,6 +30,7 @@ from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
 from sculptor.testing.pages.home_page import PlaywrightHomePage
 from sculptor.testing.playwright_utils import navigate_to_home_page
+from sculptor.testing.playwright_utils import settle_first_run_offer
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -696,6 +697,11 @@ def test_workspace_deleted_via_cli_disappears_from_ui(sculptor_instance_: Sculpt
     assert exit_code == 0
     deleted = json.loads(output)
     assert deleted == {"deleted": True, "id": ws["id"]}
+
+    # The delete empties the workspace list while the page is parked on Home,
+    # which re-offers the first-run new-workspace dialog. Wait it out and
+    # dismiss it so the Home surface below is clickable and assertable.
+    settle_first_run_offer(page)
 
     # Verify gone from UI
     navigate_to_home_page(page)
