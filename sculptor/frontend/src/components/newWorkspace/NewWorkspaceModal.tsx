@@ -10,9 +10,11 @@ import { PaletteDialog } from "~/components/PaletteDialog/PaletteDialog.tsx";
 /**
  * Global host for the new-workspace dialog. Opened/closed via
  * `newWorkspaceModalAtom`, set by the creation entry points — the Cmd+K command,
- * the Cmd/Meta+T shortcut, the sidebar's New Workspace button, a repo group's
- * "+" (with that repo preset), and the home page's first-run auto-open (with
- * the onboarding prompt prefilled). Mounted in AppShell, the layout hosting every
+ * the Cmd/Meta+T shortcut, the sidebar's New Workspace button, and the home
+ * page's first-run auto-open (with the onboarding prompt prefilled). A repo
+ * group's "+" direct-creates instead, opening this dialog (with that repo
+ * preset) only as its fallback when the create can't proceed. Mounted in
+ * AppShell, the layout hosting every
  * page route, so it is reachable everywhere. Renders the PaletteDialog shell
  * around the form, remounting the form on each open (keyed on the preset repo)
  * so its local field state starts fresh from the MRU seed every time.
