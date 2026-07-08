@@ -37,6 +37,10 @@ class ElementIDs(StrEnum):
     NEW_WORKSPACE_CONTEXT_PILL = "NEW_WORKSPACE_CONTEXT_PILL"
     NEW_WORKSPACE_KEEP_OPEN_SWITCH = "NEW_WORKSPACE_KEEP_OPEN_SWITCH"
     NEW_WORKSPACE_CREATE_BUTTON = "NEW_WORKSPACE_CREATE_BUTTON"
+    # Shown in place of the per-prompt agent-settings controls when the first
+    # agent is pi: model / effort / plan / fast do not apply to a pi create
+    # (pi picks its model from its own in-task catalog), so a hint replaces them.
+    NEW_WORKSPACE_PI_SETTINGS_HINT = "NEW_WORKSPACE_PI_SETTINGS_HINT"
     WORKSPACE_SELECTOR = "WORKSPACE_SELECTOR"
     WORKSPACE_OPTION_NAME = "WORKSPACE_OPTION_NAME"
     HOME_PAGE_SYSTEM_PROMPT_OPEN_BUTTON = "HOME_PAGE_SYSTEM_PROMPT_OPEN_BUTTON"
