@@ -42,6 +42,7 @@ import os
 import random
 import re
 import time
+from collections.abc import Callable
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -247,20 +248,14 @@ The user's request follows:
 # (ChatInput.tsx `wsTimeout`) so a wedged `new_session` fails rather than hanging the UI.
 _CLEAR_CONTEXT_TIMEOUT_SECONDS: float = 10.0
 
-# After a background/sub-agent completion, the extension wakes the agent with
-# `sendUserMessage`; Sculptor keeps the idle-drain alive this long to consume the
-# resulting reaction turn. Bounds the wait so a reaction that never arrives (the
-# wake-up errored) cannot keep the drain polling forever.
-_REACTION_WINDOW_SECONDS: float = 120.0
-
 # How long each blocking read of pi's stdout queue waits before the drain loop
 # re-checks shutdown / process-exit; small so an exit is noticed promptly.
 _STDOUT_QUEUE_POLL_SECONDS: float = 0.1
 
-# Input-queue wait between turns. While async tasks/reactions are pending, poll
-# briefly so their out-of-band completions surface promptly; when idle, wait
-# longer to avoid busy-polling (a new user message wakes the queue immediately
-# either way, and the longer wait bounds shutdown latency).
+# Input-queue wait between turns. While async tasks are pending, poll briefly so
+# their out-of-band completions surface promptly; when idle, wait longer to
+# avoid busy-polling (a new user message wakes the queue immediately either way,
+# and the longer wait bounds shutdown latency).
 _TASK_POLL_SECONDS: float = 0.1
 _IDLE_WAIT_SECONDS: float = 1.0
 
@@ -555,6 +550,22 @@ class _PiTransientTurnError(Exception):
         self.reason = reason
 
 
+@dataclass
+class _ReactionWakeMessage:
+    """A Sculptor-initiated reaction to a completed sub-agent / background task.
+
+    Enqueued on `_input_agent_messages` when a completion is surfaced, and
+    serviced by `_run_wake_turn` as an ordinary prompt turn. Deliberately NOT a
+    `Message` union member: the wake is internal scheduling, not user chat, and
+    it must never reach pi through any channel but this FIFO — Sculptor is the
+    only turn-initiator. A pi-side wake-up (`sendUserMessage`) queues into an
+    in-flight run and defers `agent_end`, the wrapper's sole turn boundary,
+    starving queued user messages (SCU-1776).
+    """
+
+    text: str
+
+
 class PiAgent(DefaultAgentWrapper):
     # Narrows the inherited `harness: Harness` field — the registry owns
     # construction, so no agent↔harness import cycle exists.
@@ -569,12 +580,18 @@ class PiAgent(DefaultAgentWrapper):
     # first turn and the switcher does not flicker back to pi's own default. None when
     # the switcher has no persisted selection yet (pi's default is used).
     preselected_model: ModelOption | None = None
-    # Carries chat turns AND between-turns control messages (context reset,
-    # model switch) through one FIFO so each runs strictly after any in-flight
-    # turn — the sole-reader window where the control RPCs' responses can be
-    # consumed safely (see _process_message_queue).
+    # Carries chat turns, between-turns control messages (context reset, model
+    # switch), AND Sculptor-initiated reaction wakes through one FIFO so each
+    # runs strictly after any in-flight turn — the sole-reader window where the
+    # control RPCs' responses can be consumed safely (see
+    # _process_message_queue). One FIFO is the SCU-1776 serialization guarantee:
+    # a user message queued before a completion's wake is serviced first.
     _input_agent_messages: Queue[
-        ChatInputUserMessage | ClearContextUserMessage | SetModelUserMessage | RefreshModelsUserMessage
+        ChatInputUserMessage
+        | ClearContextUserMessage
+        | SetModelUserMessage
+        | RefreshModelsUserMessage
+        | _ReactionWakeMessage
     ] = PrivateAttr(default_factory=Queue)
     _shutdown_event: Event = PrivateAttr(default_factory=Event)
     _message_processing_thread: ObservableThread | None = PrivateAttr(default=None)
@@ -647,12 +664,6 @@ class PiAgent(DefaultAgentWrapper):
     # protects both task dicts).
     _subagent_tasks: dict[str, tuple[int, ...]] = PrivateAttr(default_factory=dict)
     _background_tasks_lock: Lock = PrivateAttr(default_factory=Lock)
-    # Count of surfaced completions whose auto-resume reaction turn (the
-    # extension's `sendUserMessage`) has not yet been consumed, with a deadline.
-    # Keeps the idle-drain alive to catch the reaction. Mutated only on the
-    # message-processing thread.
-    _awaiting_reaction_count: int = PrivateAttr(default=0)
-    _awaiting_reaction_deadline: float = PrivateAttr(default=0.0)
     # The curated model catalog surfaced at start (`_fetch_models_into_state`),
     # cached so a `set_model` switch can re-emit it with the new current model in
     # its `ModelsAvailableAgentMessage` carrier. Set and read on the
@@ -1547,32 +1558,17 @@ class PiAgent(DefaultAgentWrapper):
                 # _handle_refresh_models).
                 self._handle_refresh_models(message)
                 continue
+            if isinstance(message, _ReactionWakeMessage):
+                # A completion's Sculptor-initiated reaction: an ordinary prompt
+                # turn in its own request cycle, FIFO-serialized behind any
+                # user message queued before it (see _ReactionWakeMessage).
+                self._run_wake_turn(message)
+                continue
             self._run_prompt_turn(message)
 
     def _has_background_tasks(self) -> bool:
         with self._background_tasks_lock:
-            if self._background_tasks or self._subagent_tasks:
-                return True
-        return self._is_awaiting_reaction()
-
-    def _is_awaiting_reaction(self) -> bool:
-        """True while a completion's auto-resume reaction turn is still expected.
-
-        Bounded by a deadline so a reaction that never arrives (the wake-up
-        errored) cannot keep the idle-drain polling forever.
-        """
-        if self._awaiting_reaction_count <= 0:
-            return False
-        if time.monotonic() >= self._awaiting_reaction_deadline:
-            self._awaiting_reaction_count = 0
-            return False
-        return True
-
-    def _note_awaiting_reaction(self) -> None:
-        """Record a surfaced completion so the idle-drain stays alive to consume the
-        reaction turn the extension triggers via `sendUserMessage`."""
-        self._awaiting_reaction_count += 1
-        self._awaiting_reaction_deadline = time.monotonic() + _REACTION_WINDOW_SECONDS
+            return bool(self._background_tasks or self._subagent_tasks)
 
     def _run_prompt_turn(self, message: ChatInputUserMessage) -> None:
         # Track this turn's request id so an interrupt arriving with no turn in
@@ -1583,34 +1579,72 @@ class PiAgent(DefaultAgentWrapper):
         self._update_plan_mode_from_message(message)
         self._ensure_diff_baseline()
         with self._handle_user_message(message):
-            # A fresh turn starts un-interrupted: clear interrupt state left by an
-            # interrupt that raced in with no turn in flight, which would otherwise
-            # mis-mark this turn as interrupted.
+            self._drive_turn(lambda prompt_id: self._build_prompt_payload(prompt_id, message))
+
+    def _run_wake_turn(self, wake: _ReactionWakeMessage) -> None:
+        """Run a completion's Sculptor-initiated reaction as its own request cycle.
+
+        The wake is an ordinary prompt turn through the SAME lifecycle as a user
+        turn (`_drive_turn`), so interrupts and transient retries behave
+        identically. It differs only in its payload (the bare wake text) and its
+        failure policy: the wake is not a reply to any user message, so a
+        turn-level failure (`PiCrashError` / exhausted-retry
+        `AgentTransientError`) is logged and resolves the cycle
+        `interrupted=True` instead of tearing down the agent.
+        """
+        request_id = AgentMessageID()
+        self._in_flight_request_id = request_id
+        self._ensure_diff_baseline()
+        self._output_messages.put(RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=request_id))
+        turn_failed = False
+        try:
+            self._drive_turn(lambda prompt_id: {"type": "prompt", "id": prompt_id, "message": wake.text})
+        except (PiCrashError, AgentTransientError) as error:
+            logger.info("PiAgent reaction wake turn failed: {}", error)
+            turn_failed = True
+        finally:
+            was_interrupted = self._was_interrupted.is_set()
             self._was_interrupted.clear()
+            self._output_messages.put(
+                RequestSuccessAgentMessage(
+                    message_id=AgentMessageID(),
+                    request_id=request_id,
+                    interrupted=turn_failed or was_interrupted,
+                )
+            )
+
+    def _drive_turn(self, build_payload: Callable[[str], dict[str, Any]]) -> None:
+        """One turn lifecycle, shared by user turns and reaction wake turns.
+
+        Owns the interrupt-state machine around a single prompt→agent_end cycle:
+        a fresh turn starts un-interrupted (clearing state left by an interrupt
+        that raced in with no turn in flight, which would otherwise mis-mark this
+        turn as interrupted), `_turn_in_flight` gates the interrupt escalation,
+        and on exit — success or failure — escalation stands down and any
+        backchannel answer delivered mid-turn is finalized (its RequestSuccess
+        was deferred so the post-answer content reached the frontend first;
+        mirrors Claude).
+        """
+        self._was_interrupted.clear()
+        self._interrupt_pending.clear()
+        self._cancel_interrupt_escalation()
+        self._turn_in_flight.set()
+        turn_failed = False
+        try:
+            self._consume_turn_with_transient_retry(build_payload)
+        except BaseException:
+            turn_failed = True
+            raise
+        finally:
+            # Turn over: stand down escalation and drop interrupt-pending so a
+            # late grace-window thread can't SIGTERM the next turn's pi.
+            self._turn_in_flight.clear()
             self._interrupt_pending.clear()
             self._cancel_interrupt_escalation()
-            self._turn_in_flight.set()
-            turn_failed = False
-            try:
-                self._consume_turn_with_transient_retry(message)
-            except BaseException:
-                turn_failed = True
-                raise
-            finally:
-                # Turn over: stand down escalation and drop interrupt-pending so a
-                # late grace-window thread can't SIGTERM the next turn's pi.
-                self._turn_in_flight.clear()
-                self._interrupt_pending.clear()
-                self._cancel_interrupt_escalation()
-                # Finalize any backchannel answer delivered mid-turn (its
-                # RequestSuccess was deferred to here so the post-answer content
-                # reached the frontend first). Runs on the failure path too, so the
-                # answer's request resolves instead of pinning the frontend
-                # "thinking" (mirrors Claude).
-                self._finalize_pending_answers(interrupted=turn_failed)
+            self._finalize_pending_answers(interrupted=turn_failed)
 
-    def _consume_turn_with_transient_retry(self, message: ChatInputUserMessage) -> None:
-        """Drive one user turn, retrying KNOWN-TRANSIENT provider failures with backoff.
+    def _consume_turn_with_transient_retry(self, build_payload: Callable[[str], dict[str, Any]]) -> None:
+        """Drive one turn, retrying KNOWN-TRANSIENT provider failures with backoff.
 
         A turn whose assistant run ends in a transient provider error
         (`_PiTransientTurnError` — overloaded / rate-limit / 5xx / timeout) is
@@ -1623,7 +1657,7 @@ class PiAgent(DefaultAgentWrapper):
         instead of `PiCrashError`. A non-transient error still raises `PiCrashError`
         from the dispatcher and is not retried here.
         """
-        payload = self._build_prompt_payload(generate_id(), message)
+        payload = build_payload(generate_id())
         attempt = 0
         while True:
             self._send_rpc(payload)
@@ -2404,6 +2438,10 @@ class PiAgent(DefaultAgentWrapper):
                 summary=_format_subagent_completion(completion),
             )
         )
+        # Schedule the Sculptor-initiated reaction turn: same rendering as the
+        # notification (one completion fact, one presentation), FIFO-serialized
+        # behind any user message queued before this completion (SCU-1776).
+        self._input_agent_messages.put(_ReactionWakeMessage(text=_format_subagent_completion(completion)))
 
     def _emit_subagent_completion_out_of_band(self, completion: SubagentCompletion) -> None:
         """Surface a sub-agent completion that arrived between turns, live.
@@ -2491,6 +2529,10 @@ class PiAgent(DefaultAgentWrapper):
                 content=summary_blocks,
             )
         )
+        # Schedule the Sculptor-initiated reaction turn: same rendering as the
+        # summary block above (one completion fact, one presentation),
+        # FIFO-serialized behind any queued user message (SCU-1776).
+        self._input_agent_messages.put(_ReactionWakeMessage(text=_format_background_completion(completion)))
 
     def _emit_background_completion_out_of_band(self, completion: BackgroundTaskCompletion) -> None:
         """Surface a background completion that arrived between turns, live.
@@ -2510,15 +2552,19 @@ class PiAgent(DefaultAgentWrapper):
             )
 
     def _drain_idle_background_events(self) -> None:
-        """Between turns, surface task completions and consume any auto-resume turn.
+        """Between turns, surface task completions from pi's stdout.
 
         Sculptor drains pi's stdout only during a turn, so a completion `notify`
-        (and the reaction turn the extension triggers via `sendUserMessage`) firing
-        while the user is idle would otherwise sit unseen. While a task is in flight
-        — or a completion is awaiting its reaction turn — `_process_message_queue`
-        calls this between user messages: a completion is surfaced out-of-band, and a
-        pi-initiated turn (the auto-resume reaction) is consumed in its own request
-        cycle. Runs on the message-processing thread (the sole stdout reader).
+        firing while the user is idle would otherwise sit unseen. While a task is
+        in flight, `_process_message_queue` calls this between user messages: a
+        completion is surfaced out-of-band, and its `_handle_*_completion` seam
+        enqueues the Sculptor-initiated reaction wake on the input FIFO. Runs on
+        the message-processing thread (the sole stdout reader).
+
+        Pi never self-starts a run: Sculptor is the only turn-initiator (the
+        extensions report completions via notify only, and `--no-extensions -e
+        <pinned>` keeps foreign extensions out), so an `agent_start` seen here is
+        a protocol violation — logged loud, not consumed.
         """
         process = self._process
         if process is None:
@@ -2542,44 +2588,16 @@ class PiAgent(DefaultAgentWrapper):
                 continue
             parsed = parse_rpc_message(event)
             if isinstance(parsed, ParsedAgentStart):
-                # The extension woke the agent (`sendUserMessage`) after a completion;
-                # consume its reaction turn in its own request cycle.
-                self._awaiting_reaction_count = max(0, self._awaiting_reaction_count - 1)
-                self._consume_reaction_turn()
+                logger.error("PiAgent saw a pi-initiated agent_start between turns — protocol violation")
                 continue
             if isinstance(parsed, ExtensionUiRequest) and parsed.method == "notify":
                 completion = parse_background_completion(parsed.message)
                 if completion is not None:
                     self._emit_background_completion_out_of_band(completion)
-                    self._note_awaiting_reaction()
                     continue
                 sub_completion = parse_subagent_completion(parsed.message)
                 if sub_completion is not None:
                     self._emit_subagent_completion_out_of_band(sub_completion)
-                    self._note_awaiting_reaction()
-
-    def _consume_reaction_turn(self) -> None:
-        """Consume a pi-initiated turn — the auto-resume reaction the extension
-        triggered via `sendUserMessage` on completion — in its own request cycle so
-        it renders as a standalone assistant turn. The triggering `agent_start` has
-        already been read; `_consume_until_turn_end` consumes the rest through
-        `agent_end`. A turn-level failure is logged, not raised: an auto-resume
-        reaction must not tear down the session.
-        """
-        request_id = AgentMessageID()
-        self._output_messages.put(RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=request_id))
-        self._turn_in_flight.set()
-        interrupted = False
-        try:
-            self._consume_until_turn_end()
-        except PiCrashError as error:
-            logger.info("PiAgent auto-resume reaction turn failed: {}", error)
-            interrupted = True
-        finally:
-            self._turn_in_flight.clear()
-            self._output_messages.put(
-                RequestSuccessAgentMessage(message_id=AgentMessageID(), request_id=request_id, interrupted=interrupted)
-            )
 
     def _cancel_all_background_tasks(self) -> None:
         """SIGTERM every still-running background and sub-agent child by signalling its process group.
@@ -2791,15 +2809,14 @@ class PiAgent(DefaultAgentWrapper):
             completion = parse_background_completion(parsed.message)
             if completion is not None:
                 # A task that completes while a user turn is in flight is reconciled
-                # into that turn; the reaction the extension triggers (deliverAs
-                # "followUp") runs after this turn and is consumed by the idle-drain.
+                # into that turn; the completion seam enqueues the Sculptor-initiated
+                # reaction wake, serviced from the FIFO after this turn (and any
+                # earlier-queued user messages).
                 self._handle_background_completion(completion)
-                self._note_awaiting_reaction()
                 return
             sub_completion = parse_subagent_completion(parsed.message)
             if sub_completion is not None:
                 self._handle_subagent_completion(sub_completion)
-                self._note_awaiting_reaction()
                 return
             logger.debug("PiAgent ignoring non-task notify extension_ui_request")
             return
