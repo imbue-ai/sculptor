@@ -128,6 +128,25 @@ def navigate_to_home_page(page: Page) -> None:
     _expect_home_landed(page)
 
 
+def settle_first_run_offer(page: Page) -> None:
+    """Wait out and dismiss the first-run new-workspace offer after a boot.
+
+    A boot that lands on Home over an empty workspace list auto-opens the
+    new-workspace dialog (the first-run offer) as soon as the first workspace
+    snapshot arrives. Left alone, that pop lands at an unpredictable moment
+    during the caller's next steps, and the dialog's modal overlay swallows
+    any click beneath it. Callers that boot into a known zero-workspace Home
+    (the per-test browser reset, mock installs that reload the SPA) call this
+    to wait for the offer and dismiss it, so what follows starts from a
+    settled, modal-free Home. Only valid when the offer is guaranteed to fire
+    — a boot over a non-empty list would time out here.
+    """
+    new_workspace_dialog = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)
+    expect(new_workspace_dialog).to_be_visible(timeout=30_000)
+    page.keyboard.press("Escape")
+    expect(new_workspace_dialog).to_have_count(0)
+
+
 def navigate_to_workspace(page: Page, name_or_index: str | int = 0) -> None:
     """Navigate to a workspace by clicking its sidebar row.
 
@@ -706,33 +725,42 @@ def navigate_to_settings_page(page: Page, **_kwargs: object) -> PlaywrightSettin
 
     The click is retried until the settings page actually renders. A single
     click can lose a race with an in-flight imperative redirect: deleting the
-    last workspace makes WorkspacePage queue a ``navigate("/ws/new/<uuid>")``
-    that may commit *after* our navigation and bounce us off ``/settings``.
-    Re-clicking from the now-settled state lands cleanly — the redirect only
-    fires while WorkspacePage is mounted, so once we reach Settings nothing
-    redirects away again.
+    active workspace makes WorkspacePage queue a navigation to the next tab
+    (or Home) that may commit *after* our navigation and bounce us off
+    ``/settings``. Re-clicking from the now-settled state lands cleanly — the
+    redirect only fires while WorkspacePage is mounted, so once we reach
+    Settings nothing redirects away again.
     """
     settings_button = page.get_by_test_id(ElementIDs.SIDEBAR_SETTINGS_LINK)
     settings_page_marker = page.get_by_test_id(ElementIDs.SETTINGS_PAGE)
 
     def _click_into_settings() -> None:
+        # A modal overlay (e.g. the new-workspace dialog Home auto-opens while
+        # the workspace list is empty) would swallow the clicks below — nothing
+        # beneath it is ever the hit target — so dismiss any first, BEFORE
+        # expanding the sidebar (the overlay would intercept the expand-toggle
+        # click too).
+        page.keyboard.press("Escape")
         # Inside the retry body: this helper also runs during per-test cleanup
         # (_delete_extra_projects_via_ui) against the PREVIOUS test's end
         # state, where the sidebar may be collapsed — its Settings link is then
         # unmounted, not just hidden — and the shell may still be churning.
         ensure_sidebar_expanded(page)
-        # A modal overlay (e.g. the new-workspace dialog Home auto-opens while
-        # the workspace list is empty) would swallow the click below — the
-        # sidebar is never the hit target under it — so dismiss any first.
-        page.keyboard.press("Escape")
         expect(settings_button).to_be_visible(timeout=5_000)
-        settings_button.click()
+        # Bound the click: an overlay can appear AFTER the Escape above (the
+        # first-run auto-open trails the workspace snapshot, so it can pop
+        # mid-iteration). An unbounded click would eat the whole retry budget
+        # waiting under the overlay; failing fast hands control back to the
+        # next iteration, whose Escape dismisses it.
+        settings_button.click(timeout=5_000)
         expect(settings_page_marker).to_be_visible(timeout=5_000)
 
     retry(
         stop=stop_after_delay(30),
         wait=wait_fixed(0.1),
-        retry=retry_if_exception_type(AssertionError),
+        # AssertionError covers the expect() gates; the click raises
+        # playwright's TimeoutError when an overlay swallows it.
+        retry=retry_if_exception_type((AssertionError, playwright.sync_api.TimeoutError)),
         reraise=True,
     )(_click_into_settings)()
     return PlaywrightSettingsPage(page=page)

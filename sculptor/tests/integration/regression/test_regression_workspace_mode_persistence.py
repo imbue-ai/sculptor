@@ -56,10 +56,9 @@ def test_workspace_selection_mode_persists_after_workspace_creation(sculptor_ins
     # Verify In-place mode is selected before creating the workspace
     expect(add_ws_page.get_mode_selector()).to_contain_text("In-place")
 
-    # The form carries the `/sculptor:help` onboarding prefill when Home
-    # auto-opened it; clear the prompt so the agent is created without a first
-    # message (the form has no model selector, so an uncleared prompt would
-    # start a turn on the default model).
+    # Keep the agent promptless — a prefilled prompt (e.g. the first-run
+    # onboarding text) would start a turn on the default model (the form has
+    # no model selector).
     add_ws_page.get_task_input().fill("")
     add_ws_page.submit_and_wait_for_chat_panel()
 

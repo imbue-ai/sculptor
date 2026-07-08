@@ -119,23 +119,23 @@ def sculptor_instance_empty_first_run_(
 ) -> SculptorInstance:
     """Shared instance settled on the first-run auto-opened new-workspace dialog.
 
-    The shared ``sculptor_instance_`` already deletes every workspace in its
-    per-test cleanup and its browser reset navigates the hash to ``#/ws/new``
-    with one repo and zero workspaces — the genuine first-run state. The
-    first-run experience lives on Home: landing there with an empty (loaded)
-    workspace list auto-opens the new-workspace dialog with the
-    ``/sculptor:help`` onboarding prompt prefilled. Route Home and wait for the
-    dialog so tests start from the settled first-run surface.
-
-    The boot from ``#/ws/new`` sometimes redirects itself to Home (the empty
-    workspace shell falls through), in which case the auto-opened modal is
-    already up — its overlay would swallow a sidebar click, and dismissing it
-    first would kill the very dialog this fixture waits for (a same-route
-    click doesn't remount Home to re-offer it). Route Home with a hash-only
-    assignment instead: it needs no click, and a same-value assignment is a
-    no-op, so both boot landings converge on Home with the auto-open pending.
+    The shared ``sculptor_instance_``'s per-test reset ends settled on Home
+    with one repo and zero workspaces, having already waited out and dismissed
+    the first-run offer so ordinary tests never race its modal overlay. The
+    offer fires whenever Home mounts over an empty (loaded) workspace list,
+    and the reset's dismissal spent this mount's offer — so remount Home by
+    hopping through Settings and back. The hops are hash-only navigations
+    within the running SPA (no reboot — a full reload would re-race the whole
+    boot path for nothing), and the workspace list is already loaded and
+    empty, so returning to Home re-offers the dialog immediately with the
+    ``/sculptor:help`` onboarding prompt prefilled.
     """
     page = sculptor_instance_.page
+    page.evaluate("window.location.hash = '/settings'")
+    # Wait for Settings to render before hopping back: two back-to-back hash
+    # assignments can coalesce into one router update, which would leave Home
+    # mounted throughout and never re-fire its offer.
+    expect(page.get_by_test_id(ElementIDs.SETTINGS_PAGE)).to_be_visible()
     page.evaluate("window.location.hash = '/home'")
     expect(page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)).to_be_visible(timeout=45_000)
     return sculptor_instance_
