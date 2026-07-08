@@ -10,8 +10,6 @@
   padding: var(--space-1) var(--space-4);
 }
 
-// A <button>, so neutralize the UA button chrome; the inner spans carry their
-// own colors and the mono font.
 // Workspace title in the header (shown only when the sidebar is collapsed).
 // Mirrors the branch pill's text metrics (same font-size and inherited
 // line-height) so the two read as one row: the header centers its items, and
@@ -28,6 +26,8 @@
   white-space: nowrap;
 }
 
+// A <button>, so neutralize the UA button chrome; the inner spans carry their
+// own colors and the mono font.
 .branchSection {
   align-items: center;
   background: transparent;

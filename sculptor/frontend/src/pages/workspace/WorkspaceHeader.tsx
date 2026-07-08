@@ -227,12 +227,13 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
       </Flex>
 
       {/* Workspace title — only when the left sidebar is collapsed, since the sidebar
-          otherwise shows the workspace name. Mirrors the sidebar's label source and
-          "Untitled" fallback. Allowed to shrink/truncate so a long name doesn't push
-          the branch pill and right-side controls out of the overflow-hidden bar. */}
+          otherwise shows the workspace name. Mirrors the sidebar's label source, and
+          falls back to "Untitled" for a null/blank name so this prominent slot never
+          renders empty. Allowed to shrink/truncate so a long name doesn't push the
+          branch pill and right-side controls out of the overflow-hidden bar. */}
       {isSidebarCollapsed && (
         <span className={styles.workspaceTitle} data-testid={ElementIds.WORKSPACE_HEADER_TITLE}>
-          {workspace.description ?? "Untitled"}
+          {(workspace.description ?? "").trim() || "Untitled"}
         </span>
       )}
 
