@@ -309,6 +309,22 @@ def test_get_user_instructions_setup_above_env_vars() -> None:
     assert setup_idx < env_idx
 
 
+def test_get_user_instructions_setup_reminder_stays_above_auto_rename() -> None:
+    message = ChatInputUserMessage(text="hello")
+    setup_state = RunningSetup(command="npm ci", pid=12345, log_path="/abs/setup_log.txt")
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=True,
+        setup_state=setup_state,
+        enable_auto_rename=True,
+    )
+    # The higher-priority setup warning must not be pushed below the auto-rename reminder.
+    setup_idx = result.index(_SETUP_RUNNING_PREAMBLE)
+    rename_idx = result.index(_AUTO_RENAME_MARKER)
+    assert setup_idx < rename_idx
+
+
 def test_get_user_instructions_env_var_reminder_not_emitted_for_resume() -> None:
     message = ResumeAgentResponseRunnerMessage(for_user_message_id=AgentMessageID())
     result = get_user_instructions(

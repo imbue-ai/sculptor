@@ -208,9 +208,15 @@ Log file: {setup_state.log_path}
 # Injected on the first message of an auto-rename-enabled workspace. Asks the agent to give
 # the workspace and itself descriptive names once it understands the task. References the
 # SCULPT_WORKSPACE_ID / SCULPT_AGENT_ID env vars (always present in the agent's shell), so no
-# ids need threading in here; the agent's bash expands them. The id vars are left unquoted
-# (ids are space-free) so each command line carries a single quoted literal — two adjacent
-# "..." literals here would trip the no-implicit-string-concat ratchet.
+# ids need threading in here; the agent's bash expands them.
+#
+# The id vars are left unquoted on purpose: Sculptor ids have no whitespace or glob
+# characters, so expansion is shell-safe, and quoting them would place the quoted id and the
+# quoted name as two adjacent double-quoted tokens on one command line. The
+# no-implicit-string-concat ratchet is a raw-text regex scanner (not a Python parser), so it
+# reads that adjacency as implicit string concatenation and fails `just check` even though
+# the tokens live inside this triple-quoted string. (This very comment must avoid writing
+# that adjacent pair literally, for the same reason.)
 _AUTO_RENAME_REMINDER = """<system-reminder>
 This is the first message in a new Sculptor workspace. Its workspace and agent both have auto-generated placeholder names. Once you understand what this task is about, give them concise, descriptive names (3-6 words each) and set them by running BOTH of these commands once:
 
@@ -271,10 +277,13 @@ The user has configured the following environment variables for this agent: {", 
 
 """
             user_instructions = env_var_instructions + user_instructions
-        if is_first_message and setup_state is not None:
-            user_instructions = _build_setup_reminder(setup_state) + user_instructions
         if is_first_message and enable_auto_rename:
             user_instructions = _AUTO_RENAME_REMINDER + user_instructions
+        # Prepend the setup reminder after the auto-rename one so it ends up above it: a
+        # running or failed setup command is higher-priority first-message context than the
+        # rename nudge, and shouldn't be pushed down by it.
+        if is_first_message and setup_state is not None:
+            user_instructions = _build_setup_reminder(setup_state) + user_instructions
         if skill_invocation_match is not None:
             skill_name = skill_invocation_match.group(1)
             if skill_name not in _CLAUDE_CLI_BUILTINS:
