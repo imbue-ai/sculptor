@@ -104,122 +104,67 @@ export const sidebarOrderedWorkspacesAtom = atom<ReadonlyArray<Workspace>>((get)
   get(sidebarRepoGroupsAtom).flatMap((group) => group.workspaces),
 );
 
-// Commit a drop within a repo section's mixed children lane: move the dragged
-// child (a loose workspace row or a whole group card) to the drop target's slot
-// and store the section's full resulting child order (materialized from the
-// current visible order, so a partially-stored lane resolves to exactly what
-// the user saw when they dropped).
-export const reorderSidebarRepoChildAtom = atom(
+// What commitSectionDropAtom overwrote, so a drop whose membership mutation
+// the server later rejects can put the stored lanes back exactly (the
+// membership flip itself is rolled back by the mutation hook). `undefined`
+// lane values are meaningful: they mean "was never stored" and restore to that.
+export type SectionOrderSnapshot = {
+  projectId: string;
+  childLane: Array<string> | undefined;
+  memberLanes: Record<string, Array<string> | undefined>;
+};
+
+// Commit a drop's resulting order for one repo section: materialize the FULL
+// projected tree — the mixed children lane plus every group's member lane — in
+// one write, so the lanes always describe exactly what the user saw land
+// (REQ-DND-7). Membership is a backend fact the caller flips through the
+// canonical mutation alongside this write; a lane id whose membership write
+// fails simply stops resolving and is skipped on read, and the returned
+// snapshot lets the caller restore the previous lanes precisely.
+export const commitSectionDropAtom = atom(
   null,
-  (get, set, params: { projectId: string; activeChildId: string; overChildId: string }) => {
-    const group = get(sidebarRepoGroupsAtom).find((candidate) => candidate.projectId === params.projectId);
-    if (group === undefined) {
-      return;
+  (get, set, params: { projectId: string; children: ReadonlyArray<RepoSectionChild> }): SectionOrderSnapshot => {
+    const prev = get(globalLayoutAtom).sidebarOrder;
+    const snapshot: SectionOrderSnapshot = {
+      projectId: params.projectId,
+      childLane: prev.workspaces[params.projectId],
+      memberLanes: {},
+    };
+    const nextMemberLanes: Record<string, Array<string>> = {};
+    for (const child of params.children) {
+      if (child.kind === "group") {
+        snapshot.memberLanes[child.group.objectId] = prev.groupMembers?.[child.group.objectId];
+        nextMemberLanes[child.group.objectId] = child.members.map((member) => member.objectId);
+      }
     }
-    const ids = group.children.map(repoSectionChildKey);
-    const from = ids.indexOf(params.activeChildId);
-    const to = ids.indexOf(params.overChildId);
-    if (from === -1 || to === -1 || from === to) {
-      return;
-    }
-    const next = arrayMove(ids, from, to);
-    set(globalLayoutAtom, (prev) => ({
-      ...prev,
+    set(globalLayoutAtom, (layout) => ({
+      ...layout,
       sidebarOrder: {
-        ...prev.sidebarOrder,
-        workspaces: { ...prev.sidebarOrder.workspaces, [params.projectId]: next },
+        ...layout.sidebarOrder,
+        workspaces: { ...layout.sidebarOrder.workspaces, [params.projectId]: params.children.map(repoSectionChildKey) },
+        groupMembers: { ...layout.sidebarOrder.groupMembers, ...nextMemberLanes },
       },
     }));
+    return snapshot;
   },
 );
 
-// Commit a member-row drop within one group card: same
-// materialize-the-visible-order contract as reorderSidebarRepoChildAtom, for
-// the group's member lane.
-export const reorderWorkspaceGroupMemberAtom = atom(
-  null,
-  (get, set, params: { projectId: string; groupId: string; activeWorkspaceId: string; overWorkspaceId: string }) => {
-    const group = get(sidebarRepoGroupsAtom).find((candidate) => candidate.projectId === params.projectId);
-    const groupChild = group?.children.find(
-      (child) => child.kind === "group" && child.group.objectId === params.groupId,
-    );
-    if (groupChild === undefined || groupChild.kind !== "group") {
-      return;
-    }
-    const ids = groupChild.members.map((member) => member.objectId);
-    const from = ids.indexOf(params.activeWorkspaceId);
-    const to = ids.indexOf(params.overWorkspaceId);
-    if (from === -1 || to === -1 || from === to) {
-      return;
-    }
-    const next = arrayMove(ids, from, to);
-    set(globalLayoutAtom, (prev) => ({
-      ...prev,
-      sidebarOrder: {
-        ...prev.sidebarOrder,
-        groupMembers: { ...prev.sidebarOrder.groupMembers, [params.groupId]: next },
-      },
-    }));
-  },
-);
-
-// Where a membership-changing drop placed the workspace: into a group's member
-// lane (before one of its members, or appended), or into the repo section's
-// mixed lane as a loose row (before one of the section's children, or appended).
-export type WorkspaceMembershipDropTarget =
-  | { kind: "group"; groupId: string; beforeWorkspaceId?: string }
-  | { kind: "loose"; beforeChildId?: string };
-
-// Commit the ORDER half of a membership-changing drop (loose→group,
-// group→loose, group→group). Membership itself is a backend fact that the
-// caller flips through the canonical mutation; this atom runs only after that
-// mutation succeeds, so a rejected drop never strands the workspace in a lane
-// for a group it isn't in. It materializes the destination lane from the
-// CURRENT visible order — the workspace is excluded first and re-inserted at
-// the drop anchor, which makes the write correct whether the confirming stream
-// frame has already landed or not (the source lanes need no cleanup: a lane id
-// that no longer resolves to a child/member is skipped on read).
-export const commitWorkspaceMembershipOrderAtom = atom(
-  null,
-  (get, set, params: { projectId: string; workspaceId: string; target: WorkspaceMembershipDropTarget }) => {
-    const group = get(sidebarRepoGroupsAtom).find((candidate) => candidate.projectId === params.projectId);
-    if (group === undefined) {
-      return;
-    }
-
-    if (params.target.kind === "group") {
-      const { groupId, beforeWorkspaceId } = params.target;
-      const groupChild = group.children.find((child) => child.kind === "group" && child.group.objectId === groupId);
-      const ids = (groupChild?.kind === "group" ? groupChild.members : [])
-        .map((member) => member.objectId)
-        .filter((id) => id !== params.workspaceId);
-      const anchor = beforeWorkspaceId === undefined ? -1 : ids.indexOf(beforeWorkspaceId);
-      ids.splice(anchor === -1 ? ids.length : anchor, 0, params.workspaceId);
-      set(globalLayoutAtom, (prev) => ({
-        ...prev,
-        sidebarOrder: {
-          ...prev.sidebarOrder,
-          groupMembers: { ...prev.sidebarOrder.groupMembers, [groupId]: ids },
-        },
-      }));
-      return;
-    }
-    const { beforeChildId } = params.target;
-    const ids = group.children.map(repoSectionChildKey).filter((id) => id !== params.workspaceId);
-    const anchor = beforeChildId === undefined ? -1 : ids.indexOf(beforeChildId);
-    ids.splice(anchor === -1 ? ids.length : anchor, 0, params.workspaceId);
-    set(globalLayoutAtom, (prev) => ({
-      ...prev,
-      sidebarOrder: {
-        ...prev.sidebarOrder,
-        workspaces: { ...prev.sidebarOrder.workspaces, [params.projectId]: ids },
-      },
-    }));
-  },
-);
+// Restore the lanes a commitSectionDropAtom write replaced (the drop's
+// membership mutation failed). Writes back exactly the snapshot, including
+// never-stored (`undefined`) lanes.
+export const restoreSectionOrderAtom = atom(null, (_get, set, snapshot: SectionOrderSnapshot) => {
+  set(globalLayoutAtom, (layout) => ({
+    ...layout,
+    sidebarOrder: {
+      ...layout.sidebarOrder,
+      workspaces: { ...layout.sidebarOrder.workspaces, [snapshot.projectId]: snapshot.childLane },
+      groupMembers: { ...layout.sidebarOrder.groupMembers, ...snapshot.memberLanes },
+    },
+  }));
+});
 
 // Commit a repo-group drop: same materialize-the-visible-order contract as
-// reorderSidebarRepoChildAtom, for the repo list.
+// commitSectionDropAtom, for the repo list.
 export const reorderSidebarRepoGroupAtom = atom(
   null,
   (get, set, params: { activeProjectId: string; overProjectId: string }) => {

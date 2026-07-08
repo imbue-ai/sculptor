@@ -10,12 +10,18 @@
  *   sync-version; `onError` restores the snapshot only if the version is
  *   unchanged (a WS frame that landed mid-request holds server truth and must
  *   win). `onSuccess` never writes — the stream delivers the committed value.
- * - Create, add/remove member, and ungroup have no optimistic write. Create
- *   materializes server-assigned facts (id, "Group N" name, palette color);
- *   the others flip `Workspace.groupId`, which lives in the workspace store
- *   and is projected there only by the stream. For all of them the failure
- *   path is the mutation's own error state (nothing was written locally, so
- *   nothing can be left stale), and success streams in.
+ * - Add/remove member flip `Workspace.groupId` in the workspace store
+ *   optimistically (REQ-DND-7: a drop must land instantly, never snap back
+ *   and re-apply on the server's confirmation): `onMutate` snapshots the
+ *   workspace and writes the flip; `onError` restores the snapshot — the
+ *   same plain snapshot/rollback contract as the sidebar rename flow, which
+ *   accepts that a WS frame racing the failed request can be briefly
+ *   overwritten until the next frame reasserts server truth.
+ * - Create and ungroup have no optimistic write. Create materializes
+ *   server-assigned facts (id, "Group N" name, palette color); ungroup flips
+ *   every member at once and is menu-driven (no drop to keep responsive), so
+ *   both let success stream in and surface failure on the mutation's error
+ *   state.
  *
  * Every endpoint 409s with error code `workspace_groups_disabled` when the
  * `enable_workspace_groups` experiment is off; the client throws, so callers
@@ -25,7 +31,7 @@
 import { useMutation, type UseMutationResult } from "@tanstack/react-query";
 import { useStore } from "jotai";
 
-import type { WorkspaceGroup, WorkspaceGroupResponse } from "../../../api";
+import type { Workspace, WorkspaceGroup, WorkspaceGroupResponse } from "../../../api";
 import {
   addWorkspaceGroupMember,
   createWorkspaceGroup,
@@ -34,6 +40,7 @@ import {
   updateWorkspaceGroup,
 } from "../../../api";
 import { getWorkspaceGroupSyncVersion, workspaceGroupAtomFamily } from "../atoms/workspaceGroups.ts";
+import { workspaceAtomFamily } from "../atoms/workspaces.ts";
 
 type JotaiStore = ReturnType<typeof useStore>;
 
@@ -134,38 +141,85 @@ export const useUpdateWorkspaceGroupMutation = (): UseMutationResult<
 
 type WorkspaceGroupMemberVars = { groupId: string; workspaceId: string };
 
-/** Add a workspace (from the group's project) to a group. */
+export type WorkspaceMembershipMutationContext = { prev: Workspace | null };
+
+/** Snapshot the workspace and optimistically set its `groupId`. */
+const applyOptimisticMembershipFlip = (
+  store: JotaiStore,
+  workspaceId: string,
+  groupId: string | undefined,
+): WorkspaceMembershipMutationContext => {
+  const workspaceAtom = workspaceAtomFamily(workspaceId);
+  const prev = store.get(workspaceAtom);
+  if (prev !== null) {
+    store.set(workspaceAtom, { ...prev, groupId });
+  }
+  return { prev };
+};
+
+/** Restore the pre-flip workspace after a failed request, if one was written. */
+const rollbackOptimisticMembershipFlip = (
+  store: JotaiStore,
+  workspaceId: string,
+  ctx: WorkspaceMembershipMutationContext | undefined,
+): void => {
+  if (ctx?.prev != null) {
+    store.set(workspaceAtomFamily(workspaceId), ctx.prev);
+  }
+};
+
+/**
+ * Add a workspace (from the group's project) to a group, leaving its current
+ * group if it has one (the backend moves it and dissolves an emptied source).
+ * Optimistic: the sidebar re-files the row instantly (REQ-DND-7).
+ */
 export const useAddWorkspaceGroupMemberMutation = (): UseMutationResult<
   unknown,
   Error,
   WorkspaceGroupMemberVars,
-  unknown
-> =>
-  useMutation({
+  WorkspaceMembershipMutationContext
+> => {
+  const store = useStore();
+  return useMutation({
     mutationFn: (vars: WorkspaceGroupMemberVars) =>
       addWorkspaceGroupMember({
         path: { group_id: vars.groupId },
         body: { workspaceId: vars.workspaceId },
       }),
+    onMutate: (vars): WorkspaceMembershipMutationContext =>
+      applyOptimisticMembershipFlip(store, vars.workspaceId, vars.groupId),
+    onError: (_e, vars, ctx): void => {
+      rollbackOptimisticMembershipFlip(store, vars.workspaceId, ctx);
+    },
   });
+};
 
 /**
  * Remove a workspace from a group, releasing it to the repo's loose list.
  * Removing the last member dissolves the group server-side (empty groups
- * must not exist), which streams back as a group deletion.
+ * must not exist), which streams back as a group deletion. Optimistic: the
+ * sidebar re-files the row instantly (REQ-DND-7); an emptied group's run
+ * disappears immediately because empty groups never render.
  */
 export const useRemoveWorkspaceGroupMemberMutation = (): UseMutationResult<
   unknown,
   Error,
   WorkspaceGroupMemberVars,
-  unknown
-> =>
-  useMutation({
+  WorkspaceMembershipMutationContext
+> => {
+  const store = useStore();
+  return useMutation({
     mutationFn: (vars: WorkspaceGroupMemberVars) =>
       removeWorkspaceGroupMember({
         path: { group_id: vars.groupId, workspace_id: vars.workspaceId },
       }),
+    onMutate: (vars): WorkspaceMembershipMutationContext =>
+      applyOptimisticMembershipFlip(store, vars.workspaceId, undefined),
+    onError: (_e, vars, ctx): void => {
+      rollbackOptimisticMembershipFlip(store, vars.workspaceId, ctx);
+    },
   });
+};
 
 type UngroupWorkspaceGroupVars = { groupId: string };
 

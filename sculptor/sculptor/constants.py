@@ -608,18 +608,17 @@ class ElementIDs(StrEnum):
     SIDEBAR_ADD_REPO_BUTTON = "SIDEBAR_ADD_REPO_BUTTON"
     SIDEBAR_NO_WORKSPACES_HINT = "SIDEBAR_NO_WORKSPACES_HINT"
 
-    # Workspace groups (experimental): the tinted group card nested inside a
-    # sidebar repo section, its header chrome, and its menu items.
+    # Workspace groups (experimental): the group run nested inside a sidebar
+    # repo section (its wrapper "card" paints the hover/drop container
+    # surface), its header chrome, and its menu items. Drops resolve by
+    # position in the section's flat lane, so there are no separate drop-zone
+    # elements; the card's data-drop-active attribute marks the projected
+    # target group mid-drag.
     SIDEBAR_WORKSPACE_GROUP_CARD = "SIDEBAR_WORKSPACE_GROUP_CARD"
     SIDEBAR_WORKSPACE_GROUP_HEADER = "SIDEBAR_WORKSPACE_GROUP_HEADER"
     SIDEBAR_WORKSPACE_GROUP_CHEVRON = "SIDEBAR_WORKSPACE_GROUP_CHEVRON"
     SIDEBAR_WORKSPACE_GROUP_MENU_TRIGGER = "SIDEBAR_WORKSPACE_GROUP_MENU_TRIGGER"
     SIDEBAR_WORKSPACE_GROUP_CLI_BADGE = "SIDEBAR_WORKSPACE_GROUP_CLI_BADGE"
-    # Drag-and-drop drop zones: the dashed "drop to add" slot inside a group
-    # card while a workspace row is dragged, and the dashed "drop to remove
-    # from group" slot at the end of a repo section while a member is dragged.
-    SIDEBAR_WORKSPACE_GROUP_DROP_SLOT = "SIDEBAR_WORKSPACE_GROUP_DROP_SLOT"
-    SIDEBAR_WORKSPACE_GROUP_RELEASE_SLOT = "SIDEBAR_WORKSPACE_GROUP_RELEASE_SLOT"
     WORKSPACE_GROUP_MENU_NEW_WORKSPACE = "WORKSPACE_GROUP_MENU_NEW_WORKSPACE"
     WORKSPACE_GROUP_MENU_RENAME = "WORKSPACE_GROUP_MENU_RENAME"
     WORKSPACE_GROUP_MENU_COLLAPSE = "WORKSPACE_GROUP_MENU_COLLAPSE"

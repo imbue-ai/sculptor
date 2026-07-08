@@ -1,0 +1,88 @@
+// Floating drag-preview cards for the sidebar (see sidebarDragPreviews.tsx).
+// These render inside dnd-kit's DragOverlay, so they are position-managed by
+// the overlay — only the surface treatment lives here.
+
+.previewRow {
+  align-items: center;
+  display: flex;
+  font-size: var(--font-size-2);
+  gap: var(--space-2);
+  min-height: 28px;
+  min-width: 0;
+}
+
+.previewDot {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+}
+
+.previewName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// A dragged workspace row: the sidebar's row pill, lifted — solid surface so
+// the rows it floats over never show through, shadow for elevation.
+.rowPreview {
+  background: var(--gray-2);
+  border-radius: var(--radius-2);
+  box-shadow: var(--shadow-4);
+  box-sizing: border-box;
+  color: var(--gray-12);
+  cursor: grabbing;
+  padding: 0 var(--space-2) 0 var(--space-5);
+  transition:
+    padding-left var(--duration-fast) ease,
+    background-color var(--duration-fast) ease;
+}
+
+// The drop is projected inside a group: indent the card to member depth and
+// tint it toward the target group's accent (stamped as data-accent-color).
+.rowPreviewNested {
+  background: var(--accent-2);
+  padding-left: var(--space-7);
+}
+
+// A dragged group run: the container surface the run shows on hover, lifted.
+// data-accent-color on the root remaps the accent scale to the group's color.
+.groupPreview {
+  background: var(--accent-2);
+  border-radius: var(--radius-4);
+  box-shadow: var(--shadow-4);
+  box-sizing: border-box;
+  cursor: grabbing;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-1);
+}
+
+.previewHeader {
+  align-items: center;
+  color: var(--accent-11);
+  display: flex;
+  font-weight: var(--font-weight-medium);
+  gap: var(--space-2);
+  min-height: 28px;
+  padding: 0 var(--space-2);
+}
+
+.previewSwatch {
+  background: var(--accent-9);
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+  height: 9px;
+  width: 9px;
+}
+
+.previewGroupName {
+  font-size: var(--font-size-2);
+  overflow: hidden;
+}
+
+.previewMember {
+  color: var(--gray-12);
+  padding: 0 var(--space-2) 0 var(--space-5);
+}

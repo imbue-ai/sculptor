@@ -9,15 +9,17 @@ import { workspaceAtomFamily, workspaceIdsAtom } from "~/common/state/atoms/work
 import { layoutPersistenceAdapter } from "~/components/sections/persistence/LocalStorageLayoutAdapter.ts";
 import { globalLayoutAtom } from "~/components/sections/sectionAtoms.ts";
 
+import type { SectionProjection } from "./sidebarDropProjection.ts";
+import { applySectionProjection, projectSectionDrop } from "./sidebarDropProjection.ts";
 import {
-  commitWorkspaceMembershipOrderAtom,
+  commitSectionDropAtom,
   groupWorkspacesByRepo,
-  reorderSidebarRepoChildAtom,
   reorderSidebarRepoGroupAtom,
-  reorderWorkspaceGroupMemberAtom,
+  restoreSectionOrderAtom,
   sidebarOrderedWorkspacesAtom,
   sidebarRepoGroupsAtom,
 } from "./sidebarWorkspaceOrder.ts";
+import type { RepoSectionChild } from "./workspaceGroupComposition.ts";
 import { repoSectionChildKey } from "./workspaceGroupComposition.ts";
 
 const makeWorkspace = (id: string, projectId: string, description: string, groupId?: string): Workspace =>
@@ -154,15 +156,38 @@ const seedGroupedStore = (store: ReturnType<typeof createStore>): void => {
   store.set(updateWorkspaceGroupsAtom, [makeGroup("wsg-1", "p-alpha", "Group 1")]);
 };
 
-describe("sidebar reorder atoms", () => {
-  it("moves a workspace to the drop slot and stores the group's full order", () => {
+// The children a store currently composes for a project — the tree a drag
+// starts from, exactly what SidebarRepoGroup hands the projection module.
+const childrenOf = (store: ReturnType<typeof createStore>, projectId: string): ReadonlyArray<RepoSectionChild> =>
+  store.get(sidebarRepoGroupsAtom).find((group) => group.projectId === projectId)?.children ?? [];
+
+// Project a drop the way the drag layer does and return the resulting tree.
+const projectedChildren = (
+  store: ReturnType<typeof createStore>,
+  projectId: string,
+  activeId: string,
+  overId: string,
+  depthIntent: "inside" | "outside" = "inside",
+): ReadonlyArray<RepoSectionChild> => {
+  const children = childrenOf(store, projectId);
+  const projection = projectSectionDrop({
+    children,
+    collapsedGroupIds: new Set<string>(),
+    activeId,
+    overId,
+    depthIntent,
+  }) as SectionProjection;
+  return applySectionProjection(children, projection);
+};
+
+describe("sidebar drop-commit atoms", () => {
+  it("stores the full mixed lane a loose reorder lands", () => {
     const store = createStore();
     seedStore(store);
 
-    store.set(reorderSidebarRepoChildAtom, {
+    store.set(commitSectionDropAtom, {
       projectId: "p-alpha",
-      activeChildId: "w-cherry",
-      overChildId: "w-apple",
+      children: projectedChildren(store, "p-alpha", "w-cherry", "w-apple"),
     });
 
     expect(workspaceIdsOf(store.get(sidebarRepoGroupsAtom), "p-alpha")).toEqual(["w-cherry", "w-apple", "w-banana"]);
@@ -174,10 +199,9 @@ describe("sidebar reorder atoms", () => {
     const store = createStore();
     seedStore(store);
 
-    store.set(reorderSidebarRepoChildAtom, {
+    store.set(commitSectionDropAtom, {
       projectId: "p-alpha",
-      activeChildId: "w-apple",
-      overChildId: "w-cherry",
+      children: projectedChildren(store, "p-alpha", "w-apple", "w-cherry"),
     });
 
     const flattened = store.get(sidebarRepoGroupsAtom).flatMap((group) => group.workspaces);
@@ -199,10 +223,9 @@ describe("sidebar reorder atoms", () => {
     const store = createStore();
     seedStore(store);
 
-    store.set(reorderSidebarRepoChildAtom, {
+    store.set(commitSectionDropAtom, {
       projectId: "p-alpha",
-      activeChildId: "w-banana",
-      overChildId: "w-apple",
+      children: projectedChildren(store, "p-alpha", "w-banana", "w-apple"),
     });
 
     // globalLayoutAtom writes through the adapter (read-your-writes even inside
@@ -211,45 +234,37 @@ describe("sidebar reorder atoms", () => {
     expect(persisted?.sidebarOrder.workspaces["p-alpha"]).toEqual(["w-banana", "w-apple", "w-cherry"]);
   });
 
-  it("ignores drops whose ids don't resolve to the group's rows", () => {
+  it("ignores repo-group drops whose ids don't resolve", () => {
     const store = createStore();
     seedStore(store);
     const before = store.get(globalLayoutAtom);
 
-    store.set(reorderSidebarRepoChildAtom, {
-      projectId: "p-alpha",
-      activeChildId: "w-unknown",
-      overChildId: "w-apple",
-    });
     store.set(reorderSidebarRepoGroupAtom, { activeProjectId: "p-unknown", overProjectId: "p-alpha" });
 
     expect(store.get(globalLayoutAtom)).toBe(before);
   });
 
-  it("moves a group card within the mixed lane and stores workspace and group ids together", () => {
+  it("moves a whole group within the mixed lane and stores workspace and group ids together", () => {
     const store = createStore();
     seedGroupedStore(store);
 
-    // Default lane: apple, banana, Group 1. Drag the card to the top.
-    store.set(reorderSidebarRepoChildAtom, {
+    // Default lane: apple, banana, Group 1. Drag the group header to the top.
+    store.set(commitSectionDropAtom, {
       projectId: "p-alpha",
-      activeChildId: "wsg-1",
-      overChildId: "w-apple",
+      children: projectedChildren(store, "p-alpha", "wsg-1", "w-apple"),
     });
 
     expect(childKeysOf(store.get(sidebarRepoGroupsAtom), "p-alpha")).toEqual(["wsg-1", "w-apple", "w-banana"]);
     expect(store.get(globalLayoutAtom).sidebarOrder.workspaces["p-alpha"]).toEqual(["wsg-1", "w-apple", "w-banana"]);
   });
 
-  it("reorders members within a card and stores the group's member lane", () => {
+  it("reorders members within a group and stores the member lane", () => {
     const store = createStore();
     seedGroupedStore(store);
 
-    store.set(reorderWorkspaceGroupMemberAtom, {
+    store.set(commitSectionDropAtom, {
       projectId: "p-alpha",
-      groupId: "wsg-1",
-      activeWorkspaceId: "w-elder",
-      overWorkspaceId: "w-cherry",
+      children: projectedChildren(store, "p-alpha", "w-elder", "w-cherry"),
     });
 
     expect(memberIdsOf(store.get(sidebarRepoGroupsAtom), "p-alpha", "wsg-1")).toEqual(["w-elder", "w-cherry"]);
@@ -260,123 +275,66 @@ describe("sidebar reorder atoms", () => {
     const store = createStore();
     seedGroupedStore(store);
 
-    store.set(reorderWorkspaceGroupMemberAtom, {
+    store.set(commitSectionDropAtom, {
       projectId: "p-alpha",
-      groupId: "wsg-1",
-      activeWorkspaceId: "w-elder",
-      overWorkspaceId: "w-cherry",
+      children: projectedChildren(store, "p-alpha", "w-elder", "w-cherry"),
     });
 
     const persisted = layoutPersistenceAdapter.read({ kind: "global" });
     expect(persisted?.sidebarOrder.groupMembers?.["wsg-1"]).toEqual(["w-elder", "w-cherry"]);
   });
-});
 
-describe("commitWorkspaceMembershipOrderAtom", () => {
-  it("writes the member lane for a drop into a group, anchored before a member", () => {
+  it("writes both lanes for a membership-changing drop (loose row into a group)", () => {
     const store = createStore();
     seedGroupedStore(store);
 
-    // The order half of a loose→group drop: membership itself is the backend's
-    // (the stream frame may not have landed yet); the lane records the intent.
-    store.set(commitWorkspaceMembershipOrderAtom, {
+    // banana dragged down onto cherry lands right after it, inside the group.
+    store.set(commitSectionDropAtom, {
       projectId: "p-alpha",
-      workspaceId: "w-banana",
-      target: { kind: "group", groupId: "wsg-1", beforeWorkspaceId: "w-elder" },
+      children: projectedChildren(store, "p-alpha", "w-banana", "w-cherry"),
     });
 
-    expect(store.get(globalLayoutAtom).sidebarOrder.groupMembers?.["wsg-1"]).toEqual([
-      "w-cherry",
-      "w-banana",
-      "w-elder",
-    ]);
+    const order = store.get(globalLayoutAtom).sidebarOrder;
+    expect(order.workspaces["p-alpha"]).toEqual(["w-apple", "wsg-1"]);
+    expect(order.groupMembers?.["wsg-1"]).toEqual(["w-cherry", "w-banana", "w-elder"]);
   });
 
-  it("appends to the member lane when the drop had no anchor (card or drop-slot drop)", () => {
+  it("restores exactly the lanes a rejected drop overwrote, including never-stored ones", () => {
     const store = createStore();
     seedGroupedStore(store);
 
-    store.set(commitWorkspaceMembershipOrderAtom, {
+    // No lanes stored yet: the snapshot must remember "never stored", not [].
+    const snapshot = store.set(commitSectionDropAtom, {
       projectId: "p-alpha",
-      workspaceId: "w-banana",
-      target: { kind: "group", groupId: "wsg-1" },
+      children: projectedChildren(store, "p-alpha", "w-banana", "w-cherry"),
     });
+    expect(store.get(globalLayoutAtom).sidebarOrder.workspaces["p-alpha"]).toEqual(["w-apple", "wsg-1"]);
 
-    expect(store.get(globalLayoutAtom).sidebarOrder.groupMembers?.["wsg-1"]).toEqual([
-      "w-cherry",
-      "w-elder",
-      "w-banana",
-    ]);
+    store.set(restoreSectionOrderAtom, snapshot);
+
+    const order = store.get(globalLayoutAtom).sidebarOrder;
+    expect(order.workspaces["p-alpha"]).toBeUndefined();
+    expect(order.groupMembers?.["wsg-1"]).toBeUndefined();
   });
 
-  it("re-anchors a member the stream already delivered instead of duplicating it", () => {
+  it("restores the previous stored lanes when they existed", () => {
     const store = createStore();
     seedGroupedStore(store);
-
-    // The confirming frame can land before the mutation's success callback: the
-    // workspace is already a member. The write must place it at the drop anchor
-    // exactly once.
-    store.set(commitWorkspaceMembershipOrderAtom, {
+    // A first drop stores lanes...
+    store.set(commitSectionDropAtom, {
       projectId: "p-alpha",
-      workspaceId: "w-elder",
-      target: { kind: "group", groupId: "wsg-1", beforeWorkspaceId: "w-cherry" },
+      children: projectedChildren(store, "p-alpha", "w-elder", "w-cherry"),
     });
 
-    expect(store.get(globalLayoutAtom).sidebarOrder.groupMembers?.["wsg-1"]).toEqual(["w-elder", "w-cherry"]);
-  });
-
-  it("writes the mixed lane for a drop out to the loose list, anchored before a child", () => {
-    const store = createStore();
-    seedGroupedStore(store);
-
-    store.set(commitWorkspaceMembershipOrderAtom, {
+    // ...a second drop overwrites them and then fails.
+    const snapshot = store.set(commitSectionDropAtom, {
       projectId: "p-alpha",
-      workspaceId: "w-cherry",
-      target: { kind: "loose", beforeChildId: "w-banana" },
+      children: projectedChildren(store, "p-alpha", "w-banana", "w-apple"),
     });
+    store.set(restoreSectionOrderAtom, snapshot);
 
-    // Materialized from the visible children (apple, banana, card) with the
-    // released workspace spliced in at the anchor.
-    expect(store.get(globalLayoutAtom).sidebarOrder.workspaces["p-alpha"]).toEqual([
-      "w-apple",
-      "w-cherry",
-      "w-banana",
-      "wsg-1",
-    ]);
-  });
-
-  it("appends to the mixed lane when the release drop had no anchor (release-slot drop)", () => {
-    const store = createStore();
-    seedGroupedStore(store);
-
-    store.set(commitWorkspaceMembershipOrderAtom, {
-      projectId: "p-alpha",
-      workspaceId: "w-cherry",
-      target: { kind: "loose" },
-    });
-
-    expect(store.get(globalLayoutAtom).sidebarOrder.workspaces["p-alpha"]).toEqual([
-      "w-apple",
-      "w-banana",
-      "wsg-1",
-      "w-cherry",
-    ]);
-  });
-
-  it("appends when the anchor no longer resolves", () => {
-    const store = createStore();
-    seedGroupedStore(store);
-
-    store.set(commitWorkspaceMembershipOrderAtom, {
-      projectId: "p-alpha",
-      workspaceId: "w-banana",
-      target: { kind: "group", groupId: "wsg-1", beforeWorkspaceId: "w-gone" },
-    });
-
-    expect(store.get(globalLayoutAtom).sidebarOrder.groupMembers?.["wsg-1"]).toEqual([
-      "w-cherry",
-      "w-elder",
-      "w-banana",
-    ]);
+    const order = store.get(globalLayoutAtom).sidebarOrder;
+    expect(order.workspaces["p-alpha"]).toEqual(["w-apple", "w-banana", "wsg-1"]);
+    expect(order.groupMembers?.["wsg-1"]).toEqual(["w-elder", "w-cherry"]);
   });
 });

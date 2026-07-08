@@ -9,11 +9,10 @@
   margin-bottom: var(--space-3);
 }
 
-// One repo section's children — loose workspace rows and workspace-group cards —
-// in their own container: the section's drag modifiers clamp a dragged child to
-// this box's extent, so this box (not the whole group) is what keeps a sliding
-// child off the repo header while still letting it cross between the loose lane
-// and the group cards. Mirrors .repoGroup's row gap.
+// One repo section's children — loose workspace rows and workspace-group runs —
+// in their own container. Its left edge is the reference the drag layer
+// measures the pointer's depth intent against (the inside/outside flip at a
+// group's tail boundary, REQ-DND-6). Mirrors .repoGroup's row gap.
 .repoRows {
   display: flex;
   flex-direction: column;
@@ -81,6 +80,13 @@
   }
 }
 
+// A member row inside a workspace-group run: one level deeper than loose rows
+// so the nesting reads at a glance (REQ-UI-1) — and deeper indentation is also
+// what the pointer's depth-intent threshold pivots around during drags.
+.workspaceRowNested {
+  padding-left: var(--space-7);
+}
+
 // The clickable part of a workspace row (dot + name). Kept separate from the
 // row container so the hover action buttons aren't nested inside a button.
 .workspaceRowButton {
@@ -142,66 +148,45 @@
   }
 }
 
-// A row or repo group mid-drag. There is no floating overlay copy — the element
-// itself slides with the cursor (translate-only transform), so it is lifted above
-// its siblings with a solid surface so the rows it passes over can't show
-// through; the shadow carries the "picked up" read.
+// A workspace row mid-drag: the visible dragged card is the section's
+// DragOverlay copy, so the in-flow row becomes an invisible placeholder whose
+// reserved space IS the drop gap — the geometry stays (droppable rects are
+// measured mid-drag), only the pixels go.
 .rowDragging {
+  opacity: 0%;
+
+  // The dragged row keeps keyboard focus for the whole drag (the sensor
+  // listens on it); an invisible element's focus ring would float as a stray
+  // outline over the gap.
+  :focus-visible {
+    outline: none;
+  }
+}
+
+// A repo group mid-drag (the outer repo list). There is no overlay copy at
+// this level — the element itself slides on its axis-locked lane — so it is
+// lifted above its siblings with a solid surface so the rows it passes over
+// can't show through; the shadow carries the "picked up" read.
+.repoGroupDragging {
   // The sidebar's own surface color (.sidebar in WorkspaceSidebar.module.scss),
-  // not an elevated tint: an element clamped at the rail's edge sits away from
-  // the pointer, where an off-color surface reads as a stray band.
+  // not an elevated tint: the group is a plain container, and an off-color
+  // surface would read as a stray band.
   background: var(--gray-2);
-  // Rounds the drag surface and its shadow ring on whichever element carries it:
-  // workspace rows are already rounded, but a dragged repo group is a plain
-  // container whose sharp-cornered box would read as a different treatment.
   border-radius: var(--radius-2);
   box-shadow: var(--shadow-4);
   position: relative;
   z-index: var(--z-above);
 
   // The pointer rides the dragged element, whose hover style would otherwise
-  // replace the drag surface mid-move — and pop back at the rail's edge where
-  // the clamp separates the element from the pointer.
+  // replace the drag surface mid-move.
   &:hover {
     background: var(--gray-2);
   }
 
-  // The dragged element keeps keyboard focus for the whole drag (the sensor
-  // listens on it); the elevation is the drag indicator, so the focus ring
-  // riding along only adds noise.
+  // The elevation is the drag indicator; the focus ring riding along only
+  // adds noise.
   :focus-visible {
     outline: none;
-  }
-}
-
-// A row targeted by a workspace drag from ANOTHER container (a membership
-// change): the drop inserts the dragged row at this row's slot, so draw an
-// insertion line along its top edge. Accent-toned: inside a group card the
-// card's data-accent-color scopes it to the group's color, and a loose target
-// row stamps the dragged member's group color itself (see SidebarWorkspaceRow).
-// A box-shadow (not a border or pseudo-element) so the line never affects
-// layout — droppable rects are measured mid-drag and must stay stable.
-.membershipDropTarget {
-  box-shadow: 0 -2px 0 0 var(--accent-9);
-}
-
-// The dashed "drop to remove from group" zone at the end of a repo section's
-// children while a member row is dragged. Same dashed treatment as the group
-// cards' drop slot; the dragged member's group color arrives via the accent
-// stamp, so the zone reads as "this group releases here".
-.releaseSlot {
-  align-items: center;
-  border: 1px dashed var(--accent-a8);
-  border-radius: var(--radius-2);
-  color: var(--accent-11);
-  display: flex;
-  font-size: var(--font-size-1);
-  min-height: 28px;
-  padding: 0 var(--space-2) 0 var(--space-5);
-
-  &[data-drop-active] {
-    background: var(--accent-a3);
-    border-style: solid;
   }
 }
 

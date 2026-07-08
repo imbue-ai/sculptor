@@ -19,8 +19,6 @@ import type { WorkspaceAction } from "~/components/CommandPalette/contextActions
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { WorkspaceStatusDots } from "~/components/statusDot";
 
-import type { SidebarRowDragData } from "./sidebarDnd.ts";
-import { getSidebarDragData, LOOSE_CONTAINER_ID } from "./sidebarDnd.ts";
 // The row is styled by the repo section's shared stylesheet: its classes are
 // selector-coupled to the section chrome (hover-reveal and drag-suppression
 // rules key on .workspaceRow), so the row reads the same module rather than
@@ -32,7 +30,8 @@ import styles from "./SidebarRepoGroup.module.scss";
  * rename input while renaming), the hover-revealed actions dropdown and delete
  * button, and the wrapping right-click context menu. All behavior is delegated
  * through the callback props. Rendered both as a loose row directly under a
- * repo header and as a member row inside a workspace-group card.
+ * repo header and as an indented member row inside a workspace-group run
+ * (`isGroupMember`).
  *
  * The row owns its status-dot subscription and is memoized: the per-workspace
  * status slice is equality-guarded, so a task streaming tick re-renders only
@@ -40,20 +39,18 @@ import styles from "./SidebarRepoGroup.module.scss";
  * the memo to hold, every non-primitive prop must be reference-stable across
  * parent renders (memoized action lists, id-taking callbacks).
  *
- * The row is a sortable item of its repo section's DndContext: the row div is the
- * measured node, and the name button is the focusable drag activator — the hover
- * action buttons stay outside the listeners so grabbing them can never start a
- * drag. `dndContainerId` names the container the row lives in (the loose lane or
- * a group card); a drag between containers is a membership change, so a row
- * targeted from a DIFFERENT container marks itself with an insertion line (the
- * same-container case animates the sort shift instead).
+ * The row is a sortable item of its repo section's flat lane: the row div is
+ * the measured node, and the name button is the focusable drag activator — the
+ * hover action buttons stay outside the listeners so grabbing them can never
+ * start a drag. While dragged, the row stays in the flow as an invisible
+ * placeholder (the gap the drop would fill); the visible dragged card is the
+ * section's DragOverlay.
  */
 export const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   workspace,
   isRenaming,
   isActive,
-  dndContainerId = LOOSE_CONTAINER_ID,
-  dndAccentColor,
+  isGroupMember = false,
   actions,
   openInRuntime,
   destructiveColor,
@@ -66,10 +63,8 @@ export const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   workspace: Workspace;
   isRenaming: boolean;
   isActive: boolean;
-  dndContainerId?: string;
-  // The containing group's accent color for member rows; carried in the drag
-  // data so drop affordances outside the card can tint in the source group's color.
-  dndAccentColor?: string;
+  /** Member rows indent one level deeper than loose rows (REQ-UI-1). */
+  isGroupMember?: boolean;
   actions: ReadonlyArray<WorkspaceAction>;
   openInRuntime: OpenInRuntime;
   destructiveColor: ReturnType<typeof useThemeDangerColor>;
@@ -80,28 +75,11 @@ export const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   onBeginDelete: (workspace: Workspace) => void;
 }): ReactElement {
   const status = useAtomValue(workspaceDotStatusAtomFamily(workspace.objectId));
-  const dragData: SidebarRowDragData = {
-    sidebarKind: "workspace",
-    containerId: dndContainerId,
-    accentColor: dndAccentColor,
-  };
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isOver, active } =
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isOver } =
     useSortable({
       id: workspace.objectId,
       disabled: isRenaming,
-      data: dragData,
     });
-
-  // A workspace row from ANOTHER container is hovering this row's slot: the drop
-  // would change membership and insert the dragged row at this row's position, so
-  // draw the insertion line here. Loose rows tint the line in the dragged member's
-  // group color (carried in the drag data); member rows leave the card's ambient
-  // accent in charge.
-  const activeRowData = getSidebarDragData(active);
-  const isMembershipDropTarget =
-    isOver && !isDragging && activeRowData?.sidebarKind === "workspace" && activeRowData.containerId !== dndContainerId;
-  const membershipDropAccent =
-    isMembershipDropTarget && dndContainerId === LOOSE_CONTAINER_ID ? activeRowData?.accentColor : undefined;
 
   // Enter navigates from the keyboard, like a click. Space is deliberately NOT
   // handled here: it falls through to the dnd-kit keyboard sensor's activator
@@ -121,8 +99,8 @@ export const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   const rowClassName = [
     styles.workspaceRow,
     isActive ? styles.workspaceRowActive : "",
+    isGroupMember ? styles.workspaceRowNested : "",
     isDragging ? styles.rowDragging : "",
-    isMembershipDropTarget ? styles.membershipDropTarget : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -136,9 +114,6 @@ export const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
         <div
           ref={setNodeRef}
           className={rowClassName}
-          // Remaps the accent scale so the insertion line borrows the dragged
-          // member's group color while it hovers this loose row.
-          data-accent-color={membershipDropAccent}
           style={{ transform: CSS.Translate.toString(transform), transition }}
         >
           {isRenaming ? (

@@ -1,0 +1,377 @@
+// The flat-lane drop projection for a repo section's children (REQ-DND-1..7).
+//
+// A repo section renders as ONE flat sortable lane: loose workspace rows, group
+// header rows, and member rows are all siblings of a single SortableContext,
+// and a group is just a nesting level — membership is DERIVED FROM POSITION
+// (a row sitting between a group's header and the end of its member run is in
+// the group). This module is the single source of truth for that derivation:
+// the drag-over preview, the keyboard path, and the drop commit all call
+// `projectSectionDrop` and apply its result with `applySectionProjection`, so
+// what the user sees mid-drag is exactly what a drop commits.
+//
+// Everything here is pure and operates on `RepoSectionChild` trees; the React
+// layer (SidebarRepoGroup) owns when projections are applied — cross-parent
+// moves re-render the lane mid-drag so the group's painted container wraps the
+// gap, same-parent moves stay a transform preview until the drop.
+
+import { arrayMove } from "@dnd-kit/sortable";
+
+import type { Workspace } from "~/api";
+
+import type { RepoSectionChild } from "./workspaceGroupComposition.ts";
+import { repoSectionChildKey } from "./workspaceGroupComposition.ts";
+
+/** Where a workspace row would land: a group's member lane, or loose (null). */
+export type SectionParent = string | null;
+
+/**
+ * The user's depth choice at the one geometrically ambiguous slot — right
+ * after a group's last member, which is also right after the group itself
+ * (REQ-DND-6). "inside" is the default (reading order); pointer-x left of the
+ * member indent or a Left-arrow press flips to "outside".
+ */
+export type SectionDepthIntent = "inside" | "outside";
+
+export type SectionRowProjection = {
+  kind: "row";
+  activeId: string;
+  parentGroupId: SectionParent;
+  /** Insertion index within the parent lane (top-level children, or the group's members). */
+  index: number;
+  /** True when this location is the ambiguous tail-of-group slot where depth intent applies. */
+  isBoundary: boolean;
+};
+
+/** A whole-group move within the top-level lane (dragged by its header, REQ-DND-4). */
+export type SectionGroupProjection = {
+  kind: "group";
+  activeId: string;
+  index: number;
+};
+
+/**
+ * A row dropped onto a COLLAPSED group's header: appends to the group without
+ * a visible gap (its members can't show one), so the display children never
+ * change — only the commit does (REQ-DND-6).
+ */
+export type SectionAppendProjection = {
+  kind: "append-collapsed";
+  activeId: string;
+  parentGroupId: string;
+};
+
+export type SectionProjection = SectionRowProjection | SectionGroupProjection | SectionAppendProjection;
+
+// One visible row of the flattened lane, tagged with what it is so neighbor
+// inspection (which decides a projected row's parent) never guesses from ids.
+type FlatEntry = {
+  id: string;
+  /** The group whose member run this row belongs to; null for loose rows and headers. */
+  parentGroupId: SectionParent;
+  isHeader: boolean;
+};
+
+const flattenChildren = (
+  children: ReadonlyArray<RepoSectionChild>,
+  collapsedGroupIds: ReadonlySet<string>,
+  hiddenMembersGroupId?: string,
+): Array<FlatEntry> => {
+  const entries: Array<FlatEntry> = [];
+  for (const child of children) {
+    if (child.kind === "workspace") {
+      entries.push({ id: child.workspace.objectId, parentGroupId: null, isHeader: false });
+      continue;
+    }
+    const groupId = child.group.objectId;
+    entries.push({ id: groupId, parentGroupId: null, isHeader: true });
+    if (!collapsedGroupIds.has(groupId) && groupId !== hiddenMembersGroupId) {
+      for (const member of child.members) {
+        entries.push({ id: member.objectId, parentGroupId: groupId, isHeader: false });
+      }
+    }
+  }
+  return entries;
+};
+
+/**
+ * The SortableContext item ids for the section in visible top-to-bottom order:
+ * loose workspace ids, group ids (their header rows), and member workspace ids.
+ * A collapsed group contributes only its header. While a group header is being
+ * dragged its members collapse into the drag (REQ-DND-4), so they leave the
+ * lane — pass that group as `draggingGroupId`.
+ */
+export const flatSectionItemIds = (
+  children: ReadonlyArray<RepoSectionChild>,
+  collapsedGroupIds: ReadonlySet<string>,
+  draggingGroupId?: string,
+): Array<string> => flattenChildren(children, collapsedGroupIds, draggingGroupId).map((entry) => entry.id);
+
+/** The group a workspace currently belongs to within the children, or null if loose/absent. */
+export const locateWorkspaceParent = (
+  children: ReadonlyArray<RepoSectionChild>,
+  workspaceId: string,
+): SectionParent => {
+  for (const child of children) {
+    if (child.kind === "group" && child.members.some((member) => member.objectId === workspaceId)) {
+      return child.group.objectId;
+    }
+  }
+  return null;
+};
+
+/** The top-level index of the child that is, or contains, the given id; -1 if absent. */
+const topLevelIndexOf = (children: ReadonlyArray<RepoSectionChild>, id: string): number =>
+  children.findIndex(
+    (child) =>
+      repoSectionChildKey(child) === id ||
+      (child.kind === "group" && child.members.some((member) => member.objectId === id)),
+  );
+
+/**
+ * Project where the active item would land if dropped at `overId`'s slot.
+ *
+ * `children` must be the CURRENTLY DISPLAYED children (cross-parent moves are
+ * applied to the display mid-drag, so successive projections compose).
+ * Standard flat-sortable semantics: the active row takes `overId`'s flat slot
+ * (arrayMove), then its parent is read off its new neighbors — a row directly
+ * below a group header or a member row is in that group. Returns null when the
+ * drop resolves to no movement or the ids don't resolve.
+ */
+export const projectSectionDrop = (args: {
+  children: ReadonlyArray<RepoSectionChild>;
+  collapsedGroupIds: ReadonlySet<string>;
+  activeId: string;
+  overId: string;
+  depthIntent: SectionDepthIntent;
+}): SectionProjection | null => {
+  const { children, collapsedGroupIds, activeId, overId, depthIntent } = args;
+  if (activeId === overId) {
+    return null;
+  }
+
+  const activeGroupChild = children.find((child) => child.kind === "group" && child.group.objectId === activeId);
+
+  // A group header drag moves the whole group within the top-level lane and
+  // can never nest (REQ-DND-4): an `over` inside another group resolves to
+  // that group's own top-level slot.
+  if (activeGroupChild !== undefined) {
+    const from = topLevelIndexOf(children, activeId);
+    const to = topLevelIndexOf(children, overId);
+    if (from === -1 || to === -1 || from === to) {
+      return null;
+    }
+    return { kind: "group", activeId, index: to };
+  }
+
+  // Dropping onto a collapsed group's header appends to it — there is no
+  // member run on screen to open a gap in, so this is the one projection the
+  // display never reflects.
+  const overGroupChild = children.find((child) => child.kind === "group" && child.group.objectId === overId);
+  if (overGroupChild !== undefined && overGroupChild.kind === "group" && collapsedGroupIds.has(overId)) {
+    return { kind: "append-collapsed", activeId, parentGroupId: overId };
+  }
+
+  const flat = flattenChildren(children, collapsedGroupIds);
+  const from = flat.findIndex((entry) => entry.id === activeId);
+  const to = flat.findIndex((entry) => entry.id === overId);
+  if (from === -1 || to === -1 || from === to) {
+    return null;
+  }
+
+  const moved = arrayMove(flat, from, to);
+  const above: FlatEntry | undefined = moved[to - 1];
+  const below: FlatEntry | undefined = moved[to + 1];
+
+  // The parent is read off the row above: below a group's header or one of its
+  // members means inside that group. (A collapsed header shows no member run,
+  // so the slot below it is loose — joining a collapsed group goes through the
+  // append-collapsed path above.)
+  let parentGroupId: SectionParent = null;
+  if (above !== undefined) {
+    if (above.isHeader && !collapsedGroupIds.has(above.id)) {
+      parentGroupId = above.id;
+    } else if (above.parentGroupId !== null) {
+      parentGroupId = above.parentGroupId;
+    }
+  }
+
+  // The slot is ambiguous only at a group's tail: inside the group and right
+  // after it are the same y-position. Default inside; the depth intent flips
+  // it out (REQ-DND-6). The head slot (directly under the header) is NOT
+  // ambiguous — above the header is a different slot.
+  const isBoundary =
+    parentGroupId !== null && !(below !== undefined && !below.isHeader && below.parentGroupId === parentGroupId);
+  if (isBoundary && depthIntent === "outside") {
+    parentGroupId = null;
+  }
+
+  let index: number;
+  if (parentGroupId !== null) {
+    // Position within the group's member lane: the member rows sitting above it.
+    index = moved.slice(0, to).filter((entry) => entry.parentGroupId === parentGroupId).length;
+  } else {
+    // Position within the top-level lane: each loose row or header above is one child.
+    index = moved.slice(0, to).filter((entry) => entry.parentGroupId === null).length;
+  }
+  return { kind: "row", activeId, parentGroupId, index, isBoundary };
+};
+
+/**
+ * The explicit depth flip at the ambiguous tail-of-group slot (REQ-DND-6),
+ * for intent changes that arrive WITHOUT a new `over` target — the pointer
+ * crossing the member indent while parked, or a Left/Right arrow press. The
+ * active row's current effective location must actually be a tail boundary:
+ *
+ * - flip OUT: the active row is the last member of a group (in the displayed
+ *   children, or via a not-yet-applied same-parent tail projection) → loose,
+ *   directly after that group.
+ * - flip IN: the active row sits loose directly after an expanded group → that
+ *   group's member tail.
+ *
+ * Returns null when the current location is not a flippable boundary.
+ */
+export const toggleBoundaryDepth = (
+  children: ReadonlyArray<RepoSectionChild>,
+  collapsedGroupIds: ReadonlySet<string>,
+  activeId: string,
+  intent: SectionDepthIntent,
+  pending: SectionRowProjection | null,
+): SectionRowProjection | null => {
+  if (intent === "outside") {
+    // The group whose tail the active row effectively occupies.
+    let groupId: string | null = null;
+    if (pending !== null && pending.isBoundary && pending.parentGroupId !== null) {
+      groupId = pending.parentGroupId;
+    } else if (pending === null) {
+      for (const child of children) {
+        if (child.kind === "group" && child.members[child.members.length - 1]?.objectId === activeId) {
+          groupId = child.group.objectId;
+          break;
+        }
+      }
+    }
+
+    if (groupId === null) {
+      return null;
+    }
+    const groupIndex = children.findIndex((child) => child.kind === "group" && child.group.objectId === groupId);
+    const activeLooseIndex = children.findIndex(
+      (child) => child.kind === "workspace" && child.workspace.objectId === activeId,
+    );
+    // The projection index is within the lane AFTER the active row is removed,
+    // so a loose active row above the group shifts the group up by one.
+    const indexAfterRemoval = groupIndex - (activeLooseIndex !== -1 && activeLooseIndex < groupIndex ? 1 : 0);
+    return { kind: "row", activeId, parentGroupId: null, index: indexAfterRemoval + 1, isBoundary: true };
+  }
+
+  // Flip IN only from a static loose position (a pending projection means the
+  // displayed position is not where the row would land — future over events
+  // already carry the new intent).
+  if (pending !== null) {
+    return null;
+  }
+  const activeIndex = children.findIndex(
+    (child) => child.kind === "workspace" && child.workspace.objectId === activeId,
+  );
+  const above = activeIndex > 0 ? children[activeIndex - 1] : undefined;
+  if (
+    activeIndex === -1 ||
+    above === undefined ||
+    above.kind !== "group" ||
+    collapsedGroupIds.has(above.group.objectId)
+  ) {
+    // A collapsed group shows no member run, so the slot after it is simply
+    // loose — joining a collapsed group goes through its header instead.
+    return null;
+  }
+  return {
+    kind: "row",
+    activeId,
+    parentGroupId: above.group.objectId,
+    index: above.members.length,
+    isBoundary: true,
+  };
+};
+
+/** Remove the workspace with `workspaceId` from the tree, returning it and the remaining children. */
+const removeWorkspace = (
+  children: ReadonlyArray<RepoSectionChild>,
+  workspaceId: string,
+): { workspace: Workspace | null; children: Array<RepoSectionChild> } => {
+  let removed: Workspace | null = null;
+  const remaining: Array<RepoSectionChild> = [];
+  for (const child of children) {
+    if (child.kind === "workspace") {
+      if (child.workspace.objectId === workspaceId) {
+        removed = child.workspace;
+        continue;
+      }
+      remaining.push(child);
+      continue;
+    }
+    const member = child.members.find((candidate) => candidate.objectId === workspaceId);
+    if (member !== undefined) {
+      removed = member;
+      // A group emptied mid-drag stays in the tree (its header remains a
+      // visible drop-back target); the server dissolves it only if the drop
+      // commits elsewhere, and the composition rebuilds from truth after.
+      remaining.push({ ...child, members: child.members.filter((candidate) => candidate.objectId !== workspaceId) });
+      continue;
+    }
+    remaining.push(child);
+  }
+  return { workspace: removed, children: remaining };
+};
+
+const clampIndex = (index: number, length: number): number => Math.max(0, Math.min(index, length));
+
+/**
+ * Apply a projection to the children, returning the new tree (or the original
+ * array when the projection no longer resolves — a stale id mid-stream).
+ * This is what the lane renders mid-drag for cross-parent moves and what the
+ * drop commit materializes into the stored lanes.
+ */
+export const applySectionProjection = (
+  children: ReadonlyArray<RepoSectionChild>,
+  projection: SectionProjection,
+): ReadonlyArray<RepoSectionChild> => {
+  if (projection.kind === "group") {
+    const from = children.findIndex((child) => child.kind === "group" && child.group.objectId === projection.activeId);
+    if (from === -1) {
+      return children;
+    }
+    return arrayMove([...children], from, clampIndex(projection.index, children.length - 1));
+  }
+
+  const { workspace, children: remaining } = removeWorkspace(children, projection.activeId);
+  if (workspace === null) {
+    return children;
+  }
+
+  if (projection.kind === "append-collapsed") {
+    return remaining.map((child) =>
+      child.kind === "group" && child.group.objectId === projection.parentGroupId
+        ? { ...child, members: [...child.members, workspace] }
+        : child,
+    );
+  }
+
+  if (projection.parentGroupId === null) {
+    const next = [...remaining];
+    next.splice(clampIndex(projection.index, next.length), 0, { kind: "workspace", workspace });
+    return next;
+  }
+
+  const groupIndex = remaining.findIndex(
+    (child) => child.kind === "group" && child.group.objectId === projection.parentGroupId,
+  );
+  const group = remaining[groupIndex];
+  if (group === undefined || group.kind !== "group") {
+    return children;
+  }
+  const members = [...group.members];
+  members.splice(clampIndex(projection.index, members.length), 0, workspace);
+  const next = [...remaining];
+  next[groupIndex] = { ...group, members };
+  return next;
+};

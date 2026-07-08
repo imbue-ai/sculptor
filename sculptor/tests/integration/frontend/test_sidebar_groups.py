@@ -232,9 +232,9 @@ def test_keyboard_drag_moves_workspace_into_and_out_of_group(
         group_card=card,
         direction="up",
     )
-    # Membership is asserted order-agnostically: the keyboard drop lands on
-    # whichever of the card's droppables (a member row or the dashed drop slot)
-    # the arrow reached, which decides the insert position but not membership.
+    # Membership is asserted order-agnostically: the keyboard drop lands at
+    # whichever slot inside the group's run the arrow reached, which decides
+    # the insert position but not membership.
     expect(member_rows).to_have_count(2)
     expect(member_rows.filter(has_text="WS Alpha")).to_have_count(1)
     expect(member_rows.filter(has_text="WS Bravo")).to_have_count(1)

@@ -105,11 +105,20 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
     def reorder_via_keyboard_drag(self, item: Locator, target: Locator, direction: str) -> None:
         """Drag a workspace row or repo-group header to another slot via the KeyboardSensor.
 
-        ``item`` and ``target`` are drag activators of the same sortable list (two
-        workspace rows of one repo group, or two repo-group headers); ``direction``
-        is "up" or "down". Mirrors section_helpers' panel drag: pick the item up
-        (``pickup_via_keyboard``), one arrow per slot until ``target``'s slot
-        reports ``data-sidebar-drop-target``, Space to drop.
+        ``item`` and ``target`` are drag activators of the same drag context (two
+        rows of one repo section's flat lane, or two repo-group headers);
+        ``direction`` is "up" or "down". Picks the item up
+        (``pickup_via_keyboard``), presses one arrow per slot until the drag has
+        arrived at ``target``'s slot, then Space to drop.
+
+        Arrival shows up through one of two signals, matching the sidebar's two
+        preview regimes: a same-container press previews via transforms and
+        lights the targeted slot with ``data-sidebar-drop-target``, while a
+        press that crosses a group boundary (a membership change, or the
+        tail-of-group slot) re-renders the lane with the dragged row's
+        placeholder AT the projected slot — nothing lights, because the drag now
+        hovers its own row; the row's geometry passing the target is the signal
+        instead.
 
         Pass stably-identified locators (by-name helpers), not positional
         ``nth(...)`` ones: positional locators re-resolve against the post-drop
@@ -118,33 +127,21 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         self.pickup_via_keyboard(item)
 
         arrow = {"up": "ArrowUp", "down": "ArrowDown"}[direction]
-        # Each arrow press is confirmed applied before the next fires: every press
-        # moves the drag exactly one slot, so a press fired while a slow re-render
-        # is still applying the previous one overshoots the target — and in a
-        # sortable list the target slot then never lights up. Right after pickup no
-        # slot is lit (the drag sits over its own slot), so the first press is
-        # confirmed by any slot lighting up; later presses by the lit slot's
-        # identity changing (rows stamp data-workspace-id, group headers
-        # data-project-id). A drag that exhausts its presses raises rather than
-        # dropping blind, so the failure surfaces here and not as a downstream
-        # order-assertion mismatch.
-        lit_slot = self._page.locator('[data-sidebar-drop-target="true"]')
+
+        # Each arrow press is confirmed applied before the next fires: every
+        # press moves the drag exactly one slot, so a press fired while a slow
+        # re-render is still applying the previous one overshoots the target. A
+        # drag that exhausts its presses raises rather than dropping blind, so
+        # the failure surfaces here and not as a downstream order-assertion
+        # mismatch.
         for _press in range(_REORDER_MAX_ARROW_PRESSES):
-            previous_slot_id = None
-            if lit_slot.count() == 1:
-                previous_slot_id = lit_slot.get_attribute("data-workspace-id") or lit_slot.get_attribute(
-                    "data-project-id"
-                )
+            before = self._drag_snapshot(item)
             self._page.keyboard.press(arrow)
-            if previous_slot_id is None:
-                expect(lit_slot).to_have_count(1)
-            else:
-                moved_slot = self._page.locator(
-                    f'[data-sidebar-drop-target="true"]'
-                    f':not([data-workspace-id="{previous_slot_id}"]):not([data-project-id="{previous_slot_id}"])'
-                )
-                expect(moved_slot).to_have_count(1)
-            if target.get_attribute("data-sidebar-drop-target") == "true":
+            for _wait in range(40):
+                if self._drag_snapshot(item) != before:
+                    break
+                self._page.wait_for_timeout(50)
+            if self._has_drag_reached_target(item, target, direction):
                 break
         else:
             raise AssertionError(
@@ -156,18 +153,41 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         # keeps callers from racing their order assertions against the commit.
         expect(item).not_to_have_attribute("data-sidebar-dragging", "true")
 
+    def _drag_snapshot(self, item: Locator) -> tuple[str | None, float | None]:
+        """Everything an arrow press can observably change, for press confirmation.
+
+        The lit slot's identity (rows stamp data-workspace-id, group headers
+        data-project-id) and the dragged row's own position (the strategy
+        transforms the placeholder toward the targeted slot; display-driven
+        presses move it in real layout).
+        """
+        lit_slot = self._page.locator('[data-sidebar-drop-target="true"]')
+        slot_id = None
+        if lit_slot.count() == 1:
+            slot_id = lit_slot.get_attribute("data-workspace-id") or lit_slot.get_attribute("data-project-id")
+        box = item.bounding_box()
+        return (slot_id, None if box is None else round(box["y"]))
+
+    def _has_drag_reached_target(self, item: Locator, target: Locator, direction: str) -> bool:
+        """Whether the parked drag has arrived at ``target``'s slot (either preview regime)."""
+        if target.get_attribute("data-sidebar-drop-target") == "true":
+            return True
+        item_box = item.bounding_box()
+        target_box = target.bounding_box()
+        if item_box is None or target_box is None:
+            return False
+        return item_box["y"] > target_box["y"] if direction == "down" else item_box["y"] < target_box["y"]
+
     def drag_workspace_into_group_via_keyboard(self, item: Locator, group_card: Locator, direction: str) -> None:
-        """Drag a workspace row from outside a group onto that group's card via
-        the KeyboardSensor.
+        """Drag a workspace row from outside a group into that group via the
+        KeyboardSensor.
 
         The same drive as ``reorder_via_keyboard_drag`` (pickup, one arrow per
-        droppable slot, Space to drop), but the stop condition is the card's
-        membership drop affordance: ``group_card`` stamps ``data-drop-active``
-        while an outside row's drag hovers any part of it (the card body, a
-        member row, or its dashed drop slot), and dropping on any of those adds
-        the dragged workspace to the group. Watching the card instead of one
-        specific slot keeps the drive agnostic to which of the three droppables
-        the arrow lands on.
+        slot, Space to drop), but the stop condition is the group's membership
+        affordance: ``group_card`` stamps ``data-drop-active`` while the active
+        drag's projected drop would land inside the group, and it stays lit for
+        as long as the projection holds — so watching the card is agnostic to
+        which slot inside the run the arrow reached.
         """
         self.pickup_via_keyboard(item)
 
@@ -309,14 +329,14 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
 
     # -- Workspace-group cards --
     #
-    # A workspace group (the experimental workspace-groups feature) renders as
-    # an accent-tinted card nested inside its repo section: a header (chevron +
-    # color swatch + name + hover "⋯" menu trigger) wrapping the member
-    # workspace rows, which are ordinary ``SIDEBAR_WORKSPACE_ROW`` elements.
-    # The card stamps its identity and state as data attributes
-    # (``data-group-id``, ``data-accent-color``, ``data-collapsed``,
-    # ``data-drop-active``), so tests assert state through attributes rather
-    # than styles.
+    # A workspace group (the experimental workspace-groups feature) renders
+    # Dia-style inside its repo section: a header row (chevron + color swatch +
+    # name + hover "⋯" menu trigger) with the member workspace rows — ordinary
+    # ``SIDEBAR_WORKSPACE_ROW`` elements — indented beneath it. The wrapper
+    # "card" element paints the hover/drop container surface and stamps the
+    # group's identity and state as data attributes (``data-group-id``,
+    # ``data-accent-color``, ``data-collapsed``, ``data-drop-active``), so
+    # tests assert state through attributes rather than styles.
 
     def get_group_cards(self) -> Locator:
         return self.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_GROUP_CARD)

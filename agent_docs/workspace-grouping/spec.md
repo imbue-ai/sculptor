@@ -3,10 +3,17 @@
 ## Mocks
 
 See [mocks.html](./mocks.html) for interactive HTML mocks illustrating
-the user flows described below (Variant B — tinted container — is the
-chosen direction and default tab; Variants A and C are kept as an
+the user flows described below (Variant B — tinted container — was the
+direction chosen during mocking; Variants A and C are kept as an
 exploration record). [mocks.context.md](./mocks.context.md) records the
 mock session's decisions and rejected alternatives.
+
+After hands-on comparison against Dia's tab groups, the visual and
+drag-and-drop direction moved past Variant B to Dia's flat presentation:
+groups render as a header row plus indented member rows in one
+continuous list, with the container surface materializing on hover and
+during drags rather than as an always-visible card (REQ-UI-1, and the
+"Drag and drop" section below).
 
 ## Overview
 
@@ -33,8 +40,8 @@ users opt in.
 ### Create a group from a workspace
 
 User right-clicks a workspace row in the sidebar and picks **New group
-from workspace**. A rounded, accent-tinted group card appears in place,
-wrapping that workspace (REQ-MENU-2, REQ-UI-1). The group gets an
+from workspace**. A group header row appears in place with the
+workspace indented beneath it (REQ-MENU-2, REQ-UI-1). The group gets an
 indexed default name ("Group 1", "Group 2", …) and the next color from
 the curated palette (REQ-GROUP-6, REQ-GROUP-7); the user renames it via
 the group menu whenever they like.
@@ -48,15 +55,17 @@ workspace into that group's card.
 
 ### Drag a workspace into / out of / within a group
 
-With sidebar drag-and-drop landed (PR #309, SCU-1702), the
-user drags a loose workspace onto a group card; the card lights up with
-an accent ring, stronger tint, and a dashed drop slot, and the drop adds
-the workspace as a member (REQ-DND-1). Dragging a member out into the
-loose list releases it from the group without deleting anything
-(REQ-DND-3) — and if it was the last member, the group dissolves
-(REQ-GROUP-8). Dragging within the group reorders members via an
-insertion line (REQ-DND-2). The whole group card is itself draggable to
-re-order it among the repo section's children (REQ-DND-4).
+The user picks up a workspace row and a floating copy follows the
+pointer freely while the rows beneath part to open a real gap at the
+position the drop would take (REQ-DND-1, REQ-DND-6). Dragging the gap
+between a group's header and its members joins the group at that spot;
+the group's container surface wraps the gap so it always reads as
+inside (REQ-DND-1). Dragging the gap out to a loose position releases
+the membership (REQ-DND-3) — and if it was the last member, the group
+dissolves (REQ-GROUP-8). Dropping commits instantly (REQ-DND-7).
+Dragging within the group reorders members with the same gap preview
+(REQ-DND-2). The whole group is itself draggable as a unit to re-order
+it among the repo section's children (REQ-DND-4).
 
 ### Manage a group from its menu
 
@@ -151,14 +160,17 @@ behaves as if `--no-group` were always passed (REQ-FLAG-4).
 
 ### Sidebar UI
 
-- **REQ-UI-1**: A group MUST render as a rounded, accent-tinted card with
-  a faint colored border wrapping its header and member rows (mock
-  Variant B), nested inside the repo section. Loose workspaces MUST
-  continue to render directly under the repo header alongside groups.
+- **REQ-UI-1**: A group MUST render Dia-style as a header row plus its
+  member rows indented one level deeper than loose rows, in the repo
+  section's single continuous list. At rest the group shows no
+  persistent box; a rounded accent-tinted container surface wrapping
+  the header and members MUST materialize on hover and while a drag
+  targets the group. Loose workspaces MUST continue to render directly
+  under the repo header alongside groups.
 - **REQ-UI-2**: The group header MUST show only a chevron, a color
   swatch, and the name — no workspace count and no group-level
   run/status indicator.
-- **REQ-UI-3**: A collapsed group MUST shrink to its header card only (no
+- **REQ-UI-3**: A collapsed group MUST shrink to its header row only (no
   member preview). Collapse state SHOULD persist across restarts,
   following the existing repo-section collapse pattern.
 - **REQ-UI-4**: Workspace rows inside a group MUST keep their existing
@@ -182,38 +194,58 @@ behaves as if `--no-group` were always passed (REQ-FLAG-4).
 - **REQ-MENU-4**: Selecting a color swatch MUST retint the group
   immediately.
 
-### Drag and drop (extends the landed sidebar reorder model)
+### Drag and drop (the flat-lane model)
 
-Sidebar manual re-ordering landed with PR #309 (SCU-1702). The model
-this feature extends: repo sections and the workspace rows within each
-are separate vertical dnd-kit sortable lists, draggable by pointer and
-by keyboard (focus → Space → arrows → Space); each drop materializes
-the full visible order into `sidebarOrder` in the global layout
-snapshot ("stored-first": stored ids render first, unstored items
-follow alphabetically, stale ids are skipped on read). Landed drags are
-deliberately locked to their parent container — moving a workspace
-*between* containers (loose list ↔ group card) is new interaction
-ground this feature breaks.
+Each repo section is ONE flat vertical sortable lane: loose workspace
+rows, group header rows, and member rows are all siblings of a single
+dnd-kit `SortableContext`, and a group is nothing more than a nesting
+level — membership is *derived from position* (a row sitting between a
+group's header and the end of its member run is in the group). Repo
+sections themselves remain a separate outer sortable list, which is
+what keeps cross-repo drops structurally impossible. Drags work by
+pointer and by keyboard (focus → Space → arrows → Space); each drop
+materializes the full visible order into `sidebarOrder` in the global
+layout snapshot ("stored-first": stored ids render first, unstored
+items follow alphabetically, stale ids are skipped on read).
 
-- **REQ-DND-1**: Dropping a workspace onto a group card MUST add it as a
-  member, with a drop affordance (accent ring, stronger tint, dashed
-  drop slot).
-- **REQ-DND-2**: Members MUST be reorderable within a group via an
-  insertion line. Member visual order persists in the sidebar-order
+- **REQ-DND-1**: Dropping a workspace at a position inside a group's
+  run (between its header and the end of its members) MUST add it as a
+  member at that position. The drop position MUST be previewed by a
+  real gap opening at the projected slot — the same preview whether the
+  drop is a reorder, a join, or a release; there are no separate drop
+  zones or labels. The dragged row itself MUST follow the pointer
+  freely as a floating copy (no axis lock, no container clamp).
+- **REQ-DND-2**: Members MUST be reorderable within a group with the
+  same gap preview. Member visual order persists in the sidebar-order
   layout snapshot following the landed stored-first convention — the
   backend owns *membership*, the frontend layout owns *visual order*
   (`sculpt group show` lists members without implying sidebar order).
-- **REQ-DND-3**: Dragging a member out of the group into the loose list
-  MUST release its membership and MUST NOT delete the workspace (last
-  member out dissolves the group per REQ-GROUP-8).
-- **REQ-DND-4**: A group MUST be draggable as a single unit, and groups
-  MUST participate in the manual sidebar ordering exactly like loose
-  workspace rows — a repo section's children (group cards + loose
-  workspaces) form one re-orderable lane with no forced groups-first
-  placement.
+- **REQ-DND-3**: Dragging a member out of the group's run to a loose
+  position MUST release its membership and MUST NOT delete the
+  workspace (last member out dissolves the group per REQ-GROUP-8).
+- **REQ-DND-4**: A group MUST be draggable as a single unit by its
+  header (members collapse into the drag), and groups MUST participate
+  in the manual sidebar ordering exactly like loose workspace rows —
+  one lane, no forced groups-first placement. Groups MUST NOT nest.
 - **REQ-DND-5**: Group-membership drags MUST NOT regress the landed
   same-list reorder interactions, and SHOULD be operable through the
   landed keyboard drag path as well as by pointer.
+- **REQ-DND-6**: The one geometrically ambiguous slot — immediately
+  after a group's last member, which is also immediately after the
+  group — MUST default to *inside* the group (reading order), and the
+  user MUST be able to flip it to *outside*: by pointer, horizontal
+  position decides (pointer left of the member indent reads as
+  outside); by keyboard, Left/Right arrows flip the projected depth.
+  The live preview MUST always show the truth — the group's container
+  surface wraps the gap exactly when the drop would land inside — so
+  the drop can never surprise. Dropping onto a *collapsed* group's
+  header appends to the group (its members can't show a gap).
+- **REQ-DND-7**: Drops MUST commit instantly. Membership-changing drops
+  apply the membership and order optimistically and reconcile with the
+  server; a rejected mutation rolls the move back and surfaces an error
+  toast (this is the state-ownership "real failure path", REQ-GROUP-9 —
+  not a fire-and-forget write). A drop must never visibly snap back to
+  its origin and then re-apply when the server confirms.
 
 ### sculpt CLI
 

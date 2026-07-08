@@ -2,32 +2,38 @@
 // chevron, hover-revealed repository settings, and an always-visible "+" that
 // direct-creates a workspace in this repo, falling back to the new-workspace dialog
 // pre-scoped to the repo when the branch can't be resolved or the create fails),
-// followed by the repo's children while expanded. The children are one mixed,
-// re-orderable lane: loose workspace rows interleaved with workspace-group cards,
-// composed in visible order by sidebarWorkspaceOrder (with the workspace-groups
-// flag off the lane is exactly the workspace rows). Cross-group concerns — building
-// the groups, the shared action list, and the delete confirmation — stay in
-// WorkspaceSidebar and arrive as props; per-group state (collapse, rename) is read
-// from its atoms here.
+// followed by the repo's children while expanded. The children are ONE flat sortable
+// lane (REQ-DND-1): loose workspace rows, group header rows, and member rows are all
+// siblings of a single SortableContext, composed in visible order by
+// sidebarWorkspaceOrder (with the workspace-groups flag off the lane is exactly the
+// workspace rows). Cross-group concerns — building the groups, the shared action
+// list, and the delete confirmation — stay in WorkspaceSidebar and arrive as props.
 //
 // The group is itself a sortable item of WorkspaceSidebar's repo-group DndContext
 // (dragged by its header), and it hosts its OWN DndContext for its children — a
 // workspace belongs to its repo, so scoping the children context per repo section
 // makes cross-repo drops structurally impossible rather than merely rejected.
-// Within the section, though, rows travel BETWEEN containers (the loose lane and
-// the group cards): such a drop is a membership change, so it flips membership
-// through the canonical mutation and only then commits the visual order (see
-// handleSectionDragEnd).
+//
+// Within the section, a drag works Dia-style: a DragOverlay copy follows the
+// pointer freely while the dragged row's in-flow placeholder holds a real gap
+// open at the projected drop position. Where that gap lands — and whether it
+// is inside a group (a membership change) — is computed by the pure projection
+// module (sidebarDropProjection.ts) and drives the rendered order mid-drag:
+// same-parent moves preview via the sortable strategy's transforms, while a
+// projection that crosses a group boundary re-renders the lane so the group's
+// painted container physically wraps the gap (REQ-DND-6). Drops commit
+// instantly — order lanes and the membership mutation apply optimistically,
+// and a server rejection rolls both back with an error toast (REQ-DND-7).
 
-import type { DragEndEvent } from "@dnd-kit/core";
-import { closestCenter, DndContext, useDndContext, useDroppable } from "@dnd-kit/core";
+import type { DragMoveEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/core";
+import { closestCenter, DndContext, DragOverlay, MeasuringStrategy } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Flex, IconButton, Text, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { ChevronDown, ChevronRight, Plus, Settings } from "lucide-react";
 import type { ReactElement } from "react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Workspace } from "~/api";
 import { ElementIds, updateWorkspace } from "~/api";
@@ -46,56 +52,48 @@ import type { WorkspaceAction } from "~/components/CommandPalette/contextActions
 import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCreateWorkspaceFromSidebar.ts";
 import { ToastType } from "~/components/Toast.tsx";
 
-import { adjustSidebarDragCountAtom, collapsedRepoGroupsAtom, isRepoCollapsedAtomFamily } from "./navAtoms.ts";
 import {
-  buildRepoSectionDndModifiers,
-  getSidebarDragData,
-  LOOSE_CONTAINER_ID,
-  REPO_SECTION_RELEASE_SLOT_ID,
-  useSidebarDndSensors,
-} from "./sidebarDnd.ts";
+  adjustSidebarDragCountAtom,
+  collapsedRepoGroupsAtom,
+  collapsedWorkspaceGroupsAtom,
+  isRepoCollapsedAtomFamily,
+} from "./navAtoms.ts";
+import { useSidebarDndSensors } from "./sidebarDnd.ts";
+import { WorkspaceGroupDragPreview, WorkspaceRowDragPreview } from "./sidebarDragPreviews.tsx";
+import type { SectionDepthIntent, SectionProjection, SectionRowProjection } from "./sidebarDropProjection.ts";
+import {
+  applySectionProjection,
+  flatSectionItemIds,
+  locateWorkspaceParent,
+  projectSectionDrop,
+  toggleBoundaryDepth,
+} from "./sidebarDropProjection.ts";
 import styles from "./SidebarRepoGroup.module.scss";
 import type { RepoGroup } from "./sidebarWorkspaceOrder.ts";
-import {
-  commitWorkspaceMembershipOrderAtom,
-  reorderSidebarRepoChildAtom,
-  reorderWorkspaceGroupMemberAtom,
-} from "./sidebarWorkspaceOrder.ts";
+import { commitSectionDropAtom, restoreSectionOrderAtom } from "./sidebarWorkspaceOrder.ts";
 import { SidebarWorkspaceRow } from "./SidebarWorkspaceRow.tsx";
 import { WorkspaceGroupCard } from "./WorkspaceGroupCard.tsx";
-import { repoSectionChildKey } from "./workspaceGroupComposition.ts";
+import type { RepoSectionChild } from "./workspaceGroupComposition.ts";
 
-/**
- * The dashed "Drop to remove from group" slot at the end of the section's
- * children while a member row is dragged. It is the release drop target that
- * always exists (loose rows are targets too, but there may be none) and the
- * only way to drop a released row at the END of the lane (dropping on a loose
- * row inserts before it). Tinted in the dragged member's group color via the
- * accent stamp. Mounted for the whole drag, like the group cards' drop slots.
- */
-const RepoSectionReleaseSlot = (): ReactElement | null => {
-  const { active } = useDndContext();
-  const activeData = getSidebarDragData(active ?? null);
-  const isMemberDragActive = activeData?.sidebarKind === "workspace" && activeData.containerId !== LOOSE_CONTAINER_ID;
-  const { setNodeRef, isOver } = useDroppable({
-    id: REPO_SECTION_RELEASE_SLOT_ID,
-    disabled: !isMemberDragActive,
-    data: { sidebarKind: "release-slot" },
-  });
-  if (!isMemberDragActive) {
-    return null;
-  }
-  return (
-    <div
-      ref={setNodeRef}
-      className={styles.releaseSlot}
-      data-accent-color={activeData.accentColor}
-      data-testid={ElementIds.SIDEBAR_WORKSPACE_GROUP_RELEASE_SLOT}
-      data-drop-active={isOver ? "true" : undefined}
-    >
-      Drop to remove from group
-    </div>
-  );
+// Pointer x-position (relative to the section's left edge) below which the
+// depth intent at a tail-of-group boundary reads as "outside" (REQ-DND-6).
+// Sits between the loose-row indent and the member-row indent, so holding the
+// pointer where loose rows live pulls the row out, and holding it over the
+// member text keeps it in.
+const DEPTH_INTENT_THRESHOLD_PX = 32;
+
+// One in-flight drag within the section's flat lane. `display` is the children
+// tree the lane currently renders (cross-parent projections are applied to it
+// mid-drag); `pending` is a projection previewed by transforms only (same-
+// parent moves, collapsed-header appends) that the drop applies.
+type SectionDragState = {
+  activeId: string;
+  kind: "row" | "group";
+  /** The group the row belonged to at pickup; the drop diffs against it to flip membership. */
+  startParentGroupId: string | null;
+  display: ReadonlyArray<RepoSectionChild>;
+  pending: SectionProjection | null;
+  depthIntent: SectionDepthIntent;
 };
 
 type SidebarRepoGroupProps = {
@@ -128,27 +126,42 @@ export const SidebarRepoGroup = ({
   // External atoms
   const isRepoCollapsed = useAtomValue(isRepoCollapsedAtomFamily(group.projectId));
   const setCollapsedRepos = useSetAtom(collapsedRepoGroupsAtom);
+  const collapsedGroups = useAtomValue(collapsedWorkspaceGroupsAtom);
   const setRenameErrorToast = useSetAtom(workspaceRenameErrorToastAtom);
   const setGroupErrorToast = useSetAtom(workspaceGroupErrorToastAtom);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useAtom(renamingWorkspaceIdAtom);
   const { createFromSidebar, isCreating } = useCreateWorkspaceFromSidebar();
   const adjustDragCount = useSetAtom(adjustSidebarDragCountAtom);
-  const reorderRepoChild = useSetAtom(reorderSidebarRepoChildAtom);
-  const reorderGroupMember = useSetAtom(reorderWorkspaceGroupMemberAtom);
-  const commitMembershipOrder = useSetAtom(commitWorkspaceMembershipOrderAtom);
+  const commitSectionDrop = useSetAtom(commitSectionDropAtom);
+  const restoreSectionOrder = useSetAtom(restoreSectionOrderAtom);
   const store = useStore();
 
+  const collapsedGroupIds = useMemo(
+    () => new Set(Object.keys(collapsedGroups).filter((id) => collapsedGroups[id])),
+    [collapsedGroups],
+  );
+
   // Membership is a backend fact: a drop that moves a row into or out of a
-  // group goes through these mutations, and the order lanes are only written
-  // once the server confirms (see handleSectionDragEnd).
+  // group flips it through these mutations. The flip is optimistic (the hooks
+  // snapshot and roll back the workspace), so the drop lands instantly and a
+  // rejection restores both the membership and — via the drag handler's
+  // onError below — the order lanes (REQ-DND-7).
   const { mutate: addGroupMember } = useAddWorkspaceGroupMemberMutation();
   const { mutate: removeGroupMember } = useRemoveWorkspaceGroupMemberMutation();
 
-  // Whether the in-flight sidebar drag was started by THIS group's children
-  // context. Every drag context adjusts the shared drag count, so
-  // end/cancel/cleanup must only decrement for a drag they own — an unowning
-  // cleanup (collapsing a different group mid-drag) would otherwise release
-  // another context's drag.
+  // The in-flight drag owned by THIS section's context. State drives the
+  // rendered lane; the ref lets sensor/handler callbacks read the latest drag
+  // without re-subscribing mid-drag.
+  const [dragState, setDragState] = useState<SectionDragState | null>(null);
+  const dragStateRef = useRef<SectionDragState | null>(null);
+  const updateDragState = useCallback((next: SectionDragState | null): void => {
+    dragStateRef.current = next;
+    setDragState(next);
+  }, []);
+
+  // Every drag context adjusts the shared drag count, so end/cancel/cleanup
+  // must only decrement for a drag they own — an unowning cleanup (collapsing
+  // a different repo mid-drag) would otherwise release another context's drag.
   const ownsActiveDragRef = useRef(false);
   const beginOwnedDrag = useCallback((): void => {
     if (!ownsActiveDragRef.current) {
@@ -182,14 +195,212 @@ export const SidebarRepoGroup = ({
     isOver: isGroupOver,
   } = useSortable({ id: group.projectId });
 
-  // The children's own drag context; see the module comment for why it lives
-  // per repo section. Its modifiers clamp a dragged child to the children box
-  // (measured live), which is what lets a row cross between the loose lane and
-  // the group cards without ever leaving its repo section.
-  const rowDndSensors = useSidebarDndSensors();
   const sectionChildrenRef = useRef<HTMLDivElement | null>(null);
-  // eslint-disable-next-line react-hooks/refs -- the modifier factory only closes over the ref; .current is read inside the modifier, which dnd-kit invokes on drag moves (event time), never during render.
-  const sectionDndModifiers = useMemo(() => buildRepoSectionDndModifiers(sectionChildrenRef), []);
+
+  // Fold a projection into the drag state: a row projection that crosses a
+  // group boundary — a parent change, or the ambiguous tail-of-group slot —
+  // re-renders the lane so the gap is real layout and the group's painted
+  // container physically wraps it exactly when the drop would land inside
+  // (REQ-DND-6; a transform preview can't grow the container, so a
+  // tail-slot gap would read as outside while dropping inside). Everything
+  // else previews via transforms and is applied at the drop.
+  const acceptProjection = useCallback(
+    (state: SectionDragState, projection: SectionProjection | null, depthIntent: SectionDepthIntent): void => {
+      if (projection === null) {
+        if (depthIntent !== state.depthIntent) {
+          updateDragState({ ...state, depthIntent });
+        }
+        return;
+      }
+
+      if (projection.kind === "row") {
+        const currentParent = locateWorkspaceParent(state.display, state.activeId);
+        if (projection.parentGroupId !== currentParent || projection.isBoundary) {
+          updateDragState({
+            ...state,
+            display: applySectionProjection(state.display, projection),
+            pending: null,
+            depthIntent,
+          });
+          return;
+        }
+      }
+      updateDragState({ ...state, pending: projection, depthIntent });
+    },
+    [updateDragState],
+  );
+
+  const handleSectionDragStart = useCallback(
+    (event: DragStartEvent): void => {
+      beginOwnedDrag();
+      const activeId = String(event.active.id);
+      const isGroupHeader = group.children.some((child) => child.kind === "group" && child.group.objectId === activeId);
+      updateDragState({
+        activeId,
+        kind: isGroupHeader ? "group" : "row",
+        startParentGroupId: locateWorkspaceParent(group.children, activeId),
+        display: group.children,
+        pending: null,
+        depthIntent: "inside",
+      });
+    },
+    [beginOwnedDrag, group.children, updateDragState],
+  );
+
+  const handleSectionDragOver = useCallback(
+    (event: DragOverEvent): void => {
+      const state = dragStateRef.current;
+      if (state === null || event.over === null) {
+        // over == null means the pointer rests outside every target: keep the
+        // last preview — the drop must land where the gap shows.
+        return;
+      }
+      const overId = String(event.over.id);
+      if (overId === state.activeId) {
+        // The drag returned to its own placeholder: the visual (transforms
+        // reset, the row back in its slot) says "drop here", so a stale
+        // pending preview must not out-vote it.
+        if (state.pending !== null) {
+          updateDragState({ ...state, pending: null });
+        }
+        return;
+      }
+      const projection = projectSectionDrop({
+        children: state.display,
+        collapsedGroupIds,
+        activeId: state.activeId,
+        overId,
+        depthIntent: state.depthIntent,
+      });
+      acceptProjection(state, projection, state.depthIntent);
+    },
+    [collapsedGroupIds, acceptProjection, updateDragState],
+  );
+
+  // A depth-intent change with no new over target (pointer crossing the member
+  // indent while parked at a boundary, or a Left/Right arrow press): flip the
+  // projected side of the tail boundary directly (REQ-DND-6).
+  const applyDepthIntent = useCallback(
+    (intent: SectionDepthIntent): void => {
+      const state = dragStateRef.current;
+      if (state === null || state.kind !== "row" || state.depthIntent === intent) {
+        return;
+      }
+      const pendingRow: SectionRowProjection | null = state.pending?.kind === "row" ? state.pending : null;
+      const projection = toggleBoundaryDepth(state.display, collapsedGroupIds, state.activeId, intent, pendingRow);
+      acceptProjection(state, projection, intent);
+    },
+    [collapsedGroupIds, acceptProjection],
+  );
+
+  const handleSectionDragMove = useCallback(
+    (event: DragMoveEvent): void => {
+      const bounds = sectionChildrenRef.current?.getBoundingClientRect();
+      const activator = event.activatorEvent;
+      // Keyboard drags flip depth via Left/Right (see useSidebarDndSensors);
+      // only pointer drags carry a live x-position.
+      if (bounds === undefined || !(activator instanceof PointerEvent)) {
+        return;
+      }
+      const pointerX = activator.clientX + event.delta.x;
+      applyDepthIntent(pointerX - bounds.left < DEPTH_INTENT_THRESHOLD_PX ? "outside" : "inside");
+    },
+    [applyDepthIntent],
+  );
+
+  const resetSectionDrag = useCallback((): void => {
+    endOwnedDrag();
+    updateDragState(null);
+  }, [endOwnedDrag, updateDragState]);
+
+  // Commit the drop: materialize the final tree into the order lanes and, when
+  // the row's group changed, flip membership through the canonical mutation.
+  // Both writes are optimistic; the mutation's onError restores the lanes (the
+  // hook itself restores the membership flip) and surfaces a toast. The drop
+  // event's own `over` is deliberately unused: it goes null whenever the
+  // pointer rests outside any target, but the drop must land at the last
+  // previewed gap — exactly what the drag state holds.
+  const handleSectionDragEnd = useCallback((): void => {
+    const state = dragStateRef.current;
+    resetSectionDrag();
+    if (state === null) {
+      return;
+    }
+    const final = state.pending === null ? state.display : applySectionProjection(state.display, state.pending);
+    if (final === group.children) {
+      // Reference-untouched: the drag never accepted a projection.
+      return;
+    }
+
+    const findWorkspaceName = (workspaceId: string): string => {
+      const workspace = store.get(workspaceAtomFamily(workspaceId));
+      return workspace?.description ?? "workspace";
+    };
+
+    const findGroupName = (groupId: string): string => {
+      const child = final.find((candidate) => candidate.kind === "group" && candidate.group.objectId === groupId);
+      return child?.kind === "group" ? child.group.name : "group";
+    };
+
+    const snapshot = commitSectionDrop({ projectId: group.projectId, children: final });
+    if (state.kind !== "row") {
+      return;
+    }
+    const finalParent = locateWorkspaceParent(final, state.activeId);
+    if (finalParent === state.startParentGroupId) {
+      return;
+    }
+
+    if (finalParent !== null) {
+      // One mutation covers loose→group AND group→group: the backend moves a
+      // workspace that is already in another group, dissolving the source if
+      // that empties it.
+      addGroupMember(
+        { groupId: finalParent, workspaceId: state.activeId },
+        {
+          onError: (): void => {
+            restoreSectionOrder(snapshot);
+            setGroupErrorToast({
+              title: `Failed to move "${findWorkspaceName(state.activeId)}" into "${findGroupName(finalParent)}"`,
+              description: "The workspace was put back where it was. Try again or check your connection.",
+              type: ToastType.ERROR_PROMINENT,
+              action: null,
+            });
+          },
+        },
+      );
+      return;
+    }
+
+    if (state.startParentGroupId !== null) {
+      removeGroupMember(
+        { groupId: state.startParentGroupId, workspaceId: state.activeId },
+        {
+          onError: (): void => {
+            restoreSectionOrder(snapshot);
+            setGroupErrorToast({
+              title: `Failed to remove "${findWorkspaceName(state.activeId)}" from its group`,
+              description: "The workspace was put back where it was. Try again or check your connection.",
+              type: ToastType.ERROR_PROMINENT,
+              action: null,
+            });
+          },
+        },
+      );
+    }
+  }, [
+    resetSectionDrag,
+    group.children,
+    group.projectId,
+    store,
+    commitSectionDrop,
+    restoreSectionOrder,
+    addGroupMember,
+    removeGroupMember,
+    setGroupErrorToast,
+  ]);
+
+  const rowDndSensors = useSidebarDndSensors(applyDepthIntent);
 
   // Functions and callbacks
   const handleToggleCollapsed = (): void => {
@@ -208,170 +419,6 @@ export const SidebarRepoGroup = ({
     groupListeners?.onKeyDown?.(event);
   };
 
-  // Resolve a drop within the section: a reorder inside one container commits
-  // its lane directly; a drop that crosses containers is a membership change,
-  // so it flips membership through the canonical mutation and commits the
-  // destination lane only on success — a rejected drop (409, network) leaves
-  // the lanes untouched, so the order can never claim a membership the server
-  // refused. Classification rides on the drag data every sortable/droppable in
-  // the section registers (see sidebarDnd.ts).
-  const handleSectionDragEnd = useCallback(
-    (event: DragEndEvent): void => {
-      endOwnedDrag();
-      const { active, over } = event;
-      if (over === null || over.id === active.id) {
-        return;
-      }
-      const activeId = String(active.id);
-      const overId = String(over.id);
-      const activeData = getSidebarDragData(active);
-      const overData = getSidebarDragData(over);
-
-      const findWorkspaceName = (workspaceId: string): string => {
-        for (const child of group.children) {
-          if (child.kind === "workspace" && child.workspace.objectId === workspaceId) {
-            return child.workspace.description ?? "workspace";
-          }
-
-          if (child.kind === "group") {
-            const member = child.members.find((candidate) => candidate.objectId === workspaceId);
-            if (member !== undefined) {
-              return member.description ?? "workspace";
-            }
-          }
-        }
-        return "workspace";
-      };
-
-      const findGroupName = (groupId: string): string => {
-        const child = group.children.find(
-          (candidate) => candidate.kind === "group" && candidate.group.objectId === groupId,
-        );
-        return child?.kind === "group" ? child.group.name : "group";
-      };
-
-      const moveIntoGroup = (workspaceId: string, groupId: string, beforeWorkspaceId: string | undefined): void => {
-        // One mutation covers loose→group AND group→group: the backend moves a
-        // workspace that is already in another group, dissolving the source if
-        // that empties it.
-        addGroupMember(
-          { groupId, workspaceId },
-          {
-            onSuccess: (): void =>
-              commitMembershipOrder({
-                projectId: group.projectId,
-                workspaceId,
-                target: { kind: "group", groupId, beforeWorkspaceId },
-              }),
-            onError: (): void =>
-              setGroupErrorToast({
-                title: `Failed to move "${findWorkspaceName(workspaceId)}" into "${findGroupName(groupId)}"`,
-                description: "The workspace was left where it was. Try again or check your connection.",
-                type: ToastType.ERROR_PROMINENT,
-                action: null,
-              }),
-          },
-        );
-      };
-
-      const releaseFromGroup = (workspaceId: string, groupId: string, beforeChildId: string | undefined): void => {
-        removeGroupMember(
-          { groupId, workspaceId },
-          {
-            onSuccess: (): void =>
-              commitMembershipOrder({
-                projectId: group.projectId,
-                workspaceId,
-                target: { kind: "loose", beforeChildId },
-              }),
-            onError: (): void =>
-              setGroupErrorToast({
-                title: `Failed to remove "${findWorkspaceName(workspaceId)}" from its group`,
-                description: "The workspace was left where it was. Try again or check your connection.",
-                type: ToastType.ERROR_PROMINENT,
-                action: null,
-              }),
-          },
-        );
-      };
-
-      // A group card drags only within the mixed lane. A drop on a member row
-      // or drop slot means the pointer rests inside another card — take that
-      // card's slot in the lane.
-      if (activeData?.sidebarKind === "workspace-group") {
-        const overLaneKey =
-          overData?.sidebarKind === "workspace-group"
-            ? overId
-            : overData?.sidebarKind === "workspace"
-              ? overData.containerId === LOOSE_CONTAINER_ID
-                ? overId
-                : overData.containerId
-              : overData?.sidebarKind === "workspace-group-drop-slot"
-                ? overData.groupId
-                : null;
-        if (overLaneKey !== null && overLaneKey !== activeId) {
-          reorderRepoChild({ projectId: group.projectId, activeChildId: activeId, overChildId: overLaneKey });
-        }
-        return;
-      }
-
-      if (activeData?.sidebarKind !== "workspace") {
-        return;
-      }
-      const sourceContainerId = activeData.containerId;
-
-      if (overData?.sidebarKind === "workspace") {
-        if (overData.containerId === sourceContainerId) {
-          // Same container: a plain reorder of whichever lane both rows share.
-          if (sourceContainerId === LOOSE_CONTAINER_ID) {
-            reorderRepoChild({ projectId: group.projectId, activeChildId: activeId, overChildId: overId });
-          } else {
-            reorderGroupMember({
-              projectId: group.projectId,
-              groupId: sourceContainerId,
-              activeWorkspaceId: activeId,
-              overWorkspaceId: overId,
-            });
-          }
-          return;
-        }
-
-        // Cross-container onto a row: join that row's container, taking its slot.
-        if (overData.containerId === LOOSE_CONTAINER_ID) {
-          releaseFromGroup(activeId, sourceContainerId, overId);
-        } else {
-          moveIntoGroup(activeId, overData.containerId, overId);
-        }
-        return;
-      }
-
-      if (overData?.sidebarKind === "workspace-group" && overId !== sourceContainerId) {
-        moveIntoGroup(activeId, overId, undefined);
-        return;
-      }
-
-      if (overData?.sidebarKind === "workspace-group-drop-slot" && overData.groupId !== sourceContainerId) {
-        moveIntoGroup(activeId, overData.groupId, undefined);
-        return;
-      }
-
-      if (overData?.sidebarKind === "release-slot" && sourceContainerId !== LOOSE_CONTAINER_ID) {
-        releaseFromGroup(activeId, sourceContainerId, undefined);
-      }
-    },
-    [
-      endOwnedDrag,
-      group.projectId,
-      group.children,
-      reorderRepoChild,
-      reorderGroupMember,
-      commitMembershipOrder,
-      addGroupMember,
-      removeGroupMember,
-      setGroupErrorToast,
-    ],
-  );
-
   // dnd-kit does not fire onDragCancel when its context unmounts (see
   // PanelDndProvider), and the children's context unmounts whenever the group
   // collapses — which can happen mid-drag (a keyboard drag is parked while the
@@ -381,7 +428,12 @@ export const SidebarRepoGroup = ({
     if (isRepoCollapsed) {
       return undefined;
     }
-    return endOwnedDrag;
+
+    return (): void => {
+      endOwnedDrag();
+      dragStateRef.current = null;
+      setDragState(null);
+    };
   }, [isRepoCollapsed, endOwnedDrag]);
 
   // Reference-stable (the rows are memoized on their props): the rename
@@ -421,12 +473,73 @@ export const SidebarRepoGroup = ({
   }, [setRenamingWorkspaceId]);
 
   // JSX and rendering logic
+  const displayChildren = dragState?.display ?? group.children;
+  const draggingGroupId = dragState?.kind === "group" ? dragState.activeId : undefined;
+  const flatItemIds = useMemo(
+    () => flatSectionItemIds(displayChildren, collapsedGroupIds, draggingGroupId),
+    [displayChildren, collapsedGroupIds, draggingGroupId],
+  );
+
+  // The group whose container surface should light up because the active row
+  // would land inside it: the applied display position, or a pending
+  // collapsed-header append (REQ-DND-1/6).
+  const projectedTargetGroupId = useMemo((): string | null => {
+    if (dragState === null || dragState.kind !== "row") {
+      return null;
+    }
+
+    if (dragState.pending !== null && dragState.pending.kind !== "group") {
+      return dragState.pending.parentGroupId;
+    }
+    return locateWorkspaceParent(dragState.display, dragState.activeId);
+  }, [dragState]);
+  // Its accent color, so the overlay card can tint while the drop is inside.
+  const projectedTargetGroupColor = useMemo((): string | undefined => {
+    if (projectedTargetGroupId === null) {
+      return undefined;
+    }
+    const child = displayChildren.find(
+      (candidate) => candidate.kind === "group" && candidate.group.objectId === projectedTargetGroupId,
+    );
+    return child?.kind === "group" ? child.group.color : undefined;
+  }, [projectedTargetGroupId, displayChildren]);
+
+  // The dragged entities for the overlay previews, resolved from the display tree.
+  const overlayRowWorkspace = useMemo((): Workspace | null => {
+    if (dragState === null || dragState.kind !== "row") {
+      return null;
+    }
+
+    for (const child of dragState.display) {
+      if (child.kind === "workspace" && child.workspace.objectId === dragState.activeId) {
+        return child.workspace;
+      }
+
+      if (child.kind === "group") {
+        const member = child.members.find((candidate) => candidate.objectId === dragState.activeId);
+        if (member !== undefined) {
+          return member;
+        }
+      }
+    }
+    return null;
+  }, [dragState]);
+  const overlayGroupChild = useMemo(() => {
+    if (dragState === null || dragState.kind !== "group") {
+      return null;
+    }
+    const child = dragState.display.find(
+      (candidate) => candidate.kind === "group" && candidate.group.objectId === dragState.activeId,
+    );
+    return child?.kind === "group" ? child : null;
+  }, [dragState]);
+
   const Chevron = isRepoCollapsed ? ChevronRight : ChevronDown;
 
   return (
     <div
       ref={setGroupNodeRef}
-      className={`${styles.repoGroup} ${isGroupDragging ? styles.rowDragging : ""}`}
+      className={`${styles.repoGroup} ${isGroupDragging ? styles.repoGroupDragging : ""}`}
       style={{ transform: CSS.Translate.toString(groupTransform), transition: groupTransition }}
     >
       <div className={styles.repoHeader}>
@@ -493,21 +606,22 @@ export const SidebarRepoGroup = ({
         </Text>
       )}
       {!isRepoCollapsed && group.children.length > 0 && (
-        // The children get their own container (rather than sitting directly in
-        // the group) so the section modifiers clamp a dragged child to the
-        // children's extent — a row slides across the loose rows and the group
-        // cards but never up over the repo header or out of the section.
         <div ref={sectionChildrenRef} className={styles.repoRows}>
           <DndContext
             sensors={rowDndSensors}
             collisionDetection={closestCenter}
-            modifiers={sectionDndModifiers}
-            onDragStart={beginOwnedDrag}
+            // Cross-parent projections change the lane's real layout mid-drag
+            // (a group's container grows around the gap), so droppable rects
+            // must be re-measured continuously, not just at drag start.
+            measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+            onDragStart={handleSectionDragStart}
+            onDragOver={handleSectionDragOver}
+            onDragMove={handleSectionDragMove}
             onDragEnd={handleSectionDragEnd}
-            onDragCancel={endOwnedDrag}
+            onDragCancel={resetSectionDrag}
           >
-            <SortableContext items={group.children.map(repoSectionChildKey)} strategy={verticalListSortingStrategy}>
-              {group.children.map((child) =>
+            <SortableContext items={flatItemIds} strategy={verticalListSortingStrategy}>
+              {displayChildren.map((child) =>
                 child.kind === "workspace" ? (
                   <SidebarWorkspaceRow
                     key={child.workspace.objectId}
@@ -528,6 +642,7 @@ export const SidebarRepoGroup = ({
                     key={child.group.objectId}
                     group={child.group}
                     members={child.members}
+                    isProjectedTarget={projectedTargetGroupId === child.group.objectId}
                     actions={actions}
                     openInRuntime={openInRuntime}
                     destructiveColor={dangerColor}
@@ -542,7 +657,16 @@ export const SidebarRepoGroup = ({
                 ),
               )}
             </SortableContext>
-            <RepoSectionReleaseSlot />
+            <DragOverlay>
+              {overlayRowWorkspace !== null ? (
+                <WorkspaceRowDragPreview
+                  workspace={overlayRowWorkspace}
+                  projectedGroupAccent={projectedTargetGroupColor}
+                />
+              ) : overlayGroupChild !== null ? (
+                <WorkspaceGroupDragPreview group={overlayGroupChild.group} members={overlayGroupChild.members} />
+              ) : null}
+            </DragOverlay>
           </DndContext>
         </div>
       )}

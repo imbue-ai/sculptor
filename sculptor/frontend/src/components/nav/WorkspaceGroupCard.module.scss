@@ -1,74 +1,65 @@
-// Workspace-group card styling. The card element stamps the group's color as
-// data-accent-color, so every accent token below resolves to that group's
-// Radix scale — the tint, border, name, and swatch all follow one attribute.
+// Workspace-group run styling, Dia-style (REQ-UI-1). The wrapper stamps the
+// group's color as data-accent-color, so every accent token below resolves to
+// that group's Radix scale — the surface, name, and swatch all follow one
+// attribute.
 
+// At rest the run is chrome-less — a header row plus indented member rows in
+// the section's flat lane, no persistent box. The container surface
+// materializes on hover and (stronger, ringed) while a drag's projected drop
+// would land inside the group. Because the wrapper is real layout, that
+// surface physically wraps the mid-drag drop gap, which is what makes inside
+// vs outside read unambiguously (REQ-DND-6).
 .groupCard {
-  // Alpha steps composite over the sidebar surface: a3 for the subtle tint,
-  // a6 for the faint colored border (the Radix border step).
-  background: var(--accent-a3);
-  border: 1px solid var(--accent-a6);
-  border-radius: var(--radius-4);
+  background: transparent;
+  border-radius: var(--radius-3);
   display: flex;
   flex-direction: column;
   gap: 2px;
-  // Breathing room below the card so the tinted border doesn't sit flush
-  // against the next card or loose row (the section's own gap is only 2px).
-  margin-bottom: var(--space-1);
-  padding: var(--space-1);
+  transition: background-color var(--duration-fast) ease;
+
+  &:hover {
+    background: var(--accent-a2);
+  }
 }
 
-// The card while a workspace drag hovers it (the drop would add the row to the
-// group): an accent ring plus a stronger tint light the whole card up as the
-// target. Ring via box-shadow so the highlight never affects layout — droppable
+// The run while the active drag would drop inside it: surface plus an accent
+// ring. Ring via box-shadow so the highlight never affects layout — droppable
 // rects are measured mid-drag and must stay stable.
-.dropActive {
-  background: var(--accent-a4);
-  border-color: var(--accent-a8);
-  box-shadow: 0 0 0 1px var(--accent-a8);
+.dropActive,
+.dropActive:hover {
+  background: var(--accent-a3);
+  box-shadow: 0 0 0 1px var(--accent-a7);
 }
 
-// The card mid-drag (sorted within the repo section's mixed lane). There is no
-// floating overlay copy — the card itself slides with the cursor — so it is
-// lifted above its siblings with a SOLID surface (the resting tint is an alpha
-// step that rows underneath would show through); the shadow carries the
-// "picked up" read. Mirrors .rowDragging in SidebarRepoGroup.module.scss.
-.cardDragging {
-  background: var(--accent-2);
-  box-shadow: var(--shadow-4);
-  position: relative;
-  z-index: var(--z-above);
+// While ANY sidebar drag is in flight, the run's own hover surface is
+// suppressed (the pointer sweeps across runs constantly): only the projected
+// drop target above may light up.
+[data-sidebar-drag-active] .groupCard:not(.dropActive):hover {
+  background: transparent;
+}
 
-  // The dragged card keeps keyboard focus for the whole drag (the sensor
-  // listens on it); the elevation is the drag indicator, so the focus ring
-  // riding along only adds noise.
+// The run mid-drag (its header is the dragged item): the members are unmounted
+// and the visible dragged card is the section's DragOverlay copy, so what
+// remains in the flow is an invisible placeholder holding the drop gap open.
+// Mirrors .rowDragging in SidebarRepoGroup.module.scss.
+.cardDragging {
+  opacity: 0%;
+
   :focus-visible {
     outline: none;
   }
 }
 
-// The dashed "drop to add to group" placeholder row at the end of the member
-// rows while an eligible workspace drag is in flight; dropping on it appends
-// the workspace to this group.
-.dropSlot {
-  align-items: center;
-  border: 1px dashed var(--accent-a8);
-  border-radius: var(--radius-2);
-  color: var(--accent-11);
-  display: flex;
-  font-size: var(--font-size-1);
-  min-height: 28px;
-  padding: 0 var(--space-2) 0 var(--space-5);
-}
-
-// Same pill geometry as the repo header / workspace rows so the rail's row
-// rhythm carries into the card.
+// Same pill geometry as the workspace rows so the rail's row rhythm carries
+// through; the header indents like a loose row (its members sit one level
+// deeper, see .workspaceRowNested).
 .groupHeader {
   align-items: center;
   border-radius: var(--radius-2);
   display: flex;
   gap: var(--space-1);
   min-height: 28px;
-  padding: 0 var(--space-2);
+  padding: 0 var(--space-2) 0 var(--space-5);
 
   &:hover {
     background: var(--accent-a4);
