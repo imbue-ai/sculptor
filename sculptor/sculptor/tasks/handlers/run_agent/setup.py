@@ -1,26 +1,19 @@
 import time
 from contextlib import contextmanager
 from queue import Queue
-from threading import Thread
 from typing import Generator
 from typing import cast
 
 from loguru import logger
 
-from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Project
 from sculptor.database.models import Task
-from sculptor.foundation.async_monkey_patches import log_exception
-from sculptor.foundation.concurrency_group import ConcurrencyGroup
-from sculptor.foundation.constants import ExceptionPriority
 from sculptor.foundation.errors import ImbueError
 from sculptor.foundation.event_utils import ReadOnlyEvent
 from sculptor.foundation.nested_evolver import assign
 from sculptor.foundation.nested_evolver import chill
 from sculptor.foundation.nested_evolver import evolver
-from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
-from sculptor.foundation.progress_tracking.progress_tracking import start_finish_context
 from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
 from sculptor.interfaces.agents.agent import PersistentUserMessageUnion
 from sculptor.interfaces.agents.agent import RequestStoppedAgentMessage
@@ -30,8 +23,6 @@ from sculptor.interfaces.agents.agent import StopAgentUserMessage
 from sculptor.interfaces.agents.agent import UserMessageUnion
 from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import TaskID
-from sculptor.server.llm_content_generation import TaskTitle
-from sculptor.server.llm_content_generation import generate_title_from_prompt
 from sculptor.services.task_service.data_types import ServiceCollectionForTask
 from sculptor.services.task_service.errors import UserPausedTaskError
 from sculptor.state.messages import ChatInputUserMessage
@@ -41,11 +32,6 @@ from sculptor.utils.type_utils import extract_leaf_types
 
 # it will take at most this much time to notice when the process has finished
 _POLL_SECONDS: float = 1.0
-# if it takes longer than this, we give up waiting for the title and branch name to be predicted
-_TITLE_NAME_TIMEOUT_SECONDS: float = 10.0
-# the fallback title is the initial prompt truncated to this many characters
-_FALLBACK_TITLE_MAX_LENGTH: int = 60
-_FIXED_TITLE_COUNTER_FOR_TESTING = 0
 
 
 class LastProcessedMessageNotInQueueError(ImbueError):
@@ -90,141 +76,6 @@ def wait_for_initial_message_and_process_queue(
     re_queued_messages = cast(tuple[PersistentUserMessageUnion, ...], re_queued_messages)
 
     return re_queued_messages, initial_message
-
-
-@contextmanager
-def title_prediction_context(
-    task_state: AgentTaskStateV2,
-    initial_message: ChatInputUserMessage,
-    settings: SculptorSettings,
-    concurrency_group: ConcurrencyGroup,
-    root_progress_handle: RootProgressHandle,
-) -> Generator[tuple[list[TaskTitle], Thread | None], None, None]:
-    """Start title prediction thread if needed."""
-    title_result: list[TaskTitle] = []
-    title_thread = None
-
-    if task_state.title is None:
-        title_thread = concurrency_group.start_new_thread(
-            target=_predict_title,
-            args=(
-                initial_message.text,
-                title_result,
-                settings,
-                concurrency_group,
-                root_progress_handle,
-            ),
-        )
-
-    try:
-        yield title_result, title_thread
-    finally:
-        # Ensure thread is cleaned up if still running
-        if title_thread and title_thread.is_alive():
-            title_thread.join()
-
-
-def finalize_task_setup(
-    task: Task,
-    task_state: AgentTaskStateV2,
-    title_thread: Thread | None,
-    title_result: list[TaskTitle],
-    initial_message: ChatInputUserMessage,
-    services: ServiceCollectionForTask,
-) -> AgentTaskStateV2:
-    """Handle final task setup steps after environment is ready."""
-    if title_thread is not None:
-        # Resolve title prediction
-        task_state = _resolve_title_prediction_thread(
-            title_result=title_result,
-            title_thread=title_thread,
-            task_id=task.object_id,
-            task_state=task_state,
-            initial_message=initial_message,
-            services=services,
-        )
-
-    return task_state
-
-
-def _resolve_title_prediction_thread(
-    title_thread: Thread,
-    title_result: list[TaskTitle],
-    task_id: TaskID,
-    task_state: AgentTaskStateV2,
-    initial_message: ChatInputUserMessage,
-    services: ServiceCollectionForTask,
-) -> AgentTaskStateV2:
-    """
-    Waits (a little while) for the title prediction thread to finish,
-    then saves the title to the database.
-    """
-    title_thread.join(timeout=_TITLE_NAME_TIMEOUT_SECONDS)
-    if title_thread.is_alive() or not title_result:
-        logger.warning("Title prediction thread did not finish in time, using default")
-        title = initial_message.text
-    else:
-        title = title_result[0].title
-
-    # Save the title to the database, but only if the user hasn't already
-    # renamed the agent (which would have set a title via the API).
-    with services.data_model_service.open_task_transaction() as transaction:
-        task_row = transaction.get_task(task_id)
-        assert task_row is not None
-        db_state = AgentTaskStateV2.model_validate(task_row.current_state)
-        if db_state.title is not None:
-            # User already renamed — keep their title.
-            title = db_state.title
-
-        mutable_task_state = evolver(task_state)
-        assign(mutable_task_state.title, lambda: title)
-        task_state = chill(mutable_task_state)
-
-        task_row = task_row.evolve(task_row.ref().current_state, task_state.model_dump())
-        _task_row = transaction.upsert_task(task_row)
-    return task_state
-
-
-def _predict_title(
-    initial_prompt: str,
-    title_result: list[TaskTitle],
-    settings: SculptorSettings,
-    concurrency_group: ConcurrencyGroup,
-    root_progress_handle: RootProgressHandle,
-) -> None:
-    with start_finish_context(root_progress_handle.track_task_title_generation()) as title_generation_handler:
-        if settings.TESTING.INTEGRATION_ENABLED:
-            title = _generate_fixed_title_for_testing()
-            title_result.append(TaskTitle(title=title))
-            title_generation_handler.report_generated_title(title)
-            return
-        try:
-            logger.debug("Generating title for task...")
-            task_title = generate_title_from_prompt(initial_prompt, concurrency_group)
-            logger.debug("Generated title: '{}'", task_title.title)
-            title_result.append(task_title)
-        except Exception as e:
-            log_exception(
-                e,
-                "Failed to generate title",
-                priority=ExceptionPriority.LOW_PRIORITY,
-            )
-            title = (
-                initial_prompt[:_FALLBACK_TITLE_MAX_LENGTH] + "..."
-                if len(initial_prompt) > _FALLBACK_TITLE_MAX_LENGTH
-                else initial_prompt
-            )
-            logger.debug("Generated fallback title: '{}'", title)
-            title_result.append(TaskTitle(title=title))
-        finally:
-            if title_result:
-                title_generation_handler.report_generated_title(title_result[0].title)
-
-
-def _generate_fixed_title_for_testing() -> str:
-    global _FIXED_TITLE_COUNTER_FOR_TESTING
-    _FIXED_TITLE_COUNTER_FOR_TESTING += 1
-    return f"Task {_FIXED_TITLE_COUNTER_FOR_TESTING}"
 
 
 def load_initial_task_state(services: ServiceCollectionForTask, task: Task) -> tuple[AgentTaskStateV2, Project]:

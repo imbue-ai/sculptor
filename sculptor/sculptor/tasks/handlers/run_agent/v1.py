@@ -93,10 +93,8 @@ from sculptor.state.messages import ModelOption
 from sculptor.state.messages import PersistentAgentMessage
 from sculptor.state.messages import PersistentUserMessage
 from sculptor.state.messages import ResponseBlockAgentMessage
-from sculptor.tasks.handlers.run_agent.setup import finalize_task_setup
 from sculptor.tasks.handlers.run_agent.setup import load_initial_task_state
 from sculptor.tasks.handlers.run_agent.setup import message_queue_subscription_context
-from sculptor.tasks.handlers.run_agent.setup import title_prediction_context
 from sculptor.tasks.handlers.run_agent.setup import wait_for_initial_message_and_process_queue
 from sculptor.utils.build import build_sculpt_backend_env
 from sculptor.utils.build import get_sculpt_bin_dir
@@ -240,25 +238,6 @@ def run_agent_task_v1(
                     # from this in-memory copy; re-read so the selection is not lost here.
                     task_state = _refresh_model_fields_from_db(task.object_id, task_state, services)
 
-                    with title_prediction_context(
-                        task_state,
-                        initial_message,
-                        settings,
-                        environment_concurrency_group,
-                        root_progress_handle,
-                    ) as (
-                        title_result,
-                        title_thread,
-                    ):
-                        # Handle git initialization and branch setup
-                        task_state = finalize_task_setup(
-                            task=task,
-                            task_state=task_state,
-                            title_thread=title_thread,
-                            title_result=title_result,
-                            initial_message=initial_message,
-                            services=services,
-                        )
                     setup_duration = time.monotonic() - setup_start_time
                     if setup_duration >= TIMING_LOG_THRESHOLD_SECONDS:
                         logger.debug(format_timing_log("task setup", setup_duration))
@@ -868,9 +847,9 @@ def _eager_fetch_pi_models_into_state(
     task state so the switcher reflects pi's models immediately.
 
     Returns the task state, evolved with the catalog when the probe found one, so
-    the caller carries it forward — otherwise `finalize_task_setup`'s later
-    evolve-and-upsert (from the in-memory state) would write the catalog back
-    out. Restricted to pi: the `supports_model_selection` check skips harnesses
+    the caller carries it forward into agent construction, which reads this
+    in-memory copy rather than re-reading the DB. Restricted to pi: the
+    `supports_model_selection` check skips harnesses
     that cannot select a model at all, and the `PiAgent` check below skips the
     rest — only pi sources a dynamic catalog via the probe (Claude supports model
     selection but with a static built-in list). Best-effort: on any failure the
@@ -1163,8 +1142,8 @@ def _refresh_model_fields_from_db(
     The set_model endpoint writes the selected model straight to task state while the
     agent waits for its first message, so this handler's in-memory copy goes stale.
     Refresh only those two fields (leaving the rest of the in-memory state as-is) so a
-    pre-message switch reaches agent construction and survives `finalize_task_setup`'s
-    write-back. A no-op when nothing changed or the task row is missing.
+    pre-message switch reaches agent construction. A no-op when nothing changed or the
+    task row is missing.
     """
     with services.data_model_service.open_task_transaction() as transaction:
         task_row = transaction.get_task(task_id)

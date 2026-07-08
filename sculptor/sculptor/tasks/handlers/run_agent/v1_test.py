@@ -2,7 +2,6 @@ import threading
 from contextlib import contextmanager
 from pathlib import Path
 from queue import Queue
-from threading import Thread
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -36,7 +35,6 @@ from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import AssistantMessageID
 from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
-from sculptor.server.llm_content_generation import TaskTitle
 from sculptor.services.task_service.data_types import ServiceCollectionForTask
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
     LocalAgentExecutionEnvironment,
@@ -49,7 +47,6 @@ from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
 from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.tasks.handlers.run_agent.setup import _drop_already_processed_messages
-from sculptor.tasks.handlers.run_agent.setup import _resolve_title_prediction_thread
 from sculptor.tasks.handlers.run_agent.setup import load_initial_task_state
 from sculptor.tasks.handlers.run_agent.v1 import AgentPaused
 from sculptor.tasks.handlers.run_agent.v1 import _build_agent_path
@@ -281,62 +278,6 @@ def test_update_task_state_overwrites_renamed_title(
         last_processed_input_message_id=new_message_id,
         task_id=local_task.object_id,
         task_state=in_memory_state,
-        services=services,
-    )
-
-    # Step 4: The renamed title should be preserved, not overwritten.
-    assert _get_task_title(local_task, services) == "Renamed Title"
-
-
-def test_resolve_title_prediction_overwrites_renamed_title(
-    local_task: Task,
-    services: ServiceCollectionForTask,
-) -> None:
-    """_resolve_title_prediction_thread clobbers a title that was renamed via the API.
-
-    Simulates the race condition:
-    1. Agent starts with title=None, kicks off title prediction thread
-    2. User renames the agent to "Renamed Title" (updates DB)
-    3. Title prediction finishes and saves the predicted title, overwriting the rename
-    """
-    workspace_id = WorkspaceID()
-    initial_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        title=None,
-        last_processed_message_id=None,
-    )
-    _set_task_state(local_task, initial_state, services)
-
-    # Step 1: Agent loads state into memory (title=None).
-    in_memory_state = initial_state
-
-    # Step 2: User renames agent via API (directly updating DB).
-    renamed_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        title="Renamed Title",
-        last_processed_message_id=None,
-    )
-    _set_task_state(local_task, renamed_state, services)
-    assert _get_task_title(local_task, services) == "Renamed Title"
-
-    # Step 3: Title prediction thread completes with a predicted title.
-    predicted_title = [TaskTitle(title="Predicted Title")]
-    completed_thread = Thread(target=lambda: None)
-    completed_thread.start()
-    completed_thread.join()
-
-    initial_message = ChatInputUserMessage(
-        message_id=AgentMessageID(),
-        text="Initial prompt",
-        model_name=LLMModel.CLAUDE_4_SONNET,
-    )
-
-    _resolve_title_prediction_thread(
-        title_thread=completed_thread,
-        title_result=predicted_title,
-        task_id=local_task.object_id,
-        task_state=in_memory_state,
-        initial_message=initial_message,
         services=services,
     )
 
