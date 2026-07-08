@@ -11,13 +11,16 @@ import { workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
  * `presetProjectId` is set when the dialog is opened from a repo group's "+" so
  * the form lands on that repo. `initialPrompt` pre-fills the prompt textarea —
  * the home page's first-run auto-open uses it to seed the `/sculptor:help`
- * onboarding prompt. Transient — the modal is ephemeral, so this resets on
+ * onboarding prompt. `firstRun` marks that auto-open: the dialog then renders
+ * non-modally (the rest of the app stays clickable) and is closed again when
+ * the user leaves Home. Transient — the modal is ephemeral, so this resets on
  * reload.
  */
 export type NewWorkspaceModalState = {
   open: boolean;
   presetProjectId?: string;
   initialPrompt?: string;
+  firstRun?: boolean;
 };
 
 export const newWorkspaceModalAtom: PrimitiveAtom<NewWorkspaceModalState> = atom<NewWorkspaceModalState>({

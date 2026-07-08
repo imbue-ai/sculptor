@@ -607,6 +607,10 @@ class ElementIDs(StrEnum):
     SIDEBAR_ADD_REPO_BUTTON = "SIDEBAR_ADD_REPO_BUTTON"
     SIDEBAR_NO_WORKSPACES_HINT = "SIDEBAR_NO_WORKSPACES_HINT"
 
+    # The PaletteDialog shell's dimmed overlay — present only for modal opens
+    # (the first-run auto-opened new-workspace dialog renders without it).
+    PALETTE_DIALOG_OVERLAY = "PALETTE_DIALOG_OVERLAY"
+
     # Workspace header (the simplified top bar above the section grid): branch
     # pill + section collapse/expand toggles + re-homed PR button / diff summary.
     WORKSPACE_HEADER = "WORKSPACE_HEADER"

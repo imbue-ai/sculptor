@@ -45,6 +45,10 @@ export const NewWorkspaceModal = (): ReactElement | undefined => {
       open={modalState.open}
       onOpenChange={handleOpenChange}
       title="New workspace"
+      // The first-run auto-open is an offer, not a gate: it renders without an
+      // overlay so the sidebar and every other affordance stay clickable, and
+      // an open request the user never made can't steal their next click.
+      modal={!modalState.firstRun}
       testId={ElementIds.NEW_WORKSPACE_DIALOG}
     >
       <NewWorkspaceForm

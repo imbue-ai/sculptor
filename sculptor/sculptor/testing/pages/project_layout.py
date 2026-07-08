@@ -124,8 +124,9 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
             # sidebar row (same workspace list) so callers don't race it.
             expect(self.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW).first).to_be_visible()
             # If Home auto-opened the first-run new-workspace dialog before the
-            # create, it stays open (it only closes on its own create/dismiss)
-            # and its overlay would swallow the caller's next click — close it.
+            # create, it stays open (it only closes on its own create/dismiss
+            # or on leaving Home) and its panel would sit over content the
+            # caller interacts with next — close it.
             new_workspace_dialog = self.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)
             if new_workspace_dialog.count() > 0:
                 self._page.keyboard.press("Escape")

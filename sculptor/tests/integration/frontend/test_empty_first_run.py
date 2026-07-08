@@ -3,7 +3,9 @@
 With zero workspaces the app renders the normal shell, and landing on Home
 auto-opens the new-workspace dialog with the prompt prefilled to the
 ``/sculptor:help`` action text — creating a workspace is the home experience
-until one exists. The sidebar shows the empty-state "Add a repo" /
+until one exists. The auto-open is an offer, not a gate: it renders
+non-modally (no overlay, the rest of the app stays clickable) and retires when
+the user leaves Home. The sidebar shows the empty-state "Add a repo" /
 "No workspaces yet" affordances, and every create entry point stays live: the
 dialog can be dismissed and reopened via the sidebar's New Workspace button or
 the Cmd/Meta+T shortcut, and Cmd+K still opens the command palette. Creating
@@ -55,6 +57,27 @@ def test_sidebar_shows_no_workspaces_hint(sculptor_instance_empty_first_run_: Sc
     expect(page.get_by_test_id(ElementIDs.SIDEBAR_NO_WORKSPACES_HINT)).to_be_visible()
 
 
+@user_story("to keep using the app while the first-run create dialog is offered")
+def test_auto_opened_dialog_does_not_block_the_app(
+    sculptor_instance_empty_first_run_: SculptorInstance,
+) -> None:
+    """The auto-opened dialog is non-modal and retires on leaving Home.
+
+    It is an offer, not a gate: it renders without the modal overlay, so the
+    rest of the app stays clickable underneath — a sidebar click lands without
+    having to dismiss anything — and navigating to Settings closes it rather
+    than dragging it along.
+    """
+    page = sculptor_instance_empty_first_run_.page
+    dialog = PlaywrightNewWorkspaceDialog(page)
+    expect(dialog.get_dialog()).to_be_visible()
+    expect(page.get_by_test_id(ElementIDs.PALETTE_DIALOG_OVERLAY)).to_have_count(0)
+
+    page.get_by_test_id(ElementIDs.SIDEBAR_SETTINGS_LINK).click()
+    expect(page.get_by_test_id(ElementIDs.SETTINGS_PAGE)).to_be_visible()
+    expect(dialog.get_dialog()).to_have_count(0)
+
+
 @user_story("to reopen the create dialog from the sidebar after dismissing it")
 def test_dismissed_dialog_reopens_via_sidebar_button(
     sculptor_instance_empty_first_run_: SculptorInstance,
@@ -63,7 +86,8 @@ def test_dismissed_dialog_reopens_via_sidebar_button(
 
     Dismissing the auto-opened dialog leaves the empty Home list; the sidebar
     button is the explicit reopen path. The reopened dialog is a plain open —
-    the onboarding prefill belongs to the auto-open only.
+    modal (unlike the auto-open), and without the onboarding prefill, which
+    belongs to the auto-open only.
     """
     page = sculptor_instance_empty_first_run_.page
     dialog = PlaywrightNewWorkspaceDialog(page)
@@ -74,6 +98,7 @@ def test_dismissed_dialog_reopens_via_sidebar_button(
 
     dialog.open_via_sidebar_button()
     expect(dialog.get_prompt_textarea()).to_have_value("")
+    expect(page.get_by_test_id(ElementIDs.PALETTE_DIALOG_OVERLAY)).to_be_visible()
 
 
 @user_story("to use Cmd+K and Cmd/Meta+T before my first workspace exists")

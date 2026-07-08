@@ -332,8 +332,9 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
     Workspaces live in the sidebar + Home list now (no tab strip); deleting each
     Home row via its inline delete button + confirmation removes them all and
     lands on the empty Home list. Home reacts to the list turning empty by
-    auto-opening the new-workspace dialog; that modal's overlay would swallow
-    any click a caller makes next, so it is dismissed before returning.
+    auto-opening the new-workspace dialog; it is non-modal (nothing is
+    overlay-blocked) but its panel covers the center of the Home page a caller
+    may interact with next, so it is dismissed before returning.
     """
     # Dismiss any open popover/context menu that might intercept clicks.
     page.keyboard.press("Escape")
@@ -369,7 +370,8 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
 
     # The list is now empty on Home, so the first-run auto-open pops the
     # new-workspace dialog (on the store update that emptied the rows, or on
-    # the Home mount above). Close it so callers regain an unobstructed page.
+    # the Home mount above). Close it so its panel doesn't sit over the Home
+    # content callers interact with next.
     # It may legitimately never appear — an earlier step on this same Home
     # mount can have opened-and-dismissed it already — so a miss is fine.
     new_workspace_dialog = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)
