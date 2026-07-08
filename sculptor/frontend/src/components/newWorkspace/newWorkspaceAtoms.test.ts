@@ -17,9 +17,8 @@ const seedWorkspace = (store: ReturnType<typeof createStore>, id: string): void 
 
 describe("isWorkspaceListEmptyAtom", () => {
   it("stays false while the workspace list is still loading", () => {
-    // Before the first snapshot arrives the list is undefined. The empty state
-    // must not flash (nor the first-run dialog pop) on a boot that turns out
-    // to have workspaces.
+    // Before the first snapshot arrives the list is undefined. The first-run
+    // dialog must not flash on a boot that turns out to have workspaces.
     const store = createStore();
     expect(store.get(workspaceIdsAtom)).toBeUndefined();
     expect(store.get(isWorkspaceListEmptyAtom)).toBe(false);

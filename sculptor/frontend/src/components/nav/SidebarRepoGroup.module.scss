@@ -187,11 +187,17 @@
 // Empty-state hint beneath a repo that has no workspaces. Indented to
 // align with where workspace rows would sit and dimmed so it reads as a
 // placeholder rather than an actionable row.
+// Placeholder where a repo's workspace rows will appear: same metrics and
+// typography as a workspace row (height, indent, font size) so the group
+// reads consistently, but muted and without the row background/hover since
+// there is nothing to select.
 .noWorkspacesHint {
+  align-items: center;
   color: var(--gray-10);
-  font-size: var(--font-size-1);
-  font-style: italic;
-  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-5);
+  display: flex;
+  font-size: var(--font-size-2);
+  min-height: 28px;
+  padding: 0 var(--space-2) 0 var(--space-5);
 }
 
 // While a sidebar drag is active (data flag on the sidebar root), hover chrome

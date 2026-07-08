@@ -63,11 +63,10 @@ export const lastWorkspaceCreationSettingsAtom: WritableAtom<
 );
 
 /**
- * Derived over the live workspace list; gates the sidebar's empty-workspace
- * affordances and the home page's first-run auto-open of the new-workspace
- * dialog. `false` while the list is still loading (`undefined`) so the empty
- * state never flashes (and the dialog never pops) before the first snapshot
- * arrives.
+ * Derived over the live workspace list; gates the home page's first-run
+ * auto-open of the new-workspace dialog. `false` while the list is still
+ * loading (`undefined`) so the dialog never flashes on a boot that turns out
+ * to have workspaces — the offer waits for the stream's first snapshot.
  */
 export const isWorkspaceListEmptyAtom: Atom<boolean> = atom<boolean>((get) => {
   const workspaces = get(workspacesArrayAtom);
