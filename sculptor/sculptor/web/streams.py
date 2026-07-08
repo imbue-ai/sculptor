@@ -25,6 +25,7 @@ from sculptor.database.models import Project
 from sculptor.database.models import TaskID
 from sculptor.database.models import UserSettings
 from sculptor.database.models import Workspace
+from sculptor.database.models import WorkspaceGroup
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.event_utils import CompoundEvent
 from sculptor.foundation.event_utils import ReadOnlyEvent
@@ -35,6 +36,7 @@ from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TypeIDPrefixMismatchError
+from sculptor.primitives.ids import WorkspaceGroupID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.btw_service.api import BtwService
@@ -907,6 +909,7 @@ def _convert_to_user_update(all_data: list[UserUpdateSourceTypes | None]) -> Use
     notifications: list[Notification] = []
     projects_by_id: dict[ProjectID, Project] = {}
     workspaces_by_id: dict[WorkspaceID, Workspace] = {}
+    workspace_groups_by_id: dict[WorkspaceGroupID, WorkspaceGroup] = {}
     user_settings = None
     server_settings = None
     for model in all_data:
@@ -925,6 +928,8 @@ def _convert_to_user_update(all_data: list[UserUpdateSourceTypes | None]) -> Use
                             user_settings = request_model
                         case Workspace():
                             workspaces_by_id[request_model.object_id] = request_model
+                        case WorkspaceGroup():
+                            workspace_groups_by_id[request_model.object_id] = request_model
                         case _ as unreachable:
                             assert_never(unreachable)
             case SculptorSettings():
@@ -935,6 +940,7 @@ def _convert_to_user_update(all_data: list[UserUpdateSourceTypes | None]) -> Use
         user_settings=user_settings,
         projects=tuple(projects_by_id.values()),
         workspaces=tuple(workspaces_by_id.values()),
+        workspace_groups=tuple(workspace_groups_by_id.values()),
         settings=server_settings,
         notifications=tuple(notifications),
     )

@@ -21,6 +21,7 @@ from sculptor.interfaces.agents.artifacts import DiffArtifact
 from sculptor.interfaces.agents.artifacts import TaskListArtifact
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import TaskID
+from sculptor.primitives.ids import WorkspaceGroupID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.data_model_service.api import CompletedTransaction
 from sculptor.services.task_service.api import TaskMessageContainer
@@ -169,6 +170,76 @@ class BatchUpdateOpenStateRequest(RequestModel):
     is_open: bool
 
 
+class WorkspaceGroupColor(StrEnum):
+    """The curated palette of Radix accent colors for workspace groups.
+
+    Member order is the cycling order the server uses when auto-assigning a
+    color to a new group. This enum is the single source of truth for the
+    palette: it rides the OpenAPI schema so the frontend swatch row consumes
+    the generated constant instead of hand-copying the color list. Stored and
+    requested colors stay plain strings (any Radix accent name) so rows
+    written under a future palette still load.
+    """
+
+    BLUE = "blue"
+    GREEN = "green"
+    ORANGE = "orange"
+    PURPLE = "purple"
+    PINK = "pink"
+    TEAL = "teal"
+    AMBER = "amber"
+    RED = "red"
+
+
+WORKSPACE_GROUP_COLOR_PALETTE: tuple[WorkspaceGroupColor, ...] = tuple(WorkspaceGroupColor)
+
+
+class CreateWorkspaceGroupRequest(RequestModel):
+    """Create a workspace group around one or more initial member workspaces.
+
+    Groups never exist empty, so at least one member workspace is required.
+    ``name`` and ``color`` default server-side ("Group N" and the next
+    palette color for the project).
+    """
+
+    project_id: str
+    workspace_ids: list[str] = Field(min_length=1)
+    name: str | None = None
+    color: str | None = None
+    created_via_cli: bool = False
+
+
+class UpdateWorkspaceGroupRequest(RequestModel):
+    """Rename and/or recolor a workspace group. Omitted fields are left unchanged."""
+
+    name: str | None = None
+    color: str | None = None
+
+
+class AddWorkspaceGroupMemberRequest(RequestModel):
+    """Add a workspace (from the group's project) as a member of the group."""
+
+    workspace_id: str
+
+
+class WorkspaceGroupResponse(SerializableModel):
+    object_id: WorkspaceGroupID
+    project_id: ProjectID
+    name: str
+    color: str
+    created_via_cli: bool
+    created_at: datetime.datetime
+    # IDs of the group's live member workspaces (membership lives on Workspace.group_id).
+    workspace_ids: tuple[WorkspaceID, ...]
+
+
+class ListWorkspaceGroupsResponse(SerializableModel):
+    groups: list[WorkspaceGroupResponse]
+    # The curated palette in cycling order, echoed so generated clients can
+    # also read it at runtime from any list response.
+    palette: tuple[WorkspaceGroupColor, ...] = WORKSPACE_GROUP_COLOR_PALETTE
+
+
 class CreateAgentRequest(RequestModel):
     """Create agent request — prompt is optional for the '+' button flow."""
 
@@ -230,6 +301,8 @@ class WorkspaceResponse(SerializableModel):
     target_branch: str | None
     requested_branch_name: str | None
     environment_id: str | None
+    # The workspace group this workspace belongs to, if any.
+    group_id: WorkspaceGroupID | None = None
     # Only meaningful on the streaming path — REST endpoints filter out deleted
     # workspaces via get_workspace(), so they never return is_deleted=True.
     is_deleted: bool

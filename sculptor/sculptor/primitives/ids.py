@@ -122,6 +122,10 @@ class WorkspaceID(ObjectID):
     tag: str = "ws"
 
 
+class WorkspaceGroupID(ObjectID):
+    tag: str = "wsg"
+
+
 class ObjectSnapshotID(ObjectID):
     tag: str = "snap"
 

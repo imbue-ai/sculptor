@@ -30,6 +30,7 @@ from sculptor.database.models import TaskID
 from sculptor.database.models import TaskInputs
 from sculptor.database.models import UserSettings
 from sculptor.database.models import Workspace
+from sculptor.database.models import WorkspaceGroup
 from sculptor.foundation.itertools import only
 from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.foundation.pydantic_serialization import build_discriminator
@@ -852,6 +853,7 @@ class UserUpdate(SerializableModel):
     user_settings: UserSettings | None = None
     projects: tuple[Project, ...] = ()
     workspaces: tuple[Workspace, ...] = ()
+    workspace_groups: tuple[WorkspaceGroup, ...] = ()
     settings: SculptorSettings | None = None
     notifications: tuple[Notification, ...] = ()
 

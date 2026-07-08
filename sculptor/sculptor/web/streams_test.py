@@ -9,11 +9,13 @@ from sculptor.database.models import Project
 from sculptor.database.models import TaskID
 from sculptor.database.models import UserSettings
 from sculptor.database.models import Workspace
+from sculptor.database.models import WorkspaceGroup
 from sculptor.database.models import WorkspaceInitializationStrategy
 from sculptor.primitives.ids import OrganizationReference
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import UserSettingsID
+from sculptor.primitives.ids import WorkspaceGroupID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.data_model_service.api import CompletedTransaction
 from sculptor.state.workflow_state import WorkflowTaskState
@@ -62,6 +64,29 @@ def test_convert_to_user_update_collects_models_and_overwrites_duplicates() -> N
     assert update.projects == (updated_project,)
     assert update.settings == server_settings
     assert update.notifications == (notification,)
+
+
+def test_convert_to_user_update_collects_workspace_groups_and_overwrites_duplicates() -> None:
+    organization = OrganizationReference("org-ref")
+    project_id = ProjectID()
+
+    initial_group = WorkspaceGroup(
+        object_id=WorkspaceGroupID(),
+        organization_reference=organization,
+        project_id=project_id,
+        name="Group 1",
+        color="blue",
+    )
+    renamed_group = initial_group.model_copy(update={"name": "Renamed"})
+
+    transactions: list[UserUpdateSourceTypes | None] = [
+        CompletedTransaction(request_id=None, updated_models=(initial_group,)),
+        CompletedTransaction(request_id=None, updated_models=(renamed_group,)),
+    ]
+
+    update = _convert_to_user_update(transactions)
+
+    assert update.workspace_groups == (renamed_group,)
 
 
 def test_convert_to_user_update_raises_for_unexpected_models() -> None:

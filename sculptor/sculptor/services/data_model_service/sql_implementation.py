@@ -56,6 +56,7 @@ from sculptor.database.models import SavedAgentMessage
 from sculptor.database.models import Task
 from sculptor.database.models import UserSettings
 from sculptor.database.models import Workspace
+from sculptor.database.models import WorkspaceGroup
 from sculptor.database.utils import is_read_only_sqlite_url
 from sculptor.database.utils import maybe_get_db_path
 from sculptor.foundation.async_monkey_patches import log_exception
@@ -71,6 +72,7 @@ from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import TransactionID
 from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import UserSettingsID
+from sculptor.primitives.ids import WorkspaceGroupID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.data_model_service.api import CompletedTransaction
 from sculptor.services.data_model_service.api import TQ
@@ -119,6 +121,20 @@ WORKSPACE_TABLE, WORKSPACE_LATEST_TABLE = create_tables(
     monotonic_columns=frozenset({"is_deleted"}),
 )
 
+WORKSPACE_GROUP_TABLE, WORKSPACE_GROUP_LATEST_TABLE = create_tables(
+    to_snake(WorkspaceGroup.__name__),
+    WorkspaceGroup,
+    constraints=(
+        ForeignKeyConstraint(
+            ["project_id"],
+            [f"{PROJECT_LATEST_TABLE.name}.object_id"],
+            name="foreign_key_workspace_group_project_id",
+        ),
+    ),
+    # A dissolved group is never revived, so latch the soft-delete like Workspace's.
+    monotonic_columns=frozenset({"is_deleted"}),
+)
+
 TASK_TABLE, TASK_LATEST_TABLE = create_tables(
     to_snake(Task.__name__),
     Task,
@@ -157,7 +173,7 @@ NOTIFICATION_TABLE, _ = create_tables(
 
 
 T2 = TypeVar("T2", bound=DatabaseModel)
-T4 = TypeVar("T4", bound=Project | UserSettings | Notification | Task | Workspace)
+T4 = TypeVar("T4", bound=Project | UserSettings | Notification | Task | Workspace | WorkspaceGroup)
 
 _WAIT_FOR_LOCK_TIMEOUT_SEC = 10.0
 
@@ -312,6 +328,39 @@ class SQLTransaction(BaseDataModelTransaction):
             fields={**fields},
             latest_where_extra=WORKSPACE_LATEST_TABLE.c.is_deleted.is_(False),
         )
+
+    @overwrite_missing_table_error_for_sentry
+    def get_workspace_group(self, workspace_group_id: WorkspaceGroupID) -> WorkspaceGroup | None:
+        statement = (
+            select(WORKSPACE_GROUP_LATEST_TABLE)
+            .where(WORKSPACE_GROUP_LATEST_TABLE.c.object_id == str(workspace_group_id))
+            .where(WORKSPACE_GROUP_LATEST_TABLE.c.is_deleted.is_(False))
+        )
+        result = self.connection.execute(statement)
+        row = result.fetchone()
+        if row is None:
+            return None
+        return _row_to_pydantic_model(row, WorkspaceGroup)
+
+    @overwrite_missing_table_error_for_sentry
+    def get_workspace_groups(
+        self,
+        project_id: ProjectID | None = None,
+        organization_reference: OrganizationReference | None = None,
+    ) -> tuple[WorkspaceGroup, ...]:
+        statement = select(WORKSPACE_GROUP_LATEST_TABLE).where(WORKSPACE_GROUP_LATEST_TABLE.c.is_deleted.is_(False))
+        if project_id is not None:
+            statement = statement.where(WORKSPACE_GROUP_LATEST_TABLE.c.project_id == str(project_id))
+        if organization_reference is not None:
+            statement = statement.where(
+                WORKSPACE_GROUP_LATEST_TABLE.c.organization_reference == str(organization_reference)
+            )
+        result = self.connection.execute(statement)
+        return tuple(_row_to_pydantic_model(row, WorkspaceGroup) for row in result.all())
+
+    @overwrite_missing_table_error_for_sentry
+    def upsert_workspace_group(self, workspace_group: WorkspaceGroup) -> WorkspaceGroup:
+        return self._upsert_model(workspace_group, WORKSPACE_GROUP_TABLE, self.get_workspace_group)
 
     @overwrite_missing_table_error_for_sentry
     def get_all_workspaces(self) -> list[WorkspaceListingRow]:
@@ -879,11 +928,11 @@ class SQLDataModelService(TaskDataModelService, Generic[TQ]):
 
         transaction.run_post_commit_hooks()
 
-        # Filter database operations to only include observable models (Project, User, Notification, Workspace)
+        # Filter database operations to only include observable models (Project, User, Notification, Workspace, WorkspaceGroup)
         # The observer system only cares about these specific model types, not all database operations
         observable_models = []
         for operation, model in transaction.get_updated_models():
-            if isinstance(model, (Project, UserSettings, Notification, Workspace)):
+            if isinstance(model, (Project, UserSettings, Notification, Workspace, WorkspaceGroup)):
                 observable_models.append(model)
 
         completed_transaction = CompletedTransaction(request_id=request_id, updated_models=tuple(observable_models))
@@ -943,18 +992,21 @@ class SQLDataModelService(TaskDataModelService, Generic[TQ]):
                 user_reference, []
             ) + [queue]
 
-        # put the current project, workspace, and user in the queue
+        # put the current projects, workspaces, workspace groups, and user in the queue
         with self.open_transaction(RequestID()) as transaction:
             user_settings = transaction.get_user_settings(user_reference)
             assert user_settings is not None
             projects = transaction.get_projects(organization_reference)
             workspaces = transaction.get_workspaces(organization_reference=organization_reference)
+            workspace_groups = transaction.get_workspace_groups(organization_reference=organization_reference)
 
-        existing_models: list[Project | UserSettings | Notification | Workspace] = [user_settings]
+        existing_models: list[Project | UserSettings | Notification | Workspace | WorkspaceGroup] = [user_settings]
         for project in projects:
             existing_models.append(project)
         for workspace in workspaces:
             existing_models.append(workspace)
+        for workspace_group in workspace_groups:
+            existing_models.append(workspace_group)
         queue.put(CompletedTransaction(request_id=None, updated_models=tuple(existing_models)))
 
         try:
