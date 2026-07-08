@@ -27,7 +27,7 @@ export type WorkspaceLayoutState = {
   activeSubSection: SubSectionId | null;
 };
 
-// The sidebar's user-customized drag order. Both lists are materialized on every
+// The sidebar's user-customized drag order. Every list is materialized on every
 // reorder (the full visible order is stored, not a delta); ids without a stored
 // position — new workspaces, repos never reordered — follow the stored ones in the
 // default alphabetical order, and stored ids that no longer exist are skipped on
@@ -35,8 +35,17 @@ export type WorkspaceLayoutState = {
 export type SidebarOrderState = {
   // projectIds in custom order.
   repos: Array<string>;
-  // workspaceIds in custom order, per projectId.
+  // A repo section's MIXED children order, per projectId: workspace ids and
+  // workspace-group ids share the lane (distinguishable by their ws_/wsg_ id
+  // prefixes), so group cards and loose workspace rows interleave freely.
+  // With workspace groups disabled the group ids simply resolve to nothing and
+  // are skipped on read, so the lane degrades to a plain workspace order.
   workspaces: Partial<Record<string, Array<string>>>;
+  // Member workspaceIds in custom order, per workspace-group id — the visual
+  // order of the rows inside a group card (the backend owns membership; this
+  // owns only how members are arranged). Optional because global snapshots
+  // persisted before workspace groups existed load without it.
+  groupMembers?: Partial<Record<string, Array<string>>>;
 };
 
 export type GlobalLayoutState = {
@@ -78,6 +87,6 @@ export const DEFAULT_GLOBAL_LAYOUT: GlobalLayoutState = {
   sidebarWidthPx: 240,
   sidebarCollapsed: false,
   explorerListWidthPx: 240,
-  sidebarOrder: { repos: [], workspaces: {} },
+  sidebarOrder: { repos: [], workspaces: {}, groupMembers: {} },
   explorerSidebarHiddenByPanel: {},
 };

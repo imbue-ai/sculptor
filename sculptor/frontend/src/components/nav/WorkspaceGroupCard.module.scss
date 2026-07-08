@@ -17,6 +17,49 @@
   padding: var(--space-1);
 }
 
+// The card while a workspace drag hovers it (the drop would add the row to the
+// group): an accent ring plus a stronger tint light the whole card up as the
+// target. Ring via box-shadow so the highlight never affects layout — droppable
+// rects are measured mid-drag and must stay stable.
+.dropActive {
+  background: var(--accent-a4);
+  border-color: var(--accent-a8);
+  box-shadow: 0 0 0 1px var(--accent-a8);
+}
+
+// The card mid-drag (sorted within the repo section's mixed lane). There is no
+// floating overlay copy — the card itself slides with the cursor — so it is
+// lifted above its siblings with a SOLID surface (the resting tint is an alpha
+// step that rows underneath would show through); the shadow carries the
+// "picked up" read. Mirrors .rowDragging in SidebarRepoGroup.module.scss.
+.cardDragging {
+  background: var(--accent-2);
+  box-shadow: var(--shadow-4);
+  position: relative;
+  z-index: var(--z-above);
+
+  // The dragged card keeps keyboard focus for the whole drag (the sensor
+  // listens on it); the elevation is the drag indicator, so the focus ring
+  // riding along only adds noise.
+  :focus-visible {
+    outline: none;
+  }
+}
+
+// The dashed "drop to add to group" placeholder row at the end of the member
+// rows while an eligible workspace drag is in flight; dropping on it appends
+// the workspace to this group.
+.dropSlot {
+  align-items: center;
+  border: 1px dashed var(--accent-a8);
+  border-radius: var(--radius-2);
+  color: var(--accent-11);
+  display: flex;
+  font-size: var(--font-size-1);
+  min-height: 28px;
+  padding: 0 var(--space-2) 0 var(--space-5);
+}
+
 // Same pill geometry as the repo header / workspace rows so the rail's row
 // rhythm carries into the card.
 .groupHeader {

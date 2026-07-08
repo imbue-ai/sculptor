@@ -5,13 +5,22 @@
 // which remaps the whole `--accent-*` scale for the subtree — the stylesheet
 // tints purely through accent tokens and recolors follow a single attribute.
 //
+// The card is one sortable child of its repo section's mixed lane (dragged by
+// its header, like a repo group; a collapsed card is just its header), and it
+// is a drop TARGET for workspace rows from outside the group: while such a
+// drag is in flight the member box grows a dashed drop slot, and whenever the
+// drag hovers the card (the card body, a member row, or the slot) the card
+// lights up with an accent ring and a stronger tint. Member rows join the same
+// DndContext through the card's nested SortableContext, so they reorder within
+// the card and travel out of it.
+//
 // The group menu opens from the hover "⋯" AND from right-click on the header,
 // sharing one body across both Radix menu primitives (the same dual-primitive
 // pattern as the workspace row menu in contextActions/menu.tsx).
 
-import type { SensorDescriptor, SensorOptions } from "@dnd-kit/core";
-import { DndContext } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { useDndContext, useDroppable } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { ContextMenu, DropdownMenu, Flex, IconButton, Text, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import { ChevronDown, ChevronRight, MoreHorizontal } from "lucide-react";
@@ -34,13 +43,36 @@ import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCrea
 import { ToastType } from "~/components/Toast.tsx";
 
 import { collapsedWorkspaceGroupsAtom, isWorkspaceGroupCollapsedAtomFamily } from "./navAtoms.ts";
+import type { SidebarGroupCardDragData } from "./sidebarDnd.ts";
+import { getSidebarDragData, workspaceGroupDropSlotId } from "./sidebarDnd.ts";
 import { SidebarWorkspaceRow } from "./SidebarWorkspaceRow.tsx";
 import styles from "./WorkspaceGroupCard.module.scss";
 
-// Member rows carry sortable hooks from the shared row component, so they need
-// a drag context — but with no sensors a drag can never activate inside the
-// card (member drag is not part of the group card's interaction set).
-const NO_DRAG_SENSORS: Array<SensorDescriptor<SensorOptions>> = [];
+/**
+ * The dashed "Drop to add to group" slot at the end of the member rows. It is a
+ * plain droppable (not a sortable child): dropping on it appends the dragged
+ * workspace to the group. It mounts for the whole lifetime of an eligible drag
+ * rather than only while the card is hovered, so the card's geometry stays
+ * stable mid-drag (dnd-kit re-measures every droppable when the slot registers
+ * at drag start — a slot that popped in and out under the pointer would churn
+ * those rects and flicker the drop resolution).
+ */
+const WorkspaceGroupDropSlot = ({ groupId }: { groupId: string }): ReactElement => {
+  const { setNodeRef } = useDroppable({
+    id: workspaceGroupDropSlotId(groupId),
+    data: { sidebarKind: "workspace-group-drop-slot", groupId },
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      className={styles.dropSlot}
+      data-testid={ElementIds.SIDEBAR_WORKSPACE_GROUP_DROP_SLOT}
+      data-group-id={groupId}
+    >
+      Drop to add to group
+    </div>
+  );
+};
 
 /**
  * The Radix menu primitives the group menu body renders through. As with the
@@ -202,9 +234,54 @@ export const WorkspaceGroupCard = ({
   const addMember = useAddWorkspaceGroupMemberMutation();
   const { createFromSidebar, isCreating } = useCreateWorkspaceFromSidebar();
 
+  // The card is a sortable child of the repo section's mixed lane: the whole
+  // card (header + member rows) is the measured node so its members travel
+  // with it, and the header button is the drag activator — a collapsed card is
+  // just its header, so it drags as one.
+  const cardDragData: SidebarGroupCardDragData = { sidebarKind: "workspace-group" };
+  const {
+    attributes: cardAttributes,
+    listeners: cardListeners,
+    setNodeRef: setCardNodeRef,
+    setActivatorNodeRef: setCardActivatorNodeRef,
+    transform: cardTransform,
+    transition: cardTransition,
+    isDragging: isCardDragging,
+    isOver: isCardOver,
+  } = useSortable({ id: group.objectId, disabled: isRenaming, data: cardDragData });
+
+  // Membership drop-target state: a workspace row from OUTSIDE this group is in
+  // flight, and this card is lit while that drag hovers any part of it (the card
+  // body, a member row, or the drop slot). While such a drag is in flight the
+  // drop slot mounts (see WorkspaceGroupDropSlot for why it stays mounted for
+  // the whole drag).
+  const { active: dndActive, over: dndOver } = useDndContext();
+  const activeDragData = getSidebarDragData(dndActive);
+  const isEligibleRowDragActive =
+    activeDragData?.sidebarKind === "workspace" && activeDragData.containerId !== group.objectId;
+  const overId = dndOver === null ? null : String(dndOver.id);
+  const isMembershipDropActive =
+    isEligibleRowDragActive &&
+    overId !== null &&
+    (overId === group.objectId ||
+      overId === workspaceGroupDropSlotId(group.objectId) ||
+      members.some((member) => member.objectId === overId));
+
   // Functions and callbacks
   const handleToggleCollapsed = (): void => {
     setCollapsedGroups((prev) => ({ ...prev, [group.objectId]: !(prev[group.objectId] ?? false) }));
+  };
+
+  // Enter toggles collapse from the keyboard, like a click; every other key
+  // falls through to the dnd-kit keyboard sensor so Space picks the card up
+  // (see the matching handler on the repo header in SidebarRepoGroup).
+  const handleHeaderKeyDown = (event: React.KeyboardEvent<HTMLElement>): void => {
+    if (event.key === "Enter" && event.target === event.currentTarget && !isCardDragging) {
+      event.preventDefault();
+      handleToggleCollapsed();
+      return;
+    }
+    cardListeners?.onKeyDown?.(event);
   };
 
   const handleRenameCommit = (newName: string): void => {
@@ -301,12 +378,18 @@ export const WorkspaceGroupCard = ({
   };
 
   return (
+    // Translate-only (never CSS.Transform): the mixed lane's children vary in
+    // height, and the scale component dnd-kit folds into transforms would
+    // stretch the card toward the hovered slot's size.
     <div
-      className={styles.groupCard}
+      ref={setCardNodeRef}
+      className={`${styles.groupCard} ${isCardDragging ? styles.cardDragging : ""} ${isMembershipDropActive ? styles.dropActive : ""}`}
+      style={{ transform: CSS.Translate.toString(cardTransform), transition: cardTransition }}
       data-accent-color={group.color}
       data-testid={ElementIds.SIDEBAR_WORKSPACE_GROUP_CARD}
       data-group-id={group.objectId}
       data-collapsed={isCollapsed ? "true" : undefined}
+      data-drop-active={isMembershipDropActive ? "true" : undefined}
     >
       <ContextMenu.Root>
         <ContextMenu.Trigger>
@@ -325,10 +408,18 @@ export const WorkspaceGroupCard = ({
             ) : (
               <button
                 type="button"
+                ref={setCardActivatorNodeRef}
                 className={styles.groupHeaderButton}
+                {...cardAttributes}
+                {...cardListeners}
+                // After the listeners spread so this composed handler REPLACES the
+                // sensor's raw onKeyDown (it delegates every non-Enter key back to it).
+                onKeyDown={handleHeaderKeyDown}
                 onClick={handleToggleCollapsed}
                 data-testid={ElementIds.SIDEBAR_WORKSPACE_GROUP_HEADER}
                 data-group-id={group.objectId}
+                data-sidebar-dragging={isCardDragging ? "true" : undefined}
+                data-sidebar-drop-target={isCardOver && !isCardDragging ? "true" : undefined}
               >
                 <Chevron
                   size={15}
@@ -377,26 +468,31 @@ export const WorkspaceGroupCard = ({
       </ContextMenu.Root>
       {!isCollapsed && (
         <div className={styles.groupMembers}>
-          <DndContext sensors={NO_DRAG_SENSORS}>
-            <SortableContext items={members.map((member) => member.objectId)} strategy={verticalListSortingStrategy}>
-              {members.map((member) => (
-                <SidebarWorkspaceRow
-                  key={member.objectId}
-                  workspace={member}
-                  isRenaming={renamingWorkspaceId === member.objectId}
-                  isActive={member.objectId === activeWorkspaceId}
-                  actions={actions}
-                  openInRuntime={openInRuntime}
-                  destructiveColor={destructiveColor}
-                  onNavigate={onWorkspaceClick}
-                  onHover={onWorkspaceHover}
-                  onRenameCommit={onWorkspaceRenameCommit}
-                  onRenameCancel={onWorkspaceRenameCancel}
-                  onBeginDelete={onBeginDelete}
-                />
-              ))}
-            </SortableContext>
-          </DndContext>
+          {/* The nearest SortableContext wins, so the member rows sort against
+              each other (not the mixed lane) while still registering with the
+              repo section's DndContext — which is what lets a member travel out
+              of the card and a foreign row land inside it. */}
+          <SortableContext items={members.map((member) => member.objectId)} strategy={verticalListSortingStrategy}>
+            {members.map((member) => (
+              <SidebarWorkspaceRow
+                key={member.objectId}
+                workspace={member}
+                isRenaming={renamingWorkspaceId === member.objectId}
+                isActive={member.objectId === activeWorkspaceId}
+                dndContainerId={group.objectId}
+                dndAccentColor={group.color}
+                actions={actions}
+                openInRuntime={openInRuntime}
+                destructiveColor={destructiveColor}
+                onNavigate={onWorkspaceClick}
+                onHover={onWorkspaceHover}
+                onRenameCommit={onWorkspaceRenameCommit}
+                onRenameCancel={onWorkspaceRenameCancel}
+                onBeginDelete={onBeginDelete}
+              />
+            ))}
+          </SortableContext>
+          {isEligibleRowDragActive && <WorkspaceGroupDropSlot groupId={group.objectId} />}
         </div>
       )}
     </div>

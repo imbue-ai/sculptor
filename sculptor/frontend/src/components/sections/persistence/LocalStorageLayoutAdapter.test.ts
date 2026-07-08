@@ -87,7 +87,7 @@ describe("LocalStorageLayoutAdapter", () => {
     localStorage.setItem("sculptor-layout-global", JSON.stringify(legacyGlobal));
     expect(adapter.read(GLOBAL_SCOPE)).toEqual({
       ...legacyGlobal,
-      sidebarOrder: { repos: [], workspaces: {} },
+      sidebarOrder: { repos: [], workspaces: {}, groupMembers: {} },
       explorerSidebarHiddenByPanel: {},
     });
   });
@@ -99,6 +99,7 @@ describe("LocalStorageLayoutAdapter", () => {
     const corruptOrders = [
       { repos: "not-a-list", workspaces: {} },
       { repos: [], workspaces: { "p-1": "not-a-list" } },
+      { repos: [], workspaces: {}, groupMembers: { "wsg-1": "not-a-list" } },
     ];
     for (const sidebarOrder of corruptOrders) {
       localStorage.setItem(
@@ -116,7 +117,7 @@ describe("LocalStorageLayoutAdapter", () => {
         sidebarWidthPx: 300,
         sidebarCollapsed: true,
         explorerListWidthPx: 260,
-        sidebarOrder: { repos: [], workspaces: {} },
+        sidebarOrder: { repos: [], workspaces: {}, groupMembers: {} },
         explorerSidebarHiddenByPanel: {},
       });
     }

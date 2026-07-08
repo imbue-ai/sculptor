@@ -64,13 +64,17 @@ function isValidSnapshot(scope: LayoutScope, value: unknown): boolean {
 }
 
 // The ordering atoms iterate sidebarOrder's lists, so a wrong-kind member (a
-// hand-edited or corrupt entry) must never reach them.
+// hand-edited or corrupt entry) must never reach them. groupMembers is optional
+// (snapshots persisted before workspace groups existed lack it), so it is
+// validated only when present.
 function isValidSidebarOrder(value: unknown): value is SidebarOrderState {
   return (
     isObject(value) &&
     Array.isArray(value.repos) &&
     isObject(value.workspaces) &&
-    Object.values(value.workspaces).every((ids) => Array.isArray(ids))
+    Object.values(value.workspaces).every((ids) => Array.isArray(ids)) &&
+    (value.groupMembers === undefined ||
+      (isObject(value.groupMembers) && Object.values(value.groupMembers).every((ids) => Array.isArray(ids))))
   );
 }
 

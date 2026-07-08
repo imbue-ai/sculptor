@@ -2,37 +2,44 @@
 // chevron, hover-revealed repository settings, and an always-visible "+" that
 // direct-creates a workspace in this repo, falling back to the new-workspace dialog
 // pre-scoped to the repo when the branch can't be resolved or the create fails),
-// followed by the repo's children while expanded. With workspace groups enabled the
-// children are the repo's group cards (creation order) above the loose workspace
-// rows (stored drag order); with the flag off they are exactly the workspace rows.
-// Cross-group concerns — building the groups, the shared action list, and the delete
-// confirmation — stay in WorkspaceSidebar and arrive as props; per-group state
-// (collapse, rename) is read from its atoms here.
+// followed by the repo's children while expanded. The children are one mixed,
+// re-orderable lane: loose workspace rows interleaved with workspace-group cards,
+// composed in visible order by sidebarWorkspaceOrder (with the workspace-groups
+// flag off the lane is exactly the workspace rows). Cross-group concerns — building
+// the groups, the shared action list, and the delete confirmation — stay in
+// WorkspaceSidebar and arrive as props; per-group state (collapse, rename) is read
+// from its atoms here.
 //
 // The group is itself a sortable item of WorkspaceSidebar's repo-group DndContext
-// (dragged by its header), and it hosts its OWN DndContext for its workspace rows —
-// a workspace belongs to its repo, so scoping the row context per group makes
-// cross-repo drops structurally impossible rather than merely rejected.
+// (dragged by its header), and it hosts its OWN DndContext for its children — a
+// workspace belongs to its repo, so scoping the children context per repo section
+// makes cross-repo drops structurally impossible rather than merely rejected.
+// Within the section, though, rows travel BETWEEN containers (the loose lane and
+// the group cards): such a drop is a membership change, so it flips membership
+// through the canonical mutation and only then commits the visual order (see
+// handleSectionDragEnd).
 
 import type { DragEndEvent } from "@dnd-kit/core";
-import { closestCenter, DndContext } from "@dnd-kit/core";
+import { closestCenter, DndContext, useDndContext, useDroppable } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Flex, IconButton, Text, Tooltip } from "@radix-ui/themes";
-import { atom, useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
+import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { ChevronDown, ChevronRight, Plus, Settings } from "lucide-react";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
-import type { Workspace, WorkspaceGroup } from "~/api";
+import type { Workspace } from "~/api";
 import { ElementIds, updateWorkspace } from "~/api";
 import { useImbueLocation } from "~/common/NavigateUtils.ts";
-import { workspaceRenameErrorToastAtom } from "~/common/state/atoms/toasts.ts";
-import { isWorkspaceGroupsEnabledAtom } from "~/common/state/atoms/userConfig.ts";
-import { workspaceGroupsForProjectAtomFamily } from "~/common/state/atoms/workspaceGroups.ts";
+import { workspaceGroupErrorToastAtom, workspaceRenameErrorToastAtom } from "~/common/state/atoms/toasts.ts";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
+import {
+  useAddWorkspaceGroupMemberMutation,
+  useRemoveWorkspaceGroupMemberMutation,
+} from "~/common/state/mutations/workspaceGroups.ts";
 import { renamingWorkspaceIdAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
 import type { OpenInRuntime } from "~/components/CommandPalette/contextActions/menu.tsx";
 import type { WorkspaceAction } from "~/components/CommandPalette/contextActions/types.ts";
@@ -40,18 +47,56 @@ import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCrea
 import { ToastType } from "~/components/Toast.tsx";
 
 import { adjustSidebarDragCountAtom, collapsedRepoGroupsAtom, isRepoCollapsedAtomFamily } from "./navAtoms.ts";
-import { sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
+import {
+  buildRepoSectionDndModifiers,
+  getSidebarDragData,
+  LOOSE_CONTAINER_ID,
+  REPO_SECTION_RELEASE_SLOT_ID,
+  useSidebarDndSensors,
+} from "./sidebarDnd.ts";
 import styles from "./SidebarRepoGroup.module.scss";
 import type { RepoGroup } from "./sidebarWorkspaceOrder.ts";
-import { reorderSidebarWorkspaceAtom } from "./sidebarWorkspaceOrder.ts";
+import {
+  commitWorkspaceMembershipOrderAtom,
+  reorderSidebarRepoChildAtom,
+  reorderWorkspaceGroupMemberAtom,
+} from "./sidebarWorkspaceOrder.ts";
 import { SidebarWorkspaceRow } from "./SidebarWorkspaceRow.tsx";
 import { WorkspaceGroupCard } from "./WorkspaceGroupCard.tsx";
-import { composeRepoSectionChildren } from "./workspaceGroupComposition.ts";
+import { repoSectionChildKey } from "./workspaceGroupComposition.ts";
 
-// What the workspace-groups flag gates off subscribes to instead of the group
-// store: with the flag disabled the render path must not touch group atoms at
-// all, so the section renders exactly the pre-groups tree.
-const NO_WORKSPACE_GROUPS_ATOM = atom<ReadonlyArray<WorkspaceGroup>>([]);
+/**
+ * The dashed "Drop to remove from group" slot at the end of the section's
+ * children while a member row is dragged. It is the release drop target that
+ * always exists (loose rows are targets too, but there may be none) and the
+ * only way to drop a released row at the END of the lane (dropping on a loose
+ * row inserts before it). Tinted in the dragged member's group color via the
+ * accent stamp. Mounted for the whole drag, like the group cards' drop slots.
+ */
+const RepoSectionReleaseSlot = (): ReactElement | null => {
+  const { active } = useDndContext();
+  const activeData = getSidebarDragData(active ?? null);
+  const isMemberDragActive = activeData?.sidebarKind === "workspace" && activeData.containerId !== LOOSE_CONTAINER_ID;
+  const { setNodeRef, isOver } = useDroppable({
+    id: REPO_SECTION_RELEASE_SLOT_ID,
+    disabled: !isMemberDragActive,
+    data: { sidebarKind: "release-slot" },
+  });
+  if (!isMemberDragActive) {
+    return null;
+  }
+  return (
+    <div
+      ref={setNodeRef}
+      className={styles.releaseSlot}
+      data-accent-color={activeData.accentColor}
+      data-testid={ElementIds.SIDEBAR_WORKSPACE_GROUP_RELEASE_SLOT}
+      data-drop-active={isOver ? "true" : undefined}
+    >
+      Drop to remove from group
+    </div>
+  );
+};
 
 type SidebarRepoGroupProps = {
   group: RepoGroup;
@@ -84,20 +129,26 @@ export const SidebarRepoGroup = ({
   const isRepoCollapsed = useAtomValue(isRepoCollapsedAtomFamily(group.projectId));
   const setCollapsedRepos = useSetAtom(collapsedRepoGroupsAtom);
   const setRenameErrorToast = useSetAtom(workspaceRenameErrorToastAtom);
+  const setGroupErrorToast = useSetAtom(workspaceGroupErrorToastAtom);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useAtom(renamingWorkspaceIdAtom);
   const { createFromSidebar, isCreating } = useCreateWorkspaceFromSidebar();
   const adjustDragCount = useSetAtom(adjustSidebarDragCountAtom);
-  const reorderWorkspace = useSetAtom(reorderSidebarWorkspaceAtom);
+  const reorderRepoChild = useSetAtom(reorderSidebarRepoChildAtom);
+  const reorderGroupMember = useSetAtom(reorderWorkspaceGroupMemberAtom);
+  const commitMembershipOrder = useSetAtom(commitWorkspaceMembershipOrderAtom);
   const store = useStore();
-  const areWorkspaceGroupsEnabled = useAtomValue(isWorkspaceGroupsEnabledAtom);
-  const workspaceGroups = useAtomValue(
-    areWorkspaceGroupsEnabled ? workspaceGroupsForProjectAtomFamily(group.projectId) : NO_WORKSPACE_GROUPS_ATOM,
-  );
 
-  // Whether the in-flight sidebar drag was started by THIS group's row context.
-  // Every drag context adjusts the shared drag count, so end/cancel/cleanup must
-  // only decrement for a drag they own — an unowning cleanup (collapsing a
-  // different group mid-drag) would otherwise release another context's drag.
+  // Membership is a backend fact: a drop that moves a row into or out of a
+  // group goes through these mutations, and the order lanes are only written
+  // once the server confirms (see handleSectionDragEnd).
+  const { mutate: addGroupMember } = useAddWorkspaceGroupMemberMutation();
+  const { mutate: removeGroupMember } = useRemoveWorkspaceGroupMemberMutation();
+
+  // Whether the in-flight sidebar drag was started by THIS group's children
+  // context. Every drag context adjusts the shared drag count, so
+  // end/cancel/cleanup must only decrement for a drag they own — an unowning
+  // cleanup (collapsing a different group mid-drag) would otherwise release
+  // another context's drag.
   const ownsActiveDragRef = useRef(false);
   const beginOwnedDrag = useCallback((): void => {
     if (!ownsActiveDragRef.current) {
@@ -118,8 +169,8 @@ export const SidebarRepoGroup = ({
   const dangerColor = useThemeDangerColor();
 
   // The group is a sortable item of WorkspaceSidebar's repo-group context: the
-  // whole group (header + rows) is the measured node so its rows travel with it,
-  // and the header button is the drag activator.
+  // whole group (header + children) is the measured node so its children travel
+  // with it, and the header button is the drag activator.
   const {
     attributes: groupAttributes,
     listeners: groupListeners,
@@ -131,8 +182,14 @@ export const SidebarRepoGroup = ({
     isOver: isGroupOver,
   } = useSortable({ id: group.projectId });
 
-  // The rows' own drag context; see the module comment for why it lives per group.
+  // The children's own drag context; see the module comment for why it lives
+  // per repo section. Its modifiers clamp a dragged child to the children box
+  // (measured live), which is what lets a row cross between the loose lane and
+  // the group cards without ever leaving its repo section.
   const rowDndSensors = useSidebarDndSensors();
+  const sectionChildrenRef = useRef<HTMLDivElement | null>(null);
+  // eslint-disable-next-line react-hooks/refs -- the modifier factory only closes over the ref; .current is read inside the modifier, which dnd-kit invokes on drag moves (event time), never during render.
+  const sectionDndModifiers = useMemo(() => buildRepoSectionDndModifiers(sectionChildrenRef), []);
 
   // Functions and callbacks
   const handleToggleCollapsed = (): void => {
@@ -151,23 +208,172 @@ export const SidebarRepoGroup = ({
     groupListeners?.onKeyDown?.(event);
   };
 
-  const handleRowDragEnd = useCallback(
+  // Resolve a drop within the section: a reorder inside one container commits
+  // its lane directly; a drop that crosses containers is a membership change,
+  // so it flips membership through the canonical mutation and commits the
+  // destination lane only on success — a rejected drop (409, network) leaves
+  // the lanes untouched, so the order can never claim a membership the server
+  // refused. Classification rides on the drag data every sortable/droppable in
+  // the section registers (see sidebarDnd.ts).
+  const handleSectionDragEnd = useCallback(
     (event: DragEndEvent): void => {
       endOwnedDrag();
-      if (event.over === null || event.over.id === event.active.id) {
+      const { active, over } = event;
+      if (over === null || over.id === active.id) {
         return;
       }
-      reorderWorkspace({
-        projectId: group.projectId,
-        activeWorkspaceId: String(event.active.id),
-        overWorkspaceId: String(event.over.id),
-      });
+      const activeId = String(active.id);
+      const overId = String(over.id);
+      const activeData = getSidebarDragData(active);
+      const overData = getSidebarDragData(over);
+
+      const findWorkspaceName = (workspaceId: string): string => {
+        for (const child of group.children) {
+          if (child.kind === "workspace" && child.workspace.objectId === workspaceId) {
+            return child.workspace.description ?? "workspace";
+          }
+
+          if (child.kind === "group") {
+            const member = child.members.find((candidate) => candidate.objectId === workspaceId);
+            if (member !== undefined) {
+              return member.description ?? "workspace";
+            }
+          }
+        }
+        return "workspace";
+      };
+
+      const findGroupName = (groupId: string): string => {
+        const child = group.children.find(
+          (candidate) => candidate.kind === "group" && candidate.group.objectId === groupId,
+        );
+        return child?.kind === "group" ? child.group.name : "group";
+      };
+
+      const moveIntoGroup = (workspaceId: string, groupId: string, beforeWorkspaceId: string | undefined): void => {
+        // One mutation covers loose→group AND group→group: the backend moves a
+        // workspace that is already in another group, dissolving the source if
+        // that empties it.
+        addGroupMember(
+          { groupId, workspaceId },
+          {
+            onSuccess: (): void =>
+              commitMembershipOrder({
+                projectId: group.projectId,
+                workspaceId,
+                target: { kind: "group", groupId, beforeWorkspaceId },
+              }),
+            onError: (): void =>
+              setGroupErrorToast({
+                title: `Failed to move "${findWorkspaceName(workspaceId)}" into "${findGroupName(groupId)}"`,
+                description: "The workspace was left where it was. Try again or check your connection.",
+                type: ToastType.ERROR_PROMINENT,
+                action: null,
+              }),
+          },
+        );
+      };
+
+      const releaseFromGroup = (workspaceId: string, groupId: string, beforeChildId: string | undefined): void => {
+        removeGroupMember(
+          { groupId, workspaceId },
+          {
+            onSuccess: (): void =>
+              commitMembershipOrder({
+                projectId: group.projectId,
+                workspaceId,
+                target: { kind: "loose", beforeChildId },
+              }),
+            onError: (): void =>
+              setGroupErrorToast({
+                title: `Failed to remove "${findWorkspaceName(workspaceId)}" from its group`,
+                description: "The workspace was left where it was. Try again or check your connection.",
+                type: ToastType.ERROR_PROMINENT,
+                action: null,
+              }),
+          },
+        );
+      };
+
+      // A group card drags only within the mixed lane. A drop on a member row
+      // or drop slot means the pointer rests inside another card — take that
+      // card's slot in the lane.
+      if (activeData?.sidebarKind === "workspace-group") {
+        const overLaneKey =
+          overData?.sidebarKind === "workspace-group"
+            ? overId
+            : overData?.sidebarKind === "workspace"
+              ? overData.containerId === LOOSE_CONTAINER_ID
+                ? overId
+                : overData.containerId
+              : overData?.sidebarKind === "workspace-group-drop-slot"
+                ? overData.groupId
+                : null;
+        if (overLaneKey !== null && overLaneKey !== activeId) {
+          reorderRepoChild({ projectId: group.projectId, activeChildId: activeId, overChildId: overLaneKey });
+        }
+        return;
+      }
+
+      if (activeData?.sidebarKind !== "workspace") {
+        return;
+      }
+      const sourceContainerId = activeData.containerId;
+
+      if (overData?.sidebarKind === "workspace") {
+        if (overData.containerId === sourceContainerId) {
+          // Same container: a plain reorder of whichever lane both rows share.
+          if (sourceContainerId === LOOSE_CONTAINER_ID) {
+            reorderRepoChild({ projectId: group.projectId, activeChildId: activeId, overChildId: overId });
+          } else {
+            reorderGroupMember({
+              projectId: group.projectId,
+              groupId: sourceContainerId,
+              activeWorkspaceId: activeId,
+              overWorkspaceId: overId,
+            });
+          }
+          return;
+        }
+
+        // Cross-container onto a row: join that row's container, taking its slot.
+        if (overData.containerId === LOOSE_CONTAINER_ID) {
+          releaseFromGroup(activeId, sourceContainerId, overId);
+        } else {
+          moveIntoGroup(activeId, overData.containerId, overId);
+        }
+        return;
+      }
+
+      if (overData?.sidebarKind === "workspace-group" && overId !== sourceContainerId) {
+        moveIntoGroup(activeId, overId, undefined);
+        return;
+      }
+
+      if (overData?.sidebarKind === "workspace-group-drop-slot" && overData.groupId !== sourceContainerId) {
+        moveIntoGroup(activeId, overData.groupId, undefined);
+        return;
+      }
+
+      if (overData?.sidebarKind === "release-slot" && sourceContainerId !== LOOSE_CONTAINER_ID) {
+        releaseFromGroup(activeId, sourceContainerId, undefined);
+      }
     },
-    [endOwnedDrag, reorderWorkspace, group.projectId],
+    [
+      endOwnedDrag,
+      group.projectId,
+      group.children,
+      reorderRepoChild,
+      reorderGroupMember,
+      commitMembershipOrder,
+      addGroupMember,
+      removeGroupMember,
+      setGroupErrorToast,
+    ],
   );
 
   // dnd-kit does not fire onDragCancel when its context unmounts (see
-  // PanelDndProvider), and the rows' context unmounts whenever the group
+  // PanelDndProvider), and the children's context unmounts whenever the group
   // collapses — which can happen mid-drag (a keyboard drag is parked while the
   // header stays clickable). Without this release a stranded drag leaves the
   // shared drag count held forever, silently disabling the hover peek.
@@ -216,15 +422,6 @@ export const SidebarRepoGroup = ({
 
   // JSX and rendering logic
   const Chevron = isRepoCollapsed ? ChevronRight : ChevronDown;
-
-  // The section's children while expanded: workspace-group cards first, then the
-  // loose rows. This interim placement (groups-above-loose) is the composition
-  // seam the sidebar-order lane extends when group cards join the manual drag
-  // ordering; keep any placement logic here.
-  const { groupsWithMembers, looseWorkspaces } = useMemo(
-    () => composeRepoSectionChildren(group.workspaces, workspaceGroups),
-    [group.workspaces, workspaceGroups],
-  );
 
   return (
     <div
@@ -290,61 +487,62 @@ export const SidebarRepoGroup = ({
           </Flex>
         )}
       </div>
-      {!isRepoCollapsed && group.workspaces.length === 0 && (
+      {!isRepoCollapsed && group.children.length === 0 && (
         <Text className={styles.noWorkspacesHint} data-testid={ElementIds.SIDEBAR_NO_WORKSPACES_HINT}>
           No workspaces yet
         </Text>
       )}
-      {!isRepoCollapsed &&
-        groupsWithMembers.map(({ group: workspaceGroup, members }) => (
-          <WorkspaceGroupCard
-            key={workspaceGroup.objectId}
-            group={workspaceGroup}
-            members={members}
-            actions={actions}
-            openInRuntime={openInRuntime}
-            destructiveColor={dangerColor}
-            renamingWorkspaceId={renamingWorkspaceId}
-            activeWorkspaceId={activeWorkspaceId}
-            onWorkspaceClick={onWorkspaceClick}
-            onWorkspaceHover={onWorkspaceHover}
-            onWorkspaceRenameCommit={handleRenameCommit}
-            onWorkspaceRenameCancel={handleRenameCancel}
-            onBeginDelete={onBeginDelete}
-          />
-        ))}
-      {!isRepoCollapsed && looseWorkspaces.length > 0 && (
-        // The rows get their own container (rather than sitting directly in the
-        // group) so restrictToParentElement clamps a dragged row to the rows'
-        // extent — it can slide between its siblings but never up over the
-        // group header or the group cards above.
-        <div className={styles.repoRows}>
+      {!isRepoCollapsed && group.children.length > 0 && (
+        // The children get their own container (rather than sitting directly in
+        // the group) so the section modifiers clamp a dragged child to the
+        // children's extent — a row slides across the loose rows and the group
+        // cards but never up over the repo header or out of the section.
+        <div ref={sectionChildrenRef} className={styles.repoRows}>
           <DndContext
             sensors={rowDndSensors}
             collisionDetection={closestCenter}
-            modifiers={sidebarDndModifiers}
+            modifiers={sectionDndModifiers}
             onDragStart={beginOwnedDrag}
-            onDragEnd={handleRowDragEnd}
+            onDragEnd={handleSectionDragEnd}
             onDragCancel={endOwnedDrag}
           >
-            <SortableContext items={looseWorkspaces.map((ws) => ws.objectId)} strategy={verticalListSortingStrategy}>
-              {looseWorkspaces.map((ws) => (
-                <SidebarWorkspaceRow
-                  key={ws.objectId}
-                  workspace={ws}
-                  isRenaming={renamingWorkspaceId === ws.objectId}
-                  isActive={ws.objectId === activeWorkspaceId}
-                  actions={actions}
-                  openInRuntime={openInRuntime}
-                  destructiveColor={dangerColor}
-                  onNavigate={onWorkspaceClick}
-                  onHover={onWorkspaceHover}
-                  onRenameCommit={handleRenameCommit}
-                  onRenameCancel={handleRenameCancel}
-                  onBeginDelete={onBeginDelete}
-                />
-              ))}
+            <SortableContext items={group.children.map(repoSectionChildKey)} strategy={verticalListSortingStrategy}>
+              {group.children.map((child) =>
+                child.kind === "workspace" ? (
+                  <SidebarWorkspaceRow
+                    key={child.workspace.objectId}
+                    workspace={child.workspace}
+                    isRenaming={renamingWorkspaceId === child.workspace.objectId}
+                    isActive={child.workspace.objectId === activeWorkspaceId}
+                    actions={actions}
+                    openInRuntime={openInRuntime}
+                    destructiveColor={dangerColor}
+                    onNavigate={onWorkspaceClick}
+                    onHover={onWorkspaceHover}
+                    onRenameCommit={handleRenameCommit}
+                    onRenameCancel={handleRenameCancel}
+                    onBeginDelete={onBeginDelete}
+                  />
+                ) : (
+                  <WorkspaceGroupCard
+                    key={child.group.objectId}
+                    group={child.group}
+                    members={child.members}
+                    actions={actions}
+                    openInRuntime={openInRuntime}
+                    destructiveColor={dangerColor}
+                    renamingWorkspaceId={renamingWorkspaceId}
+                    activeWorkspaceId={activeWorkspaceId}
+                    onWorkspaceClick={onWorkspaceClick}
+                    onWorkspaceHover={onWorkspaceHover}
+                    onWorkspaceRenameCommit={handleRenameCommit}
+                    onWorkspaceRenameCancel={handleRenameCancel}
+                    onBeginDelete={onBeginDelete}
+                  />
+                ),
+              )}
             </SortableContext>
+            <RepoSectionReleaseSlot />
           </DndContext>
         </div>
       )}
