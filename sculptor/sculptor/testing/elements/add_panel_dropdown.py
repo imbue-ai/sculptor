@@ -22,7 +22,10 @@ _PANEL_TAB_RENDER_TIMEOUT_MS = 2_000
 # The CENTER header `+` opens its menu on HOVER (a click there quick-adds an agent), so
 # opening it is a retried hover — a hover landing while Radix tears down a just-dismissed
 # menu can be swallowed, and ``expect`` alone can't recover a lost hover. Non-center `+`
-# opens on click (which pins the menu), so those use the click-based ``open_radix_toggle``.
+# also opens on hover, but a click there PINS the menu open, so those go through the
+# click-based ``open_radix_toggle``: a pinned menu stays put across the pointer moves the
+# assertions make, where a transient hover-open would need the same anchoring the center
+# path uses.
 _OPEN_HOVER_ATTEMPTS = 3
 _OPEN_HOVER_TIMEOUT_MS = 3_000
 

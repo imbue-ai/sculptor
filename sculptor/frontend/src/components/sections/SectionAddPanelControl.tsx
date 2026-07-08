@@ -7,8 +7,10 @@
 //     same action as the menu's "New {recent} agent" row) instead of toggling the menu.
 //     A tooltip naming that action fades in after a ~1s dwell, alongside the open menu.
 //   - NON-CENTER sections (left / right / bottom): a click PINS the menu open (it
-//     survives the pointer leaving) until the "+" is clicked again. Agents belong to the
-//     center, so there is no quick-add here — the menu is the whole interaction.
+//     survives the pointer leaving) until the "+" is clicked again. There is no
+//     click-to-quick-add here: the one-click shortcut is reserved for the center (the
+//     primary place to spin up agents). The side menus still create agents/panels the
+//     normal way — by picking from the menu, which targets the requesting section.
 //
 // The menu contents themselves are the shared AddPanelMenuContent (identical to the
 // empty-state dropdown). Radix's own click/keyboard toggle on the trigger is

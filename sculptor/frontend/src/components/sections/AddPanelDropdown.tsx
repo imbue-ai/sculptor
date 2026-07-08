@@ -98,11 +98,18 @@ const agentTypeTestId = (agentType: AgentTypeName): string => {
 const AddPanelMenuItems = ({
   subSection,
   onOpenPanel,
+  onPointerEnter,
+  onPointerLeave,
 }: {
   subSection: SubSectionId;
   // Called synchronously when an item is selected, before the menu closes, so the
   // dropdown can suppress Radix's focus-restore-to-trigger (see AddPanelDropdown).
   onOpenPanel: () => void;
+  // The agent-type sub-menu is a portal OUTSIDE the main content, so a hover-driven host
+  // (SectionAddPanelControl) must also see enter/leave on it — otherwise moving from the
+  // menu into the sub-menu reads as leaving the menu and closes it mid-navigation.
+  onPointerEnter?: (event: ReactPointerEvent) => void;
+  onPointerLeave?: (event: ReactPointerEvent) => void;
 }): ReactElement => {
   // state and hooks
   const actions = useAddPanelActions();
@@ -134,7 +141,11 @@ const AddPanelMenuItems = ({
         <DropdownMenu.SubTrigger data-testid={ElementIds.ADD_PANEL_AGENT_TYPE_SUBMENU}>
           <MenuRow label="New agent of type…" />
         </DropdownMenu.SubTrigger>
-        <DropdownMenu.SubContent data-testid={ElementIds.AGENT_TYPE_MENU}>
+        <DropdownMenu.SubContent
+          data-testid={ElementIds.AGENT_TYPE_MENU}
+          onPointerEnter={onPointerEnter}
+          onPointerLeave={onPointerLeave}
+        >
           {agentTypeOptions.map((option) => {
             // pi is optional: while no usable binary is resolved its entry reads
             // "Install Pi" and routes to Settings → Pi instead of creating a pi
@@ -232,6 +243,8 @@ export const AddPanelMenuContent = ({
         onOpenPanel={() => {
           openedPanelRef.current = true;
         }}
+        onPointerEnter={onPointerEnter}
+        onPointerLeave={onPointerLeave}
       />
     </DropdownMenu.Content>
   );
