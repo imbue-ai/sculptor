@@ -5,6 +5,7 @@ from playwright.sync_api import expect
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_repo_dialog import PlaywrightAddRepoDialogElement
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
+from sculptor.testing.elements.layouts import PlaywrightLayoutsSwitcherElement
 
 # Keyboard pickup (focus → Space) is retried: an async focus restore from a menu
 # that just closed can steal the Space press, so it lands on the menu trigger
@@ -307,6 +308,19 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         expand_icon = self.get_expand_icon()
         expect(expand_icon).to_be_visible()
         expand_icon.click()
+
+    # -- Layouts --
+
+    def get_layouts_link(self) -> Locator:
+        """The "Layouts" bottom-action item that opens the Layouts switcher."""
+        return self.get_by_test_id(ElementIDs.SIDEBAR_LAYOUTS_LINK)
+
+    def open_layouts_switcher(self) -> PlaywrightLayoutsSwitcherElement:
+        """Click the "Layouts" item and return the opened switcher POM."""
+        self.get_layouts_link().click()
+        dialog = self._page.get_by_test_id(ElementIDs.LAYOUTS_SWITCHER_DIALOG)
+        expect(dialog).to_be_visible()
+        return PlaywrightLayoutsSwitcherElement(locator=dialog, page=self._page)
 
 
 def get_workspace_sidebar(page: Page) -> PlaywrightWorkspaceSidebarElement:
