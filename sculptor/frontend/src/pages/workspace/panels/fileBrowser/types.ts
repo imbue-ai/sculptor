@@ -24,12 +24,14 @@ export type FlatFileEntry = {
 export type FileBrowserState = {
   expandedFolders: Array<string>;
   changesExpandedFolders: Array<string>;
-  // Folders the Changes tree has already auto-expanded once. The Changes tree
-  // opens each folder the first time it appears; recording that here (rather than
-  // in a per-mount ref) is what lets a folder the user then collapses stay
-  // collapsed across remounts and later change ticks, while genuinely new changed
-  // folders still open on first sight.
-  changesAutoExpandedFolders: Array<string>;
+  // Folders the Changes tree has already auto-expanded once. The tree opens each
+  // folder the first time it appears and records it here (persisted, not a per-mount
+  // ref), so a folder the user then collapses stays collapsed across remounts,
+  // change ticks, and workspace switches, while genuinely new changed folders still
+  // open on first sight. Optional because per-workspace snapshots persisted before
+  // this field existed load without it; readers must coalesce (`?? []`), which this
+  // `?` enforces at the type level.
+  changesAutoExpandedFolders?: Array<string>;
   viewMode: ViewMode;
   searchQuery: string;
   searchOpen: boolean;
