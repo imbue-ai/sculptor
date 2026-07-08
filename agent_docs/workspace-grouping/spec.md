@@ -48,8 +48,7 @@ workspace into that group's card.
 
 ### Drag a workspace into / out of / within a group
 
-With sidebar drag-and-drop available (built separately —
-`bryden/scu-1702-sidebar-drag-reorder`, a sub-issue of SCU-1474), the
+With sidebar drag-and-drop landed (PR #309, SCU-1702), the
 user drags a loose workspace onto a group card; the card lights up with
 an accent ring, stronger tint, and a dashed drop slot, and the drop adds
 the workspace as a member (REQ-DND-1). Dragging a member out into the
@@ -144,6 +143,11 @@ behaves as if `--no-group` were always passed (REQ-FLAG-4).
   every creation path requires an initial member, and a group whose
   last member leaves (workspace deleted, dragged out, or removed via
   CLI) MUST auto-dissolve. Empty groups MUST NOT exist.
+- **REQ-GROUP-9**: Frontend group mutations MUST follow the
+  state-ownership rules in `docs/development/review/sculptor.md`
+  (SCU-1120): backend-owned facts change through the canonical mutation
+  hooks with real failure paths — never an optimistic store write with
+  a fire-and-forget HTTP call.
 
 ### Sidebar UI
 
@@ -178,25 +182,38 @@ behaves as if `--no-group` were always passed (REQ-FLAG-4).
 - **REQ-MENU-4**: Selecting a color swatch MUST retint the group
   immediately.
 
-### Drag and drop (consumes the sidebar drag-reorder work)
+### Drag and drop (extends the landed sidebar reorder model)
 
-Sidebar manual re-ordering is being built separately on
-`bryden/scu-1702-sidebar-drag-reorder` (sub-issue of SCU-1474); this
-feature extends its model with group nodes rather than defining its own
-ordering.
+Sidebar manual re-ordering landed with PR #309 (SCU-1702). The model
+this feature extends: repo sections and the workspace rows within each
+are separate vertical dnd-kit sortable lists, draggable by pointer and
+by keyboard (focus → Space → arrows → Space); each drop materializes
+the full visible order into `sidebarOrder` in the global layout
+snapshot ("stored-first": stored ids render first, unstored items
+follow alphabetically, stale ids are skipped on read). Landed drags are
+deliberately locked to their parent container — moving a workspace
+*between* containers (loose list ↔ group card) is new interaction
+ground this feature breaks.
 
 - **REQ-DND-1**: Dropping a workspace onto a group card MUST add it as a
   member, with a drop affordance (accent ring, stronger tint, dashed
   drop slot).
 - **REQ-DND-2**: Members MUST be reorderable within a group via an
-  insertion line, and the order MUST persist.
+  insertion line. Member visual order persists in the sidebar-order
+  layout snapshot following the landed stored-first convention — the
+  backend owns *membership*, the frontend layout owns *visual order*
+  (`sculpt group show` lists members without implying sidebar order).
 - **REQ-DND-3**: Dragging a member out of the group into the loose list
   MUST release its membership and MUST NOT delete the workspace (last
   member out dissolves the group per REQ-GROUP-8).
 - **REQ-DND-4**: A group MUST be draggable as a single unit, and groups
   MUST participate in the manual sidebar ordering exactly like loose
-  workspace rows — users re-order groups and workspaces freely within a
-  repo section; there is no forced groups-first placement.
+  workspace rows — a repo section's children (group cards + loose
+  workspaces) form one re-orderable lane with no forced groups-first
+  placement.
+- **REQ-DND-5**: Group-membership drags MUST NOT regress the landed
+  same-list reorder interactions, and SHOULD be operable through the
+  landed keyboard drag path as well as by pointer.
 
 ### sculpt CLI
 
@@ -242,17 +259,24 @@ ordering.
 - **Empty groups.** A group cannot exist without members — no empty-card
   state, no "drag workspaces here" placeholder (cut when the ≥1-member
   invariant was adopted; the mock's empty-state card is superseded).
-- **Building sidebar drag-and-drop itself.** Manual re-ordering ships
-  separately (`bryden/scu-1702-sidebar-drag-reorder`, under SCU-1474);
-  this feature defines the group-specific drop behaviors on top of it.
+- **Building sidebar drag-and-drop itself.** Manual re-ordering landed
+  separately (PR #309, SCU-1702); this feature defines the
+  group-specific drop behaviors on top of it.
 - **Dia features that don't map:** pinning groups, "Chat with group",
   duplicate group, move-to-window, closed-group archival.
 
 ## Open Questions
 
-- **Coordination with the sidebar drag-reorder branch:** the ordering
-  model being built on `bryden/scu-1702-sidebar-drag-reorder` must be
-  able to represent group nodes among workspace rows (and members
-  ordered within a group). Where a *new* group or workspace initially
-  inserts in the manual order should follow whatever convention that
-  branch establishes.
+- **Naming collision with existing code:** the landed sidebar code
+  already uses "group" for *repo sections* — `RepoGroup`,
+  `sidebarWorkspaceGroupsAtom` (which holds repo groups),
+  `collapsedRepoGroupsAtom`, `reorderSidebarRepoGroupAtom`. The
+  architecture phase must pick non-colliding names for workspace
+  groups, and decide whether to rename the repo-section code for
+  clarity.
+- **Layout snapshot extension:** how `SidebarOrderState` grows to
+  represent a repo section's mixed children (group cards + loose
+  workspaces) plus per-group member order. New fields must stay
+  optional or bump `LAYOUT_SNAPSHOT_VERSION` so snapshots persisted
+  before the feature still load (see the existing optional-field
+  precedents in `persistence/types.ts`).
