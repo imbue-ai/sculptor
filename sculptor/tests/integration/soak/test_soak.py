@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.soak
+@pytest.mark.browser_and_electron
 def test_soak(
     sculptor_instance_: SculptorInstance,
     tmp_path: Path,
