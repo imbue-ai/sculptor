@@ -487,16 +487,6 @@ def _subagent_launch_events() -> list:
     ]
 
 
-def _reaction_turn_events(ack: str) -> list:
-    """A pi-initiated reaction turn (the extension's `sendUserMessage` wake-up):
-    `agent_start` with NO preceding `response` ack, then the assistant reaction."""
-    return [
-        _event({"type": "agent_start"}),
-        _event({"type": "message_end", "message": _assistant_msg(ack)}),
-        _event({"type": "agent_end", "messages": [_assistant_msg(ack)], "willRetry": False}),
-    ]
-
-
 def _main_agent_texts(emitted: list) -> list[str]:
     return [
         block.text
@@ -3043,53 +3033,28 @@ class TestSubagents:
         _assert_killed_pgid(agent, 777)
         _assert_killed_pgid(agent, 888)
 
-    def test_subagent_completion_triggers_auto_resume_reaction(self) -> None:
-        """After a sub-agent completion the extension wakes the agent (sendUserMessage);
-        the idle-drain consumes the pi-initiated reaction turn out-of-band so the agent's
-        reaction renders, and the await-reaction guard clears."""
+    def test_idle_drain_rejects_pi_initiated_agent_start(self) -> None:
+        """Pi never self-starts a run (Sculptor is the only turn-initiator — the
+        SCU-1776 invariant), so an `agent_start` between turns is a protocol
+        violation: logged loud, not consumed as a turn. The completion before it
+        still surfaces normally and its wake still enqueues."""
         agent = _make_agent()
         agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
-        ack = "Acknowledged: my sub-agent finished — continuing the work."
         agent._process = _make_process(
-            [_event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())]))]
-            + _reaction_turn_events(ack)
+            [
+                _event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())])),
+                _event({"type": "agent_start"}),
+            ]
         )
-        agent._drain_idle_background_events()
+        with expect_exact_logged_errors(["PiAgent saw a pi-initiated agent_start between turns"]):
+            agent._drain_idle_background_events()
         emitted = _drain(agent._output_messages)
 
         assert len(_bg_notifications(emitted)) == 1
-        assert any(ack in text for text in _main_agent_texts(emitted)), _main_agent_texts(emitted)
+        # Exactly the completion's own request cycle — no reaction turn was consumed.
         types = [type(m).__name__ for m in emitted]
-        assert "RequestStartedAgentMessage" in types and "RequestSuccessAgentMessage" in types
-        assert agent._awaiting_reaction_count == 0
-
-
-class TestAutoResumeReaction:
-    """Auto-resume reaction turns after task completion."""
-
-    def test_background_completion_triggers_auto_resume_reaction(self) -> None:
-        """After a background-task completion the extension wakes the agent; the idle-drain
-        consumes the pi-initiated reaction turn so the agent's reaction renders."""
-        agent = _make_agent()
-        agent._background_tasks[_BG_TASK_ID] = _BG_PGID
-        ack = "Acknowledged: my background task finished — continuing the work."
-        agent._process = _make_process([_event(_background_notify())] + _reaction_turn_events(ack))
-        agent._drain_idle_background_events()
-        emitted = _drain(agent._output_messages)
-
-        assert len(_bg_notifications(emitted)) == 1
-        assert any(ack in text for text in _main_agent_texts(emitted)), _main_agent_texts(emitted)
-        assert agent._awaiting_reaction_count == 0
-
-    def test_idle_drain_gives_up_awaiting_reaction_past_deadline(self) -> None:
-        """A completion whose reaction never arrives must not keep the drain awaiting
-        forever: once the window elapses, `_has_background_tasks` reports no work."""
-        agent = _make_agent()
-        agent._note_awaiting_reaction()
-        assert agent._has_background_tasks() is True
-        agent._awaiting_reaction_deadline = 0.0  # force the window to have elapsed
-        assert agent._has_background_tasks() is False
-        assert agent._awaiting_reaction_count == 0
+        assert types.count("RequestStartedAgentMessage") == 1
+        assert types.count("RequestSuccessAgentMessage") == 1
 
 
 class TestBackgroundTasks:
