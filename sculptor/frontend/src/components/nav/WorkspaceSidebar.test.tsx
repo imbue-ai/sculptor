@@ -90,14 +90,25 @@ describe("WorkspaceSidebar repo groups", () => {
     queryClient.clear();
   });
 
-  it("renders a repo with no workspaces as a group with a 'No workspaces yet' hint", () => {
+  it("renders a repo with no workspaces as a group with a hint and no per-repo actions", () => {
     // A registered repo before its first workspace exists must still appear in
-    // the sidebar (otherwise a just-added repo silently vanishes).
+    // the sidebar (otherwise a just-added repo silently vanishes). In the empty
+    // first-run state the per-repo "+"/settings actions are hidden: that page
+    // can't host the "+"'s dialog fallback (see WorkspaceSidebar).
     seedProject(store, "p1");
     store.set(workspaceIdsAtom, []);
     renderWithProviders(<Sidebar />, { store });
 
     expect(screen.getByTestId(ElementIds.SIDEBAR_REPO_GROUP)).toBeVisible();
     expect(screen.getByTestId(ElementIds.SIDEBAR_NO_WORKSPACES_HINT)).toBeVisible();
+    expect(screen.queryByTestId(ElementIds.SIDEBAR_REPO_ADD_WORKSPACE)).toBeNull();
+  });
+
+  it("shows the per-repo actions once a workspace exists", () => {
+    seedProject(store, "p1");
+    seedWorkspaces(store, ["w1"]);
+    renderWithProviders(<Sidebar />, { store });
+
+    expect(screen.getByTestId(ElementIds.SIDEBAR_REPO_ADD_WORKSPACE)).toBeVisible();
   });
 });

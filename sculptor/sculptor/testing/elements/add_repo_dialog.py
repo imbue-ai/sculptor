@@ -19,7 +19,7 @@ class PlaywrightAddRepoDialogElement(PlaywrightIntegrationTestElement):
         path_input = self.get_path_input()
         path_input.fill(path)
         path_input.press(f"{get_playwright_modifier_key()}+Enter")
-        expect(self._locator).to_be_hidden(timeout=15000)
+        expect(self._locator).to_be_hidden()
 
     def select_local_source(self) -> None:
         """Click the "Local" source radio card so the path-input form is shown.

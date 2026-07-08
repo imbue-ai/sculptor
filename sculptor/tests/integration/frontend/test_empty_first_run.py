@@ -73,6 +73,12 @@ def test_sidebar_add_repo_button_opens_add_repo_dialog(
     add_repo_dialog.select_local_source()
     expect(add_repo_dialog.get_path_input()).to_be_visible()
 
+    # Dismiss so the open dialog doesn't leak into the next test on the shared
+    # instance. With no autocomplete dropdown open, Escape bubbles to the Radix
+    # dialog and closes it.
+    page.keyboard.press("Escape")
+    expect(add_repo_dialog.get_path_input()).to_be_hidden()
+
 
 @user_story("to be unable to escape the first-run form with global shortcuts")
 def test_global_shortcuts_disabled_in_empty_state(sculptor_instance_empty_first_run_: SculptorInstance) -> None:

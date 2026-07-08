@@ -252,6 +252,11 @@ export const WorkspaceSidebar = (): ReactElement | null => {
               group={group}
               actions={workspaceActions}
               openInRuntime={openInRuntime}
+              // On first run the per-repo settings/"+" actions are hidden: the
+              // first-run page doesn't mount AppShell, so the "+"'s dialog
+              // fallback and error toast would silently no-op there (same reason
+              // New Workspace/Commands are disabled above).
+              showActions={!isWorkspaceListEmpty}
               onWorkspaceClick={handleWorkspaceClick}
               onWorkspaceHover={handleWorkspaceHover}
               onBeginDelete={setDeleteTarget}
