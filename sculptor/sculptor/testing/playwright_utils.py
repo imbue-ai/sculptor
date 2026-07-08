@@ -331,9 +331,8 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
     Workspaces live in the sidebar + Home list now (no tab strip); deleting each
     Home row via its inline delete button + confirmation removes them all and
     lands on the empty Home list. Home reacts to the list turning empty by
-    auto-opening the new-workspace dialog; it is non-modal (nothing is
-    overlay-blocked) but its panel covers the center of the Home page a caller
-    may interact with next, so it is dismissed before returning.
+    auto-opening the new-workspace dialog — a modal whose overlay would swallow
+    a caller's next click — so it is dismissed before returning.
     """
     # Dismiss any open popover/context menu that might intercept clicks.
     page.keyboard.press("Escape")
@@ -347,6 +346,7 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
     # navigate_to_home_page already waits for workspace rows or empty state.
     workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
 
+    did_delete_rows = False
     for _ in range(_MAX_WORKSPACE_DELETE_ITERATIONS):
         if workspace_rows.count() == 0:
             break
@@ -356,6 +356,7 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
         expect(confirm_button).to_be_visible()
         confirm_button.click()
         expect(confirm_dialog).to_be_hidden()
+        did_delete_rows = True
     else:
         remaining = workspace_rows.count()
         logger.error(
@@ -368,15 +369,17 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
         )
 
     # The list is now empty on Home, so the first-run auto-open pops the
-    # new-workspace dialog (on the store update that emptied the rows, or on
-    # the Home mount above). Close it so its panel doesn't sit over the Home
-    # content callers interact with next.
-    # It may legitimately never appear — an earlier step on this same Home
-    # mount can have opened-and-dismissed it already — so a miss is fine.
+    # new-workspace dialog. When THIS call emptied the list, the pop is
+    # guaranteed (the effect fires on the same store update that removed the
+    # rows) — wait for it with a real timeout so a slow WS frame can't leave
+    # the modal to land after we return and swallow the caller's next click.
+    # When the list was already empty on entry, the offer may have been
+    # opened-and-dismissed earlier on this same Home mount and will not
+    # re-fire, so only a momentary check is warranted.
     new_workspace_dialog = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)
-    try:
-        expect(new_workspace_dialog).to_be_visible(timeout=5_000)
-    except AssertionError:
+    if did_delete_rows:
+        expect(new_workspace_dialog).to_be_visible()
+    elif not new_workspace_dialog.is_visible():
         return
     page.keyboard.press("Escape")
     expect(new_workspace_dialog).to_have_count(0)
@@ -936,9 +939,11 @@ def wait_for_workspace_list_loaded(page: Page) -> None:
     window and skips workspace creation. Wait for one of the loaded-list
     signals before deciding anything: a sidebar workspace row (loaded,
     non-empty) or a repo group's "No workspaces yet" hint (loaded, empty; the
-    shared instance always has a repo registered). The persistent "Add repo"
-    nav button is deliberately NOT a signal — it renders before the list
-    loads, so it cannot distinguish anything.
+    shared instance always has a repo registered, and its group starts
+    expanded — the hint doesn't render inside a collapsed group, so a caller
+    that collapsed its only repo group must expand it first). The persistent
+    "Add repo" nav button is deliberately NOT a signal — it renders before the
+    list loads, so it cannot distinguish anything.
 
     Every signal lives in the sidebar, and collapsing unmounts the rail (the
     signals then don't exist in the DOM at all), so expand it first.

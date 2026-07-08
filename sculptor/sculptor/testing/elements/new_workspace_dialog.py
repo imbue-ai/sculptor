@@ -72,6 +72,10 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
     def get_dialog(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)
 
+    def get_overlay(self) -> Locator:
+        """The PaletteDialog shell's dimmed overlay, rendered for every open."""
+        return self._page.get_by_test_id(ElementIDs.PALETTE_DIALOG_OVERLAY)
+
     def get_form(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.NEW_WORKSPACE_FORM)
 

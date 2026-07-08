@@ -156,7 +156,7 @@ def test_command_palette_keyboard_suppressed_when_overlay_open(sculptor_instance
     mod = get_playwright_modifier_key()
     layout = _layout(sculptor_instance_)
     # With zero workspaces Home auto-opens the new-workspace dialog, which
-    # swallows global shortcuts while focused — create a workspace first.
+    # suppresses global shortcuts while it is open — create a workspace first.
     layout.ensure_workspace_exists()
     blur_active_element(page)
 

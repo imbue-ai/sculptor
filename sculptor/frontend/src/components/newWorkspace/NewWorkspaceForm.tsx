@@ -511,9 +511,8 @@ export const NewWorkspaceForm = ({
             <Button
               onClick={(): void => void handleSubmit()}
               disabled={isSubmitDisabled}
-              // The backend create (worktree + first agent) takes a few
-              // seconds; show that work is happening rather than a silently
-              // disabled button.
+              // The workspace-record create takes a moment; show that work
+              // is happening rather than a silently disabled button.
               loading={isCreating}
               aria-label="Create workspace"
               data-testid={ElementIds.NEW_WORKSPACE_CREATE_BUTTON}

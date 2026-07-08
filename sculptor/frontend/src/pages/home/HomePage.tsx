@@ -26,8 +26,7 @@ export const HomePage = (): ReactElement => {
   // never authors messages on the user's behalf.
   // `isWorkspaceListEmptyAtom` stays false while the list is loading, so a
   // boot with existing workspaces never flashes it; the offer therefore
-  // trails the stream's first snapshot (SCU-1781 tracks making that first
-  // snapshot fast via progressive loading).
+  // trails the stream's first snapshot.
   useEffect(() => {
     if (isWorkspaceListEmpty) {
       setNewWorkspaceModal({ open: true, initialPrompt: HOME_PROMPT_PREFILL });

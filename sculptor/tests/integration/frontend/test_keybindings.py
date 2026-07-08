@@ -36,8 +36,8 @@ def _ensure_workspace(sculptor_instance_: SculptorInstance) -> None:
     """Create a workspace so the shortcut flows below run unobstructed.
 
     Per-test cleanup deletes every workspace, and with zero workspaces Home
-    auto-opens the new-workspace dialog — a dismissible dialog that swallows
-    global shortcuts while focus sits in it. A workspace keeps the auto-open
+    auto-opens the new-workspace dialog — a dismissible overlay that suppresses
+    global shortcuts while it is open. A workspace keeps the auto-open
     away (and gives workspace-bound shortcuts something to act on); this is
     idempotent (a no-op once one exists).
     """
@@ -263,7 +263,7 @@ def test_starting_second_recording_cancels_first(sculptor_instance_: SculptorIns
 def test_help_dialog_reflects_customized_bindings(sculptor_instance_: SculptorInstance) -> None:
     """After changing a keybinding in settings, the help dialog should show the new binding."""
     # With zero workspaces Home auto-opens the new-workspace dialog, which
-    # swallows global shortcuts while focused — create a workspace first.
+    # suppresses global shortcuts while it is open — create a workspace first.
     _ensure_workspace(sculptor_instance_)
     keybindings = _navigate_to_keybindings(sculptor_instance_)
     page = sculptor_instance_.page
@@ -300,7 +300,7 @@ def test_help_dialog_reflects_customized_bindings(sculptor_instance_: SculptorIn
 def test_help_dialog_hides_unbound(sculptor_instance_: SculptorInstance) -> None:
     """Unbound keybindings should not appear in the help dialog."""
     # With zero workspaces Home auto-opens the new-workspace dialog, which
-    # swallows global shortcuts while focused — create a workspace first.
+    # suppresses global shortcuts while it is open — create a workspace first.
     _ensure_workspace(sculptor_instance_)
     keybindings = _navigate_to_keybindings(sculptor_instance_)
     page = sculptor_instance_.page
@@ -350,7 +350,7 @@ def test_keybindings_suppressed_when_overlay_open(sculptor_instance_: SculptorIn
     mod = get_playwright_modifier_key()
 
     # With zero workspaces Home auto-opens the new-workspace dialog, which
-    # swallows global shortcuts while focused — create a workspace first
+    # suppresses global shortcuts while it is open — create a workspace first
     # (before the workspace-row count is captured) so the count stays stable.
     _ensure_workspace(sculptor_instance_)
 
@@ -391,7 +391,7 @@ def test_default_command_palette_keybinding_works(sculptor_instance_: SculptorIn
     page = sculptor_instance_.page
 
     # With zero workspaces Home auto-opens the new-workspace dialog, which
-    # swallows global shortcuts while focused — create a workspace first.
+    # suppresses global shortcuts while it is open — create a workspace first.
     _ensure_workspace(sculptor_instance_)
 
     # Reset keybindings to defaults (earlier tests may have changed them)
@@ -419,7 +419,7 @@ def test_customized_keybinding_is_honored(sculptor_instance_: SculptorInstance) 
     mod = get_playwright_modifier_key()
 
     # With zero workspaces Home auto-opens the new-workspace dialog, which
-    # swallows global shortcuts while focused — create a workspace first.
+    # suppresses global shortcuts while it is open — create a workspace first.
     _ensure_workspace(sculptor_instance_)
 
     # Change "Command palette" from Meta+K to Meta+J in settings. Meta+J
@@ -467,8 +467,8 @@ def test_sidebar_toggle_keybinding_works_on_home_page(sculptor_instance_: Sculpt
     page = sculptor_instance_.page
     mod = get_playwright_modifier_key()
 
-    # Keep the empty-state auto-opened dialog (which swallows global
-    # shortcuts while focused) away by creating a workspace first.
+    # Keep the empty-state auto-opened dialog (which suppresses global
+    # shortcuts while it is open) away by creating a workspace first.
     _ensure_workspace(sculptor_instance_)
 
     # Reset keybindings to defaults (earlier tests may have changed them).
@@ -500,8 +500,8 @@ def test_sidebar_toggle_keybinding_works_on_settings_page(sculptor_instance_: Sc
     page = sculptor_instance_.page
     mod = get_playwright_modifier_key()
 
-    # Keep the empty-state auto-opened dialog (which swallows global
-    # shortcuts while focused) away by creating a workspace first.
+    # Keep the empty-state auto-opened dialog (which suppresses global
+    # shortcuts while it is open) away by creating a workspace first.
     _ensure_workspace(sculptor_instance_)
 
     # Reset keybindings to defaults; this also lands us on the settings page.

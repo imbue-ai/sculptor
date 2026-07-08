@@ -22,9 +22,10 @@ auto-opened dialog before each test.
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.new_workspace_dialog import PlaywrightNewWorkspaceDialog
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
+from sculptor.testing.pages.home_page import PlaywrightHomePage
+from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 from sculptor.testing.utils import get_playwright_modifier_key
@@ -57,7 +58,7 @@ def test_sidebar_shows_no_workspaces_hint(sculptor_instance_empty_first_run_: Sc
     """With a repo registered but no workspaces, the sidebar shows the hint."""
     page = sculptor_instance_empty_first_run_.page
 
-    expect(page.get_by_test_id(ElementIDs.SIDEBAR_NO_WORKSPACES_HINT)).to_be_visible()
+    expect(get_workspace_sidebar(page).get_no_workspaces_hint()).to_be_visible()
 
 
 @user_story("to add a repo straight from the sidebar before I have any workspaces")
@@ -102,10 +103,10 @@ def test_auto_opened_dialog_is_a_normal_modal(
     page = sculptor_instance_empty_first_run_.page
     dialog = PlaywrightNewWorkspaceDialog(page)
     expect(dialog.get_dialog()).to_be_visible()
-    expect(page.get_by_test_id(ElementIDs.PALETTE_DIALOG_OVERLAY)).to_be_visible()
+    expect(dialog.get_overlay()).to_be_visible()
 
     # An outside click (on the overlay) dismisses, exactly like other dialogs.
-    page.get_by_test_id(ElementIDs.PALETTE_DIALOG_OVERLAY).click(position={"x": 10, "y": 10})
+    dialog.get_overlay().click(position={"x": 10, "y": 10})
     expect(dialog.get_dialog()).to_have_count(0)
 
 
@@ -124,7 +125,7 @@ def test_dismissed_dialog_reopens_via_sidebar_button(
 
     page.keyboard.press("Escape")
     expect(dialog.get_dialog()).to_have_count(0)
-    expect(page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)).to_be_visible()
+    expect(PlaywrightHomePage(page=page).get_empty_state()).to_be_visible()
 
     dialog.open_via_sidebar_button()
     expect(dialog.get_prompt_textarea()).to_have_value("")
@@ -149,7 +150,7 @@ def test_global_shortcuts_live_in_empty_state(sculptor_instance_empty_first_run_
     expect(dialog.get_dialog()).to_have_count(0)
     page.keyboard.press(f"{mod_key}+k")
     page.keyboard.up(mod_key)
-    command_palette = page.get_by_test_id(ElementIDs.COMMAND_PALETTE)
+    command_palette = PlaywrightProjectLayoutPage(page=page).get_command_palette()
     expect(command_palette).to_be_visible()
     page.keyboard.press("Escape")
     expect(command_palette).to_have_count(0)
@@ -171,5 +172,6 @@ def test_creating_first_workspace_navigates_to_workspace(
     dialog.create_and_wait_for_chat_panel(workspace_name="First WS")
 
     # A workspace row appears in the sidebar and the empty-state hint is gone.
-    expect(get_workspace_sidebar(page).get_workspace_rows()).to_have_count(1)
-    expect(page.get_by_test_id(ElementIDs.SIDEBAR_NO_WORKSPACES_HINT)).to_have_count(0)
+    sidebar = get_workspace_sidebar(page)
+    expect(sidebar.get_workspace_rows()).to_have_count(1)
+    expect(sidebar.get_no_workspaces_hint()).to_have_count(0)

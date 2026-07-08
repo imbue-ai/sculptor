@@ -190,17 +190,19 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
               has_source_branch: args.sourceBranch != null,
             });
 
-            // Focus the new agent only if the user is still looking at this
-            // workspace — a keep-open multi-create or a manual navigation may
-            // have moved them on, and a late redirect would yank them back.
-            if (window.location.hash.startsWith(`#/ws/${workspaceId}`)) {
+            // Focus the new agent only if the user is still parked on this
+            // workspace's root — a keep-open multi-create or a manual
+            // navigation may have moved them elsewhere, and opening an agent
+            // themselves (the empty center's New agent) puts them on an agent
+            // sub-route; a late redirect would yank them out of either.
+            if (window.location.hash === `#/ws/${workspaceId}`) {
               navigateToAgent(workspaceId, agentResponse.data.id);
             }
           } catch (error) {
             console.error("Failed to create the workspace's first agent:", error);
             setCreateAgentErrorToast({
               title: "Failed to create agent",
-              description: String(error),
+              description: "The agent could not be created. Use the workspace's New agent action to retry.",
               type: ToastType.ERROR,
               action: null,
             });
