@@ -50,6 +50,7 @@ from sculptor.state.chat_state import ContentBlock
 from sculptor.state.chat_state import ToolInput
 from sculptor.state.chat_state import ToolInteractiveRole
 from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.messages import ModelCatalog
 from sculptor.state.messages import ModelOption
 
 
@@ -155,6 +156,16 @@ class Harness(BaseModel, abc.ABC):
         base offers nothing, mirroring the all-`False` `capabilities()` default.
         """
         return []
+
+    def get_model_catalog(self, task_state: AgentTaskStateV2 | None) -> ModelCatalog:
+        """The raw switcher catalog, preserving lifecycle states a plain list
+        cannot express (e.g. `NOT_FETCHED_YET`, before a dynamic catalog's probe
+        has run). `get_available_models` coalesces those to `[]` for callers that
+        only need to offer models; the frontend reads this to tell a still-loading
+        catalog from a fetched-but-empty one. A harness that sources no backend
+        catalog has nothing to load, so its resolved list is authoritative.
+        """
+        return self.get_available_models(task_state)
 
     def get_selected_model_id(self, task_state: AgentTaskStateV2 | None) -> str | None:
         """The `model_id` of the task's currently-selected model, or `None` when

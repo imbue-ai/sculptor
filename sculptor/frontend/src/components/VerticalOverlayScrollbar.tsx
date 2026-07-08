@@ -46,6 +46,13 @@ type VerticalOverlayScrollbarProps = {
   scrollRef: RefObject<HTMLElement | null>;
   /** Applied to the draggable thumb so tests (and callers) can target it. */
   thumbTestId?: string;
+  /**
+   * `id` of the scroll container the thumb controls, exposed as the thumb's
+   * `aria-controls`. Wiring it gives the `role="scrollbar"` thumb its expected
+   * relationship to the scrolled region, so it surfaces in accessibility trees
+   * (and Playwright snapshots) instead of reading as empty.
+   */
+  scrollContainerId?: string;
 };
 
 /**
@@ -68,6 +75,7 @@ type VerticalOverlayScrollbarProps = {
 export const VerticalOverlayScrollbar = ({
   scrollRef,
   thumbTestId,
+  scrollContainerId,
 }: VerticalOverlayScrollbarProps): ReactElement | null => {
   const [geometry, setGeometry] = useState<Geometry>(EMPTY_GEOMETRY);
   const [isHovered, setIsHovered] = useState(false);
@@ -92,7 +100,8 @@ export const VerticalOverlayScrollbar = ({
   useEffect((): (() => void) | void => {
     const element = scrollRef.current;
     if (!element) return;
-    setPortalTarget(element.closest<HTMLElement>(THEME_ROOT_SELECTOR));
+    const themeRoot = element.closest<HTMLElement>(THEME_ROOT_SELECTOR);
+    setPortalTarget(themeRoot);
 
     const readScrollTop = (): void => {
       setGeometry((prev) => (prev.scrollTop === element.scrollTop ? prev : { ...prev, scrollTop: element.scrollTop }));
@@ -132,6 +141,19 @@ export const VerticalOverlayScrollbar = ({
     resizeObserver.observe(element);
     const content = element.firstElementChild;
     if (content) resizeObserver.observe(content);
+    // A layout shift can MOVE the host without resizing it or the window — e.g.
+    // collapsing an adjacent sidebar grows a container the host lives in and
+    // slides the host sideways. That fires neither the host's own ResizeObserver
+    // nor `window resize`, so the fixed, viewport-positioned overlay would stay
+    // stranded at the host's old x, floating over whatever moved into that space.
+    // Observe the ancestor chain up to the theme root too: whichever ancestor
+    // absorbs the shift resizes, which re-reads the host's rect and repositions
+    // the overlay. The track is `position: fixed` / `pointer-events: none`, so
+    // restyling it can't resize an observed ancestor — no ResizeObserver loop.
+    for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      resizeObserver.observe(ancestor);
+      if (ancestor === themeRoot) break;
+    }
     window.addEventListener("resize", readRect);
 
     return (): void => {
@@ -189,7 +211,12 @@ export const VerticalOverlayScrollbar = ({
 
   const thumbHeight = computeThumbHeight(geometry);
   const travel = geometry.height - thumbHeight;
-  const thumbTop = travel > 0 ? (geometry.scrollTop / maxScroll) * travel : 0;
+  const scrollFraction = geometry.scrollTop / maxScroll;
+  const thumbTop = travel > 0 ? scrollFraction * travel : 0;
+  // Scroll progress as a 0–100 percentage for the ARIA scrollbar role, which
+  // pairs `aria-valuenow` with `aria-controls`. It rides the same per-scroll
+  // render as `thumbTop`, so no extra work outside the existing update path.
+  const scrollPercent = Math.round(scrollFraction * 100);
   const isActive = isHovered || isDragging;
 
   return createPortal(
@@ -205,6 +232,13 @@ export const VerticalOverlayScrollbar = ({
       <div
         className={styles.thumb}
         data-testid={thumbTestId}
+        role="scrollbar"
+        aria-orientation="vertical"
+        aria-label="Scrollbar"
+        aria-controls={scrollContainerId}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={scrollPercent}
         style={{ height: thumbHeight, transform: `translateY(${thumbTop}px)` }}
         onPointerEnter={(): void => setIsHovered(true)}
         onPointerLeave={(): void => setIsHovered(false)}

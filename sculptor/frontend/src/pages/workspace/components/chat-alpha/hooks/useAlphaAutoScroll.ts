@@ -25,9 +25,6 @@ import {
   type ScrollStateMachine,
 } from "../scroll/scrollStateMachine.ts";
 
-// The at-bottom distance comes from bottomThresholdFor(el) — tighter on short
-// (mobile) viewports — and every at-bottom sample in this hook must go through
-// it; see the helper's doc for why a single fixed-threshold hold-out regresses.
 // Tighter threshold for re-engaging auto-scroll. The user must scroll to
 // essentially the very bottom — not just "near" it — to opt back in.
 const REENGAGE_THRESHOLD = 5;

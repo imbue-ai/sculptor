@@ -1,5 +1,6 @@
 import hashlib
 import os
+import threading
 import tomllib
 from collections.abc import Mapping
 from pathlib import Path
@@ -23,6 +24,19 @@ class InvalidConfigError(Exception):
         self.message = f"Unhandled error loading your config file:\n{error}"
         super().__init__(self.message)
 
+
+# Serializes read-merge-write cycles against the module-level config singleton.
+#
+# Acquired internally by ``replace_config`` and ``merge_config`` so callers
+# cannot write the singleton or file unsynchronized. This lock is
+# process-local: correctness depends on Sculptor running as a single
+# uvicorn worker (see ``sculptor/cli/app.py``). Running uvicorn with
+# ``--workers > 1`` would give each worker its own singleton and its own
+# lock, so two workers could race on the shared config file on disk. If
+# multi-worker mode is ever required, replace this with a filesystem lock
+# (``fcntl.flock`` on the config file) or migrate user config to a
+# persistent store with row-level locking.
+_USER_CONFIG_LOCK = threading.Lock()
 
 _CONFIG_INSTANCE: UserConfig | None = None
 
@@ -53,6 +67,44 @@ def set_user_config_instance(config: UserConfig | None) -> None:
     )
     global _CONFIG_INSTANCE
     _CONFIG_INSTANCE = config
+
+
+def replace_config(new_config: UserConfig) -> UserConfig:
+    """Atomically write a full config object to disk and update the singleton.
+
+    The lock covers the file write and singleton assignment together, so no
+    concurrent caller can observe a half-updated state. Use this when you
+    already have a complete ``UserConfig`` (e.g. from ``model_update`` or
+    ``model_copy``). For partial field updates, use ``merge_config``.
+    """
+    with _USER_CONFIG_LOCK:
+        save_config(new_config, get_config_path())
+        set_user_config_instance(new_config)
+        return new_config
+
+
+def merge_config(partial_fields: dict[str, Any]) -> UserConfig:
+    """Merge partial fields into the current config, atomically.
+
+    Reads the current singleton, merges ``partial_fields`` (camelCase
+    aliases matching the JSON schema) into it, validates, writes to disk,
+    and updates the singleton — all under one lock acquisition. This
+    prevents the lost-update race where two concurrent callers both read
+    the same stale config, each merge their own field, and the second
+    writer silently clobbers the first.
+
+    ``partial_fields`` keys must use camelCase aliases — the same shape the
+    frontend sends in its JSON body. Keys absent from the dict are left
+    unchanged.
+    """
+    with _USER_CONFIG_LOCK:
+        old = get_user_config_instance()
+        merged = old.model_dump(by_alias=True) if old else {}
+        merged.update(partial_fields)
+        new = UserConfig.model_validate(merged)
+        save_config(new, get_config_path())
+        set_user_config_instance(new)
+        return new
 
 
 def _create_random_hash() -> str:
@@ -221,3 +273,43 @@ def initialize_from_file() -> bool:
     else:
         logger.info("No config file found at {}, will require onboarding", config_path)
         return False
+
+
+def make_onboarded_user_config(base: UserConfig, is_telemetry_enabled: bool) -> UserConfig:
+    """Return a copy of ``base`` with onboarding marked complete.
+
+    Records privacy-policy consent and sets the telemetry level to the given
+    consent — the same two flags ``complete_onboarding`` persists once a user
+    finishes the welcome flow. Used to fabricate a ready-to-run config (e.g. for
+    local dev/QA) without walking the onboarding UI.
+    """
+    return model_update(
+        base,
+        {
+            "is_privacy_policy_consented": True,
+            "is_telemetry_level_set": True,
+            **get_privacy_settings_for_telemetry(is_telemetry_enabled).model_dump(),
+        },
+    )
+
+
+def seed_onboarded_config_if_needed(config_path: Path, is_telemetry_enabled: bool) -> bool:
+    """Idempotently ensure ``config_path`` holds a valid, onboarded config.
+
+    Returns True when a config was written, False when an existing valid,
+    already-onboarded config was left untouched. Safe to re-run: a config that
+    already loads and has completed onboarding is preserved so local
+    customizations survive repeated launches, while a missing or corrupt one is
+    (re)written from the anonymized default.
+    """
+    existing: UserConfig | None = None
+    if config_path.exists():
+        try:
+            existing = load_config(config_path)
+        except (ValidationError, InvalidConfigError, tomllib.TOMLDecodeError):
+            existing = None
+    if existing is not None and existing.is_privacy_policy_consented and existing.is_telemetry_level_set:
+        return False
+    base = existing if existing is not None else get_default_user_config_instance()
+    save_config(make_onboarded_user_config(base, is_telemetry_enabled), config_path)
+    return True

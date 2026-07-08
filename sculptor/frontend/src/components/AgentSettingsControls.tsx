@@ -19,27 +19,18 @@ type AgentSettingsControlsProps = {
   onFastModeToggle: () => void;
   isPlanMode: boolean;
   onPlanModeToggle: () => void;
-  /**
-   * Hide the plan-mode toggle when the active harness can't honor a
-   * mid-turn interactive backchannel (pi). Defaults to `true` so callsites
-   * without a task yet (e.g. the new-workspace modal) show it.
-   */
-  canEnterPlanMode?: boolean;
-  /**
-   * Gate the fast-mode toggle on harness support in addition to the
-   * model's own `supportsFastMode` capability. Defaults to `true`.
-   */
-  canUseFastMode?: boolean;
 };
 
 /**
- * The right-side toolbar block of agent settings — plan mode, fast mode
- * (when the model supports it), thinking effort, model. Lives standalone
- * so the new-workspace modal can render the same controls beneath its
- * prompt textarea without duplicating ChatInput's wiring. The fast-mode
- * toggle is gated on `getModelCapabilities(model).supportsFastMode`
- * here (rather than at every callsite) so consumers only have to pass
- * the selected model.
+ * The right-side toolbar block of a Claude first agent's per-prompt settings —
+ * plan mode, fast mode (when the model supports it), thinking effort, and model.
+ * The new-workspace modal renders this beneath its prompt textarea for a Claude
+ * first agent. Non-Claude harnesses don't consume any of these at create (pi
+ * picks its model from its own in-task catalog and plans from the chat; terminal
+ * agents have no model), so the modal renders its own hint in place of this
+ * block rather than gating the controls one by one. The fast-mode toggle is
+ * gated on `getModelCapabilities(model).supportsFastMode` here (rather than at
+ * every callsite) so consumers only have to pass the selected model.
  *
  * ChatInput renders a parallel copy of this toolbar block that adds
  * capability-gated disabled states and a backend-model selector it needs in
@@ -55,34 +46,31 @@ export const AgentSettingsControls = ({
   onFastModeToggle,
   isPlanMode,
   onPlanModeToggle,
-  canEnterPlanMode = true,
-  canUseFastMode = true,
 }: AgentSettingsControlsProps): ReactElement => {
   const { supportsFastMode: doesSupportFastMode } = getModelCapabilities(model);
   const { navigateToGlobalSettings } = useImbueNavigate();
-  // ModelSelector's no-providers CTA (pi with an empty backend catalog) sends
-  // the user to the pi login flow under Settings -> Pi, matching ChatInput.
+  // ModelSelector requires an authenticate handler for its no-providers CTA. That
+  // CTA is a pi-only state that never fires for this Claude cluster, but the prop
+  // is required, so route it to the pi login flow to match ChatInput.
   const handleAuthenticate = useCallback((): void => {
     navigateToGlobalSettings(SettingsSection.PI);
   }, [navigateToGlobalSettings]);
   return (
     <Flex align="center" flexShrink="0">
-      {canEnterPlanMode && (
-        <Tooltip content={isPlanMode ? "Leave plan mode" : "Enter plan mode"}>
-          <IconButton
-            variant="ghost"
-            size="3"
-            onClick={onPlanModeToggle}
-            aria-label="Toggle plan first mode"
-            data-testid={ElementIds.PLAN_MODE_TOGGLE}
-            data-active={isPlanMode}
-            style={isPlanMode ? { color: "var(--button-primary-bg)", margin: 0 } : { margin: 0 }}
-          >
-            <ListChecks size={16} />
-          </IconButton>
-        </Tooltip>
-      )}
-      {doesSupportFastMode && canUseFastMode && <FastModeToggle isActive={isFastMode} onToggle={onFastModeToggle} />}
+      <Tooltip content={isPlanMode ? "Leave plan mode" : "Enter plan mode"}>
+        <IconButton
+          variant="ghost"
+          size="3"
+          onClick={onPlanModeToggle}
+          aria-label="Toggle plan first mode"
+          data-testid={ElementIds.PLAN_MODE_TOGGLE}
+          data-active={isPlanMode}
+          style={isPlanMode ? { color: "var(--button-primary-bg)", margin: 0 } : { margin: 0 }}
+        >
+          <ListChecks size={16} />
+        </IconButton>
+      </Tooltip>
+      {doesSupportFastMode && <FastModeToggle isActive={isFastMode} onToggle={onFastModeToggle} />}
       <EffortSelector effort={effort} onEffortChange={onEffortChange} />
       <Flex pr="1">
         <ModelSelector model={model} onModelChange={onModelChange} onAuthenticate={handleAuthenticate} />

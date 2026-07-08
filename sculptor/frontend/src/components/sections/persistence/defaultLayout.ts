@@ -3,9 +3,9 @@
 // agent/terminal ids are resolved by the caller (the bootstrap) from the active
 // task and the first-visit seeded terminal — never hardcoded.
 //
-//   center — the only EXPANDED section: holds the active agent, and is the
+//   center — EXPANDED: holds the active agent, and is the
 //            active sub-section on load.
-//   left   — COLLAPSED, with Files/Changes/Commits open and Files active.
+//   left   — EXPANDED, with Files/Changes/Commits open and Files active.
 //   bottom — COLLAPSED, with one terminal open.
 //   right  — COLLAPSED and empty; Actions/Skills/Notes default here only WHEN opened,
 //            and nothing is open at first run.
@@ -51,9 +51,9 @@ export function buildDefaultWorkspaceLayout({
       left: DEFAULT_ACTIVE_LEFT_PANEL_ID,
       bottom: terminalPanelId,
     },
-    // center omitted — always expanded; the other three start collapsed.
+    // center omitted — always expanded. left also starts expanded; right/bottom collapsed.
     expanded: {
-      left: false,
+      left: true,
       right: false,
       bottom: false,
     },

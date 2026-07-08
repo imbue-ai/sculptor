@@ -6,6 +6,7 @@ from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import Notification
 from sculptor.database.models import NotificationID
 from sculptor.database.models import Project
+from sculptor.database.models import TaskID
 from sculptor.database.models import UserSettings
 from sculptor.database.models import Workspace
 from sculptor.database.models import WorkspaceInitializationStrategy
@@ -15,12 +16,15 @@ from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import UserSettingsID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.data_model_service.api import CompletedTransaction
+from sculptor.state.workflow_state import WorkflowTaskState
 from sculptor.web.data_types import OpenFileUiAction
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.data_types import UserUpdateSourceTypes
+from sculptor.web.derived import TaskUpdate
 from sculptor.web.streams import LEGACY_SETUP_PLACEHOLDER_BYTES
 from sculptor.web.streams import _convert_to_streaming_update
 from sculptor.web.streams import _convert_to_user_update
+from sculptor.web.streams import _extract_changed_tasks
 from sculptor.web.streams import _snapshot_setup_state
 
 
@@ -140,6 +144,7 @@ def test_convert_includes_ui_open_file() -> None:
         task_views_by_task_id={},
         task_update_state_by_task_id={},
         processed_message_by_task_id={},
+        sent_workflow_states_by_task_id={},
         settings=_empty_settings(),
     )
 
@@ -157,6 +162,7 @@ def test_convert_ui_open_file_last_write_wins_for_same_workspace() -> None:
         task_views_by_task_id={},
         task_update_state_by_task_id={},
         processed_message_by_task_id={},
+        sent_workflow_states_by_task_id={},
         settings=_empty_settings(),
     )
 
@@ -175,7 +181,79 @@ def test_convert_ui_open_file_keeps_distinct_workspaces() -> None:
         task_views_by_task_id={},
         task_update_state_by_task_id={},
         processed_message_by_task_id={},
+        sent_workflow_states_by_task_id={},
         settings=_empty_settings(),
     )
 
     assert update.ui_open_file_by_workspace_id == {workspace_a: action_a, workspace_b: action_b}
+
+
+def _make_task_update(task_id: TaskID, workflow_task_states: dict[str, WorkflowTaskState]) -> TaskUpdate:
+    return TaskUpdate(
+        task_id=task_id,
+        chat_messages=(),
+        updated_artifacts=(),
+        in_progress_chat_message=None,
+        queued_chat_messages=(),
+        in_progress_user_message_id=None,
+        streaming_start_index=0,
+        workflow_task_states=workflow_task_states,
+    )
+
+
+def test_extract_changed_tasks_suppresses_workflow_states_resends() -> None:
+    """The workflow map goes on the wire on first send and whenever a value
+    object changes; a re-fold that carries the same value objects forward (no
+    workflow message in the batch) is suppressed to None."""
+    task_id = TaskID()
+    workflow_state = WorkflowTaskState(task_id="task_wf_1", tool_use_id="toolu_1")
+    sent_workflow_states_by_task_id: dict[TaskID, dict[str, WorkflowTaskState] | None] = {}
+
+    _, first = _extract_changed_tasks(
+        changed_task_ids={task_id},
+        task_views_by_task_id={},
+        task_update_state_by_task_id={task_id: _make_task_update(task_id, {"toolu_1": workflow_state})},
+        sent_workflow_states_by_task_id=sent_workflow_states_by_task_id,
+    )
+    assert first[task_id].workflow_task_states == {"toolu_1": workflow_state}
+
+    # The fold rebuilds the dict but carries the untouched value forward.
+    _, second = _extract_changed_tasks(
+        changed_task_ids={task_id},
+        task_views_by_task_id={},
+        task_update_state_by_task_id={task_id: _make_task_update(task_id, {"toolu_1": workflow_state})},
+        sent_workflow_states_by_task_id=sent_workflow_states_by_task_id,
+    )
+    assert second[task_id].workflow_task_states is None
+
+    # A workflow message folded a new value object: the map is sent again.
+    completed_state = workflow_state.model_copy(update={"status": "completed"})
+    _, third = _extract_changed_tasks(
+        changed_task_ids={task_id},
+        task_views_by_task_id={},
+        task_update_state_by_task_id={task_id: _make_task_update(task_id, {"toolu_1": completed_state})},
+        sent_workflow_states_by_task_id=sent_workflow_states_by_task_id,
+    )
+    assert third[task_id].workflow_task_states == {"toolu_1": completed_state}
+
+
+def test_extract_changed_tasks_suppresses_empty_map_after_first_send() -> None:
+    """Tasks that never ran a workflow send {} once, then None thereafter."""
+    task_id = TaskID()
+    sent_workflow_states_by_task_id: dict[TaskID, dict[str, WorkflowTaskState] | None] = {}
+
+    _, first = _extract_changed_tasks(
+        changed_task_ids={task_id},
+        task_views_by_task_id={},
+        task_update_state_by_task_id={task_id: _make_task_update(task_id, {})},
+        sent_workflow_states_by_task_id=sent_workflow_states_by_task_id,
+    )
+    assert first[task_id].workflow_task_states == {}
+
+    _, second = _extract_changed_tasks(
+        changed_task_ids={task_id},
+        task_views_by_task_id={},
+        task_update_state_by_task_id={task_id: _make_task_update(task_id, {})},
+        sent_workflow_states_by_task_id=sent_workflow_states_by_task_id,
+    )
+    assert second[task_id].workflow_task_states is None

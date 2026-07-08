@@ -6,12 +6,21 @@
 // the groups, the shared action list, and the delete confirmation — stay in
 // WorkspaceSidebar and arrive as props; per-group state (collapse, rename) is read
 // from its atoms here.
+//
+// The group is itself a sortable item of WorkspaceSidebar's repo-group DndContext
+// (dragged by its header), and it hosts its OWN DndContext for its workspace rows —
+// a workspace belongs to its repo, so scoping the row context per group makes
+// cross-repo drops structurally impossible rather than merely rejected.
 
+import type { DragEndEvent } from "@dnd-kit/core";
+import { closestCenter, DndContext } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { ContextMenu, DropdownMenu, Flex, IconButton, Text, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
-import { ChevronDown, ChevronRight, MoreHorizontal, Plus, Settings, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
-import { memo, useCallback } from "react";
+import { memo, useCallback, useEffect, useRef } from "react";
 
 import type { Workspace } from "~/api";
 import { ElementIds, updateWorkspace } from "~/api";
@@ -32,16 +41,11 @@ import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCrea
 import { WorkspaceStatusDots } from "~/components/statusDot";
 import { ToastType } from "~/components/Toast.tsx";
 
-import { collapsedRepoGroupsAtom, isRepoCollapsedAtomFamily } from "./navAtoms.ts";
+import { adjustSidebarDragCountAtom, collapsedRepoGroupsAtom, isRepoCollapsedAtomFamily } from "./navAtoms.ts";
+import { sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
 import styles from "./SidebarRepoGroup.module.scss";
-
-// A repo (project) and the workspaces that live in it, as grouped by
-// WorkspaceSidebar.
-export type RepoGroup = {
-  projectId: string;
-  name: string;
-  workspaces: ReadonlyArray<Workspace>;
-};
+import type { RepoGroup } from "./sidebarWorkspaceOrder.ts";
+import { reorderSidebarWorkspaceAtom } from "./sidebarWorkspaceOrder.ts";
 
 /**
  * A single workspace row in the sidebar repo group: the status dot + name (or an
@@ -54,6 +58,10 @@ export type RepoGroup = {
  * the rows whose aggregate flags actually flip — not the whole sidebar. For
  * the memo to hold, every non-primitive prop must be reference-stable across
  * parent renders (memoized action lists, id-taking callbacks).
+ *
+ * The row is a sortable item of its group's DndContext: the row div is the measured
+ * node, and the name button is the focusable drag activator — the hover action
+ * buttons stay outside the listeners so grabbing them can never start a drag.
  */
 const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   workspace,
@@ -81,11 +89,46 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   onBeginDelete: (workspace: Workspace) => void;
 }): ReactElement {
   const status = useAtomValue(workspaceDotStatusAtomFamily(workspace.objectId));
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isOver } =
+    useSortable({
+      id: workspace.objectId,
+      disabled: isRenaming,
+    });
+
+  // Enter navigates from the keyboard, like a click. Space is deliberately NOT
+  // handled here: it falls through to the dnd-kit keyboard sensor's activator
+  // (listeners.onKeyDown), so the drag pipeline (focus row → Space → arrows →
+  // Space) works while Enter can never start a drag. Mid-drag, Enter is the
+  // sensor's drop-commit key, so it is left alone rather than navigating out
+  // from under the drag.
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>): void => {
+    if (event.key === "Enter" && event.target === event.currentTarget && !isDragging) {
+      event.preventDefault();
+      onNavigate(workspace.objectId);
+      return;
+    }
+    listeners?.onKeyDown?.(event);
+  };
+
+  const rowClassName = [
+    styles.workspaceRow,
+    isActive ? styles.workspaceRowActive : "",
+    isDragging ? styles.rowDragging : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <ContextMenu.Root>
       <ContextMenu.Trigger>
-        <div className={`${styles.workspaceRow} ${isActive ? styles.workspaceRowActive : ""}`}>
+        {/* Translate-only (never CSS.Transform): rows and groups vary in height, and
+            the scale component dnd-kit folds into transforms would stretch the
+            element toward the hovered slot's size. */}
+        <div
+          ref={setNodeRef}
+          className={rowClassName}
+          style={{ transform: CSS.Translate.toString(transform), transition }}
+        >
           {isRenaming ? (
             <span className={styles.workspaceRowButton}>
               <span className={styles.workspaceDot}>
@@ -101,12 +144,23 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
           ) : (
             <button
               type="button"
+              ref={setActivatorNodeRef}
               className={styles.workspaceRowButton}
+              {...attributes}
+              {...listeners}
+              // After the listeners spread so this composed handler REPLACES the
+              // sensor's raw onKeyDown (it delegates every non-Enter key back to it).
+              onKeyDown={handleKeyDown}
               onClick={() => onNavigate(workspace.objectId)}
               onMouseEnter={() => onHover(workspace.objectId)}
               data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW}
               data-workspace-id={workspace.objectId}
               data-has-unread={String(status.hasUnread)}
+              // Live drag flags for the keyboard-drag pipeline (and its Playwright
+              // driver): the dragged row is marked while the drag is active, and the
+              // row whose slot the drag currently targets is marked as the drop target.
+              data-sidebar-dragging={isDragging ? "true" : undefined}
+              data-sidebar-drop-target={isOver && !isDragging ? "true" : undefined}
               data-workspace-tab
               data-tab-id={workspace.objectId}
             >
@@ -124,11 +178,12 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
                     variant="ghost"
                     size="1"
                     color="gray"
+                    className={styles.rowActionButton}
                     aria-label="Workspace actions"
                     data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW_MENU}
                     data-workspace-id={workspace.objectId}
                   >
-                    <MoreHorizontal size={13} />
+                    <MoreHorizontal size={12} />
                   </IconButton>
                 </DropdownMenu.Trigger>
               </Tooltip>
@@ -144,12 +199,13 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
                 variant="ghost"
                 size="1"
                 color="gray"
+                className={styles.rowActionButton}
                 onClick={() => onBeginDelete(workspace)}
                 aria-label="Delete workspace"
                 data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW_DELETE}
                 data-workspace-id={workspace.objectId}
               >
-                <Trash2 size={13} />
+                <Trash2 size={12} />
               </IconButton>
             </Tooltip>
           </Flex>
@@ -171,6 +227,11 @@ type SidebarRepoGroupProps = {
   // WorkspaceSidebar so every group and the command palette agree on the entries.
   actions: ReadonlyArray<WorkspaceAction>;
   openInRuntime: OpenInRuntime;
+  // Whether to render the per-repo header actions (settings gear + direct-create
+  // "+"). Suppressed on the first-run page: that page doesn't mount AppShell, so
+  // the "+"'s dialog fallback and its error toast wouldn't render — the inline
+  // first-run form is the only create affordance while the workspace list is empty.
+  showActions: boolean;
   onWorkspaceClick: (workspaceId: string) => void;
   onWorkspaceHover: (workspaceId: string) => void;
   // Delete is confirmed by a dialog owned by WorkspaceSidebar (shared across
@@ -182,6 +243,7 @@ export const SidebarRepoGroup = ({
   group,
   actions,
   openInRuntime,
+  showActions,
   onWorkspaceClick,
   onWorkspaceHover,
   onBeginDelete,
@@ -192,17 +254,93 @@ export const SidebarRepoGroup = ({
   const setRenameErrorToast = useSetAtom(workspaceRenameErrorToastAtom);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useAtom(renamingWorkspaceIdAtom);
   const { createFromSidebar, isCreating } = useCreateWorkspaceFromSidebar();
+  const adjustDragCount = useSetAtom(adjustSidebarDragCountAtom);
+  const reorderWorkspace = useSetAtom(reorderSidebarWorkspaceAtom);
   const store = useStore();
+
+  // Whether the in-flight sidebar drag was started by THIS group's row context.
+  // Every drag context adjusts the shared drag count, so end/cancel/cleanup must
+  // only decrement for a drag they own — an unowning cleanup (collapsing a
+  // different group mid-drag) would otherwise release another context's drag.
+  const ownsActiveDragRef = useRef(false);
+  const beginOwnedDrag = useCallback((): void => {
+    if (!ownsActiveDragRef.current) {
+      ownsActiveDragRef.current = true;
+      adjustDragCount(1);
+    }
+  }, [adjustDragCount]);
+  const endOwnedDrag = useCallback((): void => {
+    if (ownsActiveDragRef.current) {
+      ownsActiveDragRef.current = false;
+      adjustDragCount(-1);
+    }
+  }, [adjustDragCount]);
 
   // External hooks
   const openSettings = useOpenSettings();
   const { workspaceId: activeWorkspaceId } = useImbueLocation();
   const dangerColor = useThemeDangerColor();
 
+  // The group is a sortable item of WorkspaceSidebar's repo-group context: the
+  // whole group (header + rows) is the measured node so its rows travel with it,
+  // and the header button is the drag activator.
+  const {
+    attributes: groupAttributes,
+    listeners: groupListeners,
+    setNodeRef: setGroupNodeRef,
+    setActivatorNodeRef: setGroupActivatorNodeRef,
+    transform: groupTransform,
+    transition: groupTransition,
+    isDragging: isGroupDragging,
+    isOver: isGroupOver,
+  } = useSortable({ id: group.projectId });
+
+  // The rows' own drag context; see the module comment for why it lives per group.
+  const rowDndSensors = useSidebarDndSensors();
+
   // Functions and callbacks
   const handleToggleCollapsed = (): void => {
     setCollapsedRepos((prev) => ({ ...prev, [group.projectId]: !(prev[group.projectId] ?? false) }));
   };
+
+  // Enter toggles collapse from the keyboard, like a click; every other key falls
+  // through to the dnd-kit keyboard sensor so Space picks the group up (see the
+  // matching handler on SidebarWorkspaceRow).
+  const handleHeaderKeyDown = (event: React.KeyboardEvent<HTMLElement>): void => {
+    if (event.key === "Enter" && event.target === event.currentTarget && !isGroupDragging) {
+      event.preventDefault();
+      handleToggleCollapsed();
+      return;
+    }
+    groupListeners?.onKeyDown?.(event);
+  };
+
+  const handleRowDragEnd = useCallback(
+    (event: DragEndEvent): void => {
+      endOwnedDrag();
+      if (event.over === null || event.over.id === event.active.id) {
+        return;
+      }
+      reorderWorkspace({
+        projectId: group.projectId,
+        activeWorkspaceId: String(event.active.id),
+        overWorkspaceId: String(event.over.id),
+      });
+    },
+    [endOwnedDrag, reorderWorkspace, group.projectId],
+  );
+
+  // dnd-kit does not fire onDragCancel when its context unmounts (see
+  // PanelDndProvider), and the rows' context unmounts whenever the group
+  // collapses — which can happen mid-drag (a keyboard drag is parked while the
+  // header stays clickable). Without this release a stranded drag leaves the
+  // shared drag count held forever, silently disabling the hover peek.
+  useEffect(() => {
+    if (isRepoCollapsed) {
+      return undefined;
+    }
+    return endOwnedDrag;
+  }, [isRepoCollapsed, endOwnedDrag]);
 
   // Reference-stable (the rows are memoized on their props): the rename
   // callbacks depend only on reference-stable atom setters and the store.
@@ -244,72 +382,122 @@ export const SidebarRepoGroup = ({
   const Chevron = isRepoCollapsed ? ChevronRight : ChevronDown;
 
   return (
-    <div className={styles.repoGroup}>
+    <div
+      ref={setGroupNodeRef}
+      className={`${styles.repoGroup} ${isGroupDragging ? styles.rowDragging : ""}`}
+      style={{ transform: CSS.Translate.toString(groupTransform), transition: groupTransition }}
+    >
       <div className={styles.repoHeader}>
         <button
           type="button"
+          ref={setGroupActivatorNodeRef}
           className={styles.repoHeaderButton}
+          {...groupAttributes}
+          {...groupListeners}
+          // After the listeners spread so this composed handler REPLACES the
+          // sensor's raw onKeyDown (it delegates every non-Enter key back to it).
+          onKeyDown={handleHeaderKeyDown}
           onClick={handleToggleCollapsed}
           data-testid={ElementIds.SIDEBAR_REPO_GROUP}
           data-project-id={group.projectId}
+          data-sidebar-dragging={isGroupDragging ? "true" : undefined}
+          data-sidebar-drop-target={isGroupOver && !isGroupDragging ? "true" : undefined}
         >
           <Chevron size={16} className={styles.repoChevron} />
           <Text className={styles.repoName} truncate>
             {group.name}
           </Text>
         </button>
-        <Flex className={styles.rowActions} gap="2">
-          <Tooltip content="Repository settings" side="right">
-            <IconButton
-              variant="ghost"
-              size="1"
-              color="gray"
-              className={styles.hoverReveal}
-              onClick={() => openSettings("REPOSITORIES", group.projectId)}
-              aria-label="Repository settings"
-              data-testid={ElementIds.SIDEBAR_REPO_SETTINGS}
-              data-project-id={group.projectId}
-            >
-              <Settings size={13} />
-            </IconButton>
-          </Tooltip>
-          <Tooltip content="New workspace in this repo" side="right">
-            {/* Direct-create in THIS repo (fresh auto branch, last-used or
-                default settings); failures fall back to the dialog
-                pre-selecting the repo. The nav "New Workspace" above is the
-                open-the-dialog affordance. */}
-            <IconButton
-              variant="ghost"
-              size="1"
-              color="gray"
-              disabled={isCreating}
-              onClick={() => void createFromSidebar(group.projectId)}
-              aria-label="New workspace in this repo"
-              data-testid={ElementIds.SIDEBAR_REPO_ADD_WORKSPACE}
-              data-project-id={group.projectId}
-            >
-              <Plus size={13} />
-            </IconButton>
-          </Tooltip>
-        </Flex>
+        {showActions && (
+          <Flex className={styles.rowActions}>
+            <DropdownMenu.Root>
+              <Tooltip content="Repository actions" side="bottom">
+                <DropdownMenu.Trigger>
+                  <IconButton
+                    variant="ghost"
+                    size="1"
+                    color="gray"
+                    className={`${styles.rowActionButton} ${styles.hoverReveal}`}
+                    aria-label="Repository actions"
+                    data-testid={ElementIds.SIDEBAR_REPO_MENU}
+                    data-project-id={group.projectId}
+                  >
+                    <MoreHorizontal size={12} />
+                  </IconButton>
+                </DropdownMenu.Trigger>
+              </Tooltip>
+              <DropdownMenu.Content size="1" onCloseAutoFocus={(e): void => e.preventDefault()}>
+                <DropdownMenu.Item
+                  onSelect={() => openSettings("REPOSITORIES", group.projectId)}
+                  data-testid={ElementIds.SIDEBAR_REPO_SETTINGS}
+                  data-project-id={group.projectId}
+                >
+                  Configure repo
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Root>
+            <Tooltip content="New workspace in this repo" side="right">
+              {/* Direct-create in THIS repo (fresh auto branch, last-used or
+                  default settings); failures fall back to the dialog
+                  pre-selecting the repo. The nav "New Workspace" above is the
+                  open-the-dialog affordance. */}
+              <IconButton
+                variant="ghost"
+                size="1"
+                color="gray"
+                className={styles.rowActionButton}
+                disabled={isCreating}
+                onClick={() => void createFromSidebar(group.projectId)}
+                aria-label="New workspace in this repo"
+                data-testid={ElementIds.SIDEBAR_REPO_ADD_WORKSPACE}
+                data-project-id={group.projectId}
+              >
+                <Plus size={12} />
+              </IconButton>
+            </Tooltip>
+          </Flex>
+        )}
       </div>
-      {!isRepoCollapsed &&
-        group.workspaces.map((ws) => (
-          <SidebarWorkspaceRow
-            key={ws.objectId}
-            workspace={ws}
-            isRenaming={renamingWorkspaceId === ws.objectId}
-            isActive={ws.objectId === activeWorkspaceId}
-            actions={actions}
-            openInRuntime={openInRuntime}
-            destructiveColor={dangerColor}
-            onNavigate={onWorkspaceClick}
-            onHover={onWorkspaceHover}
-            onRenameCommit={handleRenameCommit}
-            onRenameCancel={handleRenameCancel}
-            onBeginDelete={onBeginDelete}
-          />
-        ))}
+      {!isRepoCollapsed && group.workspaces.length === 0 && (
+        <Text className={styles.noWorkspacesHint} data-testid={ElementIds.SIDEBAR_NO_WORKSPACES_HINT}>
+          No workspaces yet
+        </Text>
+      )}
+      {!isRepoCollapsed && group.workspaces.length > 0 && (
+        // The rows get their own container (rather than sitting directly in the
+        // group) so restrictToParentElement clamps a dragged row to the rows'
+        // extent — it can slide between its siblings but never up over the
+        // group header.
+        <div className={styles.repoRows}>
+          <DndContext
+            sensors={rowDndSensors}
+            collisionDetection={closestCenter}
+            modifiers={sidebarDndModifiers}
+            onDragStart={beginOwnedDrag}
+            onDragEnd={handleRowDragEnd}
+            onDragCancel={endOwnedDrag}
+          >
+            <SortableContext items={group.workspaces.map((ws) => ws.objectId)} strategy={verticalListSortingStrategy}>
+              {group.workspaces.map((ws) => (
+                <SidebarWorkspaceRow
+                  key={ws.objectId}
+                  workspace={ws}
+                  isRenaming={renamingWorkspaceId === ws.objectId}
+                  isActive={ws.objectId === activeWorkspaceId}
+                  actions={actions}
+                  openInRuntime={openInRuntime}
+                  destructiveColor={dangerColor}
+                  onNavigate={onWorkspaceClick}
+                  onHover={onWorkspaceHover}
+                  onRenameCommit={handleRenameCommit}
+                  onRenameCancel={handleRenameCancel}
+                  onBeginDelete={onBeginDelete}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+        </div>
+      )}
     </div>
   );
 };

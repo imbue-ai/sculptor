@@ -1,15 +1,16 @@
 import { DropdownMenu } from "@radix-ui/themes";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { Check, Pencil, Plus, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
 import { useMemo, useState } from "react";
 
-import { type CodingAgentTaskView, renameWorkspaceAgent } from "~/api";
+import type { CodingAgentTaskView } from "~/api";
 import { formatRelativeTime } from "~/common/formatRelativeTime.ts";
 import { useImbueNavigate, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
-import { tasksArrayAtom, updateTasksAtom } from "~/common/state/atoms/tasks.ts";
+import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { useOptimisticTaskDelete } from "~/common/state/hooks/useOptimisticTaskDelete.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
+import { useTaskRenameMutation } from "~/common/state/mutations";
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { AgentStatusDot } from "~/components/statusDot/StatusDot.tsx";
@@ -55,24 +56,16 @@ const AgentRow = ({
   onRequestDelete: (agent: CodingAgentTaskView) => void;
 }): ReactElement => {
   const dotStatus = getAgentDotStatus(agent.status, agent.lastReadAt, agent.updatedAt);
-  const updateTasks = useSetAtom(updateTasksAtom);
+  // The shared optimistic rename (same mutation the desktop sidebar uses):
+  // the new title shows immediately and rolls back if the request fails.
+  const renameMutation = useTaskRenameMutation(workspaceID);
   const [isRenaming, setIsRenaming] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { handlers: longPress, consumeClick } = useLongPress(() => setIsMenuOpen(true));
 
-  const handleRenameCommit = async (newName: string): Promise<void> => {
+  const handleRenameCommit = (newName: string): void => {
     setIsRenaming(false);
-    try {
-      const response = await renameWorkspaceAgent({
-        path: { workspace_id: workspaceID, agent_id: agent.id },
-        body: { title: newName },
-      });
-      if (response.data) {
-        updateTasks({ [agent.id]: response.data });
-      }
-    } catch (error) {
-      console.error("Failed to rename agent:", error);
-    }
+    renameMutation.mutate({ agentId: agent.id, newTitle: newName });
   };
 
   const handleClick = (): void => {

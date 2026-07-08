@@ -8,6 +8,7 @@ import { pluginManager } from "~/plugins/pluginManager.tsx";
 import { getRendererIdentity } from "~/plugins/rendererIdentity.ts";
 
 import type { StreamingUpdate } from "../../../api";
+import { syncTasksToQueryCache } from "../../queryClient.ts";
 import { handleBtwUpdateAtom } from "../atoms/btwPopup";
 import { dependenciesStatusAtom } from "../atoms/dependenciesStatus";
 import { notificationsAtom } from "../atoms/notifications";
@@ -15,7 +16,6 @@ import { updateProjectsAtom } from "../atoms/projects";
 import { updatePrStatusAtom } from "../atoms/prStatus";
 import { sculptorSettingsAtom } from "../atoms/sculptorSettings";
 import { getEmptyTaskDetailState, updateTaskDetailAtom, updateTaskUpdatedArtifactsAtom } from "../atoms/taskDetails";
-import { updateTasksAtom } from "../atoms/tasks";
 import { isAgentPluginLoadingAllowedAtom, isFrontendPluginsEnabledAtom } from "../atoms/userConfig";
 import { updateWorkspaceBranchAtom } from "../atoms/workspaceBranch";
 import { updateWorkspacesAtom } from "../atoms/workspaces";
@@ -24,6 +24,7 @@ import { updateWorkspaceSetupStatusAtom } from "../atoms/workspaceSetupStatus";
 import { updateWorkspaceTargetBranchesAtom } from "../atoms/workspaceTargetBranches";
 import { acknowledgeRequests, updateActiveWebsockets } from "../requestTracking";
 import { chatMessagesReducer } from "../taskDetailReducers.ts";
+import { useTaskQueryMirror } from "./useTaskQueryMirror.ts";
 import { useWebsocket } from "./useWebsocket";
 
 const API_BASE_URL = "/api/v1";
@@ -94,7 +95,10 @@ const respondToPluginCommand = (
  * doesn't lose state.
  */
 export const useUnifiedStream = (): void => {
-  const updateTasks = useSetAtom(updateTasksAtom);
+  // Whoever owns the stream owns the projection of its task frames into the
+  // legacy Jotai atoms (AppShell normally; EmptyFirstRunPage during first
+  // run). Mounted first so the mirror subscribes before a frame can arrive.
+  useTaskQueryMirror();
   const updateProjects = useSetAtom(updateProjectsAtom);
   const updateWorkspaces = useSetAtom(updateWorkspacesAtom);
   const setNotifications = useSetAtom(notificationsAtom);
@@ -121,9 +125,11 @@ export const useUnifiedStream = (): void => {
 
   const onMessage = useCallback(
     (data: StreamingUpdate): void => {
-      // Handle task views (for task list/sidebar)
+      // Handle task views (for task list/sidebar).
+      // Single-writer: the frame goes into the TanStack Query cache only;
+      // useTaskQueryMirror projects it into the legacy Jotai task atoms.
       if (data.taskViewsByTaskId) {
-        updateTasks(data.taskViewsByTaskId);
+        syncTasksToQueryCache(data.taskViewsByTaskId);
       }
 
       // Handle task details (for chat pages)
@@ -147,6 +153,7 @@ export const useUnifiedStream = (): void => {
                   submittedQuestionAnswers: state.submittedQuestionAnswers,
                   isInPlanMode: state.isInPlanMode,
                   pendingBackgroundTaskIds: state.pendingBackgroundTaskIds,
+                  workflowTaskStates: state.workflowTaskStates,
                 },
                 taskUpdate,
               );
@@ -281,7 +288,6 @@ export const useUnifiedStream = (): void => {
       }
     },
     [
-      updateTasks,
       updateProjects,
       updateWorkspaces,
       setNotifications,

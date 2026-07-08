@@ -29,6 +29,13 @@
 [no-eval-usage]
 "." = 0
 
+# Frozen at the 2026-07 state-ownership baseline. Every site is classified in
+# docs/development/state-ownership-burndown.md (handled catches — rollback or
+# toast inside — or pure fire-and-forget with no optimistic local write).
+# Reduce only; bumps need a written justification.
+[no-fire-and-forget-api-catch]
+"." = 6
+
 [no-implicit-string-concat]
 "." = 0
 
@@ -77,6 +84,9 @@
 [no-namedtuple-usage]
 "." = 0
 
+[no-noop-queryfn]
+"." = 0
+
 [no-numpy-default-rng]
 "." = 0
 
@@ -112,9 +122,14 @@
 # the full-bleed left-aligned drawer / agent-sheet / changes-pill rows, whose
 # pill/row geometry fights Radix Button/IconButton's enforced sizing. The
 # icon-only mobile buttons (header, overlays, chat input) DO use Radix IconButton.
-"." = 37
+"." = 35
 
 [no-relative-imports]
+"." = 0
+
+# Zero is the floor: all cache writes live in queryClient.ts (WS bridge) and
+# src/common/state/mutations/. See docs/development/state-ownership-burndown.md.
+[no-scattered-setquerydata]
 "." = 0
 
 [no-sculptor-copytree]

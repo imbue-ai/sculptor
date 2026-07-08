@@ -18,6 +18,7 @@ from sculptor.interfaces.agents.agent import ResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import StreamingMessageCompleteAgentMessage
 from sculptor.interfaces.agents.agent import TurnMetricsAgentMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
+from sculptor.interfaces.agents.agent import WorkflowTaskProgressAgentMessage
 from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import AssistantMessageID
 from sculptor.primitives.ids import TaskID
@@ -37,6 +38,10 @@ from sculptor.state.chat_state import UserQuestion
 from sculptor.state.chat_state import make_plan_approval_question
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
+from sculptor.state.workflow_state import WorkflowAgentProgress
+from sculptor.state.workflow_state import WorkflowPhaseProgress
+from sculptor.state.workflow_state import WorkflowTaskState
+from sculptor.state.workflow_state import WorkflowUsage
 from sculptor.web.derived import TaskUpdate
 from sculptor.web.message_conversion import convert_agent_messages_to_task_update
 
@@ -6466,3 +6471,369 @@ def test_streamed_edit_tool_use_input_survives_mid_stream_tool_result() -> None:
     tool_result_blocks = [b for b in completed.content if isinstance(b, ToolResultBlock)]
     assert len(tool_result_blocks) == 1
     assert tool_result_blocks[0].tool_use_id == str(edit_tool_use_id)
+
+
+def _make_workflow_tool_response_block(tool_use_id: str) -> ResponseBlockAgentMessage:
+    return ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=AssistantMessageID("assistant-workflow"),
+        message_id=AgentMessageID(),
+        content=(
+            ToolUseBlock(
+                id=ToolUseID(tool_use_id),
+                name="Workflow",
+                input={"script": "export const meta = {name: 'review'}"},
+            ),
+        ),
+    )
+
+
+def _make_workflow_entries(agent_state: str = "progress") -> tuple[WorkflowPhaseProgress | WorkflowAgentProgress, ...]:
+    return (
+        WorkflowPhaseProgress(index=0, title="Review"),
+        WorkflowAgentProgress(index=0, label="review:bugs", phase_index=0, phase_title="Review", state=agent_state),
+    )
+
+
+def _workflow_states_of(state: TaskUpdate) -> dict[str, WorkflowTaskState]:
+    """Narrow the Optional: the fold always populates the map — None exists
+    only on wire copies where the stream layer suppressed an unchanged map."""
+    assert state.workflow_task_states is not None
+    return state.workflow_task_states
+
+
+def test_workflow_task_started_seeds_running_entry() -> None:
+    """A local_workflow task_started seeds a running entry keyed by tool_use_id;
+    other task types leave the map untouched."""
+    task_id = TaskID()
+
+    state = convert_agent_messages_to_task_update(
+        [
+            BackgroundTaskStartedAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                description="review",
+                task_type="local_workflow",
+                workflow_name="review",
+            ),
+            BackgroundTaskStartedAgentMessage(
+                background_task_id="task-bash-1",
+                tool_use_id="toolu-bash-1",
+                description="bg sleep",
+                task_type="local_bash",
+            ),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id={},
+        current_state=None,
+    )
+
+    assert set(_workflow_states_of(state)) == {"toolu-wf-1"}
+    entry = _workflow_states_of(state)["toolu-wf-1"]
+    assert entry.status == "running"
+    assert entry.workflow_name == "review"
+    assert entry.entries == ()
+
+
+def test_workflow_progress_upserts_entry_and_carries_across_batches() -> None:
+    task_id = TaskID()
+
+    state = convert_agent_messages_to_task_update(
+        [
+            BackgroundTaskStartedAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                task_type="local_workflow",
+                workflow_name="review",
+            ),
+            WorkflowTaskProgressAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                workflow_name="review",
+                entries=_make_workflow_entries(),
+                usage=WorkflowUsage(total_tokens=3100, tool_uses=4),
+                last_tool_name="Grep",
+                summary="Review: review:bugs",
+            ),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id={},
+        current_state=None,
+    )
+
+    entry = _workflow_states_of(state)["toolu-wf-1"]
+    assert entry.status == "running"
+    assert len(entry.entries) == 2
+    assert entry.usage is not None and entry.usage.total_tokens == 3100
+    assert entry.last_tool_name == "Grep"
+
+    # An unrelated later batch must carry the map through untouched.
+    state = convert_agent_messages_to_task_update(
+        [],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id={},
+        current_state=state,
+    )
+    assert "toolu-wf-1" in _workflow_states_of(state)
+
+
+def test_workflow_progress_preserves_workflow_name_when_incoming_is_empty() -> None:
+    task_id = TaskID()
+
+    state = convert_agent_messages_to_task_update(
+        [
+            BackgroundTaskStartedAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                task_type="local_workflow",
+                workflow_name="review",
+            ),
+            WorkflowTaskProgressAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                entries=_make_workflow_entries(),
+            ),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id={},
+        current_state=None,
+    )
+
+    assert _workflow_states_of(state)["toolu-wf-1"].workflow_name == "review"
+
+
+def test_workflow_notification_flips_status_without_synthesizing_child() -> None:
+    """Completion flips the entry to its final status with the final tree, and
+    the Workflow tool must not gain a synthetic child ChatMessage (which would
+    make AlphaToolGroup misclassify it as a subagent)."""
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    user_message = ChatInputUserMessage(text="Review this", model_name=LLMModel.CLAUDE_4_SONNET)
+    state = convert_agent_messages_to_task_update(
+        [
+            user_message,
+            RequestStartedAgentMessage(request_id=user_message.message_id),
+            _make_workflow_tool_response_block("toolu-wf-1"),
+            BackgroundTaskStartedAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                task_type="local_workflow",
+                workflow_name="review",
+            ),
+            WorkflowTaskProgressAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                entries=_make_workflow_entries(),
+            ),
+            BackgroundTaskNotificationAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                status="completed",
+                summary="Reviewed 4 files",
+                workflow_name="review",
+                final_workflow_entries=_make_workflow_entries(agent_state="done"),
+                workflow_usage=WorkflowUsage(total_tokens=9000),
+            ),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+
+    entry = _workflow_states_of(state)["toolu-wf-1"]
+    assert entry.status == "completed"
+    assert entry.summary == "Reviewed 4 files"
+    agent_entry = entry.entries[1]
+    assert isinstance(agent_entry, WorkflowAgentProgress)
+    assert agent_entry.state == "done"
+    assert entry.usage is not None and entry.usage.total_tokens == 9000
+
+    # No synthetic child attached to the Workflow tool_use_id.
+    child_messages = [m for m in completed_by_id.values() if m.parent_tool_use_id == "toolu-wf-1"]
+    assert child_messages == []
+    assert state.in_progress_chat_message is not None
+    assert state.in_progress_chat_message.parent_tool_use_id is None
+
+
+def test_workflow_notification_skips_child_synthesis_when_tool_use_is_result_replaced() -> None:
+    """In streamed turns the finalized message carries the Workflow tool call
+    as a bare ToolResultBlock (the tool_use is result-replaced), so the
+    notification handler cannot identify the parent by ToolUseBlock lookup.
+    It must still skip child synthesis — a synthetic child makes the frontend
+    misclassify the Workflow call as a subagent and drop the pill."""
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    user_message = ChatInputUserMessage(text="Review this", model_name=LLMModel.CLAUDE_4_SONNET)
+    result_only_block = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=AssistantMessageID("assistant-workflow-streamed"),
+        message_id=AgentMessageID(),
+        content=(
+            ToolResultBlock(
+                tool_use_id="toolu-wf-1",
+                tool_name="Workflow",
+                invocation_string="review",
+                content=GenericToolContent(text="Workflow launched in background. Task ID: task-wf-1"),
+            ),
+        ),
+    )
+    state = convert_agent_messages_to_task_update(
+        [
+            user_message,
+            RequestStartedAgentMessage(request_id=user_message.message_id),
+            result_only_block,
+            BackgroundTaskStartedAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                task_type="local_workflow",
+                workflow_name="review",
+            ),
+            BackgroundTaskNotificationAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                status="completed",
+                summary="Reviewed 4 files",
+                workflow_name="review",
+                final_workflow_entries=_make_workflow_entries(agent_state="done"),
+            ),
+            _make_request_success(user_message.message_id),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+
+    assert _workflow_states_of(state)["toolu-wf-1"].status == "completed"
+    child_messages = [m for m in completed_by_id.values() if m.parent_tool_use_id == "toolu-wf-1"]
+    assert child_messages == []
+
+
+def test_workflow_notification_with_empty_tree_skips_child_synthesis_on_replay() -> None:
+    """A workflow that finished before reporting any tree replays with an
+    EMPTY final_workflow_entries tuple (the workflow marker). Even with no
+    ToolUseBlock in history (result-replaced) and no prior map entry, the
+    notification must rebuild a completed entry rather than synthesize a
+    subagent child."""
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    user_message = ChatInputUserMessage(text="Review this", model_name=LLMModel.CLAUDE_4_SONNET)
+    result_only_block = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=AssistantMessageID("assistant-workflow-streamed"),
+        message_id=AgentMessageID(),
+        content=(
+            ToolResultBlock(
+                tool_use_id="toolu-wf-1",
+                tool_name="Workflow",
+                invocation_string="review",
+                content=GenericToolContent(text="Workflow launched in background. Task ID: task-wf-1"),
+            ),
+        ),
+    )
+    state = convert_agent_messages_to_task_update(
+        [
+            user_message,
+            RequestStartedAgentMessage(request_id=user_message.message_id),
+            result_only_block,
+            BackgroundTaskNotificationAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                status="failed",
+                summary="Workflow script error",
+                workflow_name="review",
+                final_workflow_entries=(),
+            ),
+            _make_request_success(user_message.message_id),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+
+    entry = _workflow_states_of(state)["toolu-wf-1"]
+    assert entry.status == "failed"
+    assert entry.entries == ()
+    child_messages = [m for m in completed_by_id.values() if m.parent_tool_use_id == "toolu-wf-1"]
+    assert child_messages == []
+
+
+def test_workflow_notification_rebuilds_entry_on_replay() -> None:
+    """On history replay (fresh connection, no ephemeral messages, no current
+    state) the persisted notification alone rebuilds a completed entry."""
+    task_id = TaskID()
+
+    user_message = ChatInputUserMessage(text="Review this", model_name=LLMModel.CLAUDE_4_SONNET)
+    state = convert_agent_messages_to_task_update(
+        [
+            user_message,
+            RequestStartedAgentMessage(request_id=user_message.message_id),
+            _make_workflow_tool_response_block("toolu-wf-1"),
+            BackgroundTaskNotificationAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                status="completed",
+                summary="Reviewed 4 files",
+                workflow_name="review",
+                final_workflow_entries=_make_workflow_entries(agent_state="done"),
+                workflow_usage=WorkflowUsage(total_tokens=9000),
+            ),
+            _make_request_success(user_message.message_id),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id={},
+        current_state=None,
+    )
+
+    entry = _workflow_states_of(state)["toolu-wf-1"]
+    assert entry.status == "completed"
+    assert entry.workflow_name == "review"
+    assert len(entry.entries) == 2
+
+
+def test_workflow_states_survive_request_success() -> None:
+    """Unlike pending_background_task_ids, completed workflow entries must not
+    be cleared when the request finishes."""
+    task_id = TaskID()
+
+    user_message = ChatInputUserMessage(text="Review this", model_name=LLMModel.CLAUDE_4_SONNET)
+    state = convert_agent_messages_to_task_update(
+        [
+            user_message,
+            RequestStartedAgentMessage(request_id=user_message.message_id),
+            _make_workflow_tool_response_block("toolu-wf-1"),
+            BackgroundTaskStartedAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                task_type="local_workflow",
+                workflow_name="review",
+            ),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id={},
+        current_state=None,
+    )
+    assert "toolu-wf-1" in _workflow_states_of(state)
+    assert "task-wf-1" in state.pending_background_task_ids
+
+    state = convert_agent_messages_to_task_update(
+        [_make_request_success(user_message.message_id)],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id={},
+        current_state=state,
+    )
+
+    assert "toolu-wf-1" in _workflow_states_of(state)
+    assert state.pending_background_task_ids == frozenset()

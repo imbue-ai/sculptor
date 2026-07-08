@@ -283,6 +283,18 @@ class PlaywrightChatPanelElement(PlaywrightFilePreviewAndUploadMixin, Playwright
     def get_subagent_pills(self) -> Locator:
         return self.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_PILL)
 
+    def get_workflow_pills(self) -> Locator:
+        return self.get_by_test_id(ElementIDs.ALPHA_CHAT_WORKFLOW_PILL)
+
+    def get_workflow_popover(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.ALPHA_CHAT_WORKFLOW_POPOVER)
+
+    def get_workflow_phase_tabs(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.ALPHA_CHAT_WORKFLOW_PHASE_TAB)
+
+    def get_workflow_agent_rows(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.ALPHA_CHAT_WORKFLOW_AGENT_ROW)
+
     def get_file_chips(self) -> Locator:
         return self.get_by_test_id(ElementIDs.ALPHA_CHAT_FILE_CHIP)
 

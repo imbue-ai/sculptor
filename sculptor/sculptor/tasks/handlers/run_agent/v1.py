@@ -861,21 +861,21 @@ def _eager_fetch_pi_models_into_state(
 
     `run_agent_task_v1` keeps a prompt-less agent READY without calling
     `agent_wrapper.start()` until a message arrives, so pi's start-time
-    `_fetch_models_into_state` has not run and the task carries no
-    `available_models` — the switcher then shows the built-in Claude list. Here,
-    once the environment is ready, we run a short-lived pi probe
+    `_fetch_models_into_state` has not run and the task's catalog is still
+    `NOT_FETCHED_YET` — the switcher shows a loading state, not the login CTA.
+    Here, once the environment is ready, we run a short-lived pi probe
     (`PiAgent.fetch_available_models_probe`) and persist its curated catalog onto
     task state so the switcher reflects pi's models immediately.
 
-    Returns the task state, evolved with the catalog when the probe found one, so
-    the caller carries it forward — otherwise `finalize_task_setup`'s later
-    evolve-and-upsert (from the in-memory state) would write the catalog back
-    out. Restricted to pi: the `supports_model_selection` check skips harnesses
-    that cannot select a model at all, and the `PiAgent` check below skips the
-    rest — only pi sources a dynamic catalog via the probe (Claude supports model
+    Returns the task state evolved with the probe's result, so the caller carries
+    it forward — otherwise `finalize_task_setup`'s later evolve-and-upsert (from
+    the in-memory state) would write the stale `NOT_FETCHED_YET` back out.
+    Restricted to pi: the `supports_model_selection` check skips harnesses that
+    cannot select a model at all, and the `PiAgent` check below skips the rest —
+    only pi sources a dynamic catalog via the probe (Claude supports model
     selection but with a static built-in list). Best-effort: on any failure the
-    probe returns an empty catalog and the task state is returned unchanged, so
-    the switcher falls back exactly as before.
+    probe returns an empty catalog, which is persisted as a fetched-but-empty `[]`
+    (the switcher then shows the login CTA) rather than left not-fetched.
     """
     if not get_harness_for_config(task_data.agent_config).capabilities().supports_model_selection:
         return task_state
@@ -896,8 +896,10 @@ def _eager_fetch_pi_models_into_state(
         return task_state
     secrets = _build_agent_secrets(settings=settings, task=task, task_state=task_state, project=project)
     available_models, current_model = agent_wrapper.fetch_available_models_probe(secrets)
-    if not available_models and current_model is None:
-        return task_state
+    # Persist even the empty result: it records that the probe COMPLETED, moving the
+    # catalog off NOT_FETCHED_YET to a fetched-but-empty [] (authenticated with no
+    # providers — or a best-effort probe failure, which today falls back the same
+    # way). Returning early here would strand the switcher on "loading" forever.
     return _persist_available_models(
         available_models=available_models,
         current_model=current_model,

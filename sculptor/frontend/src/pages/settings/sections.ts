@@ -114,7 +114,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<SettingsSectionDescriptor> = [
     id: SettingsSection.PI,
     displayName: "Pi",
     group: "Harnesses",
-    paletteSubtitle: "Pi agent harness configuration",
+    paletteSubtitle: "Pi harness configuration",
     paletteKeywords: ["pi", "harness", "agent"],
     icon: PlayIcon,
     testId: ElementIds.SETTINGS_NAV_PI,

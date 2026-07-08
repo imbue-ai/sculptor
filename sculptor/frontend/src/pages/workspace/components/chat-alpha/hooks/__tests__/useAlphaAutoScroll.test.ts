@@ -337,9 +337,8 @@ describe("useAlphaAutoScroll", () => {
   it("auto-engages when new message grew content slightly before streaming starts", () => {
     // User was at bottom, sent a message which grew scrollHeight, pushing them
     // slightly above the old bottom. The streaming-start effect should read the
-    // live scroll position (still within threshold) and engage. A desktop-height
-    // container (>= 700px) gets the 200px threshold; see the short-viewport
-    // companion test below for the tighter mobile threshold.
+    // live scroll position (still within threshold) and engage.
+    // Desktop-height container (>= 700px), where the at-bottom threshold is 200px.
     const el = createMockScrollContainer(1200, 2000, 800); // distance=0, at bottom
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
@@ -362,11 +361,10 @@ describe("useAlphaAutoScroll", () => {
     expect(result.current.isEngaged).toBe(true);
   });
 
-  it("uses the tighter threshold on short (mobile) viewports", () => {
-    // Same scenario as above, but the container is short (< 700px), so the
-    // at-bottom threshold tightens to 80px (bottomThresholdFor): 100px above
-    // the bottom is READING territory on a phone — streaming must not engage
-    // and yank the view down.
+  it("auto-engages within the tighter short-viewport threshold", () => {
+    // Positive companion to the short-viewport test below ("does not
+    // auto-engage at streaming start 100px above the bottom on a short
+    // viewport"): within the tightened 80px threshold the engage still works.
     const el = createMockScrollContainer(1500, 2000, 500); // distance=0, at bottom
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
@@ -376,13 +374,7 @@ describe("useAlphaAutoScroll", () => {
       { initialProps: { isStreaming: false } },
     );
 
-    setScrollPosition(el, 1500, 2100); // distance = 2100 - 1500 - 500 = 100 > 80
-    rerender({ isStreaming: true });
-    expect(result.current.isEngaged).toBe(false);
-
-    // Within the tight threshold the engage still works.
-    setScrollPosition(el, 1560, 2100); // distance = 40 <= 80
-    rerender({ isStreaming: false });
+    setScrollPosition(el, 1560, 2100); // distance = 2100 - 1560 - 500 = 40 <= 80
     rerender({ isStreaming: true });
     expect(result.current.isEngaged).toBe(true);
   });
@@ -451,6 +443,27 @@ describe("useAlphaAutoScroll", () => {
       });
       expect(el.scrollTop).toBe(1540);
     });
+  });
+
+  it("does not auto-engage at streaming start 100px above the bottom on a short viewport", () => {
+    // Same scenario as above, but the scroll container is short (< 700px), so
+    // the at-bottom threshold tightens to 80px: 100px above the bottom is
+    // NOT "at bottom" on mobile, and streaming must not yank the view down.
+    const el = createMockScrollContainer(1500, 2000, 500); // distance=0, at bottom
+    const ref = { current: el };
+    const virtualizer = createMockVirtualizer();
+
+    const { result, rerender } = renderHook(
+      ({ isStreaming }) => useAlphaAutoScroll(ref, isStreaming, 10, virtualizer, null, -1, "test-task"),
+      { initialProps: { isStreaming: false } },
+    );
+
+    // Content grew by 100px with no scroll event — the same growth the desktop
+    // test treats as still-at-bottom (100 ≤ 200).
+    setScrollPosition(el, 1500, 2100); // distance = 2100 - 1500 - 500 = 100 > 80
+
+    rerender({ isStreaming: true });
+    expect(result.current.isEngaged).toBe(false);
   });
 
   it("scrolls to bottom when messageCount increases while at bottom (pin-to-bottom)", () => {

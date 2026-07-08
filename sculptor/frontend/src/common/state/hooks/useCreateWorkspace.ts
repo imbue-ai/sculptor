@@ -6,7 +6,11 @@ import type { EffortLevel, LlmModel, TerminalAgentRegistration } from "~/api";
 import { createWorkspaceAgent, createWorkspaceV2, WorkspaceInitializationStrategy } from "~/api";
 import { HTTPException } from "~/common/Errors.ts";
 import { useImbueNavigate } from "~/common/NavigateUtils.ts";
-import { parseStoredAgentType, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
+import {
+  encodeRegisteredAgentType,
+  resolveEffectiveAgentType,
+  type StoredAgentType,
+} from "~/common/state/atoms/agentTabs.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import { lastWorkspaceCreationSettingsAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 
@@ -101,36 +105,42 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
 
         const workspaceId = workspaceResponse.data.objectId;
 
-        // If the remembered registered agent's registration is no longer present
-        // (deleted since it was picked), fall back to Claude rather than leaving
-        // the just-created workspace with a failed, agentless first-agent create.
-        const { agentType, registrationId } = parseStoredAgentType(args.agentTypeValue);
-        const isMissingRegistration =
-          agentType === "registered" && !args.registrations.some((r) => r.registrationId === registrationId);
-        const effectiveAgentType = isMissingRegistration ? "claude" : agentType;
-        const effectiveRegistrationId = isMissingRegistration ? undefined : registrationId;
-        const effectiveAgentTypeValue: StoredAgentType = isMissingRegistration ? "claude" : args.agentTypeValue;
+        // Resolve the agent type that will actually be created: a registered
+        // agent whose registration is gone (deleted since it was picked) falls
+        // back to Claude rather than leaving the just-created workspace with a
+        // failed, agentless first-agent create.
+        const { agentType: effectiveAgentType, registrationId: effectiveRegistrationId } = resolveEffectiveAgentType(
+          args.agentTypeValue,
+          args.registrations,
+        );
+        const effectiveAgentTypeValue: StoredAgentType =
+          effectiveAgentType === "registered" && effectiveRegistrationId !== undefined
+            ? encodeRegisteredAgentType(effectiveRegistrationId)
+            : effectiveAgentType;
 
-        // Only Claude consumes a creation-time prompt, model, and the per-prompt
-        // agent settings (effort / fast / plan): terminal/registered agents have
-        // no model concept, and pi selects from its own catalog in-task, so it
-        // starts on pi's defaults rather than Claude settings it would ignore.
-        // The prompt gate mirrors the backend, which rejects a prompt for
-        // terminal/registered agents and requires a model alongside any prompt —
-        // sending one would fail the agent create after the workspace already
-        // exists, orphaning an agentless workspace. Non-Claude agents start in
-        // the waiting state instead.
+        // Claude and pi both take an initial prompt; terminal/registered agents
+        // do not — the backend rejects a prompt for them (422), which would fail
+        // the agent create after the workspace already exists and orphan it.
         const isClaudeAgent = effectiveAgentType === "claude";
+        const isPiAgent = effectiveAgentType === "pi";
+        const initialPrompt = isClaudeAgent || isPiAgent ? args.prompt.trim() || undefined : undefined;
+        // Claude seeds its model at create and consumes the per-prompt agent
+        // settings (effort / fast / plan). pi ignores all of them: it picks its
+        // model from its own in-task catalog and enters plan mode from the chat.
+        // The backend still requires a model whenever a prompt is present, so pi
+        // rides a placeholder default in that case only — the same Claude
+        // model_name every live pi message already carries and pi discards.
+        const shouldSendModel = isClaudeAgent || (isPiAgent && initialPrompt !== undefined);
         const agentResponse = await createWorkspaceAgent({
           path: { workspace_id: workspaceId },
           body: {
-            model: isClaudeAgent ? (args.defaultModel as LlmModel) : undefined,
+            model: shouldSendModel ? (args.defaultModel as LlmModel) : undefined,
             effort: isClaudeAgent ? args.effort : undefined,
             fastMode: isClaudeAgent ? args.fastMode : undefined,
             enterPlanMode: isClaudeAgent ? args.enterPlanMode : undefined,
             agentType: effectiveAgentType,
             registrationId: effectiveRegistrationId,
-            prompt: isClaudeAgent ? args.prompt.trim() || undefined : undefined,
+            prompt: initialPrompt,
           },
         });
 

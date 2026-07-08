@@ -1,0 +1,197 @@
+"""Models for Claude Code Workflow-tool progress.
+
+The Workflow tool launches a background task that orchestrates many subagents.
+The CLI streams ``system/task_progress`` events whose ``workflow_progress``
+payload is an incremental delta of the workflow's state: phase entries and
+per-subagent entries, re-emitted whenever their state changes. These models
+mirror that wire format (camelCase via the SerializableModel alias generator)
+while tolerating unknown fields and entry types, since the CLI adds fields
+across releases.
+"""
+
+from collections.abc import Sequence
+from typing import Annotated
+from typing import Any
+
+from loguru import logger
+from pydantic import Field
+from pydantic import Tag
+from pydantic import ValidationError
+
+from sculptor.foundation.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import build_discriminator
+
+# The task_type the CLI assigns to Workflow-tool background tasks in
+# task_started events.
+WORKFLOW_TASK_TYPE = "local_workflow"
+
+
+class WorkflowPhaseProgress(SerializableModel):
+    """A phase heading in a workflow's progress tree (wire type ``workflow_phase``)."""
+
+    object_type: str = "WorkflowPhaseProgress"
+    index: int = Field(description="Position of this phase in the workflow")
+    title: str = Field(default="", description="Phase title from the workflow script's phase() call")
+    kind: str = Field(default="", description="Phase kind; 'child' for a nested workflow() group")
+
+
+class WorkflowAgentProgress(SerializableModel):
+    """One subagent's progress in a workflow (wire type ``workflow_agent``)."""
+
+    object_type: str = "WorkflowAgentProgress"
+    index: int = Field(description="Position of this agent in the workflow's agent list")
+    label: str = Field(default="", description="Display label for the agent")
+    phase_index: int | None = Field(default=None, description="Index of the phase this agent belongs to")
+    phase_title: str = Field(default="", description="Title of the phase this agent belongs to")
+    agent_type: str | None = Field(default=None, description="Custom subagent type, when one is used")
+    isolation: str | None = Field(default=None, description="Isolation mode (e.g. 'worktree'), when set")
+    model: str = Field(default="", description="Model the agent runs on")
+    state: str = Field(
+        default="start",
+        description="Agent lifecycle state: 'start', 'progress', 'done', or 'error' (new states may appear)",
+    )
+    queued_at: float | str | None = Field(
+        default=None, description="When the agent was queued; presence distinguishes queued from running"
+    )
+    started_at: float | str | None = Field(
+        default=None, description="When the agent actually started; unset while waiting for a slot"
+    )
+    cached: bool | None = Field(default=None, description="True when the result was replayed from a resume journal")
+    prompt_preview: str = Field(default="", description="Truncated prompt the agent was given")
+    result_preview: str | None = Field(default=None, description="Truncated final result, once done")
+    error: str | None = Field(default=None, description="Error message when state is 'error'")
+    tokens: int | None = Field(default=None, description="Tokens the agent has used so far")
+    tool_calls: int | None = Field(default=None, description="Number of tool calls the agent has made")
+    duration_ms: float | None = Field(default=None, description="Agent run time in milliseconds")
+    last_tool_summary: str | None = Field(default=None, description="Summary of the agent's most recent tool call")
+    recent_tool_summaries: tuple[str, ...] = Field(
+        default=(),
+        description="Rolling window of the agent's most recent tool calls, newest last. Not on the wire — accumulated from last_tool_summary as deltas merge",
+    )
+
+
+WorkflowProgressEntryTypes = Annotated[
+    (
+        Annotated[WorkflowPhaseProgress, Tag("WorkflowPhaseProgress")]
+        | Annotated[WorkflowAgentProgress, Tag("WorkflowAgentProgress")]
+    ),
+    build_discriminator(),
+]
+
+
+class WorkflowUsage(SerializableModel):
+    """Aggregate usage for a workflow run, from ``task_progress.usage``."""
+
+    object_type: str = "WorkflowUsage"
+    total_tokens: int | None = Field(default=None, description="Total tokens used across all workflow agents")
+    tool_uses: int | None = Field(default=None, description="Total tool calls across all workflow agents")
+    duration_ms: float | None = Field(default=None, description="Workflow run time in milliseconds")
+
+
+class WorkflowTaskState(SerializableModel):
+    """Live/last-known state of one Workflow background task.
+
+    Keyed by the launching tool_use_id on TaskUpdate so the frontend can
+    correlate it with the Workflow ToolUseBlock in the chat.
+    """
+
+    object_type: str = "WorkflowTaskState"
+    task_id: str = Field(description="Background task ID assigned by Claude Code")
+    tool_use_id: str = Field(description="Tool use ID of the Workflow call that launched the task")
+    workflow_name: str = Field(default="", description="Workflow name from the script's meta block")
+    status: str = Field(
+        default="running",
+        description="Task status: 'running' until the CLI reports 'completed', 'failed', or 'stopped'",
+    )
+    entries: tuple[WorkflowProgressEntryTypes, ...] = Field(
+        default=(),
+        description="Progress tree accumulated from the CLI's delta payloads, one entry per phase/agent; agents reference phases by phase_index",
+    )
+    usage: WorkflowUsage | None = Field(default=None, description="Aggregate usage across the workflow's agents")
+    last_tool_name: str | None = Field(default=None, description="Most recent tool used by any workflow agent")
+    summary: str = Field(default="", description="Latest progress or completion summary")
+
+
+_WIRE_TYPE_TO_ENTRY_MODEL: dict[str, type[WorkflowPhaseProgress] | type[WorkflowAgentProgress]] = {
+    "workflow_phase": WorkflowPhaseProgress,
+    "workflow_agent": WorkflowAgentProgress,
+}
+
+
+def parse_workflow_progress_entries(
+    raw_entries: Sequence[Any] | None,
+) -> tuple[WorkflowPhaseProgress | WorkflowAgentProgress, ...] | None:
+    """Parse the ``workflow_progress`` list from a task_progress event.
+
+    Returns None when the payload is absent — the CLI omits the tree on pure
+    token-tick batches.
+
+    The wire payloads are incremental deltas, not full snapshots: the first
+    carries the phase entries plus the initial agent entries, and later ones
+    carry only the entries whose state changed (an agent may also repeat
+    within one payload — queued, then started). Entries are deduplicated here
+    by (kind, index) with the LAST occurrence winning; accumulating deltas
+    across payloads is the caller's job via
+    :func:`merge_workflow_progress_entries`.
+
+    Entries of unknown type (including ``workflow_log``) and entries that fail
+    validation are skipped so a malformed or newer-CLI payload never breaks
+    the output stream.
+    """
+    if raw_entries is None:
+        return None
+
+    entries: list[WorkflowPhaseProgress | WorkflowAgentProgress] = []
+    for raw_entry in raw_entries:
+        if not isinstance(raw_entry, dict):
+            continue
+        entry_model = _WIRE_TYPE_TO_ENTRY_MODEL.get(raw_entry.get("type", ""))
+        if entry_model is None:
+            continue
+        try:
+            entries.append(entry_model.model_validate(raw_entry))
+        except ValidationError:
+            logger.debug("Skipping malformed workflow progress entry: {}", raw_entry)
+    return merge_workflow_progress_entries((), entries)
+
+
+# How many of an agent's most recent tool calls to retain for display. The
+# wire only carries the single latest call per delta; the merge accumulates
+# them into a short activity window (mirroring the CLI's own /workflows view).
+_RECENT_TOOL_SUMMARY_LIMIT = 3
+
+
+def merge_workflow_progress_entries(
+    existing_entries: Sequence[WorkflowPhaseProgress | WorkflowAgentProgress],
+    delta_entries: Sequence[WorkflowPhaseProgress | WorkflowAgentProgress],
+) -> tuple[WorkflowPhaseProgress | WorkflowAgentProgress, ...]:
+    """Merge a delta payload into an accumulated workflow progress tree.
+
+    Entries are keyed by (kind, index) — phases and agents have separate
+    index spaces — with the delta winning. An entry that reappears keeps its
+    original position in the tree (dict update preserves first-insert order),
+    so rows don't jump around as their state advances. Agent entries carry
+    their recent_tool_summaries window forward, appending the delta's
+    last_tool_summary when it is a new call.
+    """
+    entry_by_kind_and_index: dict[tuple[str, int], WorkflowPhaseProgress | WorkflowAgentProgress] = {
+        (entry.object_type, entry.index): entry for entry in existing_entries
+    }
+    for entry in delta_entries:
+        key = (entry.object_type, entry.index)
+        if isinstance(entry, WorkflowAgentProgress):
+            previous = entry_by_kind_and_index.get(key)
+            summaries = previous.recent_tool_summaries if isinstance(previous, WorkflowAgentProgress) else ()
+            # A delta entry may carry its own window (built when the agent
+            # repeated within one payload); append those calls, else fall back
+            # to the single latest call.
+            incoming_summaries = entry.recent_tool_summaries or (
+                (entry.last_tool_summary,) if entry.last_tool_summary else ()
+            )
+            for summary in incoming_summaries:
+                if not summaries or summaries[-1] != summary:
+                    summaries = (*summaries, summary)[-_RECENT_TOOL_SUMMARY_LIMIT:]
+            if summaries != entry.recent_tool_summaries:
+                entry = entry.model_copy(update={"recent_tool_summaries": summaries})
+        entry_by_kind_and_index[key] = entry
+    return tuple(entry_by_kind_and_index.values())

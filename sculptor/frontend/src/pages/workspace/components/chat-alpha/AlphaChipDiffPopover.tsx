@@ -160,12 +160,16 @@ export const AlphaChipDiffPopover = ({
 
   const handleCopyPath = useCallback((): void => {
     if (!chipData.filePath) return;
-    navigator.clipboard.writeText(chipData.filePath).catch(() => {});
+    navigator.clipboard.writeText(chipData.filePath).catch((error) => {
+      console.warn("Failed to copy file path to clipboard.", error);
+    });
     flashCopied("path");
   }, [chipData.filePath, flashCopied]);
 
   const handleCopyError = useCallback((): void => {
-    navigator.clipboard.writeText(chipData.errorDetail ?? "").catch(() => {});
+    navigator.clipboard.writeText(chipData.errorDetail ?? "").catch((error) => {
+      console.warn("Failed to copy error detail to clipboard.", error);
+    });
     flashCopied("error");
   }, [chipData.errorDetail, flashCopied]);
 

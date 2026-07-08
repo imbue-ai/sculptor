@@ -67,8 +67,9 @@ from sculptor.state.messages import AgentMessageSource
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
-from sculptor.state.messages import ModelOption
+from sculptor.state.messages import ModelCatalog
 from sculptor.state.messages import ResponseBlockAgentMessage
+from sculptor.state.workflow_state import WorkflowTaskState
 from sculptor.utils.functional import first
 from sculptor.web.data_types import PrApproval  # noqa: F401 — re-exported for existing import sites
 from sculptor.web.data_types import PrComment  # noqa: F401 — re-exported for existing import sites
@@ -431,10 +432,15 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
 
     @computed_field
     @property
-    def available_models(self) -> list[ModelOption]:
-        """The models the harness offers in its switcher (empty when it sources
-        none and the frontend falls back to its built-in list)."""
-        return self._resolve_harness().get_available_models(self.task_state)
+    def available_models(self) -> ModelCatalog:
+        """The switcher's catalog as the frontend gates on it: NOT_FETCHED_YET
+        until the start-time probe lands, then the fetched list (empty = the
+        harness sources none and the frontend falls back to its built-in list, or
+        pi is authenticated with no providers and shows the login CTA). Runtime
+        callers that only offer models use `get_available_models`, which coalesces
+        the sentinel to []; the switcher needs the distinction so it can show a
+        loading state instead of flashing the CTA while the catalog loads."""
+        return self._resolve_harness().get_model_catalog(self.task_state)
 
     @computed_field
     @property
@@ -836,6 +842,15 @@ class TaskUpdate(SerializableModel):
     # "harness is idle, waiting for a background task notification"
     # (SCU-387).
     pending_background_task_ids: frozenset[str] = frozenset()
+    # Live/last-known state of Workflow-tool background tasks, keyed by the
+    # launching tool_use_id. A dict (possibly empty) is a full snapshot that
+    # replaces the frontend's map; None means unchanged since the previous
+    # update on this stream. The stream layer suppresses unchanged snapshots
+    # because this map rides on every TaskUpdate (including chat ticks) and
+    # grows with a workflow's lifetime agent count. Entries persist after
+    # completion (flipped to their final status with the final progress tree)
+    # so the workflow popover keeps rendering once the run is over.
+    workflow_task_states: dict[str, WorkflowTaskState] | None = None
 
 
 class UserUpdate(SerializableModel):
