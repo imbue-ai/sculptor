@@ -232,7 +232,7 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
         <Text
           as="span"
           size="1"
-          weight="medium"
+          weight="bold"
           truncate
           className={styles.workspaceTitle}
           data-testid={ElementIds.WORKSPACE_HEADER_TITLE}
