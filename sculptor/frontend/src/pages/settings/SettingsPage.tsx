@@ -23,6 +23,7 @@ import {
   isEntityMentionsEnabledAtom,
   isInPlaceWorkspacesEnabledAtom,
   isSmoothStreamingUserPreferenceAtom,
+  isWorkspaceGroupsEnabledAtom,
   userEmailAtom,
 } from "../../common/state/atoms/userConfig.ts";
 import { useUserConfig } from "../../common/state/hooks/useUserConfig.ts";
@@ -123,6 +124,7 @@ export const SettingsPage = (): ReactElement => {
   const isInPlaceWorkspacesEnabled = useAtomValue(isInPlaceWorkspacesEnabledAtom);
   const isCloneWorkspacesEnabled = useAtomValue(isCloneWorkspacesEnabledAtom);
   const isEntityMentionsEnabled = useAtomValue(isEntityMentionsEnabledAtom);
+  const isWorkspaceGroupsEnabled = useAtomValue(isWorkspaceGroupsEnabledAtom);
   const isSmoothStreamingEnabled = useAtomValue(isSmoothStreamingUserPreferenceAtom);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
@@ -490,6 +492,18 @@ export const SettingsPage = (): ReactElement => {
                         handleSettingChange(UserConfigField.ENABLE_ENTITY_MENTIONS, checked)
                       }
                       data-testid={ElementIds.SETTINGS_ENABLE_ENTITY_MENTIONS_TOGGLE}
+                    />
+                  </SettingRow>
+                  <SettingRow
+                    title="Workspace Groups"
+                    description="Organize the sidebar by grouping workspaces into named, colored cards. Also enables the sculpt group CLI commands."
+                  >
+                    <Switch
+                      checked={isWorkspaceGroupsEnabled}
+                      onCheckedChange={(checked) =>
+                        handleSettingChange(UserConfigField.ENABLE_WORKSPACE_GROUPS, checked)
+                      }
+                      data-testid={ElementIds.SETTINGS_ENABLE_WORKSPACE_GROUPS_TOGGLE}
                     />
                   </SettingRow>
                   <CustomBackendSection setToast={setToast} />

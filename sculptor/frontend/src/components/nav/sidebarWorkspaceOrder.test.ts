@@ -12,7 +12,7 @@ import {
   reorderSidebarRepoGroupAtom,
   reorderSidebarWorkspaceAtom,
   sidebarOrderedWorkspacesAtom,
-  sidebarWorkspaceGroupsAtom,
+  sidebarRepoGroupsAtom,
 } from "./sidebarWorkspaceOrder.ts";
 
 const makeWorkspace = (id: string, projectId: string, description: string): Workspace =>
@@ -102,11 +102,7 @@ describe("sidebar reorder atoms", () => {
       overWorkspaceId: "w-apple",
     });
 
-    expect(workspaceIdsOf(store.get(sidebarWorkspaceGroupsAtom), "p-alpha")).toEqual([
-      "w-cherry",
-      "w-apple",
-      "w-banana",
-    ]);
+    expect(workspaceIdsOf(store.get(sidebarRepoGroupsAtom), "p-alpha")).toEqual(["w-cherry", "w-apple", "w-banana"]);
     // The full visible order is materialized, so later fallback merging is exact.
     expect(store.get(globalLayoutAtom).sidebarOrder.workspaces["p-alpha"]).toEqual(["w-cherry", "w-apple", "w-banana"]);
   });
@@ -121,7 +117,7 @@ describe("sidebar reorder atoms", () => {
       overWorkspaceId: "w-cherry",
     });
 
-    const flattened = store.get(sidebarWorkspaceGroupsAtom).flatMap((group) => group.workspaces);
+    const flattened = store.get(sidebarRepoGroupsAtom).flatMap((group) => group.workspaces);
     expect(store.get(sidebarOrderedWorkspacesAtom)).toEqual(flattened);
     expect(flattened.map((workspace) => workspace.objectId)).toEqual(["w-banana", "w-cherry", "w-apple", "w-dates"]);
   });
@@ -132,7 +128,7 @@ describe("sidebar reorder atoms", () => {
 
     store.set(reorderSidebarRepoGroupAtom, { activeProjectId: "p-beta", overProjectId: "p-alpha" });
 
-    expect(store.get(sidebarWorkspaceGroupsAtom).map((group) => group.projectId)).toEqual(["p-beta", "p-alpha"]);
+    expect(store.get(sidebarRepoGroupsAtom).map((group) => group.projectId)).toEqual(["p-beta", "p-alpha"]);
     expect(store.get(globalLayoutAtom).sidebarOrder.repos).toEqual(["p-beta", "p-alpha"]);
   });
 

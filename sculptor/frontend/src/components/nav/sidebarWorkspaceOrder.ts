@@ -94,14 +94,16 @@ export function groupWorkspacesByRepo(
 const sidebarOrderAtom = selectAtom(globalLayoutAtom, (global) => global.sidebarOrder);
 
 // The sidebar's repo groups in render order. WorkspaceSidebar renders these.
-export const sidebarWorkspaceGroupsAtom = atom<ReadonlyArray<RepoGroup>>((get) =>
+// "Repo group" = one repo (project) section and its workspaces — distinct from
+// the backend WorkspaceGroup entity (user-created groups WITHIN a repo).
+export const sidebarRepoGroupsAtom = atom<ReadonlyArray<RepoGroup>>((get) =>
   groupWorkspacesByRepo(get(workspacesArrayAtom) ?? [], get(projectsArrayAtom), get(sidebarOrderAtom)),
 );
 
 // The sidebar's workspaces flattened into their visible top-to-bottom order, so
 // keyboard cycling steps through the same list the user sees.
 export const sidebarOrderedWorkspacesAtom = atom<ReadonlyArray<Workspace>>((get) =>
-  get(sidebarWorkspaceGroupsAtom).flatMap((group) => group.workspaces),
+  get(sidebarRepoGroupsAtom).flatMap((group) => group.workspaces),
 );
 
 // Commit a workspace-row drop: move the dragged workspace to the drop target's slot
@@ -111,7 +113,7 @@ export const sidebarOrderedWorkspacesAtom = atom<ReadonlyArray<Workspace>>((get)
 export const reorderSidebarWorkspaceAtom = atom(
   null,
   (get, set, params: { projectId: string; activeWorkspaceId: string; overWorkspaceId: string }) => {
-    const group = get(sidebarWorkspaceGroupsAtom).find((candidate) => candidate.projectId === params.projectId);
+    const group = get(sidebarRepoGroupsAtom).find((candidate) => candidate.projectId === params.projectId);
     if (group === undefined) {
       return;
     }
@@ -137,7 +139,7 @@ export const reorderSidebarWorkspaceAtom = atom(
 export const reorderSidebarRepoGroupAtom = atom(
   null,
   (get, set, params: { activeProjectId: string; overProjectId: string }) => {
-    const ids = get(sidebarWorkspaceGroupsAtom).map((group) => group.projectId);
+    const ids = get(sidebarRepoGroupsAtom).map((group) => group.projectId);
     const from = ids.indexOf(params.activeProjectId);
     const to = ids.indexOf(params.overProjectId);
     if (from === -1 || to === -1 || from === to) {

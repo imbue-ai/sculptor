@@ -191,6 +191,11 @@ export const workspaceBranchDeletionPolicyAtom = atom<"never" | "delete_if_safe"
 // Entity mentions (experimental — off by default)
 export const isEntityMentionsEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableEntityMentions ?? false);
 
+// Workspace groups (experimental — off by default). Gates the sidebar group
+// UI and menu actions; group data survives the flag being off (hidden, not
+// deleted) and the backend 409s group mutations while disabled.
+export const isWorkspaceGroupsEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableWorkspaceGroups ?? false);
+
 // Frontend plugin system (experimental — off by default). Gates plugin
 // loading at boot and the Plugins settings section. Enabling takes effect
 // immediately (PluginLoader bootstraps when the flag turns on); disabling only

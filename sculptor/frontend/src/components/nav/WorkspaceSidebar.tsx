@@ -39,7 +39,7 @@ import navItemStyles from "./NavItem.module.scss";
 import { NavItem } from "./NavItem.tsx";
 import { sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
 import { SidebarRepoGroup } from "./SidebarRepoGroup.tsx";
-import { reorderSidebarRepoGroupAtom, sidebarWorkspaceGroupsAtom } from "./sidebarWorkspaceOrder.ts";
+import { reorderSidebarRepoGroupAtom, sidebarRepoGroupsAtom } from "./sidebarWorkspaceOrder.ts";
 import styles from "./WorkspaceSidebar.module.scss";
 
 /** Smallest sidebar width the resize handle allows, in pixels. */
@@ -63,7 +63,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   // Grouped + sorted repo groups (one per repo, including repos with no
   // workspaces yet), shared with keyboard workspace cycling so the two can't
   // drift (see sidebarWorkspaceOrder).
-  const repoGroups = useAtomValue(sidebarWorkspaceGroupsAtom);
+  const repoGroups = useAtomValue(sidebarRepoGroupsAtom);
   const setRenamingWorkspaceId = useSetAtom(renamingWorkspaceIdAtom);
   // The workspace→last-agent map is only consulted inside the click handler, so
   // read it lazily from the store rather than subscribing: the whole sidebar
