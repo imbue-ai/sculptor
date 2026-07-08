@@ -239,9 +239,13 @@ export const createTipTapExtensions = ({
             default: null,
             parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-current-end"),
           },
-          spotlightSnippet: {
+          spotlightPreviousSnippet: {
             default: null,
-            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-snippet"),
+            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-previous-snippet"),
+          },
+          spotlightCurrentSnippet: {
+            default: null,
+            parseHTML: (el: HTMLElement): string | null => el.getAttribute("data-spotlight-current-snippet"),
           },
           spotlightSnippetCapturedAt: {
             default: null,
@@ -354,7 +358,8 @@ export const createTipTapExtensions = ({
               spotlightPreviousEnd: element.getAttribute("data-spotlight-previous-end"),
               spotlightCurrentStart: element.getAttribute("data-spotlight-current-start"),
               spotlightCurrentEnd: element.getAttribute("data-spotlight-current-end"),
-              spotlightSnippet: element.getAttribute("data-spotlight-snippet"),
+              spotlightPreviousSnippet: element.getAttribute("data-spotlight-previous-snippet"),
+              spotlightCurrentSnippet: element.getAttribute("data-spotlight-current-snippet"),
               spotlightSnippetCapturedAt: element.getAttribute("data-spotlight-snippet-captured-at"),
               spotlightScope: element.getAttribute("data-spotlight-scope"),
               spotlightCommitHash: element.getAttribute("data-spotlight-commit-hash"),
@@ -390,7 +395,8 @@ export const createTipTapExtensions = ({
           const previousEnd = node.attrs?.spotlightPreviousEnd as string | null;
           const currentStart = node.attrs?.spotlightCurrentStart as string | null;
           const currentEnd = node.attrs?.spotlightCurrentEnd as string | null;
-          const snippet = (node.attrs?.spotlightSnippet as string) ?? "";
+          const previousSnippet = (node.attrs?.spotlightPreviousSnippet as string) ?? "";
+          const currentSnippet = (node.attrs?.spotlightCurrentSnippet as string) ?? "";
           const capturedAt = (node.attrs?.spotlightSnippetCapturedAt as string) ?? "";
           const scope = (node.attrs?.spotlightScope as string) ?? "";
           const commitHash = (node.attrs?.spotlightCommitHash as string) ?? "";
@@ -413,7 +419,8 @@ export const createTipTapExtensions = ({
             attr("previous-end", hasPrevious ? String(previousEnd ?? previousStart) : "") +
             attr("current-start", hasCurrent ? String(currentStart) : "") +
             attr("current-end", hasCurrent ? String(currentEnd ?? currentStart) : "") +
-            attr("snippet", snippet) +
+            attr("previous-snippet", previousSnippet) +
+            attr("current-snippet", currentSnippet) +
             attr("snippet-captured-at", capturedAt) +
             attr("scope", scope) +
             attr("commit-hash", commitHash) +
@@ -487,7 +494,8 @@ export const createTipTapExtensions = ({
           optionalAttr("data-spotlight-previous-end", node.attrs.spotlightPreviousEnd);
           optionalAttr("data-spotlight-current-start", node.attrs.spotlightCurrentStart);
           optionalAttr("data-spotlight-current-end", node.attrs.spotlightCurrentEnd);
-          optionalAttr("data-spotlight-snippet", node.attrs.spotlightSnippet);
+          optionalAttr("data-spotlight-previous-snippet", node.attrs.spotlightPreviousSnippet);
+          optionalAttr("data-spotlight-current-snippet", node.attrs.spotlightCurrentSnippet);
           optionalAttr("data-spotlight-snippet-captured-at", node.attrs.spotlightSnippetCapturedAt);
           optionalAttr("data-spotlight-commit-hash", node.attrs.spotlightCommitHash);
           optionalAttr("data-spotlight-captured-branch", node.attrs.spotlightCapturedBranch);

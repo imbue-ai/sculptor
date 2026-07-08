@@ -1,7 +1,7 @@
 import { Flex, Text } from "@radix-ui/themes";
 import classnames from "classnames";
 import { useAtomValue, useSetAtom } from "jotai";
-import { Folder, Highlighter } from "lucide-react";
+import { Diff, Folder, Highlighter, Unlink } from "lucide-react";
 import type { ComponentType, ElementType, MouseEvent, ReactElement, ReactNode } from "react";
 import { createElement, useCallback, useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
@@ -11,6 +11,7 @@ import { useImbueNavigate } from "~/common/NavigateUtils";
 import { projectAtomFamily } from "~/common/state/atoms/projects";
 import { taskAtomFamily } from "~/common/state/atoms/tasks";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces";
+import { useWorkspaceFileContent } from "~/common/state/hooks/useWorkspaceFileContent.ts";
 import {
   clearSpotlightHoverForAnchorAtom,
   openCommitDiffTabAtom,
@@ -85,6 +86,11 @@ export type MentionChipProps =
       previousFileLines: LineRange | null;
       currentFileLines: LineRange | null;
       scope: SpotlightScope;
+      previousSnippet?: string;
+      currentSnippet?: string;
+      snippetCapturedAt?: string;
+      capturedBranch?: string;
+      capturedHeadCommit?: string;
     } & SharedChipProps);
 
 type WrapperElement = NonNullable<SharedChipProps["wrapperElement"]>;
@@ -267,11 +273,188 @@ const rangeText = (range: LineRange | null): string => {
 const spotlightLabel = (anchor: SpotlightAnchor): string =>
   `${anchor.file}:${rangeText(spotlightPrimaryRange(anchor))}`;
 
+// Scope label → human-readable description for the hover card.
+const scopeLabel = (scope: SpotlightScope): string => {
+  if (scope.kind === "file-view") return "File view";
+  if (scope.kind === "uncommitted-diff") return "Uncommitted diff";
+  if (scope.kind === "target-branch-diff") return "Diff vs target branch";
+  return `Commit ${scope.commitHash.slice(0, 8)}`;
+};
+
+const formatTime = (isoString: string): string => {
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return isoString;
+  return date.toLocaleString();
+};
+
+const truncateSnippet = (text: string): string => (text.length > 400 ? `${text.slice(0, 400)}…` : text);
+
+// NOTE: staleness detection uses a line-wise heuristic against the CURRENT
+// snippet — any non-empty line from the captured current-side text must still
+// appear in the file. A half-stale "changed" span where the old side is gone but
+// the new side intact reads as fresh. Splitting the check by side is possible
+// now that snippets are per-version; revisit if this causes false-fresh reports.
+const snippetLinesMatch = (snippet: string, fileContent: string): boolean => {
+  const lines = snippet.split("\n");
+  return lines.some((line) => {
+    const trimmed = line.trimEnd();
+    return trimmed.length > 0 && fileContent.includes(trimmed);
+  });
+};
+
+const SpotlightHoverContent = ({
+  file,
+  label,
+  previousSnippet,
+  currentSnippet,
+  snippetCapturedAt,
+  capturedBranch,
+  capturedHeadCommit,
+  scope,
+  workspaceID,
+  accentColor,
+}: {
+  file: string;
+  label: string;
+  previousSnippet?: string;
+  currentSnippet?: string;
+  snippetCapturedAt?: string;
+  capturedBranch?: string;
+  capturedHeadCommit?: string;
+  scope: SpotlightScope;
+  workspaceID?: string;
+  accentColor: string;
+}): ReactElement => {
+  const isFileView = scope.kind === "file-view";
+  const isCommitDiff = scope.kind === "commit-diff";
+  const gitRef = isCommitDiff && scope.kind === "commit-diff" ? scope.commitHash : null;
+  const { data: fileContent } = useWorkspaceFileContent(
+    workspaceID ?? null,
+    workspaceID ? file : null,
+    isCommitDiff ? null : gitRef,
+  );
+
+  const isStale = useMemo(() => {
+    if (isCommitDiff) return false;
+    const checkSnippet = currentSnippet ?? "";
+    if (!checkSnippet || !fileContent) return false;
+    return !snippetLinesMatch(checkSnippet, fileContent);
+  }, [isCommitDiff, currentSnippet, fileContent]);
+
+  const showDiffView = !isFileView && previousSnippet && currentSnippet;
+
+  return (
+    <Flex
+      direction="column"
+      gap="1"
+      style={{
+        padding: "var(--space-1) var(--space-2)",
+        maxWidth: "min(720px, var(--radix-popper-available-width, 100vw))",
+        minWidth: 0,
+      }}
+    >
+      <Flex align="start" gap="1" style={{ minWidth: 0 }}>
+        {isFileView ? (
+          <Highlighter style={{ ...ICON_STYLE, flexShrink: 0, color: accentColor, marginTop: "2px" }} />
+        ) : (
+          <Diff style={{ ...ICON_STYLE, flexShrink: 0, color: accentColor, marginTop: "2px" }} />
+        )}
+        <Text
+          as="div"
+          size="1"
+          style={{
+            fontFamily: "var(--code-font-family)",
+            color: "var(--gray-12)",
+            minWidth: 0,
+            wordBreak: "break-all",
+          }}
+        >
+          {label}
+        </Text>
+      </Flex>
+      {isStale && (
+        <Text as="div" size="1" style={{ color: "var(--amber-10)", fontStyle: "italic" }}>
+          <Unlink style={{ ...ICON_STYLE, verticalAlign: "text-top", marginRight: "2px" }} />
+          Contains lines that no longer match the file
+        </Text>
+      )}
+      {!isStale && showDiffView && (
+        <Flex direction="column" gap="2" style={{ fontSize: "11px", lineHeight: "18px" }}>
+          {previousSnippet && (
+            <Text
+              size="1"
+              style={{
+                color: "var(--red-10)",
+                fontFamily: "var(--code-font-family)",
+                whiteSpace: "pre-wrap",
+                backgroundColor: "var(--red-a2)",
+                padding: "var(--space-1)",
+                borderRadius: "var(--radius-1)",
+                maxHeight: "80px",
+                overflow: "hidden",
+              }}
+            >
+              {truncateSnippet(previousSnippet)}
+            </Text>
+          )}
+          {currentSnippet && (
+            <Text
+              size="1"
+              style={{
+                color: "var(--green-10)",
+                fontFamily: "var(--code-font-family)",
+                whiteSpace: "pre-wrap",
+                backgroundColor: "var(--green-a2)",
+                padding: "var(--space-1)",
+                borderRadius: "var(--radius-1)",
+                maxHeight: "80px",
+                overflow: "hidden",
+              }}
+            >
+              {truncateSnippet(currentSnippet)}
+            </Text>
+          )}
+        </Flex>
+      )}
+      {!isStale && !showDiffView && currentSnippet && (
+        <Text
+          as="div"
+          size="1"
+          style={{
+            fontFamily: "var(--code-font-family)",
+            color: "var(--gray-11)",
+            whiteSpace: "pre-wrap",
+            maxHeight: "120px",
+            overflow: "hidden",
+            fontSize: "11px",
+            lineHeight: "18px",
+          }}
+        >
+          {truncateSnippet(currentSnippet)}
+        </Text>
+      )}
+      <Text as="div" size="1" style={{ color: "var(--gray-10)" }}>
+        {snippetCapturedAt ? `Captured ${formatTime(snippetCapturedAt)}` : "Captured"}
+        {capturedBranch ? ` on ${capturedBranch}` : ""}
+        {capturedHeadCommit ? ` · HEAD ${capturedHeadCommit.slice(0, 8)}` : ""}
+      </Text>
+      <Text as="div" size="1" style={{ color: "var(--gray-10)" }}>
+        {scopeLabel(scope)}
+      </Text>
+    </Flex>
+  );
+};
+
 const SpotlightMentionChip = ({
   file,
   previousFileLines,
   currentFileLines,
   scope,
+  previousSnippet,
+  currentSnippet,
+  snippetCapturedAt,
+  capturedBranch,
+  capturedHeadCommit,
   Wrapper,
   wrapperProps,
   selected,
@@ -281,6 +464,11 @@ const SpotlightMentionChip = ({
   previousFileLines: LineRange | null;
   currentFileLines: LineRange | null;
   scope: SpotlightScope;
+  previousSnippet?: string;
+  currentSnippet?: string;
+  snippetCapturedAt?: string;
+  capturedBranch?: string;
+  capturedHeadCommit?: string;
   Wrapper: WrapperElement;
   wrapperProps?: Record<string, unknown>;
   selected?: boolean;
@@ -301,6 +489,8 @@ const SpotlightMentionChip = ({
   const label = spotlightLabel(anchor);
   // Rotating accent that binds this chip to its line-range highlight/gutter bar.
   const accentColor = spotlightBarColor(spotlightColorIndex(anchor));
+  const isFileView = scope.kind === "file-view";
+  const SpotlightIcon = isFileView ? Highlighter : Diff;
 
   const handleClick = useCallback(
     (e: MouseEvent) => {
@@ -358,39 +548,23 @@ const SpotlightMentionChip = ({
           onMouseLeave={handleMouseLeave}
           aria-disabled={isClickable ? undefined : true}
         >
-          <Highlighter style={{ ...ICON_STYLE, color: accentColor }} />
+          <SpotlightIcon style={{ ...ICON_STYLE, color: accentColor }} />
           <span className={styles.fileLabel}>{label}</span>
         </Wrapper>
       }
       content={
-        <Flex
-          direction="column"
-          gap="1"
-          style={{
-            padding: "var(--space-1) var(--space-2)",
-            maxWidth: "min(720px, var(--radix-popper-available-width, 100vw))",
-            minWidth: 0,
-          }}
-        >
-          <Flex align="start" gap="1" style={{ minWidth: 0 }}>
-            <Highlighter style={{ ...ICON_STYLE, flexShrink: 0, color: "var(--gray-12)", marginTop: "2px" }} />
-            <Text
-              as="div"
-              size="1"
-              style={{
-                fontFamily: "var(--code-font-family)",
-                color: "var(--gray-12)",
-                minWidth: 0,
-                wordBreak: "break-all",
-              }}
-            >
-              {label}
-            </Text>
-          </Flex>
-          <Text as="div" size="1" style={{ color: "var(--gray-10)" }}>
-            Click to open
-          </Text>
-        </Flex>
+        <SpotlightHoverContent
+          file={file}
+          label={label}
+          previousSnippet={previousSnippet}
+          currentSnippet={currentSnippet}
+          snippetCapturedAt={snippetCapturedAt}
+          capturedBranch={capturedBranch}
+          capturedHeadCommit={capturedHeadCommit}
+          scope={scope}
+          workspaceID={workspaceID}
+          accentColor={accentColor}
+        />
       }
     />
   );
@@ -521,6 +695,11 @@ export const MentionChip = (props: MentionChipProps): ReactElement => {
         previousFileLines={spotlightProps.previousFileLines}
         currentFileLines={spotlightProps.currentFileLines}
         scope={spotlightProps.scope}
+        previousSnippet={spotlightProps.previousSnippet}
+        currentSnippet={spotlightProps.currentSnippet}
+        snippetCapturedAt={spotlightProps.snippetCapturedAt}
+        capturedBranch={spotlightProps.capturedBranch}
+        capturedHeadCommit={spotlightProps.capturedHeadCommit}
         Wrapper={Wrapper}
         wrapperProps={spotlightProps.wrapperProps}
         selected={spotlightProps.selected}

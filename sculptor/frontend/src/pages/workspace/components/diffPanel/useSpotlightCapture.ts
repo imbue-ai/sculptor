@@ -64,8 +64,6 @@ export const useSpotlightCapture = ({
     (lineEl: HTMLElement): void => {
       const lineRect = lineEl.getBoundingClientRect();
       const bounds = paneElement?.getBoundingClientRect();
-      // Right-align to the visible pane's right edge; vertically centre on the
-      // line. (Commit 5 pivots this to a left-gutter `+`.)
       const rightInset = bounds ? Math.max(window.innerWidth - bounds.right + 8, 8) : 8;
       setButtonStyle({
         position: "fixed",

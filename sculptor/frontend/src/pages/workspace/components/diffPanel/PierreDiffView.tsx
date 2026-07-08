@@ -261,7 +261,8 @@ export const PierreDiffView = ({
         previousFileLines: result.previousFileLines,
         currentFileLines: result.currentFileLines,
         scope: spotlightScope,
-        snippet: result.snippet,
+        previousSnippet: result.previousSnippet,
+        currentSnippet: result.currentSnippet,
         snippetCapturedAt: new Date().toISOString(),
         capturedBranch: spotlightCapturedBranch ?? "",
         capturedHeadCommit: spotlightCapturedHeadCommit ?? "",
@@ -294,9 +295,9 @@ export const PierreDiffView = ({
               className={styles.spotlightButton}
               style={spotlight.buttonStyle}
               onMouseDown={handleSpotlightPillMouseDown}
+              aria-label="Capture line for spotlight"
             >
-              <Plus size={12} strokeWidth={2.5} />
-              <span>Spotlight</span>
+              <Plus size={14} strokeWidth={2.5} />
             </button>
           )}
           <div ref={pierreRef}>

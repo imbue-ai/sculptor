@@ -24,13 +24,13 @@ def test_uncommitted_diff_addition_includes_snippet_and_side() -> None:
             "current-start": "42",
             "current-end": "42",
             "scope": "uncommitted-diff",
-            "snippet": "const tax = subtotal * 0.08;",
+            "current-snippet": "const tax = subtotal * 0.08;",
         },
     )
     reminder = build_spotlight_reminder(text)
     assert reminder is not None
     assert "src/calc.ts:42 (added) [uncommitted diff]:" in reminder
-    assert "const tax = subtotal * 0.08;" in reminder
+    assert "+ const tax = subtotal * 0.08;" in reminder
     assert reminder.startswith("<system-reminder>")
     assert reminder.rstrip().endswith("</system-reminder>")
 

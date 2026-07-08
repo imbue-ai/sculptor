@@ -187,9 +187,9 @@ export const ReadOnlyPreview = ({ workspaceId, filePath, renderModeOverride }: R
         file: filePath,
         previousFileLines: result.previousFileLines,
         currentFileLines: result.currentFileLines,
-        // A plain file view has no diff axis; capture uses the file-view scope.
         scope: { kind: "file-view" },
-        snippet: result.snippet,
+        previousSnippet: result.previousSnippet,
+        currentSnippet: result.currentSnippet,
         snippetCapturedAt: new Date().toISOString(),
         // Branch/HEAD are stamped by ChatInput from workspace git state at insert time.
         capturedBranch: "",
@@ -300,9 +300,9 @@ export const ReadOnlyPreview = ({ workspaceId, filePath, renderModeOverride }: R
             className={pierreStyles.spotlightButton}
             style={spotlight.buttonStyle}
             onMouseDown={handleSpotlightPillMouseDown}
+            aria-label="Capture line for spotlight"
           >
-            <Plus size={12} strokeWidth={2.5} />
-            <span>Spotlight</span>
+            <Plus size={14} strokeWidth={2.5} />
           </button>
         )}
         <div ref={pierreRef}>

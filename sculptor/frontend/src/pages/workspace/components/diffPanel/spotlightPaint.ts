@@ -94,7 +94,10 @@ export const paintRowRun = (shadowRoot: ShadowRoot, fromEl: HTMLElement, toEl: H
 export type CapturedRun = {
   previousFileLines: LineRange | null;
   currentFileLines: LineRange | null;
-  snippet: string;
+  /** Old-file reading of the selection: deletions + shared context, in order. */
+  previousSnippet: string;
+  /** New-file reading: additions + shared context — and the sole text of a file view. */
+  currentSnippet: string;
 };
 
 const extendRange = (range: LineRange | null, n: number): LineRange =>
@@ -104,10 +107,15 @@ const extendRange = (range: LineRange | null, n: number): LineRange =>
 
 /**
  * From the contiguous DOM run between two rows (inclusive), derive the
- * per-version line ranges and the literal snippet (both sides, in visual
- * order). Context rows are attributed to the current file (that's where they
- * live now, and it keeps a file-view selection in `currentFileLines`). Returns
- * `null` when either endpoint has left the DOM.
+ * per-version line ranges and each file's reading of the selection. A row's
+ * text lands in the previous snippet when it is a deletion or shared context,
+ * and in the current snippet when it is an addition or shared context — so a
+ * modified span reconstructs BOTH the old and new file's view of those lines
+ * (context appears in each, exactly as it does on both sides of a diff). For a
+ * plain file view every row is context, so both snippets are identical and the
+ * consumer shows the current one. Context rows are attributed to the current
+ * file for range purposes (that's where they live now). Returns `null` when
+ * either endpoint has left the DOM.
  */
 export const capturedRunBetween = (
   shadowRoot: ShadowRoot,
@@ -122,17 +130,32 @@ export const capturedRunBetween = (
   const hi = Math.max(a, b);
   let previous: LineRange | null = null;
   let current: LineRange | null = null;
-  const lines: Array<string> = [];
+  const previousLines: Array<string> = [];
+  const currentLines: Array<string> = [];
   for (let index = lo; index <= hi; index++) {
     const el = rows[index];
     const n = lineNumberOf(el);
-    if (!Number.isNaN(n)) {
-      if (fileVersionOfRow(el) === "previous") previous = extendRange(previous, n);
-      else current = extendRange(current, n);
+    const version = fileVersionOfRow(el);
+    const text = el.textContent ?? "";
+    if (version === "previous") {
+      if (!Number.isNaN(n)) previous = extendRange(previous, n);
+      previousLines.push(text);
+    } else if (version === "current") {
+      if (!Number.isNaN(n)) current = extendRange(current, n);
+      currentLines.push(text);
+    } else {
+      // Context row — shared by both files.
+      if (!Number.isNaN(n)) current = extendRange(current, n);
+      previousLines.push(text);
+      currentLines.push(text);
     }
-    lines.push(el.textContent ?? "");
   }
-  return { previousFileLines: previous, currentFileLines: current, snippet: lines.join("\n") };
+  return {
+    previousFileLines: previous,
+    currentFileLines: current,
+    previousSnippet: previousLines.join("\n"),
+    currentSnippet: currentLines.join("\n"),
+  };
 };
 
 /**

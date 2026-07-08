@@ -711,7 +711,8 @@ export const ChatInput = ({
             spotlightCurrentEnd: spotlightData.currentFileLines
               ? String(spotlightData.currentFileLines.lastLine)
               : null,
-            spotlightSnippet: spotlightData.snippet,
+            spotlightPreviousSnippet: spotlightData.previousSnippet,
+            spotlightCurrentSnippet: spotlightData.currentSnippet,
             spotlightSnippetCapturedAt: spotlightData.snippetCapturedAt,
             spotlightScope: spotlightData.scope.kind,
             spotlightCommitHash: commitHash,

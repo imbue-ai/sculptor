@@ -106,8 +106,13 @@ type ParsedSculptorSpan = {
   spotlightPreviousEnd?: string | null;
   spotlightCurrentStart?: string | null;
   spotlightCurrentEnd?: string | null;
+  spotlightPreviousSnippet?: string | null;
+  spotlightCurrentSnippet?: string | null;
+  spotlightSnippetCapturedAt?: string | null;
   spotlightScope?: string | null;
   spotlightCommitHash?: string | null;
+  spotlightCapturedBranch?: string | null;
+  spotlightCapturedHeadCommit?: string | null;
 };
 
 const extractSculptorSpans = (content: string): { processedContent: string; spans: Array<ParsedSculptorSpan> } => {
@@ -129,8 +134,13 @@ const extractSculptorSpans = (content: string): { processedContent: string; span
       spotlightPreviousEnd: span.getAttribute("data-spotlight-previous-end"),
       spotlightCurrentStart: span.getAttribute("data-spotlight-current-start"),
       spotlightCurrentEnd: span.getAttribute("data-spotlight-current-end"),
+      spotlightPreviousSnippet: span.getAttribute("data-spotlight-previous-snippet"),
+      spotlightCurrentSnippet: span.getAttribute("data-spotlight-current-snippet"),
+      spotlightSnippetCapturedAt: span.getAttribute("data-spotlight-snippet-captured-at"),
       spotlightScope: span.getAttribute("data-spotlight-scope"),
       spotlightCommitHash: span.getAttribute("data-spotlight-commit-hash"),
+      spotlightCapturedBranch: span.getAttribute("data-spotlight-captured-branch"),
+      spotlightCapturedHeadCommit: span.getAttribute("data-spotlight-captured-head-commit"),
     });
     return `+[sculptorChip:${index}|x]`;
   });
@@ -172,6 +182,11 @@ const renderChips = (children: ReactNode, spans: ReadonlyArray<ParsedSculptorSpa
                 previousFileLines={lineRangeFromStrings(parsed.spotlightPreviousStart, parsed.spotlightPreviousEnd)}
                 currentFileLines={lineRangeFromStrings(parsed.spotlightCurrentStart, parsed.spotlightCurrentEnd)}
                 scope={spotlightScopeFromStrings(parsed.spotlightScope, parsed.spotlightCommitHash)}
+                previousSnippet={parsed.spotlightPreviousSnippet ?? undefined}
+                currentSnippet={parsed.spotlightCurrentSnippet ?? undefined}
+                snippetCapturedAt={parsed.spotlightSnippetCapturedAt ?? undefined}
+                capturedBranch={parsed.spotlightCapturedBranch ?? undefined}
+                capturedHeadCommit={parsed.spotlightCapturedHeadCommit ?? undefined}
               />,
             );
           } else {

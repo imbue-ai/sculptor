@@ -105,8 +105,10 @@ export type SpotlightAnchor = {
  * `<system-reminder>` for the agent.
  */
 export type SpotlightData = SpotlightAnchor & {
-  /** Literal captured text — both sides for a "changed" span. */
-  snippet: string;
+  /** Old-file reading of the selected lines (deletions + shared context). */
+  previousSnippet: string;
+  /** New-file reading of the selected lines (additions + shared context) — and the sole text captured in a file view. */
+  currentSnippet: string;
   /** ISO 8601 timestamp of the capture moment. */
   snippetCapturedAt: string;
   /** Branch checked out at capture — the agent's world-snapshot. */

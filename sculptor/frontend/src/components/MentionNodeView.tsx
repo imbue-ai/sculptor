@@ -123,6 +123,11 @@ export const MentionNodeView = ({ node, editor, getPos }: NodeViewProps): ReactE
           node.attrs.spotlightScope as string | null,
           node.attrs.spotlightCommitHash as string | null,
         )}
+        previousSnippet={(node.attrs.spotlightPreviousSnippet as string | null) ?? undefined}
+        currentSnippet={(node.attrs.spotlightCurrentSnippet as string | null) ?? undefined}
+        snippetCapturedAt={(node.attrs.spotlightSnippetCapturedAt as string | null) ?? undefined}
+        capturedBranch={(node.attrs.spotlightCapturedBranch as string | null) ?? undefined}
+        capturedHeadCommit={(node.attrs.spotlightCapturedHeadCommit as string | null) ?? undefined}
         {...sharedProps}
       />
     );

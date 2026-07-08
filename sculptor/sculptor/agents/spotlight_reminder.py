@@ -64,7 +64,8 @@ def _format_entry(span: str) -> str | None:
     current_end = _extract_attr(span, "current-end")
     scope = _extract_attr(span, "scope") or "file-view"
     commit_hash = _extract_attr(span, "commit-hash") or ""
-    snippet = _extract_attr(span, "snippet") or ""
+    previous_snippet = _extract_attr(span, "previous-snippet") or ""
+    current_snippet = _extract_attr(span, "current-snippet") or ""
 
     has_previous = bool(previous_start)
     has_current = bool(current_start)
@@ -75,10 +76,14 @@ def _format_entry(span: str) -> str | None:
     line_range = start if (not end or end == start) else f"{start}-{end}"
 
     header = f"- {file}:{line_range}{_side_annotation(scope, has_previous, has_current)} [{_scope_label(scope, commit_hash)}]:"
-    if not snippet:
-        return header
-    indented = "\n".join(f"    {line}" for line in snippet.split("\n"))
-    return f"{header}\n{indented}"
+    parts: list[str] = [header]
+    if previous_snippet:
+        indented = "\n".join(f"    - {line}" for line in previous_snippet.split("\n"))
+        parts.append(indented)
+    if current_snippet:
+        indented = "\n".join(f"    + {line}" for line in current_snippet.split("\n"))
+        parts.append(indented)
+    return "\n".join(parts)
 
 
 def build_spotlight_reminder(text: str) -> str | None:
