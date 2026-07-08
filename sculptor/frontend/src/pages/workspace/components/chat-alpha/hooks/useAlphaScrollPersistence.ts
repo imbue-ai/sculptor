@@ -5,7 +5,12 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 import { alphaScrollPositionAtomFamily } from "~/common/state/atoms/alphaScroll.ts";
 
-import { contentBottomOffset, distanceFromContentBottom, maxScrollOffset } from "../scroll/geometry.ts";
+import {
+  bottomThresholdFor,
+  contentBottomOffset,
+  distanceFromContentBottom,
+  maxScrollOffset,
+} from "../scroll/geometry.ts";
 import type { ScrollStateMachine } from "../scroll/scrollStateMachine.ts";
 
 /** Cancel all pending rAFs tracked in the set and clear it. */
@@ -13,8 +18,6 @@ const cancelPendingRafs = (ids: Set<number>): void => {
   for (const id of ids) cancelAnimationFrame(id);
   ids.clear();
 };
-
-const BOTTOM_THRESHOLD = 200;
 
 type MessageRef = { id: string };
 
@@ -62,6 +65,7 @@ export const useAlphaScrollPersistence = (
           // reader follows content that grew while away and a position inside
           // the padding (the anchored rest / a max scroll) round-trips.
           distanceFromBottom: distanceFromContentBottom(el, virtualizer),
+          savedAtMs: Date.now(),
         });
       });
     };
@@ -90,7 +94,7 @@ export const useAlphaScrollPersistence = (
       return;
     }
 
-    if (scrollPosition.distanceFromBottom <= BOTTOM_THRESHOLD) {
+    if (scrollPosition.distanceFromBottom <= bottomThresholdFor(el)) {
       // At (or past) the bottom: re-land at the saved distance from the
       // *current* content bottom, not at the saved message anchor — when
       // content grew while away, an at-bottom reader should see the new
@@ -173,8 +177,13 @@ export const useAlphaScrollPersistence = (
     }
   }, [taskId, restore]);
 
-  // Initial restore on mount; cancel pending rAFs on unmount
-  useEffect(() => {
+  // Initial restore on mount; cancel pending rAFs on unmount. A layout effect
+  // for the same reason as the task-switch restore above: on mobile every
+  // navigation REMOUNTS the chat, and a post-paint restore would flash the
+  // pin-to-bottom position (painted by useAlphaAutoScroll's mount effects)
+  // before jumping to the saved one. Running after that pin in the same
+  // layout-effect queue (this hook is called later), the restore wins pre-paint.
+  useLayoutEffect(() => {
     restore();
     const rafs = pendingRafsRef.current;
     return (): void => cancelPendingRafs(rafs);
