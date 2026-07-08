@@ -16,7 +16,7 @@ import type { ReactElement } from "react";
 import { memo } from "react";
 
 import { AgentStatusDot } from "~/components/statusDot";
-import { getTabStatusIcon } from "~/pages/workspace/panels/TerminalConnectionIndicator.tsx";
+import { TerminalTabConnectionDot } from "~/pages/workspace/panels/TerminalConnectionIndicator.tsx";
 
 import { panelDefinitionByIdAtom } from "./registry/panelRegistry.ts";
 import type { PanelId } from "./sectionTypes.ts";
@@ -49,12 +49,11 @@ const TabPillComponent = ({ panelId, variant }: TabPillProps): ReactElement | nu
         </div>
       )}
       {/* A terminal's connection-issue dot, mirroring the source tab (SectionHeader's
-          PanelTab) so the pill keeps the same footprint while dragged. Terminal panels
-          never carry dotStatus, so the two dot slots are mutually exclusive. */}
-      {definition.connectionStatus !== undefined && (
-        <div className={styles.dot} aria-hidden={isGhost ? undefined : true}>
-          {getTabStatusIcon(definition.connectionStatus)}
-        </div>
+          PanelTab) so the pill keeps the same footprint while dragged. It subscribes to
+          the terminal's own connection-status slice by panel id; terminal panels never
+          carry dotStatus, so the two dot slots are mutually exclusive. */}
+      {definition.kind === "terminal" && (
+        <TerminalTabConnectionDot panelId={panelId} className={styles.dot} ariaHidden={isGhost ? undefined : true} />
       )}
       <span className={styles.label}>{definition.displayName}</span>
     </div>
