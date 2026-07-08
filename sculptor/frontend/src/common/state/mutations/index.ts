@@ -19,12 +19,13 @@ import { useMutation, type UseMutationResult } from "@tanstack/react-query";
 
 import type { CodingAgentTaskView } from "../../../api";
 import {
+  deleteWorkspaceAgent,
   markWorkspaceAgentRead,
   markWorkspaceAgentUnread,
   renameWorkspaceAgent,
   restoreWorkspaceAgent,
 } from "../../../api";
-import { getTaskSyncVersion, queryClient, taskQueryKey } from "../../queryClient.ts";
+import { getTaskSyncVersion, queryClient, taskIdsQueryKey, taskQueryKey } from "../../queryClient.ts";
 import { clearUnreadOverride, setUnreadOverride } from "../atoms/unreadOverrides";
 
 export type TaskMutationContext = {
@@ -55,6 +56,41 @@ export const rollbackOptimisticTaskUpdate = (agentId: string, ctx: TaskMutationC
   }
   queryClient.setQueryData(taskQueryKey(agentId), ctx.prev);
   return true;
+};
+
+/**
+ * Snapshot a task, tombstone it (`null` entry), and drop its id from the ids
+ * list. Unlike the entry-only helpers, delete also touches the ids list, so it
+ * has its own apply/rollback pair. Exported so the delete hook can apply the
+ * tombstone synchronously before its navigation callbacks run — `onMutate` is
+ * a microtask behind `.mutate()`, and callbacks read the post-delete store.
+ */
+export const applyOptimisticTaskDelete = (agentId: string): TaskMutationContext => {
+  const prev = queryClient.getQueryData<CodingAgentTaskView | null>(taskQueryKey(agentId));
+  queryClient.setQueryData<CodingAgentTaskView | null>(taskQueryKey(agentId), null);
+  const ids = queryClient.getQueryData<ReadonlyArray<string>>(taskIdsQueryKey()) ?? [];
+  queryClient.setQueryData<ReadonlyArray<string>>(
+    taskIdsQueryKey(),
+    ids.filter((id) => id !== agentId),
+  );
+  return { prev, syncVersion: getTaskSyncVersion(agentId) };
+};
+
+/**
+ * Undo an optimistic delete after a failed request: restore the snapshot and
+ * re-append the id, unless a WS frame wrote the task while the request was in
+ * flight (the frame holds server truth and must win). Symmetric with
+ * `applyOptimisticTaskDelete` — restores both the entry and the ids list.
+ */
+export const rollbackOptimisticTaskDelete = (agentId: string, ctx: TaskMutationContext | undefined): void => {
+  if (!ctx?.prev || getTaskSyncVersion(agentId) !== ctx.syncVersion) {
+    return;
+  }
+  queryClient.setQueryData(taskQueryKey(agentId), ctx.prev);
+  const ids = queryClient.getQueryData<ReadonlyArray<string>>(taskIdsQueryKey()) ?? [];
+  if (!ids.includes(agentId)) {
+    queryClient.setQueryData<ReadonlyArray<string>>(taskIdsQueryKey(), [...ids, agentId]);
+  }
 };
 
 type MarkReadVars = { workspaceId: string; agentId: string };
@@ -132,4 +168,34 @@ export const useRestoreTaskMutation = (): UseMutationResult<unknown, Error, Rest
   useMutation({
     mutationFn: (vars: RestoreVars) =>
       restoreWorkspaceAgent({ path: { workspace_id: vars.workspaceId, agent_id: vars.agentId } }),
+  });
+
+type DeleteVars = {
+  workspaceId: string;
+  agentId: string;
+  // The tombstone is applied by the caller (synchronously, before its
+  // navigation callbacks) via `applyOptimisticTaskDelete`, and its snapshot is
+  // threaded here so `onError` can roll back. Applying in `onMutate` would land
+  // a microtask after `.mutate()`, too late for the callbacks — so this
+  // mutation deliberately has no `onMutate`.
+  deleteContext: TaskMutationContext;
+};
+
+/**
+ * Delete an agent. The optimistic tombstone lives in the caller (see
+ * `deleteContext`); this hook owns the request and the version-checked
+ * rollback. `skipWsAck` lets the request complete without waiting for the WS
+ * to acknowledge the removal. Rollback in `onError` (not the caller's `.catch`)
+ * so it can't be skipped if the component unmounts mid-request.
+ */
+export const useDeleteTaskMutation = (): UseMutationResult<unknown, Error, DeleteVars, unknown> =>
+  useMutation({
+    mutationFn: (vars: DeleteVars) =>
+      deleteWorkspaceAgent({
+        path: { workspace_id: vars.workspaceId, agent_id: vars.agentId },
+        meta: { skipWsAck: true },
+      }),
+    onError: (_e, vars): void => {
+      rollbackOptimisticTaskDelete(vars.agentId, vars.deleteContext);
+    },
   });
