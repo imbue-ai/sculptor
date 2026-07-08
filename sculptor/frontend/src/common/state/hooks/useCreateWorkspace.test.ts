@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as api from "~/api";
 import { EffortLevel, LlmModel, WorkspaceInitializationStrategy } from "~/api";
-import type { StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
+import { encodeRegisteredAgentType, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 
 import { useCreateWorkspace } from "./useCreateWorkspace.ts";
 
@@ -134,5 +134,60 @@ describe("useCreateWorkspace agent-type gating", () => {
     // The backend rejects a prompt for terminal/registered agents (422), so it must never be sent.
     expect(body.prompt).toBeUndefined();
     expect(body.model).toBeUndefined();
+  });
+
+  it("omits the prompt and model for a registered agent whose registration exists", async () => {
+    const store = createStore();
+    const { result } = renderHook(() => useCreateWorkspace(), { wrapper: makeWrapper(store) });
+
+    const registration: api.TerminalAgentRegistration = {
+      registrationId: "reg-1",
+      displayName: "My Agent",
+      launchCommand: "my-agent",
+    };
+    await result.current.createWorkspace(
+      baseArgs({
+        agentTypeValue: encodeRegisteredAgentType("reg-1"),
+        registrations: [registration],
+        prompt: "this should be ignored",
+      }),
+    );
+
+    const body = getAgentRequestBody();
+    // A registered agent is terminal-like: the backend rejects a prompt for it,
+    // and it carries no model / per-prompt settings.
+    expect(body.agentType).toBe("registered");
+    expect(body.registrationId).toBe("reg-1");
+    expect(body.prompt).toBeUndefined();
+    expect(body.model).toBeUndefined();
+    expect(body.effort).toBeUndefined();
+    expect(body.fastMode).toBeUndefined();
+    expect(body.enterPlanMode).toBeUndefined();
+  });
+
+  it("falls back to Claude (prompt + model + settings) when the registered agent's registration was deleted", async () => {
+    const store = createStore();
+    const { result } = renderHook(() => useCreateWorkspace(), { wrapper: makeWrapper(store) });
+
+    // The stored type references a registration that no longer exists, so
+    // resolveEffectiveAgentType falls back to Claude — which must send the prompt
+    // and settings, not silently drop them.
+    await result.current.createWorkspace(
+      baseArgs({
+        agentTypeValue: encodeRegisteredAgentType("reg-deleted"),
+        registrations: [],
+        prompt: "help me get started",
+        enterPlanMode: true,
+      }),
+    );
+
+    const body = getAgentRequestBody();
+    expect(body.agentType).toBe("claude");
+    expect(body.registrationId).toBeUndefined();
+    expect(body.prompt).toBe("help me get started");
+    expect(body.model).toBe(LlmModel.CLAUDE_4_OPUS);
+    expect(body.effort).toBe(EffortLevel.HIGH);
+    expect(body.fastMode).toBe(false);
+    expect(body.enterPlanMode).toBe(true);
   });
 });
