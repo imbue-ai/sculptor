@@ -293,6 +293,11 @@ export const SidebarRepoGroup = ({
           </Tooltip>
         </Flex>
       </div>
+      {!isRepoCollapsed && group.workspaces.length === 0 && (
+        <Text className={styles.noWorkspacesHint} data-testid={ElementIds.SIDEBAR_NO_WORKSPACES_HINT}>
+          No workspaces yet
+        </Text>
+      )}
       {!isRepoCollapsed &&
         group.workspaces.map((ws) => (
           <SidebarWorkspaceRow
