@@ -20,6 +20,7 @@ from sculpt.client.api.default import resolve_agent_by_prefix
 from sculpt.client.models.http_validation_error import HTTPValidationError
 from sculpt.client.models.project import Project
 from sculpt.client.models.project_initialization_request import ProjectInitializationRequest
+from sculpt.client.models.recent_workspace_response import RecentWorkspaceResponse
 from sculpt.formatting import cli_error
 from sculpt.formatting import handle_connection_error
 
@@ -285,6 +286,23 @@ def resolve_by_prefix(prefix: str, candidates: list[T], id_getter: Callable[[T],
     return matches[0]
 
 
+def fetch_recent_workspaces(client: Client, json_output: bool) -> list[RecentWorkspaceResponse]:
+    """Fetch all recent workspaces, exiting with a CLI error on connection or empty response.
+
+    The single shared fetch for workspace prefix resolution — command modules
+    use this rather than calling the generated client directly.
+    """
+    try:
+        result = list_recent_workspaces.sync(client=client)  # type: ignore[arg-type]
+    except httpx.ConnectError:
+        handle_connection_error(json_output)
+
+    if result is None:
+        cli_error("Failed to list workspaces", detail="No response from server", json_output=json_output)
+
+    return result.workspaces
+
+
 def resolve_workspace_id(client: Client, workspace_id_or_prefix: str, json_output: bool = False) -> str:
     """Resolve a workspace ID prefix to a full workspace ID.
 
@@ -298,13 +316,6 @@ def resolve_workspace_id(client: Client, workspace_id_or_prefix: str, json_outpu
     Returns:
         The full workspace ID string.
     """
-    try:
-        result = list_recent_workspaces.sync(client=client)  # type: ignore[arg-type]
-    except httpx.ConnectError:
-        handle_connection_error(json_output)
-
-    if result is None:
-        cli_error("Failed to list workspaces", detail="No response from server", json_output=json_output)
-
-    ws = resolve_by_prefix(workspace_id_or_prefix, result.workspaces, lambda w: w.object_id)
+    workspaces = fetch_recent_workspaces(client, json_output)
+    ws = resolve_by_prefix(workspace_id_or_prefix, workspaces, lambda w: w.object_id)
     return ws.object_id

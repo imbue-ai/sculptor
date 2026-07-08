@@ -8,12 +8,10 @@ from sculpt.auth import get_default_base_url
 from sculpt.client import Client
 from sculpt.client.api.default import create_workspace_v2
 from sculpt.client.api.default import delete_workspace
-from sculpt.client.api.default import list_recent_workspaces
 from sculpt.client.api.default import list_workspaces
 from sculpt.client.api.default import update_workspace
 from sculpt.client.models.create_workspace_request_v2 import CreateWorkspaceRequestV2
 from sculpt.client.models.http_validation_error import HTTPValidationError
-from sculpt.client.models.recent_workspace_response import RecentWorkspaceResponse
 from sculpt.client.models.update_workspace_request import UpdateWorkspaceRequest
 from sculpt.commands._group_helpers import add_workspace_to_group
 from sculpt.commands._group_helpers import create_group_for_new_workspace
@@ -33,6 +31,7 @@ from sculpt.formatting import format_table
 from sculpt.formatting import handle_connection_error
 from sculpt.formatting import truncate
 from sculpt.resolve import fetch_repo_path_lookup
+from sculpt.resolve import fetch_recent_workspaces
 from sculpt.resolve import resolve_by_prefix
 from sculpt.resolve import resolve_project
 
@@ -189,7 +188,7 @@ def list_cmd(
 
 
 def _list_all(client: Client, json_output: bool) -> None:
-    workspaces = _fetch_recent_workspaces(client, json_output)
+    workspaces = fetch_recent_workspaces(client, json_output)
     repo_lookup = fetch_repo_path_lookup(client)  # type: ignore[arg-type]
 
     if json_output:
@@ -228,18 +227,6 @@ def _list_all(client: Client, json_output: bool) -> None:
         for w in workspaces
     ]
     typer.echo(format_table(headers, rows))
-
-
-def _fetch_recent_workspaces(client: Client, json_output: bool) -> list[RecentWorkspaceResponse]:
-    try:
-        result = list_recent_workspaces.sync(client=client)  # type: ignore[arg-type]
-    except httpx.ConnectError:
-        handle_connection_error(json_output)
-
-    if result is None:
-        cli_error("Failed to list workspaces", detail="No response from server", json_output=json_output)
-
-    return result.workspaces
 
 
 def _list_for_project(client: Client, project_id: str, json_output: bool) -> None:
@@ -298,7 +285,7 @@ def show(
     base_url = base_url or get_default_base_url()
     client = get_authenticated_client(base_url)
 
-    workspaces = _fetch_recent_workspaces(client, json_output)
+    workspaces = fetch_recent_workspaces(client, json_output)
     ws = resolve_by_prefix(workspace_id, workspaces, lambda w: w.object_id)
 
     repo_lookup = fetch_repo_path_lookup(client)  # type: ignore[arg-type]
@@ -344,7 +331,7 @@ def rename(
     base_url = base_url or get_default_base_url()
     client = get_authenticated_client(base_url)
 
-    workspaces = _fetch_recent_workspaces(client, json_output)
+    workspaces = fetch_recent_workspaces(client, json_output)
     ws = resolve_by_prefix(workspace_id, workspaces, lambda w: w.object_id)
     resolved_id = ws.object_id
 
@@ -380,7 +367,7 @@ def delete(
     base_url = base_url or get_default_base_url()
     client = get_authenticated_client(base_url)
 
-    workspaces = _fetch_recent_workspaces(client, json_output)
+    workspaces = fetch_recent_workspaces(client, json_output)
     ws = resolve_by_prefix(workspace_id, workspaces, lambda w: w.object_id)
     resolved_id = ws.object_id
 

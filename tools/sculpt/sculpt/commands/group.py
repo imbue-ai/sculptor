@@ -16,7 +16,6 @@ from sculpt.auth import get_authenticated_client
 from sculpt.auth import get_default_base_url
 from sculpt.client import Client
 from sculpt.client.api.default import create_workspace_group
-from sculpt.client.api.default import list_recent_workspaces
 from sculpt.client.api.default import remove_workspace_group_member
 from sculpt.client.api.default import ungroup_workspace_group
 from sculpt.client.api.default import update_workspace_group
@@ -40,6 +39,7 @@ from sculpt.formatting import format_datetime
 from sculpt.formatting import format_table
 from sculpt.formatting import handle_connection_error
 from sculpt.formatting import truncate
+from sculpt.resolve import fetch_recent_workspaces
 from sculpt.resolve import resolve_by_prefix
 from sculpt.resolve import resolve_project
 
@@ -51,23 +51,11 @@ group_app = typer.Typer(
 _NAME_DISPLAY_MAX_LENGTH = 30
 
 
-def _fetch_recent_workspaces(client: Client, json_output: bool) -> list[RecentWorkspaceResponse]:
-    try:
-        result = list_recent_workspaces.sync(client=client)  # type: ignore[arg-type]
-    except httpx.ConnectError:
-        handle_connection_error(json_output)
-
-    if result is None:
-        cli_error("Failed to list workspaces", detail="No response from server", json_output=json_output)
-
-    return result.workspaces
-
-
 def _resolve_member_workspaces(
     client: Client, workspace_refs: list[str], json_output: bool
 ) -> list[RecentWorkspaceResponse]:
     """Resolve workspace ID prefixes to workspaces, deduplicated in input order."""
-    workspaces = _fetch_recent_workspaces(client, json_output)
+    workspaces = fetch_recent_workspaces(client, json_output)
     resolved: dict[str, RecentWorkspaceResponse] = {}
     for ref in workspace_refs:
         ws = resolve_by_prefix(ref, workspaces, lambda w: w.object_id)
@@ -298,7 +286,7 @@ def add(
 
     group = resolve_group(client, group_id, json_output=json_output)
 
-    workspaces = _fetch_recent_workspaces(client, json_output)
+    workspaces = fetch_recent_workspaces(client, json_output)
     ws = resolve_by_prefix(workspace_id, workspaces, lambda w: w.object_id)
     if ws.project_id != group.project_id:
         cli_error(

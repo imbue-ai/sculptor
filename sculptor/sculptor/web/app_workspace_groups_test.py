@@ -119,8 +119,15 @@ def _post_create_group(
     )
 
 
-def _create_group(client: TestClient, project: Project, workspaces: list[Workspace], **kwargs) -> dict:
-    response = _post_create_group(client, project, workspaces, **kwargs)
+def _create_group(
+    client: TestClient,
+    project: Project,
+    workspaces: list[Workspace],
+    name: str | None = None,
+    color: str | None = None,
+    created_via_cli: bool = False,
+) -> dict:
+    response = _post_create_group(client, project, workspaces, name=name, color=color, created_via_cli=created_via_cli)
     assert response.status_code == 200, response.text
     return response.json()
 
