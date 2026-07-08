@@ -1,4 +1,4 @@
-import { Button, Skeleton, Switch, Tooltip } from "@radix-ui/themes";
+import { Button, Skeleton, Switch, Text, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -122,10 +122,11 @@ export const NewWorkspaceForm = ({
 
   // State and hooks — external
   const { registrations } = useTerminalAgentRegistrations();
-  // Fast mode and model selection are Claude-only. Resolve through the same
-  // helper the create flow uses so a registered agent whose registration was
-  // deleted (and therefore creates a Claude agent) still shows Claude's controls.
-  const isNonClaudeHarness = resolveEffectiveAgentType(agentTypeValue, registrations).agentType !== "claude";
+  // The per-prompt agent settings (model / effort / plan / fast) are consumed at
+  // create only for Claude. Resolve through the same helper the create flow uses
+  // so a registered agent whose registration was deleted (and therefore creates a
+  // Claude agent) still shows Claude's controls.
+  const effectiveAgentType = resolveEffectiveAgentType(agentTypeValue, registrations).agentType;
   const { repoInfo, fetchRepoInfo, fetchCurrentBranch } = useRepoInfo(selectedProjectId);
   const { isCreating, createWorkspace } = useCreateWorkspace();
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -468,23 +469,30 @@ export const NewWorkspaceForm = ({
             rows={2}
           />
 
-          {/* Per-prompt agent settings (plan / fast / effort / model). Always
-              rendered so the row reserves its space; hidden via `visibility`
-              until the user has typed a prompt so the modal doesn't jump. */}
+          {/* Per-prompt agent settings. The row is always laid out so it reserves
+              its space; it is hidden via `visibility` until the user has typed a
+              prompt so the modal doesn't jump. Only Claude consumes model / effort
+              / plan / fast at create, so it gets the full control cluster. pi
+              ignores all of them — it picks its model from its own in-task catalog
+              and enters plan mode from the chat — so it gets a hint instead.
+              Terminal/registered agents configure nothing here. */}
           <div className={styles.agentSettings} data-visible={!isPromptEmpty} aria-hidden={isPromptEmpty}>
-            {/* Pi supports interactive backchannel, so plan mode stays enabled. */}
-            <AgentSettingsControls
-              model={agentModel}
-              onModelChange={setAgentModel}
-              effort={agentEffort}
-              onEffortChange={setAgentEffort}
-              isFastMode={isAgentFastMode}
-              onFastModeToggle={(): void => setIsAgentFastMode((v) => !v)}
-              isPlanMode={isAgentPlanMode}
-              onPlanModeToggle={(): void => setIsAgentPlanMode((v) => !v)}
-              canUseFastMode={!isNonClaudeHarness}
-              canSelectModel={!isNonClaudeHarness}
-            />
+            {effectiveAgentType === "claude" ? (
+              <AgentSettingsControls
+                model={agentModel}
+                onModelChange={setAgentModel}
+                effort={agentEffort}
+                onEffortChange={setAgentEffort}
+                isFastMode={isAgentFastMode}
+                onFastModeToggle={(): void => setIsAgentFastMode((v) => !v)}
+                isPlanMode={isAgentPlanMode}
+                onPlanModeToggle={(): void => setIsAgentPlanMode((v) => !v)}
+              />
+            ) : effectiveAgentType === "pi" ? (
+              <Text size="1" color="gray" data-testid={ElementIds.NEW_WORKSPACE_PI_SETTINGS_HINT}>
+                Select your model after the workspace starts
+              </Text>
+            ) : null}
           </div>
         </div>
 
