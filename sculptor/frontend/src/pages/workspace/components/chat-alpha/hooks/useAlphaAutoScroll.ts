@@ -300,7 +300,15 @@ export const useAlphaAutoScroll = (
       machine.setGeometryAtBottom(distance <= bottomThresholdFor(el));
 
       if (isProgrammaticScroll.current) {
-        isProgrammaticScroll.current = false;
+        // Clear in a microtask, not synchronously: other scroll listeners on
+        // this element (the persistence save handler) classify the SAME event
+        // by reading this flag, and listener order isn't guaranteed — both
+        // hooks re-register independently. A microtask runs after every
+        // listener of this event and before the next event's task, so the
+        // flag stays visible exactly for the one event it describes.
+        queueMicrotask(() => {
+          isProgrammaticScroll.current = false;
+        });
         return;
       }
 

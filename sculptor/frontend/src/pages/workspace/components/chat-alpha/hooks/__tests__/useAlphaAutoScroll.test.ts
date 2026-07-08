@@ -647,7 +647,7 @@ describe("useAlphaAutoScroll", () => {
     expect(virtualizer.scrollToIndex).not.toHaveBeenCalled();
   });
 
-  it("re-engages when user scrolls to exact bottom during streaming", () => {
+  it("re-engages when user scrolls to exact bottom during streaming", async () => {
     // After disengaging, if the user scrolls all the way to the bottom
     // (distance ≈ 0), auto-scroll should re-engage — this is an intentional
     // gesture to resume following the stream.
@@ -660,9 +660,12 @@ describe("useAlphaAutoScroll", () => {
     // Engaged via isStreaming effect
     expect(result.current.isEngaged).toBe(true);
 
-    // User scrolls away → disengage
+    // User scrolls away → disengage. Async act: the engage pin flagged a
+    // programmatic scroll which swallows this first scroll event; the flag
+    // clears in a microtask, so the await provides the task boundary that
+    // separates real browser scroll events.
     setScrollPosition(el, 500, 2000);
-    act(() => {
+    await act(async () => {
       el.dispatchEvent(new Event("wheel"));
       el.dispatchEvent(new Event("scroll"));
     });
@@ -911,7 +914,7 @@ describe("useAlphaAutoScroll", () => {
       expect(result.current.isJumpSuppressed).toBe(true);
     });
 
-    it("filling phase exits on user scroll", () => {
+    it("filling phase exits on user scroll", async () => {
       const el = createMockScrollContainer(1500, 2000, 500);
       const ref = { current: el };
       const virtualizer = createMockVirtualizerWithFilling(300, 100);
@@ -948,7 +951,9 @@ describe("useAlphaAutoScroll", () => {
 
       // The scroll-to-top effect sets isProgrammaticScrollRef. Consume it
       // with a bare scroll event so it doesn't swallow the real user scroll.
-      act(() => {
+      // Async act: the flag clears in a microtask after the event, so the
+      // await provides the task boundary real browser scroll events have.
+      await act(async () => {
         el.dispatchEvent(new Event("scroll"));
       });
 
