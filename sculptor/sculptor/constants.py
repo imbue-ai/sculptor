@@ -623,6 +623,9 @@ class ElementIDs(StrEnum):
     # Workspace header (the simplified top bar above the section grid): branch
     # pill + section collapse/expand toggles + re-homed PR button / diff summary.
     WORKSPACE_HEADER = "WORKSPACE_HEADER"
+    # The workspace title shown in the header. Only rendered when the left sidebar
+    # is collapsed (the sidebar otherwise carries the workspace name).
+    WORKSPACE_HEADER_TITLE = "WORKSPACE_HEADER_TITLE"
     HEADER_SECTION_TOGGLE_LEFT = "HEADER_SECTION_TOGGLE_LEFT"
     HEADER_SECTION_TOGGLE_RIGHT = "HEADER_SECTION_TOGGLE_RIGHT"
     HEADER_SECTION_TOGGLE_BOTTOM = "HEADER_SECTION_TOGGLE_BOTTOM"
