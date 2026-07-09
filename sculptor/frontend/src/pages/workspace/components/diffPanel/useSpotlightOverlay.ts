@@ -67,8 +67,9 @@ export const useSpotlightOverlay = ({ paneElement, file }: UseSpotlightOverlayOp
     if (!shadowRoot || !file) return;
     paintGutterBars(shadowRoot, draftAnchors, file, (anchor) =>
       spotlightBarColor(spotlightColorIndex(anchor, colorMap)),
+      hover,
     );
-  }, [draftAnchors, file, paneElement, domVersion, colorMap]);
+  }, [draftAnchors, file, paneElement, domVersion, colorMap, hover]);
 
   // Click scroll — retries deterministically as rows stream in.
   useEffect(() => {

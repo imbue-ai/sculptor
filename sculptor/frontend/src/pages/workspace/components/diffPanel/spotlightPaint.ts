@@ -194,14 +194,18 @@ const stripeBackground = (colors: ReadonlyArray<string>): string => {
 
 /**
  * Paint persistent gutter bars for the given set of anchors. One bar per
- * matching line: solid when one anchor covers it, repeating diagonal stripes
- * when two or more overlap. Row matching mirrors `paintAnchorRanges`.
+ * matching line — solid when a single anchor covers it, repeating diagonal
+ * stripes when two or more overlap. When `hover` is set and its anchor matches
+ * the current line, the bar renders solid in the hovered chip's colour
+ * regardless of overlap, giving the hover state a clear visual break-out from
+ * the collective stripe. Row matching mirrors `paintAnchorRanges`.
  */
 export const paintGutterBars = (
   shadowRoot: ShadowRoot,
   anchors: ReadonlyArray<SpotlightAnchor>,
   file: string,
   colorFn: (anchor: SpotlightAnchor) => string,
+  hover: SpotlightAnchor | null,
 ): void => {
   clearGutterBars(shadowRoot);
 
@@ -212,6 +216,32 @@ export const paintGutterBars = (
     const n = lineNumberOf(el);
     if (Number.isNaN(n)) continue;
     const version = fileVersionOfRow(el);
+
+    // When a chip is hovered, its bar breaks out of the stripe.
+    if (
+      hover !== null &&
+      hover.file === file &&
+      ((version === "previous" && inRange(hover.previousFileLines, n)) ||
+        (version === "current" && inRange(hover.currentFileLines, n)) ||
+        (version === null && (inRange(hover.previousFileLines, n) || inRange(hover.currentFileLines, n))))
+    ) {
+      const bar = el.ownerDocument.createElement("div");
+      bar.setAttribute("data-spotlight-bar", "");
+      bar.style.cssText = [
+        `position: absolute`,
+        `left: 0`,
+        `top: 0`,
+        `width: ${GUTTER_BAR_WIDTH}px`,
+        `height: 100%`,
+        `background: ${colorFn(hover)}`,
+        `pointer-events: none`,
+        `z-index: 0`,
+      ].join("; ");
+      el.style.position = "relative";
+      el.appendChild(bar);
+      continue;
+    }
+
     const colors = relevant
       .filter(
         (anchor) =>
