@@ -53,7 +53,6 @@ from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessa
 from sculptor.interfaces.agents.agent import PersistentRunnerMessageUnion
 from sculptor.interfaces.agents.agent import PersistentUserMessageUnion
 from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
-from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
 from sculptor.interfaces.agents.agent import RequestStoppedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
@@ -66,7 +65,6 @@ from sculptor.interfaces.agents.artifacts import FileAgentArtifact
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_CLEAN_SHUTDOWN_ON_INTERRUPT
 from sculptor.interfaces.agents.constants import SIGINT_EXIT_CODES
 from sculptor.interfaces.agents.constants import SIGTERM_EXIT_CODES
-from sculptor.interfaces.agents.errors import AgentClientError
 from sculptor.interfaces.agents.errors import AgentCrashed
 from sculptor.interfaces.agents.errors import UncleanTerminationAgentError
 from sculptor.interfaces.agents.errors import WaitTimeoutAgentError
@@ -92,10 +90,12 @@ from sculptor.state.messages import Message
 from sculptor.state.messages import ModelOption
 from sculptor.state.messages import PersistentAgentMessage
 from sculptor.state.messages import PersistentUserMessage
-from sculptor.state.messages import ResponseBlockAgentMessage
+from sculptor.tasks.handlers.run_agent.setup import HistoryScan
 from sculptor.tasks.handlers.run_agent.setup import finalize_task_setup
+from sculptor.tasks.handlers.run_agent.setup import get_killed_exit_code
 from sculptor.tasks.handlers.run_agent.setup import load_initial_task_state
 from sculptor.tasks.handlers.run_agent.setup import message_queue_subscription_context
+from sculptor.tasks.handlers.run_agent.setup import scan_message_history
 from sculptor.tasks.handlers.run_agent.setup import title_prediction_context
 from sculptor.tasks.handlers.run_agent.setup import wait_for_initial_message_and_process_queue
 from sculptor.utils.build import build_sculpt_backend_env
@@ -176,6 +176,17 @@ def run_agent_task_v1(
         # Load task state and project
         task_state, project = load_initial_task_state(services, task)
 
+        # Replay the persisted message log once to derive the loop's startup state:
+        # the in-flight (resumable) messages and the dedup cursor. Fetching this
+        # early is safe because no agent runs between this fetch and the loop start
+        # in _run_agent_in_environment, so no RequestStarted or completion messages
+        # can be persisted in the gap; user messages that arrive during the initial
+        # wait below cannot be in flight and reach the loop via the live
+        # input_message_queue.
+        with services.data_model_service.open_task_transaction() as transaction:
+            all_messages = services.task_service.get_saved_messages_for_task(task.object_id, transaction)
+        history_scan = scan_message_history(all_messages)
+
         # Subscribe to the message queue, set up the environment, then wait for the initial message.
         # Environment setup happens before the initial message wait so that prompt-less agents
         # (created via the "Add agent" button) reach READY state while waiting for user input.
@@ -233,7 +244,7 @@ def run_agent_task_v1(
 
                     # Now wait for the initial user message (may block for prompt-less agents)
                     re_queued_messages, initial_message = wait_for_initial_message_and_process_queue(
-                        input_message_queue, task_state, shutdown_event
+                        input_message_queue, history_scan.last_processed_message_id, shutdown_event
                     )
 
                     # A pre-first-message model switch is written to task state out of band
@@ -269,6 +280,7 @@ def run_agent_task_v1(
                         task=task,
                         task_data=task_data,
                         task_state=task_state,
+                        history_scan=history_scan,
                         re_queued_messages=re_queued_messages,
                         input_message_queue=input_message_queue,
                         environment=environment,
@@ -322,6 +334,7 @@ def _run_agent_in_environment(
     task: Task,
     task_data: AgentTaskInputsV2,
     task_state: AgentTaskStateV2,
+    history_scan: HistoryScan,
     re_queued_messages: tuple[PersistentUserMessageUnion, ...],
     input_message_queue: Queue[UserMessageUnion | ResumeAgentResponseRunnerMessage],
     environment: AgentExecutionEnvironment,
@@ -339,6 +352,10 @@ def _run_agent_in_environment(
     - it handles the agent's output (eg, by sending it to the database)
     - it handles the user messages (eg, by sending them to the agent)
     - it syncs artifacts from the agent's output to the task_service
+
+    ``history_scan`` is the replay of the task's persisted message log (see
+    ``scan_message_history``), which seeds the loop's view of what a previous run
+    left in flight.
     """
     # state: these variables are changed as the agent runs
     shutdown_started_at: float | None = None
@@ -347,10 +364,13 @@ def _run_agent_in_environment(
     # and have nothing to do with snapshotting
     user_input_message_being_processed: PersistentUserMessage | None = None
     queued_user_input_messages: list[PersistentUserMessageUnion] = list(re_queued_messages)
-    # is set below from old messages
-    last_user_chat_message_id: AgentMessageID | None = None
+    last_user_chat_message_id: AgentMessageID | None = history_scan.last_user_chat_message_id
     # track the full history of persistent messages we've seen
-    persistent_message_history: list[PersistentUserMessage | PersistentAgentMessage] = []
+    persistent_message_history: list[PersistentUserMessage | PersistentAgentMessage] = list(
+        history_scan.persistent_message_history
+    )
+    initial_in_flight_user_chat_message_id = history_scan.in_flight_chat_message_id
+    initial_in_flight_user_question_answer_message_id = history_scan.in_flight_answer_message_id
     # tool_use_ids of questions the agent asked that haven't been answered yet;
     # while non-empty, queued messages must not be dequeued — only answers should
     # be sent. A set (not a flag) because multiple questions can pend at once:
@@ -379,112 +399,43 @@ def _run_agent_in_environment(
         if on_agent_started is not None:
             on_agent_started()
 
-        # make sure that we've synced anything that happened previously
-        # this ensures that we reach a consistent state once the task has been resumed
-        with services.data_model_service.open_task_transaction() as transaction:
-            all_messages = services.task_service.get_saved_messages_for_task(task.object_id, transaction)
-
-        # we need to replay the messages to do a variety of things
-        persistent_user_message_by_id: dict[AgentMessageID, PersistentUserMessageUnion] = {}
-        # one of those things is to figure out what the last user chat message was that we *started* processing
-        # this is in case we never *finished* processing it, so that the agent can resume from where it left off
-        initial_in_flight_user_chat_message_id: AgentMessageID | None = None
-        # An orphaned answer: a UserQuestionAnswerMessage that was delivered to a
-        # now-dead agent process (its RequestStarted is in history) but whose turn
-        # never completed cleanly. On resume the agent has already recorded the
-        # answer (e.g. pi persists it as a toolResult) and has no open dialog, so
-        # re-delivering it raw is a stale dialog the harness skips — dropping the
-        # answer and leaving the request perpetually in-flight. Resuming it instead
-        # settles that dangling request (see _send_user_input_message).
-        initial_in_flight_user_question_answer_message_id: AgentMessageID | None = None
-        # Track whether the agent emitted any visible response for the in-flight chat
-        # message. If it didn't, there's nothing for Claude to "resume" from — we'd
-        # rather just resend the original prompt than send a "continue where you left
-        # off" instruction with no prior content. Reset on each new RequestStarted.
-        is_partial_agent_response = False
-        for message in all_messages:
-            # just remember the last chat message from the user (that the agent started processing)
-            if isinstance(message, RequestStartedAgentMessage):
-                persistent_message = persistent_user_message_by_id.get(message.request_id)
-                if persistent_message is not None:
-                    if isinstance(persistent_message, ChatInputUserMessage):
-                        last_user_chat_message_id = message.request_id
-                        initial_in_flight_user_chat_message_id = message.request_id
-                        is_partial_agent_response = False
-                    elif isinstance(persistent_message, UserQuestionAnswerMessage):
-                        initial_in_flight_user_question_answer_message_id = message.request_id
-                    # add the user message to the history as well
-                    persistent_message_history.append(persistent_user_message_by_id[message.request_id])
-            if isinstance(message, PersistentRequestCompleteAgentMessage):
-                if message.request_id == initial_in_flight_user_chat_message_id:
-                    # it doesn't count if this was from a sigterm
-                    was_killed = _get_killed_exit_code(message)
-                    if not was_killed:
-                        initial_in_flight_user_chat_message_id = None
-                # A clean (non-interrupted) success means the answer's turn
-                # actually finished, and a turn_abandoned success means it was
-                # terminally settled (harness finalization or pi resume-settle)
-                # — clear it either way so it isn't resumed again. A plain
-                # interrupted success, a failure, or a kill all leave the answer
-                # orphaned (its toolResult is recorded but nothing drove the
-                # follow-up turn), so keep it for resume.
-                if message.request_id == initial_in_flight_user_question_answer_message_id and (
-                    isinstance(message, RequestSuccessAgentMessage)
-                    and (not message.interrupted or message.turn_abandoned)
-                ):
-                    initial_in_flight_user_question_answer_message_id = None
-            # used above so that we can figure out which user messages started being processed so far
-            if isinstance(message, PersistentUserMessage):
-                persistent_user_message_by_id[message.message_id] = message
-            # remember all messages that have been emitted so far by the agent
-            if isinstance(message, PersistentAgentMessage):
-                was_killed = _get_killed_exit_code(message)
-                if not was_killed:
-                    persistent_message_history.append(message)
-                # A ResponseBlockAgentMessage from the in-flight turn means Claude
-                # produced visible content that we'd want to continue from on resume.
-                if isinstance(message, ResponseBlockAgentMessage):
-                    is_partial_agent_response = True
-        # If we didn't observe any partial response from the agent, there's nothing
-        # to "continue from" — clear the in-flight ID so the message gets pushed as
-        # a fresh ChatInputUserMessage rather than a ResumeAgentResponseRunnerMessage.
-        # When there IS a partial response, keep the ID so _send_user_input_message
-        # converts the push into a resume and Claude continues its --resume session.
-        if not is_partial_agent_response:
-            initial_in_flight_user_chat_message_id = None
-
         logger.debug("Initial in-flight user chat message ID: {}", initial_in_flight_user_chat_message_id)
-        logger.debug("Last processed message id:              {}", task_state.last_processed_message_id)
+        logger.debug("Derived last processed message id:      {}", history_scan.last_processed_message_id)
 
         # When a crash left orphaned requests (RequestStarted with no terminal
-        # completion) but no queued user messages remain to drive their resume,
+        # completion) and no pending user input will drive their resume,
         # synthesize an interrupted completion so the frontend settles to READY
         # instead of staying stuck "thinking" forever.
-        if not queued_user_input_messages:
-            orphan_request_ids = [
-                rid
-                for rid in (
-                    initial_in_flight_user_chat_message_id,
-                    initial_in_flight_user_question_answer_message_id,
-                )
-                if rid is not None
-            ]
-            orphaned_completion_msgs = [
-                RequestSuccessAgentMessage(
-                    message_id=AgentMessageID(),
-                    request_id=rid,
-                    interrupted=True,
-                    turn_abandoned=True,
-                )
-                for rid in orphan_request_ids
-            ]
-            if orphaned_completion_msgs:
-                _save_messages(task.object_id, services, orphaned_completion_msgs, {})
-                # Advance the dedup cursor so a future restart doesn't re-queue
-                # a user message whose completion we just synthesized.
-                task_state = _record_latest_completion_in_state(
-                    orphaned_completion_msgs, task.object_id, task_state, services
-                )
+        #
+        # The chat candidate is the scan's DANGLING id (no accepted terminal
+        # completion), not the post-partial-gate in-flight id: a crash before any
+        # output leaves a dangling request with nothing to resume from, and it must
+        # still be terminalized here — settling it as an empty interrupted turn
+        # rather than silently re-executing a possibly-side-effectful prompt.
+        pending_input_message_ids = {message.message_id for message in queued_user_input_messages} | {
+            message.message_id for message in input_message_queue.queue
+        }
+        orphan_request_ids = [
+            rid
+            for rid in (
+                history_scan.dangling_chat_message_id,
+                initial_in_flight_user_question_answer_message_id,
+            )
+            if rid is not None and rid not in pending_input_message_ids
+        ]
+        orphaned_completion_msgs = [
+            RequestSuccessAgentMessage(
+                message_id=AgentMessageID(),
+                request_id=rid,
+                interrupted=True,
+                turn_abandoned=True,
+            )
+            for rid in orphan_request_ids
+        ]
+        if orphaned_completion_msgs:
+            _save_messages(task.object_id, services, orphaned_completion_msgs, {})
+            # No cursor write is needed: the next run's scan_message_history sees
+            # the turn_abandoned completion and derives the message as settled.
 
     # this is the core event loop for the agent.
     exit_code: int | None
@@ -517,7 +468,6 @@ def _run_agent_in_environment(
                     agent_wrapper,
                     exit_code,
                     task,
-                    task_state,
                     project,
                     environment,
                     services,
@@ -530,7 +480,6 @@ def _run_agent_in_environment(
                 agent_wrapper,
                 exit_code,
                 task,
-                task_state,
                 project,
                 environment,
                 services,
@@ -562,14 +511,13 @@ def _run_agent_in_environment(
         # add any persistent messages to our history
         for message in new_messages:
             if isinstance(message, PersistentAgentMessage):
-                killed_exit_code = _get_killed_exit_code(message)
+                killed_exit_code = get_killed_exit_code(message)
                 if killed_exit_code:
                     logger.debug("Agent seems like it exited, returning")
                     return _handle_completed_agent(
                         agent_wrapper,
                         killed_exit_code,
                         task,
-                        task_state,
                         project,
                         environment,
                         services,
@@ -577,20 +525,12 @@ def _run_agent_in_environment(
                 else:
                     persistent_message_history.append(message)
 
-        # Advance the dedup cursor for any completion in this batch. Catches
-        # in-flight chat completions, queued-answer completions, and the AUQ-pending
-        # case where the in-flight chat ID isn't reflected in
-        # user_input_message_being_processed (cleared at v1.py:600 by design).
-        task_state = _record_latest_completion_in_state(new_messages, task.object_id, task_state, services)
-
         # Persist any model catalog the agent surfaced this batch (pi emits one at
         # start) onto task state so the harness's get_available_models reads it.
         task_state = _record_available_models_in_state(new_messages, task.object_id, task_state, services)
 
         # Did the currently-pending in-flight message complete? Drives the dispatch
-        # decision below — distinct from the cursor advance above, which fires for
-        # any completion in this batch (including ones for messages other than the
-        # one tracked by user_input_message_being_processed).
+        # decision below.
         is_agent_turn_finished = user_input_message_being_processed is not None and any(
             isinstance(m, PersistentRequestCompleteAgentMessage)
             and m.request_id == user_input_message_being_processed.message_id
@@ -683,19 +623,6 @@ def _run_agent_in_environment(
             # otherwise, simply forward the message to the agent and let it figure it out
             else:
                 agent_wrapper.push_message(message)
-
-
-def _get_killed_exit_code(message: Message) -> int:
-    if isinstance(message, RequestStoppedAgentMessage):
-        causal_error = message.error.construct_instance()
-        # sigterm and signint
-        if isinstance(causal_error, AgentClientError) and causal_error.exit_code in (
-            SIGTERM_EXIT_CODES | SIGINT_EXIT_CODES
-        ):
-            # exit_code is a member of a set of ints here, so it cannot be None
-            # pyrefly: ignore [bad-return]
-            return causal_error.exit_code
-    return 0
 
 
 InputMessageT = TypeVar("InputMessageT", bound=UserMessageUnion | ResumeAgentResponseRunnerMessage)
@@ -970,7 +897,6 @@ def _handle_completed_agent(
     agent_wrapper: Agent,
     exit_code: int,
     task: Task,
-    task_state: AgentTaskStateV2,
     project: Project,
     environment: AgentExecutionEnvironment,
     services: ServiceCollectionForTask,
@@ -990,10 +916,6 @@ def _handle_completed_agent(
     )
 
     _save_messages(task.object_id, services, new_messages, callbacks)
-
-    # Same per-iteration cursor advance the main loop does after its own _save_messages
-    # call — applied here for the final batch of messages popped after the loop exits.
-    _record_latest_completion_in_state(new_messages, task.object_id, task_state, services)
 
     agent_wrapper.wait(
         _COMPLETED_AGENT_FINAL_WAIT_SECONDS
@@ -1096,67 +1018,6 @@ def sync_artifacts(
     return callbacks_by_name
 
 
-def _record_latest_completion_in_state(
-    new_messages: Sequence[Message],
-    task_id: TaskID,
-    task_state: AgentTaskStateV2,
-    services: ServiceCollectionForTask,
-) -> AgentTaskStateV2:
-    """Bump last_processed_message_id to the latest completion's request_id in new_messages.
-
-    Single source of truth for advancing the dedup cursor when the agent reaches a
-    terminal state for a user message. Called from both the main loop (after
-    _save_messages) and _handle_completed_agent (for its post-pop save). The wrapper
-    constructs every PersistentRequestCompleteAgentMessage with request_id = the
-    user message ID it was wrapping, so request_id alone identifies which user
-    message was processed — we don't need to cross-reference the loop's mutable
-    user_input_message_being_processed local, which the AUQ-pending state
-    intentionally clears to None at v1.py:600 while the chat message is still in
-    flight.
-
-    BUT — the wrapper's ``_handle_user_message`` is also invoked for the
-    ephemeral ``StopAgentUserMessage`` (and ``InterruptProcessUserMessage`` via
-    the same code path), and it emits a completion for those too. Their
-    message_ids are never persisted, so blindly setting
-    last_processed_message_id to such a request_id would make the NEXT run's
-    ``_drop_already_processed_messages`` walk the replay queue looking for an
-    ID that isn't there and raise. Filter to request_ids that resolve to a
-    persisted user message in the DB.
-
-    Does NOT filter interrupted/killed completions here — the runtime cursor must
-    advance for those too (otherwise dedup re-delivers them on the next agent run).
-    The startup reconciliation in setup.py applies a different policy (skip
-    interrupted) because its semantics differ: it's healing past state, and
-    treating an interrupted completion as "done" would lose still-pending input
-    (see post-answer-shutdown — hypothesis #12).
-    """
-    completion_request_ids: list[AgentMessageID] = []
-    for message in new_messages:
-        if isinstance(message, PersistentRequestCompleteAgentMessage):
-            completion_request_ids.append(message.request_id)
-    if not completion_request_ids:
-        return task_state
-
-    # Resolve which request_ids actually correspond to persisted user messages.
-    with services.data_model_service.open_task_transaction() as transaction:
-        all_messages = services.task_service.get_saved_messages_for_task(task_id, transaction)
-    persistent_user_message_ids = {m.message_id for m in all_messages if isinstance(m, PersistentUserMessage)}
-
-    latest_persisted_request_id: AgentMessageID | None = None
-    for request_id in completion_request_ids:
-        if request_id in persistent_user_message_ids:
-            latest_persisted_request_id = request_id
-    if latest_persisted_request_id is None:
-        return task_state
-
-    return _update_task_state(
-        last_processed_input_message_id=latest_persisted_request_id,
-        task_id=task_id,
-        task_state=task_state,
-        services=services,
-    )
-
-
 def _record_available_models_in_state(
     new_messages: Sequence[Message],
     task_id: TaskID,
@@ -1169,8 +1030,8 @@ def _record_available_models_in_state(
     at agent start; this writes its `available_models` / `current_model` onto
     `AgentTaskStateV2` (which the harness's `get_available_models` /
     `get_selected_model_id` read). The last message in the batch wins. No-op when
-    the batch carries none. Preserves the DB title like `_update_task_state`, so a
-    concurrent rename is not clobbered.
+    the batch carries none. Preserves the DB title, so a concurrent rename is not
+    clobbered.
     """
     latest: ModelsAvailableAgentMessage | None = None
     for message in new_messages:
@@ -1242,34 +1103,6 @@ def _persist_available_models(
     if updated_task is None or not isinstance(updated_task.current_state, AgentTaskStateV2):
         return task_state
     return updated_task.current_state
-
-
-def _update_task_state(
-    last_processed_input_message_id: AgentMessageID,
-    task_id: TaskID,
-    task_state: AgentTaskStateV2,
-    services: ServiceCollectionForTask,
-) -> AgentTaskStateV2:
-    """Update the task state with the message ID that was processed successfully."""
-    if task_state.last_processed_message_id == last_processed_input_message_id:
-        return task_state
-
-    logger.debug(
-        f"Updating last processed message ID from {task_state.last_processed_message_id} to {last_processed_input_message_id}"
-    )
-    with services.data_model_service.open_task_transaction() as transaction:
-        task_row = transaction.get_task(task_id)
-        assert task_row is not None
-        # Read the current DB title so we don't clobber a concurrent rename.
-        db_state = AgentTaskStateV2.model_validate(task_row.current_state)
-        mutable_task_state = evolver(task_state)
-        assign(mutable_task_state.last_processed_message_id, lambda: last_processed_input_message_id)
-        assign(mutable_task_state.title, lambda: db_state.title)
-        updated_task_state = chill(mutable_task_state)
-        task_row = task_row.evolve(task_row.ref().current_state, updated_task_state.model_dump())
-        _task_row = transaction.upsert_task(task_row)
-
-    return updated_task_state
 
 
 def _save_messages(

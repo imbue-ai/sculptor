@@ -2792,18 +2792,6 @@
             ],
             "default": null
           },
-          "lastProcessedMessageId": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Lastprocessedmessageid"
-          },
           "objectType": {
             "default": "AgentTaskStateV2",
             "title": "Objecttype",

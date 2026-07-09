@@ -1,14 +1,16 @@
 """Characterization tests for the run_agent v1 handler's restart/restore behavior.
 
-These tests pin the CURRENT behavior of the replay scan and dispatch logic in
-``_run_agent_in_environment`` (``v1.py``) and the cursor reconciliation and dedup
-logic in ``setup.py``, so that a planned refactor -- deriving
-``last_processed_message_id`` from the persisted message log instead of storing it
-as mutable task state ("phase 3") -- makes every behavior change explicit and
-deliberate rather than accidental. A scenario failing after that refactor means
-"this behavior changed"; the refactor must then either accept the change on
-purpose or treat it as a regression to fix. Docstrings marked PHASE-3 SENSITIVE
-flag the scenarios most likely to move.
+These tests pin the behavior of the replay scan (``scan_message_history`` in
+``setup.py``), the dedup walk (``_drop_already_processed_messages``), and the
+dispatch/orphan-synthesis logic in ``_run_agent_in_environment`` (``v1.py``), so
+that changes to restart/restore semantics are explicit and deliberate rather
+than accidental. A failing scenario means "this behavior changed"; a change must
+then either be accepted on purpose or treated as a regression to fix.
+
+Most scenarios drive the loop with explicit queue contents (``re_queued_messages``
+/ ``input_message_queue``), pinning loop behavior independently of what the
+production dedup path would put in the queue. Where the production path matters,
+the scenario asserts on the scan's derived cursor directly.
 
 Fixture vocabulary shared across these tests:
 - "chat": a persisted ``ChatInputUserMessage`` plus its
@@ -17,10 +19,10 @@ Fixture vocabulary shared across these tests:
   ``RequestStarted`` (Claude produced visible output before the run ended).
 - "answer": a persisted ``UserQuestionAnswerMessage`` plus its own
   ``RequestStartedAgentMessage``.
-- "cursor": ``AgentTaskStateV2.last_processed_message_id``, seeded directly via
-  ``_set_task_state`` rather than derived -- ``_run_agent_in_environment`` only
-  logs this value, it does not branch on it. The replay scan branches on the
-  persisted message history instead.
+- "cursor": ``HistoryScan.last_processed_message_id``, derived from the persisted
+  message log by ``scan_message_history`` -- there is no stored cursor. The loop
+  does not branch on it; it feeds ``_drop_already_processed_messages`` on the
+  production path.
 """
 
 import threading
@@ -62,8 +64,9 @@ from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
 from sculptor.state.messages import ResponseBlockAgentMessage
+from sculptor.tasks.handlers.run_agent.setup import HistoryScan
 from sculptor.tasks.handlers.run_agent.setup import _drop_already_processed_messages
-from sculptor.tasks.handlers.run_agent.setup import load_initial_task_state
+from sculptor.tasks.handlers.run_agent.setup import scan_message_history
 from sculptor.tasks.handlers.run_agent.v1 import AgentPaused
 from sculptor.tasks.handlers.run_agent.v1 import _run_agent_in_environment
 
@@ -75,6 +78,13 @@ def _set_task_state(task: Task, state: AgentTaskStateV2, services: ServiceCollec
         assert task_row is not None
         updated = task_row.evolve(task_row.ref().current_state, state.model_dump())
         transaction.upsert_task(updated)
+
+
+def _scan_history(local_task: Task, services: ServiceCollectionForTask) -> HistoryScan:
+    """Fetch the task's saved messages and scan them, as run_agent_task_v1 does."""
+    with services.data_model_service.open_task_transaction() as transaction:
+        saved_messages = services.task_service.get_saved_messages_for_task(local_task.object_id, transaction)
+    return scan_message_history(saved_messages)
 
 
 def _make_in_flight_chat_message() -> ChatInputUserMessage:
@@ -238,12 +248,8 @@ def test_queued_inflight_chat_with_partial_is_resumed_not_synthesized(
     ``ResumeAgentResponseRunnerMessage`` instead.
     """
     workspace_id = WorkspaceID()
-    previous_message_id = AgentMessageID()
     chat_message = _make_in_flight_chat_message()
-    stale_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        last_processed_message_id=previous_message_id,
-    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
     _set_task_state(local_task, stale_state, services)
 
     _persist_messages(
@@ -281,6 +287,7 @@ def test_queued_inflight_chat_with_partial_is_resumed_not_synthesized(
                 task=local_task,
                 task_data=task_data,
                 task_state=stale_state,
+                history_scan=_scan_history(local_task, services),
                 re_queued_messages=(chat_message,),
                 input_message_queue=input_message_queue,
                 environment=agent_env,
@@ -316,14 +323,17 @@ def test_queued_inflight_chat_without_partial_is_resent_raw(
     ``is_partial_agent_response`` check clears the in-flight id, so
     ``_send_user_input_message`` falls through to pushing the original message
     as-is instead of converting it to a resume.
+
+    This pins the loop's behavior GIVEN a queued message. On the production
+    path the derivation settles this shape (it is dropped, not queued) and the
+    dangling request is terminalized by the orphan synthesis instead — see
+    ``test_crash_before_any_output_with_empty_queue_synthesizes_settlement``
+    in v1_test.py. The raw-resend path remains reachable when the message is
+    explicitly re-queued (e.g. a Stop-triggered re-queue).
     """
     workspace_id = WorkspaceID()
-    previous_message_id = AgentMessageID()
     chat_message = _make_in_flight_chat_message()
-    stale_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        last_processed_message_id=previous_message_id,
-    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
     _set_task_state(local_task, stale_state, services)
 
     _persist_messages(
@@ -360,6 +370,7 @@ def test_queued_inflight_chat_without_partial_is_resent_raw(
                 task=local_task,
                 task_data=task_data,
                 task_state=stale_state,
+                history_scan=_scan_history(local_task, services),
                 re_queued_messages=(chat_message,),
                 input_message_queue=input_message_queue,
                 environment=agent_env,
@@ -387,22 +398,19 @@ def test_user_stopped_turn_is_settled_no_redelivery_no_synthesis(
     test_settings: SculptorSettings,
 ) -> None:
     """A user-initiated stop (a plain interrupted, non-abandoned RequestSuccess)
-    with the cursor already at the chat message and an empty queue is a dead
-    end: no redelivery, no synthesis. This is the everyday "user clicked stop"
-    shape, and it is the dominant path phase 3 must preserve exactly.
+    settles the chat message: the derived cursor lands on it, and with an empty
+    queue the loop performs no redelivery and no synthesis. This is the everyday
+    "user clicked stop" shape, the dominant restart path.
 
     The persisted completion here is a RequestSuccess, not a
-    RequestStoppedAgentMessage, so the replay scan's ``_get_killed_exit_code``
+    RequestStoppedAgentMessage, so the replay scan's ``get_killed_exit_code``
     check (which only special-cases RequestStoppedAgentMessage) never applies to
     it -- the completion unconditionally clears the in-flight tracking on sight,
     settling the turn without needing ``turn_abandoned=True``.
     """
     workspace_id = WorkspaceID()
     chat_message = _make_in_flight_chat_message()
-    stale_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        last_processed_message_id=chat_message.message_id,
-    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
     _set_task_state(local_task, stale_state, services)
 
     _persist_messages(
@@ -420,6 +428,10 @@ def test_user_stopped_turn_is_settled_no_redelivery_no_synthesis(
             ),
         ],
     )
+
+    # The production path settles the chat message via the derived cursor, so it
+    # is dropped from the replayed queue before the loop ever sees it.
+    assert _scan_history(local_task, services).last_processed_message_id == chat_message.message_id
 
     agent_env = LocalAgentExecutionEnvironment(
         environment=environment,
@@ -446,6 +458,7 @@ def test_user_stopped_turn_is_settled_no_redelivery_no_synthesis(
                 task=local_task,
                 task_data=task_data,
                 task_state=stale_state,
+                history_scan=_scan_history(local_task, services),
                 re_queued_messages=(),
                 input_message_queue=input_message_queue,
                 environment=agent_env,
@@ -469,23 +482,20 @@ def test_killed_stop_with_partial_and_empty_queue_synthesizes_settlement(
     test_settings: SculptorSettings,
 ) -> None:
     """The original SCU-1559 stuck shape: a killed (SIGTERM) stop leaves the chat
-    message's in-flight tracking alive across replay, and with no queued message
+    message's in-flight tracking alive across replay, and with no pending message
     to drive a resume, the no-op-resume path synthesizes exactly one
     interrupted+turn_abandoned RequestSuccess so the frontend settles instead of
     sticking on "thinking" forever.
 
-    ``_get_killed_exit_code`` recognizes the SIGTERM exit code on the persisted
+    ``get_killed_exit_code`` recognizes the SIGTERM exit code on the persisted
     ``RequestStoppedAgentMessage``, so the replay scan's completion-clearing branch
-    treats it as "not really done" and keeps ``initial_in_flight_user_chat_message_id``
-    set -- unlike a plain RequestSuccess (see the user-stopped-turn scenario), which
+    treats it as "not really done" and keeps ``in_flight_chat_message_id`` set --
+    unlike a plain RequestSuccess (see the user-stopped-turn scenario), which
     always clears it.
     """
     workspace_id = WorkspaceID()
     chat_message = _make_in_flight_chat_message()
-    stale_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        last_processed_message_id=chat_message.message_id,
-    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
     _set_task_state(local_task, stale_state, services)
 
     _persist_messages(
@@ -528,6 +538,7 @@ def test_killed_stop_with_partial_and_empty_queue_synthesizes_settlement(
                 task=local_task,
                 task_data=task_data,
                 task_state=stale_state,
+                history_scan=_scan_history(local_task, services),
                 re_queued_messages=(),
                 input_message_queue=input_message_queue,
                 environment=agent_env,
@@ -539,9 +550,6 @@ def test_killed_stop_with_partial_and_empty_queue_synthesizes_settlement(
 
     with services.data_model_service.open_task_transaction() as transaction:
         saved_messages = services.task_service.get_saved_messages_for_task(local_task.object_id, transaction)
-        task_row = transaction.get_task(local_task.object_id)
-        assert task_row is not None
-        final_state = AgentTaskStateV2.model_validate(task_row.current_state)
 
     synthesized = [
         m
@@ -551,7 +559,9 @@ def test_killed_stop_with_partial_and_empty_queue_synthesizes_settlement(
     assert len(synthesized) == 1, f"expected exactly one synthesized settlement, got {synthesized}"
     assert synthesized[0].interrupted is True
 
-    assert final_state.last_processed_message_id == chat_message.message_id
+    # The synthesized completion settles the chat message for the next restart's
+    # derived cursor, so it will be dropped rather than re-queued.
+    assert scan_message_history(saved_messages).last_processed_message_id == chat_message.message_id
 
 
 def test_killed_stop_with_partial_and_queued_chat_is_resumed_not_synthesized(
@@ -562,18 +572,14 @@ def test_killed_stop_with_partial_and_queued_chat_is_resumed_not_synthesized(
     test_settings: SculptorSettings,
 ) -> None:
     """Same killed-stop history as the empty-queue scenario, but the chat message
-    is still in the re-queued messages (a stale cursor hasn't caught up to it
-    yet). Being queued takes priority over the empty-queue synthesis path: the
-    loop resumes the message instead of settling it with a synthesized
-    completion.
+    is still queued -- which is what the production path produces here, since a
+    killed stop keeps the message in flight and the derived cursor never settles
+    an in-flight message. Being queued takes priority over synthesis: the loop
+    resumes the message instead of settling it with a synthesized completion.
     """
     workspace_id = WorkspaceID()
-    previous_message_id = AgentMessageID()
     chat_message = _make_in_flight_chat_message()
-    stale_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        last_processed_message_id=previous_message_id,
-    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
     _set_task_state(local_task, stale_state, services)
 
     _persist_messages(
@@ -616,6 +622,7 @@ def test_killed_stop_with_partial_and_queued_chat_is_resumed_not_synthesized(
                 task=local_task,
                 task_data=task_data,
                 task_state=stale_state,
+                history_scan=_scan_history(local_task, services),
                 re_queued_messages=(chat_message,),
                 input_message_queue=input_message_queue,
                 environment=agent_env,
@@ -637,30 +644,21 @@ def test_killed_stop_with_partial_and_queued_chat_is_resumed_not_synthesized(
     _assert_no_synthesized_settlement(local_task, services, chat_message.message_id)
 
 
-def test_crash_window_marked_completion_heals_cursor_and_drops_message(
+def test_marked_completion_derives_cursor_and_drops_message(
     local_task: Task,
     services: ServiceCollectionForTask,
 ) -> None:
-    """A turn_abandoned completion heals a stale cursor, and the healed cursor
-    correctly drops the now-settled chat message from a replayed queue.
+    """A turn_abandoned completion settles the chat message in the derived
+    cursor, and that cursor drops the now-settled message from a replayed queue.
 
-    Simulates the crash window between ``_save_messages`` (persisting the
-    synthesized turn_abandoned completion) and ``_update_task_state`` (persisting
-    the cursor advance): ``task_state.last_processed_message_id`` is stale, but
-    ``load_initial_task_state``'s reconciliation heals it from message history
-    (``_is_truly_processed_completion`` counts a turn_abandoned completion as truly
-    processed), and the healed cursor is then usable by
+    This is the persisted shape the orphan-synthesis path leaves behind: the
+    synthesized turn_abandoned completion is the only record that the request was
+    terminally settled. The derivation must count it (in-flight tracking clears
+    on the completion), and the derived cursor must be usable by
     ``_drop_already_processed_messages`` without raising or re-queuing the
     already-settled message.
     """
-    workspace_id = WorkspaceID()
-    previous_message_id = AgentMessageID()
     chat_message = _make_in_flight_chat_message()
-    stale_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        last_processed_message_id=previous_message_id,
-    )
-    _set_task_state(local_task, stale_state, services)
 
     _persist_messages(
         local_task,
@@ -678,54 +676,50 @@ def test_crash_window_marked_completion_heals_cursor_and_drops_message(
         ],
     )
 
-    loaded_state, _project = load_initial_task_state(services, local_task)
+    scan = _scan_history(local_task, services)
 
-    assert loaded_state.last_processed_message_id == chat_message.message_id, (
-        "reconciliation must heal the stale cursor to the turn_abandoned completion's request id"
+    assert scan.last_processed_message_id == chat_message.message_id, (
+        "the derived cursor must settle on the turn_abandoned completion's request id"
     )
 
     replay_queue: Queue = Queue()
     replay_queue.put(chat_message)
-    dropped, re_queued = _drop_already_processed_messages(loaded_state.last_processed_message_id, replay_queue)
+    dropped, re_queued = _drop_already_processed_messages(scan.last_processed_message_id, replay_queue)
 
     assert dropped == (chat_message,)
     assert re_queued == ()
     assert replay_queue.empty()
 
 
-def test_crash_window_unmarked_interrupted_redelivers_raw(
+def test_unmarked_interrupted_completion_settles_derivation_but_redelivers_raw_if_queued(
     local_task: Task,
     services: ServiceCollectionForTask,
     project: Project,
     environment: LocalEnvironment,
     test_settings: SculptorSettings,
 ) -> None:
-    """PHASE-3 SENSITIVE: a plain interrupted (non-abandoned) RequestSuccess for
-    the in-flight chat message clears the replay scan's in-flight tracking the
-    same as a clean completion would -- so when the message is still queued
-    (cursor stale from the crash window between saving that completion and
-    advancing the cursor), it is re-delivered as a fresh raw chat message, not
-    resumed, even though a partial response exists to resume from.
+    """A plain interrupted (non-abandoned) RequestSuccess for the in-flight chat
+    message clears the replay scan's in-flight tracking the same as a clean
+    completion would. On the production path that settles the message in the
+    derived cursor, so dedup drops it before it ever reaches the queue -- it is
+    neither resumed nor re-delivered. At the loop level, if such a message IS
+    handed to the loop as queued input, it is re-delivered as a fresh raw chat
+    message, not resumed, even though a partial response exists to resume from
+    (the cleared in-flight tracking is what would have converted it to a resume).
 
-    ``_get_killed_exit_code`` only special-cases ``RequestStoppedAgentMessage``, so
+    ``get_killed_exit_code`` only special-cases ``RequestStoppedAgentMessage``, so
     any ``RequestSuccessAgentMessage`` -- even ``interrupted=True,
     turn_abandoned=False``, which ``RequestSuccessAgentMessage``'s own docstring
     says means "the turn may still be resumed" -- clears
-    ``initial_in_flight_user_chat_message_id``. This is the opposite of how an
-    orphaned ANSWER's interrupted, non-abandoned completion is treated (see
+    ``in_flight_chat_message_id``. This is the opposite of how an orphaned
+    ANSWER's interrupted, non-abandoned completion is treated (see
     ``test_orphaned_answer_with_interrupted_completion_is_still_resumed`` in
     v1_test.py, which keeps the answer orphaned and resumable): the chat and
-    answer completion-clearing conditions in the replay scan are not symmetric
-    today. A cursor derived from message history (phase 3) must decide this
-    branch on purpose, one way or the other.
+    answer completion-clearing conditions in the replay scan are not symmetric.
     """
     workspace_id = WorkspaceID()
-    previous_message_id = AgentMessageID()
     chat_message = _make_in_flight_chat_message()
-    stale_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        last_processed_message_id=previous_message_id,
-    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
     _set_task_state(local_task, stale_state, services)
 
     _persist_messages(
@@ -743,6 +737,10 @@ def test_crash_window_unmarked_interrupted_redelivers_raw(
             ),
         ],
     )
+
+    # Production path: the interrupted completion settles the chat message, so
+    # the derived cursor drops it from the replayed queue.
+    assert _scan_history(local_task, services).last_processed_message_id == chat_message.message_id
 
     agent_env = LocalAgentExecutionEnvironment(
         environment=environment,
@@ -769,6 +767,7 @@ def test_crash_window_unmarked_interrupted_redelivers_raw(
                 task=local_task,
                 task_data=task_data,
                 task_state=stale_state,
+                history_scan=_scan_history(local_task, services),
                 re_queued_messages=(chat_message,),
                 input_message_queue=input_message_queue,
                 environment=agent_env,
@@ -798,18 +797,15 @@ def test_nonkilled_stop_is_terminal_no_synthesis(
     test_settings: SculptorSettings,
 ) -> None:
     """A RequestStoppedAgentMessage whose error is NOT a SIGTERM/SIGINT exit code
-    is treated as a genuine terminal stop, not a kill: ``_get_killed_exit_code``
+    is treated as a genuine terminal stop, not a kill: ``get_killed_exit_code``
     returns 0 for it, so the replay scan clears the in-flight chat tracking the
-    same as any other completion. With no queued message, there is nothing left
-    to synthesize -- unlike the killed-stop shape, which keeps the in-flight id
-    alive and does synthesize.
+    same as any other completion -- the derived cursor settles the message. With
+    no pending message, there is nothing left to synthesize -- unlike the
+    killed-stop shape, which keeps the in-flight id alive and does synthesize.
     """
     workspace_id = WorkspaceID()
     chat_message = _make_in_flight_chat_message()
-    stale_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        last_processed_message_id=chat_message.message_id,
-    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
     _set_task_state(local_task, stale_state, services)
 
     _persist_messages(
@@ -826,6 +822,10 @@ def test_nonkilled_stop_is_terminal_no_synthesis(
             ),
         ],
     )
+
+    # The non-killed stop settles the chat message in the derived cursor, which
+    # is why the production path arrives here with nothing queued.
+    assert _scan_history(local_task, services).last_processed_message_id == chat_message.message_id
 
     agent_env = LocalAgentExecutionEnvironment(
         environment=environment,
@@ -852,6 +852,7 @@ def test_nonkilled_stop_is_terminal_no_synthesis(
                 task=local_task,
                 task_data=task_data,
                 task_state=stale_state,
+                history_scan=_scan_history(local_task, services),
                 re_queued_messages=(),
                 input_message_queue=input_message_queue,
                 environment=agent_env,
@@ -874,24 +875,19 @@ def test_completed_answer_after_cursor_is_redelivered_raw(
     environment: LocalEnvironment,
     test_settings: SculptorSettings,
 ) -> None:
-    """PHASE-3 SENSITIVE: a cleanly-completed answer trailing the cursor is
-    dropped from ``_drop_already_processed_messages``' dedup walk (which stops as
-    soon as it finds the cursor id), left LIVE in the actual input queue rather
-    than re-queued, and then re-delivered RAW to the agent -- even though it
-    already has a clean completion on disk.
+    """On the production path a cleanly-completed answer is settled by the
+    derived cursor (both the chat and the answer derive as settled, and the
+    cursor lands on the answer -- the latest in log order), so dedup drops it
+    before the loop ever sees it. Two lower-level pins remain:
 
-    ``_record_latest_completion_in_state`` sets the cursor to whichever
-    completion the main loop's most recently-processed batch contained, not by
-    comparing message ids -- so it can trail persisted queue order. Here the
-    cursor sits at the chat message even though the answer's own clean
-    completion was persisted afterward. ``_drop_already_processed_messages``
-    walks the queue only until it finds the cursor id and stops, so it never
-    inspects the answer sitting behind the chat message: the answer survives in
-    the live queue, relying entirely on the harness to skip it as a stale
-    dialog turn. Nothing in the replay path performs that skip today -- the
-    loop delivers the answer raw. A cursor derived from message history (phase
-    3) must decide, on purpose, whether an already-completed message like this
-    is redelivered, dropped, or handled some other way.
+    Part (a): ``_drop_already_processed_messages`` stops walking as soon as it
+    finds the cursor id, so given a cursor at the chat message it leaves the
+    trailing answer LIVE in the queue rather than re-queued -- the walk never
+    inspects messages behind the cursor.
+
+    Part (b): an answer that does reach the loop via the live input queue is
+    re-delivered RAW to the agent, never converted to a resume, relying on the
+    harness to skip it as a stale dialog turn.
     """
     workspace_id = WorkspaceID()
     chat_message = _make_in_flight_chat_message()
@@ -901,10 +897,7 @@ def test_completed_answer_after_cursor_is_redelivered_raw(
         question_data=AskUserQuestionData(questions=[], tool_use_id="t1"),
         tool_use_id="t1",
     )
-    stale_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        last_processed_message_id=chat_message.message_id,
-    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
     _set_task_state(local_task, stale_state, services)
 
     _persist_messages(
@@ -920,8 +913,12 @@ def test_completed_answer_after_cursor_is_redelivered_raw(
         ],
     )
 
-    # Part (a): replaying the queue against the cursor drops the chat message and
-    # leaves the answer sitting live in the queue -- not captured as "re-queued".
+    # Production path: the derived cursor settles both messages and lands on the
+    # answer, so dedup would drop both from the replayed queue.
+    assert _scan_history(local_task, services).last_processed_message_id == answer.message_id
+
+    # Part (a): a cursor sitting at the chat message drops it and leaves the
+    # trailing answer live in the queue -- not captured as "re-queued".
     replay_queue: Queue = Queue()
     replay_queue.put(chat_message)
     replay_queue.put(answer)
@@ -960,6 +957,7 @@ def test_completed_answer_after_cursor_is_redelivered_raw(
                 task=local_task,
                 task_data=task_data,
                 task_state=stale_state,
+                history_scan=_scan_history(local_task, services),
                 re_queued_messages=(),
                 input_message_queue=input_message_queue,
                 environment=agent_env,
