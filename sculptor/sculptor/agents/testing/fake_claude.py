@@ -21,11 +21,39 @@ from sculptor.agents.testing.fake_claude_commands import UnknownFakeClaudeComman
 from sculptor.agents.testing.fake_claude_commands import dispatch_handler
 from sculptor.agents.testing.fake_claude_commands import handle_default
 from sculptor.agents.testing.fake_claude_jsonl import generate_id
+from sculptor.agents.testing.fake_claude_jsonl import make_assistant_message
 from sculptor.agents.testing.fake_claude_jsonl import make_end_message
 from sculptor.agents.testing.fake_claude_jsonl import make_init_message
+from sculptor.agents.testing.fake_claude_jsonl import make_streaming_text_events
+from sculptor.agents.testing.fake_claude_jsonl import make_text_block
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_FROM_SIGTERM
 
 _FAKE_CLAUDE_PREFIX = "fake_claude:"
+
+# When this env var is set (it is forwarded from the backend because it starts
+# with CLAUDE_), every cycle appends an assistant text message echoing the CLI
+# launch arguments. Lets UI-level tests assert which model / fast-mode /
+# effort the CLI was actually relaunched with — e.g. that an answer-driven
+# turn after a backend restart reuses the conversation's settings.
+_ECHO_LAUNCH_ARGS_ENV_VAR = "CLAUDE_FAKE_ECHO_LAUNCH_ARGS"
+
+
+def _build_launch_args_echo(parsed: argparse.Namespace) -> str:
+    """Render the parsed launch args as a stable, greppable one-liner."""
+    fast_mode = False
+    if parsed.settings:
+        try:
+            fast_mode = bool(json.loads(parsed.settings).get("fastMode", False))
+        except json.JSONDecodeError:
+            pass
+    parts = [
+        f"model={parsed.model or 'default'}",
+        f"fast_mode={str(fast_mode).lower()}",
+        f"effort={parsed.effort or 'default'}",
+        f"resumed={'yes' if parsed.resume else 'no'}",
+    ]
+    return f"[FakeClaude] launch-args: {' '.join(parts)}"
+
 
 # Seconds to stall a resumed /compact so integration tests can observe the
 # transient Compacting indicator before FakeClaude exits.
@@ -48,6 +76,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--resume", default=None)
     parser.add_argument("--append-system-prompt", default=None)
     parser.add_argument("--model", default=None)
+    parser.add_argument("--effort", default=None)
+    parser.add_argument("--settings", default=None)
     parser.add_argument("--plugin-dir", action="append", default=[])
     # Flags specific to the /btw forked-session invocation; accepted + ignored.
     parser.add_argument("--fork-session", action="store_true")
@@ -250,6 +280,7 @@ def _run_cycle(
     plugin_dir: str | None,
     system_commands: list[str],
     write_session_file: bool,
+    launch_args_echo: str | None = None,
 ) -> int | None:
     """Run one full ``init → messages → result`` cycle for a single user frame.
 
@@ -306,6 +337,20 @@ def _run_cycle(
         _emit_jsonl(all_messages)
         return 1
 
+    if launch_args_echo is not None:
+        # Mirror handle_default's shape: streaming events first, then the
+        # persistence message. The live chat renders from the stream — a bare
+        # persistence TextBlock that was never streamed does not surface.
+        echo_message_id = generate_id("msg")
+        if emit_streaming:
+            all_messages.extend(make_streaming_text_events(message_id=echo_message_id, text=launch_args_echo))
+        all_messages.append(
+            make_assistant_message(
+                message_id=echo_message_id,
+                content_blocks=[make_text_block(launch_args_echo)],
+            )
+        )
+
     all_messages.append(make_end_message(session_id, result=end_result))
     _emit_jsonl(all_messages)
     return None
@@ -344,12 +389,21 @@ def main(argv: list[str] | None = None) -> int:
     # launch-time input, so they run once — on the first cycle only.
     system_commands = _extract_fake_claude_commands(parsed.append_system_prompt) if parsed.append_system_prompt else []
 
+    launch_args_echo = _build_launch_args_echo(parsed) if os.environ.get(_ECHO_LAUNCH_ARGS_ENV_VAR) else None
+
     # `-p <question>` carries the prompt on argv (e.g. the /btw forked
     # invocation) — a single cycle, no stdin loop.
     if isinstance(parsed.p_flag, str):
         _maybe_delay_for_compact_indicator(parsed.p_flag, parsed.resume)
         exit_code = _run_cycle(
-            parsed.p_flag, session_id, cwd, emit_streaming, plugin_dir, system_commands, persist_session
+            parsed.p_flag,
+            session_id,
+            cwd,
+            emit_streaming,
+            plugin_dir,
+            system_commands,
+            persist_session,
+            launch_args_echo=launch_args_echo,
         )
         return exit_code if exit_code is not None else 0
 
@@ -372,6 +426,7 @@ def main(argv: list[str] | None = None) -> int:
                 plugin_dir,
                 cycle_system_commands,
                 write_session_file=is_first_cycle and persist_session,
+                launch_args_echo=launch_args_echo,
             )
             if exit_code is not None:
                 return exit_code
@@ -380,7 +435,16 @@ def main(argv: list[str] | None = None) -> int:
     # Non-stream-json single-shot: a plain piped prompt, or nothing on a tty.
     prompt = html.unescape(sys.stdin.read()).strip() if not sys.stdin.isatty() else ""
     _maybe_delay_for_compact_indicator(prompt, parsed.resume)
-    exit_code = _run_cycle(prompt, session_id, cwd, emit_streaming, plugin_dir, system_commands, persist_session)
+    exit_code = _run_cycle(
+        prompt,
+        session_id,
+        cwd,
+        emit_streaming,
+        plugin_dir,
+        system_commands,
+        persist_session,
+        launch_args_echo=launch_args_echo,
+    )
     return exit_code if exit_code is not None else 0
 
 
