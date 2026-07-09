@@ -7,16 +7,29 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as api from "../../../api";
 import type { CodingAgentTaskView } from "../../../api";
 import { TaskStatus } from "../../../api";
-import { queryClient as sharedQueryClient, syncTasksToQueryCache, taskQueryKey } from "../../queryClient.ts";
+import {
+  queryClient as sharedQueryClient,
+  syncTasksToQueryCache,
+  taskIdsQueryKey,
+  taskQueryKey,
+} from "../../queryClient.ts";
 import { isUnreadOverrideActive, resetUnreadOverridesForTesting } from "../atoms/unreadOverrides";
-import { useMarkReadMutation, useMarkUnreadMutation, useRestoreTaskMutation, useTaskRenameMutation } from "./index";
+import {
+  applyOptimisticTaskDelete,
+  useDeleteTaskMutation,
+  useMarkReadMutation,
+  useMarkUnreadMutation,
+  useRestoreTaskMutation,
+  useTaskRenameMutation,
+} from "./index";
 
 // ── Mock API ────────────────────────────────────────────────
-const { mockMarkRead, mockMarkUnread, mockRename, mockRestore } = vi.hoisted(() => ({
+const { mockMarkRead, mockMarkUnread, mockRename, mockRestore, mockDelete } = vi.hoisted(() => ({
   mockMarkRead: vi.fn(),
   mockMarkUnread: vi.fn(),
   mockRename: vi.fn(),
   mockRestore: vi.fn(),
+  mockDelete: vi.fn(),
 }));
 
 vi.mock("../../../api", async () => {
@@ -27,6 +40,7 @@ vi.mock("../../../api", async () => {
     markWorkspaceAgentUnread: mockMarkUnread,
     renameWorkspaceAgent: mockRename,
     restoreWorkspaceAgent: mockRestore,
+    deleteWorkspaceAgent: mockDelete,
   };
 });
 
@@ -72,6 +86,7 @@ beforeEach(() => {
   mockMarkUnread.mockResolvedValue(undefined);
   mockRename.mockResolvedValue(undefined);
   mockRestore.mockResolvedValue(undefined);
+  mockDelete.mockResolvedValue(undefined);
   sharedQueryClient.removeQueries({ queryKey: ["sculptor"] });
   // Unread overrides live in a module-level map, so they leak across tests
   // without an explicit reset.
@@ -391,5 +406,90 @@ describe("useRestoreTaskMutation", () => {
     await flushMicrotasks();
 
     expect(getCachedTask(AGENT_ID)).toEqual(restoredTask);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// useDeleteTaskMutation
+// ═══════════════════════════════════════════════════════════
+
+describe("useDeleteTaskMutation", () => {
+  // The caller tombstones synchronously via applyOptimisticTaskDelete and
+  // threads the context into the mutation; these tests exercise that contract.
+  const seedForDelete = (): void => {
+    sharedQueryClient.setQueryData(taskIdsQueryKey(), [AGENT_ID]);
+    seedTask(makeTask());
+  };
+
+  const getIds = (): ReadonlyArray<string> | undefined =>
+    sharedQueryClient.getQueryData<ReadonlyArray<string>>(taskIdsQueryKey());
+
+  it("calls deleteWorkspaceAgent with the skipWsAck path", async () => {
+    seedForDelete();
+    const deleteContext = applyOptimisticTaskDelete(AGENT_ID);
+    const { result } = renderHook(() => useDeleteTaskMutation(), { wrapper: makeWrapper() });
+
+    act(() => {
+      result.current.mutate({ workspaceId: WS_ID, agentId: AGENT_ID, deleteContext });
+    });
+    await flushMicrotasks();
+
+    expect(mockDelete).toHaveBeenCalledOnce();
+    expect(mockDelete).toHaveBeenCalledWith({
+      path: { workspace_id: WS_ID, agent_id: AGENT_ID },
+      meta: { skipWsAck: true },
+    });
+  });
+
+  it("tombstones the entry and removes the id (via the caller's apply)", () => {
+    seedForDelete();
+
+    applyOptimisticTaskDelete(AGENT_ID);
+
+    expect(getCachedTask(AGENT_ID)).toBeNull();
+    expect(getIds()).toEqual([]);
+  });
+
+  it("restores the entry and re-adds the id when the request rejects", async () => {
+    seedForDelete();
+    const original = makeTask();
+    mockDelete.mockRejectedValueOnce(new Error("network"));
+
+    const deleteContext = applyOptimisticTaskDelete(AGENT_ID);
+    const { result } = renderHook(() => useDeleteTaskMutation(), { wrapper: makeWrapper() });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ workspaceId: WS_ID, agentId: AGENT_ID, deleteContext }),
+      ).rejects.toThrow("network");
+    });
+
+    expect(getCachedTask(AGENT_ID)).toEqual(original);
+    expect(getIds()).toContain(AGENT_ID);
+  });
+
+  it("skips the restore when a WS frame wrote the task while the request was in flight", async () => {
+    seedForDelete();
+    // A frame carrying the committed delete (e.g. the request timed out after
+    // the server applied it): the tombstone must survive the failed request's
+    // rollback.
+    const serverTask = makeTask({ isDeleted: true });
+    mockDelete.mockImplementationOnce(() => {
+      syncTasksToQueryCache({ [AGENT_ID]: serverTask });
+      return Promise.reject(new Error("timeout"));
+    });
+
+    const deleteContext = applyOptimisticTaskDelete(AGENT_ID);
+    const { result } = renderHook(() => useDeleteTaskMutation(), { wrapper: makeWrapper() });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ workspaceId: WS_ID, agentId: AGENT_ID, deleteContext }),
+      ).rejects.toThrow("timeout");
+    });
+
+    // The frame tombstoned it too, so the entry stays null and the id stays out.
+    expect(getCachedTask(AGENT_ID)).toBeNull();
+    expect(getIds() ?? []).not.toContain(AGENT_ID);
   });
 });

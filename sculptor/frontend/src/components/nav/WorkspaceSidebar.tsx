@@ -24,7 +24,7 @@ import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.
 import { DevModeIndicator } from "~/components/DevModeIndicator.tsx";
 import { sidebarCollapsedAtom, sidebarWidthAtom } from "~/components/layout/sidebarAtoms.ts";
 import { layoutsSwitcherOpenAtom } from "~/components/layouts/layoutUiAtoms.ts";
-import { isWorkspaceListEmptyAtom, newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
+import { newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { ReportProblemPopover } from "~/components/ReportProblemPopover.tsx";
 import { layoutPersistenceAdapter } from "~/components/sections/persistence/LocalStorageLayoutAdapter.ts";
 import { ResizeHandle } from "~/components/sections/ResizeHandle.tsx";
@@ -71,9 +71,6 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   // would otherwise re-render (and churn the click callbacks) on every agent-id
   // change, with no visual effect.
   const store = useStore();
-  // Gates the disabled state of the "Commands" and "New Workspace" buttons: both
-  // are inert until the first workspace exists (see their NavItems below).
-  const isWorkspaceListEmpty = useAtomValue(isWorkspaceListEmptyAtom);
 
   // Internal state — the add-repo dialog opened from the "Add repo" nav button
   // (and its toast).
@@ -275,29 +272,17 @@ export const WorkspaceSidebar = (): ReactElement | null => {
             onClick={handleOpenHome}
             testId={ElementIds.SIDEBAR_HOME_LINK}
           />
-          {/* Commands (Cmd+K) and New Workspace are inert until the first
-            workspace exists: the palette open-path is gated by
-            `areGlobalShortcutsDisabledAtom` and the new-workspace modal isn't
-            mounted on the first-run page. Reflect that with a real disabled
-            state + tooltip rather than a silent no-op — the inline first-run
-            form is the create affordance while the list is empty. */}
           <NavItem
             icon={Command}
             label="Commands"
-            disabled={isWorkspaceListEmpty}
-            disabledTooltip="Create a workspace to enable commands"
             onClick={toggleCommandPalette}
             testId={ElementIds.SIDEBAR_CMDK_LINK}
           />
           {/* Opens the new-workspace dialog; the per-repo "+" in the repo groups
-            below is the direct-create affordance. Disabled on first run, but with
-            no tooltip: the inline first-run form is the obvious create affordance,
-            so a tooltip pointing back at the sidebar row would just float detached
-            beside the centered form. */}
+            below is the direct-create affordance. */}
           <NavItem
             icon={Plus}
             label="New Workspace"
-            disabled={isWorkspaceListEmpty}
             onClick={() => setNewWorkspaceModal({ open: true })}
             testId={ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON}
           />
@@ -322,11 +307,6 @@ export const WorkspaceSidebar = (): ReactElement | null => {
                   group={group}
                   actions={workspaceActions}
                   openInRuntime={openInRuntime}
-                  // On first run the per-repo settings/"+" actions are hidden: the
-                  // first-run page doesn't mount AppShell, so the "+"'s dialog
-                  // fallback and error toast would silently no-op there (same reason
-                  // New Workspace/Commands are disabled above).
-                  showActions={!isWorkspaceListEmpty}
                   onWorkspaceClick={handleWorkspaceClick}
                   onWorkspaceHover={handleWorkspaceHover}
                   onBeginDelete={setDeleteTarget}

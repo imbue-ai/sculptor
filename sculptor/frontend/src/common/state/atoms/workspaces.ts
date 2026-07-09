@@ -23,6 +23,16 @@ export const workspaceAtomFamily = atomFamily<string, PrimitiveAtom<Workspace | 
 export const workspaceIdsAtom = atom<ReadonlyArray<string> | undefined>(undefined);
 
 /**
+ * Whether this session has ever seen a non-empty workspace list. Latched by
+ * `updateWorkspacesAtom` (its only writer) and never cleared. Gates the home
+ * page's first-run create offer: the offer is an onboarding affordance for a
+ * boot with zero workspaces, so once any workspace has existed this session,
+ * emptying the list again (deleting the last workspace) must not re-open the
+ * dialog over Home.
+ */
+export const hasEverHadWorkspacesAtom = atom<boolean>(false);
+
+/**
  * Tracks workspace IDs that have been optimistically deleted in the current
  * session.  Components that maintain their own workspace lists (e.g.
  * RecentWorkspaces) can subscribe to this atom to filter out deleted
@@ -564,6 +574,10 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
   const nextIds = Array.from(currentWorkspaceIds);
   if (previousIds === undefined || !isEqual([...previousIds].sort(), [...nextIds].sort())) {
     set(workspaceIdsAtom, nextIds);
+  }
+
+  if (nextIds.length > 0 && !get(hasEverHadWorkspacesAtom)) {
+    set(hasEverHadWorkspacesAtom, true);
   }
 
   // Propagate stream-driven deletions to deletedWorkspaceIdsAtom so that

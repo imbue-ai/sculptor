@@ -37,6 +37,10 @@ class ElementIDs(StrEnum):
     NEW_WORKSPACE_CONTEXT_PILL = "NEW_WORKSPACE_CONTEXT_PILL"
     NEW_WORKSPACE_KEEP_OPEN_SWITCH = "NEW_WORKSPACE_KEEP_OPEN_SWITCH"
     NEW_WORKSPACE_CREATE_BUTTON = "NEW_WORKSPACE_CREATE_BUTTON"
+    # Shown in place of the per-prompt agent-settings controls when the first
+    # agent is pi: model / effort / plan / fast do not apply to a pi create
+    # (pi picks its model from its own in-task catalog), so a hint replaces them.
+    NEW_WORKSPACE_PI_SETTINGS_HINT = "NEW_WORKSPACE_PI_SETTINGS_HINT"
     WORKSPACE_SELECTOR = "WORKSPACE_SELECTOR"
     WORKSPACE_OPTION_NAME = "WORKSPACE_OPTION_NAME"
     HOME_PAGE_SYSTEM_PROMPT_OPEN_BUTTON = "HOME_PAGE_SYSTEM_PROMPT_OPEN_BUTTON"
@@ -437,6 +441,9 @@ class ElementIDs(StrEnum):
     # Model-picker empty state when a pi agent has no authenticated providers.
     PI_PICKER_EMPTY_STATE = "pi-picker-empty-state"
     PI_PICKER_LOGIN_CTA = "pi-picker-login-cta"
+    # Model-picker placeholder while the start-time catalog probe is still in
+    # flight (catalog NOT_FETCHED_YET), shown instead of the empty-state CTA.
+    PI_PICKER_LOADING = "pi-picker-loading"
     # Failed-turn error block CTA that deep-links into the pi login flow.
     PI_ERROR_LOGIN_CTA = "pi-error-login-cta"
 
@@ -637,9 +644,15 @@ class ElementIDs(StrEnum):
     # renders the new-workspace form inline with the sidebar open.
     EMPTY_FIRST_RUN_PAGE = "EMPTY_FIRST_RUN_PAGE"
 
+    # The PaletteDialog shell's dimmed overlay, rendered for every open.
+    PALETTE_DIALOG_OVERLAY = "PALETTE_DIALOG_OVERLAY"
+
     # Workspace header (the simplified top bar above the section grid): branch
     # pill + section collapse/expand toggles + re-homed PR button / diff summary.
     WORKSPACE_HEADER = "WORKSPACE_HEADER"
+    # The workspace title shown in the header. Only rendered when the left sidebar
+    # is collapsed (the sidebar otherwise carries the workspace name).
+    WORKSPACE_HEADER_TITLE = "WORKSPACE_HEADER_TITLE"
     HEADER_SECTION_TOGGLE_LEFT = "HEADER_SECTION_TOGGLE_LEFT"
     HEADER_SECTION_TOGGLE_RIGHT = "HEADER_SECTION_TOGGLE_RIGHT"
     HEADER_SECTION_TOGGLE_BOTTOM = "HEADER_SECTION_TOGGLE_BOTTOM"

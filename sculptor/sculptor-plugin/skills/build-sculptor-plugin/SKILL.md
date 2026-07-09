@@ -153,8 +153,8 @@ summary. What it contains, in one breath:
   contribution; every component renders inside a per-plugin error boundary and
   receives **no props**.
 - Hooks: `useCurrentWorkspace` (selector form available), `useWorkspaces`,
-  `useWorkspaceTasks`, `useNavigateToWorkspace`, `usePluginSetting`,
-  `usePluginSettings`.
+  `useWorkspaceTasks`, `useNavigateToWorkspace`, `useOpenNewWorkspaceModal`,
+  `usePluginSetting`, `usePluginSettings`, `useSetPluginSetting`.
 - Components and actions: `Markdown`, `PanelHeader`, `openExternal`.
 
 Semantics that matter beyond the types:

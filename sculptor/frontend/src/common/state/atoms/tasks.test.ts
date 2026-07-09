@@ -1,17 +1,19 @@
 import { createStore } from "jotai";
 import { describe, expect, it } from "vitest";
 
-import type { CodingAgentTaskView, HarnessCapabilities } from "../../../api";
+import type { CodingAgentTaskView } from "../../../api";
 import {
+  taskAcceptsAutomatedPromptsAtomFamily,
   taskAtomFamily,
-  taskAvailableModelsAtomFamily,
-  taskSupportsBackgroundTasksAtomFamily,
-  taskSupportsCompactionAtomFamily,
-  taskSupportsContextResetAtomFamily,
-  taskSupportsInteractiveBackchannelAtomFamily,
-  taskSupportsSessionResumeAtomFamily,
-  taskSupportsToolUseRenderingAtomFamily,
+  taskModelAtomFamily,
+  taskStatusAtomFamily,
+  taskSupportsChatInterfaceAtomFamily,
 } from "./tasks";
+
+// The surviving selector families back Jotai atom graphs only
+// (workspaceAgentActions.ts, mentionDetails.ts); React components read these
+// fields through the useTaskHelpers hooks instead (see useTaskHelpers.test.ts
+// for the fine-grained-subscription coverage).
 
 const createMockTask = (overrides: Partial<CodingAgentTaskView> = {}): CodingAgentTaskView =>
   ({
@@ -27,6 +29,7 @@ const createMockTask = (overrides: Partial<CodingAgentTaskView> = {}): CodingAge
     interface: "API",
     systemPrompt: null,
     model: "CLAUDE_4_SONNET",
+    acceptsAutomatedPrompts: false,
     harnessCapabilities: {
       supportsChatInterface: true,
       supportsInteractiveBackchannel: true,
@@ -53,199 +56,93 @@ const createMockTask = (overrides: Partial<CodingAgentTaskView> = {}): CodingAge
     ...overrides,
   }) as CodingAgentTaskView;
 
-describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
+describe("taskStatusAtomFamily", () => {
   it("returns undefined when no task has been written for the id", () => {
     const store = createStore();
 
-    expect(store.get(taskSupportsInteractiveBackchannelAtomFamily("unknown-task"))).toBeUndefined();
+    expect(store.get(taskStatusAtomFamily("unknown-task"))).toBeUndefined();
   });
 
-  it("returns the task's supports_interactive_backchannel value when true", () => {
+  it("returns the task's status", () => {
     const store = createStore();
-    const task = createMockTask({
-      id: "task-1",
-      harnessCapabilities: {
-        supportsChatInterface: true,
-        supportsInteractiveBackchannel: true,
-        supportsSkills: true,
-        supportsSubAgents: true,
-        supportsImageInput: true,
-        supportsFastMode: true,
-        supportsContextReset: true,
-        supportsCompaction: true,
-        supportsBackgroundTasks: true,
-        supportsSessionResume: true,
-        supportsToolUseRendering: true,
-        supportsFileAttachments: true,
-        supportsInterruption: true,
-        supportsFileReferences: true,
-        supportsModelSelection: true,
-      },
-    });
-    store.set(taskAtomFamily("task-1"), task);
+    store.set(taskAtomFamily("task-1"), createMockTask({ id: "task-1", status: "WAITING" }));
 
-    expect(store.get(taskSupportsInteractiveBackchannelAtomFamily("task-1"))).toBe(true);
-  });
-
-  it("returns the task's supports_interactive_backchannel value when false", () => {
-    const store = createStore();
-    const task = createMockTask({
-      id: "task-1",
-      harnessCapabilities: {
-        supportsChatInterface: true,
-        supportsInteractiveBackchannel: false,
-        supportsSkills: false,
-        supportsSubAgents: false,
-        supportsImageInput: false,
-        supportsFastMode: false,
-        supportsContextReset: false,
-        supportsCompaction: false,
-        supportsBackgroundTasks: false,
-        supportsSessionResume: false,
-        supportsToolUseRendering: false,
-        supportsFileAttachments: false,
-        supportsInterruption: false,
-        supportsFileReferences: false,
-        supportsModelSelection: false,
-      },
-    });
-    store.set(taskAtomFamily("task-1"), task);
-
-    expect(store.get(taskSupportsInteractiveBackchannelAtomFamily("task-1"))).toBe(false);
+    expect(store.get(taskStatusAtomFamily("task-1"))).toBe("WAITING");
   });
 
   it("does not notify subscribers when an unrelated task field changes", () => {
     const store = createStore();
-    const task = createMockTask({
-      id: "task-1",
-      status: "RUNNING",
-      harnessCapabilities: {
-        supportsChatInterface: true,
-        supportsInteractiveBackchannel: true,
-        supportsSkills: true,
-        supportsSubAgents: true,
-        supportsImageInput: true,
-        supportsFastMode: true,
-        supportsContextReset: true,
-        supportsCompaction: true,
-        supportsBackgroundTasks: true,
-        supportsSessionResume: true,
-        supportsToolUseRendering: true,
-        supportsFileAttachments: true,
-        supportsInterruption: true,
-        supportsFileReferences: true,
-        supportsModelSelection: true,
-      },
-    });
+    const task = createMockTask({ id: "task-1", status: "RUNNING" });
     store.set(taskAtomFamily("task-1"), task);
 
     let notificationCount = 0;
-    const unsubscribe = store.sub(taskSupportsInteractiveBackchannelAtomFamily("task-1"), () => {
+    const unsubscribe = store.sub(taskStatusAtomFamily("task-1"), () => {
       notificationCount += 1;
     });
 
-    store.set(taskAtomFamily("task-1"), { ...task, status: "WAITING" } as CodingAgentTaskView);
+    store.set(taskAtomFamily("task-1"), { ...task, goal: "changed" } as CodingAgentTaskView);
     expect(notificationCount).toBe(0);
-
-    unsubscribe();
-  });
-
-  it("does not notify availableModels subscribers on unrelated task updates (stable empty list)", () => {
-    const store = createStore();
-    // No backend catalog (Claude): availableModels is undefined, so the derived
-    // atom must yield a stable empty array rather than a fresh one each recompute.
-    const task = createMockTask({ id: "task-1" });
-    store.set(taskAtomFamily("task-1"), task);
-
-    let notificationCount = 0;
-    const unsubscribe = store.sub(taskAvailableModelsAtomFamily("task-1"), () => {
-      notificationCount += 1;
-    });
-
-    store.set(taskAtomFamily("task-1"), { ...task, status: "WAITING" } as CodingAgentTaskView);
-    expect(notificationCount).toBe(0);
-
-    unsubscribe();
-  });
-
-  it("notifies subscribers when supports_interactive_backchannel changes", () => {
-    const store = createStore();
-    const task = createMockTask({
-      id: "task-1",
-      harnessCapabilities: {
-        supportsChatInterface: true,
-        supportsInteractiveBackchannel: true,
-        supportsSkills: true,
-        supportsSubAgents: true,
-        supportsImageInput: true,
-        supportsFastMode: true,
-        supportsContextReset: true,
-        supportsCompaction: true,
-        supportsBackgroundTasks: true,
-        supportsSessionResume: true,
-        supportsToolUseRendering: true,
-        supportsFileAttachments: true,
-        supportsInterruption: true,
-        supportsFileReferences: true,
-        supportsModelSelection: true,
-      },
-    });
-    store.set(taskAtomFamily("task-1"), task);
-
-    let notificationCount = 0;
-    const unsubscribe = store.sub(taskSupportsInteractiveBackchannelAtomFamily("task-1"), () => {
-      notificationCount += 1;
-    });
-
-    store.set(taskAtomFamily("task-1"), {
-      ...task,
-      harnessCapabilities: { ...task.harnessCapabilities, supportsInteractiveBackchannel: false },
-    } as CodingAgentTaskView);
-    expect(notificationCount).toBe(1);
-    expect(store.get(taskSupportsInteractiveBackchannelAtomFamily("task-1"))).toBe(false);
 
     unsubscribe();
   });
 });
 
-// Build a task whose harness advertises a single capability flag at the
-// given value, leaving every other flag at the all-true default.
-const buildTaskWithCapability = (field: keyof HarnessCapabilities, value: boolean): CodingAgentTaskView => {
-  const base = createMockTask({ id: "task-1" });
-  return { ...base, harnessCapabilities: { ...base.harnessCapabilities, [field]: value } } as CodingAgentTaskView;
-};
-
-// Every narrow capability atom family shares one read shape: an
-// optional-chained read of one twin field, yielding `boolean | undefined`.
-const CAPABILITY_ATOM_CASES: ReadonlyArray<{
-  atomFamily: typeof taskSupportsContextResetAtomFamily;
-  field: keyof HarnessCapabilities;
-}> = [
-  { atomFamily: taskSupportsContextResetAtomFamily, field: "supportsContextReset" },
-  { atomFamily: taskSupportsCompactionAtomFamily, field: "supportsCompaction" },
-  { atomFamily: taskSupportsBackgroundTasksAtomFamily, field: "supportsBackgroundTasks" },
-  { atomFamily: taskSupportsSessionResumeAtomFamily, field: "supportsSessionResume" },
-  { atomFamily: taskSupportsToolUseRenderingAtomFamily, field: "supportsToolUseRendering" },
-];
-
-describe.each(CAPABILITY_ATOM_CASES)("$field capability atom family", ({ atomFamily, field }) => {
+describe("taskModelAtomFamily", () => {
   it("returns undefined when no task has been written for the id", () => {
     const store = createStore();
 
-    expect(store.get(atomFamily("unknown-task"))).toBeUndefined();
+    expect(store.get(taskModelAtomFamily("unknown-task"))).toBeUndefined();
+  });
+
+  it("maps a null model to undefined (terminal agents carry no model)", () => {
+    const store = createStore();
+    store.set(taskAtomFamily("task-1"), createMockTask({ id: "task-1", model: null }));
+
+    expect(store.get(taskModelAtomFamily("task-1"))).toBeUndefined();
+  });
+});
+
+describe("taskSupportsChatInterfaceAtomFamily", () => {
+  it("returns undefined when no task has been written for the id", () => {
+    const store = createStore();
+
+    expect(store.get(taskSupportsChatInterfaceAtomFamily("unknown-task"))).toBeUndefined();
   });
 
   it("returns the capability value when true", () => {
     const store = createStore();
-    store.set(taskAtomFamily("task-1"), buildTaskWithCapability(field, true));
+    const base = createMockTask({ id: "task-1" });
+    store.set(taskAtomFamily("task-1"), {
+      ...base,
+      harnessCapabilities: { ...base.harnessCapabilities, supportsChatInterface: true },
+    } as CodingAgentTaskView);
 
-    expect(store.get(atomFamily("task-1"))).toBe(true);
+    expect(store.get(taskSupportsChatInterfaceAtomFamily("task-1"))).toBe(true);
   });
 
   it("returns the capability value when false", () => {
     const store = createStore();
-    store.set(taskAtomFamily("task-1"), buildTaskWithCapability(field, false));
+    const base = createMockTask({ id: "task-1" });
+    store.set(taskAtomFamily("task-1"), {
+      ...base,
+      harnessCapabilities: { ...base.harnessCapabilities, supportsChatInterface: false },
+    } as CodingAgentTaskView);
 
-    expect(store.get(atomFamily("task-1"))).toBe(false);
+    expect(store.get(taskSupportsChatInterfaceAtomFamily("task-1"))).toBe(false);
+  });
+});
+
+describe("taskAcceptsAutomatedPromptsAtomFamily", () => {
+  it("returns undefined when no task has been written for the id", () => {
+    const store = createStore();
+
+    expect(store.get(taskAcceptsAutomatedPromptsAtomFamily("unknown-task"))).toBeUndefined();
+  });
+
+  it("returns the task's accepts_automated_prompts value", () => {
+    const store = createStore();
+    store.set(taskAtomFamily("task-1"), createMockTask({ id: "task-1", acceptsAutomatedPrompts: true }));
+
+    expect(store.get(taskAcceptsAutomatedPromptsAtomFamily("task-1"))).toBe(true);
   });
 });

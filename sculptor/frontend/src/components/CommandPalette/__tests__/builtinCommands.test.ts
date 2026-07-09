@@ -380,12 +380,18 @@ describe("buildPanelCommands", () => {
     }
   });
 
-  it("the three section-toggle commands have keepOpen: true", () => {
+  it("the section and sidebar toggles close the palette (no keepOpen)", () => {
+    // These toggles act on chrome hidden behind the palette, so the palette
+    // closes to reveal the result — matching the maximize toggle. (The theme
+    // toggle keeps the palette open because its effect is visible in the
+    // palette itself.)
     const cmds = buildPanelCommands(makeRuntime());
     const byId = (id: string): Command => cmds.find((c) => c.id === id)!;
-    expect(byId("view.toggle_left_panel").keepOpen).toBe(true);
-    expect(byId("view.toggle_right_panel").keepOpen).toBe(true);
-    expect(byId("view.toggle_bottom_panel").keepOpen).toBe(true);
+    expect(byId("view.toggle_left_panel").keepOpen).not.toBe(true);
+    expect(byId("view.toggle_right_panel").keepOpen).not.toBe(true);
+    expect(byId("view.toggle_bottom_panel").keepOpen).not.toBe(true);
+    expect(byId("view.toggle_sidebar").keepOpen).not.toBe(true);
+    expect(byId("view.maximize_section").keepOpen).not.toBe(true);
   });
 
   it("perform delegates to the matching runtime.ui method", () => {
@@ -401,12 +407,6 @@ describe("buildPanelCommands", () => {
     expect(runtime.ui.toggleBottomPanel).toHaveBeenCalledTimes(1);
     expect(runtime.ui.toggleSidebar).toHaveBeenCalledTimes(1);
     expect(runtime.ui.toggleMaximizeSection).toHaveBeenCalledTimes(1);
-  });
-
-  it("the sidebar toggle keeps the palette open; the maximize toggle closes it", () => {
-    const cmds = buildPanelCommands(makeRuntime());
-    expect(cmds.find((c) => c.id === "view.toggle_sidebar")!.keepOpen).toBe(true);
-    expect(cmds.find((c) => c.id === "view.maximize_section")!.keepOpen).not.toBe(true);
   });
 
   it("view.maximize_section lives on the view.layout sub-page", () => {

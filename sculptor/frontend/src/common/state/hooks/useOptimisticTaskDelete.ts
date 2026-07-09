@@ -3,12 +3,12 @@ import { posthog } from "posthog-js";
 import { useCallback, useEffect, useRef } from "react";
 
 import type { CodingAgentTaskView } from "../../../api";
-import { deleteWorkspaceAgent } from "../../../api";
 import { ToastType } from "../../../components/Toast.tsx";
 import { useImbueLocation, useImbueNavigate, useImbueParams } from "../../NavigateUtils.ts";
-import { getTaskSyncVersion, queryClient, taskIdsQueryKey, taskQueryKey } from "../../queryClient.ts";
+import { queryClient, taskQueryKey } from "../../queryClient.ts";
 import { deleteErrorToastAtom } from "../atoms/toasts";
 import { agentIdForWorkspaceAtomFamily, setAgentForWorkspaceAtom } from "../atoms/workspaces.ts";
+import { applyOptimisticTaskDelete, useDeleteTaskMutation } from "../mutations";
 
 type UseOptimisticTaskDeleteInputs = {
   workspaceId: string;
@@ -34,6 +34,7 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
   const { navigateToRoot } = useImbueNavigate();
   const { isAgentRoute } = useImbueLocation();
   const { taskID } = useImbueParams();
+  const { mutateAsync: deleteTask } = useDeleteTaskMutation();
   // The Retry action re-invokes execute. Reach it through a ref (kept current
   // by the effect below) so the callback doesn't reference itself before it is
   // declared.
@@ -45,17 +46,13 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
       if (!snapshot) {
         return;
       }
-      const syncVersion = getTaskSyncVersion(taskId);
 
-      // Tombstone the task and drop it from the ids list. The mirror projects
-      // the removal into the Jotai atoms synchronously, so the navigation
-      // callbacks below already see the task gone from every store.
-      queryClient.setQueryData<CodingAgentTaskView | null>(taskQueryKey(taskId), null);
-      const currentIds = queryClient.getQueryData<ReadonlyArray<string>>(taskIdsQueryKey()) ?? [];
-      queryClient.setQueryData<ReadonlyArray<string>>(
-        taskIdsQueryKey(),
-        currentIds.filter((id) => id !== taskId),
-      );
+      // Tombstone the task and drop it from the ids list *now*, before the
+      // navigation callbacks run: the mirror projects the removal into the
+      // Jotai atoms synchronously, so the callbacks below already see the task
+      // gone from every store. The mutation's onError rolls this back on
+      // failure using the returned context.
+      const deleteContext = applyOptimisticTaskDelete(taskId);
 
       // A deleted agent must not linger as the workspace's saved agent, or the next
       // cold-start redirect targets a dead route. Left cleared on a failed delete —
@@ -75,19 +72,9 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
         agent_id: taskId,
       });
 
-      void deleteWorkspaceAgent({
-        path: { workspace_id: workspaceId, agent_id: taskId },
-        meta: { skipWsAck: true },
-      }).catch(() => {
-        // Restore the snapshot unless a WS frame wrote the task while the
-        // request was in flight — the frame holds server truth and must win.
-        if (getTaskSyncVersion(taskId) === syncVersion) {
-          queryClient.setQueryData(taskQueryKey(taskId), snapshot);
-          const restoredIds = queryClient.getQueryData<ReadonlyArray<string>>(taskIdsQueryKey()) ?? [];
-          if (!restoredIds.includes(taskId)) {
-            queryClient.setQueryData(taskIdsQueryKey(), [...restoredIds, taskId]);
-          }
-        }
+      // The mutation owns the rollback (onError, so it survives an unmount); the
+      // rejection here only drives the client-state toast.
+      deleteTask({ workspaceId, agentId: taskId, deleteContext }).catch(() => {
         setDeleteErrorToast({
           title: `Failed to delete "${taskTitle}"`,
           description: "The agent has been restored. Try again or check your connection.",
@@ -111,7 +98,9 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
       taskID,
       navigateToRoot,
       workspaceId,
+      deleteTask,
     ],
+    // deleteTask (mutateAsync) is referentially stable across renders.
   );
 
   useEffect(() => {

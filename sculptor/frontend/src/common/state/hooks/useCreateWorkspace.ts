@@ -11,8 +11,10 @@ import {
   resolveEffectiveAgentType,
   type StoredAgentType,
 } from "~/common/state/atoms/agentTabs.ts";
+import { createAgentErrorToastAtom } from "~/common/state/atoms/toasts.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import { lastWorkspaceCreationSettingsAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
+import { ToastType } from "~/components/Toast.tsx";
 
 /** Everything the create flow needs from its caller's form state. */
 type CreateWorkspaceArgs = {
@@ -51,29 +53,34 @@ export type CreateWorkspaceError = {
   cause: unknown;
 };
 
-type CreateWorkspaceResult = { ok: true } | { ok: false; error: CreateWorkspaceError };
+type CreateWorkspaceResult = { ok: true; workspaceId: string } | { ok: false; error: CreateWorkspaceError };
 
 type UseCreateWorkspaceReturn = {
   /** True while a create is in flight. */
   isCreating: boolean;
   /**
-   * Create the workspace + first agent (with the prompt), navigate to the new
-   * agent, and record the MRU creation settings. Returns a discriminated result
-   * so callers can surface their own toast/error UI without this hook owning it.
+   * Create the workspace, navigate to it, and record the MRU creation
+   * settings; the first agent (with the prompt) is created in the background
+   * and focused once it exists. Returns a discriminated result so callers can
+   * surface their own toast/error UI without this hook owning it.
    */
   createWorkspace: (args: CreateWorkspaceArgs) => Promise<CreateWorkspaceResult>;
 };
 
 /**
  * The two-step create flow: create the workspace, then its first agent (with
- * the prompt). Owns only the API calls, navigation, and the MRU write, so the
- * new-workspace modal and the empty first-run page can share it.
+ * the prompt). The workspace's environment (worktree/clone) is prepared
+ * asynchronously by the backend, so navigation happens as soon as the
+ * workspace record exists — the workspace shell renders while setup runs and
+ * the agent create is still in flight. Owns only the API calls, navigation,
+ * and the MRU write, so every create surface can share it.
  */
 export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
   // State and hooks
-  const { navigateToAgent } = useImbueNavigate();
+  const { navigateToAgent, navigateToWorkspace } = useImbueNavigate();
   const setLastWorkspaceCreationSettings = useSetAtom(lastWorkspaceCreationSettingsAtom);
   const setUserConfig = useSetAtom(userConfigAtom);
+  const setCreateAgentErrorToast = useSetAtom(createAgentErrorToastAtom);
   const [isCreating, setIsCreating] = useState<boolean>(false);
 
   // Functions and callbacks
@@ -118,33 +125,6 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
             ? encodeRegisteredAgentType(effectiveRegistrationId)
             : effectiveAgentType;
 
-        // Only Claude consumes a creation-time prompt, model, and the per-prompt
-        // agent settings (effort / fast / plan): terminal/registered agents have
-        // no model concept, and pi selects from its own catalog in-task, so it
-        // starts on pi's defaults rather than Claude settings it would ignore.
-        // The prompt gate mirrors the backend, which rejects a prompt for
-        // terminal/registered agents and requires a model alongside any prompt —
-        // sending one would fail the agent create after the workspace already
-        // exists, orphaning an agentless workspace. Non-Claude agents start in
-        // the waiting state instead.
-        const isClaudeAgent = effectiveAgentType === "claude";
-        const agentResponse = await createWorkspaceAgent({
-          path: { workspace_id: workspaceId },
-          body: {
-            model: isClaudeAgent ? (args.defaultModel as LlmModel) : undefined,
-            effort: isClaudeAgent ? args.effort : undefined,
-            fastMode: isClaudeAgent ? args.fastMode : undefined,
-            enterPlanMode: isClaudeAgent ? args.enterPlanMode : undefined,
-            agentType: effectiveAgentType,
-            registrationId: effectiveRegistrationId,
-            prompt: isClaudeAgent ? args.prompt.trim() || undefined : undefined,
-          },
-        });
-
-        if (!agentResponse.data) {
-          throw new Error("Failed to create agent — no response data");
-        }
-
         setLastWorkspaceCreationSettings({
           projectId: args.projectId,
           sourceBranch: args.mode === WorkspaceInitializationStrategy.IN_PLACE ? undefined : args.sourceBranch,
@@ -152,26 +132,87 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
           initStrategy: args.mode,
         });
 
-        // Optimistically record the chosen harness as the most-recently-used type so the
-        // add-panel "New {recent} agent" row reflects it immediately. The backend persists
-        // it on create too, but there is no live user-config push — without this the
-        // surfaces lag until a reload. Mirrors the add-panel path (addPanelCore.createAgentInLocation).
-        setUserConfig((prev) => (prev ? { ...prev, lastUsedAgentType: effectiveAgentTypeValue } : prev));
+        // Land on the new workspace right away: its environment (worktree /
+        // clone) is prepared asynchronously by the backend, so there is
+        // nothing worth blocking on — the workspace shell renders while setup
+        // runs and the first agent is created below.
+        navigateToWorkspace(workspaceId);
 
-        posthog.capture("workspace.created", {
-          workspace_id: workspaceId,
-          agent_id: agentResponse.data.id,
-          mode: args.mode,
-          agent_type: effectiveAgentType,
-          has_workspace_name: args.workspaceName.trim().length > 0,
-          has_prompt: args.prompt.trim().length > 0,
-          // Branch names are user-entered text (they can encode feature/ticket/
-          // customer names), so record only whether one was chosen.
-          has_source_branch: args.sourceBranch != null,
-        });
+        // Claude and pi both take an initial prompt; terminal/registered agents
+        // do not — the backend rejects a prompt for them (422), which would fail
+        // the agent create after the workspace already exists and orphan it.
+        const isClaudeAgent = effectiveAgentType === "claude";
+        const isPiAgent = effectiveAgentType === "pi";
+        const initialPrompt = isClaudeAgent || isPiAgent ? args.prompt.trim() || undefined : undefined;
+        // Claude seeds its model at create and consumes the per-prompt agent
+        // settings (effort / fast / plan). pi ignores all of them: it picks its
+        // model from its own in-task catalog and enters plan mode from the chat.
+        // The backend still requires a model whenever a prompt is present, so pi
+        // rides a placeholder default in that case only — the same Claude
+        // model_name every live pi message already carries and pi discards.
+        const shouldSendModel = isClaudeAgent || (isPiAgent && initialPrompt !== undefined);
 
-        navigateToAgent(workspaceId, agentResponse.data.id);
-        return { ok: true };
+        // Create the first agent in the background — the caller's create flow
+        // is done once the workspace exists. Failures surface via the global
+        // create-agent toast; the user is already on the workspace, where the
+        // empty center section offers the recovery path (New agent).
+        void (async (): Promise<void> => {
+          try {
+            const agentResponse = await createWorkspaceAgent({
+              path: { workspace_id: workspaceId },
+              body: {
+                model: shouldSendModel ? (args.defaultModel as LlmModel) : undefined,
+                effort: isClaudeAgent ? args.effort : undefined,
+                fastMode: isClaudeAgent ? args.fastMode : undefined,
+                enterPlanMode: isClaudeAgent ? args.enterPlanMode : undefined,
+                agentType: effectiveAgentType,
+                registrationId: effectiveRegistrationId,
+                prompt: initialPrompt,
+              },
+            });
+
+            if (!agentResponse.data) {
+              throw new Error("Failed to create agent — no response data");
+            }
+
+            // Optimistically record the chosen harness as the most-recently-used type so the
+            // add-panel "New {recent} agent" row reflects it immediately. The backend persists
+            // it on create too, but there is no live user-config push — without this the
+            // surfaces lag until a reload. Mirrors the add-panel path (addPanelCore.createAgentInLocation).
+            setUserConfig((prev) => (prev ? { ...prev, lastUsedAgentType: effectiveAgentTypeValue } : prev));
+
+            posthog.capture("workspace.created", {
+              workspace_id: workspaceId,
+              agent_id: agentResponse.data.id,
+              mode: args.mode,
+              agent_type: effectiveAgentType,
+              has_workspace_name: args.workspaceName.trim().length > 0,
+              has_prompt: args.prompt.trim().length > 0,
+              // Branch names are user-entered text (they can encode feature/ticket/
+              // customer names), so record only whether one was chosen.
+              has_source_branch: args.sourceBranch != null,
+            });
+
+            // Focus the new agent only if the user is still parked on this
+            // workspace's root — a keep-open multi-create or a manual
+            // navigation may have moved them elsewhere, and opening an agent
+            // themselves (the empty center's New agent) puts them on an agent
+            // sub-route; a late redirect would yank them out of either.
+            if (window.location.hash === `#/ws/${workspaceId}`) {
+              navigateToAgent(workspaceId, agentResponse.data.id);
+            }
+          } catch (error) {
+            console.error("Failed to create the workspace's first agent:", error);
+            setCreateAgentErrorToast({
+              title: "Failed to create agent",
+              description: "The agent could not be created. Use the workspace's New agent action to retry.",
+              type: ToastType.ERROR,
+              action: null,
+            });
+          }
+        })();
+
+        return { ok: true, workspaceId };
       } catch (error) {
         console.error("Failed to create workspace:", error);
         const kind: CreateWorkspaceErrorKind =
@@ -181,7 +222,7 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
         setIsCreating(false);
       }
     },
-    [navigateToAgent, setLastWorkspaceCreationSettings, setUserConfig],
+    [navigateToAgent, navigateToWorkspace, setCreateAgentErrorToast, setLastWorkspaceCreationSettings, setUserConfig],
   );
 
   return { isCreating, createWorkspace };
