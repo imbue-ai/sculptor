@@ -12,7 +12,7 @@
 "." = 4
 
 [no-asyncio-run]
-"." = 8
+"." = 9
 
 [no-bare-exit]
 "." = 0

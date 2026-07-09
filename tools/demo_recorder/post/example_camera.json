@@ -1,0 +1,12 @@
+{
+  "_comment": "Example camera for a ~18s take. Times are seconds on the master's timeline (take them from the recording's events.json). Keys starting with _ are ignored; see camera.py's docstring for the full format.",
+  "keyframes": [
+    {"t": 0.0, "zoom": 1.0, "cx": 0.5, "cy": 0.5},
+    {"t": 4.0, "zoom": 1.0, "cx": 0.5, "cy": 0.5, "_comment": "duplicate values = hold wide while the page settles"},
+    {"t": 6.5, "zoom": 2.2, "cx": 0.32, "cy": 0.55, "ease": "smooth", "_comment": "push in on the task panel"},
+    {"t": 9.5, "zoom": 2.2, "cx": 0.32, "cy": 0.55},
+    {"t": 12.0, "cx": 0.68, "cy": 0.35, "_comment": "lateral slide to the diff; omitted zoom inherits 2.2"},
+    {"t": 14.0, "zoom": 1.6, "cx": 0.75, "cy": 0.8, "ease": "hold", "_comment": "hold keeps the previous framing until t=14, then hard-cuts to this one"},
+    {"t": 17.5, "zoom": 1.0, "cx": 0.5, "cy": 0.5, "ease": "smooth", "_comment": "pull back out to wide"}
+  ]
+}
