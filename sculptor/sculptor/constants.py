@@ -438,9 +438,12 @@ class ElementIDs(StrEnum):
     PI_PROVIDER_PASTE_KEY_SWITCH = "pi-provider-paste-key-switch"
     PI_PASTE_KEY_INPUT = "pi-paste-key-input"
     PI_PASTE_KEY_SAVE = "pi-paste-key-save"
-    # Model-picker empty state when a pi agent has no authenticated providers.
+    # Model-picker disabled "no models available" state when a harness (pi) has no
+    # authenticated providers; the fix-it action lives on the composer send slot.
     PI_PICKER_EMPTY_STATE = "pi-picker-empty-state"
-    PI_PICKER_LOGIN_CTA = "pi-picker-login-cta"
+    # Composer send-slot CTA that replaces Send when the harness has no usable model,
+    # routing to that harness's own configuration settings section.
+    HARNESS_CONFIG_CTA = "harness-config-cta"
     # Model-picker placeholder while the start-time catalog probe is still in
     # flight (catalog NOT_FETCHED_YET), shown instead of the empty-state CTA.
     PI_PICKER_LOADING = "pi-picker-loading"

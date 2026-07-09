@@ -1,4 +1,4 @@
-import { Flex, IconButton, Tooltip } from "@radix-ui/themes";
+import { Button, Flex, IconButton, Tooltip } from "@radix-ui/themes";
 import type { Editor as TipTapEditor } from "@tiptap/react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { ListChecks, Plus } from "lucide-react";
@@ -37,7 +37,8 @@ import {
   setWorkspaceAgentModel,
 } from "../../../api";
 import { CHAT_INPUT_ELEMENT_ID } from "../../../common/Constants.ts";
-import { useImbueNavigate, useWorkspacePageParams } from "../../../common/NavigateUtils.ts";
+import { hasNoUsableModel } from "../../../common/modelConstants.ts";
+import { useWorkspacePageParams } from "../../../common/NavigateUtils.ts";
 import { shouldHandleKeybinding, useModifiedEnter } from "../../../common/ShortcutUtils.ts";
 import { closeBtwPopupAtom, openBtwPopupAtom } from "../../../common/state/atoms/btwPopup.ts";
 import type { InsertSkillArg } from "../../../common/state/atoms/chatActions.ts";
@@ -56,10 +57,12 @@ import {
 } from "../../../common/state/atoms/userConfig.ts";
 import { useDraftAttachedFiles } from "../../../common/state/hooks/useDraftAttachedFiles.ts";
 import { useInterruptAgent } from "../../../common/state/hooks/useInterruptAgent.ts";
+import { useOpenSettings } from "../../../common/state/hooks/useOpenSettings.ts";
 import { usePromptDraft } from "../../../common/state/hooks/usePromptDraft.ts";
 import { useTaskDetailWithDefaults } from "../../../common/state/hooks/useTaskDetail";
 import {
   useTaskAvailableModels,
+  useTaskConfigurationSettingsSection,
   useTaskModel,
   useTaskSelectedModelId,
   useTaskSourcesBackendModels,
@@ -76,7 +79,6 @@ import type { FileUploadHandle } from "../../../components/FileUpload.tsx";
 import { FileUpload } from "../../../components/FileUpload.tsx";
 import { Toast, type ToastContent, ToastType } from "../../../components/Toast.tsx";
 import { TooltipIconButton } from "../../../components/TooltipIconButton.tsx";
-import { SettingsSection } from "../../settings/sections.ts";
 import { stripHtml } from "../utils/utils.ts";
 import styles from "./ChatInput.module.scss";
 
@@ -147,7 +149,7 @@ export const ChatInput = ({
   const { workspaceID: workspaceIDFromRoute, agentID: agentIDFromRoute } = useWorkspacePageParams();
   const taskID = taskIdProp ?? agentIDFromRoute;
   const workspaceID = workspaceIdProp ?? workspaceIDFromRoute;
-  const { navigateToGlobalSettings } = useImbueNavigate();
+  const openSettings = useOpenSettings();
   const taskModel = useTaskModel(taskID ?? "");
   // Harness-supplied model list + selection (pi). hasBackendModelSource
   // distinguishes a pi task from Claude, which falls back to its built-in list
@@ -155,6 +157,11 @@ export const ChatInput = ({
   const backendModels = useTaskAvailableModels(taskID ?? "");
   const selectedModelId = useTaskSelectedModelId(taskID ?? "");
   const hasBackendModelSource = useTaskSourcesBackendModels(taskID ?? "");
+  // No usable model (pi with no authenticated providers): the picker renders disabled
+  // and Send is replaced by a "Go to harness configuration" button routing to the
+  // harness's own settings section (pi -> Pi, else Dependencies).
+  const configurationSettingsSection = useTaskConfigurationSettingsSection(taskID ?? "");
+  const isMissingUsableModel = hasNoUsableModel(hasBackendModelSource, backendModels);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
   const userConfig = useAtomValue(userConfigAtom);
@@ -496,10 +503,11 @@ export const ChatInput = ({
     [taskID, workspaceID],
   );
 
-  // The no-providers prompt sends the user to pi settings to authenticate a provider.
-  const handleAuthenticate = useCallback((): void => {
-    navigateToGlobalSettings(SettingsSection.PI);
-  }, [navigateToGlobalSettings]);
+  // Route the no-usable-model composer CTA to the harness's own configuration section
+  // (pi -> Pi, else Dependencies) via the canonical settings navigator.
+  const handleGoToHarnessConfig = useCallback((): void => {
+    openSettings(configurationSettingsSection);
+  }, [openSettings, configurationSettingsSection]);
 
   const handleMentionPicker = useCallback((): void => {
     if (!editorRef.current) return;
@@ -780,18 +788,30 @@ export const ChatInput = ({
                   selectedModelId={selectedModelId}
                   onBackendModelChange={handleBackendModelChange}
                   sourcesBackendModels={hasBackendModelSource}
-                  onAuthenticate={handleAuthenticate}
                 />
               </Flex>
-              <SendButton
-                onClick={handleSend}
-                disabled={isSending || (isDisabled && !draftIsBypassCommand(promptDraft)) || !promptDraft?.trim()}
-                loading={shouldShowSendSpinner}
-                tooltip={`${sendHint} to send message`}
-                ariaLabel="Send message"
-                testId={ElementIds.SEND_BUTTON}
-                lastSendError={lastSendError}
-              />
+              {isMissingUsableModel ? (
+                <Tooltip content="Authenticate a provider before you can send messages">
+                  <Button
+                    size="1"
+                    onClick={handleGoToHarnessConfig}
+                    data-testid={ElementIds.HARNESS_CONFIG_CTA}
+                    aria-label="Go to harness configuration"
+                  >
+                    Go to harness configuration
+                  </Button>
+                </Tooltip>
+              ) : (
+                <SendButton
+                  onClick={handleSend}
+                  disabled={isSending || (isDisabled && !draftIsBypassCommand(promptDraft)) || !promptDraft?.trim()}
+                  loading={shouldShowSendSpinner}
+                  tooltip={`${sendHint} to send message`}
+                  ariaLabel="Send message"
+                  testId={ElementIds.SEND_BUTTON}
+                  lastSendError={lastSendError}
+                />
+              )}
             </Flex>
           </Flex>
           {isDragging && (

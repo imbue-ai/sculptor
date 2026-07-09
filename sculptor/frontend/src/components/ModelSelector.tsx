@@ -34,14 +34,12 @@ type ModelSelectorProps = {
   onBackendModelChange?: (option: ModelOption) => void;
   /** Whether the harness sources its catalog from a backend (pi); when false the
    *  built-in Claude list is shown. An empty `backendModels` then means "no
-   *  authenticated providers" — show the login CTA, not the Claude fallback list. */
+   *  authenticated providers" — render a disabled "no models available" trigger, not
+   *  the Claude fallback list. The fix-it action lives on the composer's send slot. */
   sourcesBackendModels?: boolean;
-  /** Invoked by the no-providers prompt to send the user to authenticate a
-   *  provider (the pi login flow under Settings -> Pi). */
-  onAuthenticate: () => void;
 };
 
-const PI_NO_MODELS_COPY = "No models available — please log in to authenticate";
+const PI_NO_MODELS_COPY = "No models available";
 
 export const ModelSelector = ({
   model,
@@ -51,7 +49,6 @@ export const ModelSelector = ({
   selectedModelId,
   onBackendModelChange,
   sourcesBackendModels = false,
-  onAuthenticate,
 }: ModelSelectorProps): ReactElement => {
   const gate = useCapabilityGate(capabilityValue, ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION);
 
@@ -106,17 +103,16 @@ export const ModelSelector = ({
   }
 
   if (sourcesBackendModels && models.length === 0) {
-    // pi with no authenticated providers: an empty catalog is genuinely "nothing to
-    // authenticate as", not a cue to fall back to the Claude list. Show the locked
-    // copy + a CTA into the login flow.
+    // pi with no authenticated providers: a fetched-but-empty catalog is genuinely
+    // "no usable model", not a cue to fall back to the Claude list. Render an inert,
+    // disabled label stating the fact — no dropdown, no action button. The fix-it
+    // action lives on the composer's send slot, which swaps Send for a "Go to harness
+    // configuration" button (see ChatInput).
     return (
-      <Flex align="center" gap="2" data-testid={ElementIds.PI_PICKER_EMPTY_STATE}>
+      <Flex align="center" data-testid={ElementIds.PI_PICKER_EMPTY_STATE}>
         <Text size="1" color="gray">
           {PI_NO_MODELS_COPY}
         </Text>
-        <Button size="1" variant="ghost" onClick={onAuthenticate} data-testid={ElementIds.PI_PICKER_LOGIN_CTA}>
-          Open pi login
-        </Button>
       </Flex>
     );
   }

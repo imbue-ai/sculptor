@@ -278,6 +278,15 @@ export type CodingAgentTaskView = {
 	 */
 	readonly sourcesBackendModels: boolean;
 	/**
+	 * Configurationsettingssection
+	 *
+	 * The Settings section the composer's "Go to harness configuration" CTA opens
+	 * when this harness has no usable model — a frontend `SettingsSection` id, owned by
+	 * the harness (pi -> "PI", otherwise "DEPENDENCIES") so the composer never branches
+	 * on harness identity.
+	 */
+	readonly configurationSettingsSection: string;
+	/**
 	 * Acceptsautomatedprompts
 	 */
 	readonly acceptsAutomatedPrompts: boolean;

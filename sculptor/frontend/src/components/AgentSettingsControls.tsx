@@ -1,14 +1,12 @@
 import { Flex, IconButton, Tooltip } from "@radix-ui/themes";
 import { ListChecks } from "lucide-react";
-import { type ReactElement, useCallback } from "react";
+import type { ReactElement } from "react";
 
 import { type EffortLevel, ElementIds, type LlmModel } from "~/api";
 import { getModelCapabilities } from "~/common/modelCapabilities.ts";
-import { useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { EffortSelector } from "~/components/EffortSelector.tsx";
 import { FastModeToggle } from "~/components/FastModeToggle.tsx";
 import { ModelSelector } from "~/components/ModelSelector.tsx";
-import { SettingsSection } from "~/pages/settings/sections.ts";
 
 type AgentSettingsControlsProps = {
   model: LlmModel;
@@ -48,13 +46,6 @@ export const AgentSettingsControls = ({
   onPlanModeToggle,
 }: AgentSettingsControlsProps): ReactElement => {
   const { supportsFastMode: doesSupportFastMode } = getModelCapabilities(model);
-  const { navigateToGlobalSettings } = useImbueNavigate();
-  // ModelSelector requires an authenticate handler for its no-providers CTA. That
-  // CTA is a pi-only state that never fires for this Claude cluster, but the prop
-  // is required, so route it to the pi login flow to match ChatInput.
-  const handleAuthenticate = useCallback((): void => {
-    navigateToGlobalSettings(SettingsSection.PI);
-  }, [navigateToGlobalSettings]);
   return (
     <Flex align="center" flexShrink="0">
       <Tooltip content={isPlanMode ? "Leave plan mode" : "Enter plan mode"}>
@@ -73,7 +64,7 @@ export const AgentSettingsControls = ({
       {doesSupportFastMode && <FastModeToggle isActive={isFastMode} onToggle={onFastModeToggle} />}
       <EffortSelector effort={effort} onEffortChange={onEffortChange} />
       <Flex pr="1">
-        <ModelSelector model={model} onModelChange={onModelChange} onAuthenticate={handleAuthenticate} />
+        <ModelSelector model={model} onModelChange={onModelChange} />
       </Flex>
     </Flex>
   );
