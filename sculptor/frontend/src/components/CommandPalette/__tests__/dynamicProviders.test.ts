@@ -319,6 +319,18 @@ describe("buildWorkspaceProvider", () => {
     expect(cmds.find((c) => c.id === "workspaces.page.ws1")?.trailingBadge).toBeUndefined();
     expect(cmds.find((c) => c.id === "workspaces.page.ws2")?.trailingBadge).toBeUndefined();
   });
+
+  it("omits the badge for a row whose project record hasn't loaded", () => {
+    // Two distinct projects (so badges are in play), but only pA's record is
+    // loaded — the pB row has no resolvable name, so it must not be tagged.
+    seedWorkspaceIn("ws1", "One", "pA");
+    seedWorkspaceIn("ws2", "Two", "pB");
+    setWorkspaceIds(["ws1", "ws2"]);
+    seedProjects([{ id: "pA", name: "Alpha" }]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce(ROOT_CTX);
+    expect(cmds.find((c) => c.id === "workspaces.page.ws1")?.trailingBadge).toBe("Alpha");
+    expect(cmds.find((c) => c.id === "workspaces.page.ws2")?.trailingBadge).toBeUndefined();
+  });
 });
 
 describe("buildAgentProvider", () => {

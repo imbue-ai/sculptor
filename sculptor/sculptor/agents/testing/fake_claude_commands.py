@@ -2615,13 +2615,22 @@ def handle_crash(args: dict, emit_streaming: bool) -> list[dict]:
     warning, so a bad message alone no longer crashes the turn.)
 
     Args:
-        delay_seconds: Optional delay before emitting the crash.  Useful in
-            integration tests that need to navigate away from the workspace
-            before the crash fires.
+        pause_path: Optional sentinel path (see ``FakeClaudePause``).  When set,
+            the crash blocks until the test touches the file, so the test can
+            navigate away first and then release it — the crash fires while the
+            workspace is unfocused, with no wall-clock race.  Preferred over
+            ``delay_seconds`` for that "crash while backgrounded" pattern.
+        delay_seconds: Optional wall-clock delay before emitting the crash.
     """
-    delay_seconds: float = args.get("delay_seconds", 0)
-    if delay_seconds > 0:
-        time.sleep(delay_seconds)
+    pause_path: str | None = args.get("pause_path")
+    if pause_path is not None:
+        sentinel = Path(pause_path)
+        if not _wait_until(timeout_seconds=120, poll_interval=0.05, done=sentinel.exists):
+            raise RuntimeError(f"fake_claude:crash timed out after 120s waiting for {sentinel}")
+    else:
+        delay_seconds: float = args.get("delay_seconds", 0)
+        if delay_seconds > 0:
+            time.sleep(delay_seconds)
 
     session_id = generate_id("session")
 

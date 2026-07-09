@@ -32,6 +32,7 @@ from playwright.sync_api import expect
 
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
+from sculptor.testing.fake_claude_pause import FakeClaudePause
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import create_zero_agent_workspace
 from sculptor.testing.playwright_utils import navigate_to_home_page
@@ -39,14 +40,6 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.playwright_utils import wait_for_workspace_list_loaded
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
-
-# FakeClaude fires the crash this many seconds after the turn starts. The test
-# navigates home immediately after creating an error workspace, so the crash
-# lands while that workspace is unfocused and therefore stays UN-ACKED (tier
-# UNACKED_ERROR rather than the acked-error IDLE tier; viewing an error
-# acknowledges it). It also settles the crash (via the peek popover) before
-# continuing, so a pending crash never disrupts the next creation.
-_ERROR_DELAY_SECONDS = 4
 
 # An AskUserQuestion leaves the agent in WAITING (it never completes the turn),
 # which is the top attention tier.
@@ -101,21 +94,25 @@ def _make_waiting_workspace(page: Page, name: str) -> str:
 def _make_error_workspace(page: Page, layout: PlaywrightProjectLayoutPage, name: str) -> str:
     """A workspace whose agent crashes while unfocused → the UNACKED_ERROR tier.
 
-    Starts a delayed crash, then immediately navigates home so the crash lands
-    while the workspace is unfocused (un-acked). Settles the crash here — via
-    the peek popover, which hovering does NOT acknowledge — so the switcher
-    order is already stable when we assert it, and no pending crash disrupts a
-    later creation.
+    Uses a sentinel-gated crash (``FakeClaudePause``, no wall-clock): start the
+    crash paused, navigate home, then release it so the crash fires while the
+    workspace is unfocused — keeping it un-acked (viewing an error acknowledges
+    it, dropping it to the IDLE tier). Settles the crash here via the peek
+    popover, which hovering does NOT acknowledge, so the switcher order is
+    already stable when we assert it and no pending crash disrupts a later
+    creation.
     """
+    pause = FakeClaudePause()
     start_task_and_wait_for_ready(
         sculptor_page=page,
-        prompt=f'fake_claude:crash `{{"delay_seconds": {_ERROR_DELAY_SECONDS}}}`',
+        prompt=f'fake_claude:crash `{{"pause_path": "{pause.release_path}"}}`',
         workspace_name=name,
         wait_for_agent_to_finish=False,
     )
     workspace_id = _current_workspace_id(page)
 
     navigate_to_home_page(page)
+    pause.release()  # Now let the crash fire — while the workspace is unfocused.
     # Hover (not click) the sidebar row so the crash is observed without
     # navigating into — and thereby acknowledging — the workspace.
     get_workspace_sidebar(page).get_workspace_row_by_name(name).hover()
@@ -157,14 +154,11 @@ def test_workspace_switcher_orders_by_attention_then_recency(sculptor_instance_:
     rows = palette.get_items_in_group("workspaces")
     expect(rows).to_have_count(len(expected_ids))
 
-    labels = {waiting: "waiting", error_b: "error_b", error_a: "error_a", idle_b: "idle_b", idle_a: "idle_a"}
-    expected_labels = [labels[ws_id] for ws_id in expected_ids]
-    actual_ids = [
-        (rows.nth(i).get_attribute("data-command-id") or "").removeprefix("workspaces.page.")
-        for i in range(rows.count())
-    ]
-    actual_labels = [labels.get(ws_id, ws_id) for ws_id in actual_ids]
-    assert actual_labels == expected_labels, f"switcher order {actual_labels} != expected {expected_labels}"
+    # Assert each row position in order with auto-retrying expects — positional
+    # locators re-resolve on every retry, so this reads the settled order even
+    # if the list is still settling when the count first reaches five.
+    for index, workspace_id in enumerate(expected_ids):
+        expect(rows.nth(index)).to_have_attribute("data-command-id", f"workspaces.page.{workspace_id}")
 
     # The current workspace (last created) is the leading waiting row, marked
     # "Current workspace" and disabled so selecting it can't self-navigate.

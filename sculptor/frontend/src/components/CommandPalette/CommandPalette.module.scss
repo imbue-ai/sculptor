@@ -286,27 +286,15 @@
   color: var(--gray-11);
 }
 
-// Quiet right-aligned annotation pill (e.g. the switcher's cross-project
-// tag). Muted so it reads as context, not a focal point; the rounded chip
-// with a faint fill distinguishes it from the plain-text kind/shortcut
-// labels that share the trailing slot.
+// Right-aligned annotation pill (the switcher's cross-project tag). A Radix
+// soft-gray Badge provides the quiet chip styling; this only bounds and
+// truncates a long project name so it can't crowd the row.
 .itemBadge {
-  background: var(--gray-a3);
-  border-radius: var(--radius-2);
-  color: var(--gray-10);
   flex-shrink: 0;
-  font-size: var(--font-size-1);
-  font-weight: var(--font-weight-regular);
-  line-height: 1;
   max-width: 12rem;
   overflow: hidden;
-  padding: var(--space-1) var(--space-2);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.item[data-selected="true"] .itemBadge {
-  color: var(--gray-11);
 }
 
 // Per-row shortcut hint, shown at the right edge of the row. Mirrors

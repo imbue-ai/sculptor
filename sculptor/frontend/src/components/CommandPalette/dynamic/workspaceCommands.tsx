@@ -24,6 +24,9 @@ const latestActivityMs = (tasks: ReadonlyArray<CodingAgentTaskView>, ws: Workspa
   let best = ws.createdAt ? Date.parse(ws.createdAt) : 0;
   if (Number.isNaN(best)) best = 0;
   for (const task of tasks) {
+    // Skip deleted tasks so the recency tiebreak counts the same tasks the
+    // attention rank does (getWorkspaceAttentionRank filters them out too).
+    if (task.isDeleted) continue;
     const ts = Date.parse(task.updatedAt);
     if (!Number.isNaN(ts) && ts > best) best = ts;
   }
