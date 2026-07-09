@@ -1423,7 +1423,7 @@ def test_eager_pi_probe_records_fetched_empty_when_no_models(
     test_settings: SculptorSettings,
 ) -> None:
     """A start-time pi probe that finds no models records fetched-empty [], moving
-    the catalog off its NOT_FETCHED_YET default so the switcher shows the login CTA
+    the catalog off its NOT_FETCHED_YET default so the switcher shows the empty state
     rather than spinning on 'loading' forever. (The probe returns ([], None) for a
     genuinely unauthenticated user AND for a best-effort probe failure; both land
     on the same fetched-empty result, matching today's behavior — distinguishing

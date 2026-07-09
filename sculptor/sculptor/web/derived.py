@@ -436,10 +436,10 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
         """The switcher's catalog as the frontend gates on it: NOT_FETCHED_YET
         until the start-time probe lands, then the fetched list (empty = the
         harness sources none and the frontend falls back to its built-in list, or
-        pi is authenticated with no providers and shows the login CTA). Runtime
+        pi is authenticated with no providers and shows the empty state). Runtime
         callers that only offer models use `get_available_models`, which coalesces
         the sentinel to []; the switcher needs the distinction so it can show a
-        loading state instead of flashing the CTA while the catalog loads."""
+        loading state instead of flashing the empty state while the catalog loads."""
         return self._resolve_harness().get_model_catalog(self.task_state)
 
     @computed_field

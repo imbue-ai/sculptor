@@ -155,7 +155,7 @@ describe("ModelSelector", () => {
     expect(screen.queryByTestId(ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION)).not.toBeInTheDocument();
   });
 
-  it("shows the login CTA when a backend harness has no providers", () => {
+  it("shows the disabled empty state when a backend harness has no providers", () => {
     render(
       withStore(
         <ModelSelector

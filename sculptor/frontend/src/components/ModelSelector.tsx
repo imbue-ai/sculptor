@@ -7,6 +7,7 @@ import {
   getModelShortName,
   getProviderDisplayName,
   groupModelsByProvider,
+  hasNoUsableModel,
   routeModelChange,
 } from "~/common/modelConstants.ts";
 import { ModelSelectOptions } from "~/components/ModelSelectOptions.tsx";
@@ -24,7 +25,7 @@ type ModelSelectorProps = {
   capabilityValue?: boolean;
   /** The pi catalog for the switcher: the fetched list (keyed by model_id, with
    *  `selectedModelId` shown selected), or `NOT_FETCHED_YET` while the start-time
-   *  probe is still in flight — which renders a loading state, not the login CTA. */
+   *  probe is still in flight — which renders a loading state, not the empty state. */
   backendModels?: ReadonlyArray<ModelOption> | ModelCatalogState;
   /** The model_id to show selected when the harness sources a backend list (pi). */
   selectedModelId?: string;
@@ -55,6 +56,12 @@ export const ModelSelector = ({
   const models = Array.isArray(backendModels) ? backendModels : [];
   const isCatalogNotFetched = backendModels === ModelCatalogState.NOT_FETCHED_YET;
   const hasBackendModels = sourcesBackendModels && models.length > 0;
+  // Shared with the composer's send-guard (ChatInput) so the disabled picker and the
+  // blocked Send stay in lockstep. NOT_FETCHED_YET (still loading) is handled above.
+  const isMissingUsableModel = hasNoUsableModel(
+    sourcesBackendModels,
+    backendModels ?? ModelCatalogState.NOT_FETCHED_YET,
+  );
   const providerGroups = hasBackendModels ? groupModelsByProvider(models) : [];
 
   // The Select value / trigger label diverge by source: a backend list (pi) is
@@ -86,9 +93,9 @@ export const ModelSelector = ({
 
   if (sourcesBackendModels && isCatalogNotFetched) {
     // The start-time catalog probe is still in flight (catalog NOT_FETCHED_YET):
-    // show a quiet, disabled placeholder — never the login CTA, which would
+    // show a quiet, disabled placeholder — never the empty state, which would
     // otherwise flash for an authenticated user until the real catalog lands. Only
-    // a fetched-but-empty catalog (below) means "no providers, please log in".
+    // a fetched-but-empty catalog (below) means "no providers".
     return (
       <Select.Root size="1" value="" disabled>
         <Select.Trigger className={styles.trigger} data-testid={ElementIds.PI_PICKER_LOADING} variant="ghost">
@@ -102,7 +109,7 @@ export const ModelSelector = ({
     );
   }
 
-  if (sourcesBackendModels && models.length === 0) {
+  if (isMissingUsableModel) {
     // pi with no authenticated providers: a fetched-but-empty catalog is genuinely
     // "no usable model", not a cue to fall back to the Claude list. Render an inert,
     // disabled label stating the fact — no dropdown, no action button. The fix-it

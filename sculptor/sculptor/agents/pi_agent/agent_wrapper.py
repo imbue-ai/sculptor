@@ -1939,8 +1939,9 @@ class PiAgent(DefaultAgentWrapper):
         where `get_available_models` / `get_state` are safe. Reuses
         `_fetch_models_into_state` so the authenticated-set filter applied inside
         that shared path applies here for free. Best-effort and fire-and-forget: a
-        re-fetch that finds nothing leaves the cached catalog as-is rather than
-        blanking it.
+        re-fetch that finds no usable model (e.g. the user disconnected their last
+        provider) emits an empty catalog, so the switcher reaches its empty state
+        live rather than clinging to a now-unusable model.
         """
         del message
         self._fetch_models_into_state()

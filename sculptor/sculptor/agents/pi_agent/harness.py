@@ -173,7 +173,7 @@ class PiHarness(Harness):
         # The raw catalog: NOT_FETCHED_YET until the start-time probe persists a
         # list (possibly [] = authenticated but no providers). Preserved so the
         # switcher shows a loading state during startup rather than flashing the
-        # login CTA. Also NOT_FETCHED_YET when task_state is absent (nothing known).
+        # empty state. Also NOT_FETCHED_YET when task_state is absent (nothing known).
         if task_state is None:
             return NOT_FETCHED_YET
         return task_state.available_models

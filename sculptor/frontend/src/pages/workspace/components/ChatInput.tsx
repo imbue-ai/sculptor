@@ -455,6 +455,11 @@ export const ChatInput = ({
     // A send is already in flight; ignore the trigger entirely so we neither
     // re-send nor fire the trailing interrupt below for a send that no-ops.
     if (isSendingRef.current) return;
+    // No usable model (pi with no authenticated providers): Send is replaced by the
+    // "Go to harness configuration" CTA, but the modified-Enter send binding still
+    // reaches here — block it so a doomed message can't be posted to a harness that
+    // cannot service it.
+    if (isMissingUsableModel) return;
     const isBtwDraft = draftIsBypassCommand(promptDraft);
     if (isDisabled && !isBtwDraft) return;
     await sendMessage();
@@ -468,16 +473,26 @@ export const ChatInput = ({
     if (!isBtwDraft && isAlwaysInterruptAndSend && isAgentBusy && taskID) {
       await interruptWorkspaceAgent({ path: { workspace_id: workspaceID, agent_id: taskID } });
     }
-  }, [isDisabled, promptDraft, sendMessage, isAlwaysInterruptAndSend, isAgentBusy, taskID, workspaceID]);
+  }, [
+    isDisabled,
+    promptDraft,
+    sendMessage,
+    isAlwaysInterruptAndSend,
+    isAgentBusy,
+    taskID,
+    workspaceID,
+    isMissingUsableModel,
+  ]);
 
   const handleInterruptAndSend = useCallback(async (): Promise<void> => {
     if (isSendingRef.current) return;
+    if (isMissingUsableModel) return;
     if (!promptDraft?.trim() || !taskID) return;
     await sendMessage();
     if (isAgentBusy) {
       await interruptWorkspaceAgent({ path: { workspace_id: workspaceID, agent_id: taskID } });
     }
-  }, [promptDraft, taskID, sendMessage, isAgentBusy, workspaceID]);
+  }, [promptDraft, taskID, sendMessage, isAgentBusy, workspaceID, isMissingUsableModel]);
 
   // Out-of-band model switch for a harness with a backend model list (pi). The
   // value stays server-driven (selectedModelId), so on success the persisted

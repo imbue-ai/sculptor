@@ -166,7 +166,7 @@ def test_pi_harness_distinguishes_not_fetched_catalog_from_fetched_empty() -> No
     # — distinct from a fetched-but-empty [] (authenticated, but no providers).
     # get_available_models coalesces both to [] for runtime callers that only
     # offer models; get_model_catalog keeps them apart so the switcher can show a
-    # loading state instead of flashing the login CTA during startup.
+    # loading state instead of flashing the empty state during startup.
     fresh = AgentTaskStateV2(workspace_id=WorkspaceID())
     assert fresh.available_models is NOT_FETCHED_YET
     assert PI_HARNESS.get_model_catalog(fresh) is NOT_FETCHED_YET
