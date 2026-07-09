@@ -85,6 +85,25 @@ def test_get_extensions_directory_never_clobbers_an_existing_dir(tmp_path: Path)
     assert (sculptor_path / "plugins" / "old-extension").is_dir()
 
 
+def test_get_extensions_directory_serves_the_legacy_dir_when_the_rename_fails(tmp_path: Path) -> None:
+    sculptor_path = tmp_path / ".sculptor"
+    legacy_dir = sculptor_path / "plugins"
+    (legacy_dir / "my-extension").mkdir(parents=True)
+
+    with (
+        patch("sculptor.utils.build.get_sculptor_folder", return_value=sculptor_path),
+        patch.object(Path, "rename", side_effect=OSError("device or resource busy")),
+    ):
+        extensions_dir = get_extensions_directory()
+
+    # The legacy directory keeps serving in place so its drop-ins stay loaded;
+    # extensions/ is not reported (callers would create it, blocking the
+    # rename retry on the next resolve).
+    assert extensions_dir == legacy_dir
+    assert (legacy_dir / "my-extension").is_dir()
+    assert not (sculptor_path / "extensions").exists()
+
+
 def test_get_extensions_directory_resolves_without_creating(tmp_path: Path) -> None:
     sculptor_path = tmp_path / ".sculptor"
     sculptor_path.mkdir()

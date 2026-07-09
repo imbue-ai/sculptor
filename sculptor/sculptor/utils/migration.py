@@ -24,8 +24,12 @@ def get_extensions_directory() -> Path:
     ``extensions/`` is absent and that legacy directory exists, it is renamed in
     place so the user's drop-in extensions keep loading. An existing
     ``extensions/`` directory is never clobbered — a leftover legacy directory
-    is then simply ignored. This only resolves (and migrates) the path; callers
-    that need the directory to exist create it themselves.
+    is then simply ignored. If the rename fails (e.g. the legacy directory is a
+    mount point), the legacy directory itself is returned so its drop-ins keep
+    loading, and the rename is retried on a later resolve — returning the new
+    path here would let callers create an empty ``extensions/`` that blocks the
+    migration forever. This only resolves (and migrates) the path; callers that
+    need the directory to exist create it themselves.
     """
     sculptor_path = build_utils.get_sculptor_folder()
     extensions_dir = sculptor_path / "extensions"
@@ -35,7 +39,12 @@ def get_extensions_directory() -> Path:
             legacy_dir.rename(extensions_dir)
             logger.info("Renamed legacy extensions directory {} to {}", legacy_dir, extensions_dir)
         except OSError as e:
-            logger.info("Failed to rename legacy extensions directory {}: {}", legacy_dir, e)
+            logger.info(
+                "Failed to rename legacy extensions directory {}: {}; serving drop-ins from it in place",
+                legacy_dir,
+                e,
+            )
+            return legacy_dir
     return extensions_dir
 
 

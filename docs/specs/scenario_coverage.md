@@ -390,8 +390,8 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | SET-036 | Missing | — | Click a radius / scaling / panel-background option and assert the live UI updates. |
 | SET-038 | Partial | test_extension_loader.py::test_valid_extension_loads_and_can_be_removed; ::test_extension_source_can_be_disabled_and_re_enabled | Cover the Refresh rescan of the extensions directory and the displayed directory path. |
 | SET-039 | Partial | test_ci_babysitter.py::test_settings_selector_lists_only_driveable_harnesses | Assert the selector saves with a toast and is disabled when the babysitter is off. |
-| SET-040 | Complete | test_extensions_settings_visibility.py::test_plugins_section_present_and_on_by_default; ::test_global_toggle_hides_management_ui_live | — |
-| SET-041 | Complete | test_extension_loader.py::test_failed_plugin_can_be_retried | — |
+| SET-040 | Complete | test_extensions_settings_visibility.py::test_extensions_section_present_and_on_by_default; ::test_global_toggle_hides_management_ui_live | — |
+| SET-041 | Complete | test_extension_loader.py::test_failed_extension_can_be_retried | — |
 | DEV-001 | Partial | test_tanstack_devtools_panel.py::test_tanstack_devtools_panel_mounts_with_content (panel mounts only) | Cover header Dock/Float/Close controls, floating drag + resize within viewport, docked resize-from-top-edge + pushes content up, and closing hides it. |
 
 ---
