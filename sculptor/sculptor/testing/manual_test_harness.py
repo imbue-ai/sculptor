@@ -168,6 +168,12 @@ class ManualTestHarness:
         return self._server.url
 
     @property
+    def vite_url(self) -> str:
+        if self._vite_port is None:
+            raise RuntimeError("Harness not started — call start() first")
+        return f"http://127.0.0.1:{self._vite_port}"
+
+    @property
     def port(self) -> int:
         if self._port is None:
             raise RuntimeError("Harness not started — call start() first")
@@ -187,6 +193,16 @@ class ManualTestHarness:
 
     def start(self) -> None:
         """Start the backend, Vite dev server, browser, and navigate to the home page."""
+        self.start_servers()
+        self.start_browser()
+
+    def start_servers(self) -> None:
+        """Start the backend and Vite dev server without launching a browser.
+
+        Useful for tools that drive the frontend with their own browser (e.g.
+        the demo video recorder, which needs an async Playwright context with
+        video capture) but still want the canonical test backend + repo setup.
+        """
         logger.info("Starting ManualTestHarness")
 
         self._screenshots_dir.mkdir(parents=True, exist_ok=True)
@@ -206,6 +222,8 @@ class ManualTestHarness:
         self._port_manager = PortManager()
         self._start_backend_and_vite()
 
+    def start_browser(self) -> None:
+        """Launch the sync Playwright browser and navigate to the home page."""
         # Launch Playwright browser
         self._playwright = sync_playwright().start()
         # Disable WebGL so xterm.js falls back to its canvas renderer, which renders
@@ -224,10 +242,9 @@ class ManualTestHarness:
         configure_page(self._page, timeout_ms=_DEFAULT_TIMEOUT_MS)
 
         # Navigate to the Vite dev server (lands on the home page)
-        vite_url = f"http://127.0.0.1:{self._vite_port}"
-        navigate_to_frontend(page=self._page, url=vite_url)
+        navigate_to_frontend(page=self._page, url=self.vite_url)
 
-        logger.info("ManualTestHarness ready — vite_url={}, backend_url={}", vite_url, self.base_url)
+        logger.info("ManualTestHarness ready — vite_url={}, backend_url={}", self.vite_url, self.base_url)
 
     def _wait_for_vite(self, timeout_seconds: int = 120) -> None:
         """Poll until the Vite dev server is accepting connections."""
@@ -329,10 +346,9 @@ class ManualTestHarness:
         self._start_backend_and_vite()
 
         # Navigate the existing browser to the new Vite URL
-        vite_url = f"http://127.0.0.1:{self._vite_port}"
-        navigate_to_frontend(page=self.page, url=vite_url)
+        navigate_to_frontend(page=self.page, url=self.vite_url)
 
-        logger.info("ManualTestHarness restarted — vite_url={}, backend_url={}", vite_url, self.base_url)
+        logger.info("ManualTestHarness restarted — vite_url={}, backend_url={}", self.vite_url, self.base_url)
 
     def _stop_backend(self) -> None:
         """Stop the backend process and forwarder."""
