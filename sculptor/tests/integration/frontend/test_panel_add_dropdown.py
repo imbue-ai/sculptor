@@ -70,9 +70,13 @@ def test_new_agent_row_shows_recent_type_and_shortcut(sculptor_instance_: Sculpt
 def test_agent_type_submenu_offers_claude_no_bare_terminal(sculptor_instance_: SculptorInstance) -> None:
     """The agent-type sub-menu offers Claude and omits the bare "Terminal" type (B2)."""
     page = sculptor_instance_.page
-    dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
+    # Exercise a LEFT `+`: its click pins the menu open, so the sub-menu navigation stays
+    # stable under load, where the center `+` is hover-transient. The menu contents are
+    # section-agnostic, so this covers the sub-menu the same either way.
+    dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="left")
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Agent Type Submenu WS")
+    PlaywrightWorkspaceSection(page, "left").expand_section()
     dropdown.open()
     dropdown.open_agent_type_submenu()
 
@@ -86,9 +90,12 @@ def test_agent_type_submenu_offers_claude_no_bare_terminal(sculptor_instance_: S
 def test_agent_type_submenu_offers_pi(sculptor_instance_: SculptorInstance) -> None:
     """The pi agent type is always offered in the agent-type sub-menu."""
     page = sculptor_instance_.page
-    dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
+    # A LEFT `+` pins the menu on click, keeping the sub-menu navigation stable under load
+    # (the center `+` is hover-transient); the sub-menu contents are section-agnostic.
+    dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="left")
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Pi Submenu WS")
+    PlaywrightWorkspaceSection(page, "left").expand_section()
 
     dropdown.open()
     dropdown.open_agent_type_submenu()
@@ -102,9 +109,13 @@ def test_registered_agent_appears_in_submenu_without_restart(sculptor_instance_:
     """A registration TOML dropped into the instance appears on the next sub-menu open
     (the backend re-reads the directory per request)."""
     page = sculptor_instance_.page
-    dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
+    # A LEFT `+` pins the menu on click, so the two-round open → sub-menu → reopen flow
+    # below stays stable under load; the center `+` is hover-transient. Sub-menu contents
+    # (and the per-open registration re-read) are section-agnostic.
+    dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="left")
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Registered Submenu WS")
+    PlaywrightWorkspaceSection(page, "left").expand_section()
 
     # Not present yet.
     dropdown.open()
