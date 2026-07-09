@@ -1815,3 +1815,234 @@ def test_save_messages_writes_artifact_before_publishing_its_message() -> None:
     assert chat_publish_idx < sync_idx, (
         f"non-artifact publishes should run before any artifact sync (surgical interleave — chat tokens shouldn't wait for artifact writes); got {registered}"
     )
+
+
+class _IdleStopAgent(DefaultAgentWrapper):
+    """Fake agent that handles Stop without requiring a prior chat/resume push.
+
+    Used in no-op-resume tests where the loop has nothing to dispatch (no
+    queued messages, orphaned requests were finalized pre-loop) and only
+    needs to drain the Stop → exit.
+    """
+
+    def _start(self) -> None: ...
+
+    def _terminate(self, force_kill_seconds: float) -> None: ...
+
+    def wait(self, timeout: float) -> int:
+        return self._exit_code if self._exit_code is not None else 0
+
+    def _push_message(self, message: Message) -> bool:
+        if isinstance(message, StopAgentUserMessage):
+            self._exit_code = AGENT_EXIT_CODE_FROM_SIGTERM
+            return True
+        return False
+
+
+def test_orphaned_chat_request_is_finalized_on_noop_resume(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: LocalEnvironment,
+    test_settings: SculptorSettings,
+) -> None:
+    """A crash-mid-response orphan (RequestStarted with no terminal completion)
+    must be finalized with an interrupted RequestSuccess when the restored task
+    has no queued messages to drive a resume.
+
+    Without this synthetic completion the frontend stays stuck ``thinking``
+    forever because message_conversion never sees a terminal event for the
+    dangling request_id.
+    """
+    workspace_id = WorkspaceID()
+    previous_message_id = AgentMessageID()
+    chat_message = ChatInputUserMessage(
+        message_id=AgentMessageID(),
+        text="Prompt that crashed mid-response",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+    stale_state = AgentTaskStateV2(
+        workspace_id=workspace_id,
+        last_processed_message_id=previous_message_id,
+    )
+    _set_task_state(local_task, stale_state, services)
+
+    # Persist the crash state: chat message + RequestStarted + partial response,
+    # but no terminal completion.
+    with services.data_model_service.open_task_transaction() as transaction:
+        services.task_service.create_message(chat_message, local_task.object_id, transaction)
+        services.task_service.create_message(
+            RequestStartedAgentMessage(
+                message_id=AgentMessageID(),
+                request_id=chat_message.message_id,
+            ),
+            local_task.object_id,
+            transaction,
+        )
+        services.task_service.create_message(
+            ResponseBlockAgentMessage(
+                message_id=AgentMessageID(),
+                role="assistant",
+                assistant_message_id=AssistantMessageID(generate_id()),
+                content=(TextBlock(text="Partial work before crash..."),),
+            ),
+            local_task.object_id,
+            transaction,
+        )
+
+    agent_env = LocalAgentExecutionEnvironment(
+        environment=environment,
+        task_id=local_task.object_id,
+        dependency_management_service=services.dependency_management_service,
+    )
+    fake_agent = _IdleStopAgent(
+        harness=CLAUDE_CODE_HARNESS,
+        environment=agent_env,
+        task_id=local_task.object_id,
+        system_prompt="",
+    )
+
+    input_message_queue: Queue = Queue()
+    shutdown_event = threading.Event()
+    shutdown_event.set()
+
+    assert isinstance(local_task.input_data, AgentTaskInputsV2)
+    task_data = local_task.input_data
+
+    with patch("sculptor.tasks.handlers.run_agent.v1._get_agent_wrapper", return_value=fake_agent):
+        with pytest.raises(AgentPaused):
+            _run_agent_in_environment(
+                task=local_task,
+                task_data=task_data,
+                task_state=stale_state,
+                re_queued_messages=(),  # no queued messages — the no-op resume case
+                input_message_queue=input_message_queue,
+                environment=agent_env,
+                services=services,
+                project=project,
+                settings=test_settings,
+                shutdown_event=shutdown_event,
+            )
+
+    # The fix must have saved a RequestSuccessAgentMessage(interrupted=True)
+    # for the orphaned chat request so the frontend can settle to READY.
+    with services.data_model_service.open_task_transaction() as transaction:
+        saved_messages = services.task_service.get_saved_messages_for_task(local_task.object_id, transaction)
+
+    orphan_completions = [
+        m
+        for m in saved_messages
+        if isinstance(m, RequestSuccessAgentMessage) and m.request_id == chat_message.message_id and m.interrupted
+    ]
+    assert len(orphan_completions) == 1, (
+        f"Expected exactly one interrupted RequestSuccess for the orphaned request, got {len(orphan_completions)}"
+    )
+
+
+def test_orphaned_answer_is_finalized_on_noop_resume(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: LocalEnvironment,
+    test_settings: SculptorSettings,
+) -> None:
+    """A crash-mid-answer orphan (UserQuestionAnswerMessage with RequestStarted but
+    no terminal completion) must be finalized with an interrupted RequestSuccess
+    when the restored task has no queued messages.
+    """
+    workspace_id = WorkspaceID()
+    previous_message_id = AgentMessageID()
+
+    # Original chat message + completed turn
+    chat_message = ChatInputUserMessage(
+        message_id=AgentMessageID(),
+        text="Do something",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+    answer = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"Continue?": "Yes, proceed"},
+        question_data=AskUserQuestionData(questions=[], tool_use_id="toolu_orphan"),
+        tool_use_id="toolu_orphan",
+    )
+    stale_state = AgentTaskStateV2(
+        workspace_id=workspace_id,
+        last_processed_message_id=previous_message_id,
+    )
+    _set_task_state(local_task, stale_state, services)
+
+    with services.data_model_service.open_task_transaction() as transaction:
+        # Chat turn completed normally
+        services.task_service.create_message(chat_message, local_task.object_id, transaction)
+        services.task_service.create_message(
+            RequestStartedAgentMessage(
+                message_id=AgentMessageID(),
+                request_id=chat_message.message_id,
+            ),
+            local_task.object_id,
+            transaction,
+        )
+        services.task_service.create_message(
+            RequestSuccessAgentMessage(
+                message_id=AgentMessageID(),
+                request_id=chat_message.message_id,
+            ),
+            local_task.object_id,
+            transaction,
+        )
+        # Answer was delivered but the process crashed before its turn completed
+        services.task_service.create_message(answer, local_task.object_id, transaction)
+        services.task_service.create_message(
+            RequestStartedAgentMessage(
+                message_id=AgentMessageID(),
+                request_id=answer.message_id,
+            ),
+            local_task.object_id,
+            transaction,
+        )
+
+    agent_env = LocalAgentExecutionEnvironment(
+        environment=environment,
+        task_id=local_task.object_id,
+        dependency_management_service=services.dependency_management_service,
+    )
+    fake_agent = _IdleStopAgent(
+        harness=CLAUDE_CODE_HARNESS,
+        environment=agent_env,
+        task_id=local_task.object_id,
+        system_prompt="",
+    )
+
+    input_message_queue: Queue = Queue()
+    shutdown_event = threading.Event()
+    shutdown_event.set()
+
+    assert isinstance(local_task.input_data, AgentTaskInputsV2)
+    task_data = local_task.input_data
+
+    with patch("sculptor.tasks.handlers.run_agent.v1._get_agent_wrapper", return_value=fake_agent):
+        with pytest.raises(AgentPaused):
+            _run_agent_in_environment(
+                task=local_task,
+                task_data=task_data,
+                task_state=stale_state,
+                re_queued_messages=(),
+                input_message_queue=input_message_queue,
+                environment=agent_env,
+                services=services,
+                project=project,
+                settings=test_settings,
+                shutdown_event=shutdown_event,
+            )
+
+    with services.data_model_service.open_task_transaction() as transaction:
+        saved_messages = services.task_service.get_saved_messages_for_task(local_task.object_id, transaction)
+
+    orphan_completions = [
+        m
+        for m in saved_messages
+        if isinstance(m, RequestSuccessAgentMessage) and m.request_id == answer.message_id and m.interrupted
+    ]
+    assert len(orphan_completions) == 1, (
+        f"Expected exactly one interrupted RequestSuccess for the orphaned answer, got {len(orphan_completions)}"
+    )

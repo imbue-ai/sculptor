@@ -453,6 +453,30 @@ def _run_agent_in_environment(
         logger.debug("Initial in-flight user chat message ID: {}", initial_in_flight_user_chat_message_id)
         logger.debug("Last processed message id:              {}", task_state.last_processed_message_id)
 
+        # When a crash left orphaned requests (RequestStarted with no terminal
+        # completion) but no queued user messages remain to drive their resume,
+        # synthesize an interrupted completion so the frontend settles to READY
+        # instead of staying stuck "thinking" forever.
+        if not queued_user_input_messages:
+            orphan_request_ids = [
+                rid
+                for rid in (
+                    initial_in_flight_user_chat_message_id,
+                    initial_in_flight_user_question_answer_message_id,
+                )
+                if rid is not None
+            ]
+            orphaned_completion_msgs = [
+                RequestSuccessAgentMessage(
+                    message_id=AgentMessageID(),
+                    request_id=rid,
+                    interrupted=True,
+                )
+                for rid in orphan_request_ids
+            ]
+            if orphaned_completion_msgs:
+                _save_messages(task.object_id, services, orphaned_completion_msgs, {})
+
     # this is the core event loop for the agent.
     exit_code: int | None
 

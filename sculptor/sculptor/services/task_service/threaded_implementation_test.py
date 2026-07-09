@@ -14,6 +14,7 @@ from sculptor.database.models import Task
 from sculptor.database.models import TaskID
 from sculptor.foundation.git import get_repo_base_path
 from sculptor.foundation.itertools import only
+from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.agent import MessageTypes
 from sculptor.interfaces.agents.tasks import TaskState
 from sculptor.primitives.ids import RequestID
@@ -207,3 +208,55 @@ def test_task_service_proper_shutdown(
 
     for runner in service._runner_by_id.values():
         assert not runner.is_alive(), f"Runner {runner.get_name()} is still alive!"
+
+
+def test_restore_task_clears_stale_error(
+    test_service_collection: CompleteServiceCollection, specimen_project: Project
+) -> None:
+    """restore_task must clear the stale error field so outcome and error stay
+    consistent. A FAILED task with error set should come back as QUEUED with
+    error=None after restore.
+    """
+    user_session = authenticate_anonymous(test_service_collection, RequestID())
+    service = test_service_collection.task_service
+    assert isinstance(service, LocalThreadTaskService)
+
+    task = get_simple_task(user_session, specimen_project)
+    with user_session.open_transaction(test_service_collection) as transaction:
+        service.create_task(task, transaction)
+
+    # Wait for the task to complete (no-op task finishes quickly).
+    for _ in range(50):
+        with user_session.open_transaction(test_service_collection) as transaction:
+            current_task = service.get_task(task.object_id, transaction)
+            if current_task is not None and current_task.outcome not in (TaskState.QUEUED, TaskState.RUNNING):
+                break
+        time.sleep(0.1)
+
+    # Simulate a crash: manually set outcome to FAILED with a stored error.
+    try:
+        raise RuntimeError("simulated crash")
+    except RuntimeError as e:
+        fake_error = SerializedException.build(e)
+    with service.data_model_service.open_task_transaction() as transaction:
+        current_task = service.get_task(task.object_id, transaction)
+        assert current_task is not None
+        failed_task = current_task.evolve(current_task.ref().outcome, TaskState.FAILED)
+        failed_task = failed_task.evolve(failed_task.ref().error, fake_error)
+        transaction.upsert_task(failed_task)
+
+    # Precondition: error is set
+    with service.data_model_service.open_task_transaction() as transaction:
+        pre = service.get_task(task.object_id, transaction)
+        assert pre is not None
+        assert pre.outcome == TaskState.FAILED
+        assert pre.error is not None
+
+    # Restore the task.
+    with service.data_model_service.open_task_transaction() as transaction:
+        restored = service.restore_task(task.object_id, transaction)
+
+    assert restored.outcome == TaskState.QUEUED
+    assert restored.error is None, "restore_task must clear the stale error field"
+
+    service.stop()
