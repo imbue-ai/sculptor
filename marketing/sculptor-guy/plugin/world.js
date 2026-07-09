@@ -321,7 +321,7 @@ export function createWorld(root) {
       // Hold jump through the hop window so AI hops get full height.
       jumpHeld: aiMode === 'hop', jumpPressed: hop > 0,
       dropPressed: drop > 0, dropAll: drop === 2,
-      crouch: false, throttle: 0.45,
+      crouch: false, throttle: 0.28,   // an unhurried amble when unsupervised
     };
   }
 

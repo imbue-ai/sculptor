@@ -126,11 +126,15 @@ keyboard at all.
 Dev loop (mutating ops need Settings → Plugins → "Agent plugin loading"):
 
 ```bash
-sculpt plugin load marketing/sculptor-guy/plugin      # load into the live UI
-sculpt plugin reload cart-guy                         # after editing
+sculpt plugin load marketing/sculptor-guy/plugin      # load / push edits into the live UI
 sculpt plugin remove cart-guy                         # clean up
 sculpt plugin load marketing/sculptor-guy/plugin --persist   # keep it installed
 ```
+
+Use `load` — not `reload` — to push edits. `reload` reports success but does
+not re-package the source directory onto disk for a path install; it re-serves
+the frozen dev copy, so your edits never reach the UI. `load` wipes and
+rewrites the dev install and re-activates, so it reliably picks up changes.
 
 The rig markup in `world.js` is the cart SVG with `cg-`-prefixed filter ids
 and class names so nothing collides with the host page — same
