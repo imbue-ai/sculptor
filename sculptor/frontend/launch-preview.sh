@@ -18,15 +18,49 @@
 #     on one origin (the session cookie would collide).
 set -euo pipefail
 
+# The preview-switcher pill in the deployed app only auto-discovers previews in
+# the 51000-51099 quick band (a browser can't scan the whole 9000-port band on
+# every open — the /proxy/ switchboard's full-band scan covers the rest). So
+# default to a free port in that band when none is given, and warn on an explicit
+# port outside it: otherwise the preview is reachable only by a direct URL or the
+# switchboard, never the pill. Keep this band in sync with QUICK_BAND_* in
+# plugins/openhost-preview-switcher/src/scan.ts.
+quick_band_start=51000
+quick_band_end=51099
+
+pick_free_quick_port() {
+  # Ports currently bound (listening), one per line, from a single ss snapshot.
+  local used
+  used="$(ss -tlnH 2>/dev/null | grep -oE ':[0-9]+' | tr -d ':' | sort -u)"
+  local p
+  for ((p = quick_band_start; p <= quick_band_end; p++)); do
+    grep -qx "$p" <<<"$used" || { echo "$p"; return 0; }
+  done
+  return 1
+}
+
 port="${1:-}"
+if [[ -z "$port" ]]; then
+  if ! port="$(pick_free_quick_port)"; then
+    echo "no free port in $quick_band_start-$quick_band_end; pass an explicit port in 51000-59999" >&2
+    exit 1
+  fi
+  echo "auto-selected free port $port (in the preview-switcher pill's $quick_band_start-$quick_band_end scan band)"
+fi
+
 case "$port" in
   5[1-9][0-9][0-9][0-9]) ;;   # 51000-59999, the nginx preview band
   *)
-    echo "usage: $(basename "$0") <port in 51000-59999>" >&2
-    echo "  prefer 51000-51099: the /proxy/ switchboard quick-scans that range" >&2
+    echo "usage: $(basename "$0") [port in 51000-59999]   (default: a free port in $quick_band_start-$quick_band_end)" >&2
+    echo "  the preview-switcher pill only auto-discovers $quick_band_start-$quick_band_end; higher ports need the /proxy/ switchboard or a direct URL" >&2
     exit 1
     ;;
 esac
+
+if (( port < quick_band_start || port > quick_band_end )); then
+  echo "WARNING: port $port is outside $quick_band_start-$quick_band_end, so the preview-switcher pill will NOT list it." >&2
+  echo "         Reach it via the /proxy/ switchboard (full-band scan) or the direct /proxy/$port/ URL — or use a $quick_band_start-$quick_band_end port to get the pill." >&2
+fi
 
 cd "$(dirname "$0")"
 export SCULPTOR_FRONTEND_PORT="$port"
