@@ -16,6 +16,29 @@ def _bootstrap_sculptor_folder(sculptor_path: Path) -> None:
     (sculptor_path / _FORMAT_VERSION_FILENAME).write_text(f"{_FORMAT_VERSION}\n")
 
 
+def get_extensions_directory() -> Path:
+    """Resolve the drop-in extensions directory, adopting the legacy layout.
+
+    Extensions live in the data folder's ``extensions/`` subdirectory. Installs
+    that predate the "extensions" name keep their files under ``plugins/``; when
+    ``extensions/`` is absent and that legacy directory exists, it is renamed in
+    place so the user's drop-in extensions keep loading. An existing
+    ``extensions/`` directory is never clobbered — a leftover legacy directory
+    is then simply ignored. This only resolves (and migrates) the path; callers
+    that need the directory to exist create it themselves.
+    """
+    sculptor_path = build_utils.get_sculptor_folder()
+    extensions_dir = sculptor_path / "extensions"
+    legacy_dir = sculptor_path / "plugins"
+    if not extensions_dir.exists() and legacy_dir.is_dir():
+        try:
+            legacy_dir.rename(extensions_dir)
+            logger.info("Renamed legacy extensions directory {} to {}", legacy_dir, extensions_dir)
+        except OSError as e:
+            logger.info("Failed to rename legacy extensions directory {}: {}", legacy_dir, e)
+    return extensions_dir
+
+
 def ensure_sculptor_folder_ready() -> None:
     """Ensure the Sculptor data folder is in the expected format.
 

@@ -439,7 +439,7 @@ const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElemen
   const displayedPanelIds = useAtomValue(displayedPanelIdsAtom(subSection));
   // The registry-aware resolved id — the same atom SectionBody renders from — so the
   // highlighted tab always matches the rendered body, including when the persisted
-  // active id is an unregistered (unloaded/still-loading) plugin panel and the body
+  // active id is an unregistered (unloaded/still-loading) extension panel and the body
   // falls back to another open panel.
   const activePanelId = useAtomValue(resolvedActivePanelIdInSubSectionAtom(subSection));
   const ghostPanelId = useAtomValue(ghostPanelIdAtom(subSection));

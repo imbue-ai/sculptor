@@ -1002,7 +1002,7 @@ const registerAppProtocolHandler = (): void => {
     }
     let target = resolved;
     // TODO(SCU-1517): this serves one fixed bundle at startup, so a sync stat
-    // is fine. Once the handler also serves plugins from arbitrary local
+    // is fine. Once the handler also serves extensions from arbitrary local
     // directories at runtime, switch existsSync (and the read below) to async
     // fs.promises to keep the main process thread non-blocking.
     if (!fs.existsSync(target)) {

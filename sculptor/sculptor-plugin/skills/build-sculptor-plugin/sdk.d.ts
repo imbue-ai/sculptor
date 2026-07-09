@@ -1,21 +1,21 @@
-// GENERATED FILE - do not edit. Regenerate with: just generate-plugin-sdk-dts
-// The public contract of "@sculptor/plugin-sdk" (host SDK major 1), rolled up
-// from sculptor/frontend/src/plugins/sdk/ in the Sculptor repo.
+// GENERATED FILE - do not edit. Regenerate with: just generate-extension-sdk-dts
+// The public contract of "@sculptor/extension-sdk" (host SDK major 1), rolled up
+// from sculptor/frontend/src/extensions/sdk/ in the Sculptor repo.
 import { LucideIcon } from 'lucide-react';
 import { ComponentType, ReactElement, ReactNode } from 'react';
 
 export type SectionId = "left" | "center" | "right" | "bottom";
 /**
- * A panel a plugin contributes via `registerPanel`. The host renders the
+ * A panel an extension contributes via `registerPanel`. The host renders the
  * `component` inside the section shell (the manager adapts this into the
- * host's internal registry shape). A plugin panel is not auto-placed on load:
+ * host's internal registry shape). An extension panel is not auto-placed on load:
  * the user opens it from the section "+" / Cmd+K, which drops it into the
  * sub-section they pick. `defaultSection` is recorded on the registry entry but
  * no placement path reads it yet — it is reserved for a future default-placement
  * pass. The legacy `defaultZone` / `defaultShortcut` fields are accepted but
  * ignored — the docking shell they targeted is gone.
  */
-export type PluginPanelDefinition = {
+export type ExtensionPanelDefinition = {
 	/** Stable id; registering twice with the same id replaces the previous one. */
 	id: string;
 	displayName: string;
@@ -29,22 +29,22 @@ export type PluginPanelDefinition = {
 	defaultShortcut?: string;
 	/** Secondary text shown under the panel's label in the add-panel dropdown. */
 	description?: string;
-	/** Set by the loader to the owning plugin's id; not supplied by plugins. */
-	pluginId?: string;
+	/** Set by the loader to the owning extension's id; not supplied by extensions. */
+	extensionId?: string;
 };
 /**
- * The manifest a plugin ships alongside its bundle. Loaded by the host before
- * the plugin's JavaScript is fetched, so that version compatibility can be
+ * The manifest an extension ships alongside its bundle. Loaded by the host before
+ * the extension's JavaScript is fetched, so that version compatibility can be
  * checked up front.
  */
-export type PluginManifest = {
+export type ExtensionManifest = {
 	id: string;
 	name: string;
 	version: string;
-	/** Path (relative to /plugins/) to the plugin's ESM entry. */
+	/** Path (relative to /extensions/) to the extension's ESM entry. */
 	entry: string;
 	/**
-	 * Semver range of @sculptor/plugin-sdk the plugin was built against. The
+	 * Semver range of @sculptor/extension-sdk the extension was built against. The
 	 * loader only enforces the major. There is still deliberately no peer
 	 * dependency declaration: shared libraries resolve to host singletons via
 	 * the import map. Enforceable peer ranges are now unblocked — the host's
@@ -55,14 +55,14 @@ export type PluginManifest = {
 	sdkVersion: string;
 };
 /**
- * Object passed to a plugin's `activate()` function. Plugins use this to
+ * Object passed to an extension's `activate()` function. Extensions use this to
  * contribute panels, commands, etc. Returning a disposer from `activate` lets
- * the host unmount/remove contributions when the plugin is unloaded.
+ * the host unmount/remove contributions when the extension is unloaded.
  */
 /**
  * An always-on, app-global floating contribution. Unlike a panel, an overlay
  * is not tied to a zone or a single workspace: the host renders it above the
- * whole app (across every route) for as long as the plugin is loaded. The
+ * whole app (across every route) for as long as the extension is loaded. The
  * component draws into a full-viewport, click-through layer, so it must opt
  * its own interactive box back into pointer events. Use the workspace SDK
  * hooks (`useWorkspaces`, `useCurrentWorkspace`) to react to app state —
@@ -79,11 +79,11 @@ export type OverlayDefinition = {
  * chrome — today the workspace banner's action row, beside the PR button.
  * Deliberately named for the contribution (a small widget) rather than a
  * location: the same registration is what a future per-workspace vertical-tabs
- * layout would render too, so plugins don't re-register per surface.
+ * layout would render too, so extensions don't re-register per surface.
  *
  * Like a panel (and unlike an app-global overlay) it is mounted inside the
- * host's `WorkspacePluginContext`, so the workspace SDK hooks
- * (`useCurrentWorkspace`, `useWorkspaceTasks`, per-workspace `usePluginSetting`
+ * host's `WorkspaceExtensionContext`, so the workspace SDK hooks
+ * (`useCurrentWorkspace`, `useWorkspaceTasks`, per-workspace `useExtensionSetting`
  * keys) resolve to the workspace it is rendered for.
  */
 export type WorkspaceWidgetDefinition = {
@@ -91,9 +91,9 @@ export type WorkspaceWidgetDefinition = {
 	id: string;
 	component: ComponentType;
 	/**
-	 * Orders plugin widgets relative to one another within the action row: lower
+	 * Orders extension widgets relative to one another within the action row: lower
 	 * values render first, higher values render nearer the PR button. It only
-	 * sorts plugin widgets among themselves — built-in banner items are not part
+	 * sorts extension widgets among themselves — built-in banner items are not part
 	 * of this ordering — and a host that lays the widgets out differently is free
 	 * to ignore it. Omit it to sort ahead of widgets that set a value.
 	 */
@@ -102,13 +102,13 @@ export type WorkspaceWidgetDefinition = {
 /**
  * A full-page contribution the host offers as an alternative homepage body. The
  * homepage shows a view switcher whenever at least one of these is registered;
- * picking one replaces the built-in recent-workspaces list with the plugin's
+ * picking one replaces the built-in recent-workspaces list with the extension's
  * component, which owns the entire content area below the switcher. The user's
  * choice is remembered, and falls back to the built-in view if the selected
- * plugin is later unloaded.
+ * extension is later unloaded.
  *
  * Like an app-global overlay (and unlike a panel/workspace widget) it is mounted
- * with no `WorkspacePluginContext`: the homepage is not scoped to a single
+ * with no `WorkspaceExtensionContext`: the homepage is not scoped to a single
  * workspace, so a home view reads app state through the SDK hooks
  * (`useWorkspaces`, `useCurrentWorkspace`) instead of a fixed context.
  */
@@ -127,42 +127,42 @@ export type HomeViewDefinition = {
 	}>;
 	component: ComponentType;
 };
-export type PluginHostApi = {
-	registerPanel: (panel: PluginPanelDefinition) => () => void;
+export type ExtensionHostApi = {
+	registerPanel: (panel: ExtensionPanelDefinition) => () => void;
 	/**
-	 * Registers a settings component shown under the plugin in the Plugins
-	 * settings section. Rendered inside the host's PluginContext (so SDK hooks
-	 * like `usePluginSetting` work) and a per-plugin error boundary. Returns a
+	 * Registers a settings component shown under the extension in the Extensions
+	 * settings section. Rendered inside the host's ExtensionContext (so SDK hooks
+	 * like `useExtensionSetting` work) and a per-extension error boundary. Returns a
 	 * disposer.
 	 */
 	registerSettings: (component: ComponentType) => () => void;
 	/**
 	 * Registers an always-on floating overlay rendered above the whole app.
-	 * Wrapped, like panels, in a per-plugin error boundary and the host's
-	 * PluginContext (so `usePluginSetting` works). Returns a disposer.
+	 * Wrapped, like panels, in a per-extension error boundary and the host's
+	 * ExtensionContext (so `useExtensionSetting` works). Returns a disposer.
 	 */
 	registerOverlay: (overlay: OverlayDefinition) => () => void;
 	/**
 	 * Registers a workspace-scoped widget the host renders in its workspace
 	 * chrome (the banner action row beside the PR button). Wrapped, like a panel,
-	 * in a per-plugin error boundary, the host's PluginContext, and the
-	 * WorkspacePluginContext for the workspace it is shown in. Returns a disposer.
+	 * in a per-extension error boundary, the host's ExtensionContext, and the
+	 * WorkspaceExtensionContext for the workspace it is shown in. Returns a disposer.
 	 */
 	registerWorkspaceWidget: (widget: WorkspaceWidgetDefinition) => () => void;
 	/**
 	 * Registers a full-page home view selectable from the homepage switcher.
-	 * Wrapped, like an overlay, in a per-plugin error boundary and the host's
-	 * PluginContext (so `usePluginSetting` works), but with no
-	 * WorkspacePluginContext — the homepage is not workspace-scoped. Returns a
+	 * Wrapped, like an overlay, in a per-extension error boundary and the host's
+	 * ExtensionContext (so `useExtensionSetting` works), but with no
+	 * WorkspaceExtensionContext — the homepage is not workspace-scoped. Returns a
 	 * disposer.
 	 */
 	registerHomeView: (view: HomeViewDefinition) => () => void;
 };
 /**
- * Imperative host actions plugins can call. Unlike the hooks in `hooks.ts`,
+ * Imperative host actions extensions can call. Unlike the hooks in `hooks.ts`,
  * these are plain functions, callable from event handlers or anywhere outside
  * a React render. The generated SDK runtime stub (served at
- * `/plugin-runtime/sculptor-plugin-sdk.js`) re-exports them from the
+ * `/extension-runtime/sculptor-extension-sdk.js`) re-exports them from the
  * `window.__SCULPTOR_HOST__.sdk` object the host populates at boot.
  */
 /**
@@ -171,7 +171,7 @@ export type PluginHostApi = {
  * the main process, so the link opens in the system browser rather than inside
  * the app window.
  *
- * Plugins should use this instead of calling `window.open` directly: it is the
+ * Extensions should use this instead of calling `window.open` directly: it is the
  * single host-blessed seam for outbound links, so behaviour stays consistent
  * and can be upgraded (e.g. to a dedicated Electron bridge) in one place.
  * `noopener,noreferrer` prevents the opened page from reaching back through
@@ -534,11 +534,11 @@ declare const WorkspacePeekAgentStatus: {
  */
 export type WorkspacePeekAgentStatus = typeof WorkspacePeekAgentStatus[keyof typeof WorkspacePeekAgentStatus];
 /**
- * A curated, plugin-facing view of a single workspace: identity, label, live git
+ * A curated, extension-facing view of a single workspace: identity, label, live git
  * branch, and code-host link. Deliberately a subset — not the host's full
- * `Workspace` model — so the plugin contract doesn't couple to backend
+ * `Workspace` model — so the extension contract doesn't couple to backend
  * internals. The element type of `useWorkspaces` and the return of
- * `useCurrentWorkspace`, so a plugin reads the same shape whether it looks at
+ * `useCurrentWorkspace`, so an extension reads the same shape whether it looks at
  * one workspace or all of them.
  */
 export type WorkspaceView = {
@@ -585,7 +585,7 @@ export declare function useCurrentWorkspace<T = WorkspaceView | null>(selector?:
  * Returns a function that navigates to a workspace by id — the host's own
  * workspace-open behavior: it opens (or converts the home tab into) the
  * workspace's tab and jumps to its most-recently-used agent. The blessed seam
- * for a plugin to send the user into a workspace (e.g. a home view opening the
+ * for an extension to send the user into a workspace (e.g. a home view opening the
  * workspace a ticket is being worked in), so the navigation stays consistent
  * with clicking a workspace in the host's own lists.
  */
@@ -616,50 +616,65 @@ export type NewWorkspaceModalOptions = {
  * the same one behind Cmd/Meta+T — optionally pre-filled with a title, prompt,
  * and branch name. The user remains in control: they can edit every field or cancel
  * without creating anything. `onCreated` reports the created workspace's id
- * (e.g. to record a plugin-side association, or to follow up with
+ * (e.g. to record an extension-side association, or to follow up with
  * `useNavigateToWorkspace`).
  */
 export declare const useOpenNewWorkspaceModal: () => ((options?: NewWorkspaceModalOptions) => void);
 /**
- * A persisted string setting scoped to the calling plugin. Backed by
- * localStorage under a `sculptor-plugin:<id>:<key>` namespace and shared
- * reactively across the plugin's panel and its settings component.
+ * A persisted string setting scoped to the calling extension. Backed by
+ * localStorage under a `sculptor-extension:<id>:<key>` namespace and shared
+ * reactively across the extension's panel and its settings component.
  */
-export declare const usePluginSetting: (key: string) => [
+export declare const useExtensionSetting: (key: string) => [
 	string,
 	(value: string) => void
 ];
 /**
- * Read several of the calling plugin's persisted settings at once, reactively —
- * the multi-key companion to {@link usePluginSetting} for when the set of keys
- * is dynamic, so you can't call `usePluginSetting` once per key (e.g. one
+ * Read several of the calling extension's persisted settings at once, reactively —
+ * the multi-key companion to {@link useExtensionSetting} for when the set of keys
+ * is dynamic, so you can't call `useExtensionSetting` once per key (e.g. one
  * per-workspace key, with the workspace list coming from `useWorkspaces`).
  * Returns a map from each requested key to its current value (the empty string
  * for an unset key) and re-renders when any of those keys changes — including a
- * write from another surface of the plugin, since both share the same per-key
+ * write from another surface of the extension, since both share the same per-key
  * atoms.
  */
-export declare const usePluginSettings: (keys: ReadonlyArray<string>) => ReadonlyMap<string, string>;
+export declare const useExtensionSettings: (keys: ReadonlyArray<string>) => ReadonlyMap<string, string>;
 /**
- * Returns a stable function that writes one of the calling plugin's persisted
- * settings — the imperative companion to {@link usePluginSetting} for keys only
+ * Returns a stable function that writes one of the calling extension's persisted
+ * settings — the imperative companion to {@link useExtensionSetting} for keys only
  * known at event time (e.g. a per-workspace key for a workspace picked in a
  * menu), where the hook-per-key form can't be called. Writes land in the same
- * per-key atoms as the reading hooks, so `usePluginSetting` and
- * `usePluginSettings` see them reactively.
+ * per-key atoms as the reading hooks, so `useExtensionSetting` and
+ * `useExtensionSettings` see them reactively.
  */
+export declare const useSetExtensionSetting: () => ((key: string, value: string) => void);
+/** @deprecated Use {@link useExtensionSetting}. Kept for extensions compiled against the pre-rename SDK. */
+export declare const usePluginSetting: (key: string) => [
+	string,
+	(value: string) => void
+];
+/** @deprecated Use {@link useExtensionSettings}. Kept for extensions compiled against the pre-rename SDK. */
+export declare const usePluginSettings: (keys: ReadonlyArray<string>) => ReadonlyMap<string, string>;
+/** @deprecated Use {@link useSetExtensionSetting}. Kept for extensions compiled against the pre-rename SDK. */
 export declare const useSetPluginSetting: () => ((key: string, value: string) => void);
 /**
- * All non-deleted tasks for the workspace the plugin is mounted in. Returns
+ * All non-deleted tasks for the workspace the extension is mounted in. Returns
  * `undefined` until the host's task stream has produced its first batch.
  */
 export declare const useWorkspaceTasks: () => ReadonlyArray<CodingAgentTaskView> | undefined;
 /**
- * @deprecated Use {@link PluginPanelDefinition}. Kept as an alias so existing
- * plugins that import the old name still type-check; the section shell ignores
+ * @deprecated Use {@link ExtensionPanelDefinition}. Kept as an alias so existing
+ * extensions that import the old name still type-check; the section shell ignores
  * the legacy zone fields.
  */
-export type PanelDefinition = PluginPanelDefinition;
+export type PanelDefinition = ExtensionPanelDefinition;
+/** @deprecated Use {@link ExtensionManifest}. */
+export type PluginManifest = ExtensionManifest;
+/** @deprecated Use {@link ExtensionHostApi}. */
+export type PluginHostApi = ExtensionHostApi;
+/** @deprecated Use {@link ExtensionPanelDefinition}. */
+export type PluginPanelDefinition = ExtensionPanelDefinition;
 
 export {
 	MarkdownBlock as Markdown,

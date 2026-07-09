@@ -7,7 +7,7 @@ import {
   newWorkspaceModalAtom,
   shouldOfferFirstRunWorkspaceAtom,
 } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
-import { pluginHomeViewsAtom } from "~/plugins/pluginRegistry.ts";
+import { extensionHomeViewsAtom } from "~/extensions/extensionRegistry.ts";
 
 import styles from "./HomePage.module.scss";
 import { BUILTIN_HOME_VIEW_ID, effectiveHomeViewIdAtom, homeViewOptionsAtom } from "./homeViews.ts";
@@ -17,7 +17,7 @@ import { RecentWorkspacesHomeView } from "./RecentWorkspacesHomeView.tsx";
 export const HomePage = (): ReactElement => {
   const options = useAtomValue(homeViewOptionsAtom);
   const effectiveId = useAtomValue(effectiveHomeViewIdAtom);
-  const pluginHomeViews = useAtomValue(pluginHomeViewsAtom);
+  const extensionHomeViews = useAtomValue(extensionHomeViewsAtom);
   const shouldOfferFirstRunWorkspace = useAtomValue(shouldOfferFirstRunWorkspaceAtom);
   const setNewWorkspaceModal = useSetAtom(newWorkspaceModalAtom);
 
@@ -42,13 +42,13 @@ export const HomePage = (): ReactElement => {
   }, [shouldOfferFirstRunWorkspace, setNewWorkspaceModal]);
 
   // Only surface the switcher once there is something to switch to: with no
-  // plugin home views the page is the recent-workspaces list, exactly as before.
+  // extension home views the page is the recent-workspaces list, exactly as before.
   const shouldShowSwitcher = options.length > 1;
 
   const SelectedView =
     effectiveId === BUILTIN_HOME_VIEW_ID
       ? RecentWorkspacesHomeView
-      : (pluginHomeViews.find((view) => view.id === effectiveId)?.component ?? RecentWorkspacesHomeView);
+      : (extensionHomeViews.find((view) => view.id === effectiveId)?.component ?? RecentWorkspacesHomeView);
 
   return (
     <div className={styles.root}>

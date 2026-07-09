@@ -47,7 +47,7 @@ type NewWorkspaceFormProps = {
   /** Repo to pre-select (from a repo group's "+"); overrides the MRU seed. */
   presetProjectId?: string;
   /**
-   * Text to seed the title input with on mount (e.g. a plugin pre-filling a
+   * Text to seed the title input with on mount (e.g. an extension pre-filling a
    * ticket title). A mount-time snapshot the user can freely edit.
    */
   initialTitle?: string;
@@ -69,7 +69,7 @@ type NewWorkspaceFormProps = {
    * including each repeat create in keep-open mode, where the title/prompt
    * re-seed from `initialTitle`/`initialPrompt` between creates so the open
    * dialog stays visibly about the request this callback belongs to. May come
-   * from a plugin, so a throw is contained and never breaks the form's own
+   * from an extension, so a throw is contained and never breaks the form's own
    * post-create flow.
    */
   onWorkspaceCreated?: (workspaceId: string) => void;
@@ -319,7 +319,7 @@ export const NewWorkspaceForm = ({
     }
 
     // Fires on every success, keep-open or not. The callback may come from a
-    // plugin, so contain a throw rather than letting it break the form's own
+    // extension, so contain a throw rather than letting it break the form's own
     // post-create flow (field reset / dialog close).
     try {
       onWorkspaceCreated?.(result.workspaceId);

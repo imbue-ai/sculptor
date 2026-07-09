@@ -11,7 +11,7 @@ import type { DynamicAgentInput } from "./dynamicPanels.tsx";
 import { deriveDynamicPanels } from "./dynamicPanels.tsx";
 import {
   activePanelComponentInSubSectionAtom,
-  buildPluginPanelDefinitions,
+  buildExtensionPanelDefinitions,
   buildStaticPanelDefinitions,
   isMultiInstanceKind,
   panelRegistriesEqual,
@@ -186,23 +186,23 @@ describe("activePanelComponentInSubSectionAtom", () => {
 });
 
 describe("resolvedActivePanelIdInSubSectionAtom", () => {
-  const PLUGIN_PANEL_ID = "plugin:linear-issue:issues";
-  const pluginComponent: ComponentType = () => null;
-  const pluginDefinitions = buildPluginPanelDefinitions([
-    { id: PLUGIN_PANEL_ID, displayName: "Issues", icon: Puzzle, component: pluginComponent },
+  const EXTENSION_PANEL_ID = "extension:linear-issue:issues";
+  const extensionComponent: ComponentType = () => null;
+  const extensionDefinitions = buildExtensionPanelDefinitions([
+    { id: EXTENSION_PANEL_ID, displayName: "Issues", icon: Puzzle, component: extensionComponent },
   ]);
 
-  // A layout whose persisted active panel in "left" is the plugin panel, with "files"
-  // also open — the state left behind when a plugin unloads (or has not loaded yet)
+  // A layout whose persisted active panel in "left" is the extension panel, with "files"
+  // also open — the state left behind when an extension unloads (or has not loaded yet)
   // while its panel is the active tab.
   const seedStore = (workspaceId: string): ReturnType<typeof createStore> => {
     const store = createStore();
     store.set(activeWorkspaceIdAtom, workspaceId);
     store.set(workspaceLayoutAtom, {
       ...EMPTY_WORKSPACE_LAYOUT,
-      placement: { [PLUGIN_PANEL_ID]: "left", files: "left" },
-      order: { left: [PLUGIN_PANEL_ID, "files"] },
-      activePanel: { left: PLUGIN_PANEL_ID },
+      placement: { [EXTENSION_PANEL_ID]: "left", files: "left" },
+      order: { left: [EXTENSION_PANEL_ID, "files"] },
+      activePanel: { left: EXTENSION_PANEL_ID },
       expanded: { left: true },
     });
     return store;
@@ -212,7 +212,7 @@ describe("resolvedActivePanelIdInSubSectionAtom", () => {
     const filesComponent: ComponentType = () => null;
     registerPanelComponent("files", filesComponent);
     const store = seedStore("ws-unregistered-active");
-    // Static panels only: the plugin panel named by the layout has no definition.
+    // Static panels only: the extension panel named by the layout has no definition.
     store.set(panelRegistryAtom, buildStaticPanelDefinitions());
 
     expect(store.get(resolvedActivePanelIdInSubSectionAtom("left"))).toBe("files");
@@ -225,9 +225,9 @@ describe("resolvedActivePanelIdInSubSectionAtom", () => {
     store.set(activeWorkspaceIdAtom, "ws-none-registered");
     store.set(workspaceLayoutAtom, {
       ...EMPTY_WORKSPACE_LAYOUT,
-      placement: { [PLUGIN_PANEL_ID]: "left" },
-      order: { left: [PLUGIN_PANEL_ID] },
-      activePanel: { left: PLUGIN_PANEL_ID },
+      placement: { [EXTENSION_PANEL_ID]: "left" },
+      order: { left: [EXTENSION_PANEL_ID] },
+      activePanel: { left: EXTENSION_PANEL_ID },
       expanded: { left: true },
     });
     store.set(panelRegistryAtom, buildStaticPanelDefinitions());
@@ -242,11 +242,11 @@ describe("resolvedActivePanelIdInSubSectionAtom", () => {
     store.set(panelRegistryAtom, buildStaticPanelDefinitions());
     expect(store.get(resolvedActivePanelIdInSubSectionAtom("left"))).toBe("files");
 
-    // The plugin (re)loads: its definitions join the registry and — because the
+    // The extension (re)loads: its definitions join the registry and — because the
     // fallback never pruned the layout — the persisted active id wins again.
-    store.set(panelRegistryAtom, [...buildStaticPanelDefinitions(), ...pluginDefinitions]);
-    expect(store.get(resolvedActivePanelIdInSubSectionAtom("left"))).toBe(PLUGIN_PANEL_ID);
-    expect(store.get(activePanelComponentInSubSectionAtom("left"))).toBe(pluginComponent);
-    expect(store.get(workspaceLayoutAtom).activePanel.left).toBe(PLUGIN_PANEL_ID);
+    store.set(panelRegistryAtom, [...buildStaticPanelDefinitions(), ...extensionDefinitions]);
+    expect(store.get(resolvedActivePanelIdInSubSectionAtom("left"))).toBe(EXTENSION_PANEL_ID);
+    expect(store.get(activePanelComponentInSubSectionAtom("left"))).toBe(extensionComponent);
+    expect(store.get(workspaceLayoutAtom).activePanel.left).toBe(EXTENSION_PANEL_ID);
   });
 });
