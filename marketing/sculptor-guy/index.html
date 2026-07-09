@@ -322,6 +322,11 @@
         <circle cx="124" cy="86" r="3.4" fill="#1F1F1F"/>
         <circle cx="150" cy="82" r="3.4" fill="#1F1F1F"/>
       </g>
+      <g transform="translate(137,103)">
+        <g data-joint="mouth" transform="scale(0)">
+          <ellipse rx="5.5" ry="6.5" fill="#1F1F1F"/>
+        </g>
+      </g>
     </g>
   </g>
 </svg>
@@ -678,6 +683,7 @@ class CartGuy extends Guy {
     super(tplId, k);
     this.rock = 0; this.rockV = 0;
     this.gap = 0; this.gapV = 0;
+    this.mouth = 0;
     this.wheelAngle = 0;
     this.PIVOT = { x: 118, y: 246 };   // where the sculpture's base meets the deck
     this.WHEEL_R = 18 * (k.h / 320);   // wheel radius in screen px
@@ -691,12 +697,16 @@ class CartGuy extends Guy {
     this.rock += this.rockV * dt;
     // Daylight between sculpture and deck while airborne; the underdamped
     // spring dips negative on touchdown, which applyRig turns into squash.
-    const gapTarget = s.grounded ? 0 : 10;
+    const gapTarget = s.grounded ? 0 : 22;
     this.gapV += (-120 * (this.gap - gapTarget) - 9 * this.gapV) * dt;
     this.gap += this.gapV * dt;
     if (this.gap < -4) { this.gap = -4; this.gapV = Math.max(0, this.gapV); }
 
     this.wheelAngle += (s.vx * dt / this.WHEEL_R) * 57.3;
+
+    // A little "O" of awe when airborne or flooring it.
+    const awed = !s.grounded || Math.abs(s.vx) > 0.85 * this.k.maxSpeed;
+    this.mouth = approach(this.mouth, awed ? 1 : 0, 14, dt);
 
     this.pupilXT = s.facing * (1 + 2 * Math.min(1, Math.abs(s.vx) / this.k.maxSpeed));
     this.pupilYT = s.grounded ? 0 : s.vy > 0 ? -1.5 : 1.5;
@@ -717,6 +727,7 @@ class CartGuy extends Guy {
     this.joint.wheelR.setAttribute('transform', `rotate(${((this.wheelAngle + 137) % 360).toFixed(1)})`);
     this.joint.pupils.setAttribute('transform',
       `translate(${this.pupilX.toFixed(2)},${this.pupilY.toFixed(2)})`);
+    this.joint.mouth.setAttribute('transform', `scale(${this.mouth.toFixed(3)})`);
   }
 
   demoTouchUp(name) {
@@ -764,8 +775,8 @@ const tall = new WalkerGuy('tpl-tall', {
 
 const cart = new CartGuy('tpl-cart', {
   w: 130, h: 160, footY: 300 * (160 / 320), headTop: 22, shadowW: 120,
-  // Wheels: quicker, slipperier, and he coasts when you let go.
-  maxSpeed: 560, accel: 3200, friction: 700, gravity: 2700, jumpV: 900,
+  // Wheels: slippery — he coasts when you let go.
+  maxSpeed: 430, accel: 2300, friction: 700, gravity: 2700, jumpV: 900,
   stride0: 0, stride1: 0,
 });
 

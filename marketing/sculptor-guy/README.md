@@ -57,7 +57,8 @@ Design decisions worth knowing before you re-pose them:
 ### Cart (`sculptor-guy-cart.svg`)
 
 Joints: `body` (the sculpture — rocks about its deck contact point and lifts
-to open a gap), `wheelL`/`wheelR` (rolling rotation), `pupils`. The
+to open a gap), `wheelL`/`wheelR` (rolling rotation), `pupils`, and `mouth`
+(a little "O", hidden at `scale(0)`, scaled toward 1 for awe). The
 sculpture's rounded base touches the deck only at its center dip, which is
 why rocking pivots there; keep rock within ±14° or the base corners dig into
 the deck.
@@ -75,8 +76,9 @@ joint toward state-dependent targets, so all transitions blend for free.
 - The cart guy (`CartGuy`) is two springs: *rock*, driven by measured
   horizontal acceleration, so he wobbles like unstrapped cargo when the cart
   speeds up or brakes; and *gap*, which pops him off the deck while airborne
-  and turns its touchdown dip into squash. His cart also coasts — low
-  friction, higher top speed.
+  and turns its touchdown dip into squash. His cart also coasts (low
+  friction), and a little "O" mouth scales in whenever he's airborne or at
+  full speed.
 - Unsupervised characters wander: stroll at half speed, pause, occasionally
   hop, and turn around near screen edges. Clicking one routes the keyboard to
   it (a ▾ marker shows who's yours); the rest keep wandering.

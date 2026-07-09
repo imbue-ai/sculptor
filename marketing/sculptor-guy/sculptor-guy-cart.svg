@@ -12,6 +12,8 @@
     wheelL  - wheel rotation, pivot (92, 282)
     wheelR  - wheel rotation, pivot (156, 282)
     pupils  - translate-only, for look direction
+    mouth   - a little "O", hidden at scale(0); scale toward 1 for awe
+              (airborne, full speed)
 
   The sculpture's rounded base touches the deck only at its center dip
   (canvas x~118), which is why rocking pivots there. Rock within +/-14
@@ -58,6 +60,11 @@
       <g data-joint="pupils">
         <circle cx="124" cy="86" r="3.4" fill="#1F1F1F"/>
         <circle cx="150" cy="82" r="3.4" fill="#1F1F1F"/>
+      </g>
+      <g transform="translate(137,103)">
+        <g data-joint="mouth" transform="scale(0)">
+          <ellipse rx="5.5" ry="6.5" fill="#1F1F1F"/>
+        </g>
       </g>
     </g>
   </g>
