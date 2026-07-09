@@ -28,11 +28,13 @@ from sculptor.testing.resources import custom_sculptor_folder_populator
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 
-# The extension under test is the build-sculptor-plugin skill's shipped example —
+# The extension under test is the build-sculptor-extension skill's shipped example —
 # the exact directory the skill tells agents to load first. Loading it here
 # doc-tests the skill: reaching "loaded" proves the served bundle was fetched,
 # imported, and activated, so the skill's quick start cannot rot.
-_EXAMPLE_EXTENSION_DIR = Path(__file__).parents[3] / "sculptor-plugin" / "skills" / "build-sculptor-plugin" / "example"
+_EXAMPLE_EXTENSION_DIR = (
+    Path(__file__).parents[3] / "sculptor-plugin" / "skills" / "build-sculptor-extension" / "example"
+)
 
 # How long to wait for the renderer's stream to connect and answer a command
 # before giving up — the page is still booting when the test starts.
@@ -94,7 +96,7 @@ def test_extension_command_load_reaches_the_live_renderer(sculptor_instance_fact
     """`extensions/command` op=load fans out to the renderer, which loads a served extension and replies.
 
     Mirrors the `sculpt extension load <dir>` flow — for the directory the
-    build-sculptor-plugin skill ships as its quick-start example: install the
+    build-sculptor-extension skill ships as its quick-start example: install the
     packaged extension into the dev tree, then load it by its served manifest URL.
     Asserts the endpoint returns the renderer's reply (real renderer id, ok, the
     extension loaded from the dev origin) and that the renderer's own

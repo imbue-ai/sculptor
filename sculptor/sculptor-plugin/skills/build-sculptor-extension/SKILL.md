@@ -1,5 +1,5 @@
 ---
-name: build-sculptor-plugin
+name: build-sculptor-extension
 description: |
   Build or modify a Sculptor extension — a runtime ESM module loaded
   into the Sculptor UI. Use when asked to write an extension (or "plugin")
