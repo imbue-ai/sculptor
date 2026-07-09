@@ -482,15 +482,21 @@ class Guy {
     const prevVx = s.vx;
     const move = (input.right ? 1 : 0) - (input.left ? 1 : 0);
 
+    const cap = K.maxSpeed * input.throttle * (input.crouch && s.grounded ? 0.45 : 1);
     if (move !== 0) {
-      s.vx += move * K.accel * dt;
+      // Acceleration never pushes past the cap; if already over it (the cap
+      // shrank, e.g. control was released), skip accel and let the bleed
+      // below settle it — on low-friction builds accel would outrun the
+      // bleed and run away.
+      const hadRoom = Math.abs(s.vx) <= cap;
+      if (move * s.vx <= cap) s.vx += move * K.accel * dt;
+      if (hadRoom) s.vx = clamp(s.vx, -cap, cap);
       s.facing = move;
     } else {
       s.vx -= Math.sign(s.vx) * Math.min(Math.abs(s.vx), K.friction * dt);
     }
-    const cap = K.maxSpeed * input.throttle * (input.crouch && s.grounded ? 0.45 : 1);
-    // Ease down to the cap rather than clamping, so releasing control of a
-    // sprinting guy doesn't snap his speed.
+    // Over the cap: ease down rather than snapping, so releasing control of
+    // a sprinting guy doesn't jerk.
     if (Math.abs(s.vx) > cap) {
       s.vx = Math.sign(s.vx) * Math.max(cap, Math.abs(s.vx) - K.friction * 1.5 * dt);
     }

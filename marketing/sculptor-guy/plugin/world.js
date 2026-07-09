@@ -110,8 +110,8 @@ const STYLE_CSS = `
 }`;
 
 // Movement tuning (px/s, px/s^2, viewport space).
-const MAX_SPEED = 320;
-const ACCEL = 1800;
+const MAX_SPEED = 230;
+const ACCEL = 1500;
 const FRICTION = 500;   // low: the cart coasts
 const GRAVITY = 2400;
 const JUMP_V = 800;
@@ -160,7 +160,7 @@ export function createWorld(root) {
 
   const bubbleEl = document.createElement('div');
   bubbleEl.className = 'cg-bubble';
-  bubbleEl.innerHTML = 'a/d drive · space jump · s+space big jump · esc to release';
+  bubbleEl.innerHTML = 'a/d drive · space jump · s+space big jump · s drops through · esc releases';
   root.appendChild(bubbleEl);
 
   const joint = {};
@@ -189,6 +189,7 @@ export function createWorld(root) {
   let jumpQueued = false;
   let superQueued = false;  // latched with the keypress: S can be released
                             // before physics consumes the buffered jump
+  let dropQueued = false;
   let jumpBuf = 0;
   let superAir = false;   // big jumps commit: no short-hop damping mid-flight
   let ax = 0;
@@ -201,7 +202,7 @@ export function createWorld(root) {
   let pupilX = 0, pupilY = 0;
 
   // AI
-  let aiMode = 'idle', aiT = Math.random(), aiDir = 1, aiHop = 0;
+  let aiMode = 'idle', aiT = Math.random(), aiDir = 1, aiHop = 0, aiDrop = false;
 
   let bubbleTimer = 0;
 
@@ -262,6 +263,7 @@ export function createWorld(root) {
       jumpQueued = true;
       superQueued = held.crouch;   // S + Space = big jump
     }
+    if (act === 'crouch' && !e.repeat) dropQueued = true;   // drop through a perch
     held[act] = true;
   }
   function onKeyUp(e) {
@@ -296,7 +298,10 @@ export function createWorld(root) {
     aiT -= dt;
     if (aiT <= 0) {
       const r = Math.random();
-      if (r < 0.4) { aiMode = 'idle'; aiT = 1 + Math.random() * 2.2; }
+      // Perched on an element: fair odds of dropping back down through it,
+      // so he never homesteads the top of a panel.
+      if (state.surface && r < 0.28) { aiMode = 'idle'; aiT = 0.6 + Math.random(); aiDrop = true; }
+      else if (r < 0.4) { aiMode = 'idle'; aiT = 1 + Math.random() * 2.2; }
       else if (r < 0.86) {
         aiMode = 'walk';
         aiT = 0.9 + Math.random() * 1.8;
@@ -311,11 +316,13 @@ export function createWorld(root) {
       if (state.x > window.innerWidth - W - 16 && aiDir > 0) aiDir = -1;
     }
     const hop = aiHop; aiHop = 0;
+    const drop = aiDrop; aiDrop = false;
     return {
       left: aiMode === 'walk' && aiDir < 0,
       right: aiMode === 'walk' && aiDir > 0,
       // Hold jump through the hop window so AI hops get full height.
       jumpHeld: aiMode === 'hop', jumpPressed: hop > 0, superJump: hop === 2,
+      dropPressed: drop,
       crouch: false, throttle: 0.45,
     };
   }
@@ -323,11 +330,14 @@ export function createWorld(root) {
   function playerInput() {
     const jp = jumpQueued;
     const superJump = jp && superQueued;
+    const dp = dropQueued;
     jumpQueued = false;
     superQueued = false;
+    dropQueued = false;
     return {
       left: held.left, right: held.right,
       jumpHeld: held.jump, jumpPressed: jp, superJump,
+      dropPressed: dp,
       crouch: held.crouch, throttle: 1,
     };
   }
@@ -340,13 +350,18 @@ export function createWorld(root) {
     const prevVx = s.vx;
     const move = (input.right ? 1 : 0) - (input.left ? 1 : 0);
 
+    const cap = MAX_SPEED * input.throttle * (input.crouch && s.grounded ? 0.45 : 1);
     if (move !== 0) {
-      s.vx += move * ACCEL * dt;
+      // Acceleration never pushes past the cap; if already over it (the cap
+      // shrank, e.g. control was released), skip accel and let the bleed
+      // below settle it — accel would outrun the bleed and run away.
+      const hadRoom = Math.abs(s.vx) <= cap;
+      if (move * s.vx <= cap) s.vx += move * ACCEL * dt;
+      if (hadRoom) s.vx = clamp(s.vx, -cap, cap);
       s.facing = move;
     } else {
       s.vx -= Math.sign(s.vx) * Math.min(Math.abs(s.vx), FRICTION * dt);
     }
-    const cap = MAX_SPEED * input.throttle * (input.crouch && s.grounded ? 0.45 : 1);
     if (Math.abs(s.vx) > cap) {
       s.vx = Math.sign(s.vx) * Math.max(cap, Math.abs(s.vx) - FRICTION * 1.5 * dt);
     }
@@ -355,6 +370,14 @@ export function createWorld(root) {
     if (s.x < minX) { s.x = minX; s.vx = Math.max(0, s.vx); }
     if (s.x > maxX) { s.x = maxX; s.vx = Math.min(0, s.vx); }
     const feetX = s.x + W / 2;
+
+    // Drop through the current perch (S / down arrow). Nudging his feet just
+    // below the element's top edge keeps the landing probe from instantly
+    // re-catching it; anything further down is fair terrain again.
+    if (input.dropPressed && s.grounded && s.surface) {
+      s.feetY += 8;
+      fall();
+    }
 
     s.coyote = s.grounded ? COYOTE : s.coyote - dt;
     if (input.jumpPressed) jumpBuf = JUMP_BUFFER;

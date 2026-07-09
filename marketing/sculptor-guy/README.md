@@ -106,11 +106,14 @@ the fall becomes his floor. He re-measures his perch every frame, so he rides
 panels that move, and falls when his perch unmounts or slides away. The
 viewport bottom is the ultimate floor.
 
-Click him to drive: **A/D** or **←/→** roll, **W/Space** jump, **S** crouch /
-fast-fall, **S+Space** big jump (high enough to reach most panels), **Esc**
-to release him back to wandering. While driving, keys are only captured when
-the event target isn't editable, so typing in the app is never hijacked;
-uncontrolled, he never touches the keyboard at all.
+Click him to drive: **A/D** or **←/→** roll, **W/Space** jump, **S/↓** drops
+him through whatever he's perched on (on the floor it crouches; held in the
+air it fast-falls), **S+Space** big jump (high enough to reach most panels),
+**Esc** to release him back to wandering. The wander AI also drops through
+its perch every once in a while, so he never homesteads the top of a panel.
+While driving, keys are only captured when the event target isn't editable,
+so typing in the app is never hijacked; uncontrolled, he never touches the
+keyboard at all.
 
 - `plugin/world.js` — the engine, deliberately React-free so a plain harness
   page can import it directly for testing.
