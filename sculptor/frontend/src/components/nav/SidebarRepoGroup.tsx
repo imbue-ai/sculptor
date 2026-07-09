@@ -276,33 +276,22 @@ export const SidebarRepoGroup = ({
         return;
       }
 
-      // A pointer-driven group drag over another group's box resolves its slot
-      // geometrically — before or after the whole box by the pointer's side of
-      // its midpoint (see projectGroupBesideGroup for why the over slot cannot
-      // decide this without looping). Loose-row targets keep the over-slot
-      // path: there the placeholder takes the over slot, so the next over is
-      // the placeholder itself and the early-return above holds it stable.
-      const activator = event.activatorEvent;
-      if (state.kind === "group" && activator instanceof PointerEvent) {
-        const overGroupId = locateTopLevelGroupId(state.display, overId);
-        const section = sectionChildrenRef.current;
-        const card =
-          overGroupId === null || section === null
-            ? null
-            : section.querySelector(
-                `[data-testid="${ElementIds.SIDEBAR_WORKSPACE_GROUP_CARD}"][data-group-id="${overGroupId}"]`,
-              );
-        const rect = card?.getBoundingClientRect();
-        if (overGroupId !== null && rect !== undefined) {
-          const pointerY = activator.clientY + event.delta.y;
-          const side = pointerY <= (rect.top + rect.bottom) / 2 ? "before" : "after";
-          acceptProjection(
-            state,
-            projectGroupBesideGroup(state.display, state.activeId, overGroupId, side),
-            state.depthIntent,
-          );
-          return;
-        }
+      // A pointer-driven group drag over another group's box is owned by the
+      // LEVEL-triggered resolution in handleSectionDragMove: over events are
+      // edge-triggered (they fire only when the collision target changes), and
+      // the tall dragged overlay's center leads the pointer, so a box's inner
+      // targets are often all spent while the pointer is still in its top half
+      // — a later midpoint crossing would never re-evaluate the side here.
+      // Loose-row targets stay on this over path: a single-row target re-fires
+      // on every crossing, and standard slot-taking is stable there (the
+      // placeholder takes the over slot, so the next over is the drag itself
+      // and the early-return above holds).
+      if (
+        state.kind === "group" &&
+        event.activatorEvent instanceof PointerEvent &&
+        locateTopLevelGroupId(state.display, overId) !== null
+      ) {
+        return;
       }
 
       const projection = projectSectionDrop({
@@ -332,7 +321,11 @@ export const SidebarRepoGroup = ({
     [collapsedGroupIds, acceptProjection],
   );
 
-  // Pointer depth intent is geometric, like Dia's: "inside" while the pointer
+  // Every pointer-geometric decision lives on the move stream (level-
+  // triggered): a dragged group's before/after side against the box under the
+  // pointer, and a dragged row's depth intent below.
+  //
+  // Row depth intent is geometric, like Dia's: "inside" while the pointer
   // sits within some group box's vertical extent, "outside" in the gaps
   // between boxes and below the last one. This is what makes the loose slot
   // between two adjacent groups — and after a trailing group — actually
@@ -354,10 +347,39 @@ export const SidebarRepoGroup = ({
       const activator = event.activatorEvent;
       // Keyboard drags flip depth via Left/Right (see useSidebarDndSensors);
       // only pointer drags carry a live position.
-      if (state === null || state.kind !== "row" || section === null || !(activator instanceof PointerEvent)) {
+      if (state === null || section === null || !(activator instanceof PointerEvent)) {
         return;
       }
       const pointerY = activator.clientY + event.delta.y;
+
+      // A dragged GROUP resolves its slot against the other group box under
+      // the pointer on EVERY move: before or after that whole box by the
+      // pointer's side of its midpoint (projectGroupBesideGroup — a fixed
+      // point, so a stationary pointer cannot oscillate). Level-triggered
+      // deliberately — see the matching guard in handleSectionDragOver for why
+      // edge-triggered over events cannot decide the side. Outside every box
+      // (gaps, loose rows, the group's own placeholder) nothing projects here;
+      // loose-row targets arrive through the over path.
+      if (state.kind === "group") {
+        for (const card of section.querySelectorAll(`[data-testid="${ElementIds.SIDEBAR_WORKSPACE_GROUP_CARD}"]`)) {
+          const targetGroupId = card.getAttribute("data-group-id");
+          if (targetGroupId === null || targetGroupId === state.activeId) {
+            continue;
+          }
+          const rect = card.getBoundingClientRect();
+          if (pointerY >= rect.top && pointerY <= rect.bottom) {
+            const side = pointerY <= (rect.top + rect.bottom) / 2 ? "before" : "after";
+            acceptProjection(
+              state,
+              projectGroupBesideGroup(state.display, state.activeId, targetGroupId, side),
+              state.depthIntent,
+            );
+            return;
+          }
+        }
+        return;
+      }
+
       let intent: SectionDepthIntent = "outside";
       for (const card of section.querySelectorAll(`[data-testid="${ElementIds.SIDEBAR_WORKSPACE_GROUP_CARD}"]`)) {
         const rect = card.getBoundingClientRect();

@@ -230,7 +230,7 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         """Drag ``item`` with the real PointerSensor: press on its center, move
         through each waypoint's center, release.
 
-        Each waypoint re-resolves against the LIVE lane right before the move —
+        Each waypoint re-resolves against the LIVE lane right before its move —
         the drag's own projections re-slot rows mid-flight, so a position
         captured up front would aim at where a row used to be. The pointer
         parks briefly at every waypoint: the sidebar's flat lane previews by
@@ -238,23 +238,41 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         pointer is exactly where a projection feedback loop would spin, and
         pausing there gives one time to surface as a crash instead of being
         skated over.
+
+        Two fidelity details make the synthetic pointer behave like a hand:
+
+        - An activation nudge runs before the first waypoint is measured.
+          Activating the drag itself reflows the lane (a picked-up group's
+          members collapse into the drag), so a waypoint measured
+          pre-activation aims at a stale position.
+        - After settling at each waypoint the pointer wiggles one pixel. The
+          lane's pointer-geometric decisions ride the move-event stream, and a
+          waypoint that lands where the pointer already sits emits no move
+          events — the wiggle guarantees a fresh evaluation against the
+          settled layout, the way a real hand is never perfectly still.
         """
         box = item.bounding_box()
         if box is None:
             raise AssertionError("pointer drag item is not visible")
-        self._page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        start_x = box["x"] + box["width"] / 2
+        start_y = box["y"] + box["height"] / 2
+        self._page.mouse.move(start_x, start_y)
         self._page.mouse.down()
+        # Activation nudge (see docstring): far enough to cross the sensor's
+        # distance constraint, small enough to stay on the grabbed row.
+        self._page.mouse.move(start_x, start_y + 12, steps=4)
+        self._page.wait_for_timeout(250)
         for waypoint in waypoints:
             waypoint_box = waypoint.bounding_box()
             if waypoint_box is None:
                 raise AssertionError("pointer drag waypoint is not visible")
-            # Multiple steps so the sensor's activation-distance constraint is
-            # crossed by real intermediate pointermove events.
-            self._page.mouse.move(
-                waypoint_box["x"] + waypoint_box["width"] / 2,
-                waypoint_box["y"] + waypoint_box["height"] / 2,
-                steps=8,
-            )
+            target_x = waypoint_box["x"] + waypoint_box["width"] / 2
+            target_y = waypoint_box["y"] + waypoint_box["height"] / 2
+            self._page.mouse.move(target_x, target_y, steps=8)
+            self._page.wait_for_timeout(250)
+            # Settle wiggle (see docstring).
+            self._page.mouse.move(target_x, target_y + 1)
+            self._page.mouse.move(target_x, target_y)
             self._page.wait_for_timeout(250)
         self._page.mouse.up()
 
