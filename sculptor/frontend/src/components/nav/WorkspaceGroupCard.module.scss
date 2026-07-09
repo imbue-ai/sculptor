@@ -12,7 +12,12 @@
 // intent measures against), which is what makes inside vs outside read
 // unambiguously (REQ-DND-6).
 .groupCard {
-  background: var(--accent-a2);
+  // The resting surface sits midway between the accent's a2 and a3 steps: a2
+  // alone reads too faint in light mode and too dim in dark mode, while a3 is
+  // reserved for the hover shade one visible half-step above.
+  --group-surface: color-mix(in srgb, var(--accent-a2), var(--accent-a3));
+
+  background: var(--group-surface);
   border-radius: var(--radius-3);
   display: flex;
   flex-direction: column;
@@ -33,7 +38,7 @@
 // the primary signal; this is just a quiet "receiving" acknowledgement.
 .dropActive,
 .dropActive:hover {
-  background: var(--accent-a2);
+  background: var(--group-surface);
   opacity: 80%;
 }
 
@@ -41,7 +46,7 @@
 // suppressed (the pointer sweeps across runs constantly): only the projected
 // drop target above may respond.
 [data-sidebar-drag-active] .groupCard:not(.dropActive):hover {
-  background: var(--accent-a2);
+  background: var(--group-surface);
 }
 
 // The run mid-drag (its header is the dragged item): the members are unmounted

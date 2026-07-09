@@ -94,8 +94,12 @@ const sectionDndModifiers = [restrictToVerticalAxis];
 // depth intent reads "inside". The raw gap between two adjacent boxes is only
 // a few pixels — without this inset, dropping a row loose between two groups
 // would demand pixel-perfect aim; with it, the box's edge zones count as
-// "between" too.
-const BOX_EDGE_INSET_PX = 6;
+// "between" too. Sized so the full between-band (gap + both edge zones) spans
+// roughly one row height: a mid-drag box also GROWS by the drop gap it holds
+// open, so anything much smaller forces a long overshoot past the grown box
+// before a downward drag can land between boxes. Anything much larger starts
+// eating the header/member rows of short boxes.
+const BOX_EDGE_INSET_PX = 12;
 
 // One in-flight drag within the section's flat lane. `display` is the children
 // tree the lane currently renders — every projection is applied to it
@@ -770,7 +774,11 @@ export const SidebarRepoGroup = ({
                   projectedGroupAccent={projectedTargetGroupColor}
                 />
               ) : overlayGroupChild !== null ? (
-                <WorkspaceGroupDragPreview group={overlayGroupChild.group} members={overlayGroupChild.members} />
+                <WorkspaceGroupDragPreview
+                  group={overlayGroupChild.group}
+                  members={overlayGroupChild.members}
+                  isCollapsed={collapsedGroupIds.has(overlayGroupChild.group.objectId)}
+                />
               ) : null}
             </DragOverlay>
           </DndContext>

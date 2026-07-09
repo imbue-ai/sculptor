@@ -1,30 +1,11 @@
 // Floating drag-preview cards for the sidebar (see sidebarDragPreviews.tsx).
-// These render inside dnd-kit's DragOverlay, so they are position-managed by
-// the overlay — only the surface treatment lives here.
+// These render inside dnd-kit's DragOverlay and clone the real row/card
+// chrome via those elements' own SCSS modules — only the lift treatment
+// (solid surface, shadow, grabbing cursor) lives here. Backgrounds are SOLID
+// steps standing in for the in-flow alpha tints: the floating card crosses
+// other rows, which an alpha surface would let show through.
 
-.previewRow {
-  align-items: center;
-  display: flex;
-  font-size: var(--font-size-2);
-  gap: var(--space-2);
-  min-height: 28px;
-  min-width: 0;
-}
-
-.previewDot {
-  align-items: center;
-  display: flex;
-  flex-shrink: 0;
-}
-
-.previewName {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-// A dragged workspace row: the sidebar's row pill, lifted — solid surface so
-// the rows it floats over never show through, shadow for elevation.
+// A dragged workspace row, lifted.
 .rowPreview {
   background: var(--gray-2);
   border-radius: var(--radius-2);
@@ -32,49 +13,30 @@
   box-sizing: border-box;
   color: var(--gray-12);
   cursor: grabbing;
-  padding: 0 var(--space-2) 0 var(--space-5);
-  transition:
-    padding-left var(--duration-fast) ease,
-    background-color var(--duration-fast) ease;
+  transition: background-color var(--duration-fast) ease;
 }
 
-// The drop is projected inside a group: indent the card to member depth and
-// tint it toward the target group's accent (stamped as data-accent-color).
+// The drop is projected inside a group: the card borrows the target group's
+// accent (stamped as data-accent-color) as the membership cue, at the same
+// half-step shade as the group box it would join. Tint only — the dragged
+// content's layout never changes mid-drag.
 .rowPreviewNested {
-  background: var(--accent-2);
-  padding-left: var(--space-7);
+  background: color-mix(in srgb, var(--accent-2), var(--accent-3));
 }
 
-// A dragged group run: the container surface the run shows on hover, lifted.
-// data-accent-color on the root remaps the accent scale to the group's color.
-.groupPreview {
-  background: var(--accent-2);
-  border-radius: var(--radius-4);
+// A dragged group run, lifted. The solid mix mirrors the box's resting
+// half-step alpha surface (see .groupCard). It overrides the --group-surface
+// custom property rather than `background` directly: the card's drag-time
+// state rules (hover suppression, drop fade) set their backgrounds through
+// that property at higher specificity, and the floating card is always under
+// the cursor — overriding the property keeps every one of those states
+// resolving to this solid surface. Doubled selector to beat .groupCard's own
+// property declaration regardless of CSS-module emit order.
+.groupPreview.groupPreview {
+  --group-surface: color-mix(in srgb, var(--accent-2), var(--accent-3));
+
+  background: var(--group-surface);
   box-shadow: var(--shadow-4);
   box-sizing: border-box;
   cursor: grabbing;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: var(--space-1);
-}
-
-.previewHeader {
-  align-items: center;
-  color: var(--accent-11);
-  display: flex;
-  font-weight: var(--font-weight-medium);
-  gap: var(--space-2);
-  min-height: 28px;
-  padding: 0 var(--space-2);
-}
-
-.previewGroupName {
-  font-size: var(--font-size-2);
-  overflow: hidden;
-}
-
-.previewMember {
-  color: var(--gray-12);
-  padding: 0 var(--space-2) 0 var(--space-5);
 }
