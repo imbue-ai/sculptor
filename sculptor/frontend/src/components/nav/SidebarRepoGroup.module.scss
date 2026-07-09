@@ -16,13 +16,13 @@ $row-min-height: 28px;
 }
 
 // One repo section's children — loose workspace rows and workspace-group runs —
-// in their own container. Its left edge is the reference the drag layer
-// measures the pointer's depth intent against (the inside/outside flip at a
-// group's tail boundary, REQ-DND-6). Mirrors .repoGroup's row gap.
+// in their own container. One uniform gap between every child (loose row or
+// group box) so the rhythm around groups matches the rhythm between rows;
+// the boxes carry no margins of their own.
 .repoRows {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 // Repo header and workspace rows share the same pill height and full width.
@@ -99,9 +99,9 @@ $row-min-height: 28px;
   padding-left: var(--space-7);
 
   // One step above the box's HOVER shade (hovering a member also hovers the
-  // box to a4), so the pill always reads lighter than the surface under it.
+  // box to a3), so the pill always reads lighter than the surface under it.
   &:hover {
-    background: var(--accent-a5);
+    background: var(--accent-a4);
   }
 }
 

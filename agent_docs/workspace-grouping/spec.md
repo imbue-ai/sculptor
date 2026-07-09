@@ -69,12 +69,13 @@ it among the repo section's children (REQ-DND-4).
 
 ### Manage a group from its menu
 
-Hovering the group header reveals a "⋯" trigger; right-click works too
-(REQ-MENU-1). The text-only menu offers **New workspace in group**,
-**Rename…**, **Collapse group**, a color-swatch row, and **Ungroup**.
-Picking a swatch retints the card immediately (REQ-MENU-4). **New
-workspace in group** runs the normal new-workspace flow for the repo and
-the resulting workspace lands in the group (REQ-MENU-3).
+The header's always-visible "⋯" trigger opens the menu; right-click
+works too (REQ-MENU-1). The text-only menu offers **New workspace in
+group**, **Rename…**, **Collapse group**, **Ungroup** (danger-toned),
+and a row of circular color swatches. Picking a swatch retints the
+group immediately (REQ-MENU-4). **New workspace in group** runs the
+normal new-workspace flow for the repo and the resulting workspace
+lands in the group (REQ-MENU-3).
 
 ### Collapse and expand
 
@@ -183,10 +184,12 @@ behaves as if `--no-group` were always passed (REQ-FLAG-4).
 
 ### Menus
 
-- **REQ-MENU-1**: The group menu MUST open from a hover "⋯" trigger on
-  the header and from right-click. Items are text-only (no leading
-  icons): *New workspace in group*, *Rename…*, *Collapse group*, a
-  color-swatch row, *Ungroup*.
+- **REQ-MENU-1**: The group menu MUST open from an always-visible "⋯"
+  trigger on the header and from right-click. Items are text-only (no
+  leading icons), in this order: *New workspace in group*, *Rename…*,
+  *Collapse group*, then *Ungroup* in the danger color, then an
+  unlabeled row of circular color swatches last (a row of color dots
+  explains itself).
 - **REQ-MENU-2**: The workspace context menu MUST gain two grouping
   actions: **New group from workspace** and **Add to group ›**, where the
   submenu lists the repo's existing groups (with color dots) plus a

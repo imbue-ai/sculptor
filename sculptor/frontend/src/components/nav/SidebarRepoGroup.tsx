@@ -14,20 +14,22 @@
 // workspace belongs to its repo, so scoping the children context per repo section
 // makes cross-repo drops structurally impossible rather than merely rejected.
 //
-// Within the section, a drag works Dia-style: a DragOverlay copy follows the
-// pointer freely while the dragged row's in-flow placeholder holds a real gap
-// open at the projected drop position. Where that gap lands — and whether it
-// is inside a group (a membership change) — is computed by the pure projection
-// module (sidebarDropProjection.ts) and drives the rendered order mid-drag:
-// same-parent moves preview via the sortable strategy's transforms, while a
-// projection that crosses a group boundary re-renders the lane so the group's
-// painted container physically wraps the gap (REQ-DND-6). Drops commit
-// instantly — order lanes and the membership mutation apply optimistically,
-// and a server rejection rolls both back with an error toast (REQ-DND-7).
+// Within the section, a drag works Dia-style: a DragOverlay copy rides the
+// rail under the pointer while the dragged row's in-flow placeholder holds a
+// real gap open at the projected drop position. Where that gap lands — and
+// whether it is inside a group (a membership change) — is computed by the
+// pure projection module (sidebarDropProjection.ts) and drives the rendered
+// order mid-drag: every projection re-renders the lane, so the preview is
+// always real layout and a group's box always wraps exactly its rows
+// (REQ-DND-6). Drops commit instantly — order lanes and the membership
+// mutation apply optimistically, and a server rejection rolls both back with
+// an error toast (REQ-DND-7).
 
 import type { DragMoveEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/core";
 import { closestCenter, DndContext, DragOverlay, MeasuringStrategy } from "@dnd-kit/core";
-import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import type { SortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { DropdownMenu, Flex, IconButton, Text, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
@@ -60,7 +62,7 @@ import {
 } from "./navAtoms.ts";
 import { useSidebarDndSensors } from "./sidebarDnd.ts";
 import { WorkspaceGroupDragPreview, WorkspaceRowDragPreview } from "./sidebarDragPreviews.tsx";
-import type { SectionDepthIntent, SectionProjection, SectionRowProjection } from "./sidebarDropProjection.ts";
+import type { SectionAppendProjection, SectionDepthIntent, SectionProjection } from "./sidebarDropProjection.ts";
 import {
   applySectionProjection,
   flatSectionItemIds,
@@ -75,17 +77,35 @@ import { SidebarWorkspaceRow } from "./SidebarWorkspaceRow.tsx";
 import { WorkspaceGroupCard } from "./WorkspaceGroupCard.tsx";
 import type { RepoSectionChild } from "./workspaceGroupComposition.ts";
 
+// The lane previews entirely by re-rendering (see acceptProjection): sortable
+// transforms would slide rows without moving the group boxes wrapping them,
+// so the strategy is a no-op and dnd-kit's per-item layout animation carries
+// the motion instead.
+const noSortingStrategy: SortingStrategy = () => null;
+
+// The dragged card is the section's DragOverlay copy; locking it to the
+// vertical axis keeps the drag reading as list reordering (the overlay rides
+// the rail instead of trailing the pointer sideways off it).
+const sectionDndModifiers = [restrictToVerticalAxis];
+
+// How far inside a group box's top/bottom edge the pointer must be before the
+// depth intent reads "inside". The raw gap between two adjacent boxes is only
+// a few pixels — without this inset, dropping a row loose between two groups
+// would demand pixel-perfect aim; with it, the box's edge zones count as
+// "between" too.
+const BOX_EDGE_INSET_PX = 6;
+
 // One in-flight drag within the section's flat lane. `display` is the children
-// tree the lane currently renders (cross-parent projections are applied to it
-// mid-drag); `pending` is a projection previewed by transforms only (same-
-// parent moves, collapsed-header appends) that the drop applies.
+// tree the lane currently renders — every projection is applied to it
+// mid-drag, except a collapsed-header append (no visible slot to re-render),
+// which waits in `pending` for the drop.
 type SectionDragState = {
   activeId: string;
   kind: "row" | "group";
   /** The group the row belonged to at pickup; the drop diffs against it to flip membership. */
   startParentGroupId: string | null;
   display: ReadonlyArray<RepoSectionChild>;
-  pending: SectionProjection | null;
+  pending: SectionAppendProjection | null;
   depthIntent: SectionDepthIntent;
 };
 
@@ -184,13 +204,13 @@ export const SidebarRepoGroup = ({
 
   const sectionChildrenRef = useRef<HTMLDivElement | null>(null);
 
-  // Fold a projection into the drag state: a row projection that crosses a
-  // group boundary — a parent change, or the ambiguous tail-of-group slot —
-  // re-renders the lane so the gap is real layout and the group's painted
-  // container physically wraps it exactly when the drop would land inside
-  // (REQ-DND-6; a transform preview can't grow the container, so a
-  // tail-slot gap would read as outside while dropping inside). Everything
-  // else previews via transforms and is applied at the drop.
+  // Fold a projection into the drag state. Row and group projections apply to
+  // the DISPLAY immediately — the lane re-renders with the placeholder at the
+  // projected slot, so the preview is always real layout and a group's painted
+  // box always wraps exactly its rows (a transform preview would slide rows
+  // out from under a box that cannot move with them). The one exception is
+  // the collapsed-header append, which has no visible slot to re-render; it
+  // stays pending and the drop applies it.
   const acceptProjection = useCallback(
     (state: SectionDragState, projection: SectionProjection | null, depthIntent: SectionDepthIntent): void => {
       if (projection === null) {
@@ -200,19 +220,16 @@ export const SidebarRepoGroup = ({
         return;
       }
 
-      if (projection.kind === "row") {
-        const currentParent = locateWorkspaceParent(state.display, state.activeId);
-        if (projection.parentGroupId !== currentParent || projection.isBoundary) {
-          updateDragState({
-            ...state,
-            display: applySectionProjection(state.display, projection),
-            pending: null,
-            depthIntent,
-          });
-          return;
-        }
+      if (projection.kind === "append-collapsed") {
+        updateDragState({ ...state, pending: projection, depthIntent });
+        return;
       }
-      updateDragState({ ...state, pending: projection, depthIntent });
+      updateDragState({
+        ...state,
+        display: applySectionProjection(state.display, projection),
+        pending: null,
+        depthIntent,
+      });
     },
     [updateDragState],
   );
@@ -273,8 +290,7 @@ export const SidebarRepoGroup = ({
       if (state === null || state.kind !== "row" || state.depthIntent === intent) {
         return;
       }
-      const pendingRow: SectionRowProjection | null = state.pending?.kind === "row" ? state.pending : null;
-      const projection = toggleBoundaryDepth(state.display, collapsedGroupIds, state.activeId, intent, pendingRow);
+      const projection = toggleBoundaryDepth(state.display, collapsedGroupIds, state.activeId, intent, null);
       acceptProjection(state, projection, intent);
     },
     [collapsedGroupIds, acceptProjection],
@@ -309,7 +325,7 @@ export const SidebarRepoGroup = ({
       let intent: SectionDepthIntent = "outside";
       for (const card of section.querySelectorAll(`[data-testid="${ElementIds.SIDEBAR_WORKSPACE_GROUP_CARD}"]`)) {
         const rect = card.getBoundingClientRect();
-        if (pointerY >= rect.top && pointerY <= rect.bottom) {
+        if (pointerY >= rect.top + BOX_EDGE_INSET_PX && pointerY <= rect.bottom - BOX_EDGE_INSET_PX) {
           intent = "inside";
           break;
         }
@@ -337,7 +353,10 @@ export const SidebarRepoGroup = ({
                 kind: "row",
                 activeId: state.activeId,
                 parentGroupId: null,
-                index: pointerY <= cardRect.top ? groupIndex : groupIndex + 1,
+                // Which side of the group the row leaves toward: the box's
+                // midpoint, so a pointer in the top edge zone reads "before"
+                // and one in the bottom edge zone reads "after".
+                index: pointerY <= (cardRect.top + cardRect.bottom) / 2 ? groupIndex : groupIndex + 1,
                 isBoundary: true,
               },
               intent,
@@ -531,7 +550,7 @@ export const SidebarRepoGroup = ({
       return null;
     }
 
-    if (dragState.pending !== null && dragState.pending.kind !== "group") {
+    if (dragState.pending !== null) {
       return dragState.pending.parentGroupId;
     }
     return locateWorkspaceParent(dragState.display, dragState.activeId);
@@ -664,9 +683,10 @@ export const SidebarRepoGroup = ({
           <DndContext
             sensors={rowDndSensors}
             collisionDetection={closestCenter}
-            // Cross-parent projections change the lane's real layout mid-drag
-            // (a group's container grows around the gap), so droppable rects
-            // must be re-measured continuously, not just at drag start.
+            modifiers={sectionDndModifiers}
+            // Projections change the lane's real layout mid-drag (rows
+            // re-slot, a group's box grows around the gap), so droppable
+            // rects must be re-measured continuously, not just at drag start.
             measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
             onDragStart={handleSectionDragStart}
             onDragOver={handleSectionDragOver}
@@ -674,7 +694,7 @@ export const SidebarRepoGroup = ({
             onDragEnd={handleSectionDragEnd}
             onDragCancel={resetSectionDrag}
           >
-            <SortableContext items={flatItemIds} strategy={verticalListSortingStrategy}>
+            <SortableContext items={flatItemIds} strategy={noSortingStrategy}>
               {displayChildren.map((child) =>
                 child.kind === "workspace" ? (
                   <SidebarWorkspaceRow

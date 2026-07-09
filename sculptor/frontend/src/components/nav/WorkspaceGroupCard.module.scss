@@ -12,36 +12,36 @@
 // intent measures against), which is what makes inside vs outside read
 // unambiguously (REQ-DND-6).
 .groupCard {
-  background: var(--accent-a3);
+  background: var(--accent-a2);
   border-radius: var(--radius-3);
   display: flex;
   flex-direction: column;
   gap: 2px;
-  // Breathing room below the box so it doesn't sit flush against the next
-  // run or loose row (the section's own gap is only 2px).
-  margin-bottom: var(--space-1);
   padding: var(--space-1);
-  transition: background-color var(--duration-fast) ease;
+  transition:
+    background-color var(--duration-fast) ease,
+    opacity var(--duration-fast) ease;
 
   &:hover {
-    background: var(--accent-a4);
+    background: var(--accent-a3);
   }
 }
 
-// The box while the active drag would drop inside it: hover shade plus an
-// accent ring. Ring via box-shadow so the highlight never affects layout —
-// droppable rects are measured mid-drag and must stay stable.
+// The box while the active drag would drop inside it fades slightly (no ring,
+// no stronger tint — a louder treatment reads as jarring when it flicks on
+// and off as the drag sweeps the rail): the projected gap inside the box is
+// the primary signal; this is just a quiet "receiving" acknowledgement.
 .dropActive,
 .dropActive:hover {
-  background: var(--accent-a4);
-  box-shadow: 0 0 0 1px var(--accent-a7);
+  background: var(--accent-a2);
+  opacity: 80%;
 }
 
 // While ANY sidebar drag is in flight, the box's own hover shade is
 // suppressed (the pointer sweeps across runs constantly): only the projected
-// drop target above may light up.
+// drop target above may respond.
 [data-sidebar-drag-active] .groupCard:not(.dropActive):hover {
-  background: var(--accent-a3);
+  background: var(--accent-a2);
 }
 
 // The run mid-drag (its header is the dragged item): the members are unmounted
@@ -59,7 +59,9 @@
 // Same pill geometry as the workspace rows so the rail's row rhythm carries
 // through. The box's own padding contributes part of the indent, so the
 // header's content column lines up with the loose rows outside (its members
-// sit one level deeper, see .workspaceRowNested).
+// sit one level deeper, see .workspaceRowNested). No hover pill of its own:
+// the header is the group's label, not a row-like target — the box's hover
+// shade is the only hover response (REQ-UI-2).
 .groupHeader {
   align-items: center;
   border-radius: var(--radius-2);
@@ -67,10 +69,6 @@
   gap: var(--space-1);
   min-height: 28px;
   padding: 0 var(--space-2) 0 calc(var(--space-5) - var(--space-1));
-
-  &:hover {
-    background: var(--accent-a4);
-  }
 }
 
 .groupHeaderButton {
@@ -122,25 +120,13 @@
   gap: 2px;
 }
 
-// Trailing hover-revealed "⋯"; mirrors the repo header's action cluster
-// (visibility, not display, so the tooltip anchor keeps its rect — see
-// SidebarRepoGroup.module.scss).
+// Trailing "⋯" action cluster. Always visible (unlike the workspace rows'
+// hover-revealed actions): the menu is the group's only header affordance
+// besides collapse, and keeping it present makes groups scannable.
 .rowActions {
   align-items: center;
   display: flex;
   flex-shrink: 0;
-}
-
-.groupHeader .hoverReveal {
-  visibility: hidden;
-}
-
-// The dropdown trigger's open state is read via [aria-expanded] — its
-// data-state is clobbered by the Tooltip sharing the button via asChild.
-.groupHeader:hover .hoverReveal,
-.groupHeader:focus-within .hoverReveal,
-.groupHeader:has([aria-expanded="true"]) .hoverReveal {
-  visibility: visible;
 }
 
 // The group menu's color-swatch row: eight palette dots laid out in a row.
@@ -153,10 +139,12 @@
 // Each swatch is a real menu item (keyboard-reachable, closes on select)
 // restyled into a color dot. Each stamps its own data-accent-color, so the
 // accent tokens resolve per swatch. Scoped under .swatchRow to out-specify
-// the Radix base menu-item geometry.
+// the Radix base menu-item geometry. 50% (not --radius-full, which resolves
+// to a box radius under non-"full" theme radius settings) so the dots are
+// true circles.
 .swatchRow .menuSwatch {
   background: var(--accent-9);
-  border-radius: var(--radius-full);
+  border-radius: 50%;
   height: 16px;
   min-height: 0;
   padding: 0;

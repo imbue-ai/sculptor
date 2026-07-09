@@ -104,7 +104,7 @@ don't break old rows.
 - **Collapse**: per-group boolean in localStorage, mirroring
   `collapsedRepoGroupsAtom` (`sculptor-collapsed-workspace-groups`).
 - **UI (REQ-UI-1, Dia-style)**: a group renders as a header row
-  (chevron + accent-tinted name + hover "⋯", no swatch) plus member
+  (chevron + accent-tinted name + always-visible "⋯", no swatch) plus member
   rows indented one level deeper, all direct participants of the repo
   section's flat lane, wrapped in an always-visible accent box (rest +
   hover shades) whose padding insets the row pills; a selected member
@@ -117,17 +117,18 @@ don't break old rows.
   group headers, member rows); membership is *projected from position*
   by a pure module (`sidebarDropProjection.ts`) shared by the
   drag-over preview, the keyboard path, and the drop commit. During a
-  drag the projection drives the rendered order (the dragged row's
-  in-flow placeholder re-parents into the projected slot, so the
-  group's painted container physically wraps the gap), while a
-  `DragOverlay` copy follows the pointer freely. The ambiguous
-  after-last-member slot resolves geometrically — inside while the
-  pointer is within the group box's vertical extent, outside in the
-  gaps between boxes; keyboard drags default inside with Left/Right
-  flipping (REQ-DND-6). Drops apply membership + order
-  optimistically with rollback + toast on failure (REQ-DND-7). Repo
-  sections stay an outer sortable list, keeping cross-repo drops
-  structurally impossible.
+  drag every projection re-renders the lane (the sorting strategy is a
+  no-op; sortable transforms would slide rows without moving the group
+  boxes wrapping them), so the in-flow placeholder always sits at the
+  projected slot and a group's box always wraps exactly its rows,
+  while an axis-locked `DragOverlay` copy rides the rail under the
+  pointer. Group-edge slots resolve geometrically — inside while the
+  pointer is within the box's vertical extent (inset a few px at the
+  edges so between-box drops don't demand pixel aim), outside in the
+  gaps; keyboard drags default inside with Left/Right flipping
+  (REQ-DND-6). Drops apply membership + order optimistically with
+  rollback + toast on failure (REQ-DND-7). Repo sections stay an outer
+  sortable list, keeping cross-repo drops structurally impossible.
 
 ## Build stages
 

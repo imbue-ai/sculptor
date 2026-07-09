@@ -43,6 +43,10 @@ import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCrea
 import { ToastType } from "~/components/Toast.tsx";
 
 import { collapsedWorkspaceGroupsAtom, isWorkspaceGroupCollapsedAtomFamily } from "./navAtoms.ts";
+// The compact action-button treatment is shared with the repo header and
+// workspace rows, so the trigger reads that module's class rather than
+// duplicating it here.
+import rowStyles from "./SidebarRepoGroup.module.scss";
 import { SidebarWorkspaceRow } from "./SidebarWorkspaceRow.tsx";
 import styles from "./WorkspaceGroupCard.module.scss";
 
@@ -60,36 +64,36 @@ type GroupMenuComponents = {
     "data-group-id"?: string;
     "data-testid"?: string;
     className?: string;
+    color?: ReturnType<typeof useThemeDangerColor>;
     disabled?: boolean;
     onSelect?: (event: Event) => void;
     children?: ReactNode;
   }>;
   Separator: ComponentType;
-  Label: ComponentType<{ children?: ReactNode }>;
 };
 
 const CONTEXT_MENU_COMPONENTS: GroupMenuComponents = {
   Item: ContextMenu.Item as GroupMenuComponents["Item"],
   Separator: ContextMenu.Separator as GroupMenuComponents["Separator"],
-  Label: ContextMenu.Label as GroupMenuComponents["Label"],
 };
 
 const DROPDOWN_MENU_COMPONENTS: GroupMenuComponents = {
   Item: DropdownMenu.Item as GroupMenuComponents["Item"],
   Separator: DropdownMenu.Separator as GroupMenuComponents["Separator"],
-  Label: DropdownMenu.Label as GroupMenuComponents["Label"],
 };
 
 /**
- * The group menu body (REQ-MENU-1): text-only items — New workspace in group,
- * Rename…, Collapse/Expand group, the color-swatch row, Ungroup. No delete:
- * a group is only a container, so Ungroup is the strongest action it offers.
+ * The group menu body (REQ-MENU-1): New workspace in group, Rename…,
+ * Collapse/Expand group, Ungroup (danger-toned — it is the group's strongest
+ * action; there is no delete, a group is only a container), and the
+ * color-swatch row last, unlabeled — a row of color dots explains itself.
  */
 const WorkspaceGroupMenuItems = ({
   menu,
   group,
   isCollapsed,
   isCreateDisabled,
+  destructiveColor,
   onNewWorkspaceInGroup,
   onBeginRename,
   onToggleCollapsed,
@@ -100,6 +104,7 @@ const WorkspaceGroupMenuItems = ({
   group: WorkspaceGroup;
   isCollapsed: boolean;
   isCreateDisabled: boolean;
+  destructiveColor: ReturnType<typeof useThemeDangerColor>;
   onNewWorkspaceInGroup: () => void;
   onBeginRename: () => void;
   onToggleCollapsed: () => void;
@@ -130,7 +135,15 @@ const WorkspaceGroupMenuItems = ({
       {isCollapsed ? "Expand group" : "Collapse group"}
     </menu.Item>
     <menu.Separator />
-    <menu.Label>Color</menu.Label>
+    <menu.Item
+      color={destructiveColor}
+      data-testid={ElementIds.WORKSPACE_GROUP_MENU_UNGROUP}
+      data-group-id={group.objectId}
+      onSelect={onUngroup}
+    >
+      Ungroup
+    </menu.Item>
+    <menu.Separator />
     <div className={styles.swatchRow} data-testid={ElementIds.WORKSPACE_GROUP_MENU_SWATCH_ROW}>
       {/* The swatches iterate the generated palette constant — the server
           cycles the same enum when auto-assigning colors, so the row can
@@ -148,14 +161,6 @@ const WorkspaceGroupMenuItems = ({
         />
       ))}
     </div>
-    <menu.Separator />
-    <menu.Item
-      data-testid={ElementIds.WORKSPACE_GROUP_MENU_UNGROUP}
-      data-group-id={group.objectId}
-      onSelect={onUngroup}
-    >
-      Ungroup
-    </menu.Item>
   </>
 );
 
@@ -331,6 +336,7 @@ export const WorkspaceGroupCard = ({
     group,
     isCollapsed,
     isCreateDisabled: isCreating,
+    destructiveColor,
     onNewWorkspaceInGroup: (): void => void handleNewWorkspaceInGroup(),
     onBeginRename: (): void => setIsRenaming(true),
     onToggleCollapsed: handleToggleCollapsed,
@@ -398,7 +404,7 @@ export const WorkspaceGroupCard = ({
                 )}
               </button>
             )}
-            <Flex className={`${styles.rowActions} ${styles.hoverReveal}`} gap="2">
+            <Flex className={styles.rowActions}>
               <DropdownMenu.Root>
                 <Tooltip content="Group actions" side="bottom">
                   <DropdownMenu.Trigger>
@@ -406,11 +412,12 @@ export const WorkspaceGroupCard = ({
                       variant="ghost"
                       size="1"
                       color="gray"
+                      className={rowStyles.rowActionButton}
                       aria-label="Group actions"
                       data-testid={ElementIds.SIDEBAR_WORKSPACE_GROUP_MENU_TRIGGER}
                       data-group-id={group.objectId}
                     >
-                      <MoreHorizontal size={13} />
+                      <MoreHorizontal size={12} />
                     </IconButton>
                   </DropdownMenu.Trigger>
                 </Tooltip>
