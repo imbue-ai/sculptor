@@ -13,7 +13,7 @@
 // cross-repo drops structurally impossible rather than merely rejected.
 
 import type { DragEndEvent } from "@dnd-kit/core";
-import { closestCenter, DndContext } from "@dnd-kit/core";
+import { DndContext } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ContextMenu, DropdownMenu, Flex, IconButton, Text, Tooltip } from "@radix-ui/themes";
@@ -42,7 +42,7 @@ import { WorkspaceStatusDots } from "~/components/statusDot";
 import { ToastType } from "~/components/Toast.tsx";
 
 import { adjustSidebarDragCountAtom, collapsedRepoGroupsAtom, isRepoCollapsedAtomFamily } from "./navAtoms.ts";
-import { sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
+import { sidebarCollisionDetection, sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
 import styles from "./SidebarRepoGroup.module.scss";
 import type { RepoGroup } from "./sidebarWorkspaceOrder.ts";
 import { reorderSidebarWorkspaceAtom } from "./sidebarWorkspaceOrder.ts";
@@ -463,7 +463,7 @@ export const SidebarRepoGroup = ({
         <div className={styles.repoRows}>
           <DndContext
             sensors={rowDndSensors}
-            collisionDetection={closestCenter}
+            collisionDetection={sidebarCollisionDetection}
             modifiers={sidebarDndModifiers}
             onDragStart={beginOwnedDrag}
             onDragEnd={handleRowDragEnd}
