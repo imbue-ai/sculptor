@@ -72,6 +72,7 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   destructiveColor,
   onNavigate,
   onHover,
+  onBeginRename,
   onRenameCommit,
   onRenameCancel,
   onBeginDelete,
@@ -84,6 +85,7 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   destructiveColor: ReturnType<typeof useThemeDangerColor>;
   onNavigate: (workspaceId: string) => void;
   onHover: (workspaceId: string) => void;
+  onBeginRename: (workspaceId: string) => void;
   onRenameCommit: (workspaceId: string, newName: string) => void;
   onRenameCancel: () => void;
   onBeginDelete: (workspace: Workspace) => void;
@@ -152,6 +154,7 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
               // sensor's raw onKeyDown (it delegates every non-Enter key back to it).
               onKeyDown={handleKeyDown}
               onClick={() => onNavigate(workspace.objectId)}
+              onDoubleClick={() => onBeginRename(workspace.objectId)}
               onMouseEnter={() => onHover(workspace.objectId)}
               data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW}
               data-workspace-id={workspace.objectId}
@@ -338,6 +341,13 @@ export const SidebarRepoGroup = ({
 
   // Reference-stable (the rows are memoized on their props): the rename
   // callbacks depend only on reference-stable atom setters and the store.
+  const handleBeginRename = useCallback(
+    (workspaceId: string): void => {
+      setRenamingWorkspaceId(workspaceId);
+    },
+    [setRenamingWorkspaceId],
+  );
+
   const handleRenameCommit = useCallback(
     (workspaceId: string, newName: string): void => {
       setRenamingWorkspaceId(null);
@@ -481,6 +491,7 @@ export const SidebarRepoGroup = ({
                   destructiveColor={dangerColor}
                   onNavigate={onWorkspaceClick}
                   onHover={onWorkspaceHover}
+                  onBeginRename={handleBeginRename}
                   onRenameCommit={handleRenameCommit}
                   onRenameCancel={handleRenameCancel}
                   onBeginDelete={onBeginDelete}
