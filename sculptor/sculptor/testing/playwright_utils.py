@@ -994,7 +994,9 @@ def wait_for_workspace_list_loaded(page: Page) -> None:
     expect(workspace_rows.or_(sidebar_empty).first).to_be_visible()
 
 
-def create_zero_agent_workspace(page: Page, *, description: str | None = None, source_branch: str = "testing") -> str:
+def create_zero_agent_workspace(
+    page: Page, *, description: str | None = None, source_branch: str = "testing", project_id: str | None = None
+) -> str:
     """Create a WORKTREE workspace with NO agent and navigate to it, returning its id.
 
     The redesign relaxes the old "≥1 agent" invariant, so a
@@ -1004,17 +1006,23 @@ def create_zero_agent_workspace(page: Page, *, description: str | None = None, s
     created — then navigates to ``/ws/<id>`` with a hash change so the WebSocket
     stays alive (mirroring ``navigate_to_workspace_without_agent``).
 
-    Resolves the active project and a unique branch name (via the same
-    ``preview-branch-name`` endpoint the Add Workspace form uses) so the worktree
-    branch never collides across repeated calls.
+    Resolves a unique branch name (via the same ``preview-branch-name`` endpoint
+    the Add Workspace form uses) so the worktree branch never collides across
+    repeated calls. ``project_id`` targets a specific repo; when omitted the first
+    active project is used (the common single-repo case). Passing it lets a test
+    pile many workspaces into one particular repo group — e.g. to make a group
+    tall enough to exercise drag behaviour that depends on group height.
     """
     base_url = resolve_backend_api_url(page)
 
-    projects_response = request_with_retry(page.request.get, f"{base_url}/api/v1/projects/active")
-    assert projects_response.ok, f"list active projects failed: {projects_response.status} {projects_response.text()}"
-    projects = projects_response.json()
-    assert projects, "no active project to create a zero-agent workspace in"
-    project_id = projects[0]["objectId"]
+    if project_id is None:
+        projects_response = request_with_retry(page.request.get, f"{base_url}/api/v1/projects/active")
+        assert projects_response.ok, (
+            f"list active projects failed: {projects_response.status} {projects_response.text()}"
+        )
+        projects = projects_response.json()
+        assert projects, "no active project to create a zero-agent workspace in"
+        project_id = projects[0]["objectId"]
 
     workspace_name = description or f"Zero Agent WS {next(_workspace_name_counter)}"
     preview_response = request_with_retry(
@@ -1041,6 +1049,21 @@ def create_zero_agent_workspace(page: Page, *, description: str | None = None, s
 
     navigate_to_workspace_without_agent(page, workspace_id)
     return workspace_id
+
+
+def get_active_project_id_by_name(page: Page, name: str) -> str:
+    """Return the objectId of the active project whose folder name matches ``name``.
+
+    A project's ``name`` is the folder that contains its git repo (see the Project
+    model), so this resolves the id of a repo added via the settings page — handy
+    for then targeting ``create_zero_agent_workspace(project_id=...)`` at that repo.
+    """
+    base_url = resolve_backend_api_url(page)
+    response = request_with_retry(page.request.get, f"{base_url}/api/v1/projects/active")
+    assert response.ok, f"list active projects failed: {response.status} {response.text()}"
+    matches = [project["objectId"] for project in response.json() if project["name"] == name]
+    assert len(matches) == 1, f"expected exactly one active project named {name!r}, found {len(matches)}"
+    return matches[0]
 
 
 def dispatch_modified_shortcuts_in_one_task(page: Page, shortcuts: Sequence[tuple[str, str]]) -> list[str]:

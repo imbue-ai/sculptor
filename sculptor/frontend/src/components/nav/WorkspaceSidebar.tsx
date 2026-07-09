@@ -1,5 +1,5 @@
 import type { DragEndEvent } from "@dnd-kit/core";
-import { closestCenter, DndContext } from "@dnd-kit/core";
+import { DndContext } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { IconButton, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
@@ -37,7 +37,7 @@ import { WorkspacePeekOverlay } from "~/pages/workspace/components/WorkspacePeek
 import { adjustSidebarDragCountAtom, isSidebarDragActiveAtom } from "./navAtoms.ts";
 import navItemStyles from "./NavItem.module.scss";
 import { NavItem } from "./NavItem.tsx";
-import { sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
+import { sidebarCollisionDetection, sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
 import { SidebarRepoGroup } from "./SidebarRepoGroup.tsx";
 import { reorderSidebarRepoGroupAtom, sidebarWorkspaceGroupsAtom } from "./sidebarWorkspaceOrder.ts";
 import styles from "./WorkspaceSidebar.module.scss";
@@ -292,7 +292,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
             "Add repo" button in the bottom actions. */}
           <DndContext
             sensors={groupDndSensors}
-            collisionDetection={closestCenter}
+            collisionDetection={sidebarCollisionDetection}
             modifiers={sidebarDndModifiers}
             onDragStart={beginOwnedDrag}
             onDragEnd={handleGroupDragEnd}
