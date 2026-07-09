@@ -24,14 +24,16 @@ set -euo pipefail
 # default to a free port in that band when none is given, and warn on an explicit
 # port outside it: otherwise the preview is reachable only by a direct URL or the
 # switchboard, never the pill. Keep this band in sync with QUICK_BAND_* in
-# plugins/openhost-preview-switcher/src/scan.ts.
+# sculptor/frontend/plugins/openhost-preview-switcher/src/scan.ts.
 quick_band_start=51000
 quick_band_end=51099
 
 pick_free_quick_port() {
   # Ports currently bound (listening), one per line, from a single ss snapshot.
+  # grep matches nothing when there are no listeners at all; tolerate that
+  # (|| true) rather than letting the empty match trip pipefail under set -e.
   local used
-  used="$(ss -tlnH 2>/dev/null | grep -oE ':[0-9]+' | tr -d ':' | sort -u)"
+  used="$(ss -tlnH 2>/dev/null | grep -oE ':[0-9]+' | tr -d ':' | sort -u)" || true
   local p
   for ((p = quick_band_start; p <= quick_band_end; p++)); do
     grep -qx "$p" <<<"$used" || { echo "$p"; return 0; }
