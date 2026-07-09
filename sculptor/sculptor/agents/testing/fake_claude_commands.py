@@ -5,6 +5,7 @@ between the init and end messages.
 """
 
 import glob as glob_module
+import html
 import inspect
 import json
 import os
@@ -17,6 +18,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
+from sculptor.agents.testing.fake_claude_jsonl import append_transcript_entry
 from sculptor.agents.testing.fake_claude_jsonl import generate_id
 from sculptor.agents.testing.fake_claude_jsonl import get_last_session_id
 from sculptor.agents.testing.fake_claude_jsonl import make_assistant_message
@@ -26,6 +28,7 @@ from sculptor.agents.testing.fake_claude_jsonl import make_compact_summary_user_
 from sculptor.agents.testing.fake_claude_jsonl import make_end_message
 from sculptor.agents.testing.fake_claude_jsonl import make_hook_callback_control_request
 from sculptor.agents.testing.fake_claude_jsonl import make_init_message
+from sculptor.agents.testing.fake_claude_jsonl import make_queued_command_attachment_entry
 from sculptor.agents.testing.fake_claude_jsonl import make_streaming_interleaved_events
 from sculptor.agents.testing.fake_claude_jsonl import make_streaming_text_events
 from sculptor.agents.testing.fake_claude_jsonl import make_streaming_tool_events
@@ -36,6 +39,7 @@ from sculptor.agents.testing.fake_claude_jsonl import make_task_updated_message
 from sculptor.agents.testing.fake_claude_jsonl import make_text_block
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_result_message
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_use_block
+from sculptor.agents.testing.fake_claude_jsonl import make_user_frame_echo
 from sculptor.agents.testing.fake_claude_jsonl import make_workflow_agent_entry
 from sculptor.agents.testing.fake_claude_jsonl import make_workflow_phase_entry
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_FROM_SIGTERM
@@ -138,68 +142,230 @@ def _emit_mcp_tool_call_and_wait_for_response(
     return _read_mcp_control_response_text(request_id, tool_use_id, timeout_seconds, expect_error=expect_error)
 
 
-# Bytes pulled off stdin by a response reader after its final match. A single
-# os.read can swallow lines destined for a LATER reader in the same process
-# (the SCU-783 buffering flake); parking them here keeps sequential readers
-# (e.g. two AUQ waits in one handler) from losing responses.
-_STDIN_UNCONSUMED: bytes = b""
+# --- Unified stdin router ---------------------------------------------------
+#
+# Every stdin read in FakeClaude funnels through one router so a frame that
+# arrives while a cycle is held open is classified exactly once and never
+# silently dropped. It reads the raw fd (via ``sys.stdin.fileno()``) into a
+# single buffer: mixing ``sys.stdin``'s BufferedReader with raw ``os.read``
+# splits complete lines across two invisible buffers, the flake behind SCU-783
+# (a matching control_response stranded in Python's buffer where ``select`` on
+# the fd can't see it). With one buffer, whatever a mid-cycle reader pulls off
+# stdin but doesn't itself consume — a later reader's response, a frame to
+# absorb — stays available to the next reader across the cycle boundary.
+#
+# Classification is uniform, mirroring the real CLI:
+#   * an ``interrupt`` control_request exits the process (SIGTERM code);
+#   * a ``control_response`` goes to whichever handler is waiting on its id;
+#   * a ``user`` frame arriving mid-cycle is *absorbed* — recorded as a
+#     ``queued_command`` attachment and, under ``--replay-user-messages``,
+#     echoed on stdout (the real CLI's mid-turn steering);
+#   * anything else (a ``get_context_usage`` request, injected chrome events)
+#     is ignored.
+# A ``user`` frame read *between* cycles is turn-starting instead, so the
+# between-cycle reader classifies it itself rather than absorbing it.
+
+# Launch-time flags governing absorption, set by ``configure_stdin_router``.
+_REPLAY_USER_MESSAGES: bool = False
+_PERSIST_SESSION: bool = True
+
+# Contents of frames absorbed mid-cycle in the current turn, in arrival order.
+# ``handle_reference_absorbed`` reads this so a scripted cycle can prove it saw
+# the steered content; ``clear_absorbed_frames`` resets it per cycle.
+_ABSORBED_FRAMES: list[str] = []
+
+# Sentinels returned by ``_StdinRouter.next_frame`` when no frame is available.
+_STDIN_TIMEOUT = object()
+_STDIN_EOF = object()
+
+
+class _StdinRouter:
+    """Sole owner of FakeClaude's stdin fd (see the module comment above)."""
+
+    def __init__(self) -> None:
+        self._buffer: bytes = b""
+        self._eof: bool = False
+
+    def reset(self) -> None:
+        """Drop buffered bytes and clear EOF (unit tests reuse one process)."""
+        self._buffer = b""
+        self._eof = False
+
+    def _pop_frame(self) -> dict | None:
+        """Return the next complete, parseable JSON object already buffered.
+
+        Blank and unparseable lines (and non-object JSON) are skipped; a
+        partial trailing line stays buffered for the next read.
+        """
+        while b"\n" in self._buffer:
+            raw_line, _, self._buffer = self._buffer.partition(b"\n")
+            line = raw_line.decode("utf-8", errors="replace").strip()
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(data, dict):
+                return data
+        return None
+
+    def _fill(self, timeout: float) -> None:
+        """Block up to ``timeout`` seconds for more stdin bytes into the buffer."""
+        if self._eof:
+            return
+        try:
+            fd = sys.stdin.fileno()
+        except (ValueError, OSError):
+            # No real fd (closed stream / non-fd stdin) — treat as end of input.
+            self._eof = True
+            return
+        ready, _, _ = select.select([fd], [], [], timeout)
+        if not ready:
+            return
+        chunk = os.read(fd, 8192)
+        if not chunk:
+            self._eof = True
+            return
+        self._buffer += chunk
+
+    def next_frame(self, timeout: float) -> dict | object:
+        """Return the next parsed JSON frame, else ``_STDIN_TIMEOUT`` (nothing
+        arrived within ``timeout``) or ``_STDIN_EOF`` (stdin closed)."""
+        frame = self._pop_frame()
+        if frame is not None:
+            return frame
+        if self._eof:
+            return _STDIN_EOF
+        self._fill(timeout)
+        frame = self._pop_frame()
+        if frame is not None:
+            return frame
+        return _STDIN_EOF if (self._eof and b"\n" not in self._buffer) else _STDIN_TIMEOUT
+
+
+_STDIN_ROUTER = _StdinRouter()
+
+
+def configure_stdin_router(replay_user_messages: bool, persist_session: bool) -> None:
+    """Apply launch-time flags and start each invocation from a clean slate."""
+    global _REPLAY_USER_MESSAGES, _PERSIST_SESSION
+    _REPLAY_USER_MESSAGES = replay_user_messages
+    _PERSIST_SESSION = persist_session
+    _STDIN_ROUTER.reset()
+    _ABSORBED_FRAMES.clear()
+
+
+def clear_absorbed_frames() -> None:
+    """Reset the absorbed-frame record at the start of a cycle so each turn's
+    ``reference_absorbed`` sees only the frames absorbed during that turn."""
+    _ABSORBED_FRAMES.clear()
+
+
+def _user_frame_content(frame: dict) -> str:
+    """Extract a user frame's message content, HTML-unescaped and stripped
+    (the same normalization the between-cycle reader applies to a prompt)."""
+    content = frame.get("message", {}).get("content", "")
+    return html.unescape(content).strip() if isinstance(content, str) else ""
+
+
+def _exit_if_interrupt(frame: dict) -> None:
+    """Exit with the SIGTERM code if ``frame`` is an interrupt control_request.
+
+    Mirrors real Claude's event loop: a Stop-button click arrives as an
+    ``interrupt`` control_request and tears the turn down promptly.
+    """
+    if (
+        frame.get("type") == "control_request"
+        and isinstance(frame.get("request"), dict)
+        and frame["request"].get("subtype") == "interrupt"
+    ):
+        sys.exit(AGENT_EXIT_CODE_FROM_SIGTERM)
+
+
+def _absorb_user_frame(frame: dict) -> None:
+    """Record a mid-cycle user frame the way the real CLI absorbs steering.
+
+    Appends a ``queued_command`` attachment to the session transcript (so the
+    on-disk shape distinguishes an absorbed frame from a turn-starting plain
+    user message) and, under ``--replay-user-messages``, echoes the frame on
+    stdout — emitted here, inside the open turn before its ``result``, which is
+    the steered replay position the spike pinned (as opposed to a turn-starting
+    frame's echo, which lands just after a fresh ``init``).
+    """
+    content = _user_frame_content(frame)
+    _ABSORBED_FRAMES.append(content)
+    session_id = get_last_session_id()
+    if _PERSIST_SESSION and session_id is not None:
+        append_transcript_entry(session_id, make_queued_command_attachment_entry(session_id, content))
+    if _REPLAY_USER_MESSAGES:
+        _emit_event(make_user_frame_echo(content))
+
+
+def _route_mid_cycle_frame(frame: dict) -> None:
+    """Apply the universal side effects for a frame a mid-cycle reader is not
+    itself consuming: an interrupt exits, a user frame is absorbed, everything
+    else is ignored."""
+    _exit_if_interrupt(frame)
+    if frame.get("type") == "user":
+        _absorb_user_frame(frame)
+
+
+def read_next_user_prompt() -> str | None:
+    """Block *between* cycles for the next turn-starting user frame.
+
+    Returns the frame's (HTML-unescaped, stripped) content, or ``None`` when
+    stdin closes first (EOF) so the caller exits instead of running a turn the
+    user never sent. An ``interrupt`` control_request seen while idle exits with
+    the SIGTERM code. A user frame here is turn-starting — it is NOT absorbed
+    (absorption applies only to frames that land while a cycle is held open);
+    control responses and other non-user frames are ignored while scanning.
+    """
+    while True:
+        frame = _STDIN_ROUTER.next_frame(timeout=3600.0)
+        if frame is _STDIN_TIMEOUT:
+            continue
+        if frame is _STDIN_EOF:
+            return None
+        assert isinstance(frame, dict)
+        _exit_if_interrupt(frame)
+        if frame.get("type") == "user":
+            return _user_frame_content(frame)
 
 
 def _read_mcp_control_responses(expected_request_ids: set[str], timeout_seconds: float) -> dict[str, dict]:
-    """Block reading stdin until an MCP ``control_response`` has arrived for
-    every id in ``expected_request_ids``. Returns ``{request_id: mcp_response}``.
+    """Block until an MCP ``control_response`` has arrived for every id in
+    ``expected_request_ids``. Returns ``{request_id: mcp_response}``.
 
-    Reads from stdin's raw file descriptor rather than ``sys.stdin.readline``
-    to avoid a flake (SCU-783) where Sculptor writes a non-matching control
-    request (e.g. ``get_context_usage``) and the matching control_response
-    back-to-back: ``readline``'s underlying ``read1`` then pulls BOTH lines
-    into Python's ``BufferedReader`` buffer in a single syscall, returns only
-    the first, and leaves the response in the buffer where the next
-    ``select.select`` on stdin's fd cannot see it — the helper would spin
-    until its 180s timeout while the agent's status pill stayed visible.
+    Runs on the unified router, so a user frame that lands while the handler
+    waits for its answer is absorbed rather than discarded, and a non-matching
+    control_response batched into the same read stays buffered for the next
+    reader instead of being lost (SCU-783).
     """
-    global _STDIN_UNCONSUMED
-    fd = sys.stdin.fileno()
-    results: dict[str, dict] = {}
     remaining_ids = set(expected_request_ids)
-    pending = _STDIN_UNCONSUMED
-    _STDIN_UNCONSUMED = b""
+    results: dict[str, dict] = {}
     deadline = time.monotonic() + timeout_seconds
-    try:
-        while True:
-            while b"\n" in pending:
-                raw_line, _, pending = pending.partition(b"\n")
-                line = raw_line.decode("utf-8", errors="replace").strip()
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if not isinstance(data, dict) or data.get("type") != "control_response":
-                    continue
-                response = data.get("response", {})
-                request_id = response.get("request_id")
-                if request_id not in remaining_ids:
-                    continue
+    while remaining_ids:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        frame = _STDIN_ROUTER.next_frame(timeout=min(remaining, 0.1))
+        if frame is _STDIN_TIMEOUT:
+            continue
+        if frame is _STDIN_EOF:
+            break
+        assert isinstance(frame, dict)
+        if frame.get("type") == "control_response":
+            response = frame.get("response", {})
+            request_id = response.get("request_id")
+            if request_id in remaining_ids:
                 results[request_id] = response.get("response", {}).get("mcp_response", {})
                 remaining_ids.discard(request_id)
-                if not remaining_ids:
-                    return results
-
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            ready, _, _ = select.select([fd], [], [], min(remaining, 0.1))
-            if not ready:
-                continue
-            chunk = os.read(fd, 8192)
-            if not chunk:
-                break
-            pending += chunk
+            continue
+        _route_mid_cycle_frame(frame)
+    if remaining_ids:
         raise RuntimeError(f"Timed out waiting for MCP control_response(s) for request_ids={sorted(remaining_ids)}")
-    finally:
-        _STDIN_UNCONSUMED = pending
+    return results
 
 
 def _extract_mcp_response_text(mcp_response: dict) -> str:
@@ -498,11 +664,13 @@ def _wait_until(
 ) -> bool:
     """Wait until ``done()`` returns true or ``timeout_seconds`` elapses.
 
-    Polls stdin throughout: a Stop-button click arrives as an interrupt
-    ``control_request`` and exits the process with the SIGTERM exit code,
-    mirroring real Claude's event loop and keeping interrupt tests fast.
-    SIGTERM itself still terminates via the signal handler installed in
-    ``main()`` — including on ``-p``-mode callers whose stdin is closed.
+    Polls stdin throughout via the unified router: a Stop-button click arrives
+    as an ``interrupt`` control_request and exits with the SIGTERM code
+    (mirroring real Claude's event loop and keeping interrupt tests fast),
+    while a user frame that lands during the wait is absorbed as steering
+    rather than dropped. SIGTERM itself still terminates via the signal handler
+    installed in ``main()`` — including on ``-p``-mode callers whose stdin is
+    closed.
 
     With ``done`` omitted, simply waits out the full timeout. Returns whether
     ``done()`` fired before the timeout.
@@ -512,25 +680,15 @@ def _wait_until(
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             return False
-        ready, _, _ = select.select([sys.stdin], [], [], min(remaining, poll_interval))
-        if not ready:
+        frame = _STDIN_ROUTER.next_frame(timeout=min(remaining, poll_interval))
+        if frame is _STDIN_TIMEOUT:
             continue
-        line = sys.stdin.readline()
-        if not line:
-            # stdin closed (e.g. -p mode) — keep waiting without it.
-            time.sleep(poll_interval)
+        if frame is _STDIN_EOF:
+            # stdin closed (e.g. -p mode) — keep polling done()/timeout without it.
+            time.sleep(min(remaining, poll_interval))
             continue
-        try:
-            data = json.loads(line.strip())
-        except json.JSONDecodeError:
-            continue
-        if (
-            isinstance(data, dict)
-            and data.get("type") == "control_request"
-            and isinstance(data.get("request"), dict)
-            and data["request"].get("subtype") == "interrupt"
-        ):
-            sys.exit(AGENT_EXIT_CODE_FROM_SIGTERM)
+        assert isinstance(frame, dict)
+        _route_mid_cycle_frame(frame)
     return True
 
 
@@ -560,6 +718,30 @@ def handle_wait_for_file(args: dict, emit_streaming: bool) -> list[dict]:
     if not _wait_until(timeout_seconds=timeout_seconds, poll_interval=0.05, done=sentinel.exists):
         raise RuntimeError(f"fake_claude:wait_for_file timed out after {timeout_seconds}s waiting for {sentinel}")
     return []
+
+
+def handle_reference_absorbed(args: dict, emit_streaming: bool) -> list[dict]:
+    """Emit assistant text referencing the frames absorbed so far this cycle.
+
+    A scripted way to prove the held cycle actually saw the steered content
+    (scenario 1's "a scripted directive controls whether/how the fake assistant
+    references the absorbed content in its remaining output"): pair it after a
+    held handler in a ``multi_step`` so absorption happens during the hold and
+    this step quotes it. ``prefix`` / ``separator`` shape the text; with nothing
+    absorbed the body is ``empty`` (default ``"(none)"``).
+    """
+    prefix: str = args.get("prefix", "Absorbed: ")
+    separator: str = args.get("separator", " | ")
+    empty: str = args.get("empty", "(none)")
+    body = separator.join(_ABSORBED_FRAMES) if _ABSORBED_FRAMES else empty
+    text = prefix + body
+
+    message_id = generate_id("msg")
+    messages: list[dict] = []
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=message_id, text=text))
+    messages.append(make_assistant_message(message_id=message_id, content_blocks=[make_text_block(text)]))
+    return messages
 
 
 _TASK_DEFAULTS: dict = {
@@ -1055,37 +1237,30 @@ def handle_auto_compact(args: dict, plugin_dir: str | None, emit_streaming: bool
 
 
 def _read_control_response_from_stdin(expected_request_id: str, timeout_seconds: float = 5.0) -> None:
-    """Read stdin until we get a ``control_response`` for the given request ID.
+    """Read stdin until a ``control_response`` for ``expected_request_id`` arrives.
 
-    Falls back silently after ``timeout_seconds`` so FakeClaude doesn't hang
-    if the output processor doesn't respond (e.g. during unit tests that mock
-    stdin).
+    Runs on the unified router (so a mid-wait user frame is absorbed and an
+    interrupt exits), but falls back silently after ``timeout_seconds`` — unlike
+    the MCP reader — so FakeClaude doesn't hang if the output processor never
+    acks the hook (e.g. during unit tests that mock stdin).
     """
     deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
+    while True:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            break
-        # Use select to avoid blocking indefinitely on stdin
-        ready, _, _ = select.select([sys.stdin], [], [], min(remaining, 0.1))
-        if not ready:
+            return
+        frame = _STDIN_ROUTER.next_frame(timeout=min(remaining, 0.1))
+        if frame is _STDIN_TIMEOUT:
             continue
-        line = sys.stdin.readline()
-        if not line:
-            break
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            data = json.loads(line)
-        except json.JSONDecodeError:
-            continue
+        if frame is _STDIN_EOF:
+            return
+        assert isinstance(frame, dict)
         if (
-            isinstance(data, dict)
-            and data.get("type") == "control_response"
-            and data.get("response", {}).get("request_id") == expected_request_id
+            frame.get("type") == "control_response"
+            and frame.get("response", {}).get("request_id") == expected_request_id
         ):
             return
+        _route_mid_cycle_frame(frame)
 
 
 def handle_auto_compact_no_summary(args: dict, plugin_dir: str | None, emit_streaming: bool) -> list[dict]:
@@ -2817,6 +2992,7 @@ COMMAND_REGISTRY: dict[str, Callable[..., list[dict]]] = {
     "text_and_bash": handle_text_and_bash,
     "sleep": handle_sleep,
     "wait_for_file": handle_wait_for_file,
+    "reference_absorbed": handle_reference_absorbed,
     "task_create": handle_task_create,
     "task_update": handle_task_update,
     "task_list": handle_task_list,

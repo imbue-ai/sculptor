@@ -1,18 +1,26 @@
 """Unit tests for FakeClaude script."""
 
-import io
 import json
 import os
 import subprocess
 import sys
+import threading
+import time
+from collections.abc import Callable
+from collections.abc import Iterator
 from pathlib import Path
+from typing import IO
 from uuid import uuid4
 
 import pytest
 
 from sculptor.agents.testing.fake_claude import _parse_prompt
 from sculptor.agents.testing.fake_claude import _read_prompt_from_stream_json_stdin
+from sculptor.agents.testing.fake_claude_commands import _ABSORBED_FRAMES
+from sculptor.agents.testing.fake_claude_commands import _STDIN_ROUTER
 from sculptor.agents.testing.fake_claude_commands import _read_mcp_control_response_text
+from sculptor.agents.testing.fake_claude_commands import _read_mcp_control_responses
+from sculptor.agents.testing.fake_claude_commands import configure_stdin_router
 from sculptor.agents.testing.fake_claude_commands import handle_ask_user_question
 from sculptor.agents.testing.fake_claude_commands import handle_background_task_notification
 from sculptor.agents.testing.fake_claude_commands import handle_background_task_started
@@ -46,6 +54,21 @@ from sculptor.state.claude_state import ParsedTaskNotificationResponse
 from sculptor.state.claude_state import ParsedTaskStartedResponse
 from sculptor.state.claude_state import ParsedToolResultResponseSimple
 from sculptor.state.claude_state import parse_claude_code_json_lines_simple
+
+
+@pytest.fixture(autouse=True)
+def _reset_stdin_router() -> Iterator[None]:
+    """Clear the module-level stdin router between tests.
+
+    The router is a process-wide singleton whose buffer/EOF state persists
+    across tests in one pytest process; resetting keeps a prior test's leftover
+    bytes or EOF from leaking into the next reader.
+    """
+    _STDIN_ROUTER.reset()
+    _ABSORBED_FRAMES.clear()
+    yield
+    _STDIN_ROUTER.reset()
+    _ABSORBED_FRAMES.clear()
 
 
 def test_init_message_roundtrip() -> None:
@@ -750,6 +773,7 @@ def _run_fake_claude_stream_json(
     *,
     include_partial: bool = False,
     append_system_prompt: str | None = None,
+    replay_user_messages: bool = False,
     home: Path | None = None,
     timeout: float = 30.0,
 ) -> subprocess.CompletedProcess[str]:
@@ -771,6 +795,8 @@ def _run_fake_claude_stream_json(
     ]
     if include_partial:
         argv.append("--include-partial-messages")
+    if replay_user_messages:
+        argv.append("--replay-user-messages")
     if append_system_prompt is not None:
         argv.extend(["--append-system-prompt", append_system_prompt])
     env = {**os.environ, "HOME": str(home)} if home is not None else None
@@ -898,10 +924,25 @@ def test_stream_json_interrupt_between_cycles_exits_with_sigterm_code() -> None:
     assert len([e for e in events if e.get("type") == "result"]) == 1
 
 
+def _feed_stdin_pipe(payload: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point ``sys.stdin`` at a real pipe carrying ``payload`` then EOF.
+
+    The unified stdin router reads the raw fd (``sys.stdin.fileno()``), so the
+    between-cycle reader tests need a genuine file descriptor rather than an
+    ``io.StringIO`` (which has no fileno). Closing the write end after the
+    payload gives the reader a clean EOF.
+    """
+    read_fd, write_fd = os.pipe()
+    os.write(write_fd, payload.encode("utf-8"))
+    os.close(write_fd)
+    fake_stdin = os.fdopen(read_fd, "r")
+    monkeypatch.setattr(sys, "stdin", fake_stdin)
+
+
 def test_read_prompt_returns_none_on_eof(monkeypatch: pytest.MonkeyPatch) -> None:
     """EOF (empty stdin) yields None so the caller exits instead of running the
     default handler for a turn the user never sent."""
-    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    _feed_stdin_pipe("", monkeypatch)
     assert _read_prompt_from_stream_json_stdin() is None
 
 
@@ -909,13 +950,13 @@ def test_read_prompt_returns_empty_string_for_empty_content_frame(monkeypatch: p
     """An explicit empty-content user frame is distinct from EOF: it returns ""
     so the default handler still runs for a genuinely empty prompt."""
     frame = json.dumps({"type": "user", "message": {"role": "user", "content": ""}}) + "\n"
-    monkeypatch.setattr(sys, "stdin", io.StringIO(frame))
+    _feed_stdin_pipe(frame, monkeypatch)
     assert _read_prompt_from_stream_json_stdin() == ""
 
 
 def test_read_prompt_returns_content_for_user_frame(monkeypatch: pytest.MonkeyPatch) -> None:
     frame = json.dumps({"type": "user", "message": {"role": "user", "content": "hello there"}}) + "\n"
-    monkeypatch.setattr(sys, "stdin", io.StringIO(frame))
+    _feed_stdin_pipe(frame, monkeypatch)
     assert _read_prompt_from_stream_json_stdin() == "hello there"
 
 
@@ -930,14 +971,14 @@ def test_read_prompt_skips_non_user_frames_until_user_frame(monkeypatch: pytest.
         + json.dumps({"type": "user", "message": {"role": "user", "content": "actual prompt"}})
         + "\n"
     )
-    monkeypatch.setattr(sys, "stdin", io.StringIO(lines))
+    _feed_stdin_pipe(lines, monkeypatch)
     assert _read_prompt_from_stream_json_stdin() == "actual prompt"
 
 
 def test_read_prompt_exits_on_idle_interrupt(monkeypatch: pytest.MonkeyPatch) -> None:
     """An interrupt control_request read between cycles exits with the SIGTERM code."""
     frame = json.dumps({"type": "control_request", "request_id": "r", "request": {"subtype": "interrupt"}}) + "\n"
-    monkeypatch.setattr(sys, "stdin", io.StringIO(frame))
+    _feed_stdin_pipe(frame, monkeypatch)
     with pytest.raises(SystemExit) as exc_info:
         _read_prompt_from_stream_json_stdin()
     assert exc_info.value.code == AGENT_EXIT_CODE_FROM_SIGTERM
@@ -1047,3 +1088,311 @@ def test_read_mcp_control_response_surfaces_response_after_buffered_control_requ
         os.close(w_fd)
 
     assert result == "MCP error -32602: Invalid params"
+
+
+# --- Mid-turn absorption + --replay-user-messages (SCU-1679) ---
+#
+# The real CLI absorbs a user frame that lands while a turn is in flight as a
+# ``queued_command`` attachment (steering), distinct from a between-turns frame
+# which starts a plain new turn. FakeClaude reproduces both, keyed on whether
+# the frame arrives while a cycle is held open. The transcript shape is checked
+# with the same detectors the real-CLI delivery-matrix canary uses.
+
+# A cycle held open on a 1s sleep (long enough for the router to absorb a
+# buffered frame during the hold), then a directive that quotes what it absorbed.
+_HELD_THEN_REFERENCE_STEPS = [
+    {"command": "sleep", "args": {"seconds": 1.0}},
+    {"command": "reference_absorbed", "args": {}},
+]
+
+
+def _held_then_reference_frame() -> str:
+    """A frame whose cycle holds open, absorbs a buffered frame, then references it."""
+    return _user_frame("fake_claude:multi_step `" + json.dumps({"steps": _HELD_THEN_REFERENCE_STEPS}) + "`")
+
+
+def _read_transcript_from_home(home: Path) -> list[dict]:
+    """Parse every JSONL transcript FakeClaude wrote under a pinned ``$HOME``.
+
+    One session runs per process, so this is the single session file; parsing
+    all of them keeps the helper robust to the slugged projects path.
+    """
+    entries: list[dict] = []
+    claude_dir = home / ".claude"
+    if not claude_dir.exists():
+        return entries
+    for path in claude_dir.rglob("*.jsonl"):
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entries.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return entries
+
+
+def _queued_command_prompts(entries: list[dict]) -> list[str]:
+    """Prompts of ``queued_command`` attachment entries (the steering shape)."""
+    prompts = []
+    for entry in entries:
+        attachment = entry.get("attachment")
+        if (
+            entry.get("type") == "attachment"
+            and isinstance(attachment, dict)
+            and attachment.get("type") == "queued_command"
+        ):
+            prompts.append(attachment.get("prompt", ""))
+    return prompts
+
+
+def _plain_user_texts(entries: list[dict]) -> list[str]:
+    """Text of ordinary (turn-starting) user messages in the transcript."""
+    texts = []
+    for entry in entries:
+        if entry.get("type") != "user":
+            continue
+        content = entry.get("message", {}).get("content", "")
+        if isinstance(content, str):
+            texts.append(content)
+    return texts
+
+
+def _string_user_echoes(events: list[dict], needle: str) -> list[str]:
+    """Stdout user-frame echoes (string content) containing ``needle``."""
+    echoes = []
+    for event in events:
+        if event.get("type") != "user":
+            continue
+        content = event.get("message", {}).get("content")
+        if isinstance(content, str) and needle in content:
+            echoes.append(content)
+    return echoes
+
+
+def test_mid_cycle_frame_absorbed_as_queued_command(tmp_path: Path) -> None:
+    """Scenario 1: a frame that lands while a cycle is held open is absorbed.
+
+    The held cycle does NOT start a second turn; it records the frame as a
+    ``queued_command`` attachment (not a plain user message) and a scripted
+    ``reference_absorbed`` step proves the cycle saw the absorbed content.
+    """
+    steer = f"STEER-{uuid4().hex}"
+    result = _run_fake_claude_stream_json(_held_then_reference_frame() + _user_frame(steer), home=tmp_path)
+    assert result.returncode == 0, result.stderr
+
+    events = _top_level_events(result.stdout)
+    # Absorbed mid-cycle → exactly one turn, not a second init/result cycle.
+    assert len([e for e in events if e.get("type") == "result"]) == 1
+    assert len([e for e in events if e.get("subtype") == "init"]) == 1
+
+    # The held cycle referenced the absorbed content in its remaining output.
+    assistant_texts = [e["message"]["content"][0]["text"] for e in events if e.get("type") == "assistant"]
+    assert any(steer in text for text in assistant_texts), assistant_texts
+
+    # Transcript: absorbed frame = queued_command; the turn-starting frame stays plain.
+    entries = _read_transcript_from_home(tmp_path)
+    assert _queued_command_prompts(entries) == [steer]
+    plain = _plain_user_texts(entries)
+    assert steer not in plain
+    assert any("multi_step" in text for text in plain), plain
+
+
+def test_absorbed_frame_not_replayed_on_stdout_without_flag(tmp_path: Path) -> None:
+    """Without --replay-user-messages the absorbed frame is recorded but never
+    echoed on stdout (matching the canary's negative assertion)."""
+    steer = f"STEER-{uuid4().hex}"
+    result = _run_fake_claude_stream_json(_held_then_reference_frame() + _user_frame(steer), home=tmp_path)
+    assert result.returncode == 0, result.stderr
+
+    assert _string_user_echoes(_top_level_events(result.stdout), steer) == []
+    assert _queued_command_prompts(_read_transcript_from_home(tmp_path)) == [steer]
+
+
+def test_replay_echoes_both_frames_in_position(tmp_path: Path) -> None:
+    """Scenario 2: with --replay-user-messages both frames are echoed, the
+    discriminator being position — the turn-starting frame just after its init,
+    the absorbed (steered) frame inside the open turn before its result."""
+    steer = f"STEER-{uuid4().hex}"
+    result = _run_fake_claude_stream_json(
+        _held_then_reference_frame() + _user_frame(steer),
+        replay_user_messages=True,
+        home=tmp_path,
+    )
+    assert result.returncode == 0, result.stderr
+
+    events = _top_level_events(result.stdout)
+    assert _string_user_echoes(events, steer) == [steer]
+
+    def is_user_echo(event: dict, needle: str) -> bool:
+        content = event.get("message", {}).get("content")
+        return event.get("type") == "user" and isinstance(content, str) and needle in content
+
+    init_index = next(i for i, e in enumerate(events) if e.get("subtype") == "init")
+    turn_starting_index = next(i for i, e in enumerate(events) if is_user_echo(e, "multi_step"))
+    steered_index = next(
+        i for i, e in enumerate(events) if e.get("type") == "user" and e.get("message", {}).get("content") == steer
+    )
+    result_index = next(i for i, e in enumerate(events) if e.get("type") == "result")
+
+    # init -> turn-starting echo -> steered echo (inside the open turn) -> result.
+    assert init_index < turn_starting_index < steered_index < result_index
+
+
+def test_between_turns_frames_recorded_as_plain_user(tmp_path: Path) -> None:
+    """A between-turns frame is turn-starting, not steering: two fast cycles
+    each record a plain user message and zero queued_command attachments."""
+    frames = _user_frame('fake_claude:text `{"text": "TURN1"}`') + _user_frame('fake_claude:text `{"text": "TURN2"}`')
+    result = _run_fake_claude_stream_json(frames, home=tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert len([e for e in _top_level_events(result.stdout) if e.get("type") == "result"]) == 2
+
+    entries = _read_transcript_from_home(tmp_path)
+    assert _queued_command_prompts(entries) == []
+    plain = _plain_user_texts(entries)
+    assert any("TURN1" in text for text in plain)
+    assert any("TURN2" in text for text in plain)
+
+
+def test_mcp_reader_absorbs_user_frame_while_awaiting_response(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The unified reader routes each frame by type in one pass: a user frame
+    arriving while a handler awaits its MCP control_response is absorbed
+    (recorded as queued_command), while the awaited response is still delivered.
+
+    This is the core of the reader unification — previously the MCP reader
+    discarded any non-matching line, silently losing a mid-wait user frame.
+    """
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    session_id = f"session-{uuid4().hex}"
+    make_init_message(session_id)  # sets get_last_session_id() for the transcript write
+    configure_stdin_router(replay_user_messages=False, persist_session=True)
+
+    steer = f"STEER-{uuid4().hex}"
+    request_id = "mcp_req_absorb"
+    user_frame = json.dumps({"type": "user", "message": {"role": "user", "content": steer}})
+    response = json.dumps(
+        {
+            "type": "control_response",
+            "response": {
+                "subtype": "success",
+                "request_id": request_id,
+                "response": {"mcp_response": {"result": {"content": [{"type": "text", "text": "ANSWER"}]}}},
+            },
+        }
+    )
+    read_fd, write_fd = os.pipe()
+    # User frame arrives first, then the awaited response — the reader must serve both.
+    os.write(write_fd, (user_frame + "\n" + response + "\n").encode("utf-8"))
+    os.close(write_fd)
+    fake_stdin = os.fdopen(read_fd, "r")
+    monkeypatch.setattr(sys, "stdin", fake_stdin)
+    try:
+        results = _read_mcp_control_responses({request_id}, timeout_seconds=2.0)
+    finally:
+        fake_stdin.close()
+
+    assert results[request_id]["result"]["content"][0]["text"] == "ANSWER"
+    assert _ABSORBED_FRAMES == [steer]
+    assert _queued_command_prompts(_read_transcript_from_home(tmp_path)) == [steer]
+
+
+class _BackgroundLineReader:
+    """Collects a subprocess's stdout JSONL on a daemon thread, so a test can
+    interleave stdin writes with waits on observed events (true mid-cycle
+    timing, unlike ``subprocess.run`` which writes all of stdin up front)."""
+
+    def __init__(self, stream: IO[str]) -> None:
+        self._stream = stream
+        self._events: list[dict] = []
+        self._lock = threading.Lock()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        for raw_line in self._stream:
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            with self._lock:
+                self._events.append(obj)
+
+    def events(self) -> list[dict]:
+        with self._lock:
+            return list(self._events)
+
+    def count(self, predicate: Callable[[dict], bool]) -> int:
+        return sum(1 for e in self.events() if predicate(e))
+
+    def wait_for(self, predicate: Callable[[dict], bool], timeout: float, description: str) -> None:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if any(predicate(e) for e in self.events()):
+                return
+            time.sleep(0.02)
+        raise AssertionError(f"Timed out waiting for {description}; events={self.events()}")
+
+
+def test_mid_cycle_absorption_true_timing_via_wait_for_file(tmp_path: Path) -> None:
+    """Scenario 1 with genuine mid-cycle timing: the steer frame is written only
+    AFTER the held cycle is observed in flight (not pre-buffered), then absorbed."""
+    steer = f"STEER-{uuid4().hex}"
+    sentinel = tmp_path / "release.signal"
+    argv = [
+        sys.executable,
+        "-m",
+        "sculptor.agents.testing.fake_claude",
+        "-p",
+        "--output-format",
+        "stream-json",
+        "--input-format",
+        "stream-json",
+        "--replay-user-messages",
+    ]
+    env = {**os.environ, "HOME": str(tmp_path)}
+    process = subprocess.Popen(
+        argv,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=str(Path(__file__).parents[3]),
+        env=env,
+    )
+    assert process.stdin is not None and process.stdout is not None
+    reader = _BackgroundLineReader(process.stdout)
+    try:
+        # Hold a cycle open on the sentinel, then wait until it is genuinely in flight.
+        process.stdin.write(_user_frame("fake_claude:wait_for_file `" + json.dumps({"path": str(sentinel)}) + "`"))
+        process.stdin.flush()
+        reader.wait_for(lambda e: e.get("subtype") == "init", timeout=15, description="system/init")
+
+        # Inject the steer frame mid-cycle; its echo proves the held cycle absorbed it.
+        process.stdin.write(_user_frame(steer))
+        process.stdin.flush()
+        reader.wait_for(
+            lambda e: e.get("type") == "user" and e.get("message", {}).get("content") == steer,
+            timeout=15,
+            description="steered replay echo",
+        )
+        # Absorption must not have opened a second turn.
+        assert reader.count(lambda e: e.get("type") == "result") == 0
+
+        sentinel.touch()  # release the held cycle so it finishes naturally
+        process.stdin.close()
+        assert process.wait(timeout=15) == 0, process.stderr.read() if process.stderr else ""
+    finally:
+        if process.poll() is None:
+            process.kill()
+        if process.stderr is not None:
+            process.stderr.close()
+        process.stdout.close()
+
+    assert reader.count(lambda e: e.get("type") == "result") == 1
+    assert _queued_command_prompts(_read_transcript_from_home(tmp_path)) == [steer]
