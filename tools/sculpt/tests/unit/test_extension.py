@@ -4,7 +4,6 @@ import json
 
 import pytest
 import typer
-
 from sculpt.client.models.extension_command_response import ExtensionCommandResponse
 from sculpt.client.models.extension_command_result import ExtensionCommandResult
 from sculpt.client.models.renderer_identity import RendererIdentity
