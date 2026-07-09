@@ -421,13 +421,16 @@ def _run_agent_in_environment(
                     was_killed = _get_killed_exit_code(message)
                     if not was_killed:
                         initial_in_flight_user_chat_message_id = None
-                # Only a clean (non-interrupted) success means the answer's turn
-                # actually finished — clear it so it isn't resumed. An interrupted
-                # success, a failure, or a kill all leave the answer orphaned (its
-                # toolResult is recorded but nothing drove the follow-up turn), so
-                # keep it for resume.
+                # A clean (non-interrupted) success means the answer's turn
+                # actually finished, and a turn_abandoned success means it was
+                # terminally settled (harness finalization or pi resume-settle)
+                # — clear it either way so it isn't resumed again. A plain
+                # interrupted success, a failure, or a kill all leave the answer
+                # orphaned (its toolResult is recorded but nothing drove the
+                # follow-up turn), so keep it for resume.
                 if message.request_id == initial_in_flight_user_question_answer_message_id and (
-                    isinstance(message, RequestSuccessAgentMessage) and not message.interrupted
+                    isinstance(message, RequestSuccessAgentMessage)
+                    and (not message.interrupted or message.turn_abandoned)
                 ):
                     initial_in_flight_user_question_answer_message_id = None
             # used above so that we can figure out which user messages started being processed so far
@@ -471,6 +474,7 @@ def _run_agent_in_environment(
                     message_id=AgentMessageID(),
                     request_id=rid,
                     interrupted=True,
+                    turn_abandoned=True,
                 )
                 for rid in orphan_request_ids
             ]

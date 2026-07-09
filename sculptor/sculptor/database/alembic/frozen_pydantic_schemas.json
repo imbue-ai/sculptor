@@ -1420,6 +1420,11 @@
           "source": {
             "$ref": "#/$defs/AgentMessageSource",
             "default": "AGENT"
+          },
+          "turnAbandoned": {
+            "default": false,
+            "title": "Turnabandoned",
+            "type": "boolean"
           }
         },
         "required": [

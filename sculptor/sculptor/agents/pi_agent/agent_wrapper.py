@@ -820,6 +820,7 @@ class PiAgent(DefaultAgentWrapper):
                     request_id=message.for_user_message_id,
                     error=None,
                     interrupted=True,
+                    turn_abandoned=True,
                 )
             )
             return True

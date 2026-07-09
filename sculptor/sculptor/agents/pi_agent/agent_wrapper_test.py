@@ -2092,6 +2092,7 @@ class TestPushMessageDispatch:
         assert isinstance(emitted, RequestSuccessAgentMessage)
         assert emitted.request_id == stuck_id
         assert emitted.interrupted is True
+        assert emitted.turn_abandoned is True
 
     def test_push_message_enqueues_clear_context_returns_true(self) -> None:
         """A ClearContextUserMessage goes on the same FIFO as chat turns — handled, not dead-lettered."""

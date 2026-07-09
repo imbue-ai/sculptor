@@ -271,13 +271,18 @@ def _is_truly_processed_completion(message: PersistentRequestCompleteAgentMessag
     here, dedup would treat the message as processed and silently drop it on the next
     run — which loses the user's typed input in the post-answer-shutdown scenario.
 
+    The exception is an interrupted success marked ``turn_abandoned``: the request
+    was terminally settled (harness orphan-finalization, pi resume-settle) and the
+    turn will never be continued, so re-delivering the message could only duplicate
+    it. Those count.
+
     ``RequestFailureAgentMessage`` and ``RequestSkippedAgentMessage`` do count: the
     agent received the message and reached a terminal state for it (failed or
     intentionally skipped). Re-delivering would just hit the same outcome.
     """
     if isinstance(message, RequestStoppedAgentMessage):
         return False
-    if isinstance(message, RequestSuccessAgentMessage) and message.interrupted:
+    if isinstance(message, RequestSuccessAgentMessage) and message.interrupted and not message.turn_abandoned:
         return False
     return True
 

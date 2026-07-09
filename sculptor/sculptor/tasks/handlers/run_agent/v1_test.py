@@ -2171,3 +2171,167 @@ def test_noop_resume_advances_dedup_cursor_for_synthesized_completions(
     assert {m.message_id for m in dropped} == {chat_message.message_id, answer.message_id}
     assert re_queued == ()
     assert replay_queue.empty()
+
+
+def _run_noop_resume(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    agent_env: LocalAgentExecutionEnvironment,
+    test_settings: SculptorSettings,
+    task_state: AgentTaskStateV2,
+) -> None:
+    """Run one no-op resume cycle (no queued messages, shutdown pre-set) to AgentPaused."""
+    fake_agent = _IdleStopAgent(
+        harness=CLAUDE_CODE_HARNESS,
+        environment=agent_env,
+        task_id=local_task.object_id,
+        system_prompt="",
+    )
+    input_message_queue: Queue = Queue()
+    shutdown_event = threading.Event()
+    shutdown_event.set()
+    assert isinstance(local_task.input_data, AgentTaskInputsV2)
+    with patch("sculptor.tasks.handlers.run_agent.v1._get_agent_wrapper", return_value=fake_agent):
+        with pytest.raises(AgentPaused):
+            _run_agent_in_environment(
+                task=local_task,
+                task_data=local_task.input_data,
+                task_state=task_state,
+                re_queued_messages=(),
+                input_message_queue=input_message_queue,
+                environment=agent_env,
+                services=services,
+                project=project,
+                settings=test_settings,
+                shutdown_event=shutdown_event,
+            )
+
+
+def test_second_noop_resume_does_not_duplicate_answer_finalization(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: LocalEnvironment,
+    test_settings: SculptorSettings,
+) -> None:
+    """A finalized answer orphan must stay finalized across further restarts.
+
+    The synthesized completion is interrupted, and replay used to treat any
+    interrupted success as "keep the answer orphaned for resume" — so every
+    subsequent no-op resume re-detected the same orphan and appended another
+    synthetic completion, one per restart cycle. The turn_abandoned marker
+    tells replay the request was terminally settled, so the second cycle must
+    synthesize nothing.
+    """
+    workspace_id = WorkspaceID()
+    previous_message_id = AgentMessageID()
+    chat_message = ChatInputUserMessage(
+        message_id=AgentMessageID(),
+        text="Do something",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+    answer = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"Continue?": "Yes, proceed"},
+        question_data=AskUserQuestionData(questions=[], tool_use_id="toolu_repeat"),
+        tool_use_id="toolu_repeat",
+    )
+    stale_state = AgentTaskStateV2(
+        workspace_id=workspace_id,
+        last_processed_message_id=previous_message_id,
+    )
+    _set_task_state(local_task, stale_state, services)
+
+    with services.data_model_service.open_task_transaction() as transaction:
+        services.task_service.create_message(chat_message, local_task.object_id, transaction)
+        services.task_service.create_message(
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=chat_message.message_id),
+            local_task.object_id,
+            transaction,
+        )
+        services.task_service.create_message(
+            RequestSuccessAgentMessage(message_id=AgentMessageID(), request_id=chat_message.message_id),
+            local_task.object_id,
+            transaction,
+        )
+        services.task_service.create_message(answer, local_task.object_id, transaction)
+        services.task_service.create_message(
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=answer.message_id),
+            local_task.object_id,
+            transaction,
+        )
+
+    agent_env = LocalAgentExecutionEnvironment(
+        environment=environment,
+        task_id=local_task.object_id,
+        dependency_management_service=services.dependency_management_service,
+    )
+
+    _run_noop_resume(local_task, services, project, agent_env, test_settings, stale_state)
+    # Second cycle loads state the way a real restart does (also exercising the
+    # reconciler against the marked completion persisted by the first cycle).
+    reloaded_state, _project = load_initial_task_state(services, local_task)
+    _run_noop_resume(local_task, services, project, agent_env, test_settings, reloaded_state)
+
+    with services.data_model_service.open_task_transaction() as transaction:
+        saved_messages = services.task_service.get_saved_messages_for_task(local_task.object_id, transaction)
+
+    answer_completions = [
+        m for m in saved_messages if isinstance(m, RequestSuccessAgentMessage) and m.request_id == answer.message_id
+    ]
+    assert len(answer_completions) == 1, (
+        f"The second no-op resume must not re-finalize the settled answer, got {len(answer_completions)} completions"
+    )
+    assert answer_completions[0].interrupted and answer_completions[0].turn_abandoned
+
+
+def test_load_initial_task_state_counts_turn_abandoned_completions(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+) -> None:
+    """Reconciliation counts interrupted completions marked turn_abandoned.
+
+    Mirror of test_load_initial_task_state_does_not_count_interrupted_completions:
+    a plain interrupted success means "may still be resumed" and must not advance
+    the cursor, but a turn_abandoned one means "terminally settled, never
+    re-drive" — if the cursor write was lost to a crash between _save_messages
+    and _update_task_state, reconciliation must heal it so the settled message
+    isn't re-delivered.
+    """
+    workspace_id = WorkspaceID()
+    previous_message_id = AgentMessageID()
+    chat_message = ChatInputUserMessage(
+        message_id=AgentMessageID(),
+        text="Prompt that crashed mid-response",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+    stale_state = AgentTaskStateV2(
+        workspace_id=workspace_id,
+        last_processed_message_id=previous_message_id,
+    )
+    _set_task_state(local_task, stale_state, services)
+
+    with services.data_model_service.open_task_transaction() as transaction:
+        services.task_service.create_message(chat_message, local_task.object_id, transaction)
+        services.task_service.create_message(
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=chat_message.message_id),
+            local_task.object_id,
+            transaction,
+        )
+        services.task_service.create_message(
+            RequestSuccessAgentMessage(
+                message_id=AgentMessageID(),
+                request_id=chat_message.message_id,
+                interrupted=True,
+                turn_abandoned=True,
+            ),
+            local_task.object_id,
+            transaction,
+        )
+
+    loaded_state, _project = load_initial_task_state(services, local_task)
+
+    assert loaded_state.last_processed_message_id == chat_message.message_id, (
+        "Reconciliation must advance the cursor over a turn_abandoned completion"
+    )
