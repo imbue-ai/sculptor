@@ -299,29 +299,39 @@ button { font-family: inherit; }
 }
 .save-cap { color: var(--gray-10); font-size: 13px; }
 
-/* Mini preview of what this layout captures. Solid boxes = saved panels;
-   dashed = agents/terminals, which a layout never touches. */
+/* Mini preview of what this layout captures. Solid boxes = saved panels; dashed
+   chips mark the fixed homes where default seeding creates an agent/terminal.
+   Bottom spans the full width; the box is centered near a real window's aspect. */
 .prev {
   border: 1px solid var(--gray-a4); border-radius: 6px; display: grid; gap: 4px;
-  grid-template-areas: "l c r" "l b r"; grid-template-columns: 26% 1fr 20%;
-  grid-template-rows: 1fr 30px; height: 168px; padding: 6px;
+  grid-template-areas: "l c r" "b b b"; grid-template-columns: 1fr 1.4fr 1fr;
+  grid-template-rows: 1fr 56px; height: 360px; margin: 0 auto; max-width: 560px;
+  padding: 4px; width: 100%;
 }
-.prev .cell { border-radius: 4px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.prev .cell { border-radius: 4px; display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow: hidden; padding: 8px; }
 .prev .saved { background: var(--gray-a2); border: 1px solid var(--gray-a5); }
 .prev .stays { border: 1px dashed var(--gray-a5); }
+.prev .cell-label { color: var(--gray-9); font-size: 12px; line-height: 1.4; }
 .prev .cell-l { grid-area: l; }
 .prev .cell-c { grid-area: c; }
 .prev .cell-r { grid-area: r; }
-.prev .cell-b { align-items: center; flex-direction: row; grid-area: b; justify-content: center; }
-.prev .cell-tabs { display: flex; flex-wrap: wrap; gap: 3px; padding: 6px; }
+.prev .cell-b { align-items: center; flex-direction: row; gap: 8px; grid-area: b; }
+.prev .cell-tabs { display: flex; flex-wrap: wrap; gap: 3px; }
 .prev .ptab {
-  background: var(--gray-a3); border-radius: 3px; color: var(--gray-11);
-  font-size: 10px; padding: 2px 6px; white-space: nowrap;
+  background: var(--gray-a3); border: 1px solid transparent; border-radius: 3px; color: var(--gray-11);
+  font-size: 12px; padding: 2px 8px; white-space: nowrap;
 }
 .prev .ptab.on { background: var(--gray-a5); color: var(--gray-12); }
-.prev .fill { align-items: center; color: var(--gray-9); display: flex; flex: 1; font-size: 11px; gap: 6px; justify-content: center; }
-.prev .fill svg { color: var(--gray-8); }
+.prev .ptab.default { background: transparent; border: 1px dashed var(--gray-a6); color: var(--gray-10); }
 .prev-legend { color: var(--gray-9); font-size: 12px; }
+
+/* save-options proposal: per-layout switches move up into the body (tidy-on-apply
+   joins set-as-default); the footer keeps only the save affordances. */
+.opt-rows { display: flex; flex-direction: column; gap: 12px; }
+.opt-row { align-items: flex-start; cursor: pointer; display: flex; gap: 10px; }
+.opt-row .switch { margin-top: 3px; }
+.opt-title { color: var(--gray-11); font-size: 13px; }
+.opt-sub { color: var(--gray-9); font-size: 12px; margin-top: 1px; }
 
 /* Switch (Radix size-1-ish) */
 .switch { background: var(--gray-a6); border-radius: 999px; flex-shrink: 0; height: 14px; position: relative; width: 26px; }
@@ -370,7 +380,8 @@ body[data-state="dialog"] .overlay,
 body[data-state="dialog-search"] .overlay,
 body[data-state="switcher"] .overlay,
 body[data-state="switcher-actions"] .overlay,
-body[data-state="save"] .overlay { background: rgba(0, 0, 0, 0.7); display: block; }
+body[data-state="save"] .overlay,
+body[data-state="save-options"] .overlay { background: rgba(0, 0, 0, 0.7); display: block; }
 body[data-state="switcher"] #dlg-switcher { display: flex; }
 body[data-state="switcher-actions"] #dlg-switcher-actions { display: flex; }
 body[data-state="palette"] .overlay { background: rgba(0, 0, 0, 0.4); display: block; }
@@ -380,6 +391,7 @@ body[data-state="dialog"] #dlg-layouts { display: flex; }
 body[data-state="dialog-search"] #dlg-layouts-search { display: flex; }
 body[data-state="palette"] #dlg-palette { display: flex; box-shadow: var(--shadow-palette); max-height: min(72vh, 560px); }
 body[data-state="save"] #dlg-save { display: flex; }
+body[data-state="save-options"] #dlg-save-options { display: flex; }
 body[data-state="tidy"] #dlg-tidy { display: flex; }
 body[data-state="sidebar"] .nav-layouts { background: var(--gray-a3); }
 
@@ -747,28 +759,63 @@ body.bare #chrome { display: none; }
     <div class="save-cap">Saves this workspace&rsquo;s panels and space as a reusable layout.</div>
     <div class="prev">
       <div class="cell cell-l saved">
+        <div class="cell-label">Left</div>
         <div class="cell-tabs"><span class="ptab on">Files</span><span class="ptab">Changes</span><span class="ptab">Commits</span></div>
       </div>
       <div class="cell cell-c stays">
-        <div class="fill">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 5V3"/><path d="M12 21v-2"/><path d="M5 12H3"/><path d="M21 12h-2"/></svg>
-          Claude 1 · stays as-is
-        </div>
+        <div class="cell-label">Center</div>
+        <div class="cell-tabs"><span class="ptab default">Agent default</span></div>
       </div>
       <div class="cell cell-r saved">
+        <div class="cell-label">Right</div>
         <div class="cell-tabs"><span class="ptab on">Browser</span></div>
       </div>
       <div class="cell cell-b stays">
-        <div class="fill">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
-          Terminal · stays as-is
-        </div>
+        <div class="cell-label">Bottom</div>
+        <div class="cell-tabs"><span class="ptab default">Terminal default</span></div>
       </div>
     </div>
-    <div class="prev-legend">Agents and terminals aren&rsquo;t saved — applying a layout never closes them.</div>
+    <div class="prev-legend">An agent is created by default in the center section. A terminal is created by default in the bottom section.</div>
   </div>
   <footer class="pal-foot" style="padding: 16px 24px;">
     <label class="switch-label"><span class="switch on"></span>Set as default for new workspaces</label>
+    <span style="align-items: center; display: flex; gap: 12px;">
+      <span class="foot-hints"><span><kbd>⌘↵</kbd> to save</span></span>
+      <button class="btn primary">Save layout</button>
+    </span>
+  </footer>
+</section>
+
+<!-- ═══════════════ 4b) Save-as dialog — tidy-on-apply proposal ═══════════════ -->
+<section class="pal" id="dlg-save-options">
+  <div class="save-body">
+    <div class="save-title">Planning<span class="caret"></span></div>
+    <div class="save-cap">Saves this workspace&rsquo;s panels and space as a reusable layout.</div>
+    <div class="prev">
+      <div class="cell cell-l saved">
+        <div class="cell-label">Left</div>
+        <div class="cell-tabs"><span class="ptab on">Files</span><span class="ptab">Changes</span><span class="ptab">Commits</span></div>
+      </div>
+      <div class="cell cell-c stays">
+        <div class="cell-label">Center</div>
+        <div class="cell-tabs"><span class="ptab default">Agent default</span></div>
+      </div>
+      <div class="cell cell-r saved">
+        <div class="cell-label">Right</div>
+        <div class="cell-tabs"><span class="ptab on">Browser</span></div>
+      </div>
+      <div class="cell cell-b stays">
+        <div class="cell-label">Bottom</div>
+        <div class="cell-tabs"><span class="ptab default">Terminal default</span></div>
+      </div>
+    </div>
+    <div class="prev-legend">An agent is created by default in the center section. A terminal is created by default in the bottom section.</div>
+    <div class="opt-rows">
+      <label class="opt-row"><span class="switch on"></span><span><span class="opt-title">Tidy panels when applying</span><div class="opt-sub">Closes panels this layout doesn&rsquo;t include — never agents or terminals.</div></span></label>
+      <label class="opt-row"><span class="switch"></span><span><span class="opt-title">Set as default for new workspaces</span></span></label>
+    </div>
+  </div>
+  <footer class="pal-foot" style="justify-content: flex-end; padding: 16px 24px;">
     <span style="align-items: center; display: flex; gap: 12px;">
       <span class="foot-hints"><span><kbd>⌘↵</kbd> to save</span></span>
       <button class="btn primary">Save layout</button>
@@ -807,6 +854,7 @@ body.bare #chrome { display: none; }
   <a href="?state=switcher">Switcher</a>
   <a href="?state=switcher-actions">Actions ⌘K</a>
   <a href="?state=save">Save as…</a>
+  <a href="?state=save-options">Save options</a>
   <a href="?state=tidy">Tidy</a>
   <a href="?state=palette">Cmd+K</a>
   <a href="?state=sidebar">Sidebar</a>
