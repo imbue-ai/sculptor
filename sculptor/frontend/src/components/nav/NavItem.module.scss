@@ -46,8 +46,17 @@
   flex-shrink: 0;
 }
 
-// Dim the leading icon in step with the disabled label. Kept flat (and after
-// `.navIcon`) so selector specificity stays in source order for stylelint.
+// Tint the leading icon with the accent color when the row is selected, matching
+// the accent label. The icon sets an explicit color (rather than inheriting
+// currentColor), so the active state has to restate it here.
+.navItemActive .navIcon {
+  color: var(--accent-11);
+}
+
+// Dim the leading icon in step with the disabled label. The `:disabled`
+// pseudo-class makes this more specific than `.navItemActive .navIcon`, so it
+// wins for an active-and-disabled row. Kept flat and after the active rule so
+// specificity stays non-descending in source order for stylelint.
 .navItem:disabled .navIcon {
   color: var(--gray-8);
 }
