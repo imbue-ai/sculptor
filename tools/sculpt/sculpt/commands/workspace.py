@@ -1,4 +1,5 @@
 import json
+import os
 
 import httpx
 import typer
@@ -11,10 +12,13 @@ from sculpt.client.api.default import delete_workspace
 from sculpt.client.api.default import list_recent_workspaces
 from sculpt.client.api.default import list_workspaces
 from sculpt.client.api.default import update_workspace
+from sculpt.client.models.creation_attribution import CreationAttribution
 from sculpt.client.models.create_workspace_request_v2 import CreateWorkspaceRequestV2
 from sculpt.client.models.http_validation_error import HTTPValidationError
 from sculpt.client.models.recent_workspace_response import RecentWorkspaceResponse
 from sculpt.client.models.update_workspace_request import UpdateWorkspaceRequest
+from sculpt.client.types import UNSET
+from sculpt.client.types import Unset
 from sculpt.commands._workspace_helpers import STRATEGY_MAPPING
 from sculpt.commands._workspace_helpers import resolve_requested_branch_name
 from sculpt.commands._workspace_helpers import resolve_strategy
@@ -43,6 +47,26 @@ workspace_app = typer.Typer(
 _RECENT_REPO_DISPLAY_MAX_LENGTH = 30
 _RECENT_DESCRIPTION_DISPLAY_MAX_LENGTH = 30
 _PROJECT_DESCRIPTION_DISPLAY_MAX_LENGTH = 40
+
+
+def _resolve_creation_attribution() -> CreationAttribution | Unset:
+    """Record which workspace/agent spawned a new workspace, for sidebar nesting.
+
+    Sculptor injects SCULPT_WORKSPACE_ID (and, inside an agent, SCULPT_AGENT_ID) into
+    every workspace shell. When present, this command is running on behalf of an
+    existing workspace, so the new workspace is attributed to it and the UI nests it
+    beneath its creator. When absent — e.g. a user running `sculpt` from a plain
+    terminal — attribution is left unset and the workspace is treated as user-created
+    (it goes to the top of the sidebar).
+    """
+    workspace_id = os.environ.get("SCULPT_WORKSPACE_ID")
+    agent_id = os.environ.get("SCULPT_AGENT_ID")
+    if not workspace_id and not agent_id:
+        return UNSET
+    return CreationAttribution(
+        created_by_workspace_id=workspace_id if workspace_id else UNSET,
+        created_by_agent_id=agent_id if agent_id else UNSET,
+    )
 
 
 @workspace_app.command("create")
@@ -99,6 +123,7 @@ def create(
         description=name,
         requested_branch_name=resolved_branch_name,
         target_branch=target_branch,
+        created_by=_resolve_creation_attribution(),
     )
 
     try:

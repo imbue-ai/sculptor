@@ -92,6 +92,8 @@ WORKSPACE_CREATION_ONLY_FIELDS: frozenset[str] = frozenset(
         "source_git_hash",
         "requested_branch_name",
         "harness",
+        # Attribution stamped once when the workspace is created; never updated.
+        "created_by",
     }
 )
 

@@ -6,6 +6,7 @@ from typing import Generator
 from typing import Literal
 from typing import TYPE_CHECKING
 
+from sculptor.database.models import CreationAttribution
 from sculptor.database.models import Project
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
@@ -161,6 +162,7 @@ class WorkspaceService(Service, ABC):
         description: str | None,
         transaction: DataModelTransaction,
         target_branch: str | None = None,
+        created_by: CreationAttribution | None = None,
     ) -> Workspace:
         """
         Create a new workspace for a project.
@@ -175,6 +177,8 @@ class WorkspaceService(Service, ABC):
             transaction: Database transaction for atomicity.
             target_branch: Diff/merge target branch. When None, a default is resolved
                 from the repo (origin's default branch, else local main/master).
+            created_by: Attribution for an agent-spawned workspace. None for
+                user-initiated creation.
 
         Returns:
             The created Workspace.

@@ -80,6 +80,31 @@ class Project(DatabaseModel):
         return Path(self.user_git_repo_url.replace("file://", ""))
 
 
+class CreationAttribution(SerializableModel):
+    """
+    Records what created a workspace, so the UI can group agent-spawned workspaces
+    under the workspace that created them (and place user-initiated ones on top).
+
+    Populated by `sculpt workspace create` from the creating agent's own identity
+    (SCULPT_WORKSPACE_ID / SCULPT_AGENT_ID). Left null for user-initiated creation
+    through the UI, which is why a null attribution is treated the same as "created
+    by the user" everywhere it's consumed.
+
+    This is intentionally an embedded object stored inline as a JSON column, NOT a
+    foreign-key relation: SQLite foreign keys fight the two-table
+    (`<name>` / `<name>_latest`) trigger design, so parentage lives here as plain
+    embedded ids rather than a cross-table constraint.
+    """
+
+    # The workspace whose agent spawned this one. Drives the sidebar nesting; a
+    # workspace whose creator isn't currently visible in the same repo group falls
+    # back to top-level.
+    created_by_workspace_id: WorkspaceID | None = None
+    # The specific agent (task) that spawned this workspace, when known. Not used
+    # for sidebar ordering today; kept as the "task-level" detail for future use.
+    created_by_agent_id: TaskID | None = None
+
+
 class Workspace(DatabaseModel):
     """
     A workspace represents an isolated working environment for one or more tasks.
@@ -120,6 +145,10 @@ class Workspace(DatabaseModel):
     # here so it survives a backend restart (the coordinator's in-memory state is
     # rebuilt lazily and would otherwise revert to the default).
     ci_babysitter_paused: bool = False
+    # What created this workspace. Null for user-initiated creation via the UI;
+    # populated by `sculpt workspace create` when an agent spawns a workspace.
+    # Consumed by the sidebar to nest agent-spawned workspaces under their creator.
+    created_by: CreationAttribution | None = None
 
 
 # Runtime tables

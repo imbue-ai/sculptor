@@ -258,6 +258,70 @@ class TestWorkspaceCreate:
         assert request_body["targetBranch"] == "feature"
 
     @respx.mock
+    def test_create_attributes_to_creating_workspace_and_agent(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When run from an agent shell, the new workspace records its creator."""
+        monkeypatch.setenv("SCULPT_WORKSPACE_ID", "ws_creator")
+        monkeypatch.setenv("SCULPT_AGENT_ID", "tsk_creator")
+        _mock_session()
+        _mock_initialize_project()
+        _mock_preview_branch_name()
+        create_route = respx.post("http://localhost:5050/api/v1/workspaces").mock(
+            return_value=Response(200, json=_workspace_response_dict())
+        )
+
+        result = runner.invoke(app, ["workspace", "create", "--repo", "/tmp/test"])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        request_body = json.loads(create_route.calls[0].request.content)
+        assert request_body["createdBy"] == {
+            "createdByWorkspaceId": "ws_creator",
+            "createdByAgentId": "tsk_creator",
+        }
+
+    @respx.mock
+    def test_create_attributes_workspace_only_outside_an_agent(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """From a workspace terminal (not an agent), only the workspace id is attributed."""
+        monkeypatch.setenv("SCULPT_WORKSPACE_ID", "ws_creator")
+        monkeypatch.delenv("SCULPT_AGENT_ID", raising=False)
+        _mock_session()
+        _mock_initialize_project()
+        _mock_preview_branch_name()
+        create_route = respx.post("http://localhost:5050/api/v1/workspaces").mock(
+            return_value=Response(200, json=_workspace_response_dict())
+        )
+
+        result = runner.invoke(app, ["workspace", "create", "--repo", "/tmp/test"])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        request_body = json.loads(create_route.calls[0].request.content)
+        assert request_body["createdBy"] == {"createdByWorkspaceId": "ws_creator"}
+        assert "createdByAgentId" not in request_body["createdBy"]
+
+    @respx.mock
+    def test_create_omits_attribution_without_env(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A plain-terminal create sends no attribution, so the workspace stays user-created."""
+        monkeypatch.delenv("SCULPT_WORKSPACE_ID", raising=False)
+        monkeypatch.delenv("SCULPT_AGENT_ID", raising=False)
+        _mock_session()
+        _mock_initialize_project()
+        _mock_preview_branch_name()
+        create_route = respx.post("http://localhost:5050/api/v1/workspaces").mock(
+            return_value=Response(200, json=_workspace_response_dict())
+        )
+
+        result = runner.invoke(app, ["workspace", "create", "--repo", "/tmp/test"])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        request_body = json.loads(create_route.calls[0].request.content)
+        assert "createdBy" not in request_body
+
+    @respx.mock
     def test_create_invalid_strategy(self, runner: CliRunner) -> None:
         _mock_session()
         _mock_initialize_project()
