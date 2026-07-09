@@ -41,7 +41,7 @@ describe("NewWorkspaceModal", () => {
   });
 
   it("passes the open request's seeds and create callback through to the form", () => {
-    // A plugin's open request (via the SDK's useOpenNewWorkspaceModal) and the
+    // An extension's open request (via the SDK's useOpenNewWorkspaceModal) and the
     // home page's first-run auto-open both ride this atom; the form only sees
     // what the modal forwards.
     const store = createStore();

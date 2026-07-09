@@ -12,7 +12,7 @@ import { hasEverHadWorkspacesAtom, workspacesArrayAtom } from "~/common/state/at
  * group's "+" so the form lands on that repo. `initialTitle` / `initialPrompt`
  * / `initialBranchName` seed the form's title, prompt, and new-branch-name
  * fields: the home page's first-run auto-open uses `initialPrompt` to seed the
- * `/sculptor:help` onboarding prompt, and plugins use the full seed set (via
+ * `/sculptor:help` onboarding prompt, and extensions use the full seed set (via
  * the SDK's `useOpenNewWorkspaceModal`) to open the dialog pre-filled.
  * `onWorkspaceCreated` fires after each successful create while the dialog
  * stays associated with this open request (including repeat creates in

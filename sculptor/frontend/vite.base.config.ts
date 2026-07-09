@@ -27,8 +27,8 @@ import {
   type UserConfigExport,
 } from "vite";
 
-import { bundledPlugins } from "./vite-plugins/bundled-plugins.ts";
-import { pluginRuntimeStubs } from "./vite-plugins/plugin-runtime-stubs.ts";
+import { bundledExtensions } from "./vite-plugins/bundled-extensions.ts";
+import { extensionRuntimeStubs } from "./vite-plugins/extension-runtime-stubs.ts";
 
 /**
  * Exclude ``@xterm/xterm`` from the bundle and serve it as a standalone
@@ -87,8 +87,8 @@ export function externalizeXterm(root: string): Plugin {
 /** Plugins shared by the web and Electron-renderer builds. */
 export const sharedPlugins = (root: string): Array<Plugin> => [
   externalizeXterm(root),
-  pluginRuntimeStubs(),
-  bundledPlugins(),
+  extensionRuntimeStubs(),
+  bundledExtensions(),
   react(),
 ];
 
@@ -150,7 +150,7 @@ export const sharedDefine = (
  * factory, so each entry config only declares what actually differs.
  */
 export interface FrontendConfigOptions {
-  /** Frontend dir; drives `root`, the `~` alias, SCSS load paths, and plugin file copies. */
+  /** Frontend dir; drives `root`, the `~` alias, SCSS load paths, and extension file copies. */
   root: string;
   /** Dev-server port used when SCULPTOR_FRONTEND_PORT is unset (5174 web, 5173 renderer). */
   defaultFrontendPort: number;
@@ -178,7 +178,7 @@ export interface FrontendConfigOptions {
 /**
  * OpenHost preview identity: inject `<meta name="sculptor-preview">` into
  * index.html so the /proxy/ switchboard (openhost-preview-fallback.html) and
- * the openhost-preview-switcher plugin can label this preview. A dev server has
+ * the openhost-preview-switcher extension can label this preview. A dev server has
  * no "build time" to report; instead branch/sha/dirty are read fresh from the
  * working tree on each index.html request. HMR patches modules without
  * refetching index.html, so a loaded page keeps the identity it loaded with —
@@ -248,7 +248,7 @@ function previewHmrKeepalive(): Plugin {
   };
 }
 
-/** Dev-only proxy server forwarding `/api`, `/ws`, and `/plugins/local` to the backend. */
+/** Dev-only proxy server forwarding `/api`, `/ws`, and `/extensions/local` to the backend. */
 function devServer(env: Record<string, string>, fePort: number): import("vite").ServerOptions {
   const apiPort = Number(env.SCULPTOR_API_PORT || 5050);
   const apiTarget = env.SCULPTOR_CUSTOM_BACKEND_URL || `http://127.0.0.1:${apiPort}`;
@@ -270,13 +270,13 @@ function devServer(env: Record<string, string>, fePort: number): import("vite").
         ws: true,
         rewriteWsOrigin: true,
       },
-      // Local/dev plugins are served by the backend's `/plugins/local` static
+      // Local/dev extensions are served by the backend's `/extensions/local` static
       // mount; in production the backend serves the SPA too (same origin), but in
       // dev the SPA is on Vite, so forward this prefix to the backend or the
-      // plugin loader's manifest fetch hits Vite's SPA fallback (HTML, not JSON).
-      // Only `/plugins/local` — builtin plugins (`/plugins/<id>`) are Vite public
-      // assets and must keep being served by Vite.
-      "/plugins/local": {
+      // extension loader's manifest fetch hits Vite's SPA fallback (HTML, not JSON).
+      // Only `/extensions/local` — builtin extensions (`/extensions/<id>`) are Vite
+      // public assets and must keep being served by Vite.
+      "/extensions/local": {
         target: apiTarget,
         changeOrigin: true,
       },

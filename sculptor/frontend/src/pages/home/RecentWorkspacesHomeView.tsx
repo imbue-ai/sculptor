@@ -9,7 +9,7 @@ import styles from "./RecentWorkspacesHomeView.module.scss";
 /**
  * The built-in homepage view: a centered, searchable list of recent workspaces.
  * Registered under {@link BUILTIN_HOME_VIEW_ID} and always the fallback view, so
- * the homepage looks unchanged when no plugin contributes an alternative.
+ * the homepage looks unchanged when no extension contributes an alternative.
  */
 export const RecentWorkspacesHomeView = (): ReactElement => {
   const { handleWorkspaceClick, handleOpenInNewTab } = useWorkspaceNavigation();

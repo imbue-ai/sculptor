@@ -138,7 +138,7 @@ describe("NewWorkspaceForm", () => {
 
   it("contains a throwing onWorkspaceCreated so the post-create flow still runs", async () => {
     const onWorkspaceCreated = vi.fn(() => {
-      throw new Error("plugin exploded");
+      throw new Error("extension exploded");
     });
     const onCreated = vi.fn();
     // The form logs the contained throw; keep the test output clean.

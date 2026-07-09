@@ -36,11 +36,11 @@ import { CustomBackendSection } from "./components/AdvancedSection.tsx";
 import { CIBabysitterSettingsSection } from "./components/CIBabysitterSettingsSection.tsx";
 import { DependenciesSettingsSection } from "./components/DependenciesSettingsSection.tsx";
 import { EnvironmentVariablesSection } from "./components/EnvironmentVariablesSection.tsx";
+import { ExtensionsSettingsSection } from "./components/ExtensionsSettingsSection.tsx";
 import { FileBrowserSettingsSection } from "./components/FileBrowserSettingsSection.tsx";
 import { GitSettingsSection } from "./components/GitSettingsSection.tsx";
 import { KeybindingsSection } from "./components/KeybindingsSection.tsx";
 import { PiSettingsSection } from "./components/PiSettingsSection.tsx";
-import { PluginsSettingsSection } from "./components/PluginsSettingsSection.tsx";
 import { ReposSection } from "./components/ReposSection.tsx";
 import { SettingRow } from "./components/SettingRow.tsx";
 import { SettingsSectionLayout } from "./components/SettingsSection.tsx";
@@ -395,8 +395,8 @@ export const SettingsPage = (): ReactElement => {
               {activeSection === SettingsSection.KEYBINDINGS && (
                 <KeybindingsSection onSettingChange={handleSettingChange} />
               )}
-              {activeSection === SettingsSection.PLUGINS && (
-                <PluginsSettingsSection onSettingChange={handleSettingChange} />
+              {activeSection === SettingsSection.EXTENSIONS && (
+                <ExtensionsSettingsSection onSettingChange={handleSettingChange} />
               )}
               {activeSection === SettingsSection.PRIVACY && (
                 <SettingsSectionLayout description="Your email and telemetry preferences.">

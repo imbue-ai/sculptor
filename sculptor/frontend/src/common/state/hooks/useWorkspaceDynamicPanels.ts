@@ -18,12 +18,12 @@ import { agentDeleteTargetAtom, terminalCloseTargetAtom } from "~/components/Com
 import type { DynamicAgentInput, DynamicTerminalInput } from "~/components/sections/registry/dynamicPanels.tsx";
 import { deriveDynamicPanels, makeTerminalPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
 import {
-  buildPluginPanelDefinitions,
+  buildExtensionPanelDefinitions,
   buildStaticPanelDefinitions,
   panelRegistriesEqual,
   panelRegistryAtom,
 } from "~/components/sections/registry/panelRegistry.ts";
-import { pluginPanelsAtom } from "~/plugins/pluginRegistry.ts";
+import { extensionPanelsAtom } from "~/extensions/extensionRegistry.ts";
 
 import type { AgentDiagnosticsByTaskId } from "./useWorkspaceAgentDiagnostics.ts";
 import { useWorkspaceAgentDiagnostics } from "./useWorkspaceAgentDiagnostics.ts";
@@ -53,7 +53,7 @@ const agentDiagnosticsEqual = (a: AgentDiagnosticsByTaskId, b: AgentDiagnosticsB
 export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
   const tasks = useAtomValue(tasksArrayAtom);
   const allTerminalTabs = useAtomValue(terminalTabStateAtom);
-  const pluginPanels = useAtomValue(pluginPanelsAtom);
+  const extensionPanels = useAtomValue(extensionPanelsAtom);
   const setPanelRegistry = useSetAtom(panelRegistryAtom);
   const setTerminalTabs = useSetAtom(terminalTabStateAtom);
   const setTerminalCloseTarget = useSetAtom(terminalCloseTargetAtom);
@@ -163,13 +163,15 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
   useLayoutEffect(() => {
     const staticDefinitions = buildStaticPanelDefinitions();
     const dynamicDefinitions = deriveDynamicPanels(agents, terminals);
-    // Merge plugin-contributed panels into the rebuilt registry so they survive every
-    // task-tick rebuild. A plugin panel whose id collides with a
-    // static or dynamic panel loses (the host panel wins) so a plugin can't shadow a
+    // Merge extension-contributed panels into the rebuilt registry so they survive every
+    // task-tick rebuild. An extension panel whose id collides with a
+    // static or dynamic panel loses (the host panel wins) so an extension can't shadow a
     // built-in surface.
     const reservedIds = new Set([...staticDefinitions.map((p) => p.id), ...dynamicDefinitions.map((p) => p.id)]);
-    const pluginDefinitions = buildPluginPanelDefinitions(pluginPanels.filter((panel) => !reservedIds.has(panel.id)));
-    const next = [...staticDefinitions, ...pluginDefinitions, ...dynamicDefinitions];
+    const extensionDefinitions = buildExtensionPanelDefinitions(
+      extensionPanels.filter((panel) => !reservedIds.has(panel.id)),
+    );
+    const next = [...staticDefinitions, ...extensionDefinitions, ...dynamicDefinitions];
     // Skip the write when this rebuild changed nothing: task ticks re-derive the
     // registry several times per second during streaming, and an unguarded write (a
     // brand-new array every time) re-renders every whole-registry subscriber.
@@ -182,5 +184,5 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
       agentDiagnosticsEqual(previousDiagnosticsRef.current, diagnosticsByTaskId);
     previousDiagnosticsRef.current = diagnosticsByTaskId;
     setPanelRegistry((previous) => (areDiagnosticsUnchanged && panelRegistriesEqual(previous, next) ? previous : next));
-  }, [agents, terminals, pluginPanels, diagnosticsByTaskId, setPanelRegistry]);
+  }, [agents, terminals, extensionPanels, diagnosticsByTaskId, setPanelRegistry]);
 };

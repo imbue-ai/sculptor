@@ -49,7 +49,7 @@ A swallowed rejection is a violation **only if** (a) an optimistic local
 write (cache or atom) preceded the call, **and** (b) the healing channel does
 not re-send on failure. Concretely:
 
-- Telemetry, analytics, and reply-POSTs (plugin-command results) with no
+- Telemetry, analytics, and reply-POSTs (extension-command results) with no
   local write: **exempt** — nothing to heal.
 - Optimistic write + failure leaves the server unchanged: **violation** —
   the delta stream will never correct it. This is the class that shipped
@@ -115,13 +115,13 @@ test. None is a swallowed rejection; the frozen budget documents them:
   `updateWorkspacesAtom`.
 - The Jotai task atoms + `useTaskQueryMirror` — the terminal item, blocked
   on the remaining Jotai readers, which are no longer components but
-  **atom graphs and the plugin SDK**:
+  **atom graphs and the extension SDK**:
   - `state/atoms/workspaces.ts`, `state/atoms/mentionDetails.ts`,
     `state/agentPanelPlacement.ts`, `pages/workspace/panels/workspaceAgentActions.ts`
     derive from `tasksArrayAtom` / `taskAtomFamily` / four surviving
     selector families inside Jotai `get(...)` graphs — migrating them means
     restructuring those derivations, not swapping a hook.
-  - `plugins/sdk/hooks.ts` exposes task state to runtime-loaded plugins —
+  - `extensions/sdk/hooks.ts` exposes task state to runtime-loaded extensions —
     a public API that needs a deprecation path, not a rename.
   Until those move, the mirror stays, and `taskAtomFamily`/`taskIdsAtom`
   remain single-writer projections.

@@ -9,10 +9,10 @@ from sculptor.testing.elements.settings_ci_babysitter import PlaywrightCIBabysit
 from sculptor.testing.elements.settings_claude_cli import PlaywrightClaudeCliSettingsElement
 from sculptor.testing.elements.settings_env_vars import PlaywrightEnvVarsSettingsElement
 from sculptor.testing.elements.settings_experimental import PlaywrightExperimentalSettingsElement
+from sculptor.testing.elements.settings_extensions import PlaywrightExtensionsSettingsElement
 from sculptor.testing.elements.settings_git import PlaywrightGitSettingsElement
 from sculptor.testing.elements.settings_keybindings import PlaywrightKeybindingsSettingsElement
 from sculptor.testing.elements.settings_pi import PlaywrightPiSettingsElement
-from sculptor.testing.elements.settings_plugins import PlaywrightPluginsSettingsElement
 from sculptor.testing.elements.settings_privacy import PlaywrightPrivacySettingsElement
 from sculptor.testing.elements.settings_repositories import PlaywrightRepositoriesSettingsElement
 from sculptor.testing.elements.settings_theme_builder import PlaywrightThemeBuilderSettingsElement
@@ -56,14 +56,14 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
         self._get_pi_nav().click()
         return PlaywrightPiSettingsElement(locator=self._get_settings_content(), page=self._page)
 
-    def click_on_plugins(self) -> PlaywrightPluginsSettingsElement:
-        """Navigate to Plugins settings and return the section element.
+    def click_on_extensions(self) -> PlaywrightExtensionsSettingsElement:
+        """Navigate to Extensions settings and return the section element.
 
-        The Plugins nav item is always present (it hosts the frontend-plugins
+        The Extensions nav item is always present (it hosts the extensions
         master switch), so this works regardless of whether the system is on.
         """
-        self.get_plugins_nav().click()
-        return PlaywrightPluginsSettingsElement(locator=self._get_settings_content(), page=self._page)
+        self.get_extensions_nav().click()
+        return PlaywrightExtensionsSettingsElement(locator=self._get_settings_content(), page=self._page)
 
     def click_on_privacy(self) -> PlaywrightPrivacySettingsElement:
         """Navigate to Privacy settings and return the section element."""
@@ -121,13 +121,13 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
         """Get the Keybindings navigation item."""
         return self.get_by_test_id(ElementIDs.SETTINGS_NAV_KEYBINDINGS)
 
-    def get_plugins_nav(self) -> Locator:
-        """Get the Plugins navigation item.
+    def get_extensions_nav(self) -> Locator:
+        """Get the Extensions navigation item.
 
-        The Plugins section is always present — it hosts the frontend-plugins
+        The Extensions section is always present — it hosts the extensions
         master switch, so it stays reachable even when the system is off.
         """
-        return self.get_by_test_id(ElementIDs.SETTINGS_NAV_PLUGINS)
+        return self.get_by_test_id(ElementIDs.SETTINGS_NAV_EXTENSIONS)
 
     def _get_pi_nav(self) -> Locator:
         """Get the Pi navigation item."""

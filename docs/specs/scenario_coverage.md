@@ -324,7 +324,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | PANEL-051 | Partial | test_custom_actions.py::test_create_group_from_settings; ::test_delete_group_deletes_actions_from_settings; ::test_delete_group_deletes_actions_from_panel | Assert inline group rename (Enter/blur confirms) and Escape-cancel on group create. |
 | PANEL-052 | Missing | — | Drag an action/group → drop indicator + order updates; move action between groups; built-in items not draggable. |
 | PANEL-056 | Partial | test_file_browser.py::test_split_view_toggle_persists_across_panel_reopen; ::test_line_wrap_toggle_persists_across_panel_reopen; test_panel_zones.py::test_inner_vertical_split_height_persists_after_navigation | Assert folder-expansion, scroll position, active-tab, view-mode (tree/flat), and diff-scope restored after switching tabs/files and returning. |
-| PANEL-057 | Partial | test_bundled_linear_plugin.py::test_bundled_linear_plugin_loads_and_renders | Assert the plugin-contributed panel is listed with a "plugin" badge in the Panels list (not just that it renders). |
+| PANEL-057 | Partial | test_bundled_linear_extension.py::test_bundled_linear_extension_loads_and_renders | Assert the extension-contributed panel is listed with an "extension" badge in the Panels list (not just that it renders). |
 
 ### CMDP
 
@@ -388,10 +388,10 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | SET-034 | Partial | test_theme_builder.py::test_theme_builder_navigation; ::test_theme_builder_change_accent_color | Exercise changing appearance mode, primary font, code font, and code theme and verify the UI updates. |
 | SET-035 | Partial | test_theme_builder.py::test_theme_builder_change_accent_color; ::test_theme_builder_reset_to_defaults | Cover custom hex entry, the light/dark hex override toggle, invalid-hex-shown-red, and the Gray/Success/Warning/Info swatches. |
 | SET-036 | Missing | — | Click a radius / scaling / panel-background option and assert the live UI updates. |
-| SET-038 | Partial | test_plugin_loader.py::test_valid_plugin_loads_and_can_be_removed; ::test_plugin_source_can_be_disabled_and_re_enabled | Cover the Refresh rescan of the plugins directory and the displayed directory path. |
+| SET-038 | Partial | test_extension_loader.py::test_valid_extension_loads_and_can_be_removed; ::test_extension_source_can_be_disabled_and_re_enabled | Cover the Refresh rescan of the extensions directory and the displayed directory path. |
 | SET-039 | Partial | test_ci_babysitter.py::test_settings_selector_lists_only_driveable_harnesses | Assert the selector saves with a toast and is disabled when the babysitter is off. |
-| SET-040 | Complete | test_plugins_settings_visibility.py::test_plugins_section_present_and_on_by_default; ::test_global_toggle_hides_management_ui_live | — |
-| SET-041 | Complete | test_plugin_loader.py::test_failed_plugin_can_be_retried | — |
+| SET-040 | Complete | test_extensions_settings_visibility.py::test_extensions_section_present_and_on_by_default; ::test_global_toggle_hides_management_ui_live | — |
+| SET-041 | Complete | test_extension_loader.py::test_failed_extension_can_be_retried | — |
 | DEV-001 | Partial | test_tanstack_devtools_panel.py::test_tanstack_devtools_panel_mounts_with_content (panel mounts only) | Cover header Dock/Float/Close controls, floating drag + resize within viewport, docked resize-from-top-edge + pushes content up, and closing hides it. |
 
 ---

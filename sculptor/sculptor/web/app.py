@@ -175,6 +175,7 @@ from sculptor.utils.build import get_install_path
 from sculptor.utils.build import get_sculptor_folder
 from sculptor.utils.build import is_packaged
 from sculptor.utils.errors import is_irrecoverable_exception
+from sculptor.utils.migration import get_extensions_directory
 from sculptor.utils.timeout import log_runtime
 from sculptor.utils.tracing import DEFAULT_ADHOC_TRACER_ENTRIES
 from sculptor.utils.tracing import DEFAULT_TRACER_ENTRIES
@@ -214,10 +215,14 @@ from sculptor.web.data_types import DirectoryEntry
 from sculptor.web.data_types import DiscardFileRequest
 from sculptor.web.data_types import EmailConfigRequest
 from sculptor.web.data_types import EnvVarNamesResponse
+from sculptor.web.data_types import ExtensionCommandRequest
+from sculptor.web.data_types import ExtensionCommandResponse
+from sculptor.web.data_types import ExtensionCommandResult
+from sculptor.web.data_types import ExtensionCommandUiAction
 from sculptor.web.data_types import HealthCheckResponse
 from sculptor.web.data_types import InitializeGitRepoRequest
-from sculptor.web.data_types import InstallPluginRequest
-from sculptor.web.data_types import InstallPluginResponse
+from sculptor.web.data_types import InstallExtensionRequest
+from sculptor.web.data_types import InstallExtensionResponse
 from sculptor.web.data_types import ListTerminalAgentRegistrationsResponse
 from sculptor.web.data_types import ListWorkspacesResponse
 from sculptor.web.data_types import NamingPatternRequest
@@ -231,10 +236,6 @@ from sculptor.web.data_types import PasteKeyRequest
 from sculptor.web.data_types import PiLoginRequest
 from sculptor.web.data_types import PiLoginResponse
 from sculptor.web.data_types import PiLoginStatusResponse
-from sculptor.web.data_types import PluginCommandRequest
-from sculptor.web.data_types import PluginCommandResponse
-from sculptor.web.data_types import PluginCommandResult
-from sculptor.web.data_types import PluginCommandUiAction
 from sculptor.web.data_types import PreviewBranchNameResponse
 from sculptor.web.data_types import ProjectEnvVarNames
 from sculptor.web.data_types import ProjectInitializationRequest
@@ -271,6 +272,9 @@ from sculptor.web.derived import CodingAgentTaskView
 from sculptor.web.derived import TaskInterface
 from sculptor.web.derived import TaskViewTypes
 from sculptor.web.derived import create_initial_task_view
+from sculptor.web.extension_command_bus import close_correlation
+from sculptor.web.extension_command_bus import open_correlation
+from sculptor.web.extension_command_bus import submit_result
 from sculptor.web.message_conversion import convert_agent_messages_to_task_update
 from sculptor.web.middleware import App
 from sculptor.web.middleware import DecoratedAPIRouter
@@ -286,9 +290,6 @@ from sculptor.web.middleware import resolve_stream_scope
 from sculptor.web.middleware import run_sync_function_with_debugging_support_if_enabled
 from sculptor.web.middleware import shutdown_event as shutdown_event_impl
 from sculptor.web.open_with import open_path_in_external_app
-from sculptor.web.plugin_command_bus import close_correlation
-from sculptor.web.plugin_command_bus import open_correlation
-from sculptor.web.plugin_command_bus import submit_result
 from sculptor.web.remote_repos import remote_repos_router
 from sculptor.web.skills import discover_skills
 from sculptor.web.streams import Scope
@@ -1572,146 +1573,148 @@ def workspace_read_file_at_ref(
     return ReadFileAtRefResponse(content=result.content, encoding=result.encoding)
 
 
-# Subdirectories of the plugins folder reserved for Sculptor's own use, never
-# reported as drop-in plugins. ``dev`` holds agent-loaded dev installs, nested as
-# ``dev/<workspace_id>/<plugin_id>/`` so they're visibly temporary and can't
-# collide across workspaces (see the `sculpt plugin` command endpoints below).
-_RESERVED_PLUGIN_DIR_NAMES = frozenset({"dev"})
+# Subdirectories of the extensions folder reserved for Sculptor's own use, never
+# reported as drop-in extensions. ``dev`` holds agent-loaded dev installs, nested as
+# ``dev/<workspace_id>/<extension_id>/`` so they're visibly temporary and can't
+# collide across workspaces (see the `sculpt extension` command endpoints below).
+_RESERVED_EXTENSION_DIR_NAMES = frozenset({"dev"})
 
 
-class LocalPluginInfo(SerializableModel):
-    """A frontend plugin discovered in the Sculptor plugins directory.
+class LocalExtensionInfo(SerializableModel):
+    """A frontend extension discovered in the Sculptor extensions directory.
 
-    That directory is the backend data folder's ``plugins/`` subdirectory (e.g.
-    ``~/.sculptor/plugins``; it varies by build and environment — see
+    That directory is the backend data folder's ``extensions/`` subdirectory (e.g.
+    ``~/.sculptor/extensions``; it varies by build and environment — see
     ``get_sculptor_folder``).
 
-    ``manifest_url`` is the origin-relative path to the plugin's manifest; the
+    ``manifest_url`` is the origin-relative path to the extension's manifest; the
     frontend resolves it against the backend origin, registers it as a read-only
-    "local" plugin source, and loads it through the normal plugin loader (the
-    files are served by the ``/plugins/local`` static mount).
+    "local" extension source, and loads it through the normal extension loader (the
+    files are served by the ``/extensions/local`` static mount).
     """
 
     id: str
     manifest_url: str
 
 
-@router.get("/api/v1/plugins/local")
-def get_local_plugins() -> list[LocalPluginInfo]:
-    """List frontend plugins the user has dropped into the Sculptor plugins directory.
+@router.get("/api/v1/extensions/local")
+def get_local_extensions() -> list[LocalExtensionInfo]:
+    """List frontend extensions the user has dropped into the Sculptor extensions directory.
 
-    The directory is the backend data folder's ``plugins/`` subdirectory (e.g.
-    ``~/.sculptor/plugins``; varies by build/environment).
+    The directory is the backend data folder's ``extensions/`` subdirectory (e.g.
+    ``~/.sculptor/extensions``; varies by build/environment).
     Each immediate subdirectory that contains a ``manifest.json`` is reported as
     a loadable source, sorted by directory name for a stable order. Returns an
     empty list when the directory is absent. This only enumerates; the manifest
-    and bundle bytes are served by the ``/plugins/local`` static mount (see
-    ``sculptor.web.middleware.mount_plugin_files``).
+    and bundle bytes are served by the ``/extensions/local`` static mount (see
+    ``sculptor.web.middleware.mount_extension_files``).
     """
-    plugins_dir = get_sculptor_folder() / "plugins"
-    if not plugins_dir.is_dir():
+    extensions_dir = get_extensions_directory()
+    if not extensions_dir.is_dir():
         return []
     try:
-        entries = sorted(plugins_dir.iterdir())
+        entries = sorted(extensions_dir.iterdir())
     except OSError as e:
-        log_exception(e, "Failed to list local plugins directory")
+        log_exception(e, "Failed to list local extensions directory")
         return []
-    plugins: list[LocalPluginInfo] = []
+    extensions: list[LocalExtensionInfo] = []
     for entry in entries:
-        if entry.name in _RESERVED_PLUGIN_DIR_NAMES:
+        if entry.name in _RESERVED_EXTENSION_DIR_NAMES:
             continue
         if entry.is_dir() and (entry / "manifest.json").is_file():
             # Percent-encode the directory name: a name with URL-special chars
             # (#, ?, space) would otherwise corrupt the manifest URL the frontend
             # fetches. `safe=""` encodes everything but unreserved chars.
             encoded_name = urllib.parse.quote(entry.name, safe="")
-            plugins.append(LocalPluginInfo(id=entry.name, manifest_url=f"/plugins/local/{encoded_name}/manifest.json"))
-    return plugins
+            extensions.append(
+                LocalExtensionInfo(id=entry.name, manifest_url=f"/extensions/local/{encoded_name}/manifest.json")
+            )
+    return extensions
 
 
-class LocalPluginsDirectory(SerializableModel):
-    """The on-disk directory Sculptor scans for drop-in frontend plugins.
+class LocalExtensionsDirectory(SerializableModel):
+    """The on-disk directory Sculptor scans for drop-in frontend extensions.
 
     ``path`` is formatted for display — the user's home directory is collapsed to
     ``~`` (see ``_display_path``), so the settings UI can show e.g.
-    ``~/.sculptor/plugins`` rather than an absolute path that embeds the username.
+    ``~/.sculptor/extensions`` rather than an absolute path that embeds the username.
     A from-source checkout outside ``$HOME`` shows its full path instead.
     """
 
     path: str
 
 
-@router.get("/api/v1/plugins/dir")
-def get_local_plugins_directory() -> LocalPluginsDirectory:
-    """Report where drop-in frontend plugins are loaded from, formatted for display.
+@router.get("/api/v1/extensions/dir")
+def get_local_extensions_directory() -> LocalExtensionsDirectory:
+    """Report where drop-in frontend extensions are loaded from, formatted for display.
 
-    The directory is the backend data folder's ``plugins/`` subdirectory; it need
+    The directory is the backend data folder's ``extensions/`` subdirectory; it need
     not exist yet (the settings copy tells the user where to create it). This only
-    reports the path — enumerating the plugins inside it is ``get_local_plugins``.
+    reports the path — enumerating the extensions inside it is ``get_local_extensions``.
     """
-    return LocalPluginsDirectory(path=_display_path(get_sculptor_folder() / "plugins"))
+    return LocalExtensionsDirectory(path=_display_path(get_extensions_directory()))
 
 
 # How long the command endpoint waits for renderer replies before returning what
 # it has. Connected renderers usually answer in well under a second; this is the
 # ceiling for the "no window responded" case (and for a renderer that has the
-# plugin feature disabled and so never replies).
-_PLUGIN_COMMAND_TIMEOUT_SECONDS = 8.0
+# extension feature disabled and so never replies).
+_EXTENSION_COMMAND_TIMEOUT_SECONDS = 8.0
 # Ops that mutate the running UI (install/run frontend code) and so require the
 # agent-loading switch. ``inspect``/``list`` are read-only and stay ungated so an
 # agent can always check state.
-_PLUGIN_COMMAND_GATED_OPS = frozenset({"load", "reload", "unload"})
+_EXTENSION_COMMAND_GATED_OPS = frozenset({"load", "reload", "unload"})
 
 
-def _require_agent_plugin_loading() -> None:
+def _require_agent_extension_loading() -> None:
     """Enforce the agent-loading switch; raise a clear 403 when it is closed."""
     config = get_user_config_instance()
-    if config is None or not config.allow_agent_plugin_loading:
+    if config is None or not config.allow_agent_extension_loading:
         raise HTTPException(
             status_code=403,
             detail={
-                "code": "agent_plugin_loading_disabled",
-                "message": "Agent plugin loading is disabled. Enable it in Settings -> Plugins.",
+                "code": "agent_extension_loading_disabled",
+                "message": "Agent extension loading is disabled. Enable it in Settings -> Extensions.",
             },
         )
 
 
-def _validate_plugin_id(plugin_id: str) -> str:
-    """Reject ids that aren't a single safe path segment (the plugin's dir name)."""
+def _validate_extension_id(extension_id: str) -> str:
+    """Reject ids that aren't a single safe path segment (the extension's dir name)."""
     if (
-        not plugin_id
-        or "/" in plugin_id
-        or "\\" in plugin_id
-        or plugin_id in {".", ".."}
-        or plugin_id in _RESERVED_PLUGIN_DIR_NAMES
+        not extension_id
+        or "/" in extension_id
+        or "\\" in extension_id
+        or extension_id in {".", ".."}
+        or extension_id in _RESERVED_EXTENSION_DIR_NAMES
     ):
         raise HTTPException(
             status_code=400,
-            detail={"code": "invalid_plugin_id", "message": f"invalid plugin id: {plugin_id!r}"},
+            detail={"code": "invalid_extension_id", "message": f"invalid extension id: {extension_id!r}"},
         )
-    return plugin_id
+    return extension_id
 
 
-def _resolve_plugin_file_dest(plugin_dir: Path, relative_path: str) -> Path:
+def _resolve_extension_file_dest(extension_dir: Path, relative_path: str) -> Path:
     """Resolve a packaged file's destination, refusing paths that escape the dir."""
-    plugin_dir_resolved = plugin_dir.resolve()
-    candidate = (plugin_dir_resolved / relative_path).resolve()
-    if candidate != plugin_dir_resolved and not candidate.is_relative_to(plugin_dir_resolved):
+    extension_dir_resolved = extension_dir.resolve()
+    candidate = (extension_dir_resolved / relative_path).resolve()
+    if candidate != extension_dir_resolved and not candidate.is_relative_to(extension_dir_resolved):
         raise HTTPException(
             status_code=400,
             detail={
-                "code": "unsafe_plugin_path",
-                "message": f"plugin file path escapes the plugin directory: {relative_path!r}",
+                "code": "unsafe_extension_path",
+                "message": f"extension file path escapes the extension directory: {relative_path!r}",
             },
         )
     return candidate
 
 
-@router.post("/api/v1/workspaces/{workspace_id}/plugins/command")
-def post_plugin_command(workspace_id: str, command: PluginCommandRequest) -> PluginCommandResponse:
-    """Broadcast a plugin command to connected renderers and collect their replies.
+@router.post("/api/v1/workspaces/{workspace_id}/extensions/command")
+def post_extension_command(workspace_id: str, command: ExtensionCommandRequest) -> ExtensionCommandResponse:
+    """Broadcast an extension command to connected renderers and collect their replies.
 
-    Publishes a ``PluginCommandUiAction`` over the per-user WebSocket fan-out, then
+    Publishes an ``ExtensionCommandUiAction`` over the per-user WebSocket fan-out, then
     blocks (in the sync threadpool) draining per-renderer replies from the
     correlation bus until every connected renderer has answered or the timeout
     elapses. The reply list is keyed by renderer in the CLI; an empty list means no
@@ -1719,28 +1722,28 @@ def post_plugin_command(workspace_id: str, command: PluginCommandRequest) -> Plu
     ``list`` are read-only and ungated.
     """
     validated_workspace_id = validate_workspace_id(workspace_id)
-    if command.op in _PLUGIN_COMMAND_GATED_OPS:
-        _require_agent_plugin_loading()
+    if command.op in _EXTENSION_COMMAND_GATED_OPS:
+        _require_agent_extension_loading()
 
     correlation_id = str(uuid4())
     result_queue = open_correlation(correlation_id)
     try:
         expected = subscriber_count()
         publish_ui_action(
-            PluginCommandUiAction(
+            ExtensionCommandUiAction(
                 workspace_id=validated_workspace_id,
                 correlation_id=correlation_id,
                 op=command.op,
-                plugin_id=command.plugin_id,
+                extension_id=command.extension_id,
                 source=command.source,
                 cache_bust=command.cache_bust,
             )
         )
-        results: list[PluginCommandResult] = []
+        results: list[ExtensionCommandResult] = []
         # With no connected renderer, the broadcast reaches no one and nothing can
         # reply — return immediately instead of blocking for the whole timeout.
         if expected > 0:
-            deadline = time.monotonic() + _PLUGIN_COMMAND_TIMEOUT_SECONDS
+            deadline = time.monotonic() + _EXTENSION_COMMAND_TIMEOUT_SECONDS
             while len(results) < expected:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -1749,13 +1752,13 @@ def post_plugin_command(workspace_id: str, command: PluginCommandRequest) -> Plu
                     results.append(result_queue.get(timeout=remaining))
                 except queue.Empty:
                     break
-        return PluginCommandResponse(correlation_id=correlation_id, results=results)
+        return ExtensionCommandResponse(correlation_id=correlation_id, results=results)
     finally:
         close_correlation(correlation_id)
 
 
-@router.post("/api/v1/plugins/command/{correlation_id}/result")
-def post_plugin_command_result(correlation_id: str, result: PluginCommandResult) -> Response:
+@router.post("/api/v1/extensions/command/{correlation_id}/result")
+def post_extension_command_result(correlation_id: str, result: ExtensionCommandResult) -> Response:
     """Renderer-facing endpoint: deliver one window's reply to a waiting command.
 
     Quietly succeeds even if nobody is waiting (the originating request may have
@@ -1776,66 +1779,72 @@ def post_plugin_command_result(correlation_id: str, result: PluginCommandResult)
     return Response(status_code=204)
 
 
-@router.post("/api/v1/workspaces/{workspace_id}/plugins/install")
-def post_plugin_install(workspace_id: str, install: InstallPluginRequest) -> InstallPluginResponse:
-    """Write a packaged plugin to the data folder so the static mount can serve it.
+@router.post("/api/v1/workspaces/{workspace_id}/extensions/install")
+def post_extension_install(workspace_id: str, install: InstallExtensionRequest) -> InstallExtensionResponse:
+    """Write a packaged extension to the data folder so the static mount can serve it.
 
     ``persist=False`` (dev) writes to the reserved
-    ``plugins/dev/<workspace_id>/<plugin_id>/`` tree; ``persist=True`` writes a
-    permanent install at the top-level ``plugins/<plugin_id>/``. Either way the
+    ``extensions/dev/<workspace_id>/<extension_id>/`` tree; ``persist=True`` writes a
+    permanent install at the top-level ``extensions/<extension_id>/``. Either way the
     target is wiped and rewritten so reloads pick up edits. Returns the
     origin-relative manifest URL the caller then loads via the command endpoint.
     """
-    _require_agent_plugin_loading()
+    _require_agent_extension_loading()
     validated_workspace_id = validate_workspace_id(workspace_id)
-    plugin_id = _validate_plugin_id(install.plugin_id)
-    if not any(plugin_file.path == "manifest.json" for plugin_file in install.files):
+    extension_id = _validate_extension_id(install.extension_id)
+    if not any(extension_file.path == "manifest.json" for extension_file in install.files):
         raise HTTPException(
             status_code=400,
-            detail={"code": "missing_manifest", "message": "packaged plugin must include a top-level manifest.json"},
+            detail={
+                "code": "missing_manifest",
+                "message": "packaged extension must include a top-level manifest.json",
+            },
         )
 
-    plugins_root = get_sculptor_folder() / "plugins"
-    encoded_plugin_id = urllib.parse.quote(plugin_id, safe="")
+    extensions_root = get_extensions_directory()
+    encoded_extension_id = urllib.parse.quote(extension_id, safe="")
     if install.persist:
-        plugin_dir = plugins_root / plugin_id
-        manifest_url = f"/plugins/local/{encoded_plugin_id}/manifest.json"
+        extension_dir = extensions_root / extension_id
+        manifest_url = f"/extensions/local/{encoded_extension_id}/manifest.json"
     else:
         workspace_segment = str(validated_workspace_id)
-        plugin_dir = plugins_root / "dev" / workspace_segment / plugin_id
+        extension_dir = extensions_root / "dev" / workspace_segment / extension_id
         encoded_workspace = urllib.parse.quote(workspace_segment, safe="")
-        manifest_url = f"/plugins/local/dev/{encoded_workspace}/{encoded_plugin_id}/manifest.json"
+        manifest_url = f"/extensions/local/dev/{encoded_workspace}/{encoded_extension_id}/manifest.json"
 
-    if plugin_dir.exists():
-        shutil.rmtree(plugin_dir)
-    plugin_dir.mkdir(parents=True, exist_ok=True)
-    for plugin_file in install.files:
-        dest = _resolve_plugin_file_dest(plugin_dir, plugin_file.path)
+    if extension_dir.exists():
+        shutil.rmtree(extension_dir)
+    extension_dir.mkdir(parents=True, exist_ok=True)
+    for extension_file in install.files:
+        dest = _resolve_extension_file_dest(extension_dir, extension_file.path)
         dest.parent.mkdir(parents=True, exist_ok=True)
         try:
-            dest.write_bytes(base64.b64decode(plugin_file.content_base64, validate=True))
+            dest.write_bytes(base64.b64decode(extension_file.content_base64, validate=True))
         except ValueError as e:
             raise HTTPException(
                 status_code=400,
-                detail={"code": "invalid_file_encoding", "message": f"file {plugin_file.path!r} is not valid base64"},
+                detail={
+                    "code": "invalid_file_encoding",
+                    "message": f"file {extension_file.path!r} is not valid base64",
+                },
             ) from e
 
-    return InstallPluginResponse(manifest_url=manifest_url, plugin_dir=_display_path(plugin_dir))
+    return InstallExtensionResponse(manifest_url=manifest_url, extension_dir=_display_path(extension_dir))
 
 
-@router.post("/api/v1/workspaces/{workspace_id}/plugins/{plugin_id}/remove")
-def post_plugin_remove(workspace_id: str, plugin_id: str) -> Response:
+@router.post("/api/v1/workspaces/{workspace_id}/extensions/{extension_id}/remove")
+def post_extension_remove(workspace_id: str, extension_id: str) -> Response:
     """Delete a dev install's files (the cleanup step of the dev lifecycle).
 
     Only touches the workspace-scoped ``dev/`` tree; permanent top-level installs
     are left alone. Idempotent — removing an absent dev install still succeeds.
     """
-    _require_agent_plugin_loading()
+    _require_agent_extension_loading()
     validated_workspace_id = validate_workspace_id(workspace_id)
-    plugin_id = _validate_plugin_id(plugin_id)
-    plugin_dir = get_sculptor_folder() / "plugins" / "dev" / str(validated_workspace_id) / plugin_id
-    if plugin_dir.exists():
-        shutil.rmtree(plugin_dir)
+    extension_id = _validate_extension_id(extension_id)
+    extension_dir = get_extensions_directory() / "dev" / str(validated_workspace_id) / extension_id
+    if extension_dir.exists():
+        shutil.rmtree(extension_dir)
     return Response(status_code=204)
 
 

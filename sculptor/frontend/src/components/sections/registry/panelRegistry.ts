@@ -57,7 +57,7 @@ export type PanelDefinition = {
   // Optional: review-all and browser have no default section (not opened by default).
   defaultSection?: SubSectionId;
   // Secondary text shown under the panel's label in the add-panel dropdown. Only
-  // plugin panels supply it; static built-ins leave it unset and render title-only.
+  // extension panels supply it; static built-ins leave it unset and render title-only.
   description?: string;
   component: ComponentType;
   // The agent/terminal-agent status reflected by the tab's status dot. Exposed on the
@@ -118,10 +118,10 @@ export function buildStaticPanelDefinitions(): ReadonlyArray<PanelDefinition> {
   }));
 }
 
-// The minimal plugin-panel shape this registry adapts. Declared structurally (rather
-// than importing the plugins module) so the registry stays plugin-agnostic and the
-// dependency only points one way (plugins → sections, never the reverse).
-export type PluginRegistryPanel = {
+// The minimal extension-panel shape this registry adapts. Declared structurally (rather
+// than importing the extensions module) so the registry stays extension-agnostic and the
+// dependency only points one way (extensions → sections, never the reverse).
+export type ExtensionRegistryPanel = {
   id: PanelId;
   displayName: string;
   icon: LucideIcon;
@@ -130,14 +130,14 @@ export type PluginRegistryPanel = {
   description?: string;
 };
 
-// Adapt plugin-contributed panels into registry PanelDefinitions so the new shell can
-// resolve and render them. Plugin panels are single-instance ("static") and
-// host-managed; the plugin's component is already wrapped (error boundary + contexts)
+// Adapt extension-contributed panels into registry PanelDefinitions so the new shell can
+// resolve and render them. Extension panels are single-instance ("static") and
+// host-managed; the extension's component is already wrapped (error boundary + contexts)
 // by the loader before it reaches here.
-export function buildPluginPanelDefinitions(
-  pluginPanels: ReadonlyArray<PluginRegistryPanel>,
+export function buildExtensionPanelDefinitions(
+  extensionPanels: ReadonlyArray<ExtensionRegistryPanel>,
 ): ReadonlyArray<PanelDefinition> {
-  return pluginPanels.map((panel) => ({
+  return extensionPanels.map((panel) => ({
     id: panel.id,
     displayName: panel.displayName,
     icon: panel.icon,
@@ -148,8 +148,8 @@ export function buildPluginPanelDefinitions(
   }));
 }
 
-// The current registry (static + plugin + dynamic). Kept in sync with the active
-// workspace's agent/terminal panels and the loaded plugins by useWorkspaceDynamicPanels;
+// The current registry (static + extension + dynamic). Kept in sync with the active
+// workspace's agent/terminal panels and the loaded extensions by useWorkspaceDynamicPanels;
 // defaults to the static panels so reads before sync never crash.
 export const panelRegistryAtom = atom<ReadonlyArray<PanelDefinition>>(buildStaticPanelDefinitions());
 
@@ -216,8 +216,8 @@ export const panelDefinitionByIdAtom = atomFamily((panelId: PanelId) =>
 // matches the rendered body.
 //
 // The persisted layout can name a panel id with no current registry definition:
-// plugin registration is async, so on every reload a persisted plugin-panel id is
-// transiently unregistered, and unloading a plugin removes its definitions while its
+// extension registration is async, so on every reload a persisted extension-panel id is
+// transiently unregistered, and unloading an extension removes its definitions while its
 // panels stay in the layout. Resolution therefore falls back — at read time only —
 // to the first OPEN panel in the sub-section that still has a definition (undefined
 // when none does, rendering the empty state). The layout itself must NEVER be
