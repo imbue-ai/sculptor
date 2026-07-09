@@ -107,10 +107,13 @@ panels that move, and falls when his perch unmounts or slides away. The
 viewport bottom is the ultimate floor.
 
 Click him to drive: **A/D** or **←/→** roll, **W/Space** jump, **S/↓** drops
-him through whatever he's perched on (on the floor it crouches; held in the
-air it fast-falls), **S+Space** big jump (high enough to reach most panels),
-**Esc** to release him back to wandering. The wander AI also drops through
-its perch every once in a while, so he never homesteads the top of a panel.
+him through whatever he's perched on — a tap punches through to the next
+surface below, holding it plummets him all the way to the bottom of the
+screen (the app DOM is a dense stack of nested containers, so drops disable
+landing for a window rather than nudging him past one edge). **Esc** releases
+him back to wandering. The wander AI also drops through its perch every once
+in a while — sometimes one step, sometimes all the way down — so he never
+homesteads the top of a panel.
 While driving, keys are only captured when the event target isn't editable,
 so typing in the app is never hijacked; uncontrolled, he never touches the
 keyboard at all.

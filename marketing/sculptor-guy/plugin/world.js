@@ -9,10 +9,12 @@
 // scroll, and falls when his perch unmounts, shrinks, or slides out from
 // under him. The viewport bottom is the ultimate floor.
 //
-// Controls: click him to drive (A/D or arrows, W/Space jump, S crouch or
-// fast-fall, S+Space big jump, Esc to release). While driving, keys are only
-// captured when the event target is not editable, so typing in the app is
-// never hijacked; without control he never touches the keyboard at all.
+// Controls: click him to drive (A/D or arrows, W/Space jump, Esc to
+// release). S/down taps drop him through his current perch; holding S keeps
+// the fall-through window open so he plummets to the viewport bottom. While
+// driving, keys are only captured when the event target is not editable, so
+// typing in the app is never hijacked; without control he never touches the
+// keyboard at all.
 
 'use strict';
 
@@ -110,12 +112,11 @@ const STYLE_CSS = `
 }`;
 
 // Movement tuning (px/s, px/s^2, viewport space).
-const MAX_SPEED = 230;
-const ACCEL = 1500;
+const MAX_SPEED = 150;
+const ACCEL = 900;
 const FRICTION = 500;   // low: the cart coasts
 const GRAVITY = 2400;
 const JUMP_V = 800;
-const SUPER_JUMP_V = 1500;
 const COYOTE = 0.09;
 const JUMP_BUFFER = 0.12;
 
@@ -160,7 +161,7 @@ export function createWorld(root) {
 
   const bubbleEl = document.createElement('div');
   bubbleEl.className = 'cg-bubble';
-  bubbleEl.innerHTML = 'a/d drive · space jump · s+space big jump · s drops through · esc releases';
+  bubbleEl.innerHTML = 'a/d drive · space jump · s drop through (hold to plummet) · esc releases';
   root.appendChild(bubbleEl);
 
   const joint = {};
@@ -187,11 +188,9 @@ export function createWorld(root) {
   let controlled = false;
   let disposed = false;
   let jumpQueued = false;
-  let superQueued = false;  // latched with the keypress: S can be released
-                            // before physics consumes the buffered jump
   let dropQueued = false;
   let jumpBuf = 0;
-  let superAir = false;   // big jumps commit: no short-hop damping mid-flight
+  let dropTimer = 0;   // while >0, landing probes are off: he falls through terrain
   let ax = 0;
   const held = { left: false, right: false, jump: false, crouch: false };
 
@@ -202,7 +201,7 @@ export function createWorld(root) {
   let pupilX = 0, pupilY = 0;
 
   // AI
-  let aiMode = 'idle', aiT = Math.random(), aiDir = 1, aiHop = 0, aiDrop = false;
+  let aiMode = 'idle', aiT = Math.random(), aiDir = 1, aiHop = 0, aiDrop = 0;
 
   let bubbleTimer = 0;
 
@@ -238,7 +237,7 @@ export function createWorld(root) {
     state.grounded = true;
     state.surface = el;
     state.landTimer = 0.13;
-    superAir = false;
+    dropTimer = 0;
     spawnPoof();
   }
 
@@ -259,10 +258,7 @@ export function createWorld(root) {
     if (!act) return;
     e.preventDefault();
     e.stopPropagation();
-    if (act === 'jump' && !e.repeat) {
-      jumpQueued = true;
-      superQueued = held.crouch;   // S + Space = big jump
-    }
+    if (act === 'jump' && !e.repeat) jumpQueued = true;
     if (act === 'crouch' && !e.repeat) dropQueued = true;   // drop through a perch
     held[act] = true;
   }
@@ -300,7 +296,10 @@ export function createWorld(root) {
       const r = Math.random();
       // Perched on an element: fair odds of dropping back down through it,
       // so he never homesteads the top of a panel.
-      if (state.surface && r < 0.28) { aiMode = 'idle'; aiT = 0.6 + Math.random(); aiDrop = true; }
+      if (state.surface && r < 0.28) {
+        aiMode = 'idle'; aiT = 0.6 + Math.random();
+        aiDrop = Math.random() < 0.5 ? 2 : 1;   // 2 = all the way down
+      }
       else if (r < 0.4) { aiMode = 'idle'; aiT = 1 + Math.random() * 2.2; }
       else if (r < 0.86) {
         aiMode = 'walk';
@@ -308,36 +307,33 @@ export function createWorld(root) {
         aiDir = state.x < 120 ? 1
           : state.x > window.innerWidth - W - 120 ? -1
           : Math.random() < 0.5 ? -1 : 1;
-      } else if (r < 0.95) { aiMode = 'hop'; aiT = 0.35; aiHop = 1; }
-      else { aiMode = 'hop'; aiT = 0.5; aiHop = 2; }   // the occasional big one
+      } else { aiMode = 'hop'; aiT = 0.35; aiHop = 1; }
     }
     if (aiMode === 'walk') {
       if (state.x < 16 && aiDir < 0) aiDir = 1;
       if (state.x > window.innerWidth - W - 16 && aiDir > 0) aiDir = -1;
     }
     const hop = aiHop; aiHop = 0;
-    const drop = aiDrop; aiDrop = false;
+    const drop = aiDrop; aiDrop = 0;
     return {
       left: aiMode === 'walk' && aiDir < 0,
       right: aiMode === 'walk' && aiDir > 0,
       // Hold jump through the hop window so AI hops get full height.
-      jumpHeld: aiMode === 'hop', jumpPressed: hop > 0, superJump: hop === 2,
-      dropPressed: drop,
+      jumpHeld: aiMode === 'hop', jumpPressed: hop > 0,
+      dropPressed: drop > 0, dropAll: drop === 2,
       crouch: false, throttle: 0.45,
     };
   }
 
   function playerInput() {
     const jp = jumpQueued;
-    const superJump = jp && superQueued;
     const dp = dropQueued;
     jumpQueued = false;
-    superQueued = false;
     dropQueued = false;
     return {
       left: held.left, right: held.right,
-      jumpHeld: held.jump, jumpPressed: jp, superJump,
-      dropPressed: dp,
+      jumpHeld: held.jump, jumpPressed: jp,
+      dropPressed: dp, dropAll: false,   // holding S is the player's plummet
       crouch: held.crouch, throttle: 1,
     };
   }
@@ -371,25 +367,29 @@ export function createWorld(root) {
     if (s.x > maxX) { s.x = maxX; s.vx = Math.min(0, s.vx); }
     const feetX = s.x + W / 2;
 
-    // Drop through the current perch (S / down arrow). Nudging his feet just
-    // below the element's top edge keeps the landing probe from instantly
-    // re-catching it; anything further down is fair terrain again.
+    // Drop through the current perch (S / down arrow). Real app DOM is a
+    // dense stack of nested containers, so a positional nudge alone just
+    // lands him on the next inner element a few px down; instead, disable
+    // landing probes for a window. A tap punches through the perch; holding
+    // S keeps the window open so he plummets to the viewport bottom.
     if (input.dropPressed && s.grounded && s.surface) {
       s.feetY += 8;
       fall();
+      dropTimer = input.dropAll ? Infinity : 0.28;
     }
+    if (!s.grounded && input.crouch) dropTimer = Math.max(dropTimer, 0.06);
+    dropTimer = Math.max(0, dropTimer - dt);
 
     s.coyote = s.grounded ? COYOTE : s.coyote - dt;
     if (input.jumpPressed) jumpBuf = JUMP_BUFFER;
     jumpBuf -= dt;
     if (jumpBuf > 0 && s.coyote > 0) {
-      s.vy = input.superJump ? SUPER_JUMP_V : JUMP_V;
-      superAir = input.superJump;
+      s.vy = JUMP_V;
       fall();
       s.coyote = 0;
       jumpBuf = 0;
     }
-    if (!input.jumpHeld && s.vy > 0 && !superAir) s.vy *= Math.pow(0.02, dt * 6);
+    if (!input.jumpHeld && s.vy > 0) s.vy *= Math.pow(0.02, dt * 6);
 
     if (!s.grounded) {
       // Crouch fast-fall only bites on the way down, so holding S through an
@@ -397,7 +397,7 @@ export function createWorld(root) {
       s.vy -= (input.crouch && s.vy < 0 ? GRAVITY * 1.8 : GRAVITY) * dt;
       const drop = -s.vy * dt;   // px downward this frame
       if (drop > 0) {
-        const hit = probeLanding(feetX, s.feetY, s.feetY + drop);
+        const hit = dropTimer > 0 ? null : probeLanding(feetX, s.feetY, s.feetY + drop);
         if (hit) {
           land(hit.top, hit.el);
         } else if (s.feetY + drop >= floorY()) {
@@ -476,10 +476,10 @@ export function createWorld(root) {
     if (controlled) {
       const bobble = 2.5 * Math.sin(s.t * 5);
       markerEl.style.transform =
-        `translate3d(${(s.x + W / 2 - 5).toFixed(1)}px, ${(y + 4 + bobble).toFixed(1)}px, 0)`;
+        `translate3d(${(s.x + W / 2 - 5).toFixed(1)}px, ${(y - 18 + bobble).toFixed(1)}px, 0)`;
       if (bubbleTimer > 0) {
         bubbleEl.style.transform =
-          `translate3d(${clamp(s.x + W / 2 - 110, 8, window.innerWidth - 240).toFixed(1)}px, ${(y - 22).toFixed(1)}px, 0)`;
+          `translate3d(${clamp(s.x + W / 2 - 110, 8, window.innerWidth - 240).toFixed(1)}px, ${(y - 46).toFixed(1)}px, 0)`;
       }
     }
   }
