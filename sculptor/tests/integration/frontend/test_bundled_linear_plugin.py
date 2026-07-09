@@ -93,10 +93,16 @@ def _assert_linear_plugin_loads_and_renders(plugins: PlaywrightPluginsSettingsEl
     expect(plugins.get_source_row(LINEAR_SOURCE)).to_contain_text(LINEAR_SETTINGS_TEXT)
 
 
+@pytest.mark.browser_and_electron
 def test_bundled_linear_plugin_loads_and_renders(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
-    """In a browser, the bundled Linear plugin loads and renders its UI."""
+    """The bundled Linear plugin loads and renders its UI in both browser and Electron.
+
+    The per-test factory instance runs in both launch modes, so this single test
+    covers the plugin's load + render in a browser and inside a real,
+    non-packaged Electron shell.
+    """
     with sculptor_instance_factory_.spawn_instance() as instance:
         settings_page = navigate_to_settings_page(page=instance.page)
         plugins = settings_page.click_on_plugins()
@@ -132,13 +138,3 @@ def test_bundled_linear_plugin_workspace_widget_shows_branch_ticket(
         widget = instance.page.get_by_test_id(LINEAR_WIDGET_TESTID)
         expect(widget).to_be_visible()
         expect(widget).to_contain_text(WIDGET_TICKET_ID)
-
-
-@pytest.mark.electron
-def test_bundled_linear_plugin_loads_and_renders_in_electron(
-    sculptor_instance_: SculptorInstance,
-) -> None:
-    """In Electron, the bundled Linear plugin loads and renders its UI."""
-    settings_page = navigate_to_settings_page(page=sculptor_instance_.page)
-    plugins = settings_page.click_on_plugins()
-    _assert_linear_plugin_loads_and_renders(plugins)

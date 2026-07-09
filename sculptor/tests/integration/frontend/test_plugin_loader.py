@@ -6,11 +6,12 @@ fetches the manifest, validates it, dynamic-imports the entry module, and runs
 its ``activate``. Each source renders a row whose ``data-status`` reflects the
 outcome and, on failure, a ``data-phase`` naming the stage that failed.
 
-The frontend plugin system is on by default, so the browser tests run on a plain
-factory instance and the Electron variant rides the shared instance (the only
-path that launches a real, non-packaged Electron today -- the factory is
-browser-only). The same loader assertions back all of them, shared through
-``_exercise_*`` helpers.
+The frontend plugin system is on by default, so every test runs on a plain
+factory instance. The loader tests that need Electron coverage are marked
+``@browser_and_electron`` and run in both browser and Electron modes from that
+one per-test instance -- the factory can launch a real, non-packaged Electron
+shell, so no separate shared-instance Electron variant is needed. The same
+loader assertions back all of them, shared through ``_exercise_*`` helpers.
 
 Plugin sources are served from a local cross-origin fixture HTTP server (the
 shape a plugin dev server takes), which lets each failure mode be reproduced
@@ -33,7 +34,6 @@ from sculptor.testing.plugin_fixture_server import PluginFixtureServer
 from sculptor.testing.plugin_fixture_server import spawn_plugin_fixture_server
 from sculptor.testing.resources import _default_sculptor_folder_populator
 from sculptor.testing.resources import custom_sculptor_folder_populator
-from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.web.app import _display_path
 
@@ -212,6 +212,7 @@ def _exercise_disable_and_enable(plugins: PlaywrightPluginsSettingsElement, serv
     expect(plugins.get_source_row(source)).to_have_count(0)
 
 
+@pytest.mark.browser_and_electron
 def test_plugin_source_can_be_disabled_and_re_enabled(sculptor_instance_factory_: SculptorInstanceFactory) -> None:
     """A loaded source can be disabled without removal and later re-enabled."""
     with (
@@ -223,6 +224,7 @@ def test_plugin_source_can_be_disabled_and_re_enabled(sculptor_instance_factory_
         _exercise_disable_and_enable(plugins, server)
 
 
+@pytest.mark.browser_and_electron
 def test_plugin_source_error_modes(sculptor_instance_factory_: SculptorInstanceFactory) -> None:
     """Every malformed-source mode settles the row into an error at its phase.
 
@@ -267,6 +269,7 @@ def test_failed_plugin_can_be_retried(sculptor_instance_factory_: SculptorInstan
         plugins.expect_loaded(source, name="Retry Me", version="0.1.0")
 
 
+@pytest.mark.browser_and_electron
 def test_valid_plugin_loads_and_can_be_removed(sculptor_instance_factory_: SculptorInstanceFactory) -> None:
     """A well-formed cross-origin source loads (name/version shown) and removes cleanly."""
     with (
@@ -410,27 +413,3 @@ def test_plugins_directory_shows_real_backend_path(sculptor_instance_factory_: S
         # the hardcoded placeholder, or this test couldn't catch that regression.
         assert expected != "~/.sculptor/plugins"
         expect(plugins.get_directory_label()).to_have_text(expected)
-
-
-@pytest.mark.electron
-def test_plugin_loader_in_electron(sculptor_instance_: SculptorInstance) -> None:
-    """The same loader flow, exercised inside a real Electron shell.
-
-    Scope: this is *non-packaged* Electron -- the renderer is still served over
-    ``http://localhost`` and driven via CDP. So it covers the Electron
-    process/IPC model and a real cross-origin fetch + dynamic import from a
-    different origin, but NOT the packaged app's ``file://`` origin (where
-    ``window.location.origin`` is ``"null"`` and the same-origin/CORS rules
-    differ). That packaged ``file://`` case remains a separate, unsolved scenario.
-
-    The factory fixture can't launch a non-packaged Electron, so Electron
-    coverage rides the shared instance. The plugin system is on by default, so we
-    drive the Plugins section directly. (The error rows the run leaves behind are
-    renderer-local and harmless -- no other Electron test reads plugin sources --
-    so we don't bother removing them.)
-    """
-    settings_page = navigate_to_settings_page(page=sculptor_instance_.page)
-    plugins = settings_page.click_on_plugins()
-    with spawn_plugin_fixture_server() as server:
-        _exercise_error_modes(plugins, server)
-        _exercise_valid_load_and_remove(plugins, server)

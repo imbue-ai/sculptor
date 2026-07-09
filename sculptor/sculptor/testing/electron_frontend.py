@@ -22,8 +22,8 @@ from tenacity import stop_after_delay
 from tenacity import wait_fixed
 
 from sculptor.testing.frontend_utils import configure_page
+from sculptor.testing.frontend_utils import get_v1_frontend_path
 from sculptor.testing.port_manager import PortManager
-from sculptor.testing.server_utils import get_v1_frontend_path
 from sculptor.testing.subprocess_utils import Forwarder
 
 # electron-forge 7.10+ stopped printing its "Launched Electron app" task
@@ -90,6 +90,7 @@ class ElectronFrontend:
         timeout_ms: int,
         custom_backend_cmd: str | None = None,
         extra_env: dict[str, str] | None = None,
+        env_unset_keys: tuple[str, ...] = (),
     ) -> None:
         self.playwright = playwright
         self.backend_port = backend_port
@@ -97,6 +98,11 @@ class ElectronFrontend:
         self.timeout_ms = timeout_ms
         self.custom_backend_cmd = custom_backend_cmd
         self.extra_env = extra_env or {}
+        # Keys to drop from the inherited ``os.environ`` before launching Electron.
+        # ``extra_env`` can only add/override, so unsetting a parent var (e.g. a
+        # SESSION_TOKEN inherited from a Sculptor-spawned terminal) requires
+        # excluding it here.
+        self.env_unset_keys = env_unset_keys
         self._electron_proc: subprocess.Popen | None = None
         self._forwarder: Forwarder | None = None
         self._user_data_dir: str | None = None
@@ -148,7 +154,8 @@ class ElectronFrontend:
             electron_env["SCULPTOR_CUSTOM_BACKEND_CMD"] = self.custom_backend_cmd
         else:
             electron_env["SCULPTOR_API_PORT"] = str(self.backend_port)
-        full_env = {**os.environ, **self.extra_env, **electron_env}
+        inherited_env = {k: v for k, v in os.environ.items() if k not in self.env_unset_keys}
+        full_env = {**inherited_env, **self.extra_env, **electron_env}
 
         frontend_dir = get_v1_frontend_path()
         lock_path = Path("/tmp/sculptor_electron_forge.lock")

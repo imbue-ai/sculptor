@@ -171,6 +171,11 @@ class SculptorInstance:
         return self._project_path
 
     @property
+    def is_electron(self) -> bool:
+        """Whether this instance renders in an Electron shell (vs a plain browser page)."""
+        return self._is_electron
+
+    @property
     def backend_api_url(self) -> str:
         """Base URL of the running Sculptor backend's HTTP API (for /api/... requests).
 
@@ -706,7 +711,9 @@ class SculptorInstanceFactory:
                 Only supported in packaged-electron mode.
         """
         project_path = self.base_repo.base_path if auto_project else None
-        is_electron = isinstance(self._delegate, PackagedElectronFactory)
+        # Both the raw-backend ``SculptorFactory`` (electron / electron-custom-command
+        # launch modes) and ``PackagedElectronFactory`` expose ``is_electron``.
+        is_electron = self._delegate.is_electron
         with self._delegate.spawn_sculptor_instance(
             project_path=project_path,
             wait_until_ready=wait_until_ready,
@@ -735,8 +742,16 @@ def create_sculptor_instance_factory(
     sculptor_folder: Path,
     base_repo: MockRepoState,
     fake_bin_dir: Path,
+    launch_mode: str = "browser",
+    playwright: Playwright | None = None,
+    port_manager: PortManager | None = None,
 ) -> SculptorInstanceFactory:
-    """Build a SculptorInstanceFactory from fixture-provided parameters."""
+    """Build a SculptorInstanceFactory from fixture-provided parameters.
+
+    ``launch_mode`` selects the per-spawn frontend; ``playwright`` and
+    ``port_manager`` are only consulted by the electron launch modes (and
+    asserted present there), so browser-mode callers can omit them.
+    """
     delegate = SculptorFactory(
         environment=environment,
         port=port,
@@ -744,6 +759,9 @@ def create_sculptor_instance_factory(
         default_timeout_ms=default_timeout_ms,
         request=request,
         sculptor_folder=sculptor_folder,
+        launch_mode=launch_mode,
+        playwright=playwright,
+        port_manager=port_manager,
     )
     return SculptorInstanceFactory(
         delegate=delegate,

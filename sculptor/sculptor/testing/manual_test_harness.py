@@ -29,6 +29,7 @@ from sculptor.config.user_config import UserConfig
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.frontend_utils import configure_page
+from sculptor.testing.frontend_utils import get_v1_frontend_path
 from sculptor.testing.mock_repo import MockRepoState
 from sculptor.testing.playwright_utils import navigate_to_frontend
 from sculptor.testing.port_manager import PortManager
@@ -36,7 +37,6 @@ from sculptor.testing.repo_resources import get_test_project_state
 from sculptor.testing.server_utils import SculptorServer
 from sculptor.testing.server_utils import get_sculptor_command_backend_only
 from sculptor.testing.server_utils import get_testing_environment
-from sculptor.testing.server_utils import get_v1_frontend_path
 from sculptor.testing.server_utils import start_server_process_and_validate_readiness
 from sculptor.testing.subprocess_utils import Forwarder
 
