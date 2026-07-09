@@ -118,6 +118,7 @@ const PaletteRow = ({
           <Spinner size="1" />
         ) : (
           <>
+            {command.trailingBadge ? <span className={styles.itemBadge}>{command.trailingBadge}</span> : null}
             {binding ? (
               <ShortcutHint binding={binding} />
             ) : kind ? (
