@@ -31,8 +31,10 @@ from playwright.sync_api import expect
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_tool_blocks
 from sculptor.testing.elements.ask_user_question import get_first_ask_user_question_tool_block
+from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
+from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
@@ -127,8 +129,14 @@ def test_pending_question_restored_and_answerable_after_restart(
         tool_block.expect_submitted_state()
         tool_block.expect_answer_visible("Red")
 
-        # The resumed turn completes and the agent settles to idle
-        # (read/unread dot), proving the answer actually drove a turn.
+        # The resumed turn must actually run and finish: the answer respawns
+        # the CLI (--resume) and the follow-up response lands as a third
+        # completed message (user prompt, stopped AUQ turn, follow-up).
+        # Asserting the dot alone is not enough — a failed-but-viewed task
+        # also settles to a read dot, hiding a crashed resume.
+        chat_panel = PlaywrightTaskPage(page=instance.page).get_chat_panel()
+        wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
+        expect(chat_panel.get_error_block()).to_have_count(0)
         expect(_agent_tab(instance.page)).to_have_attribute(
             "data-dot-status", _IDLE_DOT_STATUS, timeout=_SETTLE_TIMEOUT_MS
         )
