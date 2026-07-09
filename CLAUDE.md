@@ -1,3 +1,11 @@
+<!--
+This file is also available as AGENTS.md, and the .claude/ directory as
+.agents/, via symlinks (AGENTS.md -> CLAUDE.md, .agents -> .claude). The
+CLAUDE.md file and .claude/ directory are the real, canonical paths; the
+AGENTS-named entries are aliases so agent tools that follow the AGENTS.md
+convention read the same content. Edit CLAUDE.md and .claude/, not the aliases.
+-->
+
 # Interaction Guidelines
 
 - When the user asks a question, answer the question directly. Do not treat questions as requests for code changes or other work.
