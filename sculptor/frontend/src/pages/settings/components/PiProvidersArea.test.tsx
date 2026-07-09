@@ -40,4 +40,30 @@ describe("groupProviders", () => {
     expect(grouping.sessionOnly.map((p) => p.providerId)).toEqual(["amazon-bedrock"]);
     expect(grouping.connected).toHaveLength(0);
   });
+
+  it("sorts the Available group alphabetically by display name", () => {
+    const grouping = groupProviders([
+      makeProvider({ providerId: "openrouter", displayName: "OpenRouter" }),
+      makeProvider({ providerId: "anthropic", displayName: "Anthropic" }),
+      makeProvider({ providerId: "mistral", displayName: "Mistral" }),
+      makeProvider({ providerId: "cerebras", displayName: "Cerebras" }),
+    ]);
+    expect(grouping.available.map((p) => p.displayName)).toEqual(["Anthropic", "Cerebras", "Mistral", "OpenRouter"]);
+  });
+
+  it("sorts the Connected group alphabetically by display name", () => {
+    const grouping = groupProviders([
+      makeProvider({ providerId: "openai", displayName: "OpenAI", inAuthJson: true }),
+      makeProvider({ providerId: "anthropic", displayName: "Anthropic", inAuthJson: true }),
+    ]);
+    expect(grouping.connected.map((p) => p.displayName)).toEqual(["Anthropic", "OpenAI"]);
+  });
+
+  it("sorts case-insensitively so xAI precedes Z.AI", () => {
+    const grouping = groupProviders([
+      makeProvider({ providerId: "zai", displayName: "Z.AI" }),
+      makeProvider({ providerId: "xai", displayName: "xAI" }),
+    ]);
+    expect(grouping.available.map((p) => p.displayName)).toEqual(["xAI", "Z.AI"]);
+  });
 });
