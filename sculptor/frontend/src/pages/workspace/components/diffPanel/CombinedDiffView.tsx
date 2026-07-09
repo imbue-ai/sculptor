@@ -335,10 +335,6 @@ export const CombinedDiffView = ({
           {areAllCollapsed ? <ChevronsUpDown size={14} /> : <ChevronsDownUp size={14} />}
         </TooltipIconButton>
         <DiffScopePicker scope={scope} onScopeChange={setScope} hasTargetBranch={hasTargetBranch} />
-        <span className={styles.toolbarSpacer} />
-        {scope === "uncommitted" && (
-          <CommitButton changesCount={isReady ? fileChanges.length : 0} onCommit={onCommit} />
-        )}
       </div>
       {isActive &&
         (fileChanges.length === 0 ? (
@@ -369,6 +365,14 @@ export const CombinedDiffView = ({
             </div>
           </div>
         ))}
+      {/* Commit action pinned as a full-width footer, matching the Changes
+          panel. Keeping it out of the toolbar row avoids colliding with the
+          scope picker (both want the full width) when the panel is narrow. */}
+      {scope === "uncommitted" && (
+        <Flex flexShrink="0" px="3" py="2" className={styles.commitFooter}>
+          <CommitButton changesCount={isReady ? fileChanges.length : 0} onCommit={onCommit} />
+        </Flex>
+      )}
     </div>
   );
 };
