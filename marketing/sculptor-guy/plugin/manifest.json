@@ -1,0 +1,7 @@
+{
+  "id": "cart-guy",
+  "name": "Cart Guy",
+  "version": "0.1.0",
+  "entry": "main.js",
+  "sdkVersion": "^1.0.0"
+}

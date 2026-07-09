@@ -95,3 +95,37 @@ scene.resume();              // hand the loop back
 The character markup in `index.html` (three `<template>`s) is a copy of the
 standalone SVGs, inlined so the page works from `file://` without fetch
 restrictions — if you change a rig, change both.
+
+## The Sculptor plugin (`plugin/`)
+
+Cart guy as a desktop pet inside the Sculptor UI itself: a frontend plugin
+that registers a full-app overlay where he wanders and **treats the app's DOM
+as terrain** — while falling, `document.elementsFromPoint` is probed under
+his wheels and the first sufficiently large element whose top edge crosses
+the fall becomes his floor. He re-measures his perch every frame, so he rides
+panels that move, and falls when his perch unmounts or slides away. The
+viewport bottom is the ultimate floor.
+
+Click him to drive: **A/D** or **←/→** roll, **W/Space** jump, **S** crouch /
+fast-fall, **S+Space** big jump (high enough to reach most panels), **Esc**
+to release him back to wandering. While driving, keys are only captured when
+the event target isn't editable, so typing in the app is never hijacked;
+uncontrolled, he never touches the keyboard at all.
+
+- `plugin/world.js` — the engine, deliberately React-free so a plain harness
+  page can import it directly for testing.
+- `plugin/main.js` — the plugin entry: React overlay wrapper + `activate`.
+- `plugin/manifest.json` — plugin manifest (`id: cart-guy`).
+
+Dev loop (mutating ops need Settings → Plugins → "Agent plugin loading"):
+
+```bash
+sculpt plugin load marketing/sculptor-guy/plugin      # load into the live UI
+sculpt plugin reload cart-guy                         # after editing
+sculpt plugin remove cart-guy                         # clean up
+sculpt plugin load marketing/sculptor-guy/plugin --persist   # keep it installed
+```
+
+The rig markup in `world.js` is the cart SVG with `cg-`-prefixed filter ids
+and class names so nothing collides with the host page — same
+change-both-copies rule as the playground templates.
