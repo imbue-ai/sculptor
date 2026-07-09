@@ -1,4 +1,12 @@
-"""Regression test: a pending ask_user_question must survive a Sculptor restart.
+"""Regression tests for restarting Sculptor while an ask_user_question is pending.
+
+Two behaviors are pinned here:
+
+1. The pending question must survive the restart —
+   ``test_pending_question_restored_and_answerable_after_restart``.
+2. Answering it must relaunch the CLI with the conversation's launch
+   settings (model / fast mode / effort), not fresh-manager defaults —
+   ``test_launch_settings_preserved_for_answer_after_restart``.
 
 When the agent is blocked on an unanswered AskUserQuestion and Sculptor
 restarts, the Claude CLI is SIGTERM'd (exit code 143) and the wrapper
