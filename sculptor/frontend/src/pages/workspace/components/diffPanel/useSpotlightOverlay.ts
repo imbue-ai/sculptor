@@ -65,8 +65,11 @@ export const useSpotlightOverlay = ({ paneElement, file }: UseSpotlightOverlayOp
   useEffect(() => {
     const shadowRoot = shadowRootOf(paneElement);
     if (!shadowRoot || !file) return;
-    paintGutterBars(shadowRoot, draftAnchors, file, (anchor) =>
-      spotlightBarColor(spotlightColorIndex(anchor, colorMap)),
+    paintGutterBars(
+      shadowRoot,
+      draftAnchors,
+      file,
+      (anchor) => spotlightBarColor(spotlightColorIndex(anchor, colorMap)),
       hover,
     );
   }, [draftAnchors, file, paneElement, domVersion, colorMap, hover]);
