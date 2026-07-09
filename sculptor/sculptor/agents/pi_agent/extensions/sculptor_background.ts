@@ -170,7 +170,11 @@ export default function sculptorBackgroundExtension(pi: ExtensionAPI): void {
 				const summary = truncateSummary(output.trim());
 				// Out-of-band completion: a fire-and-forget notify carrying the
 				// structured marker. Sculptor's adapter maps it onto
-				// BackgroundTaskNotification (background.py / agent_wrapper).
+				// BackgroundTaskNotification (background.py / agent_wrapper) and
+				// initiates the reaction turn itself — this extension must NOT wake
+				// the agent (a pi-side sendUserMessage landing mid-run splices
+				// reaction turns into the run and defers agent_end indefinitely;
+				// SCU-1776).
 				try {
 					sessionCtx?.ui.notify(
 						JSON.stringify({
@@ -188,17 +192,6 @@ export default function sculptorBackgroundExtension(pi: ExtensionAPI): void {
 					);
 				} catch {
 					/* session torn down between completion and notify; nothing to surface */
-				}
-				// Wake the calling agent so it can react to the completion. sendUserMessage
-				// triggers a turn when the agent is idle; deliverAs "followUp" queues it
-				// behind an in-flight user turn instead of interrupting it.
-				try {
-					pi.sendUserMessage(
-						`Your background task (${label}) finished: ${status}${exitCode === null ? "" : ` (exit ${exitCode})`}.`,
-						{ deliverAs: "followUp" },
-					);
-				} catch {
-					/* session torn down; nothing to deliver */
 				}
 			};
 

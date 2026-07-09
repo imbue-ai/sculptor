@@ -1,11 +1,16 @@
 import type { Virtualizer } from "@tanstack/react-virtual";
 import { useAtom } from "jotai";
-import type { RefObject } from "react";
+import type { MutableRefObject, RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 import { alphaScrollPositionAtomFamily } from "~/common/state/atoms/alphaScroll.ts";
 
-import { contentBottomOffset, distanceFromContentBottom, maxScrollOffset } from "../scroll/geometry.ts";
+import {
+  bottomThresholdFor,
+  contentBottomOffset,
+  distanceFromContentBottom,
+  maxScrollOffset,
+} from "../scroll/geometry.ts";
 import type { ScrollStateMachine } from "../scroll/scrollStateMachine.ts";
 
 /** Cancel all pending rAFs tracked in the set and clear it. */
@@ -13,8 +18,6 @@ const cancelPendingRafs = (ids: Set<number>): void => {
   for (const id of ids) cancelAnimationFrame(id);
   ids.clear();
 };
-
-const BOTTOM_THRESHOLD = 200;
 
 type MessageRef = { id: string };
 
@@ -24,10 +27,14 @@ export const useAlphaScrollPersistence = (
   taskId: string,
   filteredMessages: ReadonlyArray<MessageRef>,
   machine: ScrollStateMachine,
+  isProgrammaticScrollRef: MutableRefObject<boolean>,
 ): void => {
   const [scrollPosition, setScrollPosition] = useAtom(alphaScrollPositionAtomFamily(taskId));
   const prevTaskIdRef = useRef(taskId);
   const pendingRafsRef = useRef(new Set<number>());
+  // A restore that arrived before the task's messages did (cold task-detail
+  // atom right after a switch). Held until the first non-empty message list.
+  const pendingRestoreRef = useRef(false);
 
   // Save scroll position (rAF-debounced)
   useEffect(() => {
@@ -40,6 +47,15 @@ export const useAlphaScrollPersistence = (
       // Don't record positions the restore itself produces — the machine is in
       // `restoring` for the whole restore window.
       if (machine.getState().authority.kind === "restoring") return;
+      // Nor positions produced by other programmatic scrolls: pin-to-bottom
+      // writes and TanStack's per-item scroll compensation flag themselves
+      // here, and mid-measurement compensation in particular lands at
+      // positions the user never chose — recording one overwrites the real
+      // reading position. The flag is cleared in a microtask (after every
+      // listener of this event has run), so this read is safe regardless of
+      // listener registration order. Sampled at event time: the rAF below
+      // runs after the microtask clear.
+      if (isProgrammaticScrollRef.current) return;
 
       if (rafId !== null) cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
@@ -62,6 +78,7 @@ export const useAlphaScrollPersistence = (
           // reader follows content that grew while away and a position inside
           // the padding (the anchored rest / a max scroll) round-trips.
           distanceFromBottom: distanceFromContentBottom(el, virtualizer),
+          savedAtMs: Date.now(),
         });
       });
     };
@@ -71,7 +88,7 @@ export const useAlphaScrollPersistence = (
       el.removeEventListener("scroll", handleScroll);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [scrollContainerRef, virtualizer, filteredMessages, setScrollPosition, machine]);
+  }, [scrollContainerRef, virtualizer, filteredMessages, setScrollPosition, machine, isProgrammaticScrollRef]);
 
   // Apply the saved scroll position to the container. Resolves the saved anchor
   // (message index + pixel offset, or distance-from-bottom) against the
@@ -90,7 +107,7 @@ export const useAlphaScrollPersistence = (
       return;
     }
 
-    if (scrollPosition.distanceFromBottom <= BOTTOM_THRESHOLD) {
+    if (scrollPosition.distanceFromBottom <= bottomThresholdFor(el)) {
       // At (or past) the bottom: re-land at the saved distance from the
       // *current* content bottom, not at the saved message anchor — when
       // content grew while away, an at-bottom reader should see the new
@@ -122,13 +139,26 @@ export const useAlphaScrollPersistence = (
   // Restore scroll position on task switch
   const restore = useCallback(() => {
     const el = scrollContainerRef.current;
-    if (!el || filteredMessages.length === 0) return;
+    if (!el) return;
 
     // Cancel any in-flight rAFs from a previous restore call
     cancelPendingRafs(pendingRafsRef.current);
     // Enter `restoring`: the machine now owns "a restore is in flight", which
     // suppresses position saves and is reflected to the DOM as data-scroll-phase.
     machine.dispatch({ kind: "taskSwitched", taskId });
+
+    // The task's messages may not have arrived yet (the task-detail atom is
+    // cold right after a switch and the unified stream fills it a beat later).
+    // There is nothing to resolve the saved anchor against, so hold the
+    // restore pending — the message-arrival effect below fires it on the first
+    // non-empty list. Entering `restoring` above is what makes the wait safe:
+    // the interim landing (content mounting, estimate-based pins) fires scroll
+    // events that must not overwrite the saved position we have yet to read.
+    if (filteredMessages.length === 0) {
+      pendingRestoreRef.current = true;
+      return;
+    }
+    pendingRestoreRef.current = false;
 
     // First apply: resolves the anchor against the virtualizer's *estimated*
     // heights — on a task switch the virtualizer is mid-settle and the items
@@ -173,8 +203,25 @@ export const useAlphaScrollPersistence = (
     }
   }, [taskId, restore]);
 
-  // Initial restore on mount; cancel pending rAFs on unmount
-  useEffect(() => {
+  // Fire a pending restore the moment the task's messages arrive. Pre-paint
+  // for the same reason as the restores above. Skipped (and cleared) if the
+  // user already scrolled during the wait: their position wins over the saved
+  // one, exactly like the settled restore's re-assert courtesy.
+  useLayoutEffect(() => {
+    if (!pendingRestoreRef.current || filteredMessages.length === 0) return;
+    pendingRestoreRef.current = false;
+    if (machine.getState().authority.kind === "restoring") {
+      restore();
+    }
+  }, [filteredMessages, machine, restore]);
+
+  // Initial restore on mount; cancel pending rAFs on unmount. A layout effect
+  // for the same reason as the task-switch restore above: on mobile every
+  // navigation REMOUNTS the chat, and a post-paint restore would flash the
+  // pin-to-bottom position (painted by useAlphaAutoScroll's mount effects)
+  // before jumping to the saved one. Running after that pin in the same
+  // layout-effect queue (this hook is called later), the restore wins pre-paint.
+  useLayoutEffect(() => {
     restore();
     const rafs = pendingRafsRef.current;
     return (): void => cancelPendingRafs(rafs);

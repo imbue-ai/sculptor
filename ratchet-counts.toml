@@ -29,9 +29,10 @@
 [no-eval-usage]
 "." = 0
 
-# Frozen at the 2026-07 state-ownership baseline (all pre-existing sites are
-# pure fire-and-forget with no optimistic local write, or tracked in
-# docs/development/state-ownership-burndown.md). Reduce only.
+# Frozen at the 2026-07 state-ownership baseline. Every site is classified in
+# docs/development/state-ownership-burndown.md (handled catches — rollback or
+# toast inside — or pure fire-and-forget with no optimistic local write).
+# Reduce only; bumps need a written justification.
 [no-fire-and-forget-api-catch]
 "." = 6
 
@@ -122,10 +123,10 @@
 [no-relative-imports]
 "." = 0
 
-# Both sites are useOptimisticTaskDelete's tombstone/rollback writes — the
-# first burn-down item in docs/development/state-ownership-burndown.md.
+# Zero is the floor: all cache writes live in queryClient.ts (WS bridge) and
+# src/common/state/mutations/. See docs/development/state-ownership-burndown.md.
 [no-scattered-setquerydata]
-"." = 2
+"." = 0
 
 [no-sculptor-copytree]
 "." = 1

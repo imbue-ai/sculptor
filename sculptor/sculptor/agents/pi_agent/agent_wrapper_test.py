@@ -22,6 +22,7 @@ from unittest.mock import patch
 
 import pytest
 
+from sculptor.agents.pi_agent import agent_wrapper as agent_wrapper_module
 from sculptor.agents.pi_agent.agent_wrapper import PI_PROBE_SESSION_DIR_NAME
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_DIR_NAME
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_ID_STATE_FILE
@@ -30,6 +31,8 @@ from sculptor.agents.pi_agent.agent_wrapper import _PI_TRANSIENT_RETRY_BASE_DELA
 from sculptor.agents.pi_agent.agent_wrapper import _PI_TRANSIENT_RETRY_MAX_DELAY_SECONDS
 from sculptor.agents.pi_agent.agent_wrapper import _TurnState
 from sculptor.agents.pi_agent.agent_wrapper import _curate_models
+from sculptor.agents.pi_agent.agent_wrapper import _format_background_completion
+from sculptor.agents.pi_agent.agent_wrapper import _format_subagent_completion
 from sculptor.agents.pi_agent.agent_wrapper import _model_option_from_pi
 from sculptor.agents.pi_agent.agent_wrapper import _render_synthesized_skill
 from sculptor.agents.pi_agent.agent_wrapper import _rewrite_skill_invocation
@@ -38,6 +41,7 @@ from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_DIALOG_TITLE
 from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_HEADER
 from sculptor.agents.pi_agent.background import BACKGROUND_NOTIFY_MARKER
 from sculptor.agents.pi_agent.background import BACKGROUND_PAYLOAD_VERSION
+from sculptor.agents.pi_agent.background import parse_background_completion
 from sculptor.agents.pi_agent.harness import PI_HARNESS
 from sculptor.agents.pi_agent.output_processor import AgentMessage
 from sculptor.agents.pi_agent.output_processor import ParsedAgentEnd
@@ -45,6 +49,7 @@ from sculptor.agents.pi_agent.output_processor import ParsedUnknownEvent
 from sculptor.agents.pi_agent.output_processor import extract_tool_call_blocks
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
 from sculptor.agents.pi_agent.subagent import SUBAGENT_NOTIFY_MARKER
+from sculptor.agents.pi_agent.subagent import parse_subagent_completion
 from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
@@ -479,16 +484,6 @@ def _subagent_launch_events() -> list:
         _event(_tool_execution_start(_SA_TOOL_CALL_ID, "subagent", {"task": "investigate"})),
         _event(_tool_execution_end(_SA_TOOL_CALL_ID, "subagent", result=_subagent_start_result())),
         _event({"type": "agent_end", "messages": [], "willRetry": False}),
-    ]
-
-
-def _reaction_turn_events(ack: str) -> list:
-    """A pi-initiated reaction turn (the extension's `sendUserMessage` wake-up):
-    `agent_start` with NO preceding `response` ack, then the assistant reaction."""
-    return [
-        _event({"type": "agent_start"}),
-        _event({"type": "message_end", "message": _assistant_msg(ack)}),
-        _event({"type": "agent_end", "messages": [_assistant_msg(ack)], "willRetry": False}),
     ]
 
 
@@ -3038,53 +3033,28 @@ class TestSubagents:
         _assert_killed_pgid(agent, 777)
         _assert_killed_pgid(agent, 888)
 
-    def test_subagent_completion_triggers_auto_resume_reaction(self) -> None:
-        """After a sub-agent completion the extension wakes the agent (sendUserMessage);
-        the idle-drain consumes the pi-initiated reaction turn out-of-band so the agent's
-        reaction renders, and the await-reaction guard clears."""
+    def test_idle_drain_rejects_pi_initiated_agent_start(self) -> None:
+        """Pi never self-starts a run (Sculptor is the only turn-initiator — the
+        SCU-1776 invariant), so an `agent_start` between turns is a protocol
+        violation: logged loud, not consumed as a turn. The completion before it
+        still surfaces normally and its wake still enqueues."""
         agent = _make_agent()
         agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
-        ack = "Acknowledged: my sub-agent finished — continuing the work."
         agent._process = _make_process(
-            [_event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())]))]
-            + _reaction_turn_events(ack)
+            [
+                _event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())])),
+                _event({"type": "agent_start"}),
+            ]
         )
-        agent._drain_idle_background_events()
+        with expect_exact_logged_errors(["PiAgent saw a pi-initiated agent_start between turns"]):
+            agent._drain_idle_background_events()
         emitted = _drain(agent._output_messages)
 
         assert len(_bg_notifications(emitted)) == 1
-        assert any(ack in text for text in _main_agent_texts(emitted)), _main_agent_texts(emitted)
+        # Exactly the completion's own request cycle — no reaction turn was consumed.
         types = [type(m).__name__ for m in emitted]
-        assert "RequestStartedAgentMessage" in types and "RequestSuccessAgentMessage" in types
-        assert agent._awaiting_reaction_count == 0
-
-
-class TestAutoResumeReaction:
-    """Auto-resume reaction turns after task completion."""
-
-    def test_background_completion_triggers_auto_resume_reaction(self) -> None:
-        """After a background-task completion the extension wakes the agent; the idle-drain
-        consumes the pi-initiated reaction turn so the agent's reaction renders."""
-        agent = _make_agent()
-        agent._background_tasks[_BG_TASK_ID] = _BG_PGID
-        ack = "Acknowledged: my background task finished — continuing the work."
-        agent._process = _make_process([_event(_background_notify())] + _reaction_turn_events(ack))
-        agent._drain_idle_background_events()
-        emitted = _drain(agent._output_messages)
-
-        assert len(_bg_notifications(emitted)) == 1
-        assert any(ack in text for text in _main_agent_texts(emitted)), _main_agent_texts(emitted)
-        assert agent._awaiting_reaction_count == 0
-
-    def test_idle_drain_gives_up_awaiting_reaction_past_deadline(self) -> None:
-        """A completion whose reaction never arrives must not keep the drain awaiting
-        forever: once the window elapses, `_has_background_tasks` reports no work."""
-        agent = _make_agent()
-        agent._note_awaiting_reaction()
-        assert agent._has_background_tasks() is True
-        agent._awaiting_reaction_deadline = 0.0  # force the window to have elapsed
-        assert agent._has_background_tasks() is False
-        assert agent._awaiting_reaction_count == 0
+        assert types.count("RequestStartedAgentMessage") == 1
+        assert types.count("RequestSuccessAgentMessage") == 1
 
 
 class TestBackgroundTasks:
@@ -3646,3 +3616,161 @@ class TestTurnFooterMetrics:
         assert first is not None
         assert agent._diff_tracker is first
         tracker_cls.assert_called_once_with(agent.environment)
+
+
+class TestSculptorInitiatedWake:
+    """SCU-1776: completion wake-ups are Sculptor-initiated, serialized on the input FIFO.
+
+    The extensions' pi-side `sendUserMessage(deliverAs:"followUp")` wake-up raced
+    Sculptor's prompt pump: landing mid-run it spliced reaction turns into the run,
+    deferring `agent_end` (the wrapper's only turn boundary) indefinitely — queued
+    user messages starved and Stop escalated to SIGTERM. The fix makes Sculptor the
+    only turn-initiator: surfacing a completion enqueues a `_ReactionWakeMessage`
+    onto the same FIFO as user messages, and servicing it drives an ordinary
+    prompt turn in its own request cycle.
+
+    `_ReactionWakeMessage` / `_run_wake_turn` are resolved via `getattr` so that,
+    before the fix exists, exactly these tests fail with AttributeError at
+    runtime — a static reference would fail module collection and `just
+    typecheck` for the whole file on the failing-test commit.
+    """
+
+    @staticmethod
+    def _wake_message(text: str) -> Any:
+        wake_cls = getattr(agent_wrapper_module, "_ReactionWakeMessage")  # noqa: B009
+        return wake_cls(text=text)
+
+    @staticmethod
+    def _is_wake(message: Any) -> bool:
+        return type(message).__name__ == "_ReactionWakeMessage"
+
+    def test_subagent_completion_from_idle_drain_enqueues_wake_on_input_fifo(self) -> None:
+        """A sub-agent completion surfaced by the idle-drain enqueues one wake message
+        on the input FIFO, carrying the same summary text the completion notification
+        renders (one completion fact, one rendering)."""
+        agent = _make_agent()
+        agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+        notify = _subagent_notify([_subagent_child("c0", "done", _read_child_events())])
+        agent._process = _make_process([_event(notify)])
+
+        agent._drain_idle_background_events()
+
+        queued = _drain(agent._input_agent_messages)
+        wakes = [m for m in queued if self._is_wake(m)]
+        assert len(wakes) == 1
+        completion = parse_subagent_completion(notify["message"])
+        assert completion is not None
+        assert wakes[0].text == _format_subagent_completion(completion)
+
+    def test_subagent_completion_in_turn_enqueues_wake_on_input_fifo(self) -> None:
+        """A completion that reconciles into an in-flight turn also enqueues the wake:
+        it is serviced from the FIFO after this turn (and any earlier-queued user
+        messages), never spliced into the current run."""
+        agent = _make_agent()
+        agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+        agent._process = _make_process(
+            [
+                _event({"type": "agent_start"}),
+                _event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())])),
+                _event({"type": "agent_end", "messages": [_assistant_msg("done")], "willRetry": False}),
+            ]
+        )
+
+        agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+        queued = _drain(agent._input_agent_messages)
+        assert len(queued) == 1 and self._is_wake(queued[0]), queued
+
+    def test_background_completion_enqueues_wake_on_input_fifo(self) -> None:
+        """A background-task completion enqueues a wake whose text is the notification
+        summary (which carries the output tail), mirroring the sub-agent contract."""
+        agent = _make_agent()
+        agent._background_tasks[_BG_TASK_ID] = _BG_PGID
+        notify = _background_notify()
+        agent._process = _make_process([_event(notify)])
+
+        agent._drain_idle_background_events()
+
+        queued = _drain(agent._input_agent_messages)
+        wakes = [m for m in queued if self._is_wake(m)]
+        assert len(wakes) == 1
+        completion = parse_background_completion(notify["message"])
+        assert completion is not None
+        assert wakes[0].text == _format_background_completion(completion)
+
+    def test_wake_enqueues_behind_already_queued_user_message(self) -> None:
+        """FIFO serialization is the fix's core guarantee: a user message queued before
+        the completion is serviced FIRST; the wake lands behind it (the old pi-side
+        followUp ran reaction turns ahead of queued user messages — the bug)."""
+        agent = _make_agent()
+        agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+        user_message = ChatInputUserMessage(text="answer me first")
+        assert agent._push_message(user_message) is True
+        agent._process = _make_process(
+            [_event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())]))]
+        )
+
+        agent._drain_idle_background_events()
+
+        queued = _drain(agent._input_agent_messages)
+        assert len(queued) == 2, queued
+        assert queued[0] is user_message
+        assert self._is_wake(queued[1])
+
+    def test_wake_turn_sends_prompt_in_own_request_cycle(self) -> None:
+        """Servicing a wake sends its text verbatim as an ordinary `prompt` RPC and
+        brackets the consumed turn in its own RequestStarted → RequestSuccess cycle
+        (a fresh request id — the wake is not a reply to any user message)."""
+        agent = _make_agent()
+        ack = "Both sub-agents finished; continuing."
+        agent._process = _make_process(
+            [
+                _event({"type": "agent_start"}),
+                _event(_text_delta_update(ack, ack)),
+                _event({"type": "message_end", "message": _assistant_msg(ack)}),
+                _event({"type": "agent_end", "messages": [_assistant_msg(ack)], "willRetry": False}),
+            ]
+        )
+        wake = self._wake_message("Sub-agents completed: 1 done, 0 failed (of 1).")
+
+        getattr(agent, "_run_wake_turn")(wake)  # noqa: B009
+
+        sent = [json.loads(call.args[0]) for call in agent._process.write_stdin.call_args_list]
+        prompts = [payload for payload in sent if payload.get("type") == "prompt"]
+        assert len(prompts) == 1
+        assert prompts[0]["message"] == wake.text
+
+        emitted = _drain(agent._output_messages)
+        assert isinstance(emitted[0], RequestStartedAgentMessage)
+        assert isinstance(emitted[-1], RequestSuccessAgentMessage)
+        assert emitted[-1].request_id == emitted[0].request_id
+        assert emitted[-1].interrupted is False
+        assert any(ack in text for text in _main_agent_texts(emitted))
+
+    def test_wake_turn_pi_crash_is_nonfatal(self) -> None:
+        """A wake turn that fails (PiCrashError) must not tear down the agent: the
+        failure is logged and its request cycle resolves interrupted=True, so the
+        message-processing loop lives on to serve the next user message."""
+        agent = _make_agent()
+        # An unexpected stopReason:"aborted" (no interrupt pending) raises
+        # PiCrashError inside the consume loop — the crash shape from the field.
+        agent._process = _make_process(
+            [
+                _event({"type": "agent_start"}),
+                _event(
+                    {
+                        "type": "agent_end",
+                        "messages": [_assistant_msg("boom", stop_reason="aborted")],
+                        "willRetry": False,
+                    }
+                ),
+            ]
+        )
+        wake = self._wake_message("Background task completed (exit code 0).")
+
+        getattr(agent, "_run_wake_turn")(wake)  # must NOT raise  # noqa: B009
+
+        emitted = _drain(agent._output_messages)
+        assert isinstance(emitted[0], RequestStartedAgentMessage)
+        assert isinstance(emitted[-1], RequestSuccessAgentMessage)
+        assert emitted[-1].interrupted is True

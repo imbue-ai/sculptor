@@ -129,16 +129,20 @@ class PlaywrightPluginsSettingsElement(PlaywrightIntegrationTestElement):
         """
         self.get_source_row(source).get_by_test_id(ElementIDs.SETTINGS_PLUGINS_SOURCE_SETTINGS).click()
 
-    def set_source_text_setting(self, source: str, value: str) -> None:
-        """Open a source's plugin-rendered settings and fill its text input.
+    def set_source_text_setting(self, source: str, value: str, *, placeholder: str | None = None) -> None:
+        """Open a source's plugin-rendered settings and fill a text input.
 
-        The settings component is plugin-authored, so its field carries no host
-        testid; scope to the (single) ``<input>`` inside the source's row. Used
-        e.g. to enter the Linear plugin's API key, which the plugin persists via
-        the settings SDK and applies reactively (no reload needed).
+        The settings component is plugin-authored, so its fields carry no host
+        testids. A plugin whose settings render a single ``<input>`` needs no
+        disambiguation; when they render several (e.g. the Linear plugin's API
+        key beside its template fields), pass the target field's ``placeholder``
+        — Playwright's canonical locator for a label-less input. Used e.g. to
+        enter the Linear plugin's API key, which the plugin persists via the
+        settings SDK and applies reactively (no reload needed).
         """
         self.open_source_settings(source)
-        field = self.get_source_row(source).locator("input")
+        row = self.get_source_row(source)
+        field = row.get_by_placeholder(placeholder) if placeholder is not None else row.locator("input")
         expect(field).to_be_visible()
         field.fill(value)
 
