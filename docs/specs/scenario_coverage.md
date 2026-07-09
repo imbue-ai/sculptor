@@ -192,7 +192,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | Scenario | Status | Existing integration test(s) | Integration tests to add |
 |----------|--------|------------------------------|--------------------------|
 | WS-001 | Partial | test_queued_messages.py::test_queued_message_bar_appears_and_shows_content (editor clears) | Assert the attachments preview clears after sending a message that had an image attached. |
-| WS-002 | Partial | test_queued_messages.py::test_chat_input_disabled_while_message_queued | Assert Send disabled when editor empty and a hover tooltip shows the disabled reason. |
+| WS-002 | Partial | test_queued_messages.py::test_chat_input_disabled_while_message_queued | Assert Send disabled when editor empty and a hover tooltip shows the disabled reason; and that a Pi agent with no authenticated providers replaces Send with a "Go to harness configuration" button that opens Settings → Pi. |
 | WS-005 | Missing | — | Drag files over chat input → "Drop to attach images" overlay; on drop files appear in preview list. |
 | WS-009 | Partial | test_regression_model_selection.py::test_new_agent_inherits_model_from_existing_agent | Open model selector, pick a model; assert it is highlighted and applied to the next sent message. |
 | WS-013 | Missing | — | Shift+Enter inserts a line break and editor grows; sending submits the whole multiline text as one message. |
@@ -258,7 +258,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | CHAT-043 | Partial | test_alpha_ask_user_question.py::test_alpha_auq_pill_dismissed_state | Assert the dimmed-options styling on the dismissed block. |
 | CHAT-044 | Partial | test_alpha_chat_view.py::test_debug_view_displays_blocks | Assert role, id, timestamp, and tool_use/tool_result names per message. |
 | CHAT-045 | Missing | — | Clicking a debug-view timestamp toggles between relative and absolute formats. |
-| CHAT-046 | Partial | test_pi_capability_gating.py::test_pi_model_switcher_offers_pi_models_and_accepts_a_pick; ::test_fresh_pi_agent_switcher_shows_pi_models_without_a_message | Assert the picker is disabled (with the current model) for a terminal agent; that two-or-more providers cascade into per-provider submenus while a single provider stays flat; that a Pi agent with no authenticated providers shows the "Authenticate a provider" prompt; and that a harness-rejected Pi switch leaves the selection unchanged and shows an error toast. |
+| CHAT-046 | Partial | test_pi_capability_gating.py::test_pi_model_switcher_offers_pi_models_and_accepts_a_pick; ::test_fresh_pi_agent_switcher_shows_pi_models_without_a_message | Assert the picker is disabled (with the current model) for a terminal agent; that two-or-more providers cascade into per-provider submenus while a single provider stays flat; that a Pi agent with no authenticated providers shows the "Authenticate a provider" prompt (including after a model had been selected — the now-unusable selection is dropped) and replaces Send with a "Go to harness configuration" button; and that a harness-rejected Pi switch leaves the selection unchanged and shows an error toast. |
 
 ### MSG
 
