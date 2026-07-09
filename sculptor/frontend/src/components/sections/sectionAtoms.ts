@@ -167,6 +167,23 @@ export const explorerListWidthAtom: WritableAtom<number, [number], void> = atom(
   },
 );
 
+// Whether an explorer panel's list sidebar is hidden. Unlike the shared width,
+// this is per-panel-id, so hiding the list in one panel leaves the others
+// visible. Persisted globally, so a panel stays the way the user left it across
+// remounts and workspace switches. The `?? {}`/`?? false` guards let a snapshot
+// persisted before this field existed read back as "visible".
+export const explorerSidebarHiddenAtom = atomFamily((panelId: PanelId) =>
+  atom(
+    (get) => get(globalLayoutAtom).explorerSidebarHiddenByPanel?.[panelId] ?? false,
+    (_get, set, hidden: boolean) => {
+      set(globalLayoutAtom, (prev) => ({
+        ...prev,
+        explorerSidebarHiddenByPanel: { ...(prev.explorerSidebarHiddenByPanel ?? {}), [panelId]: hidden },
+      }));
+    },
+  ),
+);
+
 // Scope switching / removal
 
 // A workspace's snapshot is "empty" (never visited / nothing seeded) when no panel is

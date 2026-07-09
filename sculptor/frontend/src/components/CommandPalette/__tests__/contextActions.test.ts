@@ -43,6 +43,7 @@ const makeWorkspaceRuntime = (overrides: WorkspaceRuntimeOverrides = {}): Worksp
 
 const makeAgentRuntime = (): AgentActionRuntime => ({
   markUnread: vi.fn(),
+  beginRename: vi.fn(),
   beginDelete: vi.fn(),
 });
 
@@ -129,14 +130,26 @@ describe("buildWorkspaceActions", () => {
 });
 
 describe("buildAgentActions", () => {
-  it("emits the canonical right-click menu set", () => {
+  it("emits the canonical right-click menu set in order", () => {
     const actions = buildAgentActions(makeAgentRuntime());
-    expect(actions.map((a) => a.id)).toEqual(["mark_unread", "delete"]);
+    expect(actions.map((a) => a.id)).toEqual(["mark_unread", "rename", "delete"]);
   });
 
-  it("omits rename — agent rename is the panel tab's inline edit, not a palette action", () => {
+  it("rename appends the agent name in the palette and sorts before delete", () => {
     const actions = buildAgentActions(makeAgentRuntime());
-    expect(actions.map((a) => a.id)).not.toContain("rename");
+    const rename = actions.find((a) => a.id === "rename");
+    const del = actions.find((a) => a.id === "delete");
+    expect(rename?.paletteTitleSuffix).toBe("name");
+    expect(rename?.separatorBefore).toBe(true);
+    expect(rename?.paletteOrder).toBeLessThan(del?.paletteOrder ?? Number.POSITIVE_INFINITY);
+  });
+
+  it("rename perform routes to runtime.beginRename with the agent target", () => {
+    const runtime = makeAgentRuntime();
+    const actions = buildAgentActions(runtime);
+    const agent = fakeAgent("a3");
+    actions.find((a) => a.id === "rename")?.perform(agent);
+    expect(runtime.beginRename).toHaveBeenCalledWith(agent);
   });
 
   it("delete is destructive and routes through the runtime", () => {

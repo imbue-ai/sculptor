@@ -41,8 +41,9 @@ describe("NewWorkspaceModal", () => {
   });
 
   it("passes the open request's seeds and create callback through to the form", () => {
-    // A plugin's open request (via the SDK's useOpenNewWorkspaceModal) rides
-    // this atom; the form only sees what the modal forwards.
+    // A plugin's open request (via the SDK's useOpenNewWorkspaceModal) and the
+    // home page's first-run auto-open both ride this atom; the form only sees
+    // what the modal forwards.
     const store = createStore();
     const onWorkspaceCreated = vi.fn();
     store.set(newWorkspaceModalAtom, {
@@ -64,17 +65,12 @@ describe("NewWorkspaceModal", () => {
     );
   });
 
-  it("closes a stale open request when the host unmounts", () => {
-    // The modal's only mount is AppShell, which unmounts when the first-run
-    // page takes over. An open request set just before that swap must die with
-    // the host — otherwise it survives invisibly in the store and pops the
-    // dialog (overlay and all) over the first workspace created afterwards.
+  it("renders every open as a modal dialog (with overlay)", () => {
+    // The first-run auto-open and the explicit entry points share one modal
+    // look and dismissal behavior — there is no special non-modal variant.
     const store = createStore();
     store.set(newWorkspaceModalAtom, { open: true });
-    const { unmount } = renderWithProviders(<NewWorkspaceModal />, { store });
-    expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_DIALOG)).toBeTruthy();
-
-    unmount();
-    expect(store.get(newWorkspaceModalAtom)).toEqual({ open: false });
+    renderWithProviders(<NewWorkspaceModal />, { store });
+    expect(screen.getByTestId(ElementIds.PALETTE_DIALOG_OVERLAY)).toBeTruthy();
   });
 });

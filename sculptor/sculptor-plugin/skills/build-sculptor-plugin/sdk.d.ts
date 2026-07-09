@@ -12,8 +12,8 @@ export type SectionId = "left" | "center" | "right" | "bottom";
  * the user opens it from the section "+" / Cmd+K, which drops it into the
  * sub-section they pick. `defaultSection` is recorded on the registry entry but
  * no placement path reads it yet — it is reserved for a future default-placement
- * pass. The legacy `defaultZone` / `defaultShortcut` / `description` fields are
- * accepted but ignored — the docking shell they targeted is gone.
+ * pass. The legacy `defaultZone` / `defaultShortcut` fields are accepted but
+ * ignored — the docking shell they targeted is gone.
  */
 export type PluginPanelDefinition = {
 	/** Stable id; registering twice with the same id replaces the previous one. */
@@ -27,7 +27,7 @@ export type PluginPanelDefinition = {
 	defaultZone?: string;
 	/** @deprecated Ignored — per-panel keybindings were removed. */
 	defaultShortcut?: string;
-	/** @deprecated Ignored. */
+	/** Secondary text shown under the panel's label in the add-panel dropdown. */
 	description?: string;
 	/** Set by the loader to the owning plugin's id; not supplied by plugins. */
 	pluginId?: string;
@@ -254,10 +254,15 @@ export type CodingAgentTaskView = {
 	/**
 	 * Availablemodels
 	 *
-	 * The models the harness offers in its switcher (empty when it sources
-	 * none and the frontend falls back to its built-in list).
+	 * The switcher's catalog as the frontend gates on it: NOT_FETCHED_YET
+	 * until the start-time probe lands, then the fetched list (empty = the
+	 * harness sources none and the frontend falls back to its built-in list, or
+	 * pi is authenticated with no providers and shows the login CTA). Runtime
+	 * callers that only offer models use `get_available_models`, which coalesces
+	 * the sentinel to []; the switcher needs the distinction so it can show a
+	 * loading state instead of flashing the CTA while the catalog loads.
 	 */
-	readonly availableModels: Array<ModelOption>;
+	readonly availableModels: Array<ModelOption> | ModelCatalogState;
 	/**
 	 * Selectedmodelid
 	 *
@@ -443,6 +448,22 @@ declare const LlmModel: {
  * LLMModel
  */
 export type LlmModel = typeof LlmModel[keyof typeof LlmModel];
+declare const ModelCatalogState: {
+	readonly NOT_FETCHED_YET: "not_fetched_yet";
+};
+/**
+ * ModelCatalogState
+ *
+ * The catalog states a plain `list[ModelOption]` cannot express.
+ *
+ * `NOT_FETCHED_YET` is the birth state of a backend (pi) catalog on task state,
+ * before the start-time probe runs — distinct from a fetched-but-empty `[]`
+ * (authenticated, but no providers), which is what drives the login CTA. Keeping
+ * the two apart is what stops the switcher flashing that CTA during startup. A
+ * StrEnum member is a value-less, interned singleton that survives serialization
+ * by identity, so read sites use `is` rather than overloading `None`.
+ */
+export type ModelCatalogState = typeof ModelCatalogState[keyof typeof ModelCatalogState];
 /**
  * ModelOption
  *

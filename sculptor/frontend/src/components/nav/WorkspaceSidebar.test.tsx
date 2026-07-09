@@ -4,8 +4,9 @@ import { createStore } from "jotai";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { ElementIds, type Workspace } from "~/api";
+import { ElementIds, type Project, type Workspace } from "~/api";
 import { queryClient } from "~/common/queryClient";
+import { projectAtomFamily, projectIdsAtom } from "~/common/state/atoms/projects.ts";
 import { workspaceAtomFamily, workspaceIdsAtom } from "~/common/state/atoms/workspaces.ts";
 import { renderWithProviders } from "~/common/testUtils.tsx";
 
@@ -28,7 +29,12 @@ const seedWorkspaces = (store: ReturnType<typeof createStore>, ids: ReadonlyArra
   store.set(workspaceIdsAtom, [...ids]);
 };
 
-describe("WorkspaceSidebar empty-state nav buttons", () => {
+const seedProject = (store: ReturnType<typeof createStore>, id: string): void => {
+  store.set(projectAtomFamily(id), { objectId: id, name: `repo-${id}` } as unknown as Project);
+  store.set(projectIdsAtom, [id]);
+};
+
+describe("WorkspaceSidebar nav buttons", () => {
   let store: ReturnType<typeof createStore>;
 
   beforeEach(() => {
@@ -45,20 +51,67 @@ describe("WorkspaceSidebar empty-state nav buttons", () => {
     queryClient.clear();
   });
 
-  it("disables Search and New Workspace when the workspace list is empty", () => {
-    // An empty (but loaded) list — `isWorkspaceListEmptyAtom` reports true.
+  it("keeps Search and New Workspace enabled when the workspace list is empty", () => {
+    // An empty (but loaded) list — the first-run state. The new-workspace
+    // dialog and the command palette are reachable here, so the buttons stay
+    // live as the reopen paths for the auto-opened dialog.
     store.set(workspaceIdsAtom, []);
     renderWithProviders(<Sidebar />, { store });
 
-    expect(screen.getByTestId(ElementIds.SIDEBAR_CMDK_LINK)).toBeDisabled();
-    expect(screen.getByTestId(ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON)).toBeDisabled();
+    expect(screen.getByTestId(ElementIds.SIDEBAR_CMDK_LINK)).toBeEnabled();
+    expect(screen.getByTestId(ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON)).toBeEnabled();
   });
 
-  it("enables Search and New Workspace once a workspace exists", () => {
+  it("keeps Search and New Workspace enabled once a workspace exists", () => {
     seedWorkspaces(store, ["w1"]);
     renderWithProviders(<Sidebar />, { store });
 
-    expect(screen.getByTestId(ElementIds.SIDEBAR_CMDK_LINK)).not.toBeDisabled();
-    expect(screen.getByTestId(ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON)).not.toBeDisabled();
+    expect(screen.getByTestId(ElementIds.SIDEBAR_CMDK_LINK)).toBeEnabled();
+    expect(screen.getByTestId(ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON)).toBeEnabled();
+  });
+
+  it("keeps the Add repo button enabled even when the workspace list is empty", () => {
+    // Registering a repo is the natural first-run action, so it is live like
+    // every other nav button.
+    store.set(workspaceIdsAtom, []);
+    renderWithProviders(<Sidebar />, { store });
+
+    expect(screen.getByTestId(ElementIds.SIDEBAR_ADD_REPO_BUTTON)).not.toBeDisabled();
+  });
+});
+
+describe("WorkspaceSidebar repo groups", () => {
+  let store: ReturnType<typeof createStore>;
+
+  beforeEach(() => {
+    store = createStore();
+  });
+
+  afterEach(() => {
+    cleanup();
+    queryClient.clear();
+  });
+
+  it("renders a repo with no workspaces as a group with a hint and live per-repo actions", () => {
+    // A registered repo before its first workspace exists must still appear in
+    // the sidebar (otherwise a just-added repo silently vanishes). Its "+" and
+    // settings actions work here too: the new-workspace dialog host (AppShell)
+    // is mounted on every route, so the "+"'s dialog fallback and error toast
+    // have somewhere to land even with zero workspaces.
+    seedProject(store, "p1");
+    store.set(workspaceIdsAtom, []);
+    renderWithProviders(<Sidebar />, { store });
+
+    expect(screen.getByTestId(ElementIds.SIDEBAR_REPO_GROUP)).toBeVisible();
+    expect(screen.getByTestId(ElementIds.SIDEBAR_NO_WORKSPACES_HINT)).toBeVisible();
+    expect(screen.getByTestId(ElementIds.SIDEBAR_REPO_ADD_WORKSPACE)).toBeVisible();
+  });
+
+  it("shows the per-repo actions once a workspace exists", () => {
+    seedProject(store, "p1");
+    seedWorkspaces(store, ["w1"]);
+    renderWithProviders(<Sidebar />, { store });
+
+    expect(screen.getByTestId(ElementIds.SIDEBAR_REPO_ADD_WORKSPACE)).toBeVisible();
   });
 });

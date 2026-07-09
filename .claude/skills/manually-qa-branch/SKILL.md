@@ -105,6 +105,13 @@ port conflicts and authentication issues:
 env -u SESSION_TOKEN -u SCULPTOR_API_PORT -u SCULPTOR_FRONTEND_PORT just start
 ```
 
+> **Testing the onboarding flow?** Plain `just start` seeds a dev config and
+> skips the welcome flow, landing straight in the app — ideal for QAing the PR's
+> feature. To walk the full first-run/onboarding flow instead, swap `just start`
+> for `just start-onboard` (alias `just source`) in the command above. Both exist
+> only on branches that include the fast-QA `just start` change; on older
+> branches `just start` still shows onboarding.
+
 Run that command via the Bash tool with `run_in_background: true`. Note the
 shell ID returned — you'll use it later to check on the app if needed.
 
