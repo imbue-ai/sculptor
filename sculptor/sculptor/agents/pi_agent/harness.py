@@ -189,6 +189,12 @@ class PiHarness(Harness):
         # Pi sources its catalog from its authenticated providers.
         return True
 
+    def configuration_settings_section(self) -> str:
+        # Pi authenticates providers under Settings -> Pi (its own provider-auth area),
+        # not the shared Dependencies binary/auth surface, so the no-usable-model CTA
+        # routes there.
+        return "PI"
+
     def is_ask_user_question_tool(self, tool_name: str) -> bool:
         return tool_name == ASK_USER_QUESTION_TOOL_NAME
 

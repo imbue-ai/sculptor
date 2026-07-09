@@ -1,5 +1,6 @@
 """Tests for `PiHarness`'s identity, capability set, and gated methods."""
 
+from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.pi_agent.backchannel import ASK_USER_QUESTION_TOOL_NAME
 from sculptor.agents.pi_agent.backchannel import EXIT_PLAN_MODE_TOOL_NAME
 from sculptor.agents.pi_agent.harness import PI_HARNESS
@@ -34,6 +35,16 @@ def test_pi_harness_capabilities() -> None:
         supports_file_references=True,
         supports_model_selection=True,
     )
+
+
+def test_harness_configuration_settings_section() -> None:
+    # The no-usable-model composer CTA opens each harness's own configuration area:
+    # pi -> Settings -> Pi (provider auth), overriding the base default; the base
+    # (Claude and the rest) -> Dependencies, where a harness binary + its auth/login
+    # status live. Both are frontend `SettingsSection` ids (a frontend drift test pins
+    # them to real sections).
+    assert PI_HARNESS.configuration_settings_section() == "PI"
+    assert CLAUDE_CODE_HARNESS.configuration_settings_section() == "DEPENDENCIES"
 
 
 def test_pi_harness_gated_methods_recognize_backchannel_tools() -> None:

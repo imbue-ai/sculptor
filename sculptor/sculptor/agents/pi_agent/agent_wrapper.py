@@ -1188,14 +1188,18 @@ class PiAgent(DefaultAgentWrapper):
 
     def _reselect_unauthenticated_current_model(
         self, current_model: ModelOption, curated: list[ModelOption], authenticated: set[str]
-    ) -> ModelOption:
+    ) -> ModelOption | None:
         """Switch off a current model whose provider is no longer authenticated.
 
         pi's catalog gates on credential presence, so disconnecting a provider can
         leave the agent pointed at a model it can no longer run — and because the
         current model is retained in `curated`, the switcher otherwise stays stuck on
         it. If an authenticated model is available, switch to the first (newest-first)
-        one so the user is not stranded. Best-effort: a failed switch leaves the
+        one so the user is not stranded. If none is available (the user disconnected
+        their only provider), return `None` to drop the selection: the catalog then
+        curates to `[]` and the switcher reaches its "no usable model" empty state
+        rather than offering a single model that cannot run — the composer's send-guard
+        routes the user to authenticate. Best-effort: a failed switch leaves the
         current model unchanged. Only call when `current_model.provider` is already
         known to be unauthenticated, and only after a successful catalog fetch (so pi
         is proven responsive and the `set_model` write will not block).
@@ -1203,10 +1207,10 @@ class PiAgent(DefaultAgentWrapper):
         replacement = next((option for option in curated if option.provider in authenticated), None)
         if replacement is None:
             logger.info(
-                "PiAgent current model {} is no longer authenticated and no authenticated model is available to switch to",
+                "PiAgent current model {} is no longer authenticated and no authenticated model is available; dropping the selection so the switcher shows the empty state",
                 current_model.model_id,
             )
-            return current_model
+            return None
         new_model = self._request_set_model_blocking(replacement.provider, replacement.model_id)
         if new_model is None:
             logger.info(
@@ -1264,8 +1268,9 @@ class PiAgent(DefaultAgentWrapper):
         queue, before the message thread starts), maps the raw Model dicts to
         `ModelOption`s, curates them (`_curate_models`), and emits a
         `ModelsAvailableAgentMessage` the run-agent handler maps onto
-        `AgentTaskStateV2.available_models` / `current_model`. Best-effort: an empty
-        catalog leaves the switcher to the frontend's built-in fallback list.
+        `AgentTaskStateV2.available_models` / `current_model`. An empty catalog (no
+        authenticated providers) is emitted as `[]`, driving the pi switcher's
+        "no usable model" empty state — not the built-in Claude fallback list.
         """
         raw_models = self._request_available_models_blocking()
         state = self._request_state_blocking()
@@ -1286,11 +1291,10 @@ class PiAgent(DefaultAgentWrapper):
         if current_model is not None and current_model.provider not in authenticated:
             current_model = self._reselect_unauthenticated_current_model(current_model, curated, authenticated)
             curated = _curate_models(options, current_model, authenticated)
-        if not curated and current_model is None:
-            logger.info("PiAgent get_available_models returned no usable models; switcher will fall back to defaults")
-            return
-        # Cache the catalog so a later set_model can re-emit it with the new
-        # current model.
+        # Cache the catalog so a later set_model can re-emit it with the new current
+        # model. An empty catalog (no authenticated providers) is emitted too, so the
+        # pi switcher reaches its "no usable model" empty state instead of falling back
+        # to the built-in Claude list — and a live credential-change refresh updates it.
         self._available_models = tuple(curated)
         self._output_messages.put(
             ModelsAvailableAgentMessage(
@@ -1387,9 +1391,21 @@ class PiAgent(DefaultAgentWrapper):
             option = _model_option_from_pi(raw)
             if option is not None:
                 options.append(option)
-        curated = _curate_models(options, current_model, compute_authenticated_provider_ids())
+        authenticated = compute_authenticated_provider_ids()
+        # Drop a selected model whose provider is no longer authenticated when nothing
+        # authenticated remains to fall back to: the switcher must reach its empty
+        # "no usable model" state, not offer a single model that cannot run. (When an
+        # authenticated model does remain, the read-only probe leaves the switch to the
+        # start-time reselect in `_fetch_models_into_state`, which can `set_model`.)
+        if (
+            current_model is not None
+            and current_model.provider not in authenticated
+            and not any(option.provider in authenticated for option in options)
+        ):
+            current_model = None
+        curated = _curate_models(options, current_model, authenticated)
         if not curated and current_model is None:
-            logger.info("PiAgent model probe found no usable models; switcher will fall back to defaults")
+            logger.info("PiAgent model probe found no usable models; switcher shows the empty state")
             return [], None
         logger.info(
             "PiAgent model probe fetched {} model(s); current model={}",

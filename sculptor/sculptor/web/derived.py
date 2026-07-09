@@ -458,6 +458,15 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
 
     @computed_field
     @property
+    def configuration_settings_section(self) -> str:
+        """The Settings section the composer's "Go to harness configuration" CTA opens
+        when this harness has no usable model — a frontend `SettingsSection` id, owned by
+        the harness (pi -> "PI", otherwise "DEPENDENCIES") so the composer never branches
+        on harness identity."""
+        return self._resolve_harness().configuration_settings_section()
+
+    @computed_field
+    @property
     def accepts_automated_prompts(self) -> bool:
         # Stamped from the registration TOML at creation: only opted-in
         # registered terminal agents can receive automated prompts through
