@@ -30,6 +30,9 @@ from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql"
 LINEAR_SOURCE = "/plugins/linear-issue"
 API_KEY = "lin_api_test_key_1234"
+# The API key field's placeholder, used to pick it out of the plugin's
+# settings (which also render the workspace-seed template fields).
+API_KEY_FIELD_PLACEHOLDER = "lin_api_..."
 
 
 def _make_linear_route(captured_auth: list[str]):
@@ -95,7 +98,7 @@ def test_linear_panel_follows_workspace_branch_and_sends_key(
         settings_page = navigate_to_settings_page(page=page)
         plugins = settings_page.click_on_plugins()
         plugins.expect_loaded(LINEAR_SOURCE, name="Linear", version="0.1.0")
-        plugins.set_source_text_setting(LINEAR_SOURCE, API_KEY)
+        plugins.set_source_text_setting(LINEAR_SOURCE, API_KEY, placeholder=API_KEY_FIELD_PLACEHOLDER)
 
         right_section = PlaywrightWorkspaceSection(page, "right")
 

@@ -53,6 +53,10 @@ export const NewWorkspaceModal = (): ReactElement | undefined => {
     return undefined;
   }
 
+  // Destructured because react/jsx-handler-names rejects a member expression
+  // on an `on*` prop (it accepts a plain identifier).
+  const { onWorkspaceCreated } = modalState;
+
   return (
     <PaletteDialog
       open={modalState.open}
@@ -63,6 +67,10 @@ export const NewWorkspaceModal = (): ReactElement | undefined => {
       <NewWorkspaceForm
         key={modalState.presetProjectId ?? "default"}
         presetProjectId={modalState.presetProjectId}
+        initialTitle={modalState.initialTitle}
+        initialPrompt={modalState.initialPrompt}
+        initialBranchName={modalState.initialBranchName}
+        onWorkspaceCreated={onWorkspaceCreated}
         onCreated={handleCreated}
       />
     </PaletteDialog>
