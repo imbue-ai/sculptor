@@ -139,8 +139,15 @@ jobs:
           COUNT=$(wc -l < perf-out/head.jsonl | tr -d ' ')
           echo "rows=$COUNT" >> "$GITHUB_OUTPUT"
           echo "Aggregated $COUNT measurement rows."
+          # Fail red on zero rows. This lane is non-gating for perf *regressions*
+          # (those are comment-only), but zero measurements after the suite ran
+          # means the plumbing is broken (bad download_globs, unset
+          # SCULPTOR_PERF_OUTPUT_PATH, collector not flushing) — a tooling failure
+          # that must be visible, not a hollow green that masks itself. The
+          # measurements artifact still uploads (always()) for debugging.
           if [ "$COUNT" -eq 0 ]; then
-            echo "::warning::No perf measurements were produced."
+            echo "::error::No perf measurements were produced — the suite ran but no JSONL came back. Check offload download_globs and SCULPTOR_PERF_OUTPUT_PATH."
+            exit 1
           fi
 
       - name: Upload measurements artifact

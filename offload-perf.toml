@@ -76,6 +76,12 @@ record_history = "flag"
 output_dir = "test-results-perf"
 junit = true
 junit_file = "junit-perf.xml"
-# Bring back the per-sandbox measurement JSONLs (the actual perf payload) plus
-# the merged JUnit. The workflow concatenates the JSONLs for the compare step.
-download_globs = ["test-results-perf/**/perf-measurements-*.jsonl"]
+# Bring back everything each sandbox wrote under test-results-perf/ — the
+# per-sandbox measurement JSONLs (perf-measurements-<token>.jsonl, the actual
+# payload) plus the merged JUnit. Must be a bare recursive ``dir/**``, NOT
+# ``dir/**/perf-measurements-*.jsonl``: the collector writes the JSONL directly
+# under test-results-perf/ with no intermediate directory, and a mid-pattern
+# ``**/`` requires one — so it silently matches nothing and no measurements come
+# back. The workflow's aggregate step name-filters, so pulling the JUnit too is
+# harmless.
+download_globs = ["test-results-perf/**"]
