@@ -1,5 +1,6 @@
 import { cleanup, screen } from "@testing-library/react";
 import { createStore } from "jotai";
+import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ElementIds } from "~/api";
@@ -9,9 +10,12 @@ import { newWorkspaceModalAtom } from "./newWorkspaceAtoms.ts";
 import { NewWorkspaceModal } from "./NewWorkspaceModal.tsx";
 
 // The real form pulls in project queries and creation hooks; the modal's
-// open/close contract is what is under test, so stub the form out.
+// open/close contract is what is under test, so stub the form out — surfacing
+// the props the modal forwards so the seed passthrough is assertable.
 vi.mock("~/components/newWorkspace/NewWorkspaceForm.tsx", () => ({
-  NewWorkspaceForm: (): null => null,
+  NewWorkspaceForm: ({ initialPrompt }: { initialPrompt?: string }): ReactElement => (
+    <div data-testid="stub-form" data-initial-prompt={initialPrompt} />
+  ),
 }));
 
 describe("NewWorkspaceModal", () => {
@@ -34,17 +38,21 @@ describe("NewWorkspaceModal", () => {
     expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_DIALOG)).toBeTruthy();
   });
 
-  it("closes a stale open request when the host unmounts", () => {
-    // The modal's only mount is AppShell, which unmounts when the first-run
-    // page takes over. An open request set just before that swap must die with
-    // the host — otherwise it survives invisibly in the store and pops the
-    // dialog (overlay and all) over the first workspace created afterwards.
+  it("forwards the open request's initial prompt to the form", () => {
+    // The home page's first-run auto-open seeds the onboarding prompt through
+    // the open request; the modal must hand it to the form untouched.
+    const store = createStore();
+    store.set(newWorkspaceModalAtom, { open: true, initialPrompt: "/sculptor:help hello" });
+    renderWithProviders(<NewWorkspaceModal />, { store });
+    expect(screen.getByTestId("stub-form").getAttribute("data-initial-prompt")).toBe("/sculptor:help hello");
+  });
+
+  it("renders every open as a modal dialog (with overlay)", () => {
+    // The first-run auto-open and the explicit entry points share one modal
+    // look and dismissal behavior — there is no special non-modal variant.
     const store = createStore();
     store.set(newWorkspaceModalAtom, { open: true });
-    const { unmount } = renderWithProviders(<NewWorkspaceModal />, { store });
-    expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_DIALOG)).toBeTruthy();
-
-    unmount();
-    expect(store.get(newWorkspaceModalAtom)).toEqual({ open: false });
+    renderWithProviders(<NewWorkspaceModal />, { store });
+    expect(screen.getByTestId(ElementIds.PALETTE_DIALOG_OVERLAY)).toBeTruthy();
   });
 });
