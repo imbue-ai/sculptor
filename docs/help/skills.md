@@ -14,7 +14,7 @@ Two skill bundles ship with Sculptor:
 
 (There are also three `sculptor:*` helpers — `/sculptor:help` to ask questions
 about Sculptor, `/sculptor:sculpt-cli` to drive Sculptor from the `sculpt`
-CLI, and `/sculptor:build-sculptor-plugin` to build an
+CLI, and `/sculptor:build-sculptor-extension` to build an
 [extension](extensions.md). They're listed in
 [Slash commands](chat.md#slash-commands).)
 

@@ -7,9 +7,9 @@ drop them in as files (or load them live from a workspace) and they run
 immediately. You can enable the bundled ones, install extensions others have
 written, or have an agent build a custom one for you in minutes.
 
-> **A note on naming:** the in-app labels and the CLI currently use the older
-> term *plugins* — the settings section is **Settings → Plugins** and the CLI
-> command is `sculpt plugin`. Extensions and plugins are the same thing.
+> **Upgrading?** In earlier releases extensions were called *plugins*. Anything
+> in the old `~/.sculptor/plugins` directory is migrated automatically, and the
+> old `sculpt plugin` command still works as an alias for `sculpt extension`.
 
 ---
 
@@ -25,7 +25,7 @@ written, or have an agent build a custom one for you in minutes.
 - **Overlays** — a floating layer above the whole app that stays visible
   across every screen.
 - **Settings** — each extension can contribute its own configuration UI, shown
-  under its entry in **Settings → Plugins**.
+  under its entry in **Settings → Extensions**.
 
 Extensions run inside the Sculptor frontend and can read live app state — the
 current workspace, its branch and pull request, the full workspace list — and
@@ -39,7 +39,7 @@ rest of the app keeps working.
 
 ## Bundled extensions
 
-Three extensions ship with Sculptor. Toggle them in **Settings → Plugins**:
+Three extensions ship with Sculptor. Toggle them in **Settings → Extensions**:
 
 - **Linear** *(on by default)* — connects Sculptor to Linear. Adds a workspace
   panel showing the issues linked to the current branch and pull request, a
@@ -56,9 +56,9 @@ Three extensions ship with Sculptor. Toggle them in **Settings → Plugins**:
 
 ## Managing extensions
 
-Everything lives in **Settings → Plugins**:
+Everything lives in **Settings → Extensions**:
 
-![Settings → Plugins: the global toggles and the three bundled extensions](images/extensions_settings.png)
+![Settings → Extensions: the global toggles and the three bundled extensions](images/extensions_settings.png)
 
 - **Per-extension toggles** — enable or disable each extension individually.
   Changes apply live.
@@ -71,14 +71,14 @@ Everything lives in **Settings → Plugins**:
 
 Two global switches sit at the top of the section:
 
-- **Frontend plugins** *(on by default)* — the master switch for the whole
-  extension system. Turning it off disables loading extensions entirely
-  (a full app reload is needed for it to take effect).
-- **Agent plugin loading** *(off by default)* — allows agents to install and
-  reload extensions in your UI via the `sculpt plugin` CLI. Because this
-  effectively lets a workspace run arbitrary code in your Sculptor UI, it's
-  off until you opt in. Read-only commands (`list`, `inspect`, `dir`) work
-  regardless.
+- **Extensions** *(on by default)* — the master switch for the whole extension
+  system. Turning it off disables loading extensions entirely (a full app
+  reload is needed for it to take effect).
+- **Agent extension loading** *(off by default)* — allows agents to install
+  and reload extensions in your UI via the `sculpt extension` CLI. Because
+  this effectively lets a workspace run arbitrary code in your Sculptor UI,
+  it's off until you opt in. Read-only commands (`list`, `inspect`, `dir`)
+  work regardless.
 
 ---
 
@@ -88,38 +88,39 @@ An extension is a folder containing a `manifest.json` and a JavaScript entry
 module. There are two ways to install one:
 
 **From a folder** — copy it into the extensions directory:
-`~/.sculptor/plugins/<extension-id>/` (the exact path is shown in
-**Settings → Plugins**, or run `sculpt plugin dir`). Then click **Refresh** in
-**Settings → Plugins** (or restart the app).
+`~/.sculptor/extensions/<extension-id>/` (the exact path is shown in
+**Settings → Extensions**, or run `sculpt extension dir`). Then click
+**Refresh** in **Settings → Extensions** (or restart the app).
 
 **From a URL** — paste the URL the extension is served from (for example
-`http://localhost:5174/my-plugin`) into the field at the top of
-**Settings → Plugins** and click **Add**. Sculptor fetches the extension's
+`http://localhost:5174/my-extension`) into the field at the top of
+**Settings → Extensions** and click **Add**. Sculptor fetches the extension's
 `manifest.json` — and everything else it needs — from that address. URL
 sources are saved to your list and re-fetched on launch, so they suit both
 extensions hosted somewhere and local development against a dev server, where
 the running extension picks up your edits without a reinstall.
 
 Either kind can also be added from inside a workspace:
-`sculpt plugin load <dir> --persist` packages a folder and installs it
-permanently in one step, and `sculpt plugin load <url>` registers a URL source
-(this requires the **Agent plugin loading** toggle when run by an agent).
+`sculpt extension load <dir> --persist` packages a folder and installs it
+permanently in one step, and `sculpt extension load <url>` registers a URL
+source (this requires the **Agent extension loading** toggle when run by an
+agent).
 
 ---
 
 ## Building your own
 
 The fastest route is to ask an agent. The bundled
-`/sculptor:build-sculptor-plugin` skill is a self-contained reference — it
+`/sculptor:build-sculptor-extension` skill is a self-contained reference — it
 works from **any** repo, no Sculptor source checkout needed — that teaches the
 agent the manifest format, the SDK, and the live-development loop. Enable
-**Agent plugin loading** in **Settings → Plugins**, then try:
+**Agent extension loading** in **Settings → Extensions**, then try:
 
-> Use /sculptor:build-sculptor-plugin to build me a panel that shows …
+> Use /sculptor:build-sculptor-extension to build me a panel that shows …
 
 The agent writes the extension, loads it into your running UI with
-`sculpt plugin load`, and iterates with `sculpt plugin reload` while you watch
-the result live.
+`sculpt extension load`, and iterates with `sculpt extension reload` while you
+watch the result live.
 
 If you'd rather write one by hand, the minimal extension is two files:
 
@@ -139,27 +140,28 @@ export default function activate(api) {
 }
 ```
 
-Drop the folder into the extensions directory (or `sculpt plugin load` it) and
-it's running. No build step is required — plain JavaScript works, and React is
-available through the host if you want it. For the full SDK contract (panels,
-widgets, home views, workspace data hooks, persisted settings), see the
-[skill reference](../../sculptor/sculptor-plugin/skills/build-sculptor-plugin/SKILL.md)
+Drop the folder into the extensions directory (or `sculpt extension load` it)
+and it's running. No build step is required — plain JavaScript works, and
+React is available through the host if you want it. For the full SDK contract
+(panels, widgets, home views, workspace data hooks, persisted settings), see
+the
+[skill reference](../../sculptor/sculptor-plugin/skills/build-sculptor-extension/SKILL.md)
 that ships with Sculptor.
 
-### The development loop (`sculpt plugin`)
+### The development loop (`sculpt extension`)
 
 The `sculpt` CLI manages extensions in the live UI from any workspace terminal
 or agent session:
 
 | Command | What it does |
 | --- | --- |
-| `sculpt plugin load <dir\|url> [--persist]` | Load an extension into the live UI. Without `--persist` it's a dev install scoped to the current workspace; with it, a permanent install. |
-| `sculpt plugin reload <id>` | Re-fetch and re-import after an edit. |
-| `sculpt plugin list` | All extensions with their live status. |
-| `sculpt plugin inspect <id>` | One extension's status, registrations, and setting key names (values are never shown). |
-| `sculpt plugin unload <id>` | Unload from the UI; files stay on disk. |
-| `sculpt plugin remove <id>` | Unload and delete the workspace's dev install. |
-| `sculpt plugin dir` | Print the extensions directory path. |
+| `sculpt extension load <dir\|url> [--persist]` | Load an extension into the live UI. Without `--persist` it's a dev install scoped to the current workspace; with it, a permanent install. |
+| `sculpt extension reload <id>` | Re-fetch and re-import after an edit. |
+| `sculpt extension list` | All extensions with their live status. |
+| `sculpt extension inspect <id>` | One extension's status, registrations, and setting key names (values are never shown). |
+| `sculpt extension unload <id>` | Unload from the UI; files stay on disk. |
+| `sculpt extension remove <id>` | Unload and delete the workspace's dev install. |
+| `sculpt extension dir` | Print the extensions directory path. |
 
 `load` and `reload` wait for the extension to finish loading and report
 success or the failing phase and error, so you (or the agent) know immediately
@@ -169,14 +171,14 @@ whether an edit worked.
 
 ## Troubleshooting
 
-- **An extension doesn't appear** — check **Settings → Plugins**: is the
-  master **Frontend plugins** toggle on, and is the extension's own toggle on?
-  If you dropped it in by hand, click **Refresh**.
+- **An extension doesn't appear** — check **Settings → Extensions**: is the
+  master **Extensions** toggle on, and is the extension's own toggle on? If
+  you dropped it in by hand, click **Refresh**.
 - **A row shows "failed"** — the row includes the failing phase and error
   message. Fix the extension and use the row's reload button (or
-  `sculpt plugin reload <id>`).
+  `sculpt extension reload <id>`).
 - **An extension's panel shows an error box** — the extension crashed while
   rendering. The rest of the app is unaffected; reload the extension after
   fixing it.
-- **`sculpt plugin load` fails with a permissions error** — enable
-  **Agent plugin loading** in **Settings → Plugins**.
+- **`sculpt extension load` fails with a permissions error** — enable
+  **Agent extension loading** in **Settings → Extensions**.
