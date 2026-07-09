@@ -48,6 +48,19 @@ If your test needs the agent to perform specific actions — e.g., writing files
 | `multi_step` | Execute multiple commands sequentially | `fake_claude:multi_step \`{"steps": [...]}\`` |
 | `parallel_tools` | Execute multiple tools in parallel | `fake_claude:parallel_tools \`{"tools": [...]}\`` |
 | `warning` | Surface a warning message | `fake_claude:warning \`{"message": "..."}\`` |
+| `start_background_task` | Arm a background task; the arming turn ends and the process lingers | `fake_claude:start_background_task \`{"trigger_path": "...", "reaction_text": "..."}\`` |
+| `complete_background_task` | Inside a borrowed turn, complete an armed task inline mid-cycle | `fake_claude:complete_background_task \`{"task_id": "..."}\`` |
+
+**Test-timed background completions.** `start_background_task` arms a background
+task without completing it — the arming turn ends (its `result` is emitted) and
+the process lingers. Pass `trigger_path` from a `FakeClaudeTrigger`
+(`sculptor/testing/fake_claude_pause.py`) and call `trigger.fire()` when the test
+wants completion: FakeClaude then emits `task_updated` + `task_notification`
+followed by a scripted reaction cycle (`reaction_text` / `reaction_steps`),
+without any user frame prompting it. To complete a task *during* a follow-up turn
+instead (so the notification interleaves mid-cycle), put a
+`complete_background_task` step with the same `task_id` in that turn's
+`multi_step` script; its reaction cycle then runs after the turn finishes.
 
 ## CRITICAL: Use `/run-integration-test` to Run Tests
 

@@ -3,8 +3,13 @@
 import io
 import json
 import os
+import queue
 import subprocess
 import sys
+import threading
+import time
+from collections.abc import Callable
+from collections.abc import Generator
 from pathlib import Path
 from uuid import uuid4
 
@@ -12,21 +17,27 @@ import pytest
 
 from sculptor.agents.testing.fake_claude import _parse_prompt
 from sculptor.agents.testing.fake_claude import _read_prompt_from_stream_json_stdin
+from sculptor.agents.testing.fake_claude_commands import UnknownFakeClaudeCommandError
 from sculptor.agents.testing.fake_claude_commands import _read_mcp_control_response_text
+from sculptor.agents.testing.fake_claude_commands import emit_pending_task_reaction
+from sculptor.agents.testing.fake_claude_commands import find_pending_background_task
 from sculptor.agents.testing.fake_claude_commands import handle_ask_user_question
 from sculptor.agents.testing.fake_claude_commands import handle_background_task_notification
 from sculptor.agents.testing.fake_claude_commands import handle_background_task_started
 from sculptor.agents.testing.fake_claude_commands import handle_bash
+from sculptor.agents.testing.fake_claude_commands import handle_complete_background_task
 from sculptor.agents.testing.fake_claude_commands import handle_default
 from sculptor.agents.testing.fake_claude_commands import handle_edit_file
 from sculptor.agents.testing.fake_claude_commands import handle_multi_step
 from sculptor.agents.testing.fake_claude_commands import handle_parallel_tools
+from sculptor.agents.testing.fake_claude_commands import handle_start_background_task
 from sculptor.agents.testing.fake_claude_commands import handle_stream_text
 from sculptor.agents.testing.fake_claude_commands import handle_task_create
 from sculptor.agents.testing.fake_claude_commands import handle_task_update
 from sculptor.agents.testing.fake_claude_commands import handle_text
 from sculptor.agents.testing.fake_claude_commands import handle_wait_for_file
 from sculptor.agents.testing.fake_claude_commands import handle_write_file
+from sculptor.agents.testing.fake_claude_commands import reset_pending_background_tasks
 from sculptor.agents.testing.fake_claude_jsonl import generate_id
 from sculptor.agents.testing.fake_claude_jsonl import make_assistant_message
 from sculptor.agents.testing.fake_claude_jsonl import make_end_message
@@ -46,6 +57,20 @@ from sculptor.state.claude_state import ParsedTaskNotificationResponse
 from sculptor.state.claude_state import ParsedTaskStartedResponse
 from sculptor.state.claude_state import ParsedToolResultResponseSimple
 from sculptor.state.claude_state import parse_claude_code_json_lines_simple
+from sculptor.testing.fake_claude_pause import FakeClaudeTrigger
+
+
+@pytest.fixture(autouse=True)
+def _reset_background_task_registry() -> Generator[None, None, None]:
+    """Clear the process-global background-task registry around every test.
+
+    The registry is module-global so it survives across cycles within one
+    FakeClaude invocation; the pure-function tests here share this process, so
+    reset it so one test's armed tasks can't leak into the next.
+    """
+    reset_pending_background_tasks()
+    yield
+    reset_pending_background_tasks()
 
 
 def test_init_message_roundtrip() -> None:
@@ -1047,3 +1072,432 @@ def test_read_mcp_control_response_surfaces_response_after_buffered_control_requ
         os.close(w_fd)
 
     assert result == "MCP error -32602: Invalid params"
+
+
+# --- Test-timed background completions and reaction turns ---
+#
+# ``start_background_task`` arms a task whose completion the test triggers via a
+# sentinel file; ``complete_background_task`` completes an armed task inline
+# mid-cycle. The handler-level tests below check the pieces; the subprocess
+# tests drive FakeClaude's stdin the way a lingering CLI is fed and trigger
+# completions with real sentinel files, asserting the emitted byte stream for
+# each borrowing-model scenario.
+
+
+def test_handle_start_background_task_registers_and_emits_launch(tmp_path: Path) -> None:
+    """The arm command emits a realistic launch and records the task's completion
+    details for later, without emitting any completion event itself."""
+    trigger = tmp_path / "trigger"
+    messages = handle_start_background_task(
+        args={
+            "trigger_path": str(trigger),
+            "task_id": "bg-1",
+            "description": "Find files",
+            "launched_text": "LAUNCHED",
+            "reaction_text": "REACTED",
+            "notification_summary": "all done",
+        },
+        emit_streaming=False,
+    )
+
+    kinds = [(m.get("type"), m.get("subtype", "")) for m in messages]
+    assert kinds == [("assistant", ""), ("user", ""), ("system", "task_started"), ("assistant", "")]
+    assert messages[0]["message"]["content"][1]["name"] == "Agent"
+    assert messages[2]["task_id"] == "bg-1"
+    assert messages[2]["task_type"] == "local_agent"
+    assert messages[3]["message"]["content"][0]["text"] == "LAUNCHED"
+
+    task = find_pending_background_task("bg-1")
+    assert task is not None
+    assert task.trigger_path == str(trigger)
+    assert task.notification_summary == "all done"
+    assert task.notification_emitted is False
+    assert task.reaction_steps == [{"command": "text", "args": {"text": "REACTED"}}]
+
+
+def test_handle_complete_background_task_emits_notification_and_marks_ready(tmp_path: Path) -> None:
+    """Completing an armed task inline emits task_updated + task_notification and
+    leaves the task registered but reaction-ready (so the linger loop runs only
+    its reaction cycle later)."""
+    trigger = tmp_path / "trigger"
+    handle_start_background_task(
+        args={"trigger_path": str(trigger), "task_id": "bg-2", "description": "d", "notification_summary": "s"},
+        emit_streaming=False,
+    )
+    # Pre-create the sentinel so the wait returns immediately (no stdin polling).
+    trigger.touch()
+
+    messages = handle_complete_background_task(args={"task_id": "bg-2"}, emit_streaming=False)
+    kinds = [(m.get("type"), m.get("subtype", "")) for m in messages]
+    assert kinds == [("system", "task_updated"), ("system", "task_notification")]
+    assert messages[0]["task_id"] == "bg-2"
+    assert messages[0]["patch"]["status"] == "completed"
+    assert messages[1]["summary"] == "s"
+
+    task = find_pending_background_task("bg-2")
+    assert task is not None
+    assert task.notification_emitted is True
+
+
+def test_handle_complete_background_task_unknown_task_raises() -> None:
+    """Completing a task that was never armed fails loudly."""
+    with pytest.raises(UnknownFakeClaudeCommandError):
+        handle_complete_background_task(args={"task_id": "never-armed"}, emit_streaming=False)
+
+
+def test_emit_pending_task_reaction_with_notification(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """A spontaneous completion emits task_updated + task_notification, then a
+    full init -> reaction -> result cycle in the given session."""
+    handle_start_background_task(
+        args={
+            "trigger_path": str(tmp_path / "t"),
+            "task_id": "bg-3",
+            "description": "d",
+            "notification_summary": "sum",
+            "reaction_text": "REACTED",
+        },
+        emit_streaming=False,
+    )
+    task = find_pending_background_task("bg-3")
+    assert task is not None
+
+    emit_pending_task_reaction(
+        task, session_id="sess-x", cwd=str(tmp_path), emit_streaming=False, plugin_dir=None, emit_notification=True
+    )
+
+    events = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.strip()]
+    kinds = [(e.get("type"), e.get("subtype", "")) for e in events]
+    assert kinds == [
+        ("system", "task_updated"),
+        ("system", "task_notification"),
+        ("system", "init"),
+        ("assistant", ""),
+        ("result", "success"),
+    ]
+    assert events[1]["summary"] == "sum"
+    assert events[2]["session_id"] == "sess-x"
+    assert events[3]["message"]["content"][0]["text"] == "REACTED"
+
+
+def test_emit_pending_task_reaction_without_notification(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """When the notification already fired inline, the reaction is just an
+    init -> reaction -> result cycle (no task_updated / task_notification)."""
+    handle_start_background_task(
+        args={"trigger_path": str(tmp_path / "t"), "task_id": "bg-4", "description": "d", "reaction_text": "REACTED"},
+        emit_streaming=False,
+    )
+    task = find_pending_background_task("bg-4")
+    assert task is not None
+
+    emit_pending_task_reaction(
+        task, session_id="sess-y", cwd=str(tmp_path), emit_streaming=False, plugin_dir=None, emit_notification=False
+    )
+
+    events = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.strip()]
+    kinds = [(e.get("type"), e.get("subtype", "")) for e in events]
+    assert kinds == [("system", "init"), ("assistant", ""), ("result", "success")]
+    assert events[1]["message"]["content"][0]["text"] == "REACTED"
+
+
+def test_fake_claude_trigger_fire_creates_sentinel() -> None:
+    """FakeClaudeTrigger mints a unique sentinel path and creates it on fire()."""
+    trigger = FakeClaudeTrigger()
+    assert not trigger.trigger_path.exists()
+    trigger.fire()
+    assert trigger.trigger_path.exists()
+    trigger.trigger_path.unlink()
+
+
+class _FakeClaudeProcess:
+    """Drive a live FakeClaude stream-json process the way a lingering CLI is fed.
+
+    Writes user frames onto stdin one at a time and reads top-level (non
+    ``stream_event``) events off stdout on a background thread, so a test can
+    synchronize on emitted content — waiting for a turn's ``result`` before
+    firing a trigger — rather than on wall-clock time.
+    """
+
+    def __init__(self, *, include_partial: bool = False) -> None:
+        argv = [
+            sys.executable,
+            "-m",
+            "sculptor.agents.testing.fake_claude",
+            "-p",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+        ]
+        if include_partial:
+            argv.append("--include-partial-messages")
+        self._proc = subprocess.Popen(
+            argv,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=str(Path(__file__).parents[3]),
+        )
+        self._lines: queue.Queue[str | None] = queue.Queue()
+        self._reader = threading.Thread(target=self._pump_stdout, daemon=True)
+        self._reader.start()
+
+    def _pump_stdout(self) -> None:
+        assert self._proc.stdout is not None
+        for line in self._proc.stdout:
+            self._lines.put(line)
+        self._lines.put(None)
+
+    def __enter__(self) -> "_FakeClaudeProcess":
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        if self._proc.poll() is None:
+            self._proc.kill()
+        self._proc.wait(timeout=15.0)
+
+    def write_frame(self, content: str) -> None:
+        assert self._proc.stdin is not None
+        self._proc.stdin.write(_user_frame(content))
+        self._proc.stdin.flush()
+
+    def close_stdin(self) -> None:
+        assert self._proc.stdin is not None
+        self._proc.stdin.close()
+
+    def read_top_level_until(self, predicate: Callable[[dict], bool], *, timeout: float = 15.0) -> list[dict]:
+        """Collect top-level events until one satisfies ``predicate`` (inclusive)."""
+        collected: list[dict] = []
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise AssertionError(
+                    f"timed out; collected {[(e.get('type'), e.get('subtype', '')) for e in collected]}"
+                )
+            try:
+                line = self._lines.get(timeout=remaining)
+            except queue.Empty:
+                raise AssertionError("timed out waiting for a stdout line")
+            if line is None:
+                raise AssertionError(
+                    "stdout closed before match; collected "
+                    + f"{[(e.get('type'), e.get('subtype', '')) for e in collected]}, stderr={self._read_stderr()}"
+                )
+            line = line.strip()
+            if not line:
+                continue
+            event = json.loads(line)
+            if event.get("type") == "stream_event":
+                continue
+            collected.append(event)
+            if predicate(event):
+                return collected
+
+    def _read_stderr(self) -> str:
+        assert self._proc.stderr is not None
+        return self._proc.stderr.read()
+
+    def wait(self, *, timeout: float = 15.0) -> int:
+        return self._proc.wait(timeout=timeout)
+
+
+def _is_result(event: dict) -> bool:
+    return event.get("type") == "result"
+
+
+def _assistant_text(event: dict) -> str | None:
+    if event.get("type") != "assistant":
+        return None
+    content = event["message"]["content"]
+    return content[0].get("text") if content and content[0].get("type") == "text" else None
+
+
+def test_scenario_idle_completion_emits_reaction_turn() -> None:
+    """Scenario 1: a cycle arms a background task and ends; the process lingers;
+    a sentinel fires completion; FakeClaude spontaneously emits
+    task_updated + task_notification then a full reaction cycle — with no user
+    frame in between."""
+    trigger = FakeClaudeTrigger()
+    arm = json.dumps(
+        {
+            "trigger_path": str(trigger.trigger_path),
+            "task_id": "bg-idle",
+            "launched_text": "LAUNCHED",
+            "reaction_text": "REACTION",
+            "notification_summary": "background done",
+        }
+    )
+    with _FakeClaudeProcess() as proc:
+        proc.write_frame(f"fake_claude:start_background_task `{arm}`")
+
+        # The arming cycle runs to its own result and the process then lingers.
+        cycle = proc.read_top_level_until(_is_result)
+        assert [(e.get("type"), e.get("subtype", "")) for e in cycle] == [
+            ("system", "init"),
+            ("assistant", ""),  # "I'll start..." + Agent tool_use
+            ("user", ""),  # "Async agent launched" tool_result
+            ("system", "task_started"),
+            ("assistant", ""),  # LAUNCHED
+            ("result", "success"),
+        ]
+
+        # Nothing more can be emitted until the trigger sentinel appears: the
+        # first event after the arming result is the completion's task_updated,
+        # which proves the reaction was gated on fire().
+        trigger.fire()
+        reaction = proc.read_top_level_until(_is_result)
+        assert [(e.get("type"), e.get("subtype", "")) for e in reaction] == [
+            ("system", "task_updated"),
+            ("system", "task_notification"),
+            ("system", "init"),
+            ("assistant", ""),
+            ("result", "success"),
+        ]
+        assert reaction[0]["task_id"] == "bg-idle"
+        assert reaction[1]["task_id"] == "bg-idle"
+        assert reaction[1]["summary"] == "background done"
+        assert _assistant_text(reaction[3]) == "REACTION"
+
+        proc.close_stdin()
+        assert proc.wait() == 0
+
+
+def test_scenario_borrowed_turn_completion_is_mid_cycle() -> None:
+    """Scenario 2: with a task pending, a borrowed user turn is in flight when
+    the test fires completion; the task_updated + task_notification are emitted
+    mid-cycle (before that turn's result), and the reaction cycle runs after the
+    borrowed turn completes."""
+    trigger = FakeClaudeTrigger()
+    arm = json.dumps(
+        {
+            "trigger_path": str(trigger.trigger_path),
+            "task_id": "bg-borrow",
+            "launched_text": "LAUNCHED",
+            "reaction_text": "REACTION",
+            "notification_summary": "background done",
+        }
+    )
+    borrowed = json.dumps(
+        {
+            "steps": [
+                {"command": "text", "args": {"text": "BORROWED_WORKING"}},
+                {"command": "complete_background_task", "args": {"task_id": "bg-borrow"}},
+                {"command": "text", "args": {"text": "BORROWED_DONE"}},
+            ]
+        }
+    )
+    with _FakeClaudeProcess() as proc:
+        proc.write_frame(f"fake_claude:start_background_task `{arm}`")
+        proc.read_top_level_until(_is_result)  # arming cycle ends; process lingers
+
+        # A borrowed turn arrives during the lingering window and parks in
+        # complete_background_task after flushing its "working" text.
+        proc.write_frame(f"fake_claude:multi_step `{borrowed}`")
+        proc.read_top_level_until(lambda e: _assistant_text(e) == "BORROWED_WORKING")
+
+        # Fire completion while the borrowed turn is mid-flight.
+        trigger.fire()
+        borrowed_tail = proc.read_top_level_until(_is_result)
+        assert [(e.get("type"), e.get("subtype", "")) for e in borrowed_tail] == [
+            ("system", "task_updated"),
+            ("system", "task_notification"),
+            ("assistant", ""),  # BORROWED_DONE — the turn continues past the notification
+            ("result", "success"),  # no premature result before the notification
+        ]
+        assert borrowed_tail[1]["task_id"] == "bg-borrow"
+        assert _assistant_text(borrowed_tail[2]) == "BORROWED_DONE"
+
+        # The reaction cycle runs after the borrowed turn's result, and does NOT
+        # re-emit the notification (already delivered inline).
+        reaction = proc.read_top_level_until(_is_result)
+        assert [(e.get("type"), e.get("subtype", "")) for e in reaction] == [
+            ("system", "init"),
+            ("assistant", ""),
+            ("result", "success"),
+        ]
+        assert _assistant_text(reaction[1]) == "REACTION"
+
+        proc.close_stdin()
+        assert proc.wait() == 0
+
+
+def test_scenario_borrowed_turn_arms_second_task_extends_window() -> None:
+    """Scenario 3: a borrowed turn completes the first task and arms a second;
+    the lingering window stays open until the second task is also triggered and
+    its reaction consumed."""
+    trigger_a = FakeClaudeTrigger()
+    trigger_b = FakeClaudeTrigger()
+    arm_a = json.dumps(
+        {
+            "trigger_path": str(trigger_a.trigger_path),
+            "task_id": "bg-a",
+            "launched_text": "LAUNCHED_A",
+            "reaction_text": "REACTION_A",
+            "notification_summary": "a done",
+        }
+    )
+    borrowed = json.dumps(
+        {
+            "steps": [
+                {"command": "complete_background_task", "args": {"task_id": "bg-a"}},
+                {
+                    "command": "start_background_task",
+                    "args": {
+                        "trigger_path": str(trigger_b.trigger_path),
+                        "task_id": "bg-b",
+                        "launched_text": "LAUNCHED_B",
+                        "reaction_text": "REACTION_B",
+                        "notification_summary": "b done",
+                    },
+                },
+            ]
+        }
+    )
+    with _FakeClaudeProcess() as proc:
+        proc.write_frame(f"fake_claude:start_background_task `{arm_a}`")
+        proc.read_top_level_until(_is_result)  # A armed; process lingers
+
+        # Borrowed turn: its first step parks on A's trigger straight after the
+        # cycle's init, so sync on that init before firing A.
+        proc.write_frame(f"fake_claude:multi_step `{borrowed}`")
+        proc.read_top_level_until(lambda e: e.get("subtype") == "init")
+
+        trigger_a.fire()
+        borrowed_tail = proc.read_top_level_until(_is_result)
+        assert [(e.get("type"), e.get("subtype", "")) for e in borrowed_tail] == [
+            ("system", "task_updated"),  # A completes inline
+            ("system", "task_notification"),
+            ("assistant", ""),  # "I'll start..." + Agent tool_use for B
+            ("user", ""),  # B's launched tool_result
+            ("system", "task_started"),  # B armed
+            ("assistant", ""),  # LAUNCHED_B
+            ("result", "success"),
+        ]
+        assert borrowed_tail[1]["task_id"] == "bg-a"
+        assert borrowed_tail[4]["task_id"] == "bg-b"
+
+        # A's reaction runs immediately after the borrowed turn's result.
+        reaction_a = proc.read_top_level_until(_is_result)
+        assert [(e.get("type"), e.get("subtype", "")) for e in reaction_a] == [
+            ("system", "init"),
+            ("assistant", ""),
+            ("result", "success"),
+        ]
+        assert _assistant_text(reaction_a[1]) == "REACTION_A"
+
+        # B is still pending — the window stayed open. Fire it and drain.
+        trigger_b.fire()
+        reaction_b = proc.read_top_level_until(_is_result)
+        assert [(e.get("type"), e.get("subtype", "")) for e in reaction_b] == [
+            ("system", "task_updated"),
+            ("system", "task_notification"),
+            ("system", "init"),
+            ("assistant", ""),
+            ("result", "success"),
+        ]
+        assert reaction_b[1]["task_id"] == "bg-b"
+        assert _assistant_text(reaction_b[3]) == "REACTION_B"
+
+        proc.close_stdin()
+        assert proc.wait() == 0
