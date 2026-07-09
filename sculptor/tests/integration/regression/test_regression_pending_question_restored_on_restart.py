@@ -1,12 +1,8 @@
-"""Regression tests for restarting Sculptor while an ask_user_question is pending.
+"""Regression test: a pending ask_user_question must survive a Sculptor restart.
 
-Two behaviors are pinned here:
-
-1. The pending question must survive the restart —
-   ``test_pending_question_restored_and_answerable_after_restart``.
-2. Answering it must relaunch the CLI with the conversation's launch
-   settings (model / fast mode / effort), not fresh-manager defaults —
-   ``test_launch_settings_preserved_for_answer_after_restart``.
+The sibling concern — the answer-driven relaunch preserving the
+conversation's launch settings — is pinned separately in
+``test_regression_launch_settings_after_restart.py``.
 
 When the agent is blocked on an unanswered AskUserQuestion and Sculptor
 restarts, the Claude CLI is SIGTERM'd (exit code 143) and the wrapper
@@ -39,7 +35,6 @@ from playwright.sync_api import expect
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_tool_blocks
 from sculptor.testing.elements.ask_user_question import get_first_ask_user_question_tool_block
-from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
@@ -149,53 +144,3 @@ def test_pending_question_restored_and_answerable_after_restart(
         expect(_agent_tab(instance.page)).to_have_attribute(
             "data-dot-status", _IDLE_DOT_STATUS, timeout=_SETTLE_TIMEOUT_MS
         )
-
-
-@user_story("keep my model settings when answering an agent's question after restarting Sculptor")
-def test_launch_settings_preserved_for_answer_after_restart(
-    sculptor_instance_factory_: SculptorInstanceFactory,
-) -> None:
-    """A post-restart answer must relaunch the CLI with the conversation's settings.
-
-    A UserQuestionAnswerMessage carries no model/fast-mode/effort — its turn
-    continues the conversation's existing launch settings, which the runner
-    seeds from replayed history on restart. Drive non-default settings
-    through the real chat controls (fast mode on, effort Low), park the
-    agent on a question, restart, answer — and assert via fake_claude's
-    launch-args echo (CLAUDE_FAKE_ECHO_LAUNCH_ARGS) that the resumed turn's
-    CLI relaunched with those same settings rather than fresh-manager
-    defaults (fast mode off, effort xhigh).
-
-    The question turn's own echo never lands — its cycle dies with the
-    restart — so exactly one echo exists afterwards: the answer turn's.
-    """
-    sculptor_instance_factory_.update_environment(CLAUDE_FAKE_ECHO_LAUNCH_ARGS="1")
-
-    with sculptor_instance_factory_.spawn_instance() as instance:
-        task_page = start_task_and_wait_for_ready(instance.page)
-        chat_panel = task_page.get_chat_panel()
-
-        # Non-default launch settings, set through the real UI controls.
-        chat_panel.get_fast_mode_toggle().click()
-        expect(chat_panel.get_fast_mode_toggle()).to_have_attribute("data-active", "true")
-        chat_panel.select_effort("Low")
-        expect(chat_panel.get_effort_selector()).to_have_attribute("data-value", "low")
-
-        send_chat_message(chat_panel, _AUQ_PROMPT)
-        expect(get_ask_user_question_panel(instance.page)).to_be_visible(timeout=_INFLIGHT_OBSERVATION_TIMEOUT_MS)
-
-    with sculptor_instance_factory_.spawn_instance() as instance:
-        _open_workspace_after_restart(instance.page)
-
-        auq_panel = get_ask_user_question_panel(instance.page)
-        expect(auq_panel).to_be_visible(timeout=_RESTART_VISIBILITY_TIMEOUT_MS)
-        auq_panel.select_first_option_and_submit()
-        expect(auq_panel).not_to_be_visible(timeout=_SETTLE_TIMEOUT_MS)
-
-        # The relaunched CLI must carry the conversation's settings: fast mode
-        # and effort from the pre-restart chat turn, resuming the session.
-        chat_panel = PlaywrightTaskPage(page=instance.page).get_chat_panel()
-        launch_echoes = chat_panel.get_text_blocks().filter(has_text="launch-args:")
-        expect(launch_echoes).to_have_count(1, timeout=_SETTLE_TIMEOUT_MS)
-        expect(launch_echoes.first).to_contain_text("fast_mode=true effort=low resumed=yes")
-        expect(chat_panel.get_error_block()).to_have_count(0)
