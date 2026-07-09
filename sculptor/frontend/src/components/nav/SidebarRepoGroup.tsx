@@ -89,11 +89,26 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   onBeginDelete: (workspace: Workspace) => void;
 }): ReactElement {
   const status = useAtomValue(workspaceDotStatusAtomFamily(workspace.objectId));
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isOver } =
-    useSortable({
-      id: workspace.objectId,
-      disabled: isRenaming,
-    });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+    isOver,
+    activeIndex,
+    overIndex,
+  } = useSortable({
+    id: workspace.objectId,
+    disabled: isRenaming,
+  });
+
+  // Which edge of this row the dragged row will land against, for the drop-indicator
+  // line: "after" (below) when dragging down onto it, "before" (above) when dragging up.
+  // Only meaningful while this row is the drop target (isOver, and not itself dragged).
+  const dropSide = isOver && !isDragging ? (activeIndex < overIndex ? "after" : "before") : undefined;
 
   // Enter navigates from the keyboard, like a click. Space is deliberately NOT
   // handled here: it falls through to the dnd-kit keyboard sensor's activator
@@ -161,6 +176,7 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
               // row whose slot the drag currently targets is marked as the drop target.
               data-sidebar-dragging={isDragging ? "true" : undefined}
               data-sidebar-drop-target={isOver && !isDragging ? "true" : undefined}
+              data-sidebar-drop-side={dropSide}
               data-workspace-tab
               data-tab-id={workspace.objectId}
             >
@@ -287,7 +303,14 @@ export const SidebarRepoGroup = ({
     transition: groupTransition,
     isDragging: isGroupDragging,
     isOver: isGroupOver,
+    activeIndex: groupActiveIndex,
+    overIndex: groupOverIndex,
   } = useSortable({ id: group.projectId });
+
+  // Which edge of this group the dragged group will land against, for the drop-indicator
+  // line (see the row's dropSide). Only meaningful while this group is the drop target.
+  const groupDropSide =
+    isGroupOver && !isGroupDragging ? (groupActiveIndex < groupOverIndex ? "after" : "before") : undefined;
 
   // The rows' own drag context; see the module comment for why it lives per group.
   const rowDndSensors = useSidebarDndSensors();
@@ -396,6 +419,7 @@ export const SidebarRepoGroup = ({
           data-project-id={group.projectId}
           data-sidebar-dragging={isGroupDragging ? "true" : undefined}
           data-sidebar-drop-target={isGroupOver && !isGroupDragging ? "true" : undefined}
+          data-sidebar-group-drop-side={groupDropSide}
         >
           <Chevron size={16} className={styles.repoChevron} />
           <Text className={styles.repoName} truncate>
