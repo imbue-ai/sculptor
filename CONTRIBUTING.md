@@ -1,6 +1,7 @@
 # Contributing to Sculptor
 
-Our team is small, and we want to properly support and review every contribution. We genuinely want to — but rushing into it would
+Our team is small, and we don't have a ton of bandwidth to properly support and
+review every contribution. We genuinely want to — but rushing into it would
 overwhelm us and create a bad experience for everyone. We'd rather do this right
 than do it fast.
 
