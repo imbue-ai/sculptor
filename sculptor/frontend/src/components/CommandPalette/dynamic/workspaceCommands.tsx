@@ -21,12 +21,11 @@ const workspaceName = (description: string | undefined): string => (description 
  * missing timestamps collapse to 0 (sorts last within the tier).
  */
 const latestActivityMs = (tasks: ReadonlyArray<CodingAgentTaskView>, ws: Workspace): number => {
+  // Callers pass the workspace's already-active tasks (see the per-workspace
+  // bucket in produce()), so this just takes the newest of them.
   let best = ws.createdAt ? Date.parse(ws.createdAt) : 0;
   if (Number.isNaN(best)) best = 0;
   for (const task of tasks) {
-    // Skip deleted tasks so the recency tiebreak counts the same tasks the
-    // attention rank does (getWorkspaceAttentionRank filters them out too).
-    if (task.isDeleted) continue;
     const ts = Date.parse(task.updatedAt);
     if (!Number.isNaN(ts) && ts > best) best = ts;
   }
@@ -88,13 +87,26 @@ export const buildWorkspaceProvider = (runtime: CommandRuntime): DynamicProvider
       // more than one project — otherwise every row carries a redundant tag.
       const hasMultipleProjects = new Set(workspaces.map((ws) => ws.projectId)).size > 1;
 
+      // Bucket tasks by workspace in a single pass rather than re-scanning the
+      // whole task list once per workspace (O(workspaces × tasks) every time
+      // produce() re-runs — i.e. on every palette keystroke). Deleted tasks are
+      // dropped here so the attention rank and the recency tiebreak below count
+      // the exact same tasks.
+      const tasksByWorkspace = new Map<string, Array<CodingAgentTaskView>>();
+      for (const task of tasks) {
+        if (task.isDeleted || task.workspaceId === null) continue;
+        const bucket = tasksByWorkspace.get(task.workspaceId);
+        if (bucket) bucket.push(task);
+        else tasksByWorkspace.set(task.workspaceId, [task]);
+      }
+
       // Attention-first ordering, most-recent activity as the in-tier
       // tiebreak. We sort here and emit the result through each row's `order`
       // field so groupCommands honours it on the empty-query switcher page;
       // once the user types, cmdk re-ranks by fuzzy score as usual.
       const ordered = workspaces
         .map((ws) => {
-          const wsTasks = tasks.filter((task) => task.workspaceId === ws.objectId);
+          const wsTasks = tasksByWorkspace.get(ws.objectId) ?? [];
           return { ws, rank: getWorkspaceAttentionRank(wsTasks), recencyMs: latestActivityMs(wsTasks, ws) };
         })
         .sort((a, b) => {
