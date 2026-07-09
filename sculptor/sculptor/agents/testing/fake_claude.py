@@ -9,6 +9,7 @@ import html
 import json
 import os
 import re
+import select
 import signal
 import sys
 import time
@@ -19,7 +20,11 @@ from sculptor.agents.default.claude_code_sdk.harness import compute_claude_jsonl
 from sculptor.agents.testing.fake_claude_commands import COMMAND_REGISTRY
 from sculptor.agents.testing.fake_claude_commands import UnknownFakeClaudeCommandError
 from sculptor.agents.testing.fake_claude_commands import dispatch_handler
+from sculptor.agents.testing.fake_claude_commands import emit_pending_task_reaction
 from sculptor.agents.testing.fake_claude_commands import handle_default
+from sculptor.agents.testing.fake_claude_commands import pending_background_task_count
+from sculptor.agents.testing.fake_claude_commands import take_reaction_ready_background_task
+from sculptor.agents.testing.fake_claude_commands import take_triggered_background_task
 from sculptor.agents.testing.fake_claude_jsonl import generate_id
 from sculptor.agents.testing.fake_claude_jsonl import make_end_message
 from sculptor.agents.testing.fake_claude_jsonl import make_init_message
@@ -233,6 +238,124 @@ def _read_prompt_from_stream_json_stdin() -> str | None:
     return None
 
 
+# Poll interval for the between-cycle linger loop: how often it re-checks the
+# pending tasks' trigger sentinels. Small enough that a fired trigger is picked
+# up promptly; the sentinel file — not the interval — is the synchronization
+# point, so this is latency, never a race window.
+_LINGER_POLL_INTERVAL_SECONDS: float = 0.05
+
+# Safety cap on how long the linger loop waits for a trigger once stdin is at
+# EOF. With stdin closed no borrowed frame can arrive, so only a trigger can
+# advance the loop; a forgotten trigger then fails loudly instead of hanging the
+# runner. While stdin is open there is no deadline — the process is under the
+# caller's control and exits on interrupt / SIGTERM / stdin close.
+_LINGER_EOF_SAFETY_TIMEOUT_SECONDS: float = 120.0
+
+
+def _read_one_stdin_frame() -> tuple[str, str | None]:
+    """Read and classify a single stdin line during the linger loop.
+
+    Returns ``("prompt", content)`` for a user frame, ``("interrupt", None)``
+    for a Stop interrupt control_request, ``("eof", None)`` when stdin has
+    closed, and ``("ignore", None)`` for anything else (control responses,
+    context-usage requests, blank or unparseable lines).
+
+    Reads exactly one line — unlike ``_read_prompt_from_stream_json_stdin``,
+    which loops until a user frame — so the linger loop stays free to re-check
+    the background-task triggers between frames. Kept independent of that reader
+    so its stdin-reader rework (mid-turn absorption) and this reaction-emission
+    path can evolve separately.
+    """
+    line = sys.stdin.readline()
+    if not line:
+        return ("eof", None)
+    line = line.strip()
+    if not line:
+        return ("ignore", None)
+    try:
+        data = json.loads(line)
+    except json.JSONDecodeError:
+        return ("ignore", None)
+    if not isinstance(data, dict):
+        return ("ignore", None)
+    if (
+        data.get("type") == "control_request"
+        and isinstance(data.get("request"), dict)
+        and data["request"].get("subtype") == "interrupt"
+    ):
+        return ("interrupt", None)
+    if data.get("type") == "user":
+        message = data.get("message", {})
+        content = message.get("content", "")
+        return ("prompt", html.unescape(content).strip() if isinstance(content, str) else "")
+    return ("ignore", None)
+
+
+def _run_background_task_linger_loop(
+    session_id: str,
+    cwd: str,
+    emit_streaming: bool,
+    plugin_dir: str | None,
+) -> str | None:
+    """Wait between cycles while background tasks are pending.
+
+    Emits each armed task's reaction cycle as its completion fires, and returns
+    the next borrowed turn's prompt read from stdin — or ``None`` once stdin is
+    at EOF and every pending task has drained, letting ``main`` exit.
+
+    Two completion paths feed the same reaction emission:
+      * a task a ``complete_background_task`` step already completed inline
+        mid-cycle — its reaction runs here, without re-emitting the
+        task_updated/task_notification; and
+      * a task still awaiting its trigger sentinel — when the sentinel appears
+        this loop emits task_updated + task_notification, then the reaction cycle.
+
+    The loop returns ``None`` only once nothing is pending AND stdin is closed,
+    so the lingering window extends until every scripted task has fired and its
+    reaction has been consumed — including tasks a borrowed turn itself armed.
+    """
+    stdin_at_eof = False
+    eof_deadline: float | None = None
+    while True:
+        ready = take_reaction_ready_background_task()
+        if ready is not None:
+            emit_pending_task_reaction(ready, session_id, cwd, emit_streaming, plugin_dir, emit_notification=False)
+            eof_deadline = None
+            continue
+        triggered = take_triggered_background_task()
+        if triggered is not None:
+            emit_pending_task_reaction(triggered, session_id, cwd, emit_streaming, plugin_dir, emit_notification=True)
+            eof_deadline = None
+            continue
+        if pending_background_task_count() == 0:
+            # All tasks drained: resume normal between-cycle reading.
+            if stdin_at_eof:
+                return None
+            return _read_prompt_from_stream_json_stdin()
+        # Tasks still pending with triggers unfired. Wait for a trigger sentinel
+        # or (while stdin is open) a borrowed frame / interrupt.
+        if stdin_at_eof:
+            if eof_deadline is None:
+                eof_deadline = time.monotonic() + _LINGER_EOF_SAFETY_TIMEOUT_SECONDS
+            elif time.monotonic() > eof_deadline:
+                raise RuntimeError(
+                    f"FakeClaude lingered past {_LINGER_EOF_SAFETY_TIMEOUT_SECONDS}s waiting for background "
+                    + f"task trigger(s) with stdin closed; {pending_background_task_count()} task(s) never fired"
+                )
+            time.sleep(_LINGER_POLL_INTERVAL_SECONDS)
+            continue
+        ready_fds, _, _ = select.select([sys.stdin], [], [], _LINGER_POLL_INTERVAL_SECONDS)
+        if not ready_fds:
+            continue
+        frame_kind, prompt = _read_one_stdin_frame()
+        if frame_kind == "prompt":
+            return prompt
+        if frame_kind == "interrupt":
+            sys.exit(AGENT_EXIT_CODE_FROM_SIGTERM)
+        if frame_kind == "eof":
+            stdin_at_eof = True
+
+
 def _maybe_delay_for_compact_indicator(prompt: str, resume_id: str | None) -> None:
     """Stall a resumed ``/compact`` so tests can observe the Compacting indicator.
 
@@ -358,9 +481,16 @@ def main(argv: list[str] | None = None) -> int:
     if parsed.input_format == "stream-json":
         is_first_cycle = True
         while True:
-            prompt = _read_prompt_from_stream_json_stdin()
+            # While background tasks armed by a prior cycle are still pending,
+            # the linger loop drives the between-cycle wait: it emits their
+            # reaction cycles as they complete and, meanwhile, returns any
+            # borrowed turn's frame. Otherwise read the next frame plainly.
+            if pending_background_task_count() > 0:
+                prompt = _run_background_task_linger_loop(session_id, cwd, emit_streaming, plugin_dir)
+            else:
+                prompt = _read_prompt_from_stream_json_stdin()
             if prompt is None:
-                # stdin closed while idle between cycles — exit silently.
+                # stdin closed and no background task pending — exit silently.
                 return 0
             _maybe_delay_for_compact_indicator(prompt, parsed.resume)
             cycle_system_commands = system_commands if is_first_cycle else []

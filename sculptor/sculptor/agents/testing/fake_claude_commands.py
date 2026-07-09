@@ -4,6 +4,7 @@ Each handler takes parsed arguments and returns a list of JSONL dicts to emit
 between the init and end messages.
 """
 
+import dataclasses
 import glob as glob_module
 import inspect
 import json
@@ -1844,6 +1845,264 @@ def handle_background_subagent(args: dict, emit_streaming: bool) -> list[dict]:
     return messages
 
 
+@dataclasses.dataclass
+class _PendingBackgroundTask:
+    """A background task armed by ``start_background_task``, awaiting completion.
+
+    ``trigger_path`` is the sentinel whose creation completes the task.
+    ``reaction_steps`` is the reaction cycle's body (multi_step-shaped steps).
+    ``notification_emitted`` flips to True once a ``complete_background_task``
+    step has emitted this task's task_updated/task_notification inline mid-cycle;
+    the linger loop then runs only its reaction cycle, without re-emitting them.
+    """
+
+    task_id: str
+    tool_use_id: str
+    trigger_path: str
+    reaction_steps: list[dict]
+    notification_summary: str
+    notification_status: str
+    notification_emitted: bool = False
+
+
+# Background tasks armed in this process but not yet completed. Module-global so
+# it survives across cycles within one FakeClaude invocation: the arming cycle
+# registers a task here, later cycles / the between-cycle linger loop drain it.
+# A fresh process starts empty; tests sharing a process (the pure-function unit
+# tests) must reset it via ``reset_pending_background_tasks``.
+_PENDING_BACKGROUND_TASKS: list[_PendingBackgroundTask] = []
+
+
+def register_pending_background_task(task: _PendingBackgroundTask) -> None:
+    """Record an armed background task awaiting its completion trigger."""
+    _PENDING_BACKGROUND_TASKS.append(task)
+
+
+def pending_background_task_count() -> int:
+    """Return how many armed background tasks have not yet drained."""
+    return len(_PENDING_BACKGROUND_TASKS)
+
+
+def find_pending_background_task(task_id: str) -> _PendingBackgroundTask | None:
+    """Return the armed task with ``task_id`` (still in the registry), or None."""
+    for task in _PENDING_BACKGROUND_TASKS:
+        if task.task_id == task_id:
+            return task
+    return None
+
+
+def take_reaction_ready_background_task() -> _PendingBackgroundTask | None:
+    """Remove and return a task whose notification already fired inline.
+
+    These are tasks a ``complete_background_task`` step completed mid-cycle
+    (scenario 2): their reaction cycle still needs to run, but their
+    task_updated/task_notification were already emitted, so the linger loop must
+    not emit them again.
+    """
+    for index, task in enumerate(_PENDING_BACKGROUND_TASKS):
+        if task.notification_emitted:
+            return _PENDING_BACKGROUND_TASKS.pop(index)
+    return None
+
+
+def take_triggered_background_task() -> _PendingBackgroundTask | None:
+    """Remove and return a task whose trigger sentinel has appeared.
+
+    Only considers tasks not yet completed inline; the caller emits their full
+    completion (task_updated + task_notification + reaction cycle).
+    """
+    for index, task in enumerate(_PENDING_BACKGROUND_TASKS):
+        if not task.notification_emitted and Path(task.trigger_path).exists():
+            return _PENDING_BACKGROUND_TASKS.pop(index)
+    return None
+
+
+def reset_pending_background_tasks() -> None:
+    """Clear the registry. For tests that exercise handlers in-process."""
+    _PENDING_BACKGROUND_TASKS.clear()
+
+
+def handle_start_background_task(args: dict, emit_streaming: bool) -> list[dict]:
+    """Arm a background task whose completion the test triggers later.
+
+    Emits a realistic launch — assistant text + an Agent ``tool_use`` + the
+    immediate "launched" ``tool_result`` + ``system/task_started`` — and
+    registers the task in the process-global registry. The handler does NOT
+    block or emit any completion event: the arming cycle ends normally (``main``
+    appends its ``result``), the process lingers, and the reaction cycle is
+    emitted later — either spontaneously when the trigger sentinel appears while
+    the process is idle between cycles, or after a borrowed turn's
+    ``complete_background_task`` step fired the notification inline.
+
+    The task_started ``tool_use_id`` matches the launching Agent tool_use so the
+    output processor links the task to its tool call, and is reused as the
+    eventual task_notification's ``tool_use_id``.
+
+    Args:
+        trigger_path (required): sentinel file whose creation completes the task
+            (use ``FakeClaudeTrigger`` from sculptor/testing/fake_claude_pause.py).
+        task_id: stable id so a ``complete_background_task`` step can reference
+            this task (default: generated).
+        tool_use_id: the launching tool call's id (default: generated).
+        description / prompt: Agent tool metadata for the launch.
+        launched_text: assistant text emitted with the launch.
+        task_type: task_started ``task_type``. Defaults to ``local_agent`` — the
+            subagent type whose task_updated -> task_notification -> reaction
+            ordering the output processor keeps the turn open for.
+        notification_summary: the completion's task_notification summary.
+        notification_status: terminal status for both task_updated.patch.status
+            and task_notification.status (default "completed").
+        reaction_steps: the reaction cycle body as multi_step-shaped steps.
+        reaction_text: shorthand for a single-text-message reaction body (used
+            only when ``reaction_steps`` is absent).
+    """
+    trigger_path = args["trigger_path"]
+    task_id = str(args.get("task_id", generate_id("task")))
+    tool_use_id = args.get("tool_use_id", generate_id("toolu"))
+    description = args.get("description", "Explore the codebase")
+    prompt = args.get("prompt", "Find relevant files")
+    launched_text = args.get("launched_text", "Background task launched. I'll continue while it runs.")
+    task_type = args.get("task_type", "local_agent")
+    notification_summary = args.get("notification_summary", f'Agent "{description}" completed')
+    notification_status = args.get("notification_status", "completed")
+
+    reaction_steps = args.get("reaction_steps")
+    if reaction_steps is None:
+        reaction_text = args.get("reaction_text", f'[FakeClaude] Background task "{description}" completed.')
+        reaction_steps = [{"command": "text", "args": {"text": reaction_text}}]
+
+    register_pending_background_task(
+        _PendingBackgroundTask(
+            task_id=task_id,
+            tool_use_id=tool_use_id,
+            trigger_path=str(trigger_path),
+            reaction_steps=reaction_steps,
+            notification_summary=notification_summary,
+            notification_status=notification_status,
+        )
+    )
+
+    main_msg_id = generate_id("msg")
+    launched_msg_id = generate_id("msg")
+
+    agent_tool_block = make_tool_use_block(
+        tool_id=tool_use_id,
+        tool_name="Agent",
+        tool_input={"prompt": prompt, "description": description, "run_in_background": True},
+    )
+    messages = _make_tool_assistant_message(
+        message_id=main_msg_id,
+        tool_blocks=[agent_tool_block],
+        emit_streaming=emit_streaming,
+        text_prefix="I'll start a background task and keep working.",
+    )
+    messages.append(
+        make_tool_result_message(
+            tool_use_id=tool_use_id,
+            content=f"Async agent launched successfully.\nagentId: {task_id}",
+        )
+    )
+    messages.append(
+        make_task_started_message(
+            task_id=task_id,
+            tool_use_id=tool_use_id,
+            description=description,
+            task_type=task_type,
+        )
+    )
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=launched_msg_id, text=launched_text))
+    messages.append(
+        make_assistant_message(message_id=launched_msg_id, content_blocks=[make_text_block(launched_text)])
+    )
+    return messages
+
+
+def handle_complete_background_task(args: dict, emit_streaming: bool) -> list[dict]:
+    """Complete an armed background task inline, mid-cycle.
+
+    Placed inside a borrowed turn's script (scenario 2). Looks up the task armed
+    earlier by ``start_background_task`` with the same ``task_id``, blocks on its
+    registered trigger sentinel (interrupt-aware, like ``wait_for_file``), then
+    emits ``task_updated`` followed by ``task_notification`` WITHOUT ending the
+    turn — so the completion interleaves into the in-flight turn with no
+    premature ``result``. The task stays in the registry marked reaction-ready,
+    so the linger loop runs its reaction cycle after this turn's result.
+
+    Belongs to ``_INLINE_EMITTING_COMMANDS`` so a wrapping ``multi_step`` flushes
+    the prior steps' messages before this one parks on the trigger.
+
+    Args:
+        task_id (required): the armed task to complete.
+        timeout_seconds: safety cap on the trigger wait (default 120).
+    """
+    task_id = str(args["task_id"])
+    timeout_seconds: float = args.get("timeout_seconds", 120)
+    task = find_pending_background_task(task_id)
+    if task is None:
+        raise UnknownFakeClaudeCommandError(
+            f"complete_background_task: no armed background task with id {task_id!r} "
+            + "(start_background_task must run first with the same task_id)"
+        )
+    sentinel = Path(task.trigger_path)
+    if not _wait_until(timeout_seconds=timeout_seconds, poll_interval=0.05, done=sentinel.exists):
+        raise RuntimeError(
+            f"complete_background_task timed out after {timeout_seconds}s waiting for trigger {sentinel}"
+        )
+    task.notification_emitted = True
+    return [
+        make_task_updated_message(task_id=task.task_id, status=task.notification_status),
+        make_task_notification_message(
+            task_id=task.task_id,
+            tool_use_id=task.tool_use_id,
+            status=task.notification_status,
+            summary=task.notification_summary,
+        ),
+    ]
+
+
+def emit_pending_task_reaction(
+    task: _PendingBackgroundTask,
+    session_id: str,
+    cwd: str,
+    emit_streaming: bool,
+    plugin_dir: str | None,
+    emit_notification: bool,
+) -> None:
+    """Emit a completed background task's reaction turn directly to stdout.
+
+    With ``emit_notification`` True (the trigger fired while idle between
+    cycles), emit ``task_updated`` then ``task_notification`` first — the
+    completion ordering the real CLI uses. With it False (a
+    ``complete_background_task`` step already emitted them inline), go straight
+    to the reaction cycle.
+
+    The reaction cycle is a full ``init -> <reaction body> -> result`` bracket in
+    the invocation's own session: every real-CLI turn, including a spontaneous
+    reaction turn, opens with its own ``system/init``. The body is dispatched
+    through ``handle_multi_step`` so a reaction can itself run tools or ask
+    questions (and so its own inline-emitting steps flush correctly).
+    """
+    if emit_notification:
+        _emit_messages_to_stdout(
+            [
+                make_task_updated_message(task_id=task.task_id, status=task.notification_status),
+                make_task_notification_message(
+                    task_id=task.task_id,
+                    tool_use_id=task.tool_use_id,
+                    status=task.notification_status,
+                    summary=task.notification_summary,
+                ),
+            ]
+        )
+    _emit_messages_to_stdout([make_init_message(session_id=session_id)])
+    body = handle_multi_step(
+        args={"steps": task.reaction_steps}, cwd=cwd, emit_streaming=emit_streaming, plugin_dir=plugin_dir
+    )
+    _emit_messages_to_stdout(body)
+    _emit_messages_to_stdout([make_end_message(session_id=session_id)])
+
+
 def handle_workflow_run(args: dict, emit_streaming: bool) -> list[dict]:
     """Simulate the Workflow tool's full background-task lifecycle.
 
@@ -2254,6 +2513,11 @@ _INLINE_EMITTING_COMMANDS: frozenset[str] = frozenset(
         # otherwise the in-flight turn has no partial response to resume from
         # (see v1.py's is_partial_agent_response walk).
         "wait_for_file",
+        # complete_background_task blocks on a trigger sentinel like wait_for_file,
+        # so the prior steps must be flushed before it parks — otherwise the
+        # in-flight turn's earlier content isn't visible while the harness waits
+        # for the background completion.
+        "complete_background_task",
     }
 )
 
@@ -2834,6 +3098,8 @@ COMMAND_REGISTRY: dict[str, Callable[..., list[dict]]] = {
     "auto_compact_mid_stream": handle_auto_compact_mid_stream,
     "background_task_started": handle_background_task_started,
     "background_task_notification": handle_background_task_notification,
+    "start_background_task": handle_start_background_task,
+    "complete_background_task": handle_complete_background_task,
     "emit_task_notification": handle_emit_task_notification,
     "emit_task_updated": handle_emit_task_updated,
     "emit_result": handle_emit_result,
