@@ -168,6 +168,8 @@ const ExpandableFileDiff = ({
           oldLines={isTruncated ? undefined : oldLines}
           newLines={isTruncated ? undefined : newLines}
           hideHandle
+          spotlightFile={filePath}
+          spotlightScope={scope === "vs-target-branch" ? { kind: "target-branch-diff" } : { kind: "uncommitted-diff" }}
         />
       )}
     </LargeDiffGate>

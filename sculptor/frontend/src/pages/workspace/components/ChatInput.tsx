@@ -12,6 +12,8 @@ import { useTimedLatch } from "~/common/Hooks.ts";
 import { useKeybinding, useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
 import { getModelCapabilities } from "~/common/modelCapabilities.ts";
 import { type ParsedPseudoSkillCommand, parsePseudoSkillCommand } from "~/common/pseudoSkills.ts";
+import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch.ts";
+import { useWorkspaceCommits } from "~/common/state/hooks/useWorkspaceCommits.ts";
 import { mergeClasses, optional } from "~/common/Utils.ts";
 import { CapabilityGate } from "~/components/CapabilityGate.tsx";
 import { EffortSelector } from "~/components/EffortSelector.tsx";
@@ -77,6 +79,9 @@ import { FileUpload } from "../../../components/FileUpload.tsx";
 import { Toast, type ToastContent, ToastType } from "../../../components/Toast.tsx";
 import { TooltipIconButton } from "../../../components/TooltipIconButton.tsx";
 import { SettingsSection } from "../../settings/sections.ts";
+import { spotlightDraftAnchorsAtom, spotlightInsertAtom } from "../components/diffPanel/atoms.ts";
+import { parseSpotlightDraftAnchors } from "../components/diffPanel/spotlightDraftAnchors.ts";
+import { spotlightPrimaryRange } from "../components/diffPanel/types.ts";
 import { stripHtml } from "../utils/utils.ts";
 import styles from "./ChatInput.module.scss";
 
@@ -147,6 +152,13 @@ export const ChatInput = ({
   const { workspaceID: workspaceIDFromRoute, agentID: agentIDFromRoute } = useWorkspacePageParams();
   const taskID = taskIdProp ?? agentIDFromRoute;
   const workspaceID = workspaceIdProp ?? workspaceIDFromRoute;
+  // Git world-snapshot for spotlight capture — stamp the branch + HEAD commit
+  // at chip-insert time so the backend reminder has them. Both are live
+  // WebSocket-pushed atom values (no network fetch per capture).
+  const branchInfo = useWorkspaceBranch(workspaceID);
+  const commitsQuery = useWorkspaceCommits(workspaceID);
+  const capturedBranch = branchInfo?.currentBranch ?? "";
+  const capturedHeadCommit = commitsQuery.data?.commits?.[0]?.hash ?? "";
   const { navigateToGlobalSettings } = useImbueNavigate();
   const taskModel = useTaskModel(taskID ?? "");
   // Harness-supplied model list + selection (pi). hasBackendModelSource
@@ -381,10 +393,16 @@ export const ChatInput = ({
     setIsSending(true);
     setLastSendError(null);
     try {
+      const message = promptDraft?.replace(/\u200B/g, "\u00A0").replace(/(\n\n\u00A0)+$/, "");
+      // NOTE: the spotlight `<system-reminder>` is now built BACKEND-side in
+      // `get_user_instructions` (reading the `data-spotlight-*` chip spans this
+      // message carries), unified with every other reminder. It is deliberately
+      // NOT prepended to the message text here — doing so leaked it into the
+      // sent bubble, the copy button, and search.
       await sendWorkspaceAgentMessages({
         path: { workspace_id: workspaceID, agent_id: taskID },
         body: {
-          message: promptDraft?.replace(/\u200B/g, "\u00A0").replace(/(\n\n\u00A0)+$/, ""),
+          message,
           model: localModel,
           files: attachedFiles,
           // The plan-mode toggle is gated (disabled-with-tooltip) for harnesses
@@ -651,6 +669,72 @@ export const ChatInput = ({
       insertSkillRef.current = null;
     };
   }, [insertSkillRef, editorRef]);
+
+  // Subscribe to spotlightInsertAtom: when PierreDiffView fires a capture,
+  // insert the spotlight mention node at the current cursor position and
+  // clear the atom. Cross-panel pattern — same shape as openFileViewTabAtom.
+  const spotlightData = useAtomValue(spotlightInsertAtom);
+  const setSpotlightData = useSetAtom(spotlightInsertAtom);
+
+  useEffect(() => {
+    if (!spotlightData) return;
+    const editor = editorRef.current;
+    if (!editor) return;
+    const primary = spotlightPrimaryRange(spotlightData);
+    const rangeText = primary
+      ? primary.firstLine === primary.lastLine
+        ? `${primary.firstLine}`
+        : `${primary.firstLine}-${primary.lastLine}`
+      : "";
+    // The chip face is a pure location — no diff side (see commit 4 / 07-08).
+    const label = `${spotlightData.file}:${rangeText}`;
+    const commitHash = spotlightData.scope.kind === "commit-diff" ? spotlightData.scope.commitHash : null;
+    editor
+      .chain()
+      .focus()
+      .insertContent([
+        {
+          type: "mention",
+          attrs: {
+            id: label,
+            label,
+            mentionSuggestionChar: "!",
+            spotlightFile: spotlightData.file,
+            spotlightPreviousStart: spotlightData.previousFileLines
+              ? String(spotlightData.previousFileLines.firstLine)
+              : null,
+            spotlightPreviousEnd: spotlightData.previousFileLines
+              ? String(spotlightData.previousFileLines.lastLine)
+              : null,
+            spotlightCurrentStart: spotlightData.currentFileLines
+              ? String(spotlightData.currentFileLines.firstLine)
+              : null,
+            spotlightCurrentEnd: spotlightData.currentFileLines
+              ? String(spotlightData.currentFileLines.lastLine)
+              : null,
+            spotlightPreviousSnippet: spotlightData.previousSnippet,
+            spotlightCurrentSnippet: spotlightData.currentSnippet,
+            spotlightSnippetCapturedAt: spotlightData.snippetCapturedAt,
+            spotlightScope: spotlightData.scope.kind,
+            spotlightCommitHash: commitHash,
+            spotlightCapturedBranch: capturedBranch || spotlightData.capturedBranch,
+            spotlightCapturedHeadCommit: capturedHeadCommit || spotlightData.capturedHeadCommit,
+          },
+        },
+        { type: "text", text: " " },
+      ])
+      .run();
+    setSpotlightData(null);
+  }, [spotlightData, editorRef, setSpotlightData, capturedBranch, capturedHeadCommit]);
+
+  // Publish spotlight anchors from the draft so diff panes can paint persistent
+  // gutter bars. Derived from the markdown draft string on every change (insert,
+  // delete, restore from localStorage) and cleared on unmount.
+  const setDraftAnchors = useSetAtom(spotlightDraftAnchorsAtom);
+  useEffect(() => {
+    setDraftAnchors(parseSpotlightDraftAnchors(promptDraft));
+    return (): void => setDraftAnchors([]);
+  }, [promptDraft, setDraftAnchors]);
 
   // Seed the per-task stored preferences from the user default the first
   // time this task is seen after userConfig has loaded. Once set, user

@@ -22,3 +22,33 @@
 
   @include thin-scrollbar;
 }
+
+// Floating capture control shown alongside a hovered line in the Pierre
+// diff/file viewer. Fixed-positioned at the line's vertical centre, right-
+// aligned to the visible pane, outside the shadow DOM so it can receive
+// React events. A compact square button with a plus icon — word-less.
+.spotlightButton {
+  align-items: center;
+  background: var(--button-primary-bg);
+  border: none;
+  border-radius: var(--radius-2);
+  color: white;
+  cursor: pointer;
+  display: inline-flex;
+  height: 22px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  pointer-events: auto;
+  user-select: none;
+  width: 22px;
+  z-index: var(--z-dropdown);
+
+  &:hover {
+    background: var(--button-primary-bg-hover);
+  }
+
+  > svg {
+    flex-shrink: 0;
+  }
+}

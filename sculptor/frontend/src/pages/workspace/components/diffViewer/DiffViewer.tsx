@@ -32,7 +32,7 @@ import { LargeDiffGate } from "~/pages/workspace/components/diffPanel/LargeDiffG
 import { PierreDiffView } from "~/pages/workspace/components/diffPanel/PierreDiffView.tsx";
 import { ReadOnlyPreview } from "~/pages/workspace/components/diffPanel/ReadOnlyPreview.tsx";
 import { RenameBanner } from "~/pages/workspace/components/diffPanel/RenameBanner.tsx";
-import type { DiffViewType } from "~/pages/workspace/components/diffPanel/types.ts";
+import type { DiffViewType, SpotlightScope } from "~/pages/workspace/components/diffPanel/types.ts";
 import { useFileLines } from "~/pages/workspace/components/diffPanel/useFileLines.ts";
 import { useInFileSearch } from "~/pages/workspace/components/diffPanel/useInFileSearch.ts";
 import { useScrollPreservation } from "~/pages/workspace/components/diffPanel/useScrollPreservation.ts";
@@ -59,6 +59,8 @@ const renderDiffContent = ({
   themeType,
   oldLines,
   newLines,
+  spotlightFile,
+  spotlightScope,
 }: {
   diffString: string;
   viewType: DiffViewType;
@@ -66,6 +68,8 @@ const renderDiffContent = ({
   themeType: "light" | "dark" | "system";
   oldLines?: Array<string>;
   newLines?: Array<string>;
+  spotlightFile?: string;
+  spotlightScope: SpotlightScope;
 }): ReactElement => {
   return (
     <LargeDiffGate diffString={diffString}>
@@ -77,6 +81,8 @@ const renderDiffContent = ({
           themeType={themeType}
           oldLines={isTruncated ? undefined : oldLines}
           newLines={isTruncated ? undefined : newLines}
+          spotlightFile={spotlightFile}
+          spotlightScope={spotlightScope}
         />
       )}
     </LargeDiffGate>
@@ -201,17 +207,20 @@ export const DiffViewer = ({
 
   const [markdownMode, setMarkdownMode] = useAtom(markdownRenderModeAtom);
 
-  // A quick-opened file-view can carry an explicit "rendered" request (see the
-  // DiffSelection type). It overrides the persisted global render-mode WITHOUT
-  // writing it — the user's preference survives the quick look — and stays in
-  // force until the user toggles the mode, which records a dismissal. A repeat
-  // request (newer `openedAt`) re-applies the override.
+  // A quick-opened file-view can carry an explicit render-mode request (see the
+  // DiffSelection type): "rendered" from the quick-open icon, "raw" from a
+  // spotlight line-reference click (source view so line numbers align). It
+  // overrides the persisted global render-mode WITHOUT writing it — the user's
+  // preference survives the quick look — and stays in force until the user
+  // toggles the mode. A repeat request (newer `openedAt`) re-applies it.
   const [renderOverrideDismissedAt, setRenderOverrideDismissedAt] = useState<number | null>(null);
-  const isQuickOpenRenderActive =
+  const quickOpenRenderMode: MarkdownRenderMode | null =
     selection?.kind === "file-view" &&
-    selection.markdownMode === "rendered" &&
-    (renderOverrideDismissedAt === null || (selection.openedAt ?? 0) > renderOverrideDismissedAt);
-  const effectiveMarkdownMode: MarkdownRenderMode = isQuickOpenRenderActive ? "rendered" : markdownMode;
+    (selection.markdownMode === "rendered" || selection.markdownMode === "raw") &&
+    (renderOverrideDismissedAt === null || (selection.openedAt ?? 0) > renderOverrideDismissedAt)
+      ? selection.markdownMode
+      : null;
+  const effectiveMarkdownMode: MarkdownRenderMode = quickOpenRenderMode ?? markdownMode;
 
   // ReadOnlyPreview is the only path that supports rendered markdown — used for
   // file-view selections and "no diff" states. Hide the toggle elsewhere.
@@ -357,7 +366,18 @@ export const DiffViewer = ({
 
     // Added or deleted files have only one side, so a side-by-side split is meaningless.
     const effectiveViewType = status === "A" || status === "D" ? "unified" : viewType;
-    const diffProps = { diffString, viewType: effectiveViewType, overflow, themeType: appTheme, oldLines, newLines };
+    const diffProps = {
+      diffString,
+      viewType: effectiveViewType,
+      overflow,
+      themeType: appTheme,
+      oldLines,
+      newLines,
+      spotlightFile: filePath,
+      spotlightScope: (content.isTargetBranchDiff
+        ? { kind: "target-branch-diff" }
+        : { kind: "uncommitted-diff" }) as SpotlightScope,
+    };
 
     if (status === "D") {
       return (
@@ -424,7 +444,7 @@ export const DiffViewer = ({
             <ReadOnlyPreview
               workspaceId={workspaceId}
               filePath={content.filePath}
-              renderModeOverride={isQuickOpenRenderActive ? "rendered" : undefined}
+              renderModeOverride={quickOpenRenderMode ?? undefined}
             />
           </Flex>
         </>
@@ -462,6 +482,10 @@ export const DiffViewer = ({
                   viewType: commitFileStatus === "A" || commitFileStatus === "D" ? "unified" : viewType,
                   overflow,
                   themeType: appTheme,
+                  spotlightFile: content.filePath,
+                  spotlightScope: (content.commitHash
+                    ? { kind: "commit-diff", commitHash: content.commitHash }
+                    : { kind: "file-view" }) as SpotlightScope,
                 })}
               </>
             ) : (

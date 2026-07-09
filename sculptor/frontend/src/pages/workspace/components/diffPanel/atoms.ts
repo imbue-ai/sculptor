@@ -9,8 +9,28 @@ import type { DiffSelection } from "~/pages/workspace/components/diffViewer/type
 import { getUncommittedFileStatusMap } from "~/pages/workspace/panels/fileBrowser/atoms.ts";
 import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
 
-import type { DiffPanelTabState, DiffScope, DiffTab, SingleFileDiffTab } from "./types.ts";
+import { resolveColorMap } from "./spotlightPalette.ts";
+import type {
+  DiffPanelTabState,
+  DiffScope,
+  DiffTab,
+  LineRange,
+  SingleFileDiffTab,
+  SpotlightAnchor,
+  SpotlightData,
+} from "./types.ts";
 import { COMMIT_DIFF_PREFIX, FILE_VIEW_PREFIX, TARGET_BRANCH_DIFF_PREFIX } from "./types.ts";
+
+/** Structural equality of two line ranges (or both absent). */
+const lineRangesEqual = (a: LineRange | null, b: LineRange | null): boolean =>
+  a === b || (a !== null && b !== null && a.firstLine === b.firstLine && a.lastLine === b.lastLine);
+
+/** Two anchors point at the same lines in the same file from the same pane. */
+const spotlightAnchorsEqual = (a: SpotlightAnchor, b: SpotlightAnchor): boolean =>
+  a.file === b.file &&
+  a.scope.kind === b.scope.kind &&
+  lineRangesEqual(a.previousFileLines, b.previousFileLines) &&
+  lineRangesEqual(a.currentFileLines, b.currentFileLines);
 
 // The single-instance panel (and its default section) that hosts the active diff/
 // file-view tab in the section shell. file-view tabs surface in the Files panel;
@@ -28,6 +48,72 @@ export const diffScopeAtomFamily = atomFamily((_workspaceId: string) => atom<Dif
 
 /** Ratio (0–100) controlling the left/right column split in side-by-side diffs. */
 export const splitDiffColumnRatioAtom = atom(50);
+
+/**
+ * Cross-panel spotlight insertion: set by PierreDiffView when the user clicks
+ * the `+` button on a line, consumed by ChatInput which inserts the mention
+ * node into the TipTap editor and then resets the atom to null.
+ *
+ * This is the same pattern as `openFileViewTabAtom` — a write-once / read-once
+ * signal between a trigger surface (the diff pane) and the actor that owns the
+ * target (the chat input). No prop threading through the component tree.
+ */
+export const spotlightInsertAtom = atom<SpotlightData | null>(null);
+
+/**
+ * Spotlight anchors currently present in the chat input draft — one per chip.
+ * Gutter bars in the diff/file panes are painted from this list so the user can
+ * see at a glance which ranges have been spotlighted for the shown file.
+ * Populated by ChatInput on insert + draft restore; cleared on message send.
+ */
+export const spotlightDraftAnchorsAtom = atom<Array<SpotlightAnchor>>([]);
+
+/**
+ * One-shot write: clear all draft anchors (called on message send). The
+ * separate write atom avoids the ChatInput needing to read the full array.
+ */
+export const clearSpotlightDraftAnchorsAtom = atom(null, (_get, set) => {
+  set(spotlightDraftAnchorsAtom, []);
+});
+
+/**
+ * Collision-resolved palette index per draft anchor (keyed by anchor identity).
+ * The single source of truth for spotlight colours: the chip accent, the hover
+ * highlight, and the gutter bar all read this map so a set of draft chips is
+ * guaranteed up to six distinct colours before the resolver saturates. Derived
+ * from `spotlightDraftAnchorsAtom` so it recomputes whenever the draft changes.
+ */
+export const spotlightColorMapAtom = atom<ReadonlyMap<string, number>>((get) =>
+  resolveColorMap(get(spotlightDraftAnchorsAtom)),
+);
+
+/**
+ * The spotlight anchor the user is currently HOVERING (via a chip in the chat
+ * input or a sent message). The diff/file viewer showing that file paints the
+ * referenced lines blue; a mismatch or null paints nothing. Cleared on
+ * mouse-leave. Read-only signal — no navigation.
+ */
+export const spotlightHoverAtom = atom<SpotlightAnchor | null>(null);
+
+/**
+ * Clear the hover highlight ONLY if it currently points at `anchor`. Used on
+ * chip mouse-leave, deselect, and unmount (e.g. backspace-delete while hovered)
+ * so a chip never wipes a highlight another chip has since taken over.
+ */
+export const clearSpotlightHoverForAnchorAtom = atom(null, (get, set, anchor: SpotlightAnchor) => {
+  const current = get(spotlightHoverAtom);
+  if (current !== null && spotlightAnchorsEqual(current, anchor)) {
+    set(spotlightHoverAtom, null);
+  }
+});
+
+/**
+ * A one-shot request to scroll a spotlight's source line into view, set when a
+ * chip is CLICKED (alongside opening the file). The viewer showing that file
+ * scrolls to the line once Pierre has painted it, then clears the atom.
+ * `requestedAt` lets a repeat click on the same anchor re-fire the scroll.
+ */
+export const spotlightScrollTargetAtom = atom<(SpotlightAnchor & { requestedAt: number }) | null>(null);
 
 const DEFAULT_DIFF_PANEL_TAB_STATE: DiffPanelTabState = {
   activeTab: null,
@@ -192,7 +278,7 @@ type SetActiveFileView = {
   workspaceId: string;
   filePath: string;
   /** Set by the quick-open-rendered-markdown path; see {@link FileViewTab}. */
-  markdownMode?: "rendered";
+  markdownMode?: "rendered" | "raw";
 };
 
 type SetActiveCommitDiff = {
@@ -358,7 +444,7 @@ export const resetReviewAllScopeAtom = atom(null, (get, set) => {
 /** Open (or activate) a read-only file view tab. */
 export const openFileViewTabAtom = atom(
   null,
-  (_get, set, params: { workspaceId: string; filePath: string; markdownMode?: "rendered" }) => {
+  (_get, set, params: { workspaceId: string; filePath: string; markdownMode?: "rendered" | "raw" }) => {
     set(setActiveDiffTabAtom, { kind: "file-view", ...params });
   },
 );

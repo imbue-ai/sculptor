@@ -11,6 +11,7 @@ import type { EntityType } from "~/components/EntityMentionSuggestion";
 import { MentionChip } from "~/components/MentionChip";
 import type { SkillType } from "~/components/skillBadge";
 import { openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
+import { lineRangeFromStrings, spotlightScopeFromStrings } from "~/pages/workspace/components/diffPanel/types.ts";
 import { useWorkspaceCodePath } from "~/pages/workspace/hooks/useWorkspaceCodePath.ts";
 
 import { AlphaBlockquote } from "./AlphaBlockquote.tsx";
@@ -100,6 +101,18 @@ type ParsedSculptorSpan = {
   id: string;
   skillDescription: string | null;
   skillType: SkillType | null;
+  spotlightFile?: string | null;
+  spotlightPreviousStart?: string | null;
+  spotlightPreviousEnd?: string | null;
+  spotlightCurrentStart?: string | null;
+  spotlightCurrentEnd?: string | null;
+  spotlightPreviousSnippet?: string | null;
+  spotlightCurrentSnippet?: string | null;
+  spotlightSnippetCapturedAt?: string | null;
+  spotlightScope?: string | null;
+  spotlightCommitHash?: string | null;
+  spotlightCapturedBranch?: string | null;
+  spotlightCapturedHeadCommit?: string | null;
 };
 
 const extractSculptorSpans = (content: string): { processedContent: string; spans: Array<ParsedSculptorSpan> } => {
@@ -116,6 +129,18 @@ const extractSculptorSpans = (content: string): { processedContent: string; span
       id: span.textContent ?? "",
       skillDescription: span.getAttribute("data-skill-description"),
       skillType: span.getAttribute("data-skill-type") as SkillType | null,
+      spotlightFile: span.getAttribute("data-spotlight-file"),
+      spotlightPreviousStart: span.getAttribute("data-spotlight-previous-start"),
+      spotlightPreviousEnd: span.getAttribute("data-spotlight-previous-end"),
+      spotlightCurrentStart: span.getAttribute("data-spotlight-current-start"),
+      spotlightCurrentEnd: span.getAttribute("data-spotlight-current-end"),
+      spotlightPreviousSnippet: span.getAttribute("data-spotlight-previous-snippet"),
+      spotlightCurrentSnippet: span.getAttribute("data-spotlight-current-snippet"),
+      spotlightSnippetCapturedAt: span.getAttribute("data-spotlight-snippet-captured-at"),
+      spotlightScope: span.getAttribute("data-spotlight-scope"),
+      spotlightCommitHash: span.getAttribute("data-spotlight-commit-hash"),
+      spotlightCapturedBranch: span.getAttribute("data-spotlight-captured-branch"),
+      spotlightCapturedHeadCommit: span.getAttribute("data-spotlight-captured-head-commit"),
     });
     return `+[sculptorChip:${index}|x]`;
   });
@@ -148,14 +173,32 @@ const renderChips = (children: ReactNode, spans: ReadonlyArray<ParsedSculptorSpa
         // sentinel slipped past extraction).
         const parsed = spans[parseInt(match[1], 10)];
         if (parsed) {
-          parts.push(
-            <MentionChip
-              key={`sculptor-${matchIndex}`}
-              id={parsed.id}
-              skillDescription={parsed.skillDescription}
-              skillType={parsed.skillType}
-            />,
-          );
+          if (parsed.spotlightFile) {
+            parts.push(
+              <MentionChip
+                key={`spotlight-${matchIndex}`}
+                kind="spotlight"
+                file={parsed.spotlightFile}
+                previousFileLines={lineRangeFromStrings(parsed.spotlightPreviousStart, parsed.spotlightPreviousEnd)}
+                currentFileLines={lineRangeFromStrings(parsed.spotlightCurrentStart, parsed.spotlightCurrentEnd)}
+                scope={spotlightScopeFromStrings(parsed.spotlightScope, parsed.spotlightCommitHash)}
+                previousSnippet={parsed.spotlightPreviousSnippet ?? undefined}
+                currentSnippet={parsed.spotlightCurrentSnippet ?? undefined}
+                snippetCapturedAt={parsed.spotlightSnippetCapturedAt ?? undefined}
+                capturedBranch={parsed.spotlightCapturedBranch ?? undefined}
+                capturedHeadCommit={parsed.spotlightCapturedHeadCommit ?? undefined}
+              />,
+            );
+          } else {
+            parts.push(
+              <MentionChip
+                key={`sculptor-${matchIndex}`}
+                id={parsed.id}
+                skillDescription={parsed.skillDescription}
+                skillType={parsed.skillType}
+              />,
+            );
+          }
         }
       } else {
         parts.push(

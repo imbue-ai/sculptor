@@ -13,6 +13,7 @@ from loguru import logger
 
 from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
+from sculptor.agents.spotlight_reminder import build_spotlight_reminder
 from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.interfaces.agents.agent import ChatInputUserMessage
 from sculptor.interfaces.agents.agent import ParsedAgentResponseType
@@ -216,6 +217,13 @@ def get_user_instructions(
     if isinstance(message, ChatInputUserMessage):
         user_instructions = _strip_and_unescape_html(message.text)
         skill_invocation_match = _SKILL_INVOCATION_RE.match(user_instructions)
+        # Spotlight line references expand into a reminder built from the
+        # `data-spotlight-*` chip spans on the raw message text (parsed before
+        # the strip above discards them). Prepended like every other reminder,
+        # so it never lives in the stored/rendered message.
+        spotlight_reminder = build_spotlight_reminder(message.text)
+        if spotlight_reminder is not None:
+            user_instructions = spotlight_reminder + user_instructions
         if message.enter_plan_mode:
             plan_instructions = """<system-instructions>
 CRITICAL: The user has enabled plan mode. You MUST call the EnterPlanMode tool IMMEDIATELY as your very first action, before doing anything else. Do not skip this step regardless of the task. After entering plan mode, explore the codebase, design your approach, and present the plan for approval via ExitPlanMode before writing any code.

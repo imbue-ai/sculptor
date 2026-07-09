@@ -1,15 +1,16 @@
 import type { FileDiffMetadata, FileDiffOptions } from "@pierre/diffs";
 import { getSingularPatch, processFile } from "@pierre/diffs";
 import { FileDiff, PatchDiff } from "@pierre/diffs/react";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
+import { Plus } from "lucide-react";
 import type { CSSProperties, ErrorInfo, ReactElement, ReactNode, RefObject } from "react";
-import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { themeCodeThemeAtom } from "~/common/state/atoms/themeBuilder.ts";
 import { getShikiThemes } from "~/common/theme/shikiThemes.ts";
 
-import { splitDiffColumnRatioAtom } from "./atoms.ts";
+import { splitDiffColumnRatioAtom, spotlightInsertAtom } from "./atoms.ts";
 import styles from "./PierreDiffView.module.scss";
 import {
   adoptPierreOverrideSheet,
@@ -18,8 +19,10 @@ import {
 } from "./pierreShadowStyles.ts";
 import { SplitDiffHandle } from "./SplitDiffHandle.tsx";
 import { StickyHorizontalScrollbar } from "./StickyHorizontalScrollbar.tsx";
-import type { DiffViewType } from "./types.ts";
+import type { DiffViewType, SpotlightScope } from "./types.ts";
 import { usePierreHighlighterReady } from "./usePierreHighlighterReady.ts";
+import { type SpotlightCaptureResult, useSpotlightCapture } from "./useSpotlightCapture.ts";
+import { useSpotlightOverlay } from "./useSpotlightOverlay.ts";
 
 type PierreDiffViewProps = {
   diffString: string;
@@ -37,6 +40,14 @@ type PierreDiffViewProps = {
    * multiple diffs (e.g. the combined "Review all" view).
    */
   hideHandle?: boolean;
+  /** The file path this diff/file view is showing. Enables spotlight capture. */
+  spotlightFile?: string;
+  /** Which pane the capture came from — drives navigation + reminder shape. Defaults to file-view. */
+  spotlightScope?: SpotlightScope;
+  /** Branch checked out at capture time (agent world-snapshot). TODO: source from workspace git state. */
+  spotlightCapturedBranch?: string;
+  /** HEAD commit at capture time (agent world-snapshot). TODO: source from workspace git state. */
+  spotlightCapturedHeadCommit?: string;
 };
 
 /**
@@ -109,6 +120,10 @@ export const PierreDiffView = ({
   oldLines,
   newLines,
   hideHandle = false,
+  spotlightFile,
+  spotlightScope = { kind: "file-view" },
+  spotlightCapturedBranch,
+  spotlightCapturedHeadCommit,
 }: PierreDiffViewProps): ReactElement => {
   const splitRatio = useAtomValue(splitDiffColumnRatioAtom);
   const codeTheme = useAtomValue(themeCodeThemeAtom);
@@ -162,6 +177,14 @@ export const PierreDiffView = ({
 
   const pierreRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  // The spotlight hooks need the pane element as STATE (not a ref) so their
+  // effects re-run exactly when it mounts. A callback ref feeds both the
+  // existing wrapperRef (for SplitDiffHandle etc.) and this state.
+  const [paneElement, setPaneElement] = useState<HTMLDivElement | null>(null);
+  const setWrapperNode = useCallback((el: HTMLDivElement | null): void => {
+    wrapperRef.current = el;
+    setPaneElement(el);
+  }, []);
 
   /**
    * Inject our bg-override stylesheet into Pierre's shadow DOM (see
@@ -227,13 +250,56 @@ export const PierreDiffView = ({
 
   const hasScrollbar = overflow === "scroll";
 
+  // --- Spotlight capture --------------------------------------------------
+  const setSpotlight = useSetAtom(spotlightInsertAtom);
+
+  const handleSpotlightCapture = useCallback(
+    (result: SpotlightCaptureResult): void => {
+      if (!spotlightFile) return;
+      setSpotlight({
+        file: spotlightFile,
+        previousFileLines: result.previousFileLines,
+        currentFileLines: result.currentFileLines,
+        scope: spotlightScope,
+        previousSnippet: result.previousSnippet,
+        currentSnippet: result.currentSnippet,
+        snippetCapturedAt: new Date().toISOString(),
+        capturedBranch: spotlightCapturedBranch ?? "",
+        capturedHeadCommit: spotlightCapturedHeadCommit ?? "",
+      });
+    },
+    [spotlightFile, spotlightScope, spotlightCapturedBranch, spotlightCapturedHeadCommit, setSpotlight],
+  );
+
+  const spotlight = useSpotlightCapture({
+    paneElement,
+    enabled: spotlightFile !== undefined,
+    onCapture: handleSpotlightCapture,
+  });
+  const handleSpotlightPillMouseDown = spotlight.onButtonMouseDown;
+  // Hover-highlight + click-scroll driven by spotlight chips in the chat.
+  useSpotlightOverlay({ paneElement, file: spotlightFile });
+  // --- end Spotlight capture ----------------------------------------------
+
   return (
-    <div ref={wrapperRef} className={styles.splitWrapper} style={splitStyle}>
+    <div ref={setWrapperNode} className={styles.splitWrapper} style={splitStyle}>
       <div className={styles.scrollColumn}>
         <div
           className={`${styles.container} ${className ?? ""}`}
           data-testid={viewType === "unified" ? ElementIds.DIFF_VIEW_UNIFIED : ElementIds.DIFF_VIEW_SPLIT}
         >
+          {spotlight.buttonStyle && (
+            <button
+              type="button"
+              data-testid={ElementIds.SPOTLIGHT_LINE_HOVER_BUTTON}
+              className={styles.spotlightButton}
+              style={spotlight.buttonStyle}
+              onMouseDown={handleSpotlightPillMouseDown}
+              aria-label="Capture line for spotlight"
+            >
+              <Plus size={14} strokeWidth={2.5} />
+            </button>
+          )}
           <div ref={pierreRef}>
             {isHighlighterReady &&
               (fileDiffMetadata ? (

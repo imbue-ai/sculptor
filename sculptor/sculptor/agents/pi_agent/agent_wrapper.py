@@ -117,6 +117,7 @@ from sculptor.agents.pi_agent.tool_rendering import SUBAGENT_DISPLAY_NAME
 from sculptor.agents.pi_agent.tool_rendering import build_tool_result_content
 from sculptor.agents.pi_agent.tool_rendering import extract_text_from_tool_payload
 from sculptor.agents.pi_agent.tool_rendering import map_pi_tool_call
+from sculptor.agents.spotlight_reminder import build_spotlight_reminder
 from sculptor.common.plugin import get_plugin_dirs
 from sculptor.foundation.common import generate_id
 from sculptor.foundation.secrets_utils import Secret
@@ -1711,8 +1712,12 @@ class PiAgent(DefaultAgentWrapper):
 
     def _build_prompt_text(self, message: ChatInputUserMessage) -> str:
         """The user text with the skill-invocation rewrite, plus the plan-mode
-        preamble while in plan mode."""
+        preamble while in plan mode, plus any spotlight reminder (mirrors
+        Claude's `get_user_instructions` for harness parity)."""
         text = _rewrite_skill_invocation(message.text, self._discovered_skill_names)
+        spotlight_reminder = build_spotlight_reminder(message.text)
+        if spotlight_reminder is not None:
+            text = spotlight_reminder + text
         if self._is_in_plan_mode:
             return f"{_PLAN_MODE_PROMPT_PREFIX}{text}"
         return text

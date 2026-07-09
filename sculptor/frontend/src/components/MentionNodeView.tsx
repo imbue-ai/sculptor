@@ -6,6 +6,7 @@ import type { ReactElement } from "react";
 import { useCallback, useSyncExternalStore } from "react";
 
 import { disambiguateFileNames } from "~/pages/workspace/components/chat-alpha/chipRowUtils.ts";
+import { lineRangeFromStrings, spotlightScopeFromStrings } from "~/pages/workspace/components/diffPanel/types.ts";
 
 import type { EntityType } from "./EntityMentionSuggestion";
 import { MentionChip } from "./MentionChip";
@@ -101,8 +102,37 @@ export const MentionNodeView = ({ node, editor, getPos }: NodeViewProps): ReactE
   };
 
   // Dispatch by which attribute set the node carries. Entity chips are
-  // identified by a non-null `entityType`; otherwise fall through to the
-  // file/skill chip, whose variant is inferred from the leading `/` of `id`.
+  // identified by a non-null `entityType`; spotlight chips carry
+  // `spotlightFile`; otherwise fall through to the file/skill chip, whose
+  // variant is inferred from the leading `/` of `id`.
+  const spotlightFile = node.attrs.spotlightFile as string | null | undefined;
+  if (spotlightFile) {
+    return (
+      <MentionChip
+        kind="spotlight"
+        file={spotlightFile}
+        previousFileLines={lineRangeFromStrings(
+          node.attrs.spotlightPreviousStart as string | null,
+          node.attrs.spotlightPreviousEnd as string | null,
+        )}
+        currentFileLines={lineRangeFromStrings(
+          node.attrs.spotlightCurrentStart as string | null,
+          node.attrs.spotlightCurrentEnd as string | null,
+        )}
+        scope={spotlightScopeFromStrings(
+          node.attrs.spotlightScope as string | null,
+          node.attrs.spotlightCommitHash as string | null,
+        )}
+        previousSnippet={(node.attrs.spotlightPreviousSnippet as string | null) ?? undefined}
+        currentSnippet={(node.attrs.spotlightCurrentSnippet as string | null) ?? undefined}
+        snippetCapturedAt={(node.attrs.spotlightSnippetCapturedAt as string | null) ?? undefined}
+        capturedBranch={(node.attrs.spotlightCapturedBranch as string | null) ?? undefined}
+        capturedHeadCommit={(node.attrs.spotlightCapturedHeadCommit as string | null) ?? undefined}
+        {...sharedProps}
+      />
+    );
+  }
+
   if (node.attrs.entityType) {
     return (
       <MentionChip
