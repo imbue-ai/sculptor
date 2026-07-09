@@ -254,10 +254,15 @@ export type CodingAgentTaskView = {
 	/**
 	 * Availablemodels
 	 *
-	 * The models the harness offers in its switcher (empty when it sources
-	 * none and the frontend falls back to its built-in list).
+	 * The switcher's catalog as the frontend gates on it: NOT_FETCHED_YET
+	 * until the start-time probe lands, then the fetched list (empty = the
+	 * harness sources none and the frontend falls back to its built-in list, or
+	 * pi is authenticated with no providers and shows the login CTA). Runtime
+	 * callers that only offer models use `get_available_models`, which coalesces
+	 * the sentinel to []; the switcher needs the distinction so it can show a
+	 * loading state instead of flashing the CTA while the catalog loads.
 	 */
-	readonly availableModels: Array<ModelOption>;
+	readonly availableModels: Array<ModelOption> | ModelCatalogState;
 	/**
 	 * Selectedmodelid
 	 *
@@ -443,6 +448,22 @@ declare const LlmModel: {
  * LLMModel
  */
 export type LlmModel = typeof LlmModel[keyof typeof LlmModel];
+declare const ModelCatalogState: {
+	readonly NOT_FETCHED_YET: "not_fetched_yet";
+};
+/**
+ * ModelCatalogState
+ *
+ * The catalog states a plain `list[ModelOption]` cannot express.
+ *
+ * `NOT_FETCHED_YET` is the birth state of a backend (pi) catalog on task state,
+ * before the start-time probe runs — distinct from a fetched-but-empty `[]`
+ * (authenticated, but no providers), which is what drives the login CTA. Keeping
+ * the two apart is what stops the switcher flashing that CTA during startup. A
+ * StrEnum member is a value-less, interned singleton that survives serialization
+ * by identity, so read sites use `is` rather than overloading `None`.
+ */
+export type ModelCatalogState = typeof ModelCatalogState[keyof typeof ModelCatalogState];
 /**
  * ModelOption
  *
@@ -569,6 +590,36 @@ export declare function useCurrentWorkspace<T = WorkspaceView | null>(selector?:
  * with clicking a workspace in the host's own lists.
  */
 export declare const useNavigateToWorkspace: () => ((workspaceId: string) => void);
+/** Seeds and callback for {@link useOpenNewWorkspaceModal}. */
+export type NewWorkspaceModalOptions = {
+	/** Pre-fills the workspace title field. */
+	initialTitle?: string;
+	/** Pre-fills the first-agent prompt textarea. */
+	initialPrompt?: string;
+	/**
+	 * Pre-fills the new-branch-name field; when omitted the host derives the
+	 * branch from the title as usual. The host validates the name, and the user
+	 * can edit it or re-roll back to the derived one.
+	 */
+	initialBranchName?: string;
+	/**
+	 * Called with the new workspace's id per successful create — keep-open mode
+	 * lets the user create several workspaces from one open dialog, so this can
+	 * fire more than once. Between such creates the form re-seeds its fields
+	 * from the `initial*` options, so the dialog stays visibly about this open
+	 * request and every report belongs to it.
+	 */
+	onCreated?: (workspaceId: string) => void;
+};
+/**
+ * Returns a stable function that opens the host's own new-workspace dialog —
+ * the same one behind Cmd/Meta+T — optionally pre-filled with a title, prompt,
+ * and branch name. The user remains in control: they can edit every field or cancel
+ * without creating anything. `onCreated` reports the created workspace's id
+ * (e.g. to record a plugin-side association, or to follow up with
+ * `useNavigateToWorkspace`).
+ */
+export declare const useOpenNewWorkspaceModal: () => ((options?: NewWorkspaceModalOptions) => void);
 /**
  * A persisted string setting scoped to the calling plugin. Backed by
  * localStorage under a `sculptor-plugin:<id>:<key>` namespace and shared
@@ -589,6 +640,15 @@ export declare const usePluginSetting: (key: string) => [
  * atoms.
  */
 export declare const usePluginSettings: (keys: ReadonlyArray<string>) => ReadonlyMap<string, string>;
+/**
+ * Returns a stable function that writes one of the calling plugin's persisted
+ * settings — the imperative companion to {@link usePluginSetting} for keys only
+ * known at event time (e.g. a per-workspace key for a workspace picked in a
+ * menu), where the hook-per-key form can't be called. Writes land in the same
+ * per-key atoms as the reading hooks, so `usePluginSetting` and
+ * `usePluginSettings` see them reactively.
+ */
+export declare const useSetPluginSetting: () => ((key: string, value: string) => void);
 /**
  * All non-deleted tasks for the workspace the plugin is mounted in. Returns
  * `undefined` until the host's task stream has produced its first batch.

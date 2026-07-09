@@ -7,12 +7,14 @@ import type { PluginPanelDefinition } from "../types.ts";
 
 export { openExternal } from "./actions.ts";
 export { Markdown, PanelHeader } from "./components.ts";
-export type { CurrentWorkspace, WorkspaceView } from "./hooks.ts";
+export type { CurrentWorkspace, NewWorkspaceModalOptions, WorkspaceView } from "./hooks.ts";
 export {
   useCurrentWorkspace,
   useNavigateToWorkspace,
+  useOpenNewWorkspaceModal,
   usePluginSetting,
   usePluginSettings,
+  useSetPluginSetting,
   useWorkspaces,
   useWorkspaceTasks,
 } from "./hooks.ts";

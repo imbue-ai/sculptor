@@ -1,4 +1,4 @@
-import { Badge, Flex, Skeleton, Tooltip } from "@radix-ui/themes";
+import { Badge, Flex, Skeleton, Text, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import { GitBranchIcon, PanelBottom, PanelLeft, PanelRight } from "lucide-react";
 import type { ReactElement } from "react";
@@ -225,6 +225,21 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
           testId={ElementIds.HEADER_SECTION_TOGGLE_LEFT}
         />
       </Flex>
+
+      {/* Only shown when the sidebar is collapsed — it otherwise carries the name.
+          "Untitled" guards a blank name so this slot never renders empty. */}
+      {isSidebarCollapsed && (
+        <Text
+          as="span"
+          size="1"
+          weight="bold"
+          truncate
+          className={styles.workspaceTitle}
+          data-testid={ElementIds.WORKSPACE_HEADER_TITLE}
+        >
+          {(workspace.description ?? "").trim() || "Untitled"}
+        </Text>
+      )}
 
       {/* Branch pill: a real button so it is focusable and Enter/Space-activatable
           for free; the visible label is the branch name, so the aria-label spells

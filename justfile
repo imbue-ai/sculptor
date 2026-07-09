@@ -128,9 +128,8 @@ quiet_by_default() {
 '''
 
 # -------- Sculptor Aliases --------
-alias start := tmux-dev
-alias start-no-project := tmux-dev-no-project
 alias stop := tmux-stop
+alias start-onboard := source
 alias app := build-desktop-app
 alias pkg := package-desktop-installer
 alias refresh := refresh-assets
@@ -600,7 +599,11 @@ frontend:
     {{ nvm_use }}
     just _patch-electron-app-name "Sculptor (from source)"
     cd "{{justfile_directory()}}/sculptor/frontend"
+    # Start the first-run prompt box empty in the from-source dev app so QA can
+    # type immediately (see homePromptPrefill.ts). The test harness launches
+    # electron:start directly, not via this recipe, so tests keep the prefill.
     env SCULPTOR_ICON_LABEL="src" \
+      SCULPTOR_EMPTY_FIRST_RUN_PROMPT="1" \
       pnpm run electron:start -- --unhandled-rejections=strict --trace-warnings
 
 # Start Electron with the backend running in a Docker container (dev mode).
@@ -690,6 +693,30 @@ backend repo_path=".":
       uv run --project sculptor python -m sculptor.cli.main --no-open-browser --no-serve-static "{{justfile_directory()}}/{{repo_path}}"
     fi
 
+# Seed a valid (onboarded) dev config up front so the app boots past the welcome
+# flow and lands straight on the new-workspace form for the current repo.
+# Fast QA: skip onboarding and land on the new-workspace form.
+[group("dev")]
+start:
+    just _seed-dev-config
+    just tmux-dev "."
+
+# Wipe the dev state and launch with no initial project so the app behaves like a
+# fresh clone would for a real user — welcome, onboarding, and repo selection.
+# Full flow from source: run Sculptor the way a real user would, not the shortcut.
+[group("dev")]
+source:
+    just _reset-dev-config
+    just tmux-dev none
+
+# Seed a valid, onboarded UserConfig into the dev config folder (idempotent).
+_seed-dev-config:
+    uv run --project sculptor python sculptor/sculptor/scripts/dev_config.py seed
+
+# Wipe the dev Sculptor folder (config + db + logs) for a clean first-run.
+_reset-dev-config:
+    uv run --project sculptor python sculptor/sculptor/scripts/dev_config.py reset
+
 [group("dev")]
 tmux-dev repo_path=".":
     #!/bin/bash
@@ -699,8 +726,8 @@ tmux-dev repo_path=".":
     echo "Killing existing session if present..."
     tmux kill-session -t {{session_name}} 2>/dev/null || true
     echo "Creating new tmux session..."
-    tmux new-session -d -s {{session_name}} -n frontend `shell echo $$SHELL`
-    tmux new-window -t {{session_name}} -n backend `shell echo $$SHELL`
+    tmux new-session -d -s {{session_name}} -n frontend {{_ENV_SHELL}}
+    tmux new-window -t {{session_name}} -n backend {{_ENV_SHELL}}
     # Collect CLAUDE_* env vars (e.g. CLAUDE_AUTOCOMPACT_PCT_OVERRIDE) so they
     # reach the backend server and its claude child processes.  tmux send-keys
     # types text into a fresh shell that doesn't inherit the caller's env, so
@@ -727,11 +754,6 @@ tmux-dev repo_path=".":
     echo "Use 'tmux attach -t {{session_name}}' to attach to the session"
     echo "Use 'just tmux-stop' to stop the session"
     tmux attach -t {{session_name}} || echo "Failed to attach to tmux session. You can attach manually using 'tmux attach -t {{session_name}}'"
-
-# Start development servers without auto-creating a project (simulates first-run experience)
-[group("dev")]
-tmux-dev-no-project:
-    just tmux-dev none
 
 tmux-stop:
 	tmux kill-session -t {{session_name}} 2>/dev/null && echo "Session '{{session_name}}' terminated" || echo "Session '{{session_name}}' did not exist"

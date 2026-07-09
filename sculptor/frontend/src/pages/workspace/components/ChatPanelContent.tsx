@@ -4,8 +4,7 @@ import { type ReactElement, useEffect, useRef } from "react";
 
 import { closeBtwPopupIfNotForAgentAtom, isBtwPopupOpenAtom } from "~/common/state/atoms/btwPopup.ts";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
-import { taskWorkspaceIdAtomFamily } from "~/common/state/atoms/tasks.ts";
-import { useTaskSupportsChatInterface } from "~/common/state/hooks/useTaskHelpers.ts";
+import { useTaskSupportsChatInterface, useTaskWorkspaceId } from "~/common/state/hooks/useTaskHelpers.ts";
 import { chatPanelMountedAtom } from "~/pages/workspace/atoms.ts";
 import { lastFocusedChatAgentAtomFamily } from "~/pages/workspace/panels/workspaceAgentActions.ts";
 
@@ -57,11 +56,11 @@ export const ChatPanelContent = ({ taskId }: ChatPanelContentProps): ReactElemen
 
 const ChatPanelInner = ({ taskId }: ChatPanelContentProps): ReactElement => {
   // The chat data hook needs the task's workspace id; derive it from the task
-  // atom rather than the route — the panel's agent can differ from the routed
-  // one (any placed agent panel renders this component). The narrow derived
-  // atom keeps unrelated task churn (status, timestamps) from re-rendering
-  // the whole chat surface.
-  const workspaceID = useAtomValue(taskWorkspaceIdAtomFamily(taskId)) ?? "";
+  // rather than the route — the panel's agent can differ from the routed one
+  // (any placed agent panel renders this component). The narrow field hook
+  // keeps unrelated task churn (status, timestamps) from re-rendering the whole
+  // chat surface.
+  const workspaceID = useTaskWorkspaceId(taskId) ?? "";
 
   // Registration seams tying this panel's composer to the workspace-scoped
   // consumers: useChatData registers the chatActions append/insert closures

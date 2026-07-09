@@ -8,7 +8,6 @@
 [offload]
 max_parallel = 200
 test_timeout_secs = 900
-stream_output = true
 sandbox_project_root = "/app/sculptor"
 sandbox_repo_root = "/app"
 # Finalize the cached base image: install deps, write tool stubs, seed

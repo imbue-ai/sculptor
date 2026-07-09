@@ -990,39 +990,19 @@ def test_mark_unread_returns_404_if_agent_does_not_exist(
     assert response.status_code == 404
 
 
-def test_create_agent_sends_intro_message_for_first_agent(
+def test_create_agent_sends_no_messages_the_user_did_not_write(
     client: TestClient, test_services: CompleteServiceCollection, test_project: Project
 ) -> None:
-    """First-time users (no existing workspaces/agents) should get an auto-sent /sculptor:help message."""
+    """A promptless agent create starts with an empty message log.
+
+    The user's chat history must contain only messages they actually wrote —
+    onboarding content is offered client-side (the first-run dialog's prompt
+    prefill), where it is visible and editable before it is sent.
+    """
     user_session = authenticate_anonymous(test_services, RequestID())
 
     with user_session.open_transaction(test_services) as transaction:
         workspace = _create_workspace(transaction, test_services, test_project)
-
-    response = client.post(
-        f"/api/v1/workspaces/{workspace.object_id}/agents",
-        json=model_dump(CreateAgentRequest(model=LLMModel.CLAUDE_4_SONNET), is_camel_case=True),
-    )
-    assert response.status_code == 200
-    agent_id = response.json()["id"]
-
-    with user_session.open_transaction(test_services) as transaction:
-        saved_messages = test_services.task_service.get_saved_messages_for_task(TaskID(agent_id), transaction)
-    assert len(saved_messages) == 1
-    intro_msg = saved_messages[0]
-    assert isinstance(intro_msg, ChatInputUserMessage)
-    assert "/sculptor:help" in intro_msg.text
-
-
-def test_create_agent_does_not_send_intro_message_when_agents_exist(
-    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
-) -> None:
-    """Users with existing agents should not get an auto-sent intro message."""
-    user_session = authenticate_anonymous(test_services, RequestID())
-
-    with user_session.open_transaction(test_services) as transaction:
-        workspace = _create_workspace(transaction, test_services, test_project)
-        _create_task_in_workspace(transaction, user_session, test_project, test_services, workspace)
 
     response = client.post(
         f"/api/v1/workspaces/{workspace.object_id}/agents",
@@ -1382,38 +1362,6 @@ def test_create_terminal_agent_with_prompt_is_rejected(
     assert response.status_code == 422
     response = _post_agent(client, workspace, {"agentType": "registered", "prompt": "hi"})
     assert response.status_code == 422
-
-
-def test_first_terminal_agent_gets_no_intro_message(
-    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
-) -> None:
-    user_session = authenticate_anonymous(test_services, RequestID())
-    with user_session.open_transaction(test_services) as transaction:
-        workspace = _create_workspace(transaction, test_services, test_project)
-
-    response = _post_agent(client, workspace, {"agentType": "terminal"})
-    assert response.status_code == 200, response.text
-    task_id = TaskID(response.json()["id"])
-
-    with user_session.open_transaction(test_services) as transaction:
-        messages = test_services.task_service.get_saved_messages_for_task(task_id, transaction)
-    assert not any(isinstance(m, ChatInputUserMessage) for m in messages)
-
-
-def test_first_claude_agent_still_gets_intro_message(
-    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
-) -> None:
-    user_session = authenticate_anonymous(test_services, RequestID())
-    with user_session.open_transaction(test_services) as transaction:
-        workspace = _create_workspace(transaction, test_services, test_project)
-
-    response = _post_agent(client, workspace, {})
-    assert response.status_code == 200, response.text
-    task_id = TaskID(response.json()["id"])
-
-    with user_session.open_transaction(test_services) as transaction:
-        messages = test_services.task_service.get_saved_messages_for_task(task_id, transaction)
-    assert any(isinstance(m, ChatInputUserMessage) for m in messages)
 
 
 # Terminal-agent registrations.

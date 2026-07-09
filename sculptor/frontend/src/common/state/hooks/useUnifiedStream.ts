@@ -96,9 +96,9 @@ const respondToPluginCommand = (
  * doesn't lose state.
  */
 export const useUnifiedStream = (): void => {
-  // Whoever owns the stream owns the projection of its task frames into the
-  // legacy Jotai atoms (AppShell normally; EmptyFirstRunPage during first
-  // run). Mounted first so the mirror subscribes before a frame can arrive.
+  // Whoever owns the stream (AppShell) owns the projection of its task frames
+  // into the legacy Jotai atoms. Mounted first so the mirror subscribes before
+  // a frame can arrive.
   useTaskQueryMirror();
   const updateProjects = useSetAtom(updateProjectsAtom);
   const updateWorkspaces = useSetAtom(updateWorkspacesAtom);

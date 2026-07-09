@@ -1,24 +1,35 @@
-"""Integration tests for the empty first-run page.
+"""Integration tests for the empty first-run experience.
 
-When the workspace list is genuinely empty, the app gate (``EmptyFirstRunGate``)
-renders ``EmptyFirstRunPage`` in place of every route: the sidebar (open) plus
-the new-workspace form inline in a card. The first prompt defaults to the
-``/sculptor:help`` action text; the sidebar shows the persistent "Add repo"
-button and each registered repo as a group with a "No workspaces yet" hint;
-Cmd+K and the global shortcuts are off so only the form + Settings are
-reachable; and creating the first workspace navigates to the full workspace
-page.
+With zero workspaces the app renders the normal shell, and landing on Home
+auto-opens the new-workspace dialog with the prompt prefilled to the
+``/sculptor:help`` action text — creating a workspace is the home experience
+until one exists. The prefill lives in the visible, editable prompt field:
+what the user sees is exactly what their first agent receives (the backend
+never authors messages on the user's behalf). The auto-open is an ordinary
+modal open, identical to the explicit entry points: dimmed overlay,
+dismissible via Escape or an outside click. The sidebar shows the persistent
+"Add repo" button and each registered repo as a group with a "No workspaces
+yet" hint, and every create entry point stays live: a dismissed dialog can be
+reopened via the sidebar's New Workspace button or the Cmd/Meta+T shortcut,
+and Cmd+K still opens the command palette. Creating the first workspace
+navigates to the full workspace page.
+
+The offer is boot-only: once any workspace has existed in the session,
+deleting the last one lands on a plain empty Home with no dialog — the offer
+teaches a brand-new user how to start, it does not chase every empty list.
 
 These tests need a genuinely zero-workspace instance. The shared
-``sculptor_instance_`` already deletes every workspace in its per-test cleanup
-and lands on the first-run state, so ``sculptor_instance_empty_first_run_`` only
-waits for the gate to settle on the empty page before each test.
+``sculptor_instance_`` already deletes every workspace in its per-test cleanup,
+so ``sculptor_instance_empty_first_run_`` routes Home and waits for the
+auto-opened dialog before each test.
 """
 
 from playwright.sync_api import expect
 
-from sculptor.testing.elements.empty_first_run import PlaywrightEmptyFirstRun
+from sculptor.testing.elements.new_workspace_dialog import PlaywrightNewWorkspaceDialog
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
+from sculptor.testing.pages.home_page import PlaywrightHomePage
+from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 from sculptor.testing.utils import get_playwright_modifier_key
@@ -26,33 +37,32 @@ from sculptor.testing.utils import get_playwright_modifier_key
 HELP_PROMPT_PREFILL = "/sculptor:help I just set up Sculptor for the first time. What should I know to get started?"
 
 
-@user_story("to land on the inline new-workspace form when I have no workspaces yet")
-def test_empty_state_shows_inline_form(sculptor_instance_empty_first_run_: SculptorInstance) -> None:
-    """With zero workspaces the empty first-run page renders the inline form."""
+@user_story("to be offered the new-workspace dialog when I have no workspaces yet")
+def test_empty_state_auto_opens_dialog(sculptor_instance_empty_first_run_: SculptorInstance) -> None:
+    """With zero workspaces, Home auto-opens the new-workspace dialog."""
     page = sculptor_instance_empty_first_run_.page
-    empty = PlaywrightEmptyFirstRun(page)
+    dialog = PlaywrightNewWorkspaceDialog(page)
 
-    expect(empty.get_page()).to_be_visible()
-    expect(empty.get_form()).to_be_visible()
-    expect(empty.get_create_button()).to_be_visible()
+    expect(dialog.get_dialog()).to_be_visible()
+    expect(dialog.get_form()).to_be_visible()
+    expect(dialog.get_create_button()).to_be_visible()
 
 
 @user_story("to start my first workspace with the help prompt already filled in")
 def test_first_prompt_is_prefilled_with_help(sculptor_instance_empty_first_run_: SculptorInstance) -> None:
-    """The inline form's prompt is prefilled with the /sculptor:help text."""
+    """The auto-opened dialog's prompt is prefilled with the /sculptor:help text."""
     page = sculptor_instance_empty_first_run_.page
-    empty = PlaywrightEmptyFirstRun(page)
+    dialog = PlaywrightNewWorkspaceDialog(page)
 
-    expect(empty.get_prompt_textarea()).to_have_value(HELP_PROMPT_PREFILL)
+    expect(dialog.get_prompt_textarea()).to_have_value(HELP_PROMPT_PREFILL)
 
 
 @user_story("to see a 'No workspaces yet' hint under my repo before I create anything")
 def test_sidebar_shows_no_workspaces_hint(sculptor_instance_empty_first_run_: SculptorInstance) -> None:
     """With a repo registered but no workspaces, the sidebar shows the hint."""
     page = sculptor_instance_empty_first_run_.page
-    empty = PlaywrightEmptyFirstRun(page)
 
-    expect(empty.get_no_workspaces_hint()).to_be_visible()
+    expect(get_workspace_sidebar(page).get_no_workspaces_hint()).to_be_visible()
 
 
 @user_story("to add a repo straight from the sidebar before I have any workspaces")
@@ -61,11 +71,16 @@ def test_sidebar_add_repo_button_opens_add_repo_dialog(
 ) -> None:
     """The persistent "Add repo" sidebar button is available and opens the dialog.
 
-    Unlike "New Workspace", it stays enabled in the first-run state — registering
-    a repo is exactly what the user does before any workspace exists.
+    Registering a repo is exactly what a user may want to do before any
+    workspace exists, so the button works in the first-run state too.
     """
     page = sculptor_instance_empty_first_run_.page
     sidebar = get_workspace_sidebar(page)
+
+    # Dismiss the auto-opened new-workspace dialog first — its modal overlay
+    # would swallow the sidebar click.
+    page.keyboard.press("Escape")
+    expect(PlaywrightNewWorkspaceDialog(page).get_dialog()).to_have_count(0)
 
     expect(sidebar.get_add_repo_button()).to_be_enabled()
 
@@ -80,46 +95,119 @@ def test_sidebar_add_repo_button_opens_add_repo_dialog(
     expect(add_repo_dialog.get_path_input()).to_be_hidden()
 
 
-@user_story("to be unable to escape the first-run form with global shortcuts")
-def test_global_shortcuts_disabled_in_empty_state(sculptor_instance_empty_first_run_: SculptorInstance) -> None:
-    """Cmd+K and the new-workspace shortcut are off in the empty state.
+@user_story("to dismiss the first-run create dialog like any other dialog")
+def test_auto_opened_dialog_is_a_normal_modal(
+    sculptor_instance_empty_first_run_: SculptorInstance,
+) -> None:
+    """The auto-opened dialog looks and dismisses like every other open.
 
-    The command palette must not open on Cmd+K, and Cmd/Meta+T must not open a
-    separate new-workspace dialog (the form is already inline) — only Settings
-    is reachable by keyboard.
+    It renders with the standard dimmed overlay, and an outside click closes
+    it — no special first-run variant.
     """
     page = sculptor_instance_empty_first_run_.page
-    empty = PlaywrightEmptyFirstRun(page)
-    expect(empty.get_page()).to_be_visible()
+    dialog = PlaywrightNewWorkspaceDialog(page)
+    expect(dialog.get_dialog()).to_be_visible()
+    expect(dialog.get_overlay()).to_be_visible()
+
+    # An outside click (on the overlay) dismisses, exactly like other dialogs.
+    dialog.get_overlay().click(position={"x": 10, "y": 10})
+    expect(dialog.get_dialog()).to_have_count(0)
+
+
+@user_story("to reopen the create dialog from the sidebar after dismissing it")
+def test_dismissed_dialog_reopens_via_sidebar_button(
+    sculptor_instance_empty_first_run_: SculptorInstance,
+) -> None:
+    """The sidebar's New Workspace button stays live with zero workspaces.
+
+    Dismissing the auto-opened dialog leaves the empty Home list; the sidebar
+    button is the explicit reopen path. The reopened dialog is a plain open,
+    without the onboarding prefill — that belongs to the auto-open only.
+    """
+    page = sculptor_instance_empty_first_run_.page
+    dialog = PlaywrightNewWorkspaceDialog(page)
+
+    page.keyboard.press("Escape")
+    expect(dialog.get_dialog()).to_have_count(0)
+    expect(PlaywrightHomePage(page=page).get_empty_state()).to_be_visible()
+
+    dialog.open_via_sidebar_button()
+    expect(dialog.get_prompt_textarea()).to_have_value("")
+
+
+@user_story("to use Cmd+K and Cmd/Meta+T before my first workspace exists")
+def test_global_shortcuts_live_in_empty_state(sculptor_instance_empty_first_run_: SculptorInstance) -> None:
+    """Cmd+K and the new-workspace shortcut work with zero workspaces.
+
+    The command palette opens on Cmd+K, and Cmd/Meta+T reopens the
+    new-workspace dialog after a dismissal — no entry point is gated on the
+    first workspace existing.
+    """
+    page = sculptor_instance_empty_first_run_.page
+    dialog = PlaywrightNewWorkspaceDialog(page)
+    expect(dialog.get_dialog()).to_be_visible()
 
     mod_key = get_playwright_modifier_key()
 
-    # Cmd+K does not open the command palette.
+    # Dismiss the auto-opened dialog, then Cmd+K opens the command palette.
+    page.keyboard.press("Escape")
+    expect(dialog.get_dialog()).to_have_count(0)
     page.keyboard.press(f"{mod_key}+k")
     page.keyboard.up(mod_key)
-    expect(empty.get_command_palette()).to_have_count(0)
+    command_palette = PlaywrightProjectLayoutPage(page=page).get_command_palette()
+    expect(command_palette).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(command_palette).to_have_count(0)
 
-    # Cmd/Meta+T does not open a separate new-workspace dialog.
+    # Cmd/Meta+T reopens the new-workspace dialog.
     page.keyboard.press(f"{mod_key}+t")
     page.keyboard.up(mod_key)
-    expect(empty.get_new_workspace_dialog()).to_have_count(0)
-
-    # The inline form is still the only create surface present.
-    expect(empty.get_form()).to_be_visible()
+    expect(dialog.get_dialog()).to_be_visible()
 
 
-@user_story("to create my first workspace from the first-run form and land in the full workspace")
+@user_story("to create my first workspace from the auto-opened dialog and land in the full workspace")
 def test_creating_first_workspace_navigates_to_workspace(
     sculptor_instance_empty_first_run_: SculptorInstance,
 ) -> None:
-    """Creating the first workspace flips the gate off and shows the workspace page."""
+    """Creating the first workspace closes the dialog and shows the workspace page."""
     page = sculptor_instance_empty_first_run_.page
-    empty = PlaywrightEmptyFirstRun(page)
-    empty.get_workspace_name_input().fill("First WS")
+    dialog = PlaywrightNewWorkspaceDialog(page)
 
-    empty.create_and_wait_for_chat_panel()
+    dialog.create_and_wait_for_chat_panel(workspace_name="First WS")
 
-    # The empty first-run gate stops rendering once a workspace exists, and a
-    # workspace row appears in the now-normal sidebar.
-    expect(empty.get_page()).to_have_count(0)
-    expect(get_workspace_sidebar(page).get_workspace_rows()).to_have_count(1)
+    # A workspace row appears in the sidebar and the empty-state hint is gone.
+    sidebar = get_workspace_sidebar(page)
+    expect(sidebar.get_workspace_rows()).to_have_count(1)
+    expect(sidebar.get_no_workspaces_hint()).to_have_count(0)
+
+
+@user_story("to delete my last workspace without the create dialog popping over the empty page")
+def test_deleting_last_workspace_does_not_reopen_dialog(
+    sculptor_instance_empty_first_run_: SculptorInstance,
+) -> None:
+    """Emptying the list by deletion never re-triggers the first-run offer.
+
+    The offer fires only on a boot whose first workspace snapshot is empty.
+    Once a workspace has existed in the session, deleting the last one lands
+    on a plain empty Home — a surprise modal there would fight the user's
+    deliberate delete (and swallow whatever they click next).
+    """
+    page = sculptor_instance_empty_first_run_.page
+    dialog = PlaywrightNewWorkspaceDialog(page)
+
+    dialog.create_and_wait_for_chat_panel(workspace_name="Only WS")
+
+    # Delete the (active) workspace's row directly — not via the
+    # delete_all_workspaces_via_ui helper, whose defensive dialog dismissal
+    # would mask the very regression this test guards against. Removing the
+    # active workspace's last row navigates to Home.
+    sidebar = get_workspace_sidebar(page)
+    rows = sidebar.get_workspace_rows()
+    sidebar.delete_workspace_via_row_icon(rows.first)
+    expect(rows).to_have_count(0)
+
+    # The per-repo hint reappearing means the emptied list has rendered — the
+    # same store update a regressed offer would pop the dialog on — so a
+    # plain zero-count check on the dialog afterwards is race-free.
+    expect(sidebar.get_no_workspaces_hint()).to_be_visible()
+    expect(dialog.get_dialog()).to_have_count(0)

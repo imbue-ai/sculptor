@@ -172,11 +172,12 @@ export const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
                     variant="ghost"
                     size="1"
                     color="gray"
+                    className={styles.rowActionButton}
                     aria-label="Workspace actions"
                     data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW_MENU}
                     data-workspace-id={workspace.objectId}
                   >
-                    <MoreHorizontal size={13} />
+                    <MoreHorizontal size={12} />
                   </IconButton>
                 </DropdownMenu.Trigger>
               </Tooltip>
@@ -192,12 +193,13 @@ export const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
                 variant="ghost"
                 size="1"
                 color="gray"
+                className={styles.rowActionButton}
                 onClick={() => onBeginDelete(workspace)}
                 aria-label="Delete workspace"
                 data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW_DELETE}
                 data-workspace-id={workspace.objectId}
               >
-                <Trash2 size={13} />
+                <Trash2 size={12} />
               </IconButton>
             </Tooltip>
           </Flex>
