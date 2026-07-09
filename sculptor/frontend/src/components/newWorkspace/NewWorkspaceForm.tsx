@@ -47,9 +47,10 @@ type NewWorkspaceFormProps = {
   /** Repo to pre-select (from a repo group's "+"); overrides the MRU seed. */
   presetProjectId?: string;
   /**
-   * Text to seed the prompt textarea with on mount. Used by the empty
-   * first-run page to default the very first prompt to `/sculptor:help`.
-   * A mount-time snapshot the user can freely edit.
+   * Text to seed the prompt textarea with on mount. Used by the home page's
+   * first-run auto-open to default the very first prompt to `/sculptor:help`.
+   * A mount-time snapshot the user can freely edit — what the field shows is
+   * exactly what the first agent receives.
    */
   initialPrompt?: string;
   /** Called after a successful create when "keep open" is off. */
@@ -330,10 +331,10 @@ export const NewWorkspaceForm = ({
 
   // Effects — Cmd+Enter creates from anywhere in the form. An overlay open over
   // the form (e.g. the Add Repository dialog or an open Select) owns Cmd+Enter for
-  // its own action. The form's OWN host modal is ignored: when rendered inside the
-  // new-workspace dialog the form is itself within a `role="dialog"`, so without the
-  // ignore it would always treat its own modal as a blocker and Cmd+Enter would
-  // never fire. The inline first-run form has no host dialog, so the ignore is null.
+  // its own action. The form's OWN host modal is ignored: the form renders inside
+  // the new-workspace dialog and is therefore itself within a `role="dialog"`, so
+  // without the ignore it would always treat its own modal as a blocker and
+  // Cmd+Enter would never fire.
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent): void => {
       if (e.key !== "Enter" || !isModifierPressed(e)) return;
@@ -518,6 +519,9 @@ export const NewWorkspaceForm = ({
             <Button
               onClick={(): void => void handleSubmit()}
               disabled={isSubmitDisabled}
+              // The workspace-record create takes a moment; show that work
+              // is happening rather than a silently disabled button.
+              loading={isCreating}
               aria-label="Create workspace"
               data-testid={ElementIds.NEW_WORKSPACE_CREATE_BUTTON}
               size="2"

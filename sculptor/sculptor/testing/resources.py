@@ -117,26 +117,29 @@ def sculptor_instance_(
 def sculptor_instance_empty_first_run_(
     sculptor_instance_: SculptorInstance,
 ) -> SculptorInstance:
-    """Shared instance settled on the empty first-run page.
+    """Shared instance settled on the first-run auto-opened new-workspace dialog.
 
-    The shared ``sculptor_instance_`` already deletes every workspace in its
-    per-test cleanup and its browser reset navigates the hash to ``#/ws/new`` with
-    one repo and zero workspaces — the genuine first-run state — so this fixture
-    only waits for that landing to settle on ``EmptyFirstRunPage``.
-
-    The ``#/ws/new`` URL matches the generic ``/ws/:workspaceID`` route with the
-    sentinel id ``"new"`` (there is no dedicated page for it). ``EmptyFirstRunGate``
-    wraps that route and swaps in
-    ``EmptyFirstRunPage`` once the (empty) workspace snapshot flips
-    ``isWorkspaceListEmptyAtom`` true. Before that snapshot arrives the atom is
-    still false (the list is ``undefined`` while loading), so the gate falls
-    through to the routed ``Outlet`` — the AppShell chrome with ``WorkspacePage``,
-    which renders nothing for the unknown ``"new"`` id: a momentarily empty shell,
-    not a distinct page. So wait for the empty-page marker rather than asserting it
-    synchronously.
+    The shared ``sculptor_instance_``'s per-test reset ends settled on Home
+    with one repo and zero workspaces, having already waited out and dismissed
+    the first-run offer so ordinary tests never race its modal overlay. The
+    offer fires whenever Home mounts over an empty (loaded) workspace list on
+    a boot that has never had a workspace — this reset's fresh boot is exactly
+    that, and its dismissal spent this mount's offer — so remount Home by
+    hopping through Settings and back. The hops are hash-only navigations
+    within the running SPA (no reboot — a full reload would re-race the whole
+    boot path for nothing; and it must not create a workspace first, which
+    would latch the offer off for the session), and the workspace list is
+    already loaded and empty, so returning to Home re-offers the dialog
+    immediately with the ``/sculptor:help`` onboarding prompt prefilled.
     """
     page = sculptor_instance_.page
-    expect(page.get_by_test_id(ElementIDs.EMPTY_FIRST_RUN_PAGE)).to_be_visible(timeout=45_000)
+    page.evaluate("window.location.hash = '/settings'")
+    # Wait for Settings to render before hopping back: two back-to-back hash
+    # assignments can coalesce into one router update, which would leave Home
+    # mounted throughout and never re-fire its offer.
+    expect(page.get_by_test_id(ElementIDs.SETTINGS_PAGE)).to_be_visible()
+    page.evaluate("window.location.hash = '/home'")
+    expect(page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)).to_be_visible(timeout=45_000)
     return sculptor_instance_
 
 
@@ -305,8 +308,8 @@ def _get_or_create_shared_instance(
     # Use a longer timeout than the default 30s for this initial check to
     # allow headroom for cold Electron starts on CI.
     t2 = time.monotonic()
-    # The sidebar rail is rendered by AppShell on every in-app destination AND by the
-    # empty-first-run page, but not by the onboarding wizard — so it is the universal
+    # The sidebar rail is rendered by AppShell on every in-app destination, but
+    # not by the onboarding wizard — so it is the universal
     # "app rendered, not onboarding" signal in the new shell.
     app_ready = page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
     try:
@@ -580,7 +583,7 @@ def _create_custom_command_instance(
     )
 
     # Wait for the React SPA to render (the sidebar rail is the new shell's universal
-    # "app rendered" signal — present on every in-app route and the empty-first-run page).
+    # "app rendered" signal — present on every in-app route).
     try:
         expect(page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)).to_be_visible()
     except Exception:

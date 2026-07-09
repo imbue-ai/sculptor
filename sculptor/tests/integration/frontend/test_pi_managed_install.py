@@ -210,8 +210,8 @@ def test_pi_unavailable_picker_offers_install_pi_and_routes_to_settings(
 
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
-        # A fresh instance opens on the empty-first-run inline create form, which
-        # hosts the same AgentTypeSelect as the new-workspace modal.
+        # A fresh instance has no workspaces; bring up the new-workspace
+        # dialog, which hosts the AgentTypeSelect.
         open_new_workspace_form(page)
         dialog = PlaywrightNewWorkspaceDialog(page)
         dialog.get_agent_type_select().click()

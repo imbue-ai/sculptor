@@ -616,9 +616,8 @@ class ElementIDs(StrEnum):
     SIDEBAR_ADD_REPO_BUTTON = "SIDEBAR_ADD_REPO_BUTTON"
     SIDEBAR_NO_WORKSPACES_HINT = "SIDEBAR_NO_WORKSPACES_HINT"
 
-    # Empty first-run page: the no-workspaces special page that
-    # renders the new-workspace form inline with the sidebar open.
-    EMPTY_FIRST_RUN_PAGE = "EMPTY_FIRST_RUN_PAGE"
+    # The PaletteDialog shell's dimmed overlay, rendered for every open.
+    PALETTE_DIALOG_OVERLAY = "PALETTE_DIALOG_OVERLAY"
 
     # Workspace header (the simplified top bar above the section grid): branch
     # pill + section collapse/expand toggles + re-homed PR button / diff summary.

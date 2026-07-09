@@ -227,11 +227,6 @@ type SidebarRepoGroupProps = {
   // WorkspaceSidebar so every group and the command palette agree on the entries.
   actions: ReadonlyArray<WorkspaceAction>;
   openInRuntime: OpenInRuntime;
-  // Whether to render the per-repo header actions (settings gear + direct-create
-  // "+"). Suppressed on the first-run page: that page doesn't mount AppShell, so
-  // the "+"'s dialog fallback and its error toast wouldn't render — the inline
-  // first-run form is the only create affordance while the workspace list is empty.
-  showActions: boolean;
   onWorkspaceClick: (workspaceId: string) => void;
   onWorkspaceHover: (workspaceId: string) => void;
   // Delete is confirmed by a dialog owned by WorkspaceSidebar (shared across
@@ -243,7 +238,6 @@ export const SidebarRepoGroup = ({
   group,
   actions,
   openInRuntime,
-  showActions,
   onWorkspaceClick,
   onWorkspaceHover,
   onBeginDelete,
@@ -408,55 +402,53 @@ export const SidebarRepoGroup = ({
             {group.name}
           </Text>
         </button>
-        {showActions && (
-          <Flex className={styles.rowActions}>
-            <DropdownMenu.Root>
-              <Tooltip content="Repository actions" side="bottom">
-                <DropdownMenu.Trigger>
-                  <IconButton
-                    variant="ghost"
-                    size="1"
-                    color="gray"
-                    className={`${styles.rowActionButton} ${styles.hoverReveal}`}
-                    aria-label="Repository actions"
-                    data-testid={ElementIds.SIDEBAR_REPO_MENU}
-                    data-project-id={group.projectId}
-                  >
-                    <MoreHorizontal size={12} />
-                  </IconButton>
-                </DropdownMenu.Trigger>
-              </Tooltip>
-              <DropdownMenu.Content size="1" onCloseAutoFocus={(e): void => e.preventDefault()}>
-                <DropdownMenu.Item
-                  onSelect={() => openSettings("REPOSITORIES", group.projectId)}
-                  data-testid={ElementIds.SIDEBAR_REPO_SETTINGS}
+        <Flex className={styles.rowActions}>
+          <DropdownMenu.Root>
+            <Tooltip content="Repository actions" side="bottom">
+              <DropdownMenu.Trigger>
+                <IconButton
+                  variant="ghost"
+                  size="1"
+                  color="gray"
+                  className={`${styles.rowActionButton} ${styles.hoverReveal}`}
+                  aria-label="Repository actions"
+                  data-testid={ElementIds.SIDEBAR_REPO_MENU}
                   data-project-id={group.projectId}
                 >
-                  Configure repo
-                </DropdownMenu.Item>
-              </DropdownMenu.Content>
-            </DropdownMenu.Root>
-            <Tooltip content="New workspace in this repo" side="right">
-              {/* Direct-create in THIS repo (fresh auto branch, last-used or
+                  <MoreHorizontal size={12} />
+                </IconButton>
+              </DropdownMenu.Trigger>
+            </Tooltip>
+            <DropdownMenu.Content size="1" onCloseAutoFocus={(e): void => e.preventDefault()}>
+              <DropdownMenu.Item
+                onSelect={() => openSettings("REPOSITORIES", group.projectId)}
+                data-testid={ElementIds.SIDEBAR_REPO_SETTINGS}
+                data-project-id={group.projectId}
+              >
+                Configure repo
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+          <Tooltip content="New workspace in this repo" side="right">
+            {/* Direct-create in THIS repo (fresh auto branch, last-used or
                   default settings); failures fall back to the dialog
                   pre-selecting the repo. The nav "New Workspace" above is the
                   open-the-dialog affordance. */}
-              <IconButton
-                variant="ghost"
-                size="1"
-                color="gray"
-                className={styles.rowActionButton}
-                disabled={isCreating}
-                onClick={() => void createFromSidebar(group.projectId)}
-                aria-label="New workspace in this repo"
-                data-testid={ElementIds.SIDEBAR_REPO_ADD_WORKSPACE}
-                data-project-id={group.projectId}
-              >
-                <Plus size={12} />
-              </IconButton>
-            </Tooltip>
-          </Flex>
-        )}
+            <IconButton
+              variant="ghost"
+              size="1"
+              color="gray"
+              className={styles.rowActionButton}
+              disabled={isCreating}
+              onClick={() => void createFromSidebar(group.projectId)}
+              aria-label="New workspace in this repo"
+              data-testid={ElementIds.SIDEBAR_REPO_ADD_WORKSPACE}
+              data-project-id={group.projectId}
+            >
+              <Plus size={12} />
+            </IconButton>
+          </Tooltip>
+        </Flex>
       </div>
       {!isRepoCollapsed && group.workspaces.length === 0 && (
         <Text className={styles.noWorkspacesHint} data-testid={ElementIds.SIDEBAR_NO_WORKSPACES_HINT}>
