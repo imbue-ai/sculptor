@@ -1,14 +1,21 @@
-# Sculptor guy
+# Sculptor guys
 
-The Sculptor logo blob, rigged with arms and legs, plus a little playground
-where he walks around the screen.
+The Sculptor logo blob, rigged three ways, plus a playground where the whole
+cast wanders around and you can take control of any of them.
 
-- `sculptor-guy.svg` — the rigged character asset (viewable standalone; blinks).
-- `index.html` — the playground. Open it directly in a browser (`file://` works,
-  no server needed). **A/D** or **←/→** to walk, **W/Space** to jump, **S** to
-  crouch (and fast-fall in the air).
+- `index.html` — the playground. Open it directly in a browser (`file://`
+  works, no server needed). Everyone walks around on their own; **left-click a
+  guy to take control**: **A/D** or **←/→** to move, **W/Space** to jump,
+  **S** to crouch (and fast-fall in the air).
+- `sculptor-guy.svg` — the original: big bust, stubby noodle limbs.
+- `sculptor-guy-tall.svg` — normal proportions: the logo as the bust, plus a
+  pelvis and thick two-segment limbs with mannequin ball joints.
+- `sculptor-guy-cart.svg` — no limbs at all: the sculpture riding a wheeled
+  dolly, the way sculptures actually get around.
 
-## The rig
+All three assets are viewable standalone (they blink).
+
+## The rigs
 
 Every posable joint is a `<g data-joint="...">` group. Each one sits inside a
 positioning wrapper (`<g transform="translate(x,y)">`) that places its pivot,
@@ -18,54 +25,71 @@ so posing a joint is just setting a rotation on the group:
 svg.querySelector('[data-joint="armL"]').setAttribute('transform', 'rotate(35)');
 ```
 
-| Joint | Pivot (viewBox 260×310) | Notes |
-| --- | --- | --- |
-| `body` | hip center (122, 197) | torso + face + both arms; lean/bob/squash |
-| `armL` / `elbowL` | shoulder (62, 146) / 28 below | near arm, drawn in front |
-| `armR` / `elbowR` | shoulder (176, 150) / 28 below | far arm, drawn behind |
-| `thighL` / `calfL` / `footL` | hip (104, 198) / knee 38 below / ankle 32 below | near leg |
-| `thighR` / `calfR` / `footR` | hip (140, 198) / knee 38 below / ankle 32 below | far leg |
-| `pupils` | — | translate-only, look direction |
-
 Rotation sign: SVG `rotate()` is clockwise, so on a downward-hanging limb a
-positive angle swings the tip toward screen-left. Feet rest at y=278.5 in
-viewBox units.
+positive angle swings the tip toward screen-left. Each SVG's header comment
+lists its joints and pivot coordinates.
 
-Design decisions worth knowing before you re-pose him:
+### Walkers (`sculptor-guy.svg`, `sculptor-guy-tall.svg`)
+
+Both share the same joint set: `body` (lean/bob/squash), `armL/R` + `elbowL/R`,
+`thighL/R` + `calfL/R` + `footL/R`, and translate-only `pupils`. The tall guy
+adds a root-level pelvis under the bust and ball-joint discs at every pivot.
+
+Design decisions worth knowing before you re-pose them:
 
 - **Noodle limbs.** Limbs are stroked paths with round linecaps. The near
-  (left) limbs share the body red (`#F50D00`) so the shoulder/hip overlaps are
+  (left) limbs share the body fill (`#F50D00`) so the shoulder/hip overlaps are
   seamless; the far (right) limbs are darker (`#C90B00`) and drawn *behind*
   the torso. Keep that z-order: far limbs → body → near limbs.
 - **Arms are parented inside `body`**, so torso lean and squash carry them
-  along. Legs live at the root so they stay planted under him.
+  along. Legs live at the root so they stay planted.
 - **The silhouette has blind spots.** A raised near arm disappears against the
   torso's left edge past ~140°, and a raised far arm hides behind the logo's
-  top-right curl past horizontal. The playground's jump pose (one arm up-left,
-  one out-down-right) is shaped around this — check poses against the
-  silhouette, not just the joint angles.
-- The original logo path is untouched; it's only wrapped in a translate.
+  top-right curl past horizontal. The jump poses (one arm up-left, one
+  out-down-right) are shaped around this — check poses against the silhouette,
+  not just the joint angles.
+- On the tall guy, socket discs (shoulders/hips, low contrast) sit on body
+  mass while hinge discs (elbows/knees, darker) sit on exposed limb; that
+  contrast split is what keeps them from reading as stains.
+- The original logo path is untouched in all three files; it is only ever
+  wrapped in a translate.
+
+### Cart (`sculptor-guy-cart.svg`)
+
+Joints: `body` (the sculpture — rocks about its deck contact point and lifts
+to open a gap), `wheelL`/`wheelR` (rolling rotation), `pupils`. The
+sculpture's rounded base touches the deck only at its center dip, which is
+why rocking pivots there; keep rock within ±14° or the base corners dig into
+the deck.
 
 ## The playground
 
-Everything is procedural — there are no keyframed animations. The walk is a
-pair of antiphase leg pendulums with knee bend on the recovery swing, arms
-counter-swinging with an outward bias, plus body bob and lean. Jump/fall/land
-are target poses that the rig eases toward (`updatePose` smooths every joint
-toward its target each frame), so all transitions blend for free.
+Everything is procedural — no keyframed animations. Each character runs the
+same small platformer controller (acceleration + friction, gravity, coyote
+time, jump buffering, short-hops when you release jump early) and eases every
+joint toward state-dependent targets, so all transitions blend for free.
 
-Movement is a tiny platformer controller: acceleration + friction, gravity,
-coyote time, a jump input buffer, and short-hops when you release jump early.
-A contact shadow scales with height and a dust poof spawns on landing.
+- The two walkers share one pose system (`WalkerGuy`) parameterized per build:
+  antiphase leg pendulums with knee bend on the recovery swing, arms
+  counter-swinging with an outward bias, body bob and lean.
+- The cart guy (`CartGuy`) is two springs: *rock*, driven by measured
+  horizontal acceleration, so he wobbles like unstrapped cargo when the cart
+  speeds up or brakes; and *gap*, which pops him off the deck while airborne
+  and turns its touchdown dip into squash. His cart also coasts — low
+  friction, higher top speed.
+- Unsupervised characters wander: stroll at half speed, pause, occasionally
+  hop, and turn around near screen edges. Clicking one routes the keyboard to
+  it (a ▾ marker shows who's yours); the rest keep wandering.
 
 For deterministic poses (screenshots, tinkering in the console):
 
 ```js
-guy.demo('idle' | 'walk' | 'rise' | 'fall' | 'land');  // freeze a settled pose
-guy.demo('walk', 2.6);                                  // walk at a given phase
-guy.paused = false;                                     // hand control back
+guys[1].demo('idle' | 'walk' | 'rise' | 'fall' | 'land');  // freeze a settled pose
+guys[0].demo('walk', 2.6);   // walk at a given stride phase
+scene.takeControl(guys[2]);  // grab a guy programmatically
+scene.resume();              // hand the loop back
 ```
 
-The character markup in `index.html` is a copy of `sculptor-guy.svg` (inlined
-so the page works from `file://` without fetch restrictions) — if you change
-the rig, change both.
+The character markup in `index.html` (three `<template>`s) is a copy of the
+standalone SVGs, inlined so the page works from `file://` without fetch
+restrictions — if you change a rig, change both.

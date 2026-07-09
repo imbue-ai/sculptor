@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>sculptor guy</title>
+<title>sculptor guys</title>
 <style>
   :root {
     --sky: #FBF8F6;
@@ -50,21 +50,35 @@
     border-radius: 5px; padding: 1px 5px;
   }
 
-  #guy {
+  .guy {
     position: fixed;
     top: 0; left: 0;
     will-change: transform;
+    cursor: pointer;
   }
-  #guy svg { display: block; }
+  .guy svg { display: block; }
 
-  #shadow {
+  .shadow {
     position: fixed;
     top: 0; left: 0;
-    width: 90px; height: 12px;
+    height: 12px;
     border-radius: 50%;
     background: rgba(60, 20, 10, 0.13);
     filter: blur(2px);
     will-change: transform, opacity;
+    pointer-events: none;
+  }
+
+  #marker {
+    position: fixed;
+    top: 0; left: 0;
+    color: var(--red);
+    font-size: 20px;
+    line-height: 1;
+    display: none;
+    pointer-events: none;
+    will-change: transform;
+    text-shadow: 0 1px 3px rgba(60, 20, 10, 0.15);
   }
 
   .poof {
@@ -89,6 +103,8 @@
   .limb { stroke-linecap: round; fill: none; }
   .near { stroke: #F50D00; }
   .far  { stroke: #C90B00; }
+  .joint-near { fill: #AD0900; }
+  .joint-far  { fill: #8F0700; }
 </style>
 </head>
 <body>
@@ -98,20 +114,28 @@
 <div class="hint">
   <div class="title">
     <svg width="14" height="18" viewBox="0 0 156 201" fill="none"><path d="M103.454 3.61361C121.524 12.5312 120.94 41.6833 117.978 52.6868C115.015 63.6904 107.821 70.0386 100.906 75.388C97.9926 106.013 134.582 64.3285 148.548 84.6428C162.514 104.957 153.627 133.736 144.739 135.005C128.703 137.296 125.232 138.624 117.845 148.001C110.459 157.379 120.69 173.484 113.322 184.73C102.996 200.492 20.5874 208.896 19.344 187.446C18.9618 180.851 19.465 174.645 22.2676 168.655C23.315 166.417 26.9455 158.371 23.1397 157.379C16.7512 155.714 0.917805 158.702 0.229106 148.748C-0.811812 133.703 1.18263 109.089 17.0262 101.84C27.9341 96.849 53.1464 99.2114 60.3123 90.9717C62.586 88.3571 62.6406 85.3365 63.0102 82.1206C59.8859 80.1425 57.3346 77.4172 54.7865 74.7714C46.0239 65.6729 45.514 50.5068 46.8776 39.144C49.4168 17.9833 55.7701 8.83934 71.3307 2.64402C80.8742 -1.1556 94.3401 -0.883824 103.454 3.61361Z" fill="#F50D00"/></svg>
-    sculptor guy
+    sculptor guys
   </div>
   <div class="keys">
+    click a guy to control &nbsp;·&nbsp;
     <kbd>A</kbd> <kbd>D</kbd> or <kbd>←</kbd> <kbd>→</kbd> walk &nbsp;·&nbsp;
     <kbd>W</kbd> / <kbd>space</kbd> jump &nbsp;·&nbsp;
     <kbd>S</kbd> crouch
   </div>
 </div>
 
-<div id="shadow"></div>
+<div id="marker">▾</div>
 
-<!-- The rigged character (same rig as sculptor-guy.svg; see that file for the
-     joint reference). Inlined so the page works from file:// without fetch. -->
-<div id="guy">
+<!-- ===========================================================================
+     The cast. Each template holds one rigged character; the rigs mirror the
+     standalone assets (sculptor-guy.svg, sculptor-guy-tall.svg,
+     sculptor-guy-cart.svg - see those files for joint references). Inlined so
+     the page works from file:// without fetch restrictions; if you change a
+     rig, change both copies.
+     ======================================================================= -->
+
+<!-- the original: big bust, stubby limbs -->
+<template id="tpl-chibi">
 <svg width="126" height="150" viewBox="0 0 260 310" fill="none" xmlns="http://www.w3.org/2000/svg">
   <g transform="translate(140,198)">
     <g data-joint="thighR">
@@ -182,57 +206,143 @@
     </g>
   </g>
 </svg>
-</div>
+</template>
+
+<!-- normal proportions: pelvis, thick limbs, mannequin ball joints -->
+<template id="tpl-tall">
+<svg width="156" height="195" viewBox="0 0 320 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(182,238)">
+    <g data-joint="thighR">
+      <path class="limb far" stroke-width="26" d="M0 2L0 58"/>
+      <circle fill="#A50800" r="13"/>
+      <g transform="translate(0,58)">
+        <g data-joint="calfR">
+          <path class="limb far" stroke-width="21" d="M0 0L0 50"/>
+          <circle class="joint-far" r="10"/>
+          <g transform="translate(0,50)">
+            <g data-joint="footR">
+              <path class="limb far" stroke-width="17" d="M-3 5L21 5"/>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+
+  <rect x="122" y="196" width="76" height="48" rx="22" fill="#F50D00"/>
+
+  <g data-joint="body">
+    <g transform="translate(228,132)">
+      <g data-joint="armR">
+        <path class="limb far" stroke-width="21" d="M0 2L0 52"/>
+        <circle fill="#A50800" r="12"/>
+        <g transform="translate(0,52)">
+          <g data-joint="elbowR">
+            <path class="limb far" stroke-width="18" d="M0 0L0 46"/>
+            <circle class="joint-far" r="9"/>
+          </g>
+        </g>
+      </g>
+    </g>
+
+    <g transform="translate(82,10)">
+      <path d="M103.454 3.61361C121.524 12.5312 120.94 41.6833 117.978 52.6868C115.015 63.6904 107.821 70.0386 100.906 75.388C97.9926 106.013 134.582 64.3285 148.548 84.6428C162.514 104.957 153.627 133.736 144.739 135.005C128.703 137.296 125.232 138.624 117.845 148.001C110.459 157.379 120.69 173.484 113.322 184.73C102.996 200.492 20.5874 208.896 19.344 187.446C18.9618 180.851 19.465 174.645 22.2676 168.655C23.315 166.417 26.9455 158.371 23.1397 157.379C16.7512 155.714 0.917805 158.702 0.229106 148.748C-0.811812 133.703 1.18263 109.089 17.0262 101.84C27.9341 96.849 53.1464 99.2114 60.3123 90.9717C62.586 88.3571 62.6406 85.3365 63.0102 82.1206C59.8859 80.1425 57.3346 77.4172 54.7865 74.7714C46.0239 65.6729 45.514 50.5068 46.8776 39.144C49.4168 17.9833 55.7701 8.83934 71.3307 2.64402C80.8742 -1.1556 94.3401 -0.883824 103.454 3.61361Z" fill="#F50D00"/>
+    </g>
+
+    <g class="face">
+      <ellipse cx="154" cy="50" rx="7.5" ry="8.5" fill="#FFFFFF"/>
+      <ellipse cx="180" cy="46" rx="7.5" ry="8.5" fill="#FFFFFF"/>
+      <g data-joint="pupils">
+        <circle cx="154" cy="52" r="3.4" fill="#1F1F1F"/>
+        <circle cx="180" cy="48" r="3.4" fill="#1F1F1F"/>
+      </g>
+    </g>
+
+    <g transform="translate(92,130)">
+      <g data-joint="armL">
+        <path class="limb near" stroke-width="21" d="M0 2L0 52"/>
+        <circle fill="#DD0C00" r="12"/>
+        <g transform="translate(0,52)">
+          <g data-joint="elbowL">
+            <path class="limb near" stroke-width="18" d="M0 0L0 46"/>
+            <circle class="joint-near" r="9"/>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+
+  <g transform="translate(138,238)">
+    <g data-joint="thighL">
+      <path class="limb near" stroke-width="26" d="M0 2L0 58"/>
+      <circle fill="#DD0C00" r="13"/>
+      <g transform="translate(0,58)">
+        <g data-joint="calfL">
+          <path class="limb near" stroke-width="21" d="M0 0L0 50"/>
+          <circle class="joint-near" r="10"/>
+          <g transform="translate(0,50)">
+            <g data-joint="footL">
+              <path class="limb near" stroke-width="17" d="M3 5L-21 5"/>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>
+</template>
+
+<!-- the sculpture in transit: no limbs, just a dolly -->
+<template id="tpl-cart">
+<svg width="130" height="160" viewBox="0 0 260 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="58" y="246" width="132" height="18" rx="8" fill="#4A403B"/>
+  <g transform="translate(92,282)">
+    <g data-joint="wheelL">
+      <circle r="18" fill="#2E2825"/>
+      <circle r="5.5" fill="#D9CCC5"/>
+      <circle cy="-10.5" r="2.8" fill="#D9CCC5"/>
+    </g>
+  </g>
+  <g transform="translate(156,282)">
+    <g data-joint="wheelR">
+      <circle r="18" fill="#2E2825"/>
+      <circle r="5.5" fill="#D9CCC5"/>
+      <circle cy="-10.5" r="2.8" fill="#D9CCC5"/>
+    </g>
+  </g>
+
+  <g data-joint="body">
+    <g transform="translate(52,44)">
+      <path d="M103.454 3.61361C121.524 12.5312 120.94 41.6833 117.978 52.6868C115.015 63.6904 107.821 70.0386 100.906 75.388C97.9926 106.013 134.582 64.3285 148.548 84.6428C162.514 104.957 153.627 133.736 144.739 135.005C128.703 137.296 125.232 138.624 117.845 148.001C110.459 157.379 120.69 173.484 113.322 184.73C102.996 200.492 20.5874 208.896 19.344 187.446C18.9618 180.851 19.465 174.645 22.2676 168.655C23.315 166.417 26.9455 158.371 23.1397 157.379C16.7512 155.714 0.917805 158.702 0.229106 148.748C-0.811812 133.703 1.18263 109.089 17.0262 101.84C27.9341 96.849 53.1464 99.2114 60.3123 90.9717C62.586 88.3571 62.6406 85.3365 63.0102 82.1206C59.8859 80.1425 57.3346 77.4172 54.7865 74.7714C46.0239 65.6729 45.514 50.5068 46.8776 39.144C49.4168 17.9833 55.7701 8.83934 71.3307 2.64402C80.8742 -1.1556 94.3401 -0.883824 103.454 3.61361Z" fill="#F50D00"/>
+    </g>
+    <g class="face">
+      <ellipse cx="124" cy="84" rx="7.5" ry="8.5" fill="#FFFFFF"/>
+      <ellipse cx="150" cy="80" rx="7.5" ry="8.5" fill="#FFFFFF"/>
+      <g data-joint="pupils">
+        <circle cx="124" cy="86" r="3.4" fill="#1F1F1F"/>
+        <circle cx="150" cy="82" r="3.4" fill="#1F1F1F"/>
+      </g>
+    </g>
+  </g>
+</svg>
+</template>
 
 <script>
 'use strict';
 
-// ---------------------------------------------------------------------------
-// Character dimensions. The SVG viewBox is 260x310; feet rest at y=278.5 and
-// the hip center is (122, 197) in viewBox units (see sculptor-guy.svg).
-// ---------------------------------------------------------------------------
-const VIEW_W = 260, VIEW_H = 310;
-const DISPLAY_H = 150;
-const DISPLAY_W = DISPLAY_H * VIEW_W / VIEW_H;
-const SCALE = DISPLAY_H / VIEW_H;
-const FOOT_Y = 278.5 * SCALE;      // feet line, in display px from the svg top
-const HIP = { x: 122, y: 197 };    // body pivot, in viewBox units
+// ===========================================================================
+// Shared helpers and input
+// ===========================================================================
 const FLOOR_H = 64;
+const COYOTE = 0.09;        // grace period to jump after leaving the ground
+const JUMP_BUFFER = 0.12;   // grace period to press jump before landing
 
-// Movement tuning (px/s and px/s^2, screen space).
-const MAX_SPEED = 420;
-const ACCEL = 2600;
-const FRICTION = 2200;
-const GRAVITY = 2700;
-const JUMP_V = 950;
-const COYOTE = 0.09;               // grace period to jump after leaving ground
-const JUMP_BUFFER = 0.12;          // grace period to press jump before landing
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const approach = (a, b, rate, dt) => b + (a - b) * Math.exp(-rate * dt);
+const groundY = () => innerHeight - FLOOR_H;
 
-// ---------------------------------------------------------------------------
-// Rig access: every posable joint is a <g data-joint="..."> in the SVG.
-// ---------------------------------------------------------------------------
-const guyEl = document.getElementById('guy');
-const shadowEl = document.getElementById('shadow');
-const joint = {};
-for (const el of guyEl.querySelectorAll('[data-joint]')) {
-  joint[el.dataset.joint] = el;
-}
-
-// Pose = target angles (deg) for each rotating joint, plus body params.
-// Angle sign: on a downward limb, positive rotate() swings the tip screen-left.
-const JOINTS = ['thighL', 'calfL', 'footL', 'thighR', 'calfR', 'footR',
-                'armL', 'elbowL', 'armR', 'elbowR'];
-const cur = {}, tgt = {};
-for (const j of JOINTS) { cur[j] = 0; tgt[j] = 0; }
-const body = { lean: 0, bob: 0, sx: 1, sy: 1 };
-const bodyTgt = { lean: 0, bob: 0, sx: 1, sy: 1 };
-let pupilX = 0, pupilY = 0, pupilXT = 0, pupilYT = 0;
-
-// ---------------------------------------------------------------------------
-// Input
-// ---------------------------------------------------------------------------
 const held = { left: false, right: false, jump: false, crouch: false };
-let jumpBuffer = 0;
+let jumpQueued = false;
 
 const KEYMAP = {
   a: 'left', arrowleft: 'left',
@@ -244,7 +354,7 @@ addEventListener('keydown', (e) => {
   const action = KEYMAP[e.key.toLowerCase()];
   if (!action) return;
   e.preventDefault();
-  if (action === 'jump' && !e.repeat) jumpBuffer = JUMP_BUFFER;
+  if (action === 'jump' && !e.repeat) jumpQueued = true;
   held[action] = true;
 });
 addEventListener('keyup', (e) => {
@@ -253,201 +363,18 @@ addEventListener('keyup', (e) => {
 });
 addEventListener('blur', () => { for (const k in held) held[k] = false; });
 
-// ---------------------------------------------------------------------------
-// Physics state
-// ---------------------------------------------------------------------------
-const state = {
-  x: 120,          // container left, px
-  vx: 0,
-  height: 0,       // feet height above the ground, px (0 = standing on it)
-  vy: 0,           // px/s, positive = up
-  grounded: true,
-  facing: 1,       // 1 = right, -1 = left
-  phase: 0,        // walk-cycle phase, radians
-  coyote: 0,
-  landTimer: 0,    // counts down after touchdown, drives the landing crouch
-  t: 0,            // wall-clock for idle sway
-};
-
-function groundY() { return innerHeight - FLOOR_H; }
-
-function stepPhysics(dt) {
-  const s = state;
-  const move = (held.right ? 1 : 0) - (held.left ? 1 : 0);
-
-  if (move !== 0) {
-    s.vx += move * ACCEL * dt;
-    s.facing = move;
-  } else {
-    s.vx -= Math.sign(s.vx) * Math.min(Math.abs(s.vx), FRICTION * dt);
-  }
-  const cap = held.crouch && s.grounded ? MAX_SPEED * 0.45 : MAX_SPEED;
-  s.vx = Math.max(-cap, Math.min(cap, s.vx));
-  s.x += s.vx * dt;
-
-  const minX = 8, maxX = innerWidth - DISPLAY_W - 8;
-  if (s.x < minX) { s.x = minX; s.vx = 0; }
-  if (s.x > maxX) { s.x = maxX; s.vx = 0; }
-
-  s.coyote = s.grounded ? COYOTE : s.coyote - dt;
-  jumpBuffer -= dt;
-  if (jumpBuffer > 0 && s.coyote > 0) {
-    s.vy = JUMP_V;
-    s.grounded = false;
-    s.coyote = 0;
-    jumpBuffer = 0;
-  }
-  // Short-hop: releasing jump early cuts the ascent.
-  if (!held.jump && s.vy > 0) s.vy *= Math.pow(0.02, dt * 6);
-
-  if (!s.grounded) {
-    const g = held.crouch ? GRAVITY * 1.8 : GRAVITY;  // crouch = fast-fall
-    s.vy -= g * dt;
-    s.height += s.vy * dt;
-    if (s.height <= 0) {
-      s.height = 0;
-      s.vy = 0;
-      s.grounded = true;
-      s.landTimer = 0.13;
-      spawnPoof();
-    }
-  }
-  s.landTimer = Math.max(0, s.landTimer - dt);
-
-  // Advance the stride with horizontal speed.
-  if (s.grounded) s.phase += dt * (4 + 9 * Math.abs(s.vx) / MAX_SPEED);
-  s.t += dt;
+function keyboardInput() {
+  const jumpPressed = jumpQueued;
+  jumpQueued = false;
+  return {
+    left: held.left, right: held.right,
+    jumpHeld: held.jump, jumpPressed,
+    crouch: held.crouch, throttle: 1,
+  };
 }
 
-// ---------------------------------------------------------------------------
-// Pose targets per state. All procedural: the walk is a pair of antiphase
-// pendulums with knee bend on the recovery swing, arms swinging opposite.
-// ---------------------------------------------------------------------------
-function setPoseTargets() {
-  const s = state;
-  const dir = s.facing;                       // +1 right, -1 left
-  const speedK = Math.min(1, Math.abs(s.vx) / MAX_SPEED);
-  const walking = s.grounded && Math.abs(s.vx) > 30;
-
-  pupilXT = dir * (1 + 2 * speedK);
-  pupilYT = 0;
-  bodyTgt.sx = 1; bodyTgt.sy = 1;
-  bodyTgt.bob = 0;
-  bodyTgt.lean = -dir * (2 + 8 * speedK) * (s.grounded ? 1 : 0.6);
-
-  if (!s.grounded) {
-    const rising = s.vy > 0;
-    if (rising) {
-      // One arm thrown up-and-out, the other down-and-out. Both stay clear of
-      // the torso silhouette: the near arm only reads outside the left edge,
-      // the far arm hides behind the logo's curl when raised past horizontal.
-      tgt.armL = 138; tgt.armR = -52;
-      tgt.elbowL = 22; tgt.elbowR = -24;
-      tgt.thighL = -dir * 42; tgt.calfL = dir * 55; tgt.footL = -dir * 20;
-      tgt.thighR = dir * 20;  tgt.calfR = dir * 35; tgt.footR = -dir * 10;
-      pupilYT = -1.5;
-    } else {
-      // Falling: arms out with a light flutter, legs loosen for landing.
-      const flutter = Math.sin(s.t * 22) * 5;
-      tgt.armL = 115 + flutter; tgt.armR = -115 + flutter;
-      tgt.elbowL = 25; tgt.elbowR = -25;
-      tgt.thighL = -dir * 15; tgt.calfL = dir * 25; tgt.footL = 0;
-      tgt.thighR = dir * 10;  tgt.calfR = dir * 20; tgt.footR = 0;
-      pupilYT = 1.5;
-    }
-    return;
-  }
-
-  if (s.landTimer > 0 || (held.crouch && !walking)) {
-    // Touchdown / crouch: splay and squash.
-    tgt.thighL = 22; tgt.calfL = -26; tgt.footL = 6;
-    tgt.thighR = -22; tgt.calfR = 26; tgt.footR = -6;
-    tgt.armL = 35; tgt.armR = -35;
-    tgt.elbowL = 20; tgt.elbowR = -20;
-    bodyTgt.sy = 0.88; bodyTgt.sx = 1.09;
-    bodyTgt.bob = 10;
-    bodyTgt.lean = 0;
-    return;
-  }
-
-  if (walking) {
-    const A = 24 + 8 * speedK;               // thigh swing
-    const swingL = Math.sin(s.phase);
-    const swingR = Math.sin(s.phase + Math.PI);
-    tgt.thighL = A * swingL;
-    tgt.thighR = A * swingR;
-    // Knee bends on the recovery (forward) swing; bend direction follows travel.
-    tgt.calfL = dir * (8 + 30 * Math.max(0, -Math.cos(s.phase)));
-    tgt.calfR = dir * (8 + 30 * Math.max(0, -Math.cos(s.phase + Math.PI)));
-    // Keep the feet roughly level through the stride.
-    tgt.footL = -0.55 * (tgt.thighL + tgt.calfL);
-    tgt.footR = -0.55 * (tgt.thighR + tgt.calfR);
-    // Arms swing opposite their same-side leg, biased outward so they keep
-    // peeking past the torso silhouette through the cycle.
-    const armA = 18 + 14 * speedK;
-    tgt.armL = 8 - armA * swingL;
-    tgt.armR = -8 - armA * swingR;
-    tgt.elbowL = 12 - 10 * swingL * dir;
-    tgt.elbowR = -(12 + 10 * swingR * dir);
-    bodyTgt.bob = -3.5 * Math.abs(Math.sin(s.phase));
-    return;
-  }
-
-  // Idle: relaxed stance with a slow breath.
-  const breathe = Math.sin(s.t * 2.1);
-  tgt.thighL = 5; tgt.thighR = -5;
-  tgt.calfL = -3; tgt.calfR = 3;
-  tgt.footL = 0; tgt.footR = 0;
-  tgt.armL = 20 + 2.5 * breathe;
-  tgt.armR = -20 - 2.5 * breathe;
-  tgt.elbowL = 8; tgt.elbowR = -8;
-  bodyTgt.sy = 1 + 0.012 * breathe;
-  bodyTgt.lean = 0;
-  pupilXT = dir * 1.5;
-}
-
-// ---------------------------------------------------------------------------
-// Smoothing + apply
-// ---------------------------------------------------------------------------
-function approach(a, b, rate, dt) { return b + (a - b) * Math.exp(-rate * dt); }
-
-function updatePose(dt) {
-  setPoseTargets();
-  const rate = state.grounded && Math.abs(state.vx) > 30 ? 30 : 16;
-  for (const j of JOINTS) cur[j] = approach(cur[j], tgt[j], rate, dt);
-  body.lean = approach(body.lean, bodyTgt.lean, 10, dt);
-  body.bob = approach(body.bob, bodyTgt.bob, 20, dt);
-  body.sx = approach(body.sx, bodyTgt.sx, 20, dt);
-  body.sy = approach(body.sy, bodyTgt.sy, 20, dt);
-  pupilX = approach(pupilX, pupilXT, 12, dt);
-  pupilY = approach(pupilY, pupilYT, 12, dt);
-}
-
-function applyPose() {
-  for (const j of JOINTS) {
-    joint[j].setAttribute('transform', `rotate(${cur[j].toFixed(2)})`);
-  }
-  joint.body.setAttribute('transform',
-    `translate(0,${body.bob.toFixed(2)}) ` +
-    `rotate(${body.lean.toFixed(2)},${HIP.x},${HIP.y}) ` +
-    `translate(${HIP.x},${HIP.y}) scale(${body.sx.toFixed(3)},${body.sy.toFixed(3)}) translate(${-HIP.x},${-HIP.y})`);
-  joint.pupils.setAttribute('transform', `translate(${pupilX.toFixed(2)},${pupilY.toFixed(2)})`);
-
-  const y = groundY() - FOOT_Y - state.height;
-  guyEl.style.transform = `translate3d(${state.x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
-
-  // Contact shadow: shrinks and fades as he gains height.
-  const k = Math.max(0.25, 1 - state.height / 340);
-  const cx = state.x + DISPLAY_W / 2 - 45;
-  shadowEl.style.transform =
-    `translate3d(${cx.toFixed(1)}px, ${(groundY() - 7).toFixed(1)}px, 0) scaleX(${k.toFixed(3)})`;
-  shadowEl.style.opacity = (0.4 + 0.6 * k).toFixed(3);
-}
-
-// Landing dust.
-function spawnPoof() {
-  const feetX = state.x + DISPLAY_W / 2;
-  const feetY = groundY() - 8;
+// Landing dust, shared by everyone.
+function spawnPoof(feetX, feetY) {
   for (let i = 0; i < 4; i++) {
     const p = document.createElement('div');
     p.className = 'poof';
@@ -459,9 +386,408 @@ function spawnPoof() {
   }
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Guy: shared platformer physics + autonomous wandering.
+//
+// Subclasses own the rig: pose(dt) eases joints toward state-dependent
+// targets, applyRig() writes them into the SVG. Physics tuning lives in
+// this.k: {w, h, footY, headTop, maxSpeed, accel, friction, gravity, jumpV,
+// stride0, stride1, shadowW}. footY = feet line in display px from the svg
+// top; headTop = top of the head, for the control marker.
+// ===========================================================================
+class Guy {
+  constructor(tplId, k) {
+    this.k = k;
+    this.el = document.createElement('div');
+    this.el.className = 'guy';
+    this.el.appendChild(document.getElementById(tplId).content.cloneNode(true));
+    this.shadow = document.createElement('div');
+    this.shadow.className = 'shadow';
+    this.shadow.style.width = `${k.shadowW}px`;
+    document.body.appendChild(this.shadow);
+    document.body.appendChild(this.el);
+
+    this.joint = {};
+    for (const el of this.el.querySelectorAll('[data-joint]')) {
+      this.joint[el.dataset.joint] = el;
+    }
+    // Stagger the blink cycles so the cast doesn't blink in unison.
+    this.el.querySelector('.face').style.animationDelay = `${(-4.6 * Math.random()).toFixed(2)}s`;
+
+    this.state = {
+      x: 100, vx: 0,
+      height: 0,          // feet height above the ground, px (0 = standing)
+      vy: 0,              // px/s, positive = up
+      grounded: true, facing: 1,
+      phase: 0,           // walk-cycle phase, radians
+      coyote: 0, landTimer: 0,
+      t: Math.random() * 10,  // wall-clock for idle sway, desynced per guy
+    };
+    this.input = keyboardInput();
+    this.jumpBuf = 0;
+    this.ax = 0;            // measured horizontal acceleration (drives cart rock)
+    this.aiMode = 'idle';
+    this.aiT = Math.random();
+    this.aiDir = 1;
+    this.pupilX = 0; this.pupilY = 0;
+    this.pupilXT = 0; this.pupilYT = 0;
+
+    this.el.addEventListener('pointerdown', () => takeControl(this));
+  }
+
+  physics(dt, input) {
+    this.input = input;
+    const s = this.state, K = this.k;
+    const prevVx = s.vx;
+    const move = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+
+    if (move !== 0) {
+      s.vx += move * K.accel * dt;
+      s.facing = move;
+    } else {
+      s.vx -= Math.sign(s.vx) * Math.min(Math.abs(s.vx), K.friction * dt);
+    }
+    const cap = K.maxSpeed * input.throttle * (input.crouch && s.grounded ? 0.45 : 1);
+    // Ease down to the cap rather than clamping, so releasing control of a
+    // sprinting guy doesn't snap his speed.
+    if (Math.abs(s.vx) > cap) {
+      s.vx = Math.sign(s.vx) * Math.max(cap, Math.abs(s.vx) - K.friction * 1.5 * dt);
+    }
+    s.x += s.vx * dt;
+
+    const minX = 8, maxX = innerWidth - K.w - 8;
+    if (s.x < minX) { s.x = minX; s.vx = Math.max(0, s.vx); }
+    if (s.x > maxX) { s.x = maxX; s.vx = Math.min(0, s.vx); }
+
+    s.coyote = s.grounded ? COYOTE : s.coyote - dt;
+    if (input.jumpPressed) this.jumpBuf = JUMP_BUFFER;
+    this.jumpBuf -= dt;
+    if (this.jumpBuf > 0 && s.coyote > 0) {
+      s.vy = K.jumpV;
+      s.grounded = false;
+      s.coyote = 0;
+      this.jumpBuf = 0;
+    }
+    // Short-hop: releasing jump early cuts the ascent.
+    if (!input.jumpHeld && s.vy > 0) s.vy *= Math.pow(0.02, dt * 6);
+
+    if (!s.grounded) {
+      const g = input.crouch ? K.gravity * 1.8 : K.gravity;  // crouch = fast-fall
+      s.vy -= g * dt;
+      s.height += s.vy * dt;
+      if (s.height <= 0) {
+        s.height = 0;
+        s.vy = 0;
+        s.grounded = true;
+        s.landTimer = 0.13;
+        spawnPoof(s.x + K.w / 2, groundY() - 8);
+      }
+    }
+    s.landTimer = Math.max(0, s.landTimer - dt);
+
+    if (s.grounded) s.phase += dt * (K.stride0 + K.stride1 * Math.abs(s.vx) / K.maxSpeed);
+    s.t += dt;
+    this.ax = (s.vx - prevVx) / dt;
+  }
+
+  // Wandering: amble around, pause, occasionally hop. Returns an input.
+  aiStep(dt) {
+    const s = this.state, K = this.k;
+    this.aiT -= dt;
+    if (this.aiT <= 0) {
+      const r = Math.random();
+      if (r < 0.38) {
+        this.aiMode = 'idle';
+        this.aiT = 0.8 + Math.random() * 1.8;
+      } else if (r < 0.92) {
+        this.aiMode = 'walk';
+        this.aiT = 0.9 + Math.random() * 1.7;
+        this.aiDir = s.x < 140 ? 1
+          : s.x > innerWidth - K.w - 140 ? -1
+          : Math.random() < 0.5 ? -1 : 1;
+      } else {
+        this.aiMode = 'hop';
+        this.aiT = 0.35;
+        this.aiHop = true;
+      }
+    }
+    // Turn around instead of grinding against the screen edge.
+    if (this.aiMode === 'walk') {
+      if (s.x < 20 && this.aiDir < 0) this.aiDir = 1;
+      if (s.x > innerWidth - K.w - 20 && this.aiDir > 0) this.aiDir = -1;
+    }
+    const jumpPressed = !!this.aiHop;
+    this.aiHop = false;
+    return {
+      left: this.aiMode === 'walk' && this.aiDir < 0,
+      right: this.aiMode === 'walk' && this.aiDir > 0,
+      jumpHeld: false, jumpPressed,
+      crouch: false,
+      throttle: 0.5,  // stroll while unsupervised
+    };
+  }
+
+  apply() {
+    const s = this.state, K = this.k;
+    const y = groundY() - K.footY - s.height;
+    this.y = y;
+    this.el.style.transform = `translate3d(${s.x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
+
+    // Contact shadow: shrinks and fades as he gains height.
+    const k = Math.max(0.25, 1 - s.height / 340);
+    const cx = s.x + K.w / 2 - K.shadowW / 2;
+    this.shadow.style.transform =
+      `translate3d(${cx.toFixed(1)}px, ${(groundY() - 7).toFixed(1)}px, 0) scaleX(${k.toFixed(3)})`;
+    this.shadow.style.opacity = (0.4 + 0.6 * k).toFixed(3);
+
+    this.applyRig();
+  }
+
+  // Deterministic states for screenshots and console tinkering:
+  // guy.demo('idle' | 'walk' | 'rise' | 'fall' | 'land'[, walkPhase])
+  demo(name, phase) {
+    paused = true;
+    const s = this.state;
+    this.input = { left: false, right: false, jumpHeld: false, jumpPressed: false, crouch: false, throttle: 1 };
+    s.facing = 1;
+    s.landTimer = 0;
+    const presets = {
+      idle: { grounded: true, height: 0, vx: 0, vy: 0 },
+      walk: { grounded: true, height: 0, vx: this.k.maxSpeed * 0.9, vy: 0, phase: phase ?? 2.0 },
+      rise: { grounded: false, height: 130, vx: 180, vy: 500 },
+      fall: { grounded: false, height: 130, vx: 180, vy: -400 },
+      land: { grounded: true, height: 0, vx: 60, vy: 0, landTimer: 0.13 },
+    };
+    Object.assign(s, presets[name] ?? presets.idle);
+    for (let i = 0; i < 90; i++) { s.t += 1 / 60; this.pose(1 / 60); }
+    this.demoTouchUp?.(name);
+    this.apply();
+  }
+}
+
+// ===========================================================================
+// WalkerGuy: procedural walk/jump/land poses over the limb rig. All pose
+// constants live in P so the two walker builds (chibi and tall) share code.
+// Angle sign: on a downward limb, positive rotate() swings the tip screen-left.
+// ===========================================================================
+const WALK_JOINTS = ['thighL', 'calfL', 'footL', 'thighR', 'calfR', 'footR',
+                     'armL', 'elbowL', 'armR', 'elbowR'];
+
+class WalkerGuy extends Guy {
+  constructor(tplId, k, P) {
+    super(tplId, k);
+    this.P = P;
+    this.cur = {}; this.tgt = {};
+    for (const j of WALK_JOINTS) { this.cur[j] = 0; this.tgt[j] = 0; }
+    this.body = { lean: 0, bob: 0, sx: 1, sy: 1 };
+    this.bodyTgt = { lean: 0, bob: 0, sx: 1, sy: 1 };
+  }
+
+  pose(dt) {
+    const s = this.state, P = this.P, tgt = this.tgt, bt = this.bodyTgt;
+    const dir = s.facing;
+    const speedK = Math.min(1, Math.abs(s.vx) / this.k.maxSpeed);
+    const walking = s.grounded && Math.abs(s.vx) > 30;
+
+    this.pupilXT = dir * (1 + 2 * speedK);
+    this.pupilYT = 0;
+    bt.sx = 1; bt.sy = 1; bt.bob = 0;
+    bt.lean = -dir * (P.lean0 + P.lean1 * speedK) * (s.grounded ? 1 : 0.6);
+
+    if (!s.grounded) {
+      const p = s.vy > 0 ? P.rise : P.fall;
+      const flutter = s.vy > 0 ? 0 : Math.sin(s.t * 22) * 5;
+      tgt.armL = p.armL + flutter; tgt.armR = p.armR + flutter;
+      tgt.elbowL = p.elbowL; tgt.elbowR = p.elbowR;
+      tgt.thighL = -dir * p.thighLead; tgt.calfL = dir * p.calfLead; tgt.footL = -dir * p.footLead;
+      tgt.thighR = dir * p.thighTrail; tgt.calfR = dir * p.calfTrail; tgt.footR = -dir * p.footTrail;
+      this.pupilYT = s.vy > 0 ? -1.5 : 1.5;
+    } else if (s.landTimer > 0 || (this.input.crouch && !walking)) {
+      const p = P.land;
+      tgt.thighL = p.thigh; tgt.calfL = -p.calf; tgt.footL = p.foot;
+      tgt.thighR = -p.thigh; tgt.calfR = p.calf; tgt.footR = -p.foot;
+      tgt.armL = p.arm; tgt.armR = -p.arm;
+      tgt.elbowL = p.elbow; tgt.elbowR = -p.elbow;
+      bt.sy = p.sy; bt.sx = p.sx; bt.bob = p.bob; bt.lean = 0;
+    } else if (walking) {
+      const A = P.thighA0 + P.thighA1 * speedK;
+      const swingL = Math.sin(s.phase);
+      const swingR = Math.sin(s.phase + Math.PI);
+      tgt.thighL = A * swingL;
+      tgt.thighR = A * swingR;
+      // Knee bends on the recovery (forward) swing; bend direction follows travel.
+      tgt.calfL = dir * (P.knee0 + P.knee1 * Math.max(0, -Math.cos(s.phase)));
+      tgt.calfR = dir * (P.knee0 + P.knee1 * Math.max(0, -Math.cos(s.phase + Math.PI)));
+      // Keep the feet roughly level through the stride.
+      tgt.footL = -P.footK * (tgt.thighL + tgt.calfL);
+      tgt.footR = -P.footK * (tgt.thighR + tgt.calfR);
+      // Arms swing opposite their same-side leg, biased outward so they keep
+      // peeking past the torso silhouette through the cycle.
+      const armA = P.armA0 + P.armA1 * speedK;
+      tgt.armL = P.armBias - armA * swingL;
+      tgt.armR = -P.armBias - armA * swingR;
+      tgt.elbowL = 12 - 10 * swingL * dir;
+      tgt.elbowR = -(12 + 10 * swingR * dir);
+      bt.bob = -P.bobA * Math.abs(Math.sin(s.phase));
+    } else {
+      // Idle: relaxed stance with a slow breath.
+      const breathe = Math.sin(s.t * 2.1);
+      tgt.thighL = P.idleThigh; tgt.thighR = -P.idleThigh;
+      tgt.calfL = -P.idleCalf; tgt.calfR = P.idleCalf;
+      tgt.footL = 0; tgt.footR = 0;
+      tgt.armL = P.idleArm + 2.5 * breathe;
+      tgt.armR = -P.idleArm - 2.5 * breathe;
+      tgt.elbowL = P.idleElbow; tgt.elbowR = -P.idleElbow;
+      bt.sy = 1 + 0.012 * breathe; bt.lean = 0;
+      this.pupilXT = dir * 1.5;
+    }
+
+    const rate = walking ? 30 : 16;
+    for (const j of WALK_JOINTS) this.cur[j] = approach(this.cur[j], tgt[j], rate, dt);
+    const b = this.body;
+    b.lean = approach(b.lean, bt.lean, 10, dt);
+    b.bob = approach(b.bob, bt.bob, 20, dt);
+    b.sx = approach(b.sx, bt.sx, 20, dt);
+    b.sy = approach(b.sy, bt.sy, 20, dt);
+    this.pupilX = approach(this.pupilX, this.pupilXT, 12, dt);
+    this.pupilY = approach(this.pupilY, this.pupilYT, 12, dt);
+  }
+
+  applyRig() {
+    for (const j of WALK_JOINTS) {
+      this.joint[j].setAttribute('transform', `rotate(${this.cur[j].toFixed(2)})`);
+    }
+    const b = this.body, { x: hx, y: hy } = this.P.hip;
+    this.joint.body.setAttribute('transform',
+      `translate(0,${b.bob.toFixed(2)}) ` +
+      `rotate(${b.lean.toFixed(2)},${hx},${hy}) ` +
+      `translate(${hx},${hy}) scale(${b.sx.toFixed(3)},${b.sy.toFixed(3)}) translate(${-hx},${-hy})`);
+    this.joint.pupils.setAttribute('transform',
+      `translate(${this.pupilX.toFixed(2)},${this.pupilY.toFixed(2)})`);
+  }
+}
+
+// ===========================================================================
+// CartGuy: a limbless sculpture riding a dolly. Two springs do the acting:
+// rock (driven by measured horizontal acceleration, so he wobbles when the
+// cart speeds up or brakes) and gap (he pops off the deck while airborne and
+// squashes into it on touchdown).
+// ===========================================================================
+class CartGuy extends Guy {
+  constructor(tplId, k) {
+    super(tplId, k);
+    this.rock = 0; this.rockV = 0;
+    this.gap = 0; this.gapV = 0;
+    this.wheelAngle = 0;
+    this.PIVOT = { x: 118, y: 246 };   // where the sculpture's base meets the deck
+    this.WHEEL_R = 18 * (k.h / 320);   // wheel radius in screen px
+  }
+
+  pose(dt) {
+    const s = this.state;
+    // Rock against acceleration, like cargo that isn't strapped down.
+    const rockTarget = clamp(-this.ax * 0.028, -14, 14);
+    this.rockV += (-90 * (this.rock - rockTarget) - 7 * this.rockV) * dt;
+    this.rock += this.rockV * dt;
+    // Daylight between sculpture and deck while airborne; the underdamped
+    // spring dips negative on touchdown, which applyRig turns into squash.
+    const gapTarget = s.grounded ? 0 : 10;
+    this.gapV += (-120 * (this.gap - gapTarget) - 9 * this.gapV) * dt;
+    this.gap += this.gapV * dt;
+    if (this.gap < -4) { this.gap = -4; this.gapV = Math.max(0, this.gapV); }
+
+    this.wheelAngle += (s.vx * dt / this.WHEEL_R) * 57.3;
+
+    this.pupilXT = s.facing * (1 + 2 * Math.min(1, Math.abs(s.vx) / this.k.maxSpeed));
+    this.pupilYT = s.grounded ? 0 : s.vy > 0 ? -1.5 : 1.5;
+    this.pupilX = approach(this.pupilX, this.pupilXT, 12, dt);
+    this.pupilY = approach(this.pupilY, this.pupilYT, 12, dt);
+  }
+
+  applyRig() {
+    const { x: px, y: py } = this.PIVOT;
+    const lift = Math.max(0, this.gap);
+    const squash = 1 + Math.min(0, this.gap) / 45;  // gap -4 -> sy 0.91
+    const sx = 1 + (1 - squash) * 0.8;
+    this.joint.body.setAttribute('transform',
+      `translate(0,${(-lift).toFixed(2)}) ` +
+      `rotate(${this.rock.toFixed(2)},${px},${py}) ` +
+      `translate(${px},${py}) scale(${sx.toFixed(3)},${squash.toFixed(3)}) translate(${-px},${-py})`);
+    this.joint.wheelL.setAttribute('transform', `rotate(${(this.wheelAngle % 360).toFixed(1)})`);
+    this.joint.wheelR.setAttribute('transform', `rotate(${((this.wheelAngle + 137) % 360).toFixed(1)})`);
+    this.joint.pupils.setAttribute('transform',
+      `translate(${this.pupilX.toFixed(2)},${this.pupilY.toFixed(2)})`);
+  }
+
+  demoTouchUp(name) {
+    if (name === 'land') { this.gap = -3.5; }
+    if (name === 'walk') { this.rock = -6; }  // mid-acceleration lean
+  }
+}
+
+// ===========================================================================
+// The cast
+// ===========================================================================
+const chibi = new WalkerGuy('tpl-chibi', {
+  w: 126, h: 150, footY: 278.5 * (150 / 310), headTop: 5, shadowW: 90,
+  maxSpeed: 420, accel: 2600, friction: 2200, gravity: 2700, jumpV: 950,
+  stride0: 4, stride1: 9,
+}, {
+  hip: { x: 122, y: 197 },
+  lean0: 2, lean1: 8,
+  thighA0: 24, thighA1: 8, knee0: 8, knee1: 30, footK: 0.55,
+  armA0: 18, armA1: 14, armBias: 8, bobA: 3.5,
+  idleThigh: 5, idleCalf: 3, idleArm: 20, idleElbow: 8,
+  rise: { armL: 138, armR: -52, elbowL: 22, elbowR: -24,
+          thighLead: 42, calfLead: 55, footLead: 20, thighTrail: 20, calfTrail: 35, footTrail: 10 },
+  fall: { armL: 115, armR: -115, elbowL: 25, elbowR: -25,
+          thighLead: 15, calfLead: 25, footLead: 0, thighTrail: 10, calfTrail: 20, footTrail: 0 },
+  land: { thigh: 22, calf: 26, foot: 6, arm: 35, elbow: 20, sy: 0.88, sx: 1.09, bob: 10 },
+});
+
+const tall = new WalkerGuy('tpl-tall', {
+  w: 156, h: 195, footY: 359.5 * (195 / 400), headTop: 5, shadowW: 110,
+  maxSpeed: 480, accel: 2600, friction: 2200, gravity: 2700, jumpV: 1020,
+  stride0: 3.2, stride1: 7.5,
+}, {
+  hip: { x: 160, y: 205 },
+  lean0: 2, lean1: 7,
+  thighA0: 20, thighA1: 7, knee0: 10, knee1: 34, footK: 0.5,
+  armA0: 16, armA1: 12, armBias: 6, bobA: 4.5,
+  idleThigh: 3, idleCalf: 2, idleArm: 12, idleElbow: 8,
+  rise: { armL: 135, armR: -55, elbowL: 25, elbowR: -30,
+          thighLead: 38, calfLead: 60, footLead: 22, thighTrail: 18, calfTrail: 40, footTrail: 12 },
+  fall: { armL: 112, armR: -112, elbowL: 28, elbowR: -28,
+          thighLead: 14, calfLead: 28, footLead: 0, thighTrail: 8, calfTrail: 22, footTrail: 0 },
+  land: { thigh: 18, calf: 22, foot: 5, arm: 30, elbow: 24, sy: 0.9, sx: 1.07, bob: 12 },
+});
+
+const cart = new CartGuy('tpl-cart', {
+  w: 130, h: 160, footY: 300 * (160 / 320), headTop: 22, shadowW: 120,
+  // Wheels: quicker, slipperier, and he coasts when you let go.
+  maxSpeed: 560, accel: 3200, friction: 700, gravity: 2700, jumpV: 900,
+  stride0: 0, stride1: 0,
+});
+
+const guys = [chibi, tall, cart];
+chibi.state.x = innerWidth * 0.22;
+tall.state.x = innerWidth * 0.45;
+cart.state.x = innerWidth * 0.68;
+
+// ===========================================================================
+// Control: everyone wanders until clicked; the marker shows who's yours.
+// ===========================================================================
+const markerEl = document.getElementById('marker');
+let controlled = null;
+
+function takeControl(guy) {
+  controlled = guy;
+  markerEl.style.display = 'block';
+}
+
+// ===========================================================================
 // Main loop
-// ---------------------------------------------------------------------------
+// ===========================================================================
 let last = performance.now();
 let paused = false;
 
@@ -469,36 +795,30 @@ function frame(now) {
   const dt = Math.min(0.032, (now - last) / 1000);
   last = now;
   if (!paused) {
-    stepPhysics(dt);
-    updatePose(dt);
-    applyPose();
+    for (const guy of guys) {
+      const input = guy === controlled ? keyboardInput() : guy.aiStep(dt);
+      guy.physics(dt, input);
+      guy.pose(dt);
+      guy.apply();
+    }
+    if (controlled) {
+      const s = controlled.state;
+      const bobble = 3 * Math.sin(s.t * 5);
+      markerEl.style.transform =
+        `translate3d(${(s.x + controlled.k.w / 2 - 7).toFixed(1)}px, ` +
+        `${(controlled.y + controlled.k.headTop - 26 + bobble).toFixed(1)}px, 0)`;
+    }
   }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
-// ---------------------------------------------------------------------------
-// Deterministic demo hooks, used by screenshot tooling (and handy in the
-// console): guy.demo('idle' | 'walk' | 'rise' | 'fall' | 'land') freezes the
-// loop in a settled example of that state.
-// ---------------------------------------------------------------------------
-window.guy = {
-  state, joints: joint, cur,
-  set paused(v) { paused = v; },
-  demo(name, phase) {
-    paused = true;
-    const s = state;
-    s.x = innerWidth / 2 - DISPLAY_W / 2; s.facing = 1; s.landTimer = 0;
-    held.left = held.right = held.jump = held.crouch = false;
-    if (name === 'idle') { s.grounded = true; s.height = 0; s.vx = 0; s.vy = 0; }
-    if (name === 'walk') { s.grounded = true; s.height = 0; s.vx = MAX_SPEED * 0.9; s.vy = 0; s.phase = phase ?? 2.0; }
-    if (name === 'rise') { s.grounded = false; s.height = 130; s.vx = 180; s.vy = 500; }
-    if (name === 'fall') { s.grounded = false; s.height = 130; s.vx = 180; s.vy = -400; }
-    if (name === 'land') { s.grounded = true; s.height = 0; s.vx = 60; s.vy = 0; s.landTimer = 0.13; }
-    // Settle the smoothed pose without running physics.
-    for (let i = 0; i < 90; i++) { s.t += 1 / 60; updatePose(1 / 60); }
-    applyPose();
-  },
+// Console + screenshot hooks.
+window.guys = guys;
+window.scene = {
+  takeControl,
+  pause() { paused = true; },
+  resume() { paused = false; last = performance.now(); },
 };
 </script>
 </body>
