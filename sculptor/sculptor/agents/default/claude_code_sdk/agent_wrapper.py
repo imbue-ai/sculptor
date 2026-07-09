@@ -22,6 +22,7 @@ from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_SHUTDOWN_DUE_TO
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
 from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
 
 
@@ -37,6 +38,17 @@ class ClaudeCodeSDKAgent(DefaultAgentWrapper):
     workspace_id: WorkspaceID | None = None
     setup_state_provider: SetupStateProvider | None = None
     _claude_process_manager: ClaudeProcessManager | None = PrivateAttr(default=None)
+
+    def set_conversation_launch_settings(
+        self,
+        model_name: LLMModel | None,
+        fast_mode: bool,
+        effort: str | None,
+    ) -> None:
+        assert self._claude_process_manager is not None, "Claude process manager must be set"
+        self._claude_process_manager.apply_conversation_launch_settings(
+            model_name=model_name, fast_mode=fast_mode, effort=effort
+        )
 
     def _terminate(self, force_kill_seconds: float = 5.0) -> None:
         assert self._claude_process_manager is not None, "Claude process manager must be set"

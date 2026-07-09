@@ -79,6 +79,23 @@ class Agent(MutableModel, abc.ABC):
         secrets: Mapping[str, str | Secret],
     ) -> None: ...
 
+    def set_conversation_launch_settings(
+        self,
+        model_name: LLMModel | None,
+        fast_mode: bool,
+        effort: str | None,
+    ) -> None:
+        """Seed the conversation's launch settings from replayed history.
+
+        The runner calls this after replaying persisted messages on task
+        start, passing the most recent processed chat turn's model settings.
+        Turns that carry no model of their own (question answers,
+        answer-continuation resumes) continue the conversation with these
+        settings, so a harness that relaunches a CLI per turn needs them even
+        when its process state did not survive a backend restart. Harnesses
+        without per-turn launch state ignore this (the default no-op).
+        """
+
 
 EnvironmentTypes = LocalEnvironment
 

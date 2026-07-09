@@ -402,6 +402,11 @@ def _run_agent_in_environment(
         # rather just resend the original prompt than send a "continue where you left
         # off" instruction with no prior content. Reset on each new RequestStarted.
         is_partial_agent_response = False
+        # The last chat turn the agent started processing carries the
+        # conversation's launch settings (model, fast mode, effort); model-less
+        # turns (question answers) continue with them, so they are re-seeded
+        # into the agent wrapper after the replay below.
+        last_started_chat_message: ChatInputUserMessage | None = None
         for message in all_messages:
             # just remember the last chat message from the user (that the agent started processing)
             if isinstance(message, RequestStartedAgentMessage):
@@ -411,6 +416,7 @@ def _run_agent_in_environment(
                         last_user_chat_message_id = message.request_id
                         initial_in_flight_user_chat_message_id = message.request_id
                         is_partial_agent_response = False
+                        last_started_chat_message = persistent_message
                     elif isinstance(persistent_message, UserQuestionAnswerMessage):
                         initial_in_flight_user_question_answer_message_id = message.request_id
                     # add the user message to the history as well
@@ -449,6 +455,13 @@ def _run_agent_in_environment(
         # converts the push into a resume and Claude continues its --resume session.
         if not is_partial_agent_response:
             initial_in_flight_user_chat_message_id = None
+
+        if last_started_chat_message is not None:
+            agent_wrapper.set_conversation_launch_settings(
+                model_name=last_started_chat_message.model_name,
+                fast_mode=last_started_chat_message.fast_mode,
+                effort=last_started_chat_message.effort,
+            )
 
         logger.debug("Initial in-flight user chat message ID: {}", initial_in_flight_user_chat_message_id)
         logger.debug("Last processed message id:              {}", task_state.last_processed_message_id)
