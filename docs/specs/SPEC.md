@@ -346,9 +346,9 @@ agent), and shown disabled with the current model for those that don't; the list
 the agent's own harness, so a **Claude** agent picks from the Claude models while a **Pi** agent
 surfaces Pi's live catalog grouped by provider — a single provider lists its models flat, while two or
 more providers cascade into a per-provider submenu, and a Pi agent with no authenticated providers
-shows an **Authenticate a provider** prompt in place of the list — reached whenever no provider is
-authenticated, including when a model had previously been selected, whose now-unusable choice is
-dropped rather than shown. Changing a Pi agent's model takes
+shows the model picker **disabled** ("No models available") in place of the list — reached whenever
+no provider is authenticated, including when a model had previously been selected, whose now-unusable
+choice is dropped rather than shown; the action to fix it lives on the Send button (above). Changing a Pi agent's model takes
 effect in-session (a failed switch leaves the choice unchanged and raises an actionable error toast). An **effort**
 selector budgets how much thinking it spends per step (Low, Medium, High, Extra High, Max — Extra High
 by default); a **fast mode** toggle trades some depth for quicker output on the models that support it

@@ -1538,7 +1538,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **CHAT-046 — Capability-gated model picker / Pi model catalog**
   - Given: agents whose harness does and doesn't support model selection.
   - When: the user opens the model picker on each (a Claude agent, a Pi agent, and a terminal agent).
-  - Then: a Claude agent lists Claude models; a Pi agent lists Pi's own models grouped by provider (a single provider flat, two or more cascading into per-provider submenus), and a Pi agent with no authenticated providers shows an "Authenticate a provider" prompt instead of a list — including when a model had previously been selected, where the now-unusable selection is dropped so the prompt still appears, and the Send button is replaced by a "Go to harness configuration" button; a terminal agent shows the picker disabled with the current model; switching a Pi model that the harness rejects leaves the selection unchanged and shows an error toast.
+  - Then: a Claude agent lists Claude models; a Pi agent lists Pi's own models grouped by provider (a single provider flat, two or more cascading into per-provider submenus), and a Pi agent with no authenticated providers shows the model picker disabled ("No models available") instead of a list — including when a model had previously been selected, where the now-unusable selection is dropped so the picker still empties — with the single fix-it action on the Send button, which is replaced by a "Go to harness configuration" button; a terminal agent shows the picker disabled with the current model; switching a Pi model that the harness rejects leaves the selection unchanged and shows an error toast.
 
 ---
 

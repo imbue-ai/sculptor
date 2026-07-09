@@ -25,11 +25,15 @@ Two coupled defects, one design.
 
 - **Decision 1 (backend):** empty the catalog when the selected model's provider is
   unauthenticated **and** there is no authenticated fallback, so `available_models` reaches
-  `[]` and the *already-built* empty state renders. (Chesterton's-fence-checked — §4.)
+  `[]` and the *already-built* empty state renders. (Chesterton's-fence-checked under
+  Decision 1.)
 - **Decision 2 (frontend + a new harness seam):** when there is no usable model, replace
   the **Send** button with a **generic "Go to harness configuration"** button that routes
   to a **harness-owned settings destination** — pi → Settings → Pi, Claude → Settings →
-  Dependencies — instead of letting the send fail into a crash.
+  Dependencies — instead of letting the send fail into a crash. That button is the
+  **single** CTA: the model picker is shown **disabled** (it states the fact — "No models
+  available" — and carries no action button), so one predicate drives one action. **Picker
+  disabled, Send replaced.**
 
 The target external state matches the intended CTA: *"You have selected the Pi agent, but
 you cannot send any messages until you authenticate with a provider."*
@@ -107,7 +111,14 @@ It is **not correctly capable** of representing the state, for three reasons:
    usable models, so it structurally cannot carry "no models available."
 
 **Nothing on the task state answers the real question — "is there at least one model I can
-actually send to right now?"** That is the gap this design closes.
+actually send to right now?"** That is the gap this design closes — by **removing a
+representable-but-wrong state, not by adding one**. No "providers active" flag is added to
+task state: it would be a second written store for a fact derivable from `auth.json` at
+read. Instead Decision 1 makes the existing field truthful, so fetched-`[]` *becomes* the
+"no usable model" signal. Of the collapses above, only (2) — selection decoupled from
+availability — is the bug being fixed; the "no providers" / "probe failed" conflation in
+(1) is **accepted, not fixed**: no caller branches on the difference, and the CTA is
+generic either way.
 
 ## Part 2 — Why the catalog isn't empty (the exact mechanism)
 
@@ -136,8 +147,13 @@ the reselect, so a fresh restart lands on `[qwen]` directly.
 `_reselect_unauthenticated_current_model` finds **no authenticated replacement**, drop the
 selection (`current_model → None`) instead of retaining it. Then
 `_curate_models(options, None, ∅) == []`, `available_models` becomes a fetched-but-empty
-`[]`, and the existing `ModelSelector` empty state (login CTA) renders. Apply the same in
-the probe path so a fresh restart also empties.
+`[]`, and the picker renders its no-models state — **disabled**, with the action in the send
+slot (Decision 2). Apply the same in the probe path so a fresh restart also empties.
+
+**The invariant this establishes** (whenever the auth filter is active): a retained
+`current_model` is an authenticated one. Selection is tied to availability, fetched
+`available_models == []` means exactly "no usable model", and the contradictory state we
+hit — catalog `[qwen]`, selection `qwen`, providers `∅` — can no longer be produced.
 
 **Keep the rest of the exemption.** The current model stays exempt from the *cosmetic* rules
 (the `claude-3-*` blacklist, dated-pin dedup, and "pi didn't enumerate it") — those protect
@@ -167,7 +183,8 @@ justification for the auth case has since expired:
   `…_absent_from_catalog`.
 - **Narrow to the auth-filter/no-fallback plank (the plan):** the only behavior genuinely
   changed is that a user who disconnects their **only** provider **mid-session** now sees
-  the switcher go empty (the login CTA) instead of showing a dead model. That is arguably
+  the switcher go empty (a disabled picker + the composer's "Go to harness configuration" CTA)
+  instead of a dead model. That is arguably
   *correct*, and the **send-guard** (Decision 2), not the catalog, is the real protection
   against the crash.
 
@@ -180,39 +197,62 @@ state + send-guard that give "empty" a meaning.
 
 When the harness has **no usable model**:
 
-- **Model picker: empty.** For pi this is the existing "No models available — please log in
-  to authenticate" empty state (now actually reached, per Decision 1).
+- **Model picker: disabled.** When there is no usable model the picker renders inert (a
+  disabled trigger, no dropdown, no action button) — it states the fact ("No models
+  available"); it does **not** carry the action. Its former "Open pi login" button is
+  **dropped**: it rendered inline in the same composer row as Send, so keeping it would put
+  two adjacent buttons in front of one destination.
 - **Send button: replaced**, not merely disabled, by a **"Go to harness configuration"**
-  button. Clicking it opens the harness's own configuration destination. No message can be
-  sent; the crash path is never entered.
+  button — the *single action*, driven by the same predicate. Clicking it opens the
+  harness's own configuration destination. No message can be sent; the crash path is never
+  entered. (Final user-facing label to be settled against the copy constraint under
+  Documentation impact.)
 
-This replaces today's failure mode (send → `PiCrashError` → `ConcurrencyExceptionGroup` →
-two red error blocks with a *post-hoc* "Open pi login") with an *up-front* actionable CTA.
+The disabled picker says what happened; the one button says what to do next. This replaces today's failure
+mode (send → `PiCrashError` → `ConcurrencyExceptionGroup` → two red error blocks with a
+*post-hoc* "Open pi login") with an *up-front* actionable CTA.
 
 ### The generic seam (harness-owned destination)
 
-The composer must not hardcode "Pi". Today the "authenticate" CTA is hardcoded to
-`SettingsSection.PI` in **three** places (`ChatInput.tsx:500-502`,
-`AgentSettingsControls.tsx:55-57`, and the `ModelSelector` `onAuthenticate` prop). Generalize:
+The composer must not hardcode "Pi". Today the pi-ness is spread over three sites: two
+handlers hardcoding `SettingsSection.PI` (`ChatInput.tsx:500-502`, and
+`AgentSettingsControls.tsx:55-57` — a *dead* handler that exists only because
+`ModelSelector` requires `onAuthenticate`, on a pre-task, Claude-only surface where the
+empty state is unreachable) plus the pi-specific button ("Open pi login") in
+`ModelSelector`. With the single-CTA collapse above, all three are **deleted**, not
+re-pointed: the destination is read at exactly one place, the composer's send-slot CTA.
+Generalize:
 
 1. **Backend:** add `configuration_settings_section(self) -> str` to the `Harness` ABC
    (`interfaces/agents/harness.py`), parallel to `sources_backend_models()`. Each harness
-   owns its destination:
-   - `PiHarness` → `"PI"`
-   - `ClaudeCodeHarness` → `"DEPENDENCIES"`  (see rationale below)
-   - base default → `"DEPENDENCIES"` (or `"GENERAL"`) — decide in review.
+   owns its destination — two declarations, not three independent choices:
+   - base default → `"DEPENDENCIES"` — the researched right answer for Claude (below), and
+     unread for harnesses that never render a composer (terminal/hello).
+   - `PiHarness` → `"PI"` — the only override.
 
-   Do **not** put this on `HarnessCapabilities` — that model is bool-only by contract
-   (docstring-enforced).
+   Claude needs no override; the destination test (Test impact) pins both resolved values,
+   so a later base-default change cannot silently move Claude. Do **not** put this on
+   `HarnessCapabilities` — that model is bool-only by contract (docstring-enforced). The
+   value is a frontend `SettingsSection` id crossing the boundary as a string (the enum is
+   frontend-only), so the same test also asserts every destination is a real section id —
+   the `settingsSectionDrift.test.ts` / `appearanceModesDrift.test.ts` pattern.
 2. **Derived view:** expose it as a `@computed_field` on `CodingAgentTaskView`
    (`web/derived.py`, beside `sources_backend_models`), delegating to `_resolve_harness()`.
    It rides the existing task snapshot to the generated TS twin automatically.
-3. **Frontend:** read it via a `useTaskHelpers` accessor (like `useTaskSourcesBackendModels`)
-   and have the composer call `useOpenSettings(task.configurationSettingsSection)` — the
-   canonical navigator (`common/state/hooks/useOpenSettings.ts`) — instead of the hardcoded
-   `SettingsSection.PI`. This collapses the three hardcoded sites into one harness-driven value.
+3. **Frontend:** read it via a `useTaskHelpers` accessor (like `useTaskSourcesBackendModels`);
+   the send-slot CTA passes it to the `useOpenSettings()` navigator — the canonical way to
+   open Settings (`common/state/hooks/useOpenSettings.ts`; today's `ChatInput` handler calls
+   `navigateToGlobalSettings` directly, which that hook's contract forbids — retired along
+   with the handler).
 
-### Claude's destination = `SettingsSection.DEPENDENCIES`
+**Rejected alternative — a frontend harness→section map** (the precedent being the
+`BINARY_NOT_FOUND_TOOLS` table in `AlphaErrorBlock.tsx`): it would need harness *identity*
+on the task view, which is deliberately absent — the frontend renders backend-owned facts
+(capabilities, catalogs, tool roles) and never branches on which harness it is. That table
+keys on error-type strings precisely because errors carry no destination; extending it here
+would complect the composer with harness identity, the exact coupling this seam removes.
+
+### The default destination = `SettingsSection.DEPENDENCIES` (Claude's answer)
 
 `SettingsSection` is a frontend-only enum (`pages/settings/sections.ts`, 15 members). Claude
 authenticates **differently from pi**: not via a provider/API-key catalog, but via the
@@ -222,6 +262,11 @@ and surfaced under **Settings → Dependencies** (and first-run onboarding). Tha
 where `ClaudeBinaryNotFoundError` routes (`AlphaErrorBlock.tsx:30-32`). The "Claude"-labeled
 `AGENT` section holds only default-model / fast-mode / effort preferences — the wrong target.
 
+Note the value is **unread today**: Claude's static catalog can never satisfy the
+activation predicate, so no live path resolves its destination. It is researched and fixed
+now as the *default's* justification, so the seam needs no revisiting when a harness
+without an override first hits the predicate.
+
 > **Follow-up worth filing:** Dependencies shows Claude auth *status* but has no "Sign in to
 > Claude" button in Settings today (only onboarding does). Landing the seam on an actionable
 > control — reusing `POST /api/v1/dependencies/auth` — would make Claude's destination as
@@ -229,25 +274,32 @@ where `ClaudeBinaryNotFoundError` routes (`AlphaErrorBlock.tsx:30-32`). The "Cla
 
 ### The activation predicate ("no usable model")
 
-- **pi:** `sources_backend_models && available_models` is a fetched-but-empty `[]`
-  (i.e. `NOT_FETCHED_YET` excluded — that stays "Loading models…"). Decision 1 makes this
-  reachable. Lift the predicate out of `ModelSelector` into a shared helper so the
-  send-guard and the picker agree on one definition.
-- **Claude:** sources a static built-in list, so "zero models" never fires on count; the
-  seam is built generic for the **destination** and for future/other harnesses. Claude's
-  own not-authenticated state is surfaced separately (onboarding + error blocks) and is out
-  of scope for this send-guard — noted so we don't conflate the two.
+**One predicate, defined once** — lifted out of `ModelSelector` into a shared helper so
+the send-guard and the picker's empty state cannot disagree:
+
+> `hasNoUsableModel` := `sources_backend_models` **and** `available_models` is a
+> fetched-but-empty `[]` — `NOT_FETCHED_YET` excluded (that stays "Loading models…",
+> never the CTA).
+
+- **pi:** Decision 1 makes the predicate reachable.
+- **Claude:** never satisfies it by construction (static built-in list,
+  `sources_backend_models` false); the seam is generic for the **destination** and for
+  future/other harnesses. Claude's own not-authenticated state is surfaced separately
+  (onboarding + error blocks) and is out of scope for this send-guard — noted so we don't
+  conflate the two.
 
 The send-guard folds the predicate into the Send button's `disabled`/replace logic
-(`ChatInput.tsx:788`, which today checks only in-flight / queued / empty-draft) and the
-parallel `AgentSettingsControls`.
+(`ChatInput.tsx:788`, which today checks only in-flight / queued / empty-draft).
+`AgentSettingsControls` — the pre-task, Claude-only modal toolbar — gets **no** guard: the
+predicate needs a task and cannot hold there; its only change is losing its dead handler
+(see Implementation scope).
 
 ## Target states — before / after
 
 | | Today (bug) | After |
 |---|---|---|
 | `available_models` (pi, no providers, had selection) | `[qwen]` | `[]` |
-| Model picker | shows "Qwen: Qwen3.7 Max" (unusable) | empty state + login CTA |
+| Model picker | shows "Qwen: Qwen3.7 Max" (unusable) | disabled ("No models available", no action) |
 | Send button | enabled → send → crash | replaced by "Go to harness configuration" |
 | Error surface | `PiCrashError` + `ConcurrencyExceptionGroup` (2 blocks) | none — send is never attempted |
 | CTA timing | post-hoc ("Open pi login" on the error) | up-front (on the composer) |
@@ -259,17 +311,21 @@ Backend:
 - `agents/pi_agent/agent_wrapper.py`: `_reselect_unauthenticated_current_model` returns
   `ModelOption | None` (drop on no-fallback); callers in `_fetch_models_into_state` and the
   probe path handle `None` → empty catalog.
-- `interfaces/agents/harness.py`: new `configuration_settings_section()` on the ABC + per-harness overrides.
+- `interfaces/agents/harness.py`: new `configuration_settings_section()` on the ABC (base
+  default `"DEPENDENCIES"`) + the pi override.
 - `web/derived.py`: new `@computed_field` surfacing it.
 
 Frontend:
 - `common/state/hooks/useTaskHelpers.ts`: new accessor.
 - shared helper for the "no usable model" predicate (next to `routeModelChange` in
   `common/modelConstants.ts`).
-- `ChatInput.tsx` + `AgentSettingsControls.tsx`: send-guard + swap Send → "Go to harness
-  configuration"; replace the hardcoded `SettingsSection.PI` with the harness value.
-- `ModelSelector.tsx`: reuse the shared predicate; the empty-state CTA label/destination
-  becomes harness-driven.
+- `ChatInput.tsx`: send-guard + swap Send → "Go to harness configuration", reading the
+  harness destination; delete `handleAuthenticate`.
+- `AgentSettingsControls.tsx`: delete its dead `handleAuthenticate` (it exists only to
+  satisfy the required `onAuthenticate` prop for a state unreachable on that surface).
+- `ModelSelector.tsx`: reuse the shared predicate; the no-models state becomes a disabled
+  trigger ("No models available") — drop the `onAuthenticate` prop and the "Open pi login"
+  button (the action is subsumed by the send-slot CTA).
 - `just generate-api` after new `ElementIds` / view fields.
 
 ## Test impact
@@ -278,8 +334,11 @@ Frontend:
   and the reselect "only provider disconnected → retained" test now assert **drop → empty**.
 - **Keep:** the two cosmetic-exemption tests
   (`…_keeps_current_model_even_when_a_rule_would_drop_it`, `…_absent_from_catalog`).
+- **Repoint:** picker login-CTA tests (`PI_PICKER_LOGIN_CTA`) migrate to the send-slot CTA
+  — the surviving affordance; the picker's disabled no-models-state assertion stays on the picker.
 - **Add:** a send-guard test (no usable model → Send replaced, no POST), and a
-  harness-destination test (pi→PI, claude→DEPENDENCIES).
+  harness-destination test (pi→`PI`, base/claude→`DEPENDENCIES`, and every destination a
+  real `SettingsSection` id — the drift-test pattern).
 - Integration: extend the pi empty-state / picker-live-refresh suites for the
   had-a-selection path.
 
@@ -299,15 +358,24 @@ Frontend:
 - **Copy constraint:** `docs/development/review/design.md:202` — empty/error states must say
   what happened and what to do next, in plain language.
 
-## Open questions / to confirm in review
+## Decisions settled in review
 
-1. **Base-harness default destination:** `"DEPENDENCIES"` vs `"GENERAL"` for harnesses that
-   declare nothing (terminal/hello never reach the composer send path, so this is a
-   safety default).
-2. **Mid-session live-disconnect:** confirm we accept the one behavior change — the switcher
-   goes empty (login CTA) when the only provider is disconnected mid-session — rather than
-   preserving "retain" only for that sub-case.
-3. **Claude sign-in control:** file the follow-up to add an actionable "Sign in to Claude"
-   under Dependencies so Claude's destination is as useful as pi's?
+1. **Single CTA — SETTLED: picker disabled, Send replaced.** The picker is shown disabled
+   ("No models available", no action button); the send slot carries the one action ("Go to
+   harness configuration"). The picker's "Open pi login" button is retired. (The maintainer
+   first weighed "disable Send + keep the picker CTA", then reversed it once that left the
+   generic seam with nothing to power — so Send is *replaced*, not merely disabled.)
+2. **Mid-session live-disconnect — SETTLED: accept uniform.** The unusable selection is
+   dropped in every path (reselect + probe); disconnecting your only provider mid-session
+   empties the switcher rather than showing the dead model. No start-vs-refresh branch.
+
+## Still open (minor)
+
+3. **Claude sign-in control:** file a follow-up to add an actionable "Sign in to Claude"
+   under Dependencies so Claude's destination is as useful as pi's? (Not required here;
+   Claude cannot satisfy the predicate today.)
 4. **Naming:** `configuration_settings_section` vs a shorter `settings_section` /
-   `config_destination`.
+   `config_destination` — settle at implementation.
+5. **Send-slot label copy:** "Go to harness configuration" is the working label; confirm it
+   against the plain-language empty/error copy rule (`docs/development/review/design.md:202`)
+   at implementation.
