@@ -118,24 +118,39 @@ jobs:
         id: tests
         run: |
           ulimit -n 8192
-          OFFLOAD_EXIT=0
-          just test-offload-perf --ci || OFFLOAD_EXIT=$?
+          set +e
+          just test-offload-perf --ci 2>&1 | tee offload-out.log
+          OFFLOAD_EXIT=${PIPESTATUS[0]}
+          set -e
           pkill -TERM -f 'python3.*modal' 2>/dev/null || true
           sleep 3
           pkill -KILL -f 'python3.*modal' 2>/dev/null || true
-          # offload exits 2 for "some tests failed"; keep going so we still
-          # aggregate whatever measurements came back.
-          if [ "$OFFLOAD_EXIT" -ne 0 ] && [ "$OFFLOAD_EXIT" -ne 2 ]; then
-            exit "$OFFLOAD_EXIT"
-          fi
+          echo "offload wrapper exit: $OFFLOAD_EXIT"
+          # Trust offload's own end-of-run summary, not the exit code: the code
+          # for "some tests failed" varies across offload versions and the recipe
+          # swallows one of them, so a scenario failure can surface as several
+          # different non-zero codes. "Failed:  N" is printed once at the end; it
+          # is absent only when offload never produced a summary (a genuine infra
+          # failure), which then surfaces as zero rows in the aggregate step.
+          FAILED=$(grep -oE '^[[:space:]]*Failed:[[:space:]]*[0-9]+' offload-out.log | grep -oE '[0-9]+' | tail -1)
+          echo "tests_failed=${FAILED:-0}" >> "$GITHUB_OUTPUT"
+          # Never fail the step here: partial measurements are still worth
+          # reporting. Infra failure -> zero rows -> aggregate goes red; a
+          # scenario failure -> surfaced red by the final step, after the
+          # comment/summary have posted.
 
       - name: Aggregate per-sandbox measurements
         id: agg
+        if: always()
         run: |
           # Each sandbox wrote perf-measurements-<token>.jsonl; concatenate into
           # one head file for the compare + note steps.
           mkdir -p perf-out
           find test-results-perf -name 'perf-measurements-*.jsonl' -exec cat {} + > perf-out/head.jsonl || true
+          # Keep the merged JUnit next to the payload so the uploaded artifact
+          # carries per-scenario pass/fail detail (used to identify a flaky
+          # scenario without re-running the suite).
+          find test-results-perf -name 'junit-perf.xml' -exec cp {} perf-out/ \; 2>/dev/null || true
           COUNT=$(wc -l < perf-out/head.jsonl | tr -d ' ')
           echo "rows=$COUNT" >> "$GITHUB_OUTPUT"
           echo "Aggregated $COUNT measurement rows."
@@ -155,7 +170,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: perf-measurements
-          path: perf-out/head.jsonl
+          # Whole dir: head.jsonl (the payload) + junit-perf.xml (pass/fail detail).
+          path: perf-out/
           if-no-files-found: ignore
           retention-days: 30
 
@@ -212,13 +228,12 @@ jobs:
               echo "should_comment=true" >> "$GITHUB_OUTPUT"
             fi
           else
+            # No baseline note yet: render the absolute head numbers so the PR's
+            # perf profile is visible now (deltas begin once a main run seeds a
+            # note). Step summary only — nothing to diff, so no PR comment.
+            python3 tools/perf/comment.py --head perf-out/head.jsonl \
+              --format github --observational >> "$GITHUB_STEP_SUMMARY"
             echo "should_comment=false" >> "$GITHUB_OUTPUT"
-            {
-              echo "### perf scenarios"
-              echo ""
-              echo "No baseline note found for the merge-base; nothing to diff against yet."
-              echo "(This is expected until a main run has recorded a note for an ancestor commit.)"
-            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Upsert PR comment
@@ -244,3 +259,23 @@ jobs:
             gh pr comment "$PR" --body-file "$BODY_FILE"
             echo "Posted new perf comment."
           fi
+
+      # Surface scenario failures red — but only after the measurements have been
+      # aggregated, summarized, and (on PRs) commented, so a single flaky
+      # scenario never discards the results of the others. retry_count=0 means a
+      # flaky perf test is itself signal; this lane is non-gating (not a required
+      # check), so a red X is visible without blocking merges.
+      - name: Surface scenario failures
+        if: always() && steps.tests.outputs.tests_failed != '' && steps.tests.outputs.tests_failed != '0'
+        run: |
+          N="${{ steps.tests.outputs.tests_failed }}"
+          {
+            echo "### ❌ perf scenarios: $N scenario(s) failed"
+            echo ""
+            echo "Measurements from the scenarios that passed were still aggregated and rendered above."
+            echo "The failing case's detail is in the uploaded \`perf-measurements\` artifact (\`junit-perf.xml\`)."
+            echo ""
+            echo "This lane is observational (non-gating), but a failing scenario means the suite isn't reliably measurable — failing red so it stays visible."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::$N perf scenario(s) failed — see the perf-measurements artifact (junit-perf.xml)."
+          exit 1

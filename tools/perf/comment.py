@@ -340,6 +340,50 @@ def render_markdown(report: Report, base_sha: str | None, observational: bool) -
     return "\n".join(out)
 
 
+def _head_cells(h: dict) -> tuple[int, int, int, int, str]:
+    """Absolute (fg, commits, dom, bg, duration-text) for one head row."""
+    fg = sum(h["fg_by_route"].values())
+    return fg, int(h["commits"]), int(h["dom_mutations"]), int(h["bg_requests"]), f"{h['duration_ms']:.0f}ms"
+
+
+def render_head_only_markdown(head_idx: dict, head_dupes: list[tuple[str, str]]) -> str:
+    """Render absolute head numbers when there is no baseline to diff against.
+
+    The verdict table only shows values for *compared* rows, so before a main
+    run has recorded a ``refs/notes/perf`` note there is nothing to display but
+    ``new (no baseline)`` placeholders. This renders the raw current numbers so
+    a PR's perf profile is visible during the bootstrapping window (and for
+    anyone who just wants absolute values, not a delta).
+    """
+    out: list[str] = [MARKER, "", "### 📊 perf measurements (no baseline yet)"]
+    out.append("")
+    out.append(
+        "_No `refs/notes/perf` baseline for the merge-base yet — deltas begin"
+        + " once a main run records a note. Absolute numbers below._"
+    )
+    if head_dupes:
+        out.append("")
+        out.append("⚠️ duplicate rows (retries appended twice?): " + ", ".join(f"`{s}/{v}`" for s, v in head_dupes))
+    out.append("")
+    out.append("| scenario / variant | fg req | commits | dom | bg req | duration |")
+    out.append("|---|---|---|---|---|---|")
+    for k in sorted(head_idx):
+        scenario, variant = k
+        fg, commits, dom, bg, dur = _head_cells(head_idx[k])
+        out.append(f"| {scenario} / {variant} | {fg} | {commits} | {dom} | {bg} | {dur} |")
+    out.append("")
+    return "\n".join(out)
+
+
+def render_head_only_term(head_idx: dict) -> str:
+    lines = ["perf measurements (no baseline)"]
+    for k in sorted(head_idx):
+        scenario, variant = k
+        fg, commits, dom, bg, dur = _head_cells(head_idx[k])
+        lines.append(f"  {scenario}/{variant}  fg={fg} commits={commits} dom={dom} bg={bg} dur={dur}")
+    return "\n".join(lines)
+
+
 def render_term(report: Report, base_sha: str | None) -> str:
     c = report.counts()
     lines = [_verdict(report)]
@@ -366,7 +410,15 @@ def build_report(base: Path, head: Path) -> Report:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Diff perf measurements; render a PR comment / summary.")
-    p.add_argument("--base", required=True, type=Path, help=".jsonl file or dir of the baseline (merge-base) run")
+    p.add_argument(
+        "--base",
+        type=Path,
+        default=None,
+        help=(
+            ".jsonl file or dir of the baseline (merge-base) run; omit (or point at an "
+            + "empty/missing path) to render an absolute head-only table instead of a diff"
+        ),
+    )
     p.add_argument("--head", required=True, type=Path, help=".jsonl file or dir of this run")
     p.add_argument("--base-sha", default=None, help="baseline commit SHA, named in the comment")
     p.add_argument("--format", choices=["github", "term"], default="term")
@@ -374,7 +426,22 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--fail-on-regression", action="store_true", help="exit 1 if any regression (off in CI for now)")
     args = p.parse_args(argv)
 
-    report = build_report(args.base, args.head)
+    base_rows = _load_rows(args.base) if args.base is not None else []
+    head_rows = _load_rows(args.head)
+
+    # No baseline data -> head-only absolute table (bootstrapping window, before
+    # a main run has recorded a note). A diff needs both sides.
+    if not base_rows:
+        head_idx, head_dupes = _index(head_rows)
+        if args.format == "github":
+            sys.stdout.write(render_head_only_markdown(head_idx, head_dupes) + "\n")
+        else:
+            sys.stdout.write(render_head_only_term(head_idx) + "\n")
+        return 0
+
+    base_idx, base_dupes = _index(base_rows)
+    head_idx, head_dupes = _index(head_rows)
+    report = compare(base_idx, head_idx, (base_dupes, head_dupes))
     if args.format == "github":
         sys.stdout.write(render_markdown(report, args.base_sha, args.observational) + "\n")
     else:

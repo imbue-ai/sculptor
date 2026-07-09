@@ -8,8 +8,11 @@ around them.
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import sys
+import tempfile
 from pathlib import Path
 
 _spec = importlib.util.spec_from_file_location("perf_comment", Path(__file__).with_name("comment.py"))
@@ -104,6 +107,38 @@ def test_attribution_details_on_regression() -> None:
     assert r.status == "regressed"
     joined = " ".join(r.details)
     assert "FileTree" in joined and "Toast" in joined
+
+
+def test_head_only_renders_absolute_numbers() -> None:
+    # With no base rows, the CLI renders a head-only absolute table rather than
+    # a diff — the bootstrapping view before a main baseline note exists.
+    hidx, _ = comment._index([_row("prompt_input", "empty", commits=66, dom=169, bg=2)])
+    md = comment.render_head_only_markdown(hidx, [])
+    assert comment.MARKER in md
+    assert "no baseline yet" in md
+    # The absolute values appear as table cells (not "new (no baseline)").
+    assert "| prompt_input / empty | 0 | 66 | 169 | 2 |" in md
+    assert "new (no baseline)" not in md
+    term = comment.render_head_only_term(hidx)
+    assert "commits=66" in term and "dom=169" in term
+
+
+def test_main_head_only_when_base_absent() -> None:
+    # No pytest fixtures: this module also runs as a plain script (see __main__),
+    # where every test_* is called with no arguments.
+    with tempfile.TemporaryDirectory() as d:
+        head = Path(d) / "head.jsonl"
+        head.write_text(comment.json.dumps(_row("s", "v", commits=42)) + "\n", encoding="utf-8")
+        # Missing --base entirely, and a --base pointing at a nonexistent path,
+        # both fall through to head-only (exit 0, no crash).
+        for argv in (
+            ["--head", str(head), "--format", "github"],
+            ["--base", str(Path(d) / "nope.jsonl"), "--head", str(head), "--format", "github"],
+        ):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                assert comment.main(argv) == 0
+            assert "no baseline yet" in buf.getvalue()
 
 
 if __name__ == "__main__":
