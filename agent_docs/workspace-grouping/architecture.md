@@ -104,11 +104,12 @@ don't break old rows.
 - **Collapse**: per-group boolean in localStorage, mirroring
   `collapsedRepoGroupsAtom` (`sculptor-collapsed-workspace-groups`).
 - **UI (REQ-UI-1, Dia-style)**: a group renders as a header row
-  (chevron + swatch + name + hover "⋯") plus member rows indented one
-  level deeper, all direct participants of the repo section's flat
-  lane; the accent-tinted container surface is painted by a wrapper
-  around the group's run and materializes on hover/drag rather than at
-  rest. Text-only menu per REQ-MENU-1; workspace context menu carries
+  (chevron + accent-tinted name + hover "⋯", no swatch) plus member
+  rows indented one level deeper, all direct participants of the repo
+  section's flat lane, wrapped in an always-visible accent box (rest +
+  hover shades) whose padding insets the row pills; a selected member
+  re-stamps the app accent so it looks identical to a selected loose
+  row. Text-only menu per REQ-MENU-1; workspace context menu carries
   the two grouping actions (REQ-MENU-2); CLI badge is a small text chip
   on the header.
 - **D&D (the flat-lane model, REQ-DND-1..7)**: each repo section is ONE
@@ -120,8 +121,10 @@ don't break old rows.
   in-flow placeholder re-parents into the projected slot, so the
   group's painted container physically wraps the gap), while a
   `DragOverlay` copy follows the pointer freely. The ambiguous
-  after-last-member slot defaults inside; pointer-x / Left-Right
-  arrows flip it (REQ-DND-6). Drops apply membership + order
+  after-last-member slot resolves geometrically — inside while the
+  pointer is within the group box's vertical extent, outside in the
+  gaps between boxes; keyboard drags default inside with Left/Right
+  flipping (REQ-DND-6). Drops apply membership + order
   optimistically with rollback + toast on failure (REQ-DND-7). Repo
   sections stay an outer sortable list, keeping cross-repo drops
   structurally impossible.

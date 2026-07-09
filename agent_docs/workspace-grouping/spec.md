@@ -9,11 +9,11 @@ exploration record). [mocks.context.md](./mocks.context.md) records the
 mock session's decisions and rejected alternatives.
 
 After hands-on comparison against Dia's tab groups, the visual and
-drag-and-drop direction moved past Variant B to Dia's flat presentation:
+drag-and-drop direction moved past Variant B to Dia's presentation:
 groups render as a header row plus indented member rows in one
-continuous list, with the container surface materializing on hover and
-during drags rather than as an always-visible card (REQ-UI-1, and the
-"Drag and drop" section below).
+continuous list, inside an always-visible rounded accent box whose
+padding insets the row pills (REQ-UI-1, and the "Drag and drop" section
+below).
 
 ## Overview
 
@@ -161,15 +161,17 @@ behaves as if `--no-group` were always passed (REQ-FLAG-4).
 ### Sidebar UI
 
 - **REQ-UI-1**: A group MUST render Dia-style as a header row plus its
-  member rows indented one level deeper than loose rows, in the repo
-  section's single continuous list. At rest the group shows no
-  persistent box; a rounded accent-tinted container surface wrapping
-  the header and members MUST materialize on hover and while a drag
-  targets the group. Loose workspaces MUST continue to render directly
+  member rows indented one level deeper than loose rows, wrapped in an
+  always-visible rounded accent-tinted box with two shades (rest and
+  hover). The box's padding insets the rows, so a member's hover or
+  selected pill reads as a narrower card within the box — the hover
+  pill one accent step lighter than the box surface, and the selected
+  pill identical to a selected loose row (the group's accent remap MUST
+  NOT recolor it). Loose workspaces MUST continue to render directly
   under the repo header alongside groups.
-- **REQ-UI-2**: The group header MUST show only a chevron, a color
-  swatch, and the name — no workspace count and no group-level
-  run/status indicator.
+- **REQ-UI-2**: The group header MUST show only a chevron and the name
+  (tinted in the group color) — no color swatch, no workspace count,
+  and no group-level run/status indicator.
 - **REQ-UI-3**: A collapsed group MUST shrink to its header row only (no
   member preview). Collapse state SHOULD persist across restarts,
   following the existing repo-section collapse pattern.
@@ -232,14 +234,16 @@ items follow alphabetically, stale ids are skipped on read).
   landed keyboard drag path as well as by pointer.
 - **REQ-DND-6**: The one geometrically ambiguous slot — immediately
   after a group's last member, which is also immediately after the
-  group — MUST default to *inside* the group (reading order), and the
-  user MUST be able to flip it to *outside*: by pointer, horizontal
-  position decides (pointer left of the member indent reads as
-  outside); by keyboard, Left/Right arrows flip the projected depth.
-  The live preview MUST always show the truth — the group's container
-  surface wraps the gap exactly when the drop would land inside — so
-  the drop can never surprise. Dropping onto a *collapsed* group's
-  header appends to the group (its members can't show a gap).
+  group — resolves by pointer geometry against the group's visible box:
+  the drop reads *inside* while the pointer is within the box's
+  vertical extent and *outside* in the gap between boxes or below the
+  last one, so the loose slot between two adjacent groups and after a
+  trailing group is always reachable. Keyboard drags default the slot
+  to inside, with Left/Right arrows flipping the projected depth. The
+  live preview MUST always show the truth — the box wraps the gap
+  exactly when the drop would land inside — so the drop can never
+  surprise. Dropping onto a *collapsed* group's header appends to the
+  group (its members can't show a gap).
 - **REQ-DND-7**: Drops MUST commit instantly. Membership-changing drops
   apply the membership and order optimistically and reconcile with the
   server; a rejected mutation rolls the move back and surfaces an error

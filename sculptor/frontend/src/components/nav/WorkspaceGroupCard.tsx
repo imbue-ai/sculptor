@@ -1,13 +1,12 @@
-// A workspace-group run in the sidebar, Dia-style (REQ-UI-1): a header row
-// (chevron + color swatch + name + optional CLI chip + hover "⋯" menu) with
-// the member workspace rows indented beneath it. At rest the run shows no box;
-// the wrapper paints a rounded, accent-tinted container surface when the run
-// is hovered and while a drag's projected drop would land inside the group —
-// because the wrapper is real layout (not a drag transform), that surface
-// physically wraps the drop gap, which is what makes "inside vs outside" read
-// unambiguously mid-drag (REQ-DND-6). The wrapper stamps the group's Radix
-// accent color as `data-accent-color`, remapping the `--accent-*` scale for
-// the subtree, so recolors follow a single attribute.
+// A workspace-group run in the sidebar, Dia-style (REQ-UI-1): an always-
+// visible rounded accent-tinted box wrapping the header row (chevron +
+// accent-colored name + optional CLI chip + hover "⋯" menu) and the member
+// workspace rows indented beneath it. The box shows one shade stronger on
+// hover, and — because it is real layout, not a drag transform — it
+// physically wraps the mid-drag drop gap, which is what makes "inside vs
+// outside" read unambiguously (REQ-DND-6). The wrapper stamps the group's
+// Radix accent color as `data-accent-color`, remapping the `--accent-*` scale
+// for the subtree, so recolors follow a single attribute.
 //
 // The run is NOT one sortable unit in the DOM: the header row and each member
 // row register individually with the repo section's single flat
@@ -361,7 +360,6 @@ export const WorkspaceGroupCard = ({
             {isRenaming ? (
               <span className={styles.groupHeaderButton}>
                 <Chevron size={15} className={styles.groupChevron} />
-                <span className={styles.groupSwatch} />
                 <InlineRenameInput
                   value={group.name}
                   onCommit={handleRenameCommit}
@@ -390,7 +388,6 @@ export const WorkspaceGroupCard = ({
                   className={styles.groupChevron}
                   data-testid={ElementIds.SIDEBAR_WORKSPACE_GROUP_CHEVRON}
                 />
-                <span className={styles.groupSwatch} />
                 <Text className={styles.groupName} truncate>
                   {group.name}
                 </Text>

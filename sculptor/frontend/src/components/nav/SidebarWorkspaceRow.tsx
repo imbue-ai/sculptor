@@ -10,6 +10,7 @@ import type { Workspace } from "~/api";
 import { ElementIds } from "~/api";
 import { workspaceDotStatusAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import type { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
+import { useThemeAccentColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import {
   type OpenInRuntime,
   WorkspaceContextMenuContent,
@@ -75,6 +76,11 @@ export const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   onBeginDelete: (workspace: Workspace) => void;
 }): ReactElement {
   const status = useAtomValue(workspaceDotStatusAtomFamily(workspace.objectId));
+  // A group box remaps the accent scale to the group's color for its subtree;
+  // the SELECTED pill must not follow (a selected member looks exactly like a
+  // selected loose row, REQ-UI-4), so the active row re-stamps the app accent
+  // to win the nearest-data-accent-color resolution.
+  const appAccentColor = useThemeAccentColor();
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isOver } =
     useSortable({
       id: workspace.objectId,
@@ -114,6 +120,7 @@ export const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
         <div
           ref={setNodeRef}
           className={rowClassName}
+          data-accent-color={isActive ? appAccentColor : undefined}
           style={{ transform: CSS.Translate.toString(transform), transition }}
         >
           {isRenaming ? (

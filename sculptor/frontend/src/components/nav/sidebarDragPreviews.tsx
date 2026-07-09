@@ -61,7 +61,6 @@ export const WorkspaceGroupDragPreview = ({
 }): ReactElement => (
   <div className={styles.groupPreview} data-accent-color={group.color}>
     <div className={styles.previewHeader}>
-      <span className={styles.previewSwatch} />
       <Text className={styles.previewGroupName} truncate>
         {group.name}
       </Text>

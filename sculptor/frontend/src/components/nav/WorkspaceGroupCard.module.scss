@@ -3,39 +3,45 @@
 // that group's Radix scale — the surface, name, and swatch all follow one
 // attribute.
 
-// At rest the run is chrome-less — a header row plus indented member rows in
-// the section's flat lane, no persistent box. The container surface
-// materializes on hover and (stronger, ringed) while a drag's projected drop
-// would land inside the group. Because the wrapper is real layout, that
-// surface physically wraps the mid-drag drop gap, which is what makes inside
-// vs outside read unambiguously (REQ-DND-6).
+// The group's container box, Dia-style: an always-visible rounded
+// accent-tinted surface wrapping the header row and member rows, one shade
+// stronger on hover. Its padding insets the rows, so a row's hover/selected
+// pill reads as a narrower card WITHIN the box rather than a full-bleed bar.
+// Because the box is real layout, it physically wraps the mid-drag drop gap
+// (and its visible edges are exactly what the pointer's geometric depth
+// intent measures against), which is what makes inside vs outside read
+// unambiguously (REQ-DND-6).
 .groupCard {
-  background: transparent;
+  background: var(--accent-a3);
   border-radius: var(--radius-3);
   display: flex;
   flex-direction: column;
   gap: 2px;
+  // Breathing room below the box so it doesn't sit flush against the next
+  // run or loose row (the section's own gap is only 2px).
+  margin-bottom: var(--space-1);
+  padding: var(--space-1);
   transition: background-color var(--duration-fast) ease;
 
   &:hover {
-    background: var(--accent-a2);
+    background: var(--accent-a4);
   }
 }
 
-// The run while the active drag would drop inside it: surface plus an accent
-// ring. Ring via box-shadow so the highlight never affects layout — droppable
-// rects are measured mid-drag and must stay stable.
+// The box while the active drag would drop inside it: hover shade plus an
+// accent ring. Ring via box-shadow so the highlight never affects layout —
+// droppable rects are measured mid-drag and must stay stable.
 .dropActive,
 .dropActive:hover {
-  background: var(--accent-a3);
+  background: var(--accent-a4);
   box-shadow: 0 0 0 1px var(--accent-a7);
 }
 
-// While ANY sidebar drag is in flight, the run's own hover surface is
+// While ANY sidebar drag is in flight, the box's own hover shade is
 // suppressed (the pointer sweeps across runs constantly): only the projected
 // drop target above may light up.
 [data-sidebar-drag-active] .groupCard:not(.dropActive):hover {
-  background: transparent;
+  background: var(--accent-a3);
 }
 
 // The run mid-drag (its header is the dragged item): the members are unmounted
@@ -51,15 +57,16 @@
 }
 
 // Same pill geometry as the workspace rows so the rail's row rhythm carries
-// through; the header indents like a loose row (its members sit one level
-// deeper, see .workspaceRowNested).
+// through. The box's own padding contributes part of the indent, so the
+// header's content column lines up with the loose rows outside (its members
+// sit one level deeper, see .workspaceRowNested).
 .groupHeader {
   align-items: center;
   border-radius: var(--radius-2);
   display: flex;
   gap: var(--space-1);
   min-height: 28px;
-  padding: 0 var(--space-2) 0 var(--space-5);
+  padding: 0 var(--space-2) 0 calc(var(--space-5) - var(--space-1));
 
   &:hover {
     background: var(--accent-a4);
@@ -84,15 +91,6 @@
 .groupChevron {
   color: var(--gray-10);
   flex-shrink: 0;
-}
-
-// The header's color dot, matching the workspace rows' 9px status dots.
-.groupSwatch {
-  background: var(--accent-9);
-  border-radius: var(--radius-full);
-  flex-shrink: 0;
-  height: 9px;
-  width: 9px;
 }
 
 .groupName {

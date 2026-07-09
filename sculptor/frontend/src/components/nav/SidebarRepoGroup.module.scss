@@ -80,11 +80,22 @@
   }
 }
 
-// A member row inside a workspace-group run: one level deeper than loose rows
-// so the nesting reads at a glance (REQ-UI-1) — and deeper indentation is also
-// what the pointer's depth-intent threshold pivots around during drags.
+// A member row inside a workspace-group box: one level deeper than loose rows
+// so the nesting reads at a glance (REQ-UI-1). Its hover pill is one accent
+// step lighter than the box surface (the box stamps the group's accent scale)
+// rather than the loose rows' gray, so hovering inside the box reads as a
+// lift within the group's own hue; the box's padding keeps the pill inset
+// from the box edges. The selected treatment is NOT group-hued — the row pins
+// the app accent back (see SidebarWorkspaceRow) so a selected member looks
+// exactly like a selected loose row.
 .workspaceRowNested {
   padding-left: var(--space-7);
+
+  // One step above the box's HOVER shade (hovering a member also hovers the
+  // box to a4), so the pill always reads lighter than the surface under it.
+  &:hover {
+    background: var(--accent-a5);
+  }
 }
 
 // The clickable part of a workspace row (dot + name). Kept separate from the
@@ -139,12 +150,17 @@
   visibility: visible;
 }
 
+// The selected workspace's pill. A SOLID step (not the alpha step the hover
+// states use): inside a group box an alpha background would composite over
+// the group tint and read as the group's color, while the solid step covers
+// it — so a selected member looks exactly like a selected loose row
+// (REQ-UI-1/4; the row also re-pins the app accent, see SidebarWorkspaceRow).
 .workspaceRowActive {
-  background: var(--accent-a3);
+  background: var(--accent-3);
   color: var(--accent-11);
 
   &:hover {
-    background: var(--accent-a3);
+    background: var(--accent-3);
   }
 }
 

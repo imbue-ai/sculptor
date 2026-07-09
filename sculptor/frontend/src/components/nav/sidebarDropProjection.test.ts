@@ -105,12 +105,13 @@ describe("projectSectionDrop — loose row moves", () => {
 
   it("joins a group at its head when dropped on the slot under the header", () => {
     // banana dragged up onto m1: lands between header and m1 → member index 0.
+    // The head slot is a boundary — it doubles as loose-before-the-group.
     expect(project("w-banana", "w-m1")).toEqual({
       kind: "row",
       activeId: "w-banana",
       parentGroupId: "wsg-1",
       index: 0,
-      isBoundary: false,
+      isBoundary: true,
     });
   });
 
@@ -133,7 +134,7 @@ describe("projectSectionDrop — loose row moves", () => {
       activeId: "w-apple",
       parentGroupId: "wsg-1",
       index: 0,
-      isBoundary: false,
+      isBoundary: true,
     });
   });
 
@@ -232,14 +233,19 @@ describe("projectSectionDrop — member row moves", () => {
 });
 
 describe("projectSectionDrop — depth intent scope", () => {
-  it("the head slot under a header is NOT a boundary (outside intent is ignored there)", () => {
-    expect(project("w-banana", "w-m1", { depthIntent: "outside" })).toEqual({
+  it("the outside intent flips the head slot to loose-right-before-the-group", () => {
+    // The gap between a group and whatever precedes it IS the head slot; with
+    // the pointer outside the box the drop stays loose, before the group.
+    const projection = project("w-banana", "w-m1", { depthIntent: "outside" });
+    expect(projection).toEqual({
       kind: "row",
       activeId: "w-banana",
-      parentGroupId: "wsg-1",
-      index: 0,
-      isBoundary: false,
+      parentGroupId: null,
+      index: 1,
+      isBoundary: true,
     });
+    const next = applySectionProjection(CHILDREN, projection as SectionProjection);
+    expect(keysOf(next)).toEqual(["w-apple", "w-banana", "wsg-1", "wsg-2"]);
   });
 
   it("loose slots are never boundaries", () => {

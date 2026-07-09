@@ -187,21 +187,29 @@ export const projectSectionDrop = (args: {
   // so the slot below it is loose — joining a collapsed group goes through the
   // append-collapsed path above.)
   let parentGroupId: SectionParent = null;
+  let isHeadSlot = false;
   if (above !== undefined) {
     if (above.isHeader && !collapsedGroupIds.has(above.id)) {
       parentGroupId = above.id;
+      isHeadSlot = true;
     } else if (above.parentGroupId !== null) {
       parentGroupId = above.parentGroupId;
     }
   }
 
-  // The slot is ambiguous only at a group's tail: inside the group and right
-  // after it are the same y-position. Default inside; the depth intent flips
-  // it out (REQ-DND-6). The head slot (directly under the header) is NOT
-  // ambiguous — above the header is a different slot.
+  // Both edges of a group's run sit at the same y-position as a loose slot —
+  // the tail slot doubles as "right after the group", and the head slot
+  // (directly under the header) doubles as "right before the group" (the gap
+  // between two boxes IS that slot). The depth intent — pointer geometry
+  // against the visible box, or the keyboard's Left/Right choice — resolves
+  // which side wins (REQ-DND-6): outside flips the tail to after the group
+  // and the head to before it.
   const isBoundary =
-    parentGroupId !== null && !(below !== undefined && !below.isHeader && below.parentGroupId === parentGroupId);
+    parentGroupId !== null &&
+    (isHeadSlot || !(below !== undefined && !below.isHeader && below.parentGroupId === parentGroupId));
+  let didFlipBeforeGroup = false;
   if (isBoundary && depthIntent === "outside") {
+    didFlipBeforeGroup = isHeadSlot;
     parentGroupId = null;
   }
 
@@ -210,8 +218,10 @@ export const projectSectionDrop = (args: {
     // Position within the group's member lane: the member rows sitting above it.
     index = moved.slice(0, to).filter((entry) => entry.parentGroupId === parentGroupId).length;
   } else {
-    // Position within the top-level lane: each loose row or header above is one child.
-    index = moved.slice(0, to).filter((entry) => entry.parentGroupId === null).length;
+    // Position within the top-level lane: each loose row or header above is one
+    // child. A head-slot flip lands BEFORE the group, so its header — the
+    // entry directly above — must not count.
+    index = moved.slice(0, to).filter((entry) => entry.parentGroupId === null).length - (didFlipBeforeGroup ? 1 : 0);
   }
   return { kind: "row", activeId, parentGroupId, index, isBoundary };
 };

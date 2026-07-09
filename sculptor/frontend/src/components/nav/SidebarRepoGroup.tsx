@@ -75,13 +75,6 @@ import { SidebarWorkspaceRow } from "./SidebarWorkspaceRow.tsx";
 import { WorkspaceGroupCard } from "./WorkspaceGroupCard.tsx";
 import type { RepoSectionChild } from "./workspaceGroupComposition.ts";
 
-// Pointer x-position (relative to the section's left edge) below which the
-// depth intent at a tail-of-group boundary reads as "outside" (REQ-DND-6).
-// Sits between the loose-row indent and the member-row indent, so holding the
-// pointer where loose rows live pulls the row out, and holding it over the
-// member text keeps it in.
-const DEPTH_INTENT_THRESHOLD_PX = 32;
-
 // One in-flight drag within the section's flat lane. `display` is the children
 // tree the lane currently renders (cross-parent projections are applied to it
 // mid-drag); `pending` is a projection previewed by transforms only (same-
@@ -293,19 +286,75 @@ export const SidebarRepoGroup = ({
     [collapsedGroupIds, acceptProjection],
   );
 
+  // Pointer depth intent is geometric, like Dia's: "inside" while the pointer
+  // sits within some group box's vertical extent, "outside" in the gaps
+  // between boxes and below the last one. This is what makes the loose slot
+  // between two adjacent groups — and after a trailing group — actually
+  // reachable (REQ-DND-6): a group-edge slot only reads inside while the
+  // pointer really is over the group's box. The box growing around the drop
+  // gap it holds open gives natural hysteresis: ejecting takes one extra row
+  // of travel past the grown box's edge, and a pointer parked in a between-box
+  // gap never reads inside in the first place, so the box can't chase it.
+  //
+  // When the pointer is outside every box while the row's placeholder sits IN
+  // a group (a fast drag can land it inside before the intent catches up),
+  // eject it directly to the loose slot on whichever side of that group's box
+  // the pointer is — the toggle needs a direction the binary intent can't
+  // carry, so it is built here where the pointer is known.
   const handleSectionDragMove = useCallback(
     (event: DragMoveEvent): void => {
-      const bounds = sectionChildrenRef.current?.getBoundingClientRect();
+      const state = dragStateRef.current;
+      const section = sectionChildrenRef.current;
       const activator = event.activatorEvent;
       // Keyboard drags flip depth via Left/Right (see useSidebarDndSensors);
-      // only pointer drags carry a live x-position.
-      if (bounds === undefined || !(activator instanceof PointerEvent)) {
+      // only pointer drags carry a live position.
+      if (state === null || state.kind !== "row" || section === null || !(activator instanceof PointerEvent)) {
         return;
       }
-      const pointerX = activator.clientX + event.delta.x;
-      applyDepthIntent(pointerX - bounds.left < DEPTH_INTENT_THRESHOLD_PX ? "outside" : "inside");
+      const pointerY = activator.clientY + event.delta.y;
+      let intent: SectionDepthIntent = "outside";
+      for (const card of section.querySelectorAll(`[data-testid="${ElementIds.SIDEBAR_WORKSPACE_GROUP_CARD}"]`)) {
+        const rect = card.getBoundingClientRect();
+        if (pointerY >= rect.top && pointerY <= rect.bottom) {
+          intent = "inside";
+          break;
+        }
+      }
+
+      if (intent === "outside") {
+        const activeParent = locateWorkspaceParent(state.display, state.activeId);
+        const card =
+          activeParent === null
+            ? null
+            : section.querySelector(
+                `[data-testid="${ElementIds.SIDEBAR_WORKSPACE_GROUP_CARD}"][data-group-id="${activeParent}"]`,
+              );
+        const cardRect = card?.getBoundingClientRect();
+        if (activeParent !== null && cardRect !== undefined) {
+          // A member's removal never shifts top-level indices, so the group's
+          // display index is valid as the after-removal insertion anchor.
+          const groupIndex = state.display.findIndex(
+            (child) => child.kind === "group" && child.group.objectId === activeParent,
+          );
+          if (groupIndex !== -1) {
+            acceptProjection(
+              state,
+              {
+                kind: "row",
+                activeId: state.activeId,
+                parentGroupId: null,
+                index: pointerY <= cardRect.top ? groupIndex : groupIndex + 1,
+                isBoundary: true,
+              },
+              intent,
+            );
+            return;
+          }
+        }
+      }
+      applyDepthIntent(intent);
     },
-    [applyDepthIntent],
+    [applyDepthIntent, acceptProjection],
   );
 
   const resetSectionDrag = useCallback((): void => {
