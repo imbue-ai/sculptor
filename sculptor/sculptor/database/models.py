@@ -192,7 +192,6 @@ class AgentTaskStateV2(BaseTaskState):
     """
 
     object_type: str = "AgentTaskStateV2"
-    last_processed_message_id: AgentMessageID | None = None
     title: str | None = None
     workspace_id: WorkspaceID
     # Terminal agents only: the session id the registered program last

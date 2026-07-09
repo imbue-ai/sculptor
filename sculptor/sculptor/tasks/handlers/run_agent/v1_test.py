@@ -51,17 +51,19 @@ from sculptor.state.messages import Message
 from sculptor.state.messages import ModelCatalogState
 from sculptor.state.messages import ModelOption
 from sculptor.state.messages import NOT_FETCHED_YET
+from sculptor.state.messages import PersistentUserMessage
 from sculptor.state.messages import ResponseBlockAgentMessage
+from sculptor.tasks.handlers.run_agent.setup import HistoryScan
 from sculptor.tasks.handlers.run_agent.setup import _drop_already_processed_messages
 from sculptor.tasks.handlers.run_agent.setup import _resolve_title_prediction_thread
 from sculptor.tasks.handlers.run_agent.setup import load_initial_task_state
+from sculptor.tasks.handlers.run_agent.setup import scan_message_history
 from sculptor.tasks.handlers.run_agent.v1 import AgentPaused
 from sculptor.tasks.handlers.run_agent.v1 import _build_agent_path
 from sculptor.tasks.handlers.run_agent.v1 import _eager_fetch_pi_models_into_state
 from sculptor.tasks.handlers.run_agent.v1 import _run_agent_in_environment
 from sculptor.tasks.handlers.run_agent.v1 import _save_messages
 from sculptor.tasks.handlers.run_agent.v1 import _send_user_input_message
-from sculptor.tasks.handlers.run_agent.v1 import _update_task_state
 
 
 def test_drop_already_processed_messages_with_processed_id() -> None:
@@ -248,49 +250,11 @@ def _get_task_title(task: Task, services: ServiceCollectionForTask) -> str | Non
         return AgentTaskStateV2.model_validate(task_row.current_state).title
 
 
-def test_update_task_state_overwrites_renamed_title(
-    local_task: Task,
-    services: ServiceCollectionForTask,
-) -> None:
-    """_update_task_state clobbers a title that was renamed via the API.
-
-    Simulates the race condition:
-    1. Agent loads task state with title "Original Title"
-    2. User renames the agent to "Renamed Title" (updates DB)
-    3. Agent processes a message and calls _update_task_state with stale state
-    4. DB title is overwritten back to "Original Title"
-    """
-    workspace_id = WorkspaceID()
-    initial_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        title="Original Title",
-        last_processed_message_id=None,
-    )
-    _set_task_state(local_task, initial_state, services)
-
-    # Step 1: Agent loads state into memory (capturing "Original Title").
-    in_memory_state = initial_state
-
-    # Step 2: User renames agent via API (directly updating DB).
-    renamed_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        title="Renamed Title",
-        last_processed_message_id=None,
-    )
-    _set_task_state(local_task, renamed_state, services)
-    assert _get_task_title(local_task, services) == "Renamed Title"
-
-    # Step 3: Agent finishes processing and calls _update_task_state with stale state.
-    new_message_id = AgentMessageID()
-    _update_task_state(
-        last_processed_input_message_id=new_message_id,
-        task_id=local_task.object_id,
-        task_state=in_memory_state,
-        services=services,
-    )
-
-    # Step 4: The renamed title should be preserved, not overwritten.
-    assert _get_task_title(local_task, services) == "Renamed Title"
+def _scan_history(local_task: Task, services: ServiceCollectionForTask) -> HistoryScan:
+    """Fetch the task's saved messages and scan them, as run_agent_task_v1 does."""
+    with services.data_model_service.open_task_transaction() as transaction:
+        saved_messages = services.task_service.get_saved_messages_for_task(local_task.object_id, transaction)
+    return scan_message_history(saved_messages)
 
 
 def test_resolve_title_prediction_overwrites_renamed_title(
@@ -308,7 +272,6 @@ def test_resolve_title_prediction_overwrites_renamed_title(
     initial_state = AgentTaskStateV2(
         workspace_id=workspace_id,
         title=None,
-        last_processed_message_id=None,
     )
     _set_task_state(local_task, initial_state, services)
 
@@ -319,7 +282,6 @@ def test_resolve_title_prediction_overwrites_renamed_title(
     renamed_state = AgentTaskStateV2(
         workspace_id=workspace_id,
         title="Renamed Title",
-        last_processed_message_id=None,
     )
     _set_task_state(local_task, renamed_state, services)
     assert _get_task_title(local_task, services) == "Renamed Title"
@@ -396,32 +358,30 @@ def test_sigtermed_in_flight_message_is_recorded_as_processed(
     environment: LocalEnvironment,
     test_settings: SculptorSettings,
 ) -> None:
-    """When the agent is SIGTERM'd mid-turn, the in-flight user message must be recorded
-    as ``last_processed_message_id`` so the next agent run does not re-deliver it to Claude.
+    """When the agent is SIGTERM'd mid-turn, the in-flight user message must derive
+    as settled from the persisted log so the next agent run does not re-deliver it.
 
-    Reproduces the user-visible bug: on the next run, ``_drop_already_processed_messages``
-    keys off ``last_processed_message_id`` to decide which queued messages to drop. If the
-    interrupted message wasn't recorded as processed, it survives in the queue and the
-    main loop pushes it to Claude again — making the agent appear to auto-start with the
-    user's previously-interrupted prompt.
+    The user-visible pin: on the next run, ``_drop_already_processed_messages``
+    keys off the derived ``last_processed_message_id`` to decide which queued
+    messages to drop. If the interrupted message doesn't derive as settled, it
+    survives in the queue and the main loop pushes it to Claude again — making the
+    agent appear to auto-start with the user's previously-interrupted prompt. Here
+    the killed turn produced no partial response, so nothing is resumable and the
+    scan settles the message on its persisted RequestStopped.
     """
     workspace_id = WorkspaceID()
-    previous_message_id = AgentMessageID()
     in_flight_message = ChatInputUserMessage(
         message_id=AgentMessageID(),
         text="Long-running prompt",
         model_name=LLMModel.CLAUDE_4_SONNET,
     )
-    stale_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        last_processed_message_id=previous_message_id,
-    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
     _set_task_state(local_task, stale_state, services)
 
     # Persist the chat message — in production it would have been written via
     # the HTTP send endpoint before the agent picked it up via subscription.
-    # _record_latest_completion_in_state needs the user message in the DB to
-    # distinguish it from ephemeral request_ids (e.g. StopAgentUserMessage's).
+    # The scan can only resolve a RequestStarted (and hence derive the cursor)
+    # for a user message that exists in the DB.
     with services.data_model_service.open_task_transaction() as transaction:
         services.task_service.create_message(in_flight_message, local_task.object_id, transaction)
 
@@ -449,6 +409,7 @@ def test_sigtermed_in_flight_message_is_recorded_as_processed(
                 task=local_task,
                 task_data=task_data,
                 task_state=stale_state,
+                history_scan=_scan_history(local_task, services),
                 re_queued_messages=(in_flight_message,),
                 input_message_queue=input_message_queue,
                 environment=agent_env,
@@ -458,11 +419,7 @@ def test_sigtermed_in_flight_message_is_recorded_as_processed(
                 shutdown_event=shutdown_event,
             )
 
-    with services.data_model_service.open_task_transaction() as transaction:
-        task_row = transaction.get_task(local_task.object_id)
-        assert task_row is not None
-        final_state = AgentTaskStateV2.model_validate(task_row.current_state)
-        assert final_state.last_processed_message_id == in_flight_message.message_id
+    assert _scan_history(local_task, services).last_processed_message_id == in_flight_message.message_id
 
 
 class _AukThenSigtermOnStopAgent(DefaultAgentWrapper):
@@ -470,8 +427,8 @@ class _AukThenSigtermOnStopAgent(DefaultAgentWrapper):
 
     On the first ``ChatInputUserMessage``: emits ``RequestStartedAgentMessage`` and an
     ``AskUserQuestionAgentMessage`` (ephemeral) so the v1 loop sees the AUQ and
-    sets ``is_waiting_for_question_answer = True``. The loop then clears
-    ``user_input_message_being_processed = None`` at v1.py:600.
+    tracks its pending tool_use_id. The loop then clears
+    ``user_input_message_being_processed = None`` while waiting for the answer.
 
     To trigger the shutdown leg cleanly without orchestrating the
     ``shutdown_event`` from outside the loop, the agent fires the supplied event
@@ -549,26 +506,22 @@ def test_sigtermed_during_auq_wait_records_chat_message_as_processed(
     test_settings: SculptorSettings,
 ) -> None:
     """When the agent is SIGTERM'd while waiting for an AskUserQuestion answer,
-    the in-flight chat message must still be recorded as ``last_processed_message_id``.
+    the in-flight chat message must still derive as settled from the persisted log.
 
     In the AUQ-pending state the v1 loop sets ``user_input_message_being_processed = None``
-    (v1.py:600) by design — the original chat message is still in flight as far as
-    Claude is concerned, but the local variable doesn't reflect that. A fix that
-    keys off ``user_input_message_being_processed`` (hypothesis #1's fix) won't
-    update state in this scenario, leaving the chat prompt ahead of the dedup
-    cursor and re-delivered to Claude on the next agent run.
+    (by design) — the original chat message is still in flight as far as Claude is
+    concerned, but the local variable doesn't reflect that. The derivation must not
+    depend on that local: the wrapper's persisted RequestStopped(chat) is what
+    settles the message (no partial response exists, so nothing is resumable), and
+    dedup drops it instead of re-delivering it to Claude on the next agent run.
     """
     workspace_id = WorkspaceID()
-    previous_message_id = AgentMessageID()
     chat_message = ChatInputUserMessage(
         message_id=AgentMessageID(),
         text="Make a plan and ask me to approve it",
         model_name=LLMModel.CLAUDE_4_SONNET,
     )
-    stale_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        last_processed_message_id=previous_message_id,
-    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
     _set_task_state(local_task, stale_state, services)
 
     # Persist the chat message — in production it would have been written via
@@ -601,6 +554,7 @@ def test_sigtermed_during_auq_wait_records_chat_message_as_processed(
                 task=local_task,
                 task_data=task_data,
                 task_state=stale_state,
+                history_scan=_scan_history(local_task, services),
                 re_queued_messages=(chat_message,),
                 input_message_queue=input_message_queue,
                 environment=agent_env,
@@ -610,40 +564,24 @@ def test_sigtermed_during_auq_wait_records_chat_message_as_processed(
                 shutdown_event=shutdown_event,
             )
 
-    with services.data_model_service.open_task_transaction() as transaction:
-        task_row = transaction.get_task(local_task.object_id)
-        assert task_row is not None
-        final_state = AgentTaskStateV2.model_validate(task_row.current_state)
-        assert final_state.last_processed_message_id == chat_message.message_id
+    assert _scan_history(local_task, services).last_processed_message_id == chat_message.message_id
 
 
-def test_load_initial_task_state_derives_last_processed_from_history(
+def test_scan_message_history_derives_last_processed_from_history(
     local_task: Task,
     services: ServiceCollectionForTask,
 ) -> None:
-    """If the DB shows a completion for a user message that isn't reflected in
-    task_state.last_processed_message_id, load_initial_task_state should derive
-    the corrected value from history.
+    """A started user message with a clean completion derives as the dedup cursor.
 
-    Reproduces hypothesis #3: the v1 loop's success path commits _save_messages
-    (v1.py:510) and _update_task_state (v1.py:557-562) in separate transactions.
-    If the backend is SIGKILL'd or loses power between them, the completion
-    message is persisted but last_processed_message_id is stale. Without
-    reconciliation, the next agent run leaves the user message ahead of the
-    dedup cursor and re-delivers it to Claude.
+    The cursor is never stored: scan_message_history derives it from the
+    persisted log at startup and feeds it straight to
+    wait_for_initial_message_and_process_queue -> _drop_already_processed_messages,
+    so a crash at any point cannot leave the cursor out of sync with the
+    completions on disk (the failure mode a stored cursor had).
     """
-    workspace_id = WorkspaceID()
-    previous_message_id = AgentMessageID()
     chat_message_id = AgentMessageID()
-    stale_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        last_processed_message_id=previous_message_id,
-    )
-    _set_task_state(local_task, stale_state, services)
 
-    # Persist a user chat message + its completion to the DB. This is the state
-    # left behind by a crash between _save_messages and _update_task_state in
-    # the v1 loop's success path.
+    # Persist a user chat message + its RequestStarted + clean completion.
     chat_message = ChatInputUserMessage(
         message_id=chat_message_id,
         text="Processed but not recorded",
@@ -668,18 +606,9 @@ def test_load_initial_task_state_derives_last_processed_from_history(
             transaction,
         )
 
-    loaded_state, _project = load_initial_task_state(services, local_task)
+    scan = _scan_history(local_task, services)
 
-    assert loaded_state.last_processed_message_id == chat_message_id
-
-    # The correction must also be persisted so downstream dedup
-    # (wait_for_initial_message_and_process_queue -> _drop_already_processed_messages)
-    # sees the corrected value when it re-reads task_state from the DB.
-    with services.data_model_service.open_task_transaction() as transaction:
-        task_row = transaction.get_task(local_task.object_id)
-        assert task_row is not None
-        persisted_state = AgentTaskStateV2.model_validate(task_row.current_state)
-        assert persisted_state.last_processed_message_id == chat_message_id
+    assert scan.last_processed_message_id == chat_message_id
 
 
 class _RecordOnlyAgent(DefaultAgentWrapper):
@@ -748,25 +677,18 @@ def test_in_flight_message_with_partial_response_is_sent_as_resume_not_chat(
     on the next run so Claude continues its existing ``--resume`` session rather than
     restarting the prompt from scratch.
 
-    Reproduces hypothesis #2: ``v1.py:445`` unconditionally sets
-    ``initial_in_flight_user_chat_message_id = None`` (FIXME from commit
-    ``bc3922e4e2c4``, "Disable the new message resumption behavior"), throwing away
-    the value the history walk just computed. ``_send_user_input_message`` then
-    sees the loop's effective in-flight ID as ``None``, fails the equality check
-    at v1.py:681, and pushes the chat message as-is instead of converting to a
-    resume.
+    The scan's in-flight chat id survives the partial-response gate (a partial
+    exists), and ``_send_user_input_message`` keys on it to convert the queued
+    push into a resume; if the id were cleared, the chat message would be pushed
+    as-is and the prompt would restart from scratch.
     """
     workspace_id = WorkspaceID()
-    previous_message_id = AgentMessageID()
     chat_message = ChatInputUserMessage(
         message_id=AgentMessageID(),
         text="Long prompt",
         model_name=LLMModel.CLAUDE_4_SONNET,
     )
-    stale_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        last_processed_message_id=previous_message_id,
-    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
     _set_task_state(local_task, stale_state, services)
 
     # Persist the in-flight state: the chat message, its RequestStartedAgentMessage,
@@ -818,6 +740,7 @@ def test_in_flight_message_with_partial_response_is_sent_as_resume_not_chat(
                 task=local_task,
                 task_data=task_data,
                 task_state=stale_state,
+                history_scan=_scan_history(local_task, services),
                 re_queued_messages=(chat_message,),
                 input_message_queue=input_message_queue,
                 environment=agent_env,
@@ -859,16 +782,12 @@ def test_resuming_in_flight_message_does_not_persist_a_duplicate(
     on-disk row count for the in-flight message stays at exactly one.
     """
     workspace_id = WorkspaceID()
-    previous_message_id = AgentMessageID()
     chat_message = ChatInputUserMessage(
         message_id=AgentMessageID(),
         text="Long prompt",
         model_name=LLMModel.CLAUDE_4_SONNET,
     )
-    stale_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        last_processed_message_id=previous_message_id,
-    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
     _set_task_state(local_task, stale_state, services)
 
     # Persist the in-flight state exactly once: the chat message, its
@@ -929,6 +848,7 @@ def test_resuming_in_flight_message_does_not_persist_a_duplicate(
                 task=local_task,
                 task_data=task_data,
                 task_state=stale_state,
+                history_scan=_scan_history(local_task, services),
                 re_queued_messages=(chat_message,),
                 input_message_queue=input_message_queue,
                 environment=agent_env,
@@ -1021,8 +941,9 @@ def test_orphaned_question_answer_is_resumed_not_stale_skipped(
 
     A crash mid-question-answer leaves the ``UserQuestionAnswerMessage`` with a
     ``RequestStarted`` but no completion -- the per-turn ``RequestSuccess`` is
-    deferred to the turn boundary, which the crash never reaches. Reconciliation
-    keeps the orphaned answer in the queue, so the resume loop re-dispatches it.
+    deferred to the turn boundary, which the crash never reaches. The derived
+    cursor keeps the orphaned answer in the queue, so the resume loop
+    re-dispatches it.
 
     On restart the pi process has already recorded the answer as a ``toolResult``
     and has no open dialog, so re-delivering the answer raw is reported as a stale
@@ -1034,7 +955,6 @@ def test_orphaned_question_answer_is_resumed_not_stale_skipped(
     an orphaned chat message -- so the dangling request settles.
     """
     workspace_id = WorkspaceID()
-    previous_message_id = AgentMessageID()
     chat_message = _make_in_flight_chat_message()
     answer = UserQuestionAnswerMessage(
         message_id=AgentMessageID(),
@@ -1042,10 +962,7 @@ def test_orphaned_question_answer_is_resumed_not_stale_skipped(
         question_data=AskUserQuestionData(questions=[], tool_use_id="t1"),
         tool_use_id="t1",
     )
-    stale_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        last_processed_message_id=previous_message_id,
-    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
     _set_task_state(local_task, stale_state, services)
 
     # Persist the crash-mid-answer history: the chat turn started and produced a
@@ -1088,6 +1005,7 @@ def test_orphaned_question_answer_is_resumed_not_stale_skipped(
                 task=local_task,
                 task_data=task_data,
                 task_state=stale_state,
+                history_scan=_scan_history(local_task, services),
                 re_queued_messages=(answer,),
                 input_message_queue=input_message_queue,
                 environment=agent_env,
@@ -1167,7 +1085,6 @@ def test_orphaned_answer_with_interrupted_completion_is_still_resumed(
     — re-introducing the bug on the next restart.
     """
     workspace_id = WorkspaceID()
-    previous_message_id = AgentMessageID()
     chat_message = _make_in_flight_chat_message()
     answer = UserQuestionAnswerMessage(
         message_id=AgentMessageID(),
@@ -1175,10 +1092,7 @@ def test_orphaned_answer_with_interrupted_completion_is_still_resumed(
         question_data=AskUserQuestionData(questions=[], tool_use_id="t1"),
         tool_use_id="t1",
     )
-    stale_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        last_processed_message_id=previous_message_id,
-    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
     _set_task_state(local_task, stale_state, services)
 
     # Crash-mid-answer history where the answer's deferred success fired interrupted
@@ -1222,6 +1136,7 @@ def test_orphaned_answer_with_interrupted_completion_is_still_resumed(
                 task=local_task,
                 task_data=task_data,
                 task_state=stale_state,
+                history_scan=_scan_history(local_task, services),
                 re_queued_messages=(answer,),
                 input_message_queue=input_message_queue,
                 environment=agent_env,
@@ -1254,7 +1169,6 @@ def test_answer_with_clean_completion_is_not_resumed(
     converted to a resume — the negative side of the clearing condition.
     """
     workspace_id = WorkspaceID()
-    previous_message_id = AgentMessageID()
     chat_message = _make_in_flight_chat_message()
     answer = UserQuestionAnswerMessage(
         message_id=AgentMessageID(),
@@ -1262,10 +1176,7 @@ def test_answer_with_clean_completion_is_not_resumed(
         question_data=AskUserQuestionData(questions=[], tool_use_id="t1"),
         tool_use_id="t1",
     )
-    stale_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        last_processed_message_id=previous_message_id,
-    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
     _set_task_state(local_task, stale_state, services)
 
     # The answer's turn finished cleanly: RequestStarted + RequestSuccess(interrupted=False).
@@ -1307,6 +1218,7 @@ def test_answer_with_clean_completion_is_not_resumed(
                 task=local_task,
                 task_data=task_data,
                 task_state=stale_state,
+                history_scan=_scan_history(local_task, services),
                 re_queued_messages=(answer,),
                 input_message_queue=input_message_queue,
                 environment=agent_env,
@@ -1475,8 +1387,8 @@ def test_queued_followup_is_dispatched_after_resumed_turn_completes(
     response, no completion) and follow-up B queued behind it. On restart the
     loop must resume A, and -- because the resumed turn's completion is keyed on
     ``for_user_message_id`` -- ``is_agent_turn_finished`` must fire when it
-    completes so that B is dispatched. The dedup cursor must advance to A so A
-    is not re-delivered on the run after this one.
+    completes so that B is dispatched. The completion must settle A in the
+    derived cursor so A is not re-delivered on the run after this one.
 
     This binds the two halves of the contract that the wrapper-level test
     (``agent_wrapper_test.test_resume_turn_uses_for_user_message_id_as_request_id``)
@@ -1484,17 +1396,13 @@ def test_queued_followup_is_dispatched_after_resumed_turn_completes(
     keyed on the original turn id, and the loop acts on them.
     """
     workspace_id = WorkspaceID()
-    previous_message_id = AgentMessageID()
     message_a = _make_in_flight_chat_message()
     message_b = ChatInputUserMessage(
         message_id=AgentMessageID(),
         text="Queued follow-up",
         model_name=LLMModel.CLAUDE_4_SONNET,
     )
-    stale_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        last_processed_message_id=previous_message_id,
-    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
     _set_task_state(local_task, stale_state, services)
 
     # What a SIGKILL mid-turn leaves on disk: A saved + started + partial
@@ -1534,6 +1442,7 @@ def test_queued_followup_is_dispatched_after_resumed_turn_completes(
                 task=local_task,
                 task_data=task_data,
                 task_state=stale_state,
+                history_scan=_scan_history(local_task, services),
                 re_queued_messages=(message_a, message_b),
                 input_message_queue=input_message_queue,
                 environment=agent_env,
@@ -1552,10 +1461,12 @@ def test_queued_followup_is_dispatched_after_resumed_turn_completes(
     assert isinstance(second, ChatInputUserMessage)
     assert second.message_id == message_b.message_id
 
-    # The dedup cursor advanced to A, so A is not re-delivered on the next run.
-    persisted_state = _read_persisted_task_state(local_task, services)
-    assert persisted_state.last_processed_message_id == message_a.message_id, (
-        f"cursor must advance to A on resumed-turn completion; got {persisted_state.last_processed_message_id}"
+    # The derived dedup cursor advanced to A, so A is not re-delivered on the
+    # next run. (B was dispatched but never started by the fake, so it stays
+    # unsettled ahead of the cursor.)
+    derived_cursor = _scan_history(local_task, services).last_processed_message_id
+    assert derived_cursor == message_a.message_id, (
+        f"cursor must derive as A on resumed-turn completion; got {derived_cursor}"
     )
 
 
@@ -1568,20 +1479,16 @@ def test_double_hard_kill_without_resumed_turn_output_resends_fresh(
 ) -> None:
     """A second hard kill BEFORE the resumed turn produced output -> fresh re-send.
 
-    The history walk resets ``is_partial_agent_response`` on each
-    RequestStarted for the chat message (v1.py), so a resumed turn that died
-    without emitting any ResponseBlock leaves "nothing to continue from" and the
-    next run pushes the original prompt as a fresh ChatInputUserMessage instead
-    of a resume. This pins that semantic choice -- and that the fresh re-send
-    path does not re-persist the message either.
+    The scan resets ``is_partial_agent_response`` on each RequestStarted for the
+    chat message, so a resumed turn that died without emitting any ResponseBlock
+    leaves "nothing to continue from" and the next run pushes the original prompt
+    as a fresh ChatInputUserMessage instead of a resume. This pins that semantic
+    choice -- and that the fresh re-send path does not re-persist the message
+    either.
     """
     workspace_id = WorkspaceID()
-    previous_message_id = AgentMessageID()
     message_a = _make_in_flight_chat_message()
-    stale_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        last_processed_message_id=previous_message_id,
-    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
     _set_task_state(local_task, stale_state, services)
 
     _persist_messages(
@@ -1622,6 +1529,7 @@ def test_double_hard_kill_without_resumed_turn_output_resends_fresh(
                 task=local_task,
                 task_data=task_data,
                 task_state=stale_state,
+                history_scan=_scan_history(local_task, services),
                 re_queued_messages=(message_a,),
                 input_message_queue=input_message_queue,
                 environment=agent_env,
@@ -1644,31 +1552,24 @@ def test_double_hard_kill_without_resumed_turn_output_resends_fresh(
     assert len(chat_copies) == 1, f"fresh re-send must not re-persist; found {len(chat_copies)} copies"
 
 
-def test_load_initial_task_state_does_not_count_interrupted_completions(
+def test_scan_message_history_does_not_settle_answer_with_interrupted_completion(
     local_task: Task,
     services: ServiceCollectionForTask,
 ) -> None:
-    """Reconciliation must not treat interrupted completions as truly processed.
+    """A plain interrupted answer completion must not settle the answer.
 
-    Reproduces hypothesis #12 (post-answer shutdown): when the user answered an
-    AUQ and Sculptor was killed before Claude finished processing the answer, the
-    wrapper emits ``RequestSuccessAgentMessage(answer, interrupted=True)`` and
-    ``RequestStoppedAgentMessage(X)``. Both are
-    ``PersistentRequestCompleteAgentMessage``s — but neither represents a
-    fully-processed message: the chat X was SIGTERM'd mid-response, and the
-    answer was SIGTERM'd mid-MCP-delivery.
+    The post-answer-shutdown shape: the user answered an AUQ and Sculptor was
+    killed before Claude finished processing the answer. The wrapper emits
+    ``RequestSuccessAgentMessage(answer, interrupted=True)`` (no turn_abandoned
+    marker — the turn may still be resumed) and ``RequestStoppedAgentMessage(X)``
+    for the chat.
 
-    If reconciliation counts these as "processed", it sets
-    ``last_processed_message_id = answer.message_id`` and dedup drops the answer
-    from the queue on the next run. The user's typed answer is silently lost.
-
-    With the fix, reconciliation skips completions flagged as ``interrupted`` or
-    detected as killed (SIGTERM/SIGINT). For the post-answer-shutdown scenario,
-    neither X nor answer is counted, so ``last_processed_message_id`` stays at
-    its prior value and the answer survives in the queue to be re-delivered.
+    If the derivation settled the answer, dedup would drop it from the queue on
+    the next run and the user's typed answer would be silently lost. Instead the
+    scan keeps the answer in flight: the derived cursor stops at the chat message
+    (settled by its killed stop — no partial response is resumable), and the
+    dedup walk leaves the answer in the queue to be re-driven.
     """
-    workspace_id = WorkspaceID()
-    previous_message_id = AgentMessageID()
     chat_message = ChatInputUserMessage(
         message_id=AgentMessageID(),
         text="Pick an option",
@@ -1680,11 +1581,6 @@ def test_load_initial_task_state_does_not_count_interrupted_completions(
         question_data=AskUserQuestionData(questions=[], tool_use_id="t1"),
         tool_use_id="t1",
     )
-    stale_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        last_processed_message_id=previous_message_id,
-    )
-    _set_task_state(local_task, stale_state, services)
 
     try:
         raise AgentClientError("Killed by SIGTERM", exit_code=AGENT_EXIT_CODE_FROM_SIGTERM)
@@ -1731,16 +1627,23 @@ def test_load_initial_task_state_does_not_count_interrupted_completions(
             transaction,
         )
 
-    loaded_state, _project = load_initial_task_state(services, local_task)
+    scan = _scan_history(local_task, services)
 
-    # Today: reconciliation counts both completions and sets last_processed
-    # to answer.message_id (the latest). The answer would then be dropped by dedup.
-    # After fix: neither counts (both are interrupted/killed), so last_processed
-    # stays at previous_message_id and the answer survives for re-delivery.
-    assert loaded_state.last_processed_message_id != answer.message_id, (
-        "Reconciliation must not advance last_processed past the answer's interrupted completion"
+    assert scan.last_processed_message_id != answer.message_id, (
+        "The derivation must not settle the answer on its plain interrupted completion"
     )
-    assert loaded_state.last_processed_message_id == previous_message_id
+    assert scan.last_processed_message_id == chat_message.message_id
+
+    # The dedup walk driven by the derived cursor drops the settled chat message
+    # and leaves the answer in the queue to be re-driven.
+    replay_queue: Queue = Queue()
+    replay_queue.put(chat_message)
+    replay_queue.put(answer)
+    dropped, re_queued = _drop_already_processed_messages(scan.last_processed_message_id, replay_queue)
+    assert dropped == (chat_message,)
+    assert re_queued == ()
+    assert replay_queue.qsize() == 1
+    assert replay_queue.get() == answer
 
 
 def test_save_messages_writes_artifact_before_publishing_its_message() -> None:
@@ -1815,3 +1718,565 @@ def test_save_messages_writes_artifact_before_publishing_its_message() -> None:
     assert chat_publish_idx < sync_idx, (
         f"non-artifact publishes should run before any artifact sync (surgical interleave — chat tokens shouldn't wait for artifact writes); got {registered}"
     )
+
+
+class _IdleStopAgent(DefaultAgentWrapper):
+    """Fake agent that handles Stop without requiring a prior chat/resume push.
+
+    Used in no-op-resume tests where the loop has nothing to dispatch (no
+    queued messages, orphaned requests were finalized pre-loop) and only
+    needs to drain the Stop → exit.
+    """
+
+    def _start(self) -> None: ...
+
+    def _terminate(self, force_kill_seconds: float) -> None: ...
+
+    def wait(self, timeout: float) -> int:
+        return self._exit_code if self._exit_code is not None else 0
+
+    def _push_message(self, message: Message) -> bool:
+        if isinstance(message, StopAgentUserMessage):
+            self._exit_code = AGENT_EXIT_CODE_FROM_SIGTERM
+            return True
+        return False
+
+
+def test_orphaned_chat_request_is_finalized_on_noop_resume(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: LocalEnvironment,
+    test_settings: SculptorSettings,
+) -> None:
+    """A crash-mid-response orphan (RequestStarted with no terminal completion)
+    must be finalized with an interrupted RequestSuccess when the restored task
+    has no queued messages to drive a resume.
+
+    Without this synthetic completion the frontend stays stuck ``thinking``
+    forever because message_conversion never sees a terminal event for the
+    dangling request_id.
+    """
+    workspace_id = WorkspaceID()
+    chat_message = ChatInputUserMessage(
+        message_id=AgentMessageID(),
+        text="Prompt that crashed mid-response",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
+    _set_task_state(local_task, stale_state, services)
+
+    # Persist the crash state: chat message + RequestStarted + partial response,
+    # but no terminal completion.
+    with services.data_model_service.open_task_transaction() as transaction:
+        services.task_service.create_message(chat_message, local_task.object_id, transaction)
+        services.task_service.create_message(
+            RequestStartedAgentMessage(
+                message_id=AgentMessageID(),
+                request_id=chat_message.message_id,
+            ),
+            local_task.object_id,
+            transaction,
+        )
+        services.task_service.create_message(
+            ResponseBlockAgentMessage(
+                message_id=AgentMessageID(),
+                role="assistant",
+                assistant_message_id=AssistantMessageID(generate_id()),
+                content=(TextBlock(text="Partial work before crash..."),),
+            ),
+            local_task.object_id,
+            transaction,
+        )
+
+    agent_env = LocalAgentExecutionEnvironment(
+        environment=environment,
+        task_id=local_task.object_id,
+        dependency_management_service=services.dependency_management_service,
+    )
+    fake_agent = _IdleStopAgent(
+        harness=CLAUDE_CODE_HARNESS,
+        environment=agent_env,
+        task_id=local_task.object_id,
+        system_prompt="",
+    )
+
+    input_message_queue: Queue = Queue()
+    shutdown_event = threading.Event()
+    shutdown_event.set()
+
+    assert isinstance(local_task.input_data, AgentTaskInputsV2)
+    task_data = local_task.input_data
+
+    with patch("sculptor.tasks.handlers.run_agent.v1._get_agent_wrapper", return_value=fake_agent):
+        with pytest.raises(AgentPaused):
+            _run_agent_in_environment(
+                task=local_task,
+                task_data=task_data,
+                task_state=stale_state,
+                history_scan=_scan_history(local_task, services),
+                re_queued_messages=(),  # no queued messages — the no-op resume case
+                input_message_queue=input_message_queue,
+                environment=agent_env,
+                services=services,
+                project=project,
+                settings=test_settings,
+                shutdown_event=shutdown_event,
+            )
+
+    with services.data_model_service.open_task_transaction() as transaction:
+        saved_messages = services.task_service.get_saved_messages_for_task(local_task.object_id, transaction)
+
+    orphan_completions = [
+        m
+        for m in saved_messages
+        if isinstance(m, RequestSuccessAgentMessage) and m.request_id == chat_message.message_id and m.interrupted
+    ]
+    assert len(orphan_completions) == 1, (
+        f"Expected exactly one interrupted RequestSuccess for the orphaned request, got {len(orphan_completions)}"
+    )
+
+
+def test_orphaned_answer_is_finalized_on_noop_resume(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: LocalEnvironment,
+    test_settings: SculptorSettings,
+) -> None:
+    """A crash-mid-answer orphan (UserQuestionAnswerMessage with RequestStarted but
+    no terminal completion) must be finalized with an interrupted RequestSuccess
+    when the restored task has no queued messages.
+    """
+    workspace_id = WorkspaceID()
+
+    # Original chat message + completed turn
+    chat_message = ChatInputUserMessage(
+        message_id=AgentMessageID(),
+        text="Do something",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+    answer = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"Continue?": "Yes, proceed"},
+        question_data=AskUserQuestionData(questions=[], tool_use_id="toolu_orphan"),
+        tool_use_id="toolu_orphan",
+    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
+    _set_task_state(local_task, stale_state, services)
+
+    with services.data_model_service.open_task_transaction() as transaction:
+        # Chat turn completed normally
+        services.task_service.create_message(chat_message, local_task.object_id, transaction)
+        services.task_service.create_message(
+            RequestStartedAgentMessage(
+                message_id=AgentMessageID(),
+                request_id=chat_message.message_id,
+            ),
+            local_task.object_id,
+            transaction,
+        )
+        services.task_service.create_message(
+            RequestSuccessAgentMessage(
+                message_id=AgentMessageID(),
+                request_id=chat_message.message_id,
+            ),
+            local_task.object_id,
+            transaction,
+        )
+        # Answer was delivered but the process crashed before its turn completed
+        services.task_service.create_message(answer, local_task.object_id, transaction)
+        services.task_service.create_message(
+            RequestStartedAgentMessage(
+                message_id=AgentMessageID(),
+                request_id=answer.message_id,
+            ),
+            local_task.object_id,
+            transaction,
+        )
+
+    agent_env = LocalAgentExecutionEnvironment(
+        environment=environment,
+        task_id=local_task.object_id,
+        dependency_management_service=services.dependency_management_service,
+    )
+    fake_agent = _IdleStopAgent(
+        harness=CLAUDE_CODE_HARNESS,
+        environment=agent_env,
+        task_id=local_task.object_id,
+        system_prompt="",
+    )
+
+    input_message_queue: Queue = Queue()
+    shutdown_event = threading.Event()
+    shutdown_event.set()
+
+    assert isinstance(local_task.input_data, AgentTaskInputsV2)
+    task_data = local_task.input_data
+
+    with patch("sculptor.tasks.handlers.run_agent.v1._get_agent_wrapper", return_value=fake_agent):
+        with pytest.raises(AgentPaused):
+            _run_agent_in_environment(
+                task=local_task,
+                task_data=task_data,
+                task_state=stale_state,
+                history_scan=_scan_history(local_task, services),
+                re_queued_messages=(),
+                input_message_queue=input_message_queue,
+                environment=agent_env,
+                services=services,
+                project=project,
+                settings=test_settings,
+                shutdown_event=shutdown_event,
+            )
+
+    with services.data_model_service.open_task_transaction() as transaction:
+        saved_messages = services.task_service.get_saved_messages_for_task(local_task.object_id, transaction)
+
+    orphan_completions = [
+        m
+        for m in saved_messages
+        if isinstance(m, RequestSuccessAgentMessage) and m.request_id == answer.message_id and m.interrupted
+    ]
+    assert len(orphan_completions) == 1, (
+        f"Expected exactly one interrupted RequestSuccess for the orphaned answer, got {len(orphan_completions)}"
+    )
+
+
+def test_noop_resume_advances_dedup_cursor_for_synthesized_completions(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: LocalEnvironment,
+    test_settings: SculptorSettings,
+) -> None:
+    """Synthesized orphan completions must settle their messages for the next run.
+
+    The synthetic turn_abandoned completions are what the next restart's
+    scan_message_history keys on: if they didn't settle the orphans, the next
+    run's _drop_already_processed_messages would re-queue the very user messages
+    whose completions were just synthesized, re-delivering them to the agent.
+
+    Uses the both-orphans crash shape (chat mid-response AND a delivered-but-
+    unfinished answer) so it also pins the ordering rule: the derived cursor must
+    land on the answer — the later message in queue order — not the chat message.
+    """
+    workspace_id = WorkspaceID()
+    chat_message = ChatInputUserMessage(
+        message_id=AgentMessageID(),
+        text="Prompt that crashed mid-response",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+    answer = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"Continue?": "Yes, proceed"},
+        question_data=AskUserQuestionData(questions=[], tool_use_id="toolu_cursor"),
+        tool_use_id="toolu_cursor",
+    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
+    _set_task_state(local_task, stale_state, services)
+
+    with services.data_model_service.open_task_transaction() as transaction:
+        # Chat turn started, produced partial output, never completed.
+        services.task_service.create_message(chat_message, local_task.object_id, transaction)
+        services.task_service.create_message(
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=chat_message.message_id),
+            local_task.object_id,
+            transaction,
+        )
+        services.task_service.create_message(
+            ResponseBlockAgentMessage(
+                message_id=AgentMessageID(),
+                role="assistant",
+                assistant_message_id=AssistantMessageID(generate_id()),
+                content=(TextBlock(text="Partial work before crash..."),),
+            ),
+            local_task.object_id,
+            transaction,
+        )
+        # The answer was delivered but its turn never completed either.
+        services.task_service.create_message(answer, local_task.object_id, transaction)
+        services.task_service.create_message(
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=answer.message_id),
+            local_task.object_id,
+            transaction,
+        )
+
+    agent_env = LocalAgentExecutionEnvironment(
+        environment=environment,
+        task_id=local_task.object_id,
+        dependency_management_service=services.dependency_management_service,
+    )
+    fake_agent = _IdleStopAgent(
+        harness=CLAUDE_CODE_HARNESS,
+        environment=agent_env,
+        task_id=local_task.object_id,
+        system_prompt="",
+    )
+
+    input_message_queue: Queue = Queue()
+    shutdown_event = threading.Event()
+    shutdown_event.set()
+
+    assert isinstance(local_task.input_data, AgentTaskInputsV2)
+    task_data = local_task.input_data
+
+    with patch("sculptor.tasks.handlers.run_agent.v1._get_agent_wrapper", return_value=fake_agent):
+        with pytest.raises(AgentPaused):
+            _run_agent_in_environment(
+                task=local_task,
+                task_data=task_data,
+                task_state=stale_state,
+                history_scan=_scan_history(local_task, services),
+                re_queued_messages=(),
+                input_message_queue=input_message_queue,
+                environment=agent_env,
+                services=services,
+                project=project,
+                settings=test_settings,
+                shutdown_event=shutdown_event,
+            )
+
+    with services.data_model_service.open_task_transaction() as transaction:
+        saved_messages = services.task_service.get_saved_messages_for_task(local_task.object_id, transaction)
+
+    # Both orphans got a synthetic interrupted completion.
+    synthesized_request_ids = [
+        m.request_id for m in saved_messages if isinstance(m, RequestSuccessAgentMessage) and m.interrupted
+    ]
+    assert synthesized_request_ids == [chat_message.message_id, answer.message_id]
+
+    # The next restart's derived cursor lands on the LAST synthesized completion
+    # (the answer, which follows the chat message in queue order).
+    derived_cursor = scan_message_history(saved_messages).last_processed_message_id
+    assert derived_cursor == answer.message_id
+
+    # Simulate the next restart's dedup over the replayed user-message queue: both
+    # finalized messages must be dropped (not re-queued, no
+    # LastProcessedMessageNotInQueueError).
+    replay_queue: Queue = Queue()
+    for m in saved_messages:
+        if isinstance(m, PersistentUserMessage):
+            replay_queue.put(m)
+    dropped, re_queued = _drop_already_processed_messages(derived_cursor, replay_queue)
+    assert {m.message_id for m in dropped} == {chat_message.message_id, answer.message_id}
+    assert re_queued == ()
+    assert replay_queue.empty()
+
+
+def _run_noop_resume(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    agent_env: LocalAgentExecutionEnvironment,
+    test_settings: SculptorSettings,
+    task_state: AgentTaskStateV2,
+) -> None:
+    """Run one no-op resume cycle (no queued messages, shutdown pre-set) to AgentPaused."""
+    fake_agent = _IdleStopAgent(
+        harness=CLAUDE_CODE_HARNESS,
+        environment=agent_env,
+        task_id=local_task.object_id,
+        system_prompt="",
+    )
+    input_message_queue: Queue = Queue()
+    shutdown_event = threading.Event()
+    shutdown_event.set()
+    assert isinstance(local_task.input_data, AgentTaskInputsV2)
+    with patch("sculptor.tasks.handlers.run_agent.v1._get_agent_wrapper", return_value=fake_agent):
+        with pytest.raises(AgentPaused):
+            _run_agent_in_environment(
+                task=local_task,
+                task_data=local_task.input_data,
+                task_state=task_state,
+                history_scan=_scan_history(local_task, services),
+                re_queued_messages=(),
+                input_message_queue=input_message_queue,
+                environment=agent_env,
+                services=services,
+                project=project,
+                settings=test_settings,
+                shutdown_event=shutdown_event,
+            )
+
+
+def test_second_noop_resume_does_not_duplicate_answer_finalization(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: LocalEnvironment,
+    test_settings: SculptorSettings,
+) -> None:
+    """A finalized answer orphan must stay finalized across further restarts.
+
+    The synthesized completion is interrupted, and replay used to treat any
+    interrupted success as "keep the answer orphaned for resume" — so every
+    subsequent no-op resume re-detected the same orphan and appended another
+    synthetic completion, one per restart cycle. The turn_abandoned marker
+    tells replay the request was terminally settled, so the second cycle must
+    synthesize nothing.
+    """
+    workspace_id = WorkspaceID()
+    chat_message = ChatInputUserMessage(
+        message_id=AgentMessageID(),
+        text="Do something",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+    answer = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"Continue?": "Yes, proceed"},
+        question_data=AskUserQuestionData(questions=[], tool_use_id="toolu_repeat"),
+        tool_use_id="toolu_repeat",
+    )
+    stale_state = AgentTaskStateV2(workspace_id=workspace_id)
+    _set_task_state(local_task, stale_state, services)
+
+    with services.data_model_service.open_task_transaction() as transaction:
+        services.task_service.create_message(chat_message, local_task.object_id, transaction)
+        services.task_service.create_message(
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=chat_message.message_id),
+            local_task.object_id,
+            transaction,
+        )
+        services.task_service.create_message(
+            RequestSuccessAgentMessage(message_id=AgentMessageID(), request_id=chat_message.message_id),
+            local_task.object_id,
+            transaction,
+        )
+        services.task_service.create_message(answer, local_task.object_id, transaction)
+        services.task_service.create_message(
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=answer.message_id),
+            local_task.object_id,
+            transaction,
+        )
+
+    agent_env = LocalAgentExecutionEnvironment(
+        environment=environment,
+        task_id=local_task.object_id,
+        dependency_management_service=services.dependency_management_service,
+    )
+
+    _run_noop_resume(local_task, services, project, agent_env, test_settings, stale_state)
+    # Second cycle loads state the way a real restart does (its scan then sees
+    # the marked completion persisted by the first cycle).
+    reloaded_state, _project = load_initial_task_state(services, local_task)
+    _run_noop_resume(local_task, services, project, agent_env, test_settings, reloaded_state)
+
+    with services.data_model_service.open_task_transaction() as transaction:
+        saved_messages = services.task_service.get_saved_messages_for_task(local_task.object_id, transaction)
+
+    answer_completions = [
+        m for m in saved_messages if isinstance(m, RequestSuccessAgentMessage) and m.request_id == answer.message_id
+    ]
+    assert len(answer_completions) == 1, (
+        f"The second no-op resume must not re-finalize the settled answer, got {len(answer_completions)} completions"
+    )
+    assert answer_completions[0].interrupted and answer_completions[0].turn_abandoned
+
+
+def test_scan_message_history_counts_turn_abandoned_completions(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+) -> None:
+    """The derivation settles a message on its turn_abandoned completion.
+
+    Mirror of test_scan_message_history_does_not_settle_answer_with_interrupted_completion:
+    a turn_abandoned success means "terminally settled, never re-drive" (it is the
+    marker the orphan-synthesis path writes), so the derived cursor must advance
+    over it and dedup must drop the message instead of re-delivering it.
+    """
+    chat_message = ChatInputUserMessage(
+        message_id=AgentMessageID(),
+        text="Prompt that crashed mid-response",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+
+    with services.data_model_service.open_task_transaction() as transaction:
+        services.task_service.create_message(chat_message, local_task.object_id, transaction)
+        services.task_service.create_message(
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=chat_message.message_id),
+            local_task.object_id,
+            transaction,
+        )
+        services.task_service.create_message(
+            RequestSuccessAgentMessage(
+                message_id=AgentMessageID(),
+                request_id=chat_message.message_id,
+                interrupted=True,
+                turn_abandoned=True,
+            ),
+            local_task.object_id,
+            transaction,
+        )
+
+    scan = _scan_history(local_task, services)
+
+    assert scan.last_processed_message_id == chat_message.message_id, (
+        "The derived cursor must advance over a turn_abandoned completion"
+    )
+
+
+def test_crash_before_any_output_with_empty_queue_synthesizes_settlement(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: LocalEnvironment,
+    test_settings: SculptorSettings,
+) -> None:
+    """A chat whose request started but produced NO output and NO completion must
+    still be terminalized on a no-op resume.
+
+    The scan's partial gate clears the resumable in-flight id (nothing to resume
+    from) and the derivation settles the message (it will not be re-driven), so
+    without the dangling-id path the request would keep its RequestStarted with no
+    terminal completion forever — the frontend's stuck-"thinking" shape. The
+    synthesis keys on HistoryScan.dangling_chat_message_id (pre-gate) so this
+    shape settles as an empty interrupted turn. Deliberate delta from the stored-
+    cursor era, which re-executed the prompt raw on restart: a crash between
+    RequestStarted and the first persisted block may still have run side-effectful
+    tools, so silent re-execution was the riskier behavior.
+    """
+    workspace_id = WorkspaceID()
+    chat_message = ChatInputUserMessage(
+        message_id=AgentMessageID(),
+        text="Prompt that crashed before any output",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+    _set_task_state(local_task, AgentTaskStateV2(workspace_id=workspace_id), services)
+
+    with services.data_model_service.open_task_transaction() as transaction:
+        services.task_service.create_message(chat_message, local_task.object_id, transaction)
+        services.task_service.create_message(
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=chat_message.message_id),
+            local_task.object_id,
+            transaction,
+        )
+
+    pre_scan = _scan_history(local_task, services)
+    assert pre_scan.in_flight_chat_message_id is None, "no partial output, so nothing is resumable"
+    assert pre_scan.dangling_chat_message_id == chat_message.message_id
+    assert pre_scan.last_processed_message_id == chat_message.message_id, (
+        "the derivation settles the message (it will not be re-driven), which is why synthesis must terminalize it"
+    )
+
+    agent_env = LocalAgentExecutionEnvironment(
+        environment=environment,
+        task_id=local_task.object_id,
+        dependency_management_service=services.dependency_management_service,
+    )
+    _run_noop_resume(
+        local_task, services, project, agent_env, test_settings, AgentTaskStateV2(workspace_id=workspace_id)
+    )
+
+    with services.data_model_service.open_task_transaction() as transaction:
+        saved_messages = services.task_service.get_saved_messages_for_task(local_task.object_id, transaction)
+    settlements = [
+        m
+        for m in saved_messages
+        if isinstance(m, RequestSuccessAgentMessage) and m.request_id == chat_message.message_id and m.turn_abandoned
+    ]
+    assert len(settlements) == 1, f"expected exactly one synthesized settlement, got {settlements}"
+    assert settlements[0].interrupted is True
+
+    post_scan = _scan_history(local_task, services)
+    assert post_scan.dangling_chat_message_id is None, "the settlement terminalizes the dangling request"

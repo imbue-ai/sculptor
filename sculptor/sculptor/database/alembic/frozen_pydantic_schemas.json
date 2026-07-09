@@ -1420,6 +1420,11 @@
           "source": {
             "$ref": "#/$defs/AgentMessageSource",
             "default": "AGENT"
+          },
+          "turnAbandoned": {
+            "default": false,
+            "title": "Turnabandoned",
+            "type": "boolean"
           }
         },
         "required": [
@@ -2786,18 +2791,6 @@
               }
             ],
             "default": null
-          },
-          "lastProcessedMessageId": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Lastprocessedmessageid"
           },
           "objectType": {
             "default": "AgentTaskStateV2",
