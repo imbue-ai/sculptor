@@ -61,10 +61,14 @@ def _resolve_creation_attribution() -> CreationAttribution | Unset:
     """
     workspace_id = os.environ.get("SCULPT_WORKSPACE_ID")
     agent_id = os.environ.get("SCULPT_AGENT_ID")
-    if not workspace_id and not agent_id:
+    # Attribution keys off the creating workspace — that's what drives the sidebar
+    # nesting — so without a workspace id there's nothing useful to record, even if
+    # an agent id is somehow present on its own (Sculptor always injects the two
+    # together, but guard against a stray SCULPT_AGENT_ID producing an orphan record).
+    if not workspace_id:
         return UNSET
     return CreationAttribution(
-        created_by_workspace_id=workspace_id if workspace_id else UNSET,
+        created_by_workspace_id=workspace_id,
         created_by_agent_id=agent_id if agent_id else UNSET,
     )
 
