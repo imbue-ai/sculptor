@@ -1,6 +1,6 @@
-import { atom, useAtom, useAtomValue } from "jotai";
+import { atom, useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { atomFamily, atomWithStorage, selectAtom } from "jotai/utils";
-import { useContext, useEffect, useMemo, useRef } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
 
 import type { CodingAgentTaskView } from "~/api";
@@ -9,6 +9,7 @@ import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { workspaceBranchAtomFamily } from "~/common/state/atoms/workspaceBranch.ts";
 import { workspaceAtomFamily, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 import { useWorkspaceNavigation } from "~/common/state/hooks/useWorkspaceNavigation.ts";
+import { newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 
 import { usePluginContext } from "../PluginContext.tsx";
 import { useWorkspacePluginContext, WorkspacePluginContext } from "../WorkspaceContext.tsx";
@@ -149,6 +150,52 @@ export const useNavigateToWorkspace = (): ((workspaceId: string) => void) =>
   // navigateToWorkspaceById is already a stable callback, so hand it back as-is.
   useWorkspaceNavigation().navigateToWorkspaceById;
 
+/** Seeds and callback for {@link useOpenNewWorkspaceModal}. */
+export type NewWorkspaceModalOptions = {
+  /** Pre-fills the workspace title field. */
+  initialTitle?: string;
+  /** Pre-fills the first-agent prompt textarea. */
+  initialPrompt?: string;
+  /**
+   * Pre-fills the new-branch-name field; when omitted the host derives the
+   * branch from the title as usual. The host validates the name, and the user
+   * can edit it or re-roll back to the derived one.
+   */
+  initialBranchName?: string;
+  /**
+   * Called with the new workspace's id per successful create — keep-open mode
+   * lets the user create several workspaces from one open dialog, so this can
+   * fire more than once. Between such creates the form re-seeds its fields
+   * from the `initial*` options, so the dialog stays visibly about this open
+   * request and every report belongs to it.
+   */
+  onCreated?: (workspaceId: string) => void;
+};
+
+/**
+ * Returns a stable function that opens the host's own new-workspace dialog —
+ * the same one behind Cmd/Meta+T — optionally pre-filled with a title, prompt,
+ * and branch name. The user remains in control: they can edit every field or cancel
+ * without creating anything. `onCreated` reports the created workspace's id
+ * (e.g. to record a plugin-side association, or to follow up with
+ * `useNavigateToWorkspace`).
+ */
+export const useOpenNewWorkspaceModal = (): ((options?: NewWorkspaceModalOptions) => void) => {
+  const setModalState = useSetAtom(newWorkspaceModalAtom);
+  return useCallback(
+    (options?: NewWorkspaceModalOptions): void => {
+      setModalState({
+        open: true,
+        initialTitle: options?.initialTitle,
+        initialPrompt: options?.initialPrompt,
+        initialBranchName: options?.initialBranchName,
+        onWorkspaceCreated: options?.onCreated,
+      });
+    },
+    [setModalState],
+  );
+};
+
 // One persisted atom per (plugin, key). atomFamily caches by the full storage
 // key; getOnInit reads localStorage synchronously so the value is present on
 // first render instead of flashing the default.
@@ -198,6 +245,25 @@ export const usePluginSettings = (keys: ReadonlyArray<string>): ReadonlyMap<stri
     [pluginId, encodedKeys],
   );
   return useAtomValue(mapAtom);
+};
+
+/**
+ * Returns a stable function that writes one of the calling plugin's persisted
+ * settings — the imperative companion to {@link usePluginSetting} for keys only
+ * known at event time (e.g. a per-workspace key for a workspace picked in a
+ * menu), where the hook-per-key form can't be called. Writes land in the same
+ * per-key atoms as the reading hooks, so `usePluginSetting` and
+ * `usePluginSettings` see them reactively.
+ */
+export const useSetPluginSetting = (): ((key: string, value: string) => void) => {
+  const { pluginId } = usePluginContext();
+  const store = useStore();
+  return useCallback(
+    (key: string, value: string): void => {
+      store.set(pluginSettingAtomFamily(settingStorageKey(pluginId, key)), value);
+    },
+    [pluginId, store],
+  );
 };
 
 /**

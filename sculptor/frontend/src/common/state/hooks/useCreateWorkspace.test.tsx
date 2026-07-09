@@ -74,7 +74,7 @@ describe("useCreateWorkspace", () => {
 
     const createResult = await result.current.createWorkspace(CREATE_ARGS);
 
-    expect(createResult).toEqual({ ok: true });
+    expect(createResult).toEqual({ ok: true, workspaceId: "ws_1" });
     expect(navigateToWorkspace).toHaveBeenCalledWith("ws_1");
     await waitFor(() => expect(navigateToAgent).toHaveBeenCalledWith("ws_1", "agent_1"));
     expect(store.get(createAgentErrorToastAtom)).toBeNull();
@@ -112,7 +112,7 @@ describe("useCreateWorkspace", () => {
     // The workspace half still succeeds — the caller's flow is done.
     const createResult = await result.current.createWorkspace(CREATE_ARGS);
 
-    expect(createResult).toEqual({ ok: true });
+    expect(createResult).toEqual({ ok: true, workspaceId: "ws_1" });
     expect(navigateToWorkspace).toHaveBeenCalledWith("ws_1");
     await waitFor(() => expect(store.get(createAgentErrorToastAtom)).not.toBeNull());
     expect(store.get(createAgentErrorToastAtom)).toMatchObject({ title: "Failed to create agent" });

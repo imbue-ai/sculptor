@@ -7,17 +7,25 @@ import type { StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { hasEverHadWorkspacesAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 
 /**
- * Open/close state of the new-workspace modal plus optional seeds for the form.
- * `presetProjectId` is set when the dialog is opened from a repo group's "+" so
- * the form lands on that repo. `initialPrompt` pre-fills the prompt textarea —
- * the home page's first-run auto-open uses it to seed the `/sculptor:help`
- * onboarding prompt. Transient — the modal is ephemeral, so this resets on
+ * Open/close state of the new-workspace modal plus optional seeds for the form
+ * it hosts. `presetProjectId` is set when the dialog is opened from a repo
+ * group's "+" so the form lands on that repo. `initialTitle` / `initialPrompt`
+ * / `initialBranchName` seed the form's title, prompt, and new-branch-name
+ * fields: the home page's first-run auto-open uses `initialPrompt` to seed the
+ * `/sculptor:help` onboarding prompt, and plugins use the full seed set (via
+ * the SDK's `useOpenNewWorkspaceModal`) to open the dialog pre-filled.
+ * `onWorkspaceCreated` fires after each successful create while the dialog
+ * stays associated with this open request (including repeat creates in
+ * keep-open mode). Transient — the modal is ephemeral, so this resets on
  * reload.
  */
 export type NewWorkspaceModalState = {
   open: boolean;
   presetProjectId?: string;
+  initialTitle?: string;
   initialPrompt?: string;
+  initialBranchName?: string;
+  onWorkspaceCreated?: (workspaceId: string) => void;
 };
 
 export const newWorkspaceModalAtom: PrimitiveAtom<NewWorkspaceModalState> = atom<NewWorkspaceModalState>({
@@ -25,9 +33,11 @@ export const newWorkspaceModalAtom: PrimitiveAtom<NewWorkspaceModalState> = atom
 });
 
 /**
- * The "keep open" switch: when on, Create keeps the dialog open
- * for rapid multi-create — the form resets its title/prompt/branch but retains
- * the repo + agent type. Persisted so the preference survives reloads.
+ * The "keep open" switch: when on, Create keeps the dialog open for rapid
+ * multi-create — the form resets its title/prompt/branch name back to their
+ * seeds (blank fields and a re-rolled branch when the dialog was opened
+ * unseeded), but retains the repo + agent type. Persisted so the preference
+ * survives reloads.
  */
 export const keepNewWorkspaceModalOpenAtom: WritableAtom<boolean, [boolean], void> = atomWithStorage<boolean>(
   "sculptor-keep-new-workspace-modal-open",
