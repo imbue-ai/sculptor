@@ -13,8 +13,7 @@ from sculpt.client.api.default import update_workspace
 from sculpt.client.models.create_workspace_request_v2 import CreateWorkspaceRequestV2
 from sculpt.client.models.http_validation_error import HTTPValidationError
 from sculpt.client.models.update_workspace_request import UpdateWorkspaceRequest
-from sculpt.commands._group_helpers import add_workspace_to_group
-from sculpt.commands._group_helpers import create_group_for_new_workspace
+from sculpt.commands._group_helpers import group_new_workspace_or_warn
 from sculpt.commands._group_helpers import resolve_group_for_join
 from sculpt.commands._workspace_helpers import STRATEGY_MAPPING
 from sculpt.commands._workspace_helpers import resolve_requested_branch_name
@@ -135,15 +134,15 @@ def create(
     if isinstance(result, HTTPValidationError):
         cli_error("Validation error", detail=str(result), json_output=json_output)
 
-    if target_group is not None:
-        group_id = add_workspace_to_group(
-            client, group_id=target_group.object_id, workspace_id=result.object_id, json_output=json_output
-        ).object_id
-    elif no_group:
+    if no_group:
         group_id = None
     else:
-        group_id = create_group_for_new_workspace(
-            client, project_id=project_id, workspace_id=result.object_id, json_output=json_output
+        group_id = group_new_workspace_or_warn(
+            client,
+            project_id=project_id,
+            workspace_id=result.object_id,
+            target_group_id=target_group.object_id if target_group is not None else None,
+            json_output=json_output,
         )
 
     if json_output:

@@ -290,7 +290,7 @@ export const SidebarRepoGroup = ({
       if (state === null || state.kind !== "row" || state.depthIntent === intent) {
         return;
       }
-      const projection = toggleBoundaryDepth(state.display, collapsedGroupIds, state.activeId, intent, null);
+      const projection = toggleBoundaryDepth(state.display, collapsedGroupIds, state.activeId, intent);
       acceptProjection(state, projection, intent);
     },
     [collapsedGroupIds, acceptProjection],

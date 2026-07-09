@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Workspace, WorkspaceGroup } from "~/api";
 
-import type { SectionProjection, SectionRowProjection } from "./sidebarDropProjection.ts";
+import type { SectionProjection } from "./sidebarDropProjection.ts";
 import {
   applySectionProjection,
   flatSectionItemIds,
@@ -308,7 +308,7 @@ describe("projectSectionDrop — degenerate inputs", () => {
 
 describe("toggleBoundaryDepth", () => {
   it("flips a group's last member out to loose-right-after-the-group", () => {
-    const projection = toggleBoundaryDepth(CHILDREN, NONE, "w-m2", "outside", null);
+    const projection = toggleBoundaryDepth(CHILDREN, NONE, "w-m2", "outside");
     expect(projection).toEqual({
       kind: "row",
       activeId: "w-m2",
@@ -322,7 +322,7 @@ describe("toggleBoundaryDepth", () => {
 
   it("flips a loose row sitting directly after an expanded group into its tail", () => {
     // banana sits directly after wsg-1 in the fixture.
-    const projection = toggleBoundaryDepth(CHILDREN, NONE, "w-banana", "inside", null);
+    const projection = toggleBoundaryDepth(CHILDREN, NONE, "w-banana", "inside");
     expect(projection).toEqual({
       kind: "row",
       activeId: "w-banana",
@@ -332,52 +332,14 @@ describe("toggleBoundaryDepth", () => {
     });
   });
 
-  it("resolves a pending same-parent tail projection's group for the outside flip", () => {
-    // m1 previewed at its own group's tail (not yet applied): flipping outside
-    // must target wsg-1's after-slot even though m1's display position is index 0.
-    const pending: SectionRowProjection = {
-      kind: "row",
-      activeId: "w-m1",
-      parentGroupId: "wsg-1",
-      index: 1,
-      isBoundary: true,
-    };
-    expect(toggleBoundaryDepth(CHILDREN, NONE, "w-m1", "outside", pending)).toEqual({
-      kind: "row",
-      activeId: "w-m1",
-      parentGroupId: null,
-      index: 2,
-      isBoundary: true,
-    });
-  });
-
-  it("accounts for a loose active row above the group when computing the after-slot", () => {
-    // apple (loose, above wsg-1) previewed at wsg-1's tail: removing apple
-    // shifts the group up one, so the loose after-slot is index 1, not 2.
-    const pending: SectionRowProjection = {
-      kind: "row",
-      activeId: "w-apple",
-      parentGroupId: "wsg-1",
-      index: 2,
-      isBoundary: true,
-    };
-    expect(toggleBoundaryDepth(CHILDREN, NONE, "w-apple", "outside", pending)).toEqual({
-      kind: "row",
-      activeId: "w-apple",
-      parentGroupId: null,
-      index: 1,
-      isBoundary: true,
-    });
-  });
-
   it("returns null when the active row is not at a flippable boundary", () => {
     // m1 is not its group's last member; apple is not directly after a group.
-    expect(toggleBoundaryDepth(CHILDREN, NONE, "w-m1", "outside", null)).toBeNull();
-    expect(toggleBoundaryDepth(CHILDREN, NONE, "w-apple", "inside", null)).toBeNull();
+    expect(toggleBoundaryDepth(CHILDREN, NONE, "w-m1", "outside")).toBeNull();
+    expect(toggleBoundaryDepth(CHILDREN, NONE, "w-apple", "inside")).toBeNull();
   });
 
   it("does not flip into a collapsed group (the slot after it is simply loose)", () => {
-    expect(toggleBoundaryDepth(CHILDREN, new Set(["wsg-1"]), "w-banana", "inside", null)).toBeNull();
+    expect(toggleBoundaryDepth(CHILDREN, new Set(["wsg-1"]), "w-banana", "inside")).toBeNull();
   });
 });
 

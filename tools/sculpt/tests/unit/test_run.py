@@ -661,6 +661,59 @@ class TestRunGrouping:
         assert "ungrouped" not in (result.stderr or "")
 
     @respx.mock
+    def test_run_survives_group_create_failure(self, runner: CliRunner) -> None:
+        """A grouping failure after workspace creation degrades to a loose
+        workspace with a warning — it must never abort before the agent is
+        created and the ids are printed."""
+        _mock_session()
+        _mock_initialize_project()
+        _mock_preview_branch_name()
+        respx.post("http://localhost:5050/api/v1/workspaces").mock(
+            return_value=Response(200, json=_workspace_response_dict())
+        )
+        agent_route = respx.post("http://localhost:5050/api/v1/workspaces/ws_newrun123/agents").mock(
+            return_value=Response(200, json=_task_response_dict())
+        )
+        respx.post("http://localhost:5050/api/v1/workspace-groups").mock(
+            return_value=Response(500, json={"detail": "boom"})
+        )
+
+        result = runner.invoke(app, ["run", "Fix the bug", "--repo", "/tmp/test"])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        assert agent_route.called
+        assert "ws_newrun123" in result.output
+        assert "grouping failed" in result.stderr
+        assert "Group:" not in result.output
+
+    @respx.mock
+    def test_run_survives_group_join_failure(self, runner: CliRunner) -> None:
+        """The explicit --group path degrades the same way once the workspace
+        exists (the target is pre-resolved, but it can dissolve in between)."""
+        _mock_session()
+        _mock_initialize_project()
+        _mock_preview_branch_name()
+        respx.get("http://localhost:5050/api/v1/workspace-groups").mock(
+            return_value=Response(200, json={"groups": [_group_response_dict()]})
+        )
+        respx.post("http://localhost:5050/api/v1/workspaces").mock(
+            return_value=Response(200, json=_workspace_response_dict())
+        )
+        agent_route = respx.post("http://localhost:5050/api/v1/workspaces/ws_newrun123/agents").mock(
+            return_value=Response(200, json=_task_response_dict())
+        )
+        respx.post("http://localhost:5050/api/v1/workspace-groups/wsg_auto123/workspaces").mock(
+            return_value=Response(404, json={"detail": "Workspace group not found"})
+        )
+
+        result = runner.invoke(app, ["run", "Fix the bug", "--repo", "/tmp/test", "--group", "wsg_auto123"])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        assert agent_route.called
+        assert "ws_newrun123" in result.output
+        assert "grouping failed" in result.stderr
+
+    @respx.mock
     def test_run_explicit_group_fails_when_groups_disabled(self, runner: CliRunner) -> None:
         """Explicit --group surfaces the disabled error before creating anything."""
         _mock_session()

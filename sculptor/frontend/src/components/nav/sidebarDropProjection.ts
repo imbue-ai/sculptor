@@ -10,9 +10,9 @@
 // what the user sees mid-drag is exactly what a drop commits.
 //
 // Everything here is pure and operates on `RepoSectionChild` trees; the React
-// layer (SidebarRepoGroup) owns when projections are applied — cross-parent
-// moves re-render the lane mid-drag so the group's painted container wraps the
-// gap, same-parent moves stay a transform preview until the drop.
+// layer (SidebarRepoGroup) applies every projection to the rendered lane
+// mid-drag, so the drop gap is always real layout and a group's painted box
+// always wraps exactly its rows.
 
 import { arrayMove } from "@dnd-kit/sortable";
 
@@ -228,13 +228,12 @@ export const projectSectionDrop = (args: {
 
 /**
  * The explicit depth flip at the ambiguous tail-of-group slot (REQ-DND-6),
- * for intent changes that arrive WITHOUT a new `over` target — the pointer
- * crossing the member indent while parked, or a Left/Right arrow press. The
- * active row's current effective location must actually be a tail boundary:
+ * for intent changes that arrive WITHOUT a new `over` target — a Left/Right
+ * arrow press on a parked keyboard drag. The active row's displayed location
+ * must actually be a flippable boundary:
  *
- * - flip OUT: the active row is the last member of a group (in the displayed
- *   children, or via a not-yet-applied same-parent tail projection) → loose,
- *   directly after that group.
+ * - flip OUT: the active row is a group's last member → loose, directly
+ *   after that group.
  * - flip IN: the active row sits loose directly after an expanded group → that
  *   group's member tail.
  *
@@ -245,19 +244,14 @@ export const toggleBoundaryDepth = (
   collapsedGroupIds: ReadonlySet<string>,
   activeId: string,
   intent: SectionDepthIntent,
-  pending: SectionRowProjection | null,
 ): SectionRowProjection | null => {
   if (intent === "outside") {
-    // The group whose tail the active row effectively occupies.
+    // The flip applies only when the active row is a group's last member.
     let groupId: string | null = null;
-    if (pending !== null && pending.isBoundary && pending.parentGroupId !== null) {
-      groupId = pending.parentGroupId;
-    } else if (pending === null) {
-      for (const child of children) {
-        if (child.kind === "group" && child.members[child.members.length - 1]?.objectId === activeId) {
-          groupId = child.group.objectId;
-          break;
-        }
+    for (const child of children) {
+      if (child.kind === "group" && child.members[child.members.length - 1]?.objectId === activeId) {
+        groupId = child.group.objectId;
+        break;
       }
     }
 
@@ -265,21 +259,11 @@ export const toggleBoundaryDepth = (
       return null;
     }
     const groupIndex = children.findIndex((child) => child.kind === "group" && child.group.objectId === groupId);
-    const activeLooseIndex = children.findIndex(
-      (child) => child.kind === "workspace" && child.workspace.objectId === activeId,
-    );
-    // The projection index is within the lane AFTER the active row is removed,
-    // so a loose active row above the group shifts the group up by one.
-    const indexAfterRemoval = groupIndex - (activeLooseIndex !== -1 && activeLooseIndex < groupIndex ? 1 : 0);
-    return { kind: "row", activeId, parentGroupId: null, index: indexAfterRemoval + 1, isBoundary: true };
+    // A member's removal never shifts top-level indices, so the group's index
+    // is valid as the after-removal insertion anchor.
+    return { kind: "row", activeId, parentGroupId: null, index: groupIndex + 1, isBoundary: true };
   }
 
-  // Flip IN only from a static loose position (a pending projection means the
-  // displayed position is not where the row would land — future over events
-  // already carry the new intent).
-  if (pending !== null) {
-    return null;
-  }
   const activeIndex = children.findIndex(
     (child) => child.kind === "workspace" && child.workspace.objectId === activeId,
   );

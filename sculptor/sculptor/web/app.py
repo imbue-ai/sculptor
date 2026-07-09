@@ -1227,11 +1227,14 @@ def create_workspace_group(
         ]
 
         live_groups = transaction.get_workspace_groups(project_id=validated_project_id)
+        # Same trimming contract as rename: a whitespace-only name falls back
+        # to the server-assigned default rather than storing a blank header.
+        requested_name = group_request.name.strip() if group_request.name else ""
         group = WorkspaceGroup(
             object_id=WorkspaceGroupID(),
             organization_reference=user_session.organization_reference,
             project_id=validated_project_id,
-            name=group_request.name if group_request.name else _next_default_group_name(live_groups),
+            name=requested_name if requested_name else _next_default_group_name(live_groups),
             color=group_request.color if group_request.color else _next_default_group_color(live_groups),
             created_via_cli=group_request.created_via_cli,
         )

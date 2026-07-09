@@ -141,7 +141,19 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
                 if self._drag_snapshot(item) != before:
                     break
                 self._page.wait_for_timeout(50)
-            if self._has_drag_reached_target(item, target, direction):
+            # The arrival check is retried over a settle window: a re-slot
+            # moves the dragged placeholder instantly, but its displaced
+            # neighbor FLIP-animates from its old position — an instant
+            # geometry read right after press-confirmation can catch the
+            # neighbor mid-flight and wrongly conclude the target wasn't
+            # reached, firing an overshoot press.
+            is_reached = False
+            for _settle in range(8):
+                if self._has_drag_reached_target(item, target, direction):
+                    is_reached = True
+                    break
+                self._page.wait_for_timeout(50)
+            if is_reached:
                 break
         else:
             raise AssertionError(
@@ -153,20 +165,19 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         # keeps callers from racing their order assertions against the commit.
         expect(item).not_to_have_attribute("data-sidebar-dragging", "true")
 
-    def _drag_snapshot(self, item: Locator) -> tuple[str | None, float | None]:
-        """Everything an arrow press can observably change, for press confirmation.
+    def _drag_snapshot(self, item: Locator) -> float | None:
+        """The dragged row's own position, for press confirmation.
 
-        The lit slot's identity (rows stamp data-workspace-id, group headers
-        data-project-id) and the dragged row's own position (the strategy
-        transforms the placeholder toward the targeted slot; display-driven
-        presses move it in real layout).
+        Geometry ONLY, deliberately: in both drag contexts an applied press
+        moves the dragged element (the repo list transforms it toward the
+        targeted slot; the flat lane re-renders its placeholder at the
+        projected slot), whereas the lit drop-target slot can flash BEFORE the
+        lane re-render lands — counting it would confirm a press whose layout
+        effect hasn't applied yet, and the arrival check would then read stale
+        geometry and overshoot with an extra press.
         """
-        lit_slot = self._page.locator('[data-sidebar-drop-target="true"]')
-        slot_id = None
-        if lit_slot.count() == 1:
-            slot_id = lit_slot.get_attribute("data-workspace-id") or lit_slot.get_attribute("data-project-id")
         box = item.bounding_box()
-        return (slot_id, None if box is None else round(box["y"]))
+        return None if box is None else round(box["y"])
 
     def _has_drag_reached_target(self, item: Locator, target: Locator, direction: str) -> bool:
         """Whether the parked drag has arrived at ``target``'s slot (either preview regime)."""
@@ -192,13 +203,19 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         self.pickup_via_keyboard(item)
 
         arrow = {"up": "ArrowUp", "down": "ArrowDown"}[direction]
+        # Same press-confirmation discipline as reorder_via_keyboard_drag: a
+        # press fired while a slow re-render is still applying the previous one
+        # would overshoot — stepping straight through a small group's run
+        # without its affordance ever being observed lit.
         for _press in range(_REORDER_MAX_ARROW_PRESSES):
+            before = self._drag_snapshot(item)
             self._page.keyboard.press(arrow)
-            try:
-                expect(group_card).to_have_attribute("data-drop-active", "true", timeout=2_000)
+            for _wait in range(40):
+                if self._drag_snapshot(item) != before:
+                    break
+                self._page.wait_for_timeout(50)
+            if group_card.get_attribute("data-drop-active") == "true":
                 break
-            except AssertionError:
-                continue
         else:
             raise AssertionError(
                 f"keyboard drag never lit the group card's drop affordance within {_REORDER_MAX_ARROW_PRESSES} presses"

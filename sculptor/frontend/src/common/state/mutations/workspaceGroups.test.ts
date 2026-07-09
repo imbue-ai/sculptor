@@ -6,13 +6,14 @@ import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as api from "../../../api";
-import type { WorkspaceGroup } from "../../../api";
+import type { Workspace, WorkspaceGroup } from "../../../api";
 import { queryClient as sharedQueryClient } from "../../queryClient.ts";
 import {
   resetWorkspaceGroupSyncVersionsForTesting,
   updateWorkspaceGroupsAtom,
   workspaceGroupAtomFamily,
 } from "../atoms/workspaceGroups";
+import { resetWorkspaceSyncVersionsForTesting, updateWorkspacesAtom, workspaceAtomFamily } from "../atoms/workspaces";
 import {
   useAddWorkspaceGroupMemberMutation,
   useCreateWorkspaceGroupMutation,
@@ -47,6 +48,26 @@ vi.mock("../../../api", async () => {
 const GROUP_ID = "wsg-1";
 const PROJECT_ID = "p-1";
 const WS_ID = "ws-1";
+
+const makeWorkspace = (overrides: Partial<Workspace> = {}): Workspace =>
+  ({
+    objectId: WS_ID,
+    projectId: PROJECT_ID,
+    organizationReference: "org-1",
+    description: "",
+    initializationStrategy: "CLONE",
+    isOpen: true,
+    isDeleted: false,
+    ...overrides,
+  }) as Workspace;
+
+const seedWorkspace = (workspace: Workspace): void => {
+  // Through the stream writer, so the seed registers a sync version exactly
+  // like a real frame.
+  store.set(updateWorkspacesAtom, [workspace]);
+};
+
+const getStoredWorkspace = (id: string): Workspace | null => store.get(workspaceAtomFamily(id));
 
 const makeGroup = (overrides: Partial<WorkspaceGroup> = {}): WorkspaceGroup => ({
   objectId: GROUP_ID,
@@ -89,9 +110,10 @@ beforeEach(() => {
   mockRemoveMember.mockResolvedValue(undefined);
   mockUngroup.mockResolvedValue(undefined);
   store = createStore();
-  // Sync versions live in a module-level map, so they leak across tests
+  // Sync versions live in module-level maps, so they leak across tests
   // without an explicit reset.
   resetWorkspaceGroupSyncVersionsForTesting();
+  resetWorkspaceSyncVersionsForTesting();
 });
 
 afterEach(() => {
@@ -246,6 +268,51 @@ describe("useAddWorkspaceGroupMemberMutation", () => {
       body: { workspaceId: WS_ID },
     });
   });
+
+  it("optimistically sets the workspace's groupId", async () => {
+    seedWorkspace(makeWorkspace());
+    const { result } = renderHook(() => useAddWorkspaceGroupMemberMutation(), { wrapper: makeWrapper() });
+
+    act(() => {
+      result.current.mutate({ groupId: GROUP_ID, workspaceId: WS_ID });
+    });
+    await flushMicrotasks();
+
+    expect(getStoredWorkspace(WS_ID)?.groupId).toBe(GROUP_ID);
+  });
+
+  it("rolls the flip back when the API call rejects", async () => {
+    seedWorkspace(makeWorkspace());
+    mockAddMember.mockRejectedValueOnce(new Error("409"));
+    const { result } = renderHook(() => useAddWorkspaceGroupMemberMutation(), { wrapper: makeWrapper() });
+
+    act(() => {
+      result.current.mutate({ groupId: GROUP_ID, workspaceId: WS_ID });
+    });
+    await flushMicrotasks();
+
+    expect(getStoredWorkspace(WS_ID)?.groupId).toBeUndefined();
+  });
+
+  it("skips the rollback when a stream frame wrote the workspace mid-request", async () => {
+    seedWorkspace(makeWorkspace());
+    mockAddMember.mockRejectedValueOnce(new Error("timeout"));
+    const { result } = renderHook(() => useAddWorkspaceGroupMemberMutation(), { wrapper: makeWrapper() });
+
+    act(() => {
+      result.current.mutate({ groupId: GROUP_ID, workspaceId: WS_ID });
+    });
+    // The server applied the add but the response was lost: the confirming
+    // frame lands while the request is still in flight. It holds server
+    // truth, and the stream will not re-send an unchanged workspace.
+    act(() => {
+      seedWorkspace(makeWorkspace({ groupId: GROUP_ID, description: "renamed by frame" }));
+    });
+    await flushMicrotasks();
+
+    expect(getStoredWorkspace(WS_ID)?.groupId).toBe(GROUP_ID);
+    expect(getStoredWorkspace(WS_ID)?.description).toBe("renamed by frame");
+  });
 });
 
 describe("useRemoveWorkspaceGroupMemberMutation", () => {
@@ -261,6 +328,20 @@ describe("useRemoveWorkspaceGroupMemberMutation", () => {
     expect(mockRemoveMember).toHaveBeenCalledWith({
       path: { group_id: GROUP_ID, workspace_id: WS_ID },
     });
+  });
+
+  it("optimistically clears the workspace's groupId and restores it on failure", async () => {
+    seedWorkspace(makeWorkspace({ groupId: GROUP_ID }));
+    mockRemoveMember.mockRejectedValueOnce(new Error("500"));
+    const { result } = renderHook(() => useRemoveWorkspaceGroupMemberMutation(), { wrapper: makeWrapper() });
+
+    act(() => {
+      result.current.mutate({ groupId: GROUP_ID, workspaceId: WS_ID });
+    });
+    expect(getStoredWorkspace(WS_ID)?.groupId).toBeUndefined();
+    await flushMicrotasks();
+
+    expect(getStoredWorkspace(WS_ID)?.groupId).toBe(GROUP_ID);
   });
 });
 

@@ -13,10 +13,10 @@
  * - Add/remove member flip `Workspace.groupId` in the workspace store
  *   optimistically (REQ-DND-7: a drop must land instantly, never snap back
  *   and re-apply on the server's confirmation): `onMutate` snapshots the
- *   workspace and writes the flip; `onError` restores the snapshot — the
- *   same plain snapshot/rollback contract as the sidebar rename flow, which
- *   accepts that a WS frame racing the failed request can be briefly
- *   overwritten until the next frame reasserts server truth.
+ *   workspace plus its stream sync-version; `onError` restores the snapshot
+ *   only if the version is unchanged — a WS frame that landed mid-request
+ *   holds server truth and must win (same contract as the group update
+ *   above).
  * - Create and ungroup have no optimistic write. Create materializes
  *   server-assigned facts (id, "Group N" name, palette color); ungroup flips
  *   every member at once and is menu-driven (no drop to keep responsive), so
@@ -40,7 +40,7 @@ import {
   updateWorkspaceGroup,
 } from "../../../api";
 import { getWorkspaceGroupSyncVersion, workspaceGroupAtomFamily } from "../atoms/workspaceGroups.ts";
-import { workspaceAtomFamily } from "../atoms/workspaces.ts";
+import { getWorkspaceSyncVersion, workspaceAtomFamily } from "../atoms/workspaces.ts";
 
 type JotaiStore = ReturnType<typeof useStore>;
 
@@ -141,7 +141,7 @@ export const useUpdateWorkspaceGroupMutation = (): UseMutationResult<
 
 type WorkspaceGroupMemberVars = { groupId: string; workspaceId: string };
 
-export type WorkspaceMembershipMutationContext = { prev: Workspace | null };
+export type WorkspaceMembershipMutationContext = { prev: Workspace | null; syncVersion: number };
 
 /** Snapshot the workspace and optimistically set its `groupId`. */
 const applyOptimisticMembershipFlip = (
@@ -154,16 +154,21 @@ const applyOptimisticMembershipFlip = (
   if (prev !== null) {
     store.set(workspaceAtom, { ...prev, groupId });
   }
-  return { prev };
+  return { prev, syncVersion: getWorkspaceSyncVersion(workspaceId) };
 };
 
-/** Restore the pre-flip workspace after a failed request, if one was written. */
+/**
+ * Restore the pre-flip workspace after a failed request, unless nothing was
+ * written or a WS frame wrote the workspace in the meantime (that frame holds
+ * server truth — restoring the snapshot over it would resurrect a stale
+ * membership the stream will not re-send).
+ */
 const rollbackOptimisticMembershipFlip = (
   store: JotaiStore,
   workspaceId: string,
   ctx: WorkspaceMembershipMutationContext | undefined,
 ): void => {
-  if (ctx?.prev != null) {
+  if (ctx?.prev != null && getWorkspaceSyncVersion(workspaceId) === ctx.syncVersion) {
     store.set(workspaceAtomFamily(workspaceId), ctx.prev);
   }
 };

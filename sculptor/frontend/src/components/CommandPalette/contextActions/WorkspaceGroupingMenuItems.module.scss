@@ -4,7 +4,9 @@
 // group's data-accent-color, so the accent token resolves per group.
 .groupColorDot {
   background: var(--accent-9);
-  border-radius: var(--radius-full);
+  // 50% (not --radius-full, which resolves to a box radius under non-"full"
+  // theme radius settings) so the dot is a true circle.
+  border-radius: 50%;
   display: inline-block;
   flex-shrink: 0;
   height: 9px;

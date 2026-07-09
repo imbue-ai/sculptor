@@ -218,8 +218,9 @@ items follow alphabetically, stale ids are skipped on read).
   member at that position. The drop position MUST be previewed by a
   real gap opening at the projected slot — the same preview whether the
   drop is a reorder, a join, or a release; there are no separate drop
-  zones or labels. The dragged row itself MUST follow the pointer
-  freely as a floating copy (no axis lock, no container clamp).
+  zones or labels. The dragged row travels as a floating copy locked to
+  the vertical axis, riding the rail under the pointer with no
+  container clamp (it crosses group boxes freely).
 - **REQ-DND-2**: Members MUST be reorderable within a group with the
   same gap preview. Member visual order persists in the sidebar-order
   layout snapshot following the landed stored-first convention — the

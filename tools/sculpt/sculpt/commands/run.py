@@ -12,8 +12,7 @@ from sculpt.client.models.create_workspace_request_v2 import CreateWorkspaceRequ
 from sculpt.client.models.http_validation_error import HTTPValidationError
 from sculpt.client.types import UNSET
 from sculpt.commands._follow_helpers import follow_and_stream_messages
-from sculpt.commands._group_helpers import add_workspace_to_group
-from sculpt.commands._group_helpers import create_group_for_new_workspace
+from sculpt.commands._group_helpers import group_new_workspace_or_warn
 from sculpt.commands._group_helpers import resolve_group_for_join
 from sculpt.commands._harness_helpers import resolve_harness_selection
 from sculpt.commands._workspace_helpers import STRATEGY_MAPPING
@@ -150,15 +149,15 @@ def run_cmd(
 
     workspace_id = ws_result.object_id
 
-    if target_group is not None:
-        group_id = add_workspace_to_group(
-            client, group_id=target_group.object_id, workspace_id=workspace_id, json_output=json_output
-        ).object_id
-    elif no_group:
+    if no_group:
         group_id = None
     else:
-        group_id = create_group_for_new_workspace(
-            client, project_id=project_id, workspace_id=workspace_id, json_output=json_output
+        group_id = group_new_workspace_or_warn(
+            client,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            target_group_id=target_group.object_id if target_group is not None else None,
+            json_output=json_output,
         )
 
     # Create agent. An omitted --harness sends no agent type, so the server

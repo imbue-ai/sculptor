@@ -148,33 +148,63 @@ def add_workspace_to_group(
     return response.parsed
 
 
-def create_group_for_new_workspace(
+def _warn_grouping_failed(detail: str) -> None:
+    # stderr in both output modes: JSON consumers read stdout, and silently
+    # dropping the requested grouping would be worse than an extra stderr line.
+    typer.echo(f"Warning: the workspace was created but grouping failed ({detail}); it was left ungrouped.", err=True)
+
+
+def group_new_workspace_or_warn(
     client: Client,
     *,
     project_id: str,
     workspace_id: str,
+    target_group_id: str | None,
     json_output: bool,
 ) -> str | None:
-    """Auto-group a freshly created CLI workspace, returning the new group's ID.
+    """Group a just-created workspace, degrading to a loose workspace on failure.
 
-    This is the *implicit* grouping path: when the workspace-groups experiment
-    is disabled the workspace simply stays loose (returning None, with a
-    one-line stderr note in text mode). Any other failure still errors loudly.
+    This step runs between workspace creation and agent creation, so it must
+    never abort the flow: exiting here would strand a fresh, agent-less
+    workspace whose id the caller has not yet printed. Grouping is
+    organizational — any failure (a ``--group`` target dissolved since the
+    pre-resolve, a transient server error, a dropped connection) downgrades to
+    a stderr warning and the flow continues ungrouped. The disabled-experiment
+    case keeps its dedicated note.
+
+    ``target_group_id`` joins an existing group (the explicit ``--group``
+    path); ``None`` auto-creates a fresh CLI group around the workspace.
     """
-    request = CreateWorkspaceGroupRequest(
+    if target_group_id is not None:
+        member_request = AddWorkspaceGroupMemberRequest(workspace_id=workspace_id)
+        try:
+            response = add_workspace_group_member.sync_detailed(
+                group_id=target_group_id, client=client, body=member_request
+            )
+        except httpx.ConnectError:
+            _warn_grouping_failed("could not reach the server")
+            return None
+        if response.status_code == HTTPStatus.OK and isinstance(response.parsed, WorkspaceGroupResponse):
+            return response.parsed.object_id
+        _, message = extract_structured_error(response.content)
+        _warn_grouping_failed(message or f"HTTP {response.status_code}")
+        return None
+
+    create_request = CreateWorkspaceGroupRequest(
         project_id=project_id,
         workspace_ids=[workspace_id],
         created_via_cli=True,
     )
     try:
-        response = create_workspace_group.sync_detailed(client=client, body=request)
+        response = create_workspace_group.sync_detailed(client=client, body=create_request)
     except httpx.ConnectError:
-        handle_connection_error(json_output)
+        _warn_grouping_failed("could not reach the server")
+        return None
 
     if response.status_code == HTTPStatus.OK and isinstance(response.parsed, WorkspaceGroupResponse):
         return response.parsed.object_id
 
-    code, _ = extract_structured_error(response.content)
+    code, message = extract_structured_error(response.content)
     if response.status_code == HTTPStatus.CONFLICT and code == WORKSPACE_GROUPS_DISABLED_CODE:
         if not json_output:
             typer.echo(
@@ -183,4 +213,5 @@ def create_group_for_new_workspace(
             )
         return None
 
-    raise_for_group_error(response, action="auto-create workspace group", json_output=json_output)
+    _warn_grouping_failed(message or f"HTTP {response.status_code}")
+    return None
