@@ -15,6 +15,7 @@ from loguru import logger
 from pydantic import PrivateAttr
 
 from sculptor.config.settings import SculptorSettings
+from sculptor.database.models import CreationAttribution
 from sculptor.database.models import Project
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import DiffStatus
@@ -410,6 +411,7 @@ class DefaultWorkspaceService(WorkspaceService):
         description: str | None,
         transaction: DataModelTransaction,
         target_branch: str | None = None,
+        created_by: CreationAttribution | None = None,
     ) -> Workspace:
         """Create a new workspace for a project."""
         # Generate workspace description if not provided
@@ -451,6 +453,7 @@ class DefaultWorkspaceService(WorkspaceService):
             source_git_hash=source_git_hash,
             target_branch=target_branch,
             setup_status=initial_setup_status,
+            created_by=created_by,
         )
 
         logger.debug(

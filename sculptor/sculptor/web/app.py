@@ -755,6 +755,7 @@ def create_workspace_v2(
             description=workspace_request.description,
             transaction=transaction,
             target_branch=workspace_request.target_branch,
+            created_by=workspace_request.created_by,
         )
         update_most_recently_used_project(project_id=validated_project_id)
         logger.info("Created workspace {} for project {}", workspace.object_id, workspace_request.project_id)

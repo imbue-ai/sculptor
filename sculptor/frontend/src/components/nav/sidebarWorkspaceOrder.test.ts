@@ -18,6 +18,23 @@ import {
 const makeWorkspace = (id: string, projectId: string, description: string): Workspace =>
   ({ objectId: id, projectId, description }) as unknown as Workspace;
 
+// A workspace carrying the creation fields the default order keys on: createdAt
+// (newest-first) and createdBy.createdByWorkspaceId (the creator it nests beneath).
+const makeAttributedWorkspace = (
+  id: string,
+  projectId: string,
+  description: string,
+  options: { createdAt?: string; createdByWorkspaceId?: string },
+): Workspace =>
+  ({
+    objectId: id,
+    projectId,
+    description,
+    createdAt: options.createdAt,
+    createdBy:
+      options.createdByWorkspaceId !== undefined ? { createdByWorkspaceId: options.createdByWorkspaceId } : undefined,
+  }) as unknown as Workspace;
+
 const makeProject = (id: string, name: string): Project => ({ objectId: id, name }) as unknown as Project;
 
 const PROJECTS = [makeProject("p-alpha", "alpha"), makeProject("p-beta", "beta")];
@@ -32,13 +49,13 @@ const workspaceIdsOf = (groups: ReturnType<typeof groupWorkspacesByRepo>, projec
   groups.find((group) => group.projectId === projectId)?.workspaces.map((ws) => ws.objectId) ?? [];
 
 describe("groupWorkspacesByRepo", () => {
-  it("defaults to alphabetical groups and workspaces without a stored order", () => {
+  it("defaults to alphabetical groups; workspaces without createdAt tie-break by description", () => {
     const groups = groupWorkspacesByRepo(WORKSPACES, PROJECTS);
     expect(groups.map((group) => group.projectId)).toEqual(["p-alpha", "p-beta"]);
     expect(workspaceIdsOf(groups, "p-alpha")).toEqual(["w-apple", "w-banana", "w-cherry"]);
   });
 
-  it("renders stored workspace positions first, then unstored ones alphabetically", () => {
+  it("renders stored workspace positions first, then unstored ones in default order", () => {
     const groups = groupWorkspacesByRepo(WORKSPACES, PROJECTS, {
       repos: [],
       // banana was dragged above cherry; apple has no stored position.
@@ -71,6 +88,107 @@ describe("groupWorkspacesByRepo", () => {
       workspaces: {},
     });
     expect(groups.map((group) => group.projectId)).toEqual(["p-gamma", "p-alpha", "p-beta"]);
+  });
+});
+
+describe("groupWorkspacesByRepo creation ordering and nesting", () => {
+  it("orders top-level workspaces newest-first by createdAt", () => {
+    const workspaces = [
+      makeAttributedWorkspace("w-old", "p-alpha", "old", { createdAt: "2026-01-01T00:00:00Z" }),
+      makeAttributedWorkspace("w-new", "p-alpha", "new", { createdAt: "2026-03-01T00:00:00Z" }),
+      makeAttributedWorkspace("w-mid", "p-alpha", "mid", { createdAt: "2026-02-01T00:00:00Z" }),
+    ];
+    const groups = groupWorkspacesByRepo(workspaces, PROJECTS);
+    expect(workspaceIdsOf(groups, "p-alpha")).toEqual(["w-new", "w-mid", "w-old"]);
+  });
+
+  it("nests an agent-spawned workspace directly beneath its creator", () => {
+    const workspaces = [
+      makeAttributedWorkspace("w-parent", "p-alpha", "parent", { createdAt: "2026-01-01T00:00:00Z" }),
+      makeAttributedWorkspace("w-top", "p-alpha", "top", { createdAt: "2026-03-01T00:00:00Z" }),
+      makeAttributedWorkspace("w-child", "p-alpha", "child", {
+        createdAt: "2026-02-01T00:00:00Z",
+        createdByWorkspaceId: "w-parent",
+      }),
+    ];
+    const groups = groupWorkspacesByRepo(workspaces, PROJECTS);
+    // w-top is newest so it leads; w-parent follows with its child directly beneath,
+    // even though the child was created more recently than the parent.
+    expect(workspaceIdsOf(groups, "p-alpha")).toEqual(["w-top", "w-parent", "w-child"]);
+  });
+
+  it("orders sibling children newest-first under their creator", () => {
+    const workspaces = [
+      makeAttributedWorkspace("w-parent", "p-alpha", "parent", { createdAt: "2026-01-01T00:00:00Z" }),
+      makeAttributedWorkspace("w-child-old", "p-alpha", "child-old", {
+        createdAt: "2026-01-02T00:00:00Z",
+        createdByWorkspaceId: "w-parent",
+      }),
+      makeAttributedWorkspace("w-child-new", "p-alpha", "child-new", {
+        createdAt: "2026-01-03T00:00:00Z",
+        createdByWorkspaceId: "w-parent",
+      }),
+    ];
+    const groups = groupWorkspacesByRepo(workspaces, PROJECTS);
+    expect(workspaceIdsOf(groups, "p-alpha")).toEqual(["w-parent", "w-child-new", "w-child-old"]);
+  });
+
+  it("nests grandchildren recursively down the creation chain", () => {
+    const workspaces = [
+      makeAttributedWorkspace("w-a", "p-alpha", "a", { createdAt: "2026-01-01T00:00:00Z" }),
+      makeAttributedWorkspace("w-b", "p-alpha", "b", {
+        createdAt: "2026-01-02T00:00:00Z",
+        createdByWorkspaceId: "w-a",
+      }),
+      makeAttributedWorkspace("w-c", "p-alpha", "c", {
+        createdAt: "2026-01-03T00:00:00Z",
+        createdByWorkspaceId: "w-b",
+      }),
+    ];
+    const groups = groupWorkspacesByRepo(workspaces, PROJECTS);
+    expect(workspaceIdsOf(groups, "p-alpha")).toEqual(["w-a", "w-b", "w-c"]);
+  });
+
+  it("treats a workspace whose creator lives in another repo as top-level", () => {
+    const workspaces = [
+      makeAttributedWorkspace("w-parent", "p-beta", "parent", { createdAt: "2026-01-01T00:00:00Z" }),
+      makeAttributedWorkspace("w-orphan", "p-alpha", "orphan", {
+        createdAt: "2026-01-02T00:00:00Z",
+        createdByWorkspaceId: "w-parent",
+      }),
+      makeAttributedWorkspace("w-plain", "p-alpha", "plain", { createdAt: "2026-01-03T00:00:00Z" }),
+    ];
+    const groups = groupWorkspacesByRepo(workspaces, PROJECTS);
+    // w-parent isn't in p-alpha, so w-orphan roots at the top level and sorts by its
+    // own createdAt rather than nesting.
+    expect(workspaceIdsOf(groups, "p-alpha")).toEqual(["w-plain", "w-orphan"]);
+  });
+
+  it("treats a self-referential creator as top-level", () => {
+    const workspaces = [
+      makeAttributedWorkspace("w-self", "p-alpha", "self", {
+        createdAt: "2026-01-01T00:00:00Z",
+        createdByWorkspaceId: "w-self",
+      }),
+      makeAttributedWorkspace("w-other", "p-alpha", "other", { createdAt: "2026-01-02T00:00:00Z" }),
+    ];
+    const groups = groupWorkspacesByRepo(workspaces, PROJECTS);
+    expect(workspaceIdsOf(groups, "p-alpha")).toEqual(["w-other", "w-self"]);
+  });
+
+  it("still renders every workspace when creators form a cycle", () => {
+    const workspaces = [
+      makeAttributedWorkspace("w-x", "p-alpha", "x", {
+        createdAt: "2026-01-01T00:00:00Z",
+        createdByWorkspaceId: "w-y",
+      }),
+      makeAttributedWorkspace("w-y", "p-alpha", "y", {
+        createdAt: "2026-01-02T00:00:00Z",
+        createdByWorkspaceId: "w-x",
+      }),
+    ];
+    const groups = groupWorkspacesByRepo(workspaces, PROJECTS);
+    expect([...workspaceIdsOf(groups, "p-alpha")].sort()).toEqual(["w-x", "w-y"]);
   });
 });
 

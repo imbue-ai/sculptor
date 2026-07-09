@@ -3147,5 +3147,41 @@
         "type": "object"
       }
     }
+  },
+  "Workspace": {
+    "created_by": {
+      "CreationAttribution": {
+        "additionalProperties": true,
+        "description": "Records what created a workspace, so the UI can group agent-spawned workspaces\nunder the workspace that created them (and place user-initiated ones on top).\n\nPopulated by `sculpt workspace create` from the creating agent's own identity\n(SCULPT_WORKSPACE_ID / SCULPT_AGENT_ID). Left null for user-initiated creation\nthrough the UI, which is why a null attribution is treated the same as \"created\nby the user\" everywhere it's consumed.\n\nThis is intentionally an embedded object stored inline as a JSON column, NOT a\nforeign-key relation: SQLite foreign keys fight the two-table\n(`<name>` / `<name>_latest`) trigger design, so parentage lives here as plain\nembedded ids rather than a cross-table constraint.",
+        "properties": {
+          "createdByAgentId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Createdbyagentid"
+          },
+          "createdByWorkspaceId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Createdbyworkspaceid"
+          }
+        },
+        "title": "CreationAttribution",
+        "type": "object"
+      }
+    }
   }
 }

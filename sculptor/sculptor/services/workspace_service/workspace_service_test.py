@@ -14,6 +14,7 @@ from pydantic import PrivateAttr
 
 from sculptor.config.settings import SculptorSettings
 from sculptor.config.settings import TEST_LOG_PATH
+from sculptor.database.models import CreationAttribution
 from sculptor.database.models import Project
 from sculptor.database.workspace_enums import DiffStatus
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
@@ -178,6 +179,56 @@ def test_create_workspace_clone(
     assert workspace is not None
     assert workspace.initialization_strategy == WorkspaceInitializationStrategy.CLONE
     assert workspace.source_branch == "feature-branch"
+
+
+def test_create_workspace_persists_creation_attribution(
+    test_service_collection: CompleteServiceCollection,
+    test_project: Project,
+) -> None:
+    """created_by round-trips through the JSON column so the sidebar can nest workspaces."""
+    creator_workspace_id = WorkspaceID()
+    creator_agent_id = TaskID()
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        workspace = test_service_collection.workspace_service.create_workspace(
+            project=test_project,
+            initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
+            source_branch=None,
+            requested_branch_name=None,
+            description="Attributed workspace",
+            transaction=transaction,
+            created_by=CreationAttribution(
+                created_by_workspace_id=creator_workspace_id,
+                created_by_agent_id=creator_agent_id,
+            ),
+        )
+        workspace_id = workspace.object_id
+
+    # Re-fetch in a fresh transaction to prove the attribution survives serialization.
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        found_workspace = transaction.get_workspace(workspace_id)
+
+    assert found_workspace is not None
+    assert found_workspace.created_by is not None
+    assert found_workspace.created_by.created_by_workspace_id == creator_workspace_id
+    assert found_workspace.created_by.created_by_agent_id == creator_agent_id
+
+
+def test_create_workspace_defaults_creation_attribution_to_none(
+    test_service_collection: CompleteServiceCollection,
+    test_project: Project,
+) -> None:
+    """A user-initiated workspace has no attribution, so it sorts to the top of the sidebar."""
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        workspace = test_service_collection.workspace_service.create_workspace(
+            project=test_project,
+            initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
+            source_branch=None,
+            requested_branch_name=None,
+            description="Unattributed workspace",
+            transaction=transaction,
+        )
+
+    assert workspace.created_by is None
 
 
 def test_create_workspace_generates_description_without_prefix(

@@ -13,6 +13,7 @@ from pydantic import Tag
 
 from sculptor.agents.pi_agent.provider_catalog import ProviderGroup
 from sculptor.config.settings import SculptorSettings
+from sculptor.database.models import CreationAttribution
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.foundation.pydantic_serialization import build_discriminator
@@ -156,6 +157,11 @@ class CreateWorkspaceRequestV2(RequestModel):
     # Diff/merge target branch. When None, the backend resolves a sensible default
     # from the repo (origin's default branch, else local main/master).
     target_branch: str | None = None
+    # Attribution for agent-spawned workspaces: `sculpt workspace create` fills this
+    # from the calling agent's own SCULPT_WORKSPACE_ID / SCULPT_AGENT_ID. Left None
+    # for user-initiated creation via the UI, so the sidebar can nest agent-spawned
+    # workspaces under their creator and keep user-created ones on top.
+    created_by: CreationAttribution | None = None
 
 
 class UpdateWorkspaceRequest(RequestModel):
