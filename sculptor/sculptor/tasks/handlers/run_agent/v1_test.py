@@ -51,6 +51,7 @@ from sculptor.state.messages import Message
 from sculptor.state.messages import ModelCatalogState
 from sculptor.state.messages import ModelOption
 from sculptor.state.messages import NOT_FETCHED_YET
+from sculptor.state.messages import PersistentUserMessage
 from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.tasks.handlers.run_agent.setup import _drop_already_processed_messages
 from sculptor.tasks.handlers.run_agent.setup import _resolve_title_prediction_thread
@@ -2044,3 +2045,129 @@ def test_orphaned_answer_is_finalized_on_noop_resume(
     assert len(orphan_completions) == 1, (
         f"Expected exactly one interrupted RequestSuccess for the orphaned answer, got {len(orphan_completions)}"
     )
+
+
+def test_noop_resume_advances_dedup_cursor_for_synthesized_completions(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: LocalEnvironment,
+    test_settings: SculptorSettings,
+) -> None:
+    """Synthesizing orphan completions must also advance last_processed_message_id.
+
+    The synthetic completions are written outside the main loop, so they bypass
+    the loop's cursor advance at v1.py:580. If the cursor is left stale, the next
+    restart's _drop_already_processed_messages re-queues the very user messages
+    whose completions we just synthesized, re-delivering them to the agent.
+
+    Uses the both-orphans crash shape (chat mid-response AND a delivered-but-
+    unfinished answer) so it also pins the ordering rule: the cursor must land on
+    the answer — the later message in queue order — not the chat message.
+    """
+    workspace_id = WorkspaceID()
+    previous_message_id = AgentMessageID()
+    chat_message = ChatInputUserMessage(
+        message_id=AgentMessageID(),
+        text="Prompt that crashed mid-response",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+    answer = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"Continue?": "Yes, proceed"},
+        question_data=AskUserQuestionData(questions=[], tool_use_id="toolu_cursor"),
+        tool_use_id="toolu_cursor",
+    )
+    stale_state = AgentTaskStateV2(
+        workspace_id=workspace_id,
+        last_processed_message_id=previous_message_id,
+    )
+    _set_task_state(local_task, stale_state, services)
+
+    with services.data_model_service.open_task_transaction() as transaction:
+        # Chat turn started, produced partial output, never completed.
+        services.task_service.create_message(chat_message, local_task.object_id, transaction)
+        services.task_service.create_message(
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=chat_message.message_id),
+            local_task.object_id,
+            transaction,
+        )
+        services.task_service.create_message(
+            ResponseBlockAgentMessage(
+                message_id=AgentMessageID(),
+                role="assistant",
+                assistant_message_id=AssistantMessageID(generate_id()),
+                content=(TextBlock(text="Partial work before crash..."),),
+            ),
+            local_task.object_id,
+            transaction,
+        )
+        # The answer was delivered but its turn never completed either.
+        services.task_service.create_message(answer, local_task.object_id, transaction)
+        services.task_service.create_message(
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=answer.message_id),
+            local_task.object_id,
+            transaction,
+        )
+
+    agent_env = LocalAgentExecutionEnvironment(
+        environment=environment,
+        task_id=local_task.object_id,
+        dependency_management_service=services.dependency_management_service,
+    )
+    fake_agent = _IdleStopAgent(
+        harness=CLAUDE_CODE_HARNESS,
+        environment=agent_env,
+        task_id=local_task.object_id,
+        system_prompt="",
+    )
+
+    input_message_queue: Queue = Queue()
+    shutdown_event = threading.Event()
+    shutdown_event.set()
+
+    assert isinstance(local_task.input_data, AgentTaskInputsV2)
+    task_data = local_task.input_data
+
+    with patch("sculptor.tasks.handlers.run_agent.v1._get_agent_wrapper", return_value=fake_agent):
+        with pytest.raises(AgentPaused):
+            _run_agent_in_environment(
+                task=local_task,
+                task_data=task_data,
+                task_state=stale_state,
+                re_queued_messages=(),
+                input_message_queue=input_message_queue,
+                environment=agent_env,
+                services=services,
+                project=project,
+                settings=test_settings,
+                shutdown_event=shutdown_event,
+            )
+
+    with services.data_model_service.open_task_transaction() as transaction:
+        task_row = transaction.get_task(local_task.object_id)
+        assert task_row is not None
+        final_state = AgentTaskStateV2.model_validate(task_row.current_state)
+        saved_messages = services.task_service.get_saved_messages_for_task(local_task.object_id, transaction)
+
+    # Both orphans got a synthetic interrupted completion.
+    synthesized_request_ids = [
+        m.request_id for m in saved_messages if isinstance(m, RequestSuccessAgentMessage) and m.interrupted
+    ]
+    assert synthesized_request_ids == [chat_message.message_id, answer.message_id]
+
+    # The persisted cursor advanced to the LAST synthesized completion (the answer,
+    # which follows the chat message in queue order).
+    assert final_state.last_processed_message_id == answer.message_id
+
+    # Simulate the next restart's dedup over the replayed user-message queue: both
+    # finalized messages must be dropped (not re-queued, no
+    # LastProcessedMessageNotInQueueError).
+    replay_queue: Queue = Queue()
+    for m in saved_messages:
+        if isinstance(m, PersistentUserMessage):
+            replay_queue.put(m)
+    dropped, re_queued = _drop_already_processed_messages(final_state.last_processed_message_id, replay_queue)
+    assert {m.message_id for m in dropped} == {chat_message.message_id, answer.message_id}
+    assert re_queued == ()
+    assert replay_queue.empty()

@@ -476,6 +476,11 @@ def _run_agent_in_environment(
             ]
             if orphaned_completion_msgs:
                 _save_messages(task.object_id, services, orphaned_completion_msgs, {})
+                # Advance the dedup cursor so a future restart doesn't re-queue
+                # a user message whose completion we just synthesized.
+                task_state = _record_latest_completion_in_state(
+                    orphaned_completion_msgs, task.object_id, task_state, services
+                )
 
     # this is the core event loop for the agent.
     exit_code: int | None
