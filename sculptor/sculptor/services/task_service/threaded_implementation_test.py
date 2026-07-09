@@ -245,14 +245,12 @@ def test_restore_task_clears_stale_error(
         failed_task = failed_task.evolve(failed_task.ref().error, fake_error)
         transaction.upsert_task(failed_task)
 
-    # Precondition: error is set
     with service.data_model_service.open_task_transaction() as transaction:
         pre = service.get_task(task.object_id, transaction)
         assert pre is not None
         assert pre.outcome == TaskState.FAILED
         assert pre.error is not None
 
-    # Restore the task.
     with service.data_model_service.open_task_transaction() as transaction:
         restored = service.restore_task(task.object_id, transaction)
 

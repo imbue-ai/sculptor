@@ -1924,8 +1924,6 @@ def test_orphaned_chat_request_is_finalized_on_noop_resume(
                 shutdown_event=shutdown_event,
             )
 
-    # The fix must have saved a RequestSuccessAgentMessage(interrupted=True)
-    # for the orphaned chat request so the frontend can settle to READY.
     with services.data_model_service.open_task_transaction() as transaction:
         saved_messages = services.task_service.get_saved_messages_for_task(local_task.object_id, transaction)
 
