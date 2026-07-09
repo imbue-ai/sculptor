@@ -64,6 +64,11 @@ from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
 
+# Conversation-scoped CLI launch settings (fake-claude flag, fast mode,
+# effort), persisted next to the session-id state files so model-less turns
+# can relaunch the CLI consistently after a backend restart.
+TURN_LAUNCH_SETTINGS_STATE_FILE = "turn_launch_settings.json"
+
 
 class ClaudeProcessManager:
     def __init__(
@@ -164,6 +169,40 @@ class ClaudeProcessManager:
         if binary_path is None:
             raise ClaudeBinaryNotFoundError()
         return binary_path
+
+    def _save_turn_launch_settings(self) -> None:
+        """Persist the conversation's CLI launch settings for model-less turns.
+
+        UserQuestionAnswerMessage (and answer-continuation resumes) carry no
+        model/fast-mode/effort — those turns continue the conversation's
+        existing settings. The in-memory copies don't survive a backend
+        restart, so they are mirrored to a state file alongside the session id
+        and restored by ``_restore_turn_launch_settings``.
+        """
+        payload = json.dumps(
+            {"is_fake_claude": self._is_fake_claude, "fast_mode": self._fast_mode, "effort": self._effort}
+        )
+        self.environment.write_file(str(self.environment.get_state_path() / TURN_LAUNCH_SETTINGS_STATE_FILE), payload)
+
+    def _restore_turn_launch_settings(self) -> None:
+        """Restore launch settings persisted by ``_save_turn_launch_settings``.
+
+        No-ops when the state file is missing (a conversation from before the
+        file existed, or no chat turn has run yet) — the in-memory values then
+        apply unchanged.
+        """
+        contents = get_state_file_contents(self.environment, TURN_LAUNCH_SETTINGS_STATE_FILE)
+        if contents is None:
+            return
+        try:
+            settings = json.loads(contents)
+        except json.JSONDecodeError:
+            logger.warning("Ignoring unparseable turn launch settings state file: {}", contents[:200])
+            return
+        self._is_fake_claude = bool(settings.get("is_fake_claude", self._is_fake_claude))
+        self._fast_mode = bool(settings.get("fast_mode", self._fast_mode))
+        effort = settings.get("effort")
+        self._effort = effort if isinstance(effort, str) else None
 
     def process_input_message(
         self, message: ChatInputUserMessage | ResumeAgentResponseRunnerMessage | UserQuestionAnswerMessage
@@ -618,16 +657,28 @@ class ClaudeProcessManager:
                     # otherwise, use the previous validated session id if it exists
                     maybe_session_id = get_state_file_contents(self.environment, validated_session_id_state_file)
             combined_system_prompt = self._get_combined_system_prompt()
-            if isinstance(message, (ChatInputUserMessage, ResumeAgentResponseRunnerMessage)):
+            if (
+                isinstance(message, (ChatInputUserMessage, ResumeAgentResponseRunnerMessage))
+                and message.model_name is not None
+            ):
                 self._is_fake_claude = message.model_name in (LLMModel.FAKE_CLAUDE, LLMModel.FAKE_CLAUDE_2)
+                self._fast_mode = message.fast_mode
+                self._effort = message.effort
+                self._save_turn_launch_settings()
+            else:
+                # A model-less turn (UserQuestionAnswerMessage, or an
+                # answer-continuation resume) continues the conversation with
+                # its existing launch settings. The in-memory values are stale
+                # defaults when this manager was created after a backend
+                # restart, so restore the persisted ones — otherwise a
+                # fake_claude conversation's resumed turn launches the
+                # real-claude command shape and dies on the stubbed binary.
+                self._restore_turn_launch_settings()
             maybe_model = (
                 MODEL_SHORTNAME_MAP.get(message.model_name)
                 if isinstance(message, (ChatInputUserMessage, ResumeAgentResponseRunnerMessage)) and message.model_name
                 else None
             )
-            if isinstance(message, (ChatInputUserMessage, ResumeAgentResponseRunnerMessage)):
-                self._fast_mode = message.fast_mode
-                self._effort = message.effort
             plugin_dirs = get_plugin_dirs()
             claude_command = get_claude_command(
                 system_prompt=combined_system_prompt,
