@@ -27,25 +27,33 @@
   font-size: var(--font-size-2);
 }
 
-// Mini preview: solid cells = saved (static) panels; dashed = agents/terminals,
-// which a layout never touches.
+// Mini preview: solid cells = saved (static) panels; dashed chips mark the fixed
+// homes where default seeding creates an agent/terminal (never stored in a layout).
+// The bottom section spans the full width, mirroring the real shell, and the box is
+// centered at roughly a real window's aspect ratio so it reads as a true miniature.
 .preview {
   border: 1px solid var(--gray-a4);
   border-radius: var(--radius-3);
   display: grid;
   gap: var(--space-1);
   grid-template:
-    "l c r" 1fr "l b r" 30px / 26% 1fr 20%;
-  height: 168px;
+    "l c r" 1fr
+    "b b b" 56px / 1fr 1.4fr 1fr;
+  height: 360px;
+  margin: 0 auto;
+  max-width: 560px;
   padding: var(--space-1);
+  width: 100%;
 }
 
 .cell {
   border-radius: var(--radius-2);
   display: flex;
   flex-direction: column;
+  gap: var(--space-1);
   min-height: 0;
   overflow: hidden;
+  padding: var(--space-2);
 }
 
 .cellSaved {
@@ -55,6 +63,12 @@
 
 .cellStays {
   border: 1px dashed var(--gray-a5);
+}
+
+.cellLabel {
+  color: var(--gray-9);
+  font-size: var(--font-size-1);
+  line-height: 1.4;
 }
 
 .cellLeft {
@@ -72,19 +86,19 @@
 .cellBottom {
   align-items: center;
   flex-direction: row;
+  gap: var(--space-2);
   grid-area: b;
-  justify-content: center;
 }
 
 .cellTabs {
   display: flex;
   flex-wrap: wrap;
   gap: 3px;
-  padding: var(--space-2);
 }
 
 .tab {
   background: var(--gray-a3);
+  border: 1px solid transparent;
   border-radius: var(--radius-1);
   color: var(--gray-11);
   font-size: var(--font-size-1);
@@ -97,18 +111,13 @@
   color: var(--gray-12);
 }
 
-.fill {
-  align-items: center;
-  color: var(--gray-9);
-  display: flex;
-  flex: 1;
-  font-size: var(--font-size-1);
-  gap: var(--space-2);
-  justify-content: center;
-
-  svg {
-    color: var(--gray-8);
-  }
+// The agent/terminal default homes: chip-shaped like a panel tab, but dashed and
+// hollow because a layout doesn't store them.
+.tabDefault {
+  background: transparent;
+  border-color: var(--gray-a6);
+  border-style: dashed;
+  color: var(--gray-10);
 }
 
 .legend {

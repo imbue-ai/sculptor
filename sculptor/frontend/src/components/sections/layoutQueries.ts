@@ -58,7 +58,7 @@ export function listSubSections(
 
 export type AddPanelLocation = { subSection: SubSectionId; label: string };
 
-const SECTION_LABELS: Readonly<Record<SectionId, string>> = {
+export const SECTION_LABELS: Readonly<Record<SectionId, string>> = {
   left: "Left",
   center: "Center",
   right: "Right",

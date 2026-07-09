@@ -1,21 +1,19 @@
 // The "Save current arrangement as a layout" dialog, on the PaletteDialog shell.
 // A name field (styled as the heading), a mini capture preview that shows what the
-// layout stores (solid = saved static panels; dashed = agents/terminals that stay
-// as-is), a "set as default" switch, and Save (⌘↵). Atom-driven host, mounted in
-// AppShell.
+// layout stores (solid cells = saved static panels; dashed chips mark where default
+// seeding creates an agent/terminal), a "set as default" switch, and Save (⌘↵).
+// Atom-driven host, mounted in AppShell.
 
 import { Button, Switch } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { Bot, Terminal } from "lucide-react";
 import type { ReactElement } from "react";
-import { createElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { formatShortcutForDisplay } from "~/common/ShortcutUtils.ts";
 import { PaletteDialog } from "~/components/PaletteDialog/PaletteDialog.tsx";
 import { saveCurrentLayoutAtom } from "~/components/sections/layoutActions.ts";
-import { openPanelsInSubSection } from "~/components/sections/layoutQueries.ts";
+import { openPanelsInSubSection, SECTION_LABELS } from "~/components/sections/layoutQueries.ts";
 import { isMultiInstancePanelId } from "~/components/sections/registry/dynamicPanels.tsx";
 import { panelRegistryAtom } from "~/components/sections/registry/panelRegistry.ts";
 import { workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
@@ -98,7 +96,9 @@ const SaveLayoutForm = ({ onClose }: { onClose: () => void }): ReactElement => {
         />
         <div className={styles.caption}>Saves this workspace’s panels and space as a reusable layout.</div>
         <SaveLayoutPreview />
-        <div className={styles.legend}>Agents and terminals aren’t saved — applying a layout never closes them.</div>
+        <div className={styles.legend}>
+          An agent is created by default in the center section. A terminal is created by default in the bottom section.
+        </div>
       </div>
       <div className={styles.footer}>
         <label className={styles.switchLabel}>
@@ -128,6 +128,13 @@ const PREVIEW_SECTIONS: ReadonlyArray<{ section: SectionId; areaClass: string }>
   { section: "bottom", areaClass: styles.cellBottom },
 ];
 
+// A layout never declares agents/terminals; default seeding creates them in fixed
+// sections. The preview marks those homes with a dashed chip.
+const DEFAULT_DYNAMIC_CHIPS: Partial<Record<SectionId, string>> = {
+  center: "Agent default",
+  bottom: "Terminal default",
+};
+
 const SaveLayoutPreview = (): ReactElement => {
   const layout = useAtomValue(workspaceLayoutAtom);
   const registry = useAtomValue(panelRegistryAtom);
@@ -142,31 +149,27 @@ const SaveLayoutPreview = (): ReactElement => {
           ...openPanelsInSubSection(layout, toSecondary(section)),
         ];
         const statics = ids.filter((id) => !isMultiInstancePanelId(id));
-        const dynamics = ids.filter((id) => isMultiInstancePanelId(id));
         const activeId = layout.activePanel[section];
+        const defaultChip = DEFAULT_DYNAMIC_CHIPS[section];
 
-        if (statics.length > 0) {
-          return (
-            <div key={section} className={`${styles.cell} ${styles.cellSaved} ${areaClass}`}>
+        return (
+          <div
+            key={section}
+            className={`${styles.cell} ${statics.length > 0 ? styles.cellSaved : styles.cellStays} ${areaClass}`}
+          >
+            <div className={styles.cellLabel}>{SECTION_LABELS[section]}</div>
+            {statics.length > 0 || defaultChip !== undefined ? (
               <div className={styles.cellTabs}>
                 {statics.map((id) => (
                   <span key={id} className={`${styles.tab} ${id === activeId ? styles.tabActive : ""}`}>
                     {nameOf(id)}
                   </span>
                 ))}
+                {defaultChip !== undefined ? (
+                  <span className={`${styles.tab} ${styles.tabDefault}`}>{defaultChip}</span>
+                ) : undefined}
               </div>
-            </div>
-          );
-        }
-
-        return (
-          <div key={section} className={`${styles.cell} ${styles.cellStays} ${areaClass}`}>
-            {dynamics.length > 0 ? (
-              <div className={styles.fill}>
-                {createElement(dynamics[0].startsWith("terminal:") ? Terminal : Bot, { size: 12 })}
-                {nameOf(dynamics[0])} · stays as-is
-              </div>
-            ) : null}
+            ) : undefined}
           </div>
         );
       })}
