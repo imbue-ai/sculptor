@@ -77,12 +77,20 @@ def _format_entry(span: str) -> str | None:
 
     header = f"- {file}:{line_range}{_side_annotation(scope, has_previous, has_current)} [{_scope_label(scope, commit_hash)}]:"
     parts: list[str] = [header]
-    if previous_snippet:
-        indented = "\n".join(f"    - {line}" for line in previous_snippet.split("\n"))
-        parts.append(indented)
-    if current_snippet:
-        indented = "\n".join(f"    + {line}" for line in current_snippet.split("\n"))
-        parts.append(indented)
+    if scope == "file-view":
+        # A file view has no diff axis — the captured lines are the current file
+        # as-is, not additions or deletions. Render them without a +/- prefix.
+        snippet = previous_snippet or current_snippet
+        if snippet:
+            indented = "\n".join(f"    {line}" for line in snippet.split("\n"))
+            parts.append(indented)
+    else:
+        if previous_snippet:
+            indented = "\n".join(f"    - {line}" for line in previous_snippet.split("\n"))
+            parts.append(indented)
+        if current_snippet:
+            indented = "\n".join(f"    + {line}" for line in current_snippet.split("\n"))
+            parts.append(indented)
     return "\n".join(parts)
 
 

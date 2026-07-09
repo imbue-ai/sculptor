@@ -188,7 +188,8 @@ export const ReadOnlyPreview = ({ workspaceId, filePath, renderModeOverride }: R
         previousFileLines: result.previousFileLines,
         currentFileLines: result.currentFileLines,
         scope: { kind: "file-view" },
-        previousSnippet: result.previousSnippet,
+        // File views have no previous side; all rows are current-snippet only.
+        previousSnippet: "",
         currentSnippet: result.currentSnippet,
         snippetCapturedAt: new Date().toISOString(),
         // Branch/HEAD are stamped by ChatInput from workspace git state at insert time.

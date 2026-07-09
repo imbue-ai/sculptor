@@ -2,7 +2,7 @@ import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type CapturedRun, capturedRunBetween, clearLinePaint, paintRowRun, shadowRootOf } from "./spotlightPaint.ts";
-import { spotlightHighlightColor } from "./spotlightPalette.ts";
+import { spotlightHoverHighlightColor } from "./spotlightPalette.ts";
 
 /**
  * Result the hook hands back when a selection completes: the per-version line
@@ -80,7 +80,7 @@ export const useSpotlightCapture = ({
   const previewRun = useCallback(
     (fromEl: HTMLElement, toEl: HTMLElement): void => {
       const shadowRoot = shadowRootOf(paneElement);
-      if (shadowRoot) paintRowRun(shadowRoot, fromEl, toEl, spotlightHighlightColor(0));
+      if (shadowRoot) paintRowRun(shadowRoot, fromEl, toEl, spotlightHoverHighlightColor());
     },
     [paneElement],
   );

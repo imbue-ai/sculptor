@@ -1,9 +1,20 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { useEffect } from "react";
 
-import { spotlightHoverAtom, spotlightScrollTargetAtom } from "./atoms.ts";
-import { clearLinePaint, paintAnchorRanges, scrollLineIntoView, shadowRootOf } from "./spotlightPaint.ts";
-import { spotlightColorIndex, spotlightHighlightColor } from "./spotlightPalette.ts";
+import {
+  spotlightColorMapAtom,
+  spotlightDraftAnchorsAtom,
+  spotlightHoverAtom,
+  spotlightScrollTargetAtom,
+} from "./atoms.ts";
+import {
+  clearLinePaint,
+  paintAnchorRanges,
+  paintGutterBars,
+  scrollLineIntoView,
+  shadowRootOf,
+} from "./spotlightPaint.ts";
+import { spotlightBarColor, spotlightColorIndex, spotlightHoverHighlightColor } from "./spotlightPalette.ts";
 import { spotlightPrimaryRange } from "./types.ts";
 import { usePierreDomVersion } from "./usePierreDomVersion.ts";
 
@@ -30,6 +41,8 @@ export const useSpotlightOverlay = ({ paneElement, file }: UseSpotlightOverlayOp
   const hover = useAtomValue(spotlightHoverAtom);
   const scrollTarget = useAtomValue(spotlightScrollTargetAtom);
   const setScrollTarget = useSetAtom(spotlightScrollTargetAtom);
+  const draftAnchors = useAtomValue(spotlightDraftAnchorsAtom);
+  const colorMap = useAtomValue(spotlightColorMapAtom);
   const domVersion = usePierreDomVersion(paneElement, file !== undefined);
 
   // Hover highlight — repaints on every DOM version bump so a Pierre re-render
@@ -39,20 +52,23 @@ export const useSpotlightOverlay = ({ paneElement, file }: UseSpotlightOverlayOp
     if (!shadowRoot) return;
     const isMatch = hover !== null && file !== undefined && hover.file === file;
     if (isMatch) {
-      // Same rotating color the chip carries, and side-aware ranges so a
-      // `changed` chip lights up both its red and green rows while `old`/`new`
-      // light only their side.
-      paintAnchorRanges(
-        shadowRoot,
-        hover.previousFileLines,
-        hover.currentFileLines,
-        spotlightHighlightColor(spotlightColorIndex(hover)),
-      );
+      paintAnchorRanges(shadowRoot, hover.previousFileLines, hover.currentFileLines, spotlightHoverHighlightColor());
       return (): void => clearLinePaint(shadowRoot);
     }
     clearLinePaint(shadowRoot);
     return undefined;
-  }, [hover, file, paneElement, domVersion]);
+  }, [hover, file, paneElement, domVersion, colorMap]);
+
+  // Persistent gutter bars — one coloured strip per spotlight chip in the
+  // current draft. Painted on every DOM version bump so Pierre re-renders
+  // (which wipe all shadow-DOM children) don't drop the bars.
+  useEffect(() => {
+    const shadowRoot = shadowRootOf(paneElement);
+    if (!shadowRoot || !file) return;
+    paintGutterBars(shadowRoot, draftAnchors, file, (anchor) =>
+      spotlightBarColor(spotlightColorIndex(anchor, colorMap)),
+    );
+  }, [draftAnchors, file, paneElement, domVersion, colorMap]);
 
   // Click scroll — retries deterministically as rows stream in.
   useEffect(() => {

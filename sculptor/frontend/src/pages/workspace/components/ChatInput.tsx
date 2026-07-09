@@ -79,7 +79,8 @@ import { FileUpload } from "../../../components/FileUpload.tsx";
 import { Toast, type ToastContent, ToastType } from "../../../components/Toast.tsx";
 import { TooltipIconButton } from "../../../components/TooltipIconButton.tsx";
 import { SettingsSection } from "../../settings/sections.ts";
-import { spotlightInsertAtom } from "../components/diffPanel/atoms.ts";
+import { spotlightDraftAnchorsAtom, spotlightInsertAtom } from "../components/diffPanel/atoms.ts";
+import { parseSpotlightDraftAnchors } from "../components/diffPanel/spotlightDraftAnchors.ts";
 import { spotlightPrimaryRange } from "../components/diffPanel/types.ts";
 import { stripHtml } from "../utils/utils.ts";
 import styles from "./ChatInput.module.scss";
@@ -725,6 +726,15 @@ export const ChatInput = ({
       .run();
     setSpotlightData(null);
   }, [spotlightData, editorRef, setSpotlightData, capturedBranch, capturedHeadCommit]);
+
+  // Publish spotlight anchors from the draft so diff panes can paint persistent
+  // gutter bars. Derived from the markdown draft string on every change (insert,
+  // delete, restore from localStorage) and cleared on unmount.
+  const setDraftAnchors = useSetAtom(spotlightDraftAnchorsAtom);
+  useEffect(() => {
+    setDraftAnchors(parseSpotlightDraftAnchors(promptDraft));
+    return (): void => setDraftAnchors([]);
+  }, [promptDraft, setDraftAnchors]);
 
   // Seed the per-task stored preferences from the user default the first
   // time this task is seen after userConfig has loaded. Once set, user

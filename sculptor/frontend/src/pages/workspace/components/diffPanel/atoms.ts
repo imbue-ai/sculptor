@@ -9,6 +9,7 @@ import type { DiffSelection } from "~/pages/workspace/components/diffViewer/type
 import { getUncommittedFileStatusMap } from "~/pages/workspace/panels/fileBrowser/atoms.ts";
 import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
 
+import { resolveColorMap } from "./spotlightPalette.ts";
 import type {
   DiffPanelTabState,
   DiffScope,
@@ -58,6 +59,33 @@ export const splitDiffColumnRatioAtom = atom(50);
  * target (the chat input). No prop threading through the component tree.
  */
 export const spotlightInsertAtom = atom<SpotlightData | null>(null);
+
+/**
+ * Spotlight anchors currently present in the chat input draft — one per chip.
+ * Gutter bars in the diff/file panes are painted from this list so the user can
+ * see at a glance which ranges have been spotlighted for the shown file.
+ * Populated by ChatInput on insert + draft restore; cleared on message send.
+ */
+export const spotlightDraftAnchorsAtom = atom<Array<SpotlightAnchor>>([]);
+
+/**
+ * One-shot write: clear all draft anchors (called on message send). The
+ * separate write atom avoids the ChatInput needing to read the full array.
+ */
+export const clearSpotlightDraftAnchorsAtom = atom(null, (_get, set) => {
+  set(spotlightDraftAnchorsAtom, []);
+});
+
+/**
+ * Collision-resolved palette index per draft anchor (keyed by anchor identity).
+ * The single source of truth for spotlight colours: the chip accent, the hover
+ * highlight, and the gutter bar all read this map so a set of draft chips is
+ * guaranteed up to six distinct colours before the resolver saturates. Derived
+ * from `spotlightDraftAnchorsAtom` so it recomputes whenever the draft changes.
+ */
+export const spotlightColorMapAtom = atom<ReadonlyMap<string, number>>((get) =>
+  resolveColorMap(get(spotlightDraftAnchorsAtom)),
+);
 
 /**
  * The spotlight anchor the user is currently HOVERING (via a chip in the chat

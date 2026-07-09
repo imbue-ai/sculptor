@@ -16,6 +16,7 @@ import {
   clearSpotlightHoverForAnchorAtom,
   openCommitDiffTabAtom,
   openFileViewTabAtom,
+  spotlightColorMapAtom,
   spotlightHoverAtom,
   spotlightScrollTargetAtom,
 } from "~/pages/workspace/components/diffPanel/atoms";
@@ -487,8 +488,10 @@ const SpotlightMentionChip = ({
     [file, previousFileLines, currentFileLines, scope],
   );
   const label = spotlightLabel(anchor);
+  const colorMap = useAtomValue(spotlightColorMapAtom);
   // Rotating accent that binds this chip to its line-range highlight/gutter bar.
-  const accentColor = spotlightBarColor(spotlightColorIndex(anchor));
+  // Collision-resolved via the draft anchor set so up to 6 chips each get a distinct colour.
+  const accentColor = spotlightBarColor(spotlightColorIndex(anchor, colorMap));
   const isFileView = scope.kind === "file-view";
   const SpotlightIcon = isFileView ? Highlighter : Diff;
 
