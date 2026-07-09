@@ -3287,9 +3287,11 @@ class TestModelCatalogFetch:
         # The unusable openrouter model is no longer offered in the switcher.
         assert "openai/gpt-4o" not in {option.model_id for option in message.available_models}
 
-    def test_fetch_models_into_state_keeps_unauthenticated_current_when_no_alternative(self) -> None:
-        """When the disconnected provider was the only one, the current model is retained
-        (nothing to switch to) rather than blanking the switcher — and no set_model is sent."""
+    def test_fetch_models_into_state_drops_unauthenticated_current_when_no_alternative(self) -> None:
+        """When the disconnected provider was the only one, the now-unusable current model
+        is dropped and an empty catalog is emitted (driving the switcher's empty state).
+        No set_model is sent — there is nothing authenticated to switch to (the process is
+        primed with only the models + state responses, so a set_model call would error)."""
         agent = _make_agent()
         raw = [{"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openrouter"}]
         current_openrouter = {"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openrouter"}
@@ -3302,16 +3304,21 @@ class TestModelCatalogFetch:
 
         emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
         assert len(emitted) == 1
-        assert emitted[0].current_model is not None
-        assert emitted[0].current_model.model_id == "openai/gpt-4o"
+        assert emitted[0].current_model is None
+        assert list(emitted[0].available_models) == []
 
-    def test_fetch_models_into_state_emits_nothing_when_pi_lists_no_models(self) -> None:
-        """No catalog + no current model → no carrier message (switcher falls back to defaults)."""
+    def test_fetch_models_into_state_emits_empty_catalog_when_pi_lists_no_models(self) -> None:
+        """No catalog + no current model (no authenticated providers) → an empty catalog is
+        emitted, so the pi switcher shows its 'no usable model' empty state rather than
+        falling back to the built-in Claude list."""
         agent = _make_agent()
         agent._process = _make_process([_models_response([]), _state_response_with_model(None)])
         with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]):
             agent._fetch_models_into_state()
-        assert not [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+        emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+        assert len(emitted) == 1
+        assert list(emitted[0].available_models) == []
+        assert emitted[0].current_model is None
 
     def test_fetch_models_into_state_adopts_preselected_model_over_pi_default(self) -> None:
         """A model the user selected before the agent went live (preselected_model)
@@ -3512,6 +3519,24 @@ class TestModelProbe:
         probe_process.close_stdin.assert_called_once()
         probe_process.terminate.assert_called_once()
         assert agent._process is None
+
+    def test_fetch_available_models_probe_drops_unauthenticated_current_when_no_alternative(self) -> None:
+        """A selected model whose only provider is now unauthenticated is dropped by the
+        probe (nothing authenticated to fall back to), so the switcher reaches its empty
+        state instead of offering a single unusable model — the deleted-auth.json case."""
+        raw = [{"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openrouter"}]
+        current_openrouter = {"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openrouter"}
+        probe_process = _make_process([_models_response(raw), _state_response_with_model(current_openrouter)])
+        env = _make_probe_env(probe_process)
+        agent = _make_agent(env)
+        with (
+            patch(
+                "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+                side_effect=["probe-sess", "cmd-models", "cmd-state"],
+            ),
+            patch("sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value=set()),
+        ):
+            assert agent.fetch_available_models_probe(secrets={}) == ([], None)
 
 
 class TestTurnFooterMetrics:

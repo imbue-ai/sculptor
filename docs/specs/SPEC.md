@@ -333,7 +333,10 @@ agents at once is §7.4.
 **Chat** is where you direct an agent. You compose a prompt in the input box at the bottom, and the
 agent's reply, its tool calls, and its progress stream into the panel above. Press the send
 keybinding (or click **Send**) to send; the editor and any attachments clear. The Send button
-explains itself when it can't act — for example when the editor is empty. The send keybinding is
+explains itself when it can't act — for example when the editor is empty. When the agent's harness
+has no usable model at all — for a Pi agent, no authenticated providers — the Send button is replaced
+by a **Go to harness configuration** button that routes you to where you fix it (Settings → Pi for a
+Pi agent, Settings → Dependencies for Claude), so a message that could only fail is never sent. The send keybinding is
 **Cmd/Ctrl+Enter**, so a plain **Enter** (or **Shift+Enter**) inserts a line break and a prompt can
 span several lines while still sending as one message.
 
@@ -343,7 +346,9 @@ agent), and shown disabled with the current model for those that don't; the list
 the agent's own harness, so a **Claude** agent picks from the Claude models while a **Pi** agent
 surfaces Pi's live catalog grouped by provider — a single provider lists its models flat, while two or
 more providers cascade into a per-provider submenu, and a Pi agent with no authenticated providers
-shows an **Authenticate a provider** prompt in place of the list. Changing a Pi agent's model takes
+shows the model picker **disabled** ("No models available") in place of the list — reached whenever
+no provider is authenticated, including when a model had previously been selected, whose now-unusable
+choice is dropped rather than shown; the action to fix it lives on the Send button (above). Changing a Pi agent's model takes
 effect in-session (a failed switch leaves the choice unchanged and raises an actionable error toast). An **effort**
 selector budgets how much thinking it spends per step (Low, Medium, High, Extra High, Max — Extra High
 by default); a **fast mode** toggle trades some depth for quicker output on the models that support it

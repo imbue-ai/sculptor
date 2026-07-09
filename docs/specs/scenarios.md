@@ -871,10 +871,10 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user types in the chat input and clicks Send (or presses the send keybinding).
   - Then: the message is sent, the editor clears, and any attachments clear.
 
-- **WS-002 — Send button disabled states**
+- **WS-002 — Send button disabled & blocked states**
   - Given: the chat input.
-  - When: the editor is empty, or the agent is busy (for non-`/btw` content).
-  - Then: the Send button is disabled; hovering shows the reason.
+  - When: the editor is empty, or the agent is busy (for non-`/btw` content), or the agent's harness has no usable model (a Pi agent with no authenticated providers).
+  - Then: for an empty editor or a busy agent the Send button is disabled and hovering shows the reason; when the harness has no usable model the Send button is replaced by a **Go to harness configuration** button that opens the harness's settings (Settings → Pi, or Settings → Dependencies for Claude).
 
 - **WS-003 — Interrupt-and-send**
   - Given: the agent is busy and the user typed a message.
@@ -1538,7 +1538,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **CHAT-046 — Capability-gated model picker / Pi model catalog**
   - Given: agents whose harness does and doesn't support model selection.
   - When: the user opens the model picker on each (a Claude agent, a Pi agent, and a terminal agent).
-  - Then: a Claude agent lists Claude models; a Pi agent lists Pi's own models grouped by provider (a single provider flat, two or more cascading into per-provider submenus), and a Pi agent with no authenticated providers shows an "Authenticate a provider" prompt instead of a list; a terminal agent shows the picker disabled with the current model; switching a Pi model that the harness rejects leaves the selection unchanged and shows an error toast.
+  - Then: a Claude agent lists Claude models; a Pi agent lists Pi's own models grouped by provider (a single provider flat, two or more cascading into per-provider submenus), and a Pi agent with no authenticated providers shows the model picker disabled ("No models available") instead of a list — including when a model had previously been selected, where the now-unusable selection is dropped so the picker still empties — with the single fix-it action on the Send button, which is replaced by a "Go to harness configuration" button; a terminal agent shows the picker disabled with the current model; switching a Pi model that the harness rejects leaves the selection unchanged and shows an error toast.
 
 ---
 

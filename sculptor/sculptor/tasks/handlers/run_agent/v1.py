@@ -862,7 +862,7 @@ def _eager_fetch_pi_models_into_state(
     `run_agent_task_v1` keeps a prompt-less agent READY without calling
     `agent_wrapper.start()` until a message arrives, so pi's start-time
     `_fetch_models_into_state` has not run and the task's catalog is still
-    `NOT_FETCHED_YET` — the switcher shows a loading state, not the login CTA.
+    `NOT_FETCHED_YET` — the switcher shows a loading state, not the empty state.
     Here, once the environment is ready, we run a short-lived pi probe
     (`PiAgent.fetch_available_models_probe`) and persist its curated catalog onto
     task state so the switcher reflects pi's models immediately.
@@ -875,7 +875,7 @@ def _eager_fetch_pi_models_into_state(
     only pi sources a dynamic catalog via the probe (Claude supports model
     selection but with a static built-in list). Best-effort: on any failure the
     probe returns an empty catalog, which is persisted as a fetched-but-empty `[]`
-    (the switcher then shows the login CTA) rather than left not-fetched.
+    (the switcher then shows the empty state) rather than left not-fetched.
     """
     if not get_harness_for_config(task_data.agent_config).capabilities().supports_model_selection:
         return task_state
