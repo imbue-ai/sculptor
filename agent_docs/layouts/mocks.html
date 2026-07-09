@@ -277,7 +277,7 @@ button { font-family: inherit; }
 .act-list { display: flex; flex-direction: column; padding: 6px; }
 .act-row {
   align-items: center; border-radius: 4px; color: var(--gray-12); cursor: pointer;
-  display: flex; font-size: 13px; gap: 10px; padding: 6px 8px;
+  display: flex; font-size: 13px; gap: 10px; padding: 6px 8px; white-space: nowrap;
 }
 .act-row svg { color: var(--gray-11); }
 .act-row .sc { color: var(--gray-10); flex-shrink: 0; font-size: 12px; margin-left: auto; }
@@ -286,6 +286,19 @@ button { font-family: inherit; }
 .act-row.danger, .act-row.danger svg { color: var(--tomato-11, #ff977d); }
 .act-sep { background: var(--gray-a3); height: 1px; margin: 4px 6px; }
 .act-search { border-top: 1px solid var(--gray-a3); color: var(--gray-9); font-size: 13px; padding: 10px 14px; }
+/* Menu-row affordances: a right-aligned switch (tidy toggle), the current binding
+   for the shortcut row, and the capture pill shown while recording a shortcut. */
+.act-row .toggle { margin-left: auto; }
+.act-row .kbd-cur { color: var(--gray-10); flex-shrink: 0; font-size: 12px; margin-left: auto; }
+.act-row .rec {
+  align-items: center; background: var(--gray-a3); border: 1px dashed var(--gray-a6);
+  border-radius: 4px; color: var(--gray-11); display: none; font-size: 12px; gap: 2px;
+  margin-left: auto; padding: 1px 8px;
+}
+.act-row .rec .caret {
+  animation: blink 1.1s steps(1) infinite; border-left: 1.5px solid var(--gray-11);
+  display: inline-block; height: 12px; margin-left: 2px;
+}
 
 /* ============================================================
    Save-current-as dialog (NewWorkspaceForm-style body + footer)
@@ -305,7 +318,7 @@ button { font-family: inherit; }
 .prev {
   border: 1px solid var(--gray-a4); border-radius: 6px; display: grid; gap: 4px;
   grid-template-areas: "l c r" "b b b"; grid-template-columns: 1fr 1.4fr 1fr;
-  grid-template-rows: 1fr 56px; height: 360px; margin: 0 auto; max-width: 560px;
+  grid-template-rows: 1fr 70px; height: 300px; margin: 0 auto; max-width: 560px;
   padding: 4px; width: 100%;
 }
 .prev .cell { border-radius: 4px; display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow: hidden; padding: 8px; }
@@ -380,10 +393,23 @@ body[data-state="dialog"] .overlay,
 body[data-state="dialog-search"] .overlay,
 body[data-state="switcher"] .overlay,
 body[data-state="switcher-actions"] .overlay,
+body[data-state="context-menu"] .overlay,
+body[data-state="shortcut-recording"] .overlay,
 body[data-state="save"] .overlay,
 body[data-state="save-options"] .overlay { background: rgba(0, 0, 0, 0.7); display: block; }
 body[data-state="switcher"] #dlg-switcher { display: flex; }
-body[data-state="switcher-actions"] #dlg-switcher-actions { display: flex; }
+body[data-state="switcher-actions"] #dlg-switcher-actions,
+body[data-state="context-menu"] #dlg-switcher-actions,
+body[data-state="shortcut-recording"] #dlg-switcher-actions { display: flex; }
+
+/* Right-click a layout row → the same ⌘J menu, anchored at the row instead of
+   the bar. Shows the menu is both a keyboard action and a context menu. */
+body[data-state="context-menu"] .act-pop { bottom: auto; right: auto; left: 330px; top: 150px; }
+body[data-state="context-menu"] .bar-btn.active { background: transparent; }
+/* Recording state: the shortcut row swaps its current binding for a capture pill. */
+body[data-state="shortcut-recording"] #act-shortcut { background: var(--gray-a4); }
+body[data-state="shortcut-recording"] #act-shortcut .kbd-cur { display: none; }
+body[data-state="shortcut-recording"] #act-shortcut .rec { display: flex; }
 body[data-state="palette"] .overlay { background: rgba(0, 0, 0, 0.4); display: block; }
 body[data-state="tidy"] .overlay { background: rgba(0, 0, 0, 0.6); display: block; }
 
@@ -527,12 +553,12 @@ body.bare #chrome { display: none; }
       <div class="row sel">
         <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg></span>
         <span class="row-body"><span class="row-title">Focused</span><span class="row-sub">Just the agent, full width</span></span>
-        <span class="row-trail"></span>
+        <span class="row-trail"><kbd>⌥1</kbd></span>
       </div>
       <div class="row">
         <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></svg></span>
         <span class="row-body"><span class="row-title">Review</span><span class="row-sub">Changes &amp; Commits left · Browser right</span></span>
-        <span class="row-trail"><span class="marker">Current</span></span>
+        <span class="row-trail"><span class="marker">Current</span><kbd>⌥2</kbd></span>
       </div>
       <div class="row">
         <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 13h18"/><path d="M15 3v10"/></svg></span>
@@ -571,12 +597,12 @@ body.bare #chrome { display: none; }
       <div class="row sel">
         <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg></span>
         <span class="row-body"><span class="row-title">Focused</span><span class="row-sub">Just the agent, full width</span></span>
-        <span class="row-trail"></span>
+        <span class="row-trail"><kbd>⌥1</kbd></span>
       </div>
       <div class="row">
         <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></svg></span>
         <span class="row-body"><span class="row-title">Review</span><span class="row-sub">Changes &amp; Commits left · Browser right</span></span>
-        <span class="row-trail"><span class="marker">Current</span></span>
+        <span class="row-trail"><span class="marker">Current</span><kbd>⌥2</kbd></span>
       </div>
       <div class="row">
         <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 13h18"/><path d="M15 3v10"/></svg></span>
@@ -604,11 +630,15 @@ body.bare #chrome { display: none; }
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
         Apply<span class="sc">↵</span>
       </div>
-      <div class="act-row">
+      <div class="act-row" id="act-tidy">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/></svg>
-        Apply &amp; tidy<span class="sc">⌘↵</span>
+        Tidy panels when applying<span class="switch on toggle"></span>
       </div>
       <div class="act-sep"></div>
+      <div class="act-row" id="act-shortcut">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/></svg>
+        Keyboard shortcut<span class="sc kbd-cur"><kbd>⌥1</kbd></span><span class="rec">Press keys…<span class="caret"></span></span>
+      </div>
       <div class="act-row">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
         Set as default
@@ -852,7 +882,9 @@ body.bare #chrome { display: none; }
 <!-- ═══════════════ Mock chrome ═══════════════ -->
 <nav id="chrome">
   <a href="?state=switcher">Switcher</a>
-  <a href="?state=switcher-actions">Actions ⌘K</a>
+  <a href="?state=switcher-actions">Actions ⌘J</a>
+  <a href="?state=context-menu">Right-click</a>
+  <a href="?state=shortcut-recording">Set shortcut</a>
   <a href="?state=save">Save as…</a>
   <a href="?state=save-options">Save options</a>
   <a href="?state=tidy">Tidy</a>
