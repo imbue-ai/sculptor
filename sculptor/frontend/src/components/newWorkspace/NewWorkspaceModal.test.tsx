@@ -9,9 +9,14 @@ import { newWorkspaceModalAtom } from "./newWorkspaceAtoms.ts";
 import { NewWorkspaceModal } from "./NewWorkspaceModal.tsx";
 
 // The real form pulls in project queries and creation hooks; the modal's
-// open/close contract is what is under test, so stub the form out.
+// open/close contract and its prop pass-through are what is under test, so
+// stub the form out but record the props it receives.
+const { formProps } = vi.hoisted(() => ({ formProps: vi.fn() }));
 vi.mock("~/components/newWorkspace/NewWorkspaceForm.tsx", () => ({
-  NewWorkspaceForm: (): null => null,
+  NewWorkspaceForm: (props: Record<string, unknown>): null => {
+    formProps(props);
+    return null;
+  },
 }));
 
 describe("NewWorkspaceModal", () => {
@@ -19,6 +24,7 @@ describe("NewWorkspaceModal", () => {
   // isn't registered — do it explicitly so each render starts from a fresh DOM.
   afterEach(() => {
     cleanup();
+    formProps.mockClear();
   });
 
   it("renders nothing while the atom holds no open request", () => {
@@ -34,17 +40,37 @@ describe("NewWorkspaceModal", () => {
     expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_DIALOG)).toBeTruthy();
   });
 
-  it("closes a stale open request when the host unmounts", () => {
-    // The modal's only mount is AppShell, which unmounts when the first-run
-    // page takes over. An open request set just before that swap must die with
-    // the host — otherwise it survives invisibly in the store and pops the
-    // dialog (overlay and all) over the first workspace created afterwards.
+  it("passes the open request's seeds and create callback through to the form", () => {
+    // An extension's open request (via the SDK's useOpenNewWorkspaceModal) and the
+    // home page's first-run auto-open both ride this atom; the form only sees
+    // what the modal forwards.
+    const store = createStore();
+    const onWorkspaceCreated = vi.fn();
+    store.set(newWorkspaceModalAtom, {
+      open: true,
+      initialTitle: "Fix the bug",
+      initialPrompt: "Please fix it",
+      initialBranchName: "fix/the-bug",
+      onWorkspaceCreated,
+    });
+    renderWithProviders(<NewWorkspaceModal />, { store });
+
+    expect(formProps).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialTitle: "Fix the bug",
+        initialPrompt: "Please fix it",
+        initialBranchName: "fix/the-bug",
+        onWorkspaceCreated,
+      }),
+    );
+  });
+
+  it("renders every open as a modal dialog (with overlay)", () => {
+    // The first-run auto-open and the explicit entry points share one modal
+    // look and dismissal behavior — there is no special non-modal variant.
     const store = createStore();
     store.set(newWorkspaceModalAtom, { open: true });
-    const { unmount } = renderWithProviders(<NewWorkspaceModal />, { store });
-    expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_DIALOG)).toBeTruthy();
-
-    unmount();
-    expect(store.get(newWorkspaceModalAtom)).toEqual({ open: false });
+    renderWithProviders(<NewWorkspaceModal />, { store });
+    expect(screen.getByTestId(ElementIds.PALETTE_DIALOG_OVERLAY)).toBeTruthy();
   });
 });

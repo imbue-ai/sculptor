@@ -25,9 +25,8 @@ from sculptor.testing.utils import get_playwright_modifier_key
 
 
 def _layout(sculptor_instance: SculptorInstance) -> PlaywrightProjectLayoutPage:
-    # Every palette open path (sidebar Cmd+K link, keyboard shortcut) no-ops
-    # while the workspace list is still loading, and ensure_workspace_exists's
-    # momentary first-run probe misreads that window as "workspaces exist".
+    # ensure_workspace_exists's momentary empty-state probe misreads the
+    # still-loading window as "workspaces exist" and would skip its create.
     # Wait for the list before any test drives the palette.
     wait_for_workspace_list_loaded(sculptor_instance.page)
     return PlaywrightProjectLayoutPage(page=sculptor_instance.page)
@@ -156,8 +155,8 @@ def test_command_palette_keyboard_suppressed_when_overlay_open(sculptor_instance
     page = sculptor_instance_.page
     mod = get_playwright_modifier_key()
     layout = _layout(sculptor_instance_)
-    # Cmd+/ (help) and Cmd+K are suppressed in the empty first-run state, so
-    # create a workspace before exercising them.
+    # With zero workspaces Home auto-opens the new-workspace dialog, which
+    # suppresses global shortcuts while it is open — create a workspace first.
     layout.ensure_workspace_exists()
     blur_active_element(page)
 

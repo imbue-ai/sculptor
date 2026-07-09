@@ -48,9 +48,8 @@ const projectTaskIds = (store: JotaiStore, data: ReadonlyArray<string> | undefin
  * subscribers.
  *
  * Mounted by `useUnifiedStream`, so every stream owner projects its own
- * frames. Seeding on mount covers hand-offs between stream owners (e.g.
- * EmptyFirstRunPage → AppShell); a brief double-mount is harmless because
- * projection is idempotent.
+ * frames. Seeding on mount covers hand-offs between stream owners; a brief
+ * double-mount is harmless because projection is idempotent.
  *
  * Delete this hook (and the task atoms) once the last Jotai reader is
  * migrated to `useTask`/`useTaskIds`.

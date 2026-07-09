@@ -1425,6 +1425,11 @@
           "source": {
             "$ref": "#/$defs/AgentMessageSource",
             "default": "AGENT"
+          },
+          "turnAbandoned": {
+            "default": false,
+            "title": "Turnabandoned",
+            "type": "boolean"
           }
         },
         "required": [
@@ -2730,7 +2735,7 @@
       "AgentTaskStateV2": {
         "$defs": {
           "ModelCatalogState": {
-            "description": "The catalog states a plain `list[ModelOption]` cannot express.\n\n`NOT_FETCHED_YET` is the birth state of a backend (pi) catalog on task state,\nbefore the start-time probe runs \u2014 distinct from a fetched-but-empty `[]`\n(authenticated, but no providers), which is what drives the login CTA. Keeping\nthe two apart is what stops the switcher flashing that CTA during startup. A\nStrEnum member is a value-less, interned singleton that survives serialization\nby identity, so read sites use `is` rather than overloading `None`.",
+            "description": "The catalog states a plain `list[ModelOption]` cannot express.\n\n`NOT_FETCHED_YET` is the birth state of a backend (pi) catalog on task state,\nbefore the start-time probe runs \u2014 distinct from a fetched-but-empty `[]`\n(authenticated, but no providers), which is what drives the empty state. Keeping\nthe two apart is what stops the switcher flashing that empty state during startup. A\nStrEnum member is a value-less, interned singleton that survives serialization\nby identity, so read sites use `is` rather than overloading `None`.",
             "enum": [
               "not_fetched_yet"
             ],
@@ -2791,18 +2796,6 @@
               }
             ],
             "default": null
-          },
-          "lastProcessedMessageId": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Lastprocessedmessageid"
           },
           "objectType": {
             "default": "AgentTaskStateV2",

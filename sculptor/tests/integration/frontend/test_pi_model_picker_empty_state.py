@@ -1,10 +1,10 @@
-"""Integration coverage for the pi model-picker empty state.
+"""Integration coverage for the pi model-picker empty state + send-slot config CTA.
 
-When a pi agent has no models to offer (no authenticated providers), the picker
-shows the verbatim "No models available — please log in to authenticate" copy with
-an "Open pi login" CTA that routes to Settings -> Pi — never the Claude fallback
-list. FakePi reports an empty catalog (FAKE_PI_CATALOG="[]"); auth.json is isolated
-via PI_CODING_AGENT_DIR.
+When a pi agent has no models to offer (no authenticated providers), the picker is
+shown disabled with the verbatim "No models available" copy — never the Claude
+fallback list — and the Send button is replaced by a "Go to harness configuration"
+button that routes to Settings -> Pi. FakePi reports an empty catalog
+(FAKE_PI_CATALOG="[]"); auth.json is isolated via PI_CODING_AGENT_DIR.
 """
 
 import re
@@ -17,11 +17,11 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
 
-_NO_MODELS_COPY = "No models available — please log in to authenticate"
+_NO_MODELS_COPY = "No models available"
 
 
-@user_story("to be told to log in, with a CTA, when a pi agent has no authenticated providers")
-def test_pi_picker_empty_state_shows_login_cta(
+@user_story("to be routed to configure a provider when a pi agent has no authenticated providers")
+def test_pi_picker_empty_state_shows_config_cta(
     sculptor_instance_factory_: SculptorInstanceFactory,
     tmp_path: Path,
 ) -> None:
@@ -43,12 +43,14 @@ def test_pi_picker_empty_state_shows_login_cta(
         )
         chat_panel = task_page.get_chat_panel()
 
-        # The verbatim empty-state copy + CTA show, and the Claude fallback list does not.
+        # The picker is disabled with the verbatim copy; the Claude fallback list does not show.
         empty_state = chat_panel.get_picker_empty_state()
         expect(empty_state).to_be_visible(timeout=30_000)
         expect(empty_state).to_contain_text(_NO_MODELS_COPY)
         expect(chat_panel.get_model_selector()).to_have_count(0)
 
-        # The CTA routes to Settings -> Pi.
-        chat_panel.get_picker_login_cta().click()
+        # Send is replaced by a "Go to harness configuration" CTA that routes to Settings -> Pi.
+        config_cta = chat_panel.get_harness_config_cta()
+        expect(config_cta).to_be_visible()
+        config_cta.click()
         expect(page).to_have_url(re.compile("section=PI"))

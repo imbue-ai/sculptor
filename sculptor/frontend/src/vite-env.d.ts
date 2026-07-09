@@ -14,9 +14,9 @@ type ImportMeta = {
 };
 
 /**
- * Virtual module provided by the plugin-runtime-stubs Vite plugin. Exposes the
+ * Virtual module provided by the extension-runtime-stubs Vite plugin. Exposes the
  * host's installed version of each shared package, embedded at build time.
  */
-declare module "virtual:sculptor/plugin-host-versions" {
+declare module "virtual:sculptor/extension-host-versions" {
   export const hostPackageVersions: Readonly<Record<string, string>>;
 }

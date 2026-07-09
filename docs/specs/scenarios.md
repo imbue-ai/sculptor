@@ -871,10 +871,10 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user types in the chat input and clicks Send (or presses the send keybinding).
   - Then: the message is sent, the editor clears, and any attachments clear.
 
-- **WS-002 — Send button disabled states**
+- **WS-002 — Send button disabled & blocked states**
   - Given: the chat input.
-  - When: the editor is empty, or the agent is busy (for non-`/btw` content).
-  - Then: the Send button is disabled; hovering shows the reason.
+  - When: the editor is empty, or the agent is busy (for non-`/btw` content), or the agent's harness has no usable model (a Pi agent with no authenticated providers).
+  - Then: for an empty editor or a busy agent the Send button is disabled and hovering shows the reason; when the harness has no usable model the Send button is replaced by a **Go to harness configuration** button that opens the harness's settings (Settings → Pi, or Settings → Dependencies for Claude).
 
 - **WS-003 — Interrupt-and-send**
   - Given: the agent is busy and the user typed a message.
@@ -1538,7 +1538,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **CHAT-046 — Capability-gated model picker / Pi model catalog**
   - Given: agents whose harness does and doesn't support model selection.
   - When: the user opens the model picker on each (a Claude agent, a Pi agent, and a terminal agent).
-  - Then: a Claude agent lists Claude models; a Pi agent lists Pi's own models grouped by provider (a single provider flat, two or more cascading into per-provider submenus), and a Pi agent with no authenticated providers shows an "Authenticate a provider" prompt instead of a list; a terminal agent shows the picker disabled with the current model; switching a Pi model that the harness rejects leaves the selection unchanged and shows an error toast.
+  - Then: a Claude agent lists Claude models; a Pi agent lists Pi's own models grouped by provider (a single provider flat, two or more cascading into per-provider submenus), and a Pi agent with no authenticated providers shows the model picker disabled ("No models available") instead of a list — including when a model had previously been selected, where the now-unusable selection is dropped so the picker still empties — with the single fix-it action on the Send button, which is replaced by a "Go to harness configuration" button; a terminal agent shows the picker disabled with the current model; switching a Pi model that the harness rejects leaves the selection unchanged and shows an error toast.
 
 ---
 
@@ -2047,12 +2047,12 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: switching tabs/files and returning.
   - Then: each of these states is restored.
 
-## Plugin panels
+## Extension panels
 
-- **PANEL-057 — Plugin-contributed panel appears with a badge**
-  - Given: the bundled Linear plugin (enabled by default) is loaded and contributes a panel.
-  - When: the user views the Panels list and opens the plugin's panel.
-  - Then: the panel is listed with a "plugin" badge and renders its content when opened.
+- **PANEL-057 — Extension-contributed panel appears with a badge**
+  - Given: the bundled Linear extension (enabled by default) is loaded and contributes a panel.
+  - When: the user views the Panels list and opens the extension's panel.
+  - Then: the panel is listed with an "extension" badge and renders its content when opened.
 
 ---
 
@@ -2403,22 +2403,22 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user sets a custom backend command or readiness timeout.
   - Then: each saves with a "restart required" toast.
 
-## Plugins
+## Extensions
 
-- **SET-038 — Manage plugin sources**
-  - Given: the Plugins settings section with the plugin system enabled.
-  - When: the user adds a plugin source by URL, toggles a plugin's enable/disable switch, clicks Refresh to rescan the plugins directory, or removes a user-added URL source.
-  - Then: an added source appears in the list; the switch mutes/unmutes the plugin without removing it; Refresh re-scans drop-in plugins; a user-added URL source can be removed while bundled/disk-discovered ones cannot; the plugins directory path is shown.
+- **SET-038 — Manage extension sources**
+  - Given: the Extensions settings section with the extension system enabled.
+  - When: the user adds an extension source by URL, toggles an extension's enable/disable switch, clicks Refresh to rescan the extensions directory, or removes a user-added URL source.
+  - Then: an added source appears in the list; the switch mutes/unmutes the extension without removing it; Refresh re-scans drop-in extensions; a user-added URL source can be removed while bundled/disk-discovered ones cannot; the extensions directory path is shown.
 
-- **SET-040 — Global plugin enable/disable toggle**
-  - Given: the Plugins settings section (always present, since it hosts the global plugin toggle).
-  - When: the user toggles the global plugin switch at the top of the section off, then on.
-  - Then: turning it off hides the plugin-management UI (add-source input and list) while the section and switch remain; turning it on reveals the management UI again.
+- **SET-040 — Global extension enable/disable toggle**
+  - Given: the Extensions settings section (always present, since it hosts the global extension toggle).
+  - When: the user toggles the global extension switch at the top of the section off, then on.
+  - Then: turning it off hides the extension-management UI (add-source input and list) while the section and switch remain; turning it on reveals the management UI again.
 
-- **SET-041 — Retry a failed plugin load**
-  - Given: a plugin source whose row is in the error state (its load failed).
+- **SET-041 — Retry a failed extension load**
+  - Given: an extension source whose row is in the error state (its load failed).
   - When: the user clicks the retry control on that row.
-  - Then: the row re-attempts the load — settling back to error if it fails again, or showing the loaded plugin's name and version if it now succeeds.
+  - Then: the row re-attempts the load — settling back to error if it fails again, or showing the loaded extension's name and version if it now succeeds.
 
 ## Actions
 

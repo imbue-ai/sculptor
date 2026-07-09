@@ -271,6 +271,8 @@ class BaseTaskService(TaskService, ABC):
             raise InvalidTaskOperation("Task is not in a failed state - cannot restore")
         self._check_workspace_not_deleted(task, transaction)
         updated_task = task.evolve(task.ref().outcome, TaskState.QUEUED)
+        # Clear the stale error so outcome and error stay consistent.
+        updated_task = updated_task.evolve(updated_task.ref().error, None)
         updated_task = transaction.upsert_task(updated_task)
         message = TaskStatusRunnerMessage(outcome=TaskState.QUEUED, message_id=AgentMessageID())
         self.create_message(message=message, task_id=updated_task.object_id, transaction=transaction)
