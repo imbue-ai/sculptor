@@ -756,7 +756,12 @@ def navigate_to_settings_page(page: Page, **_kwargs: object) -> PlaywrightSettin
         # route change is in flight survives it and lands ON TOP of Settings,
         # where it would swallow the caller's first click. Require a clear
         # surface too — a failure retries the body, whose Escape dismisses it.
-        expect(page.get_by_test_id(ElementIDs.PALETTE_DIALOG_OVERLAY)).to_have_count(0)
+        # Keep this timeout well under the outer 30s retry budget: the default
+        # expect timeout is also 30s, so an unbounded gate would let the first
+        # stuck-offer attempt exhaust the budget waiting passively, and the
+        # retry that re-presses Escape (the only thing that dismisses the offer)
+        # would never run.
+        expect(page.get_by_test_id(ElementIDs.PALETTE_DIALOG_OVERLAY)).to_have_count(0, timeout=5_000)
 
     retry(
         stop=stop_after_delay(30),
