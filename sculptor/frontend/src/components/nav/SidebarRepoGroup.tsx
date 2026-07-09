@@ -66,7 +66,9 @@ import type { SectionAppendProjection, SectionDepthIntent, SectionProjection } f
 import {
   applySectionProjection,
   flatSectionItemIds,
+  locateTopLevelGroupId,
   locateWorkspaceParent,
+  projectGroupBesideGroup,
   projectSectionDrop,
   toggleBoundaryDepth,
 } from "./sidebarDropProjection.ts";
@@ -269,6 +271,36 @@ export const SidebarRepoGroup = ({
         }
         return;
       }
+
+      // A pointer-driven group drag over another group's box resolves its slot
+      // geometrically — before or after the whole box by the pointer's side of
+      // its midpoint (see projectGroupBesideGroup for why the over slot cannot
+      // decide this without looping). Loose-row targets keep the over-slot
+      // path: there the placeholder takes the over slot, so the next over is
+      // the placeholder itself and the early-return above holds it stable.
+      const activator = event.activatorEvent;
+      if (state.kind === "group" && activator instanceof PointerEvent) {
+        const overGroupId = locateTopLevelGroupId(state.display, overId);
+        const section = sectionChildrenRef.current;
+        const card =
+          overGroupId === null || section === null
+            ? null
+            : section.querySelector(
+                `[data-testid="${ElementIds.SIDEBAR_WORKSPACE_GROUP_CARD}"][data-group-id="${overGroupId}"]`,
+              );
+        const rect = card?.getBoundingClientRect();
+        if (overGroupId !== null && rect !== undefined) {
+          const pointerY = activator.clientY + event.delta.y;
+          const side = pointerY <= (rect.top + rect.bottom) / 2 ? "before" : "after";
+          acceptProjection(
+            state,
+            projectGroupBesideGroup(state.display, state.activeId, overGroupId, side),
+            state.depthIntent,
+          );
+          return;
+        }
+      }
+
       const projection = projectSectionDrop({
         children: state.display,
         collapsedGroupIds,

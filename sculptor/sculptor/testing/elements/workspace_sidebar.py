@@ -226,6 +226,42 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         # racing their membership assertions against the drop commit.
         expect(item).not_to_have_attribute("data-sidebar-dragging", "true")
 
+    def drag_via_pointer(self, item: Locator, waypoints: list[Locator]) -> None:
+        """Drag ``item`` with the real PointerSensor: press on its center, move
+        through each waypoint's center, release.
+
+        Each waypoint re-resolves against the LIVE lane right before the move —
+        the drag's own projections re-slot rows mid-flight, so a position
+        captured up front would aim at where a row used to be. The pointer
+        parks briefly at every waypoint: the sidebar's flat lane previews by
+        re-rendering real layout under a measuring drag context, so a parked
+        pointer is exactly where a projection feedback loop would spin, and
+        pausing there gives one time to surface as a crash instead of being
+        skated over.
+        """
+        box = item.bounding_box()
+        if box is None:
+            raise AssertionError("pointer drag item is not visible")
+        self._page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        self._page.mouse.down()
+        for waypoint in waypoints:
+            waypoint_box = waypoint.bounding_box()
+            if waypoint_box is None:
+                raise AssertionError("pointer drag waypoint is not visible")
+            # Multiple steps so the sensor's activation-distance constraint is
+            # crossed by real intermediate pointermove events.
+            self._page.mouse.move(
+                waypoint_box["x"] + waypoint_box["width"] / 2,
+                waypoint_box["y"] + waypoint_box["height"] / 2,
+                steps=8,
+            )
+            self._page.wait_for_timeout(250)
+        self._page.mouse.up()
+
+        # The drop clears the drag flag once the reorder commits; asserting it
+        # here keeps callers from racing their order assertions against it.
+        expect(item).not_to_have_attribute("data-sidebar-dragging", "true")
+
     # -- Workspace rows (mirrors PlaywrightHomePage.get_workspace_rows) --
 
     def get_workspace_rows(self) -> Locator:

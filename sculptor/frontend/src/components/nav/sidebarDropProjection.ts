@@ -127,6 +127,42 @@ const topLevelIndexOf = (children: ReadonlyArray<RepoSectionChild>, id: string):
       (child.kind === "group" && child.members.some((member) => member.objectId === id)),
   );
 
+/** The group that `id` is the header of or a member of, or null for loose rows and unknown ids. */
+export const locateTopLevelGroupId = (children: ReadonlyArray<RepoSectionChild>, id: string): string | null => {
+  const child = children[topLevelIndexOf(children, id)];
+  return child !== undefined && child.kind === "group" ? child.group.objectId : null;
+};
+
+/**
+ * Project a dragged group to the top-level slot directly before or after
+ * another group (REQ-DND-4). The side comes from the caller — pointer position
+ * against the target box's midpoint — NOT from the `over` slot: an over-slot
+ * arrayMove is unstable when the pointer rests inside a multi-row box, because
+ * the dragged header's placeholder is one row tall while the target box is
+ * many, so every application lands the group on the other side of a target the
+ * pointer is still inside — re-slotting the lane under a stationary pointer,
+ * re-firing `over`, and looping until React aborts with "Maximum update depth
+ * exceeded". Side-of-midpoint is a fixed point: a stationary pointer projects
+ * the same order every time, and the steady state returns null (no move).
+ */
+export const projectGroupBesideGroup = (
+  children: ReadonlyArray<RepoSectionChild>,
+  activeId: string,
+  targetGroupId: string,
+  side: "before" | "after",
+): SectionGroupProjection | null => {
+  const from = topLevelIndexOf(children, activeId);
+  const target = topLevelIndexOf(children, targetGroupId);
+  if (from === -1 || target === -1 || from === target) {
+    return null;
+  }
+  // arrayMove removes the active group first, so a target below the active
+  // slot shifts up by one: "directly before" is target-1 from above, target
+  // from below (and mirrored for "after").
+  const index = side === "before" ? (from < target ? target - 1 : target) : from < target ? target : target + 1;
+  return index === from ? null : { kind: "group", activeId, index };
+};
+
 /**
  * Project where the active item would land if dropped at `overId`'s slot.
  *

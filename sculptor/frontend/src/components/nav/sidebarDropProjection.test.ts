@@ -6,7 +6,9 @@ import type { SectionProjection } from "./sidebarDropProjection.ts";
 import {
   applySectionProjection,
   flatSectionItemIds,
+  locateTopLevelGroupId,
   locateWorkspaceParent,
+  projectGroupBesideGroup,
   projectSectionDrop,
   toggleBoundaryDepth,
 } from "./sidebarDropProjection.ts";
@@ -295,6 +297,75 @@ describe("projectSectionDrop — group header drags", () => {
   it("no-ops when the group targets its own slot (or its own member)", () => {
     expect(project("wsg-1", "wsg-1")).toBeNull();
     expect(project("wsg-1", "w-m1")).toBeNull();
+  });
+});
+
+describe("locateTopLevelGroupId", () => {
+  it("resolves a group id to itself and a member id to its group", () => {
+    expect(locateTopLevelGroupId(CHILDREN, "wsg-1")).toBe("wsg-1");
+    expect(locateTopLevelGroupId(CHILDREN, "w-n1")).toBe("wsg-2");
+  });
+
+  it("returns null for loose rows and unknown ids", () => {
+    expect(locateTopLevelGroupId(CHILDREN, "w-banana")).toBeNull();
+    expect(locateTopLevelGroupId(CHILDREN, "w-ghost")).toBeNull();
+  });
+});
+
+describe("projectGroupBesideGroup", () => {
+  it("lands the group directly before or after the target box, from either direction", () => {
+    const beforeFromAbove = projectGroupBesideGroup(CHILDREN, "wsg-1", "wsg-2", "before");
+    expect(keysOf(applySectionProjection(CHILDREN, beforeFromAbove as SectionProjection))).toEqual([
+      "w-apple",
+      "w-banana",
+      "wsg-1",
+      "wsg-2",
+    ]);
+
+    const afterFromAbove = projectGroupBesideGroup(CHILDREN, "wsg-1", "wsg-2", "after");
+    expect(keysOf(applySectionProjection(CHILDREN, afterFromAbove as SectionProjection))).toEqual([
+      "w-apple",
+      "w-banana",
+      "wsg-2",
+      "wsg-1",
+    ]);
+
+    const beforeFromBelow = projectGroupBesideGroup(CHILDREN, "wsg-2", "wsg-1", "before");
+    expect(keysOf(applySectionProjection(CHILDREN, beforeFromBelow as SectionProjection))).toEqual([
+      "w-apple",
+      "wsg-2",
+      "wsg-1",
+      "w-banana",
+    ]);
+
+    const afterFromBelow = projectGroupBesideGroup(CHILDREN, "wsg-2", "wsg-1", "after");
+    expect(keysOf(applySectionProjection(CHILDREN, afterFromBelow as SectionProjection))).toEqual([
+      "w-apple",
+      "wsg-1",
+      "wsg-2",
+      "w-banana",
+    ]);
+  });
+
+  it("is a fixed point: re-projecting the applied order returns null, so a stationary pointer cannot oscillate", () => {
+    const moves = [
+      ["wsg-1", "wsg-2"],
+      ["wsg-2", "wsg-1"],
+    ] as const;
+    for (const side of ["before", "after"] as const) {
+      for (const [activeId, targetGroupId] of moves) {
+        const projection = projectGroupBesideGroup(CHILDREN, activeId, targetGroupId, side);
+        expect(projection).not.toBeNull();
+        const settled = applySectionProjection(CHILDREN, projection as SectionProjection);
+        expect(projectGroupBesideGroup(settled, activeId, targetGroupId, side)).toBeNull();
+      }
+    }
+  });
+
+  it("returns null for self-targets and unknown ids", () => {
+    expect(projectGroupBesideGroup(CHILDREN, "wsg-1", "wsg-1", "before")).toBeNull();
+    expect(projectGroupBesideGroup(CHILDREN, "wsg-ghost", "wsg-1", "after")).toBeNull();
+    expect(projectGroupBesideGroup(CHILDREN, "wsg-1", "wsg-ghost", "after")).toBeNull();
   });
 });
 

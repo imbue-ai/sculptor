@@ -251,3 +251,56 @@ def test_keyboard_drag_moves_workspace_into_and_out_of_group(
     expect(member_rows).to_contain_text(["WS Alpha"])
     expect(all_rows).to_have_count(3)
     expect(sidebar.get_workspace_row_by_name("WS Bravo")).to_be_visible()
+
+
+@user_story("to drag a whole group above or below another group with the mouse")
+def test_pointer_drag_reorders_group_past_another_group(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """Pointer-dragging a group header past another group lands it beside that
+    group's box, chosen by the pointer's side of the box midpoint (REQ-DND-4).
+
+    The middle waypoint parks the pointer INSIDE the taller group's box: the
+    dragged header's placeholder is one row tall while the target box is
+    three, which is the geometry where an over-slot projection would re-slot
+    the lane under the stationary pointer and loop until React aborts
+    ("Maximum update depth exceeded") — the pause is the regression trap.
+
+    Steps:
+    1. Group 1 wraps WS Alpha; Group 2 wraps WS Bravo and gains WS Charlie, so
+       Group 2's box is taller than the dragged header's placeholder.
+    2. Pointer-drag Group 1's header onto WS Bravo's row (parked inside Group
+       2's box), then on past the box midpoint to WS Charlie's row, and drop.
+    3. Group 1 lands after Group 2; both groups keep their members.
+    """
+    page = sculptor_instance_.page
+
+    # Step 1: Group 1 (WS Alpha) above Group 2 (WS Bravo + WS Charlie).
+    sidebar = _create_single_group(page, ["WS Alpha", "WS Bravo", "WS Charlie"], "WS Alpha")
+    sidebar.create_group_from_workspace(sidebar.get_workspace_row_by_name("WS Bravo"))
+    expect(sidebar.get_group_cards()).to_have_count(2)
+    group_two = sidebar.get_group_card_by_name("Group 2")
+    sidebar.drag_workspace_into_group_via_keyboard(
+        item=sidebar.get_workspace_row_by_name("WS Charlie"),
+        group_card=group_two,
+        direction="up",
+    )
+    expect(sidebar.get_group_member_rows(group_two)).to_have_count(2)
+
+    # Step 2: Drag Group 1's header through Group 2's box with the pointer.
+    sidebar.drag_via_pointer(
+        item=sidebar.get_group_header(sidebar.get_group_card_by_name("Group 1")),
+        waypoints=[
+            sidebar.get_workspace_row_by_name("WS Bravo"),
+            sidebar.get_workspace_row_by_name("WS Charlie"),
+        ],
+    )
+
+    # Step 3: The lane reads [Group 2, Group 1], every workspace intact.
+    cards = sidebar.get_group_cards()
+    expect(cards).to_have_count(2)
+    expect(cards.nth(0)).to_contain_text("Group 2")
+    expect(cards.nth(1)).to_contain_text("Group 1")
+    expect(sidebar.get_group_member_rows(sidebar.get_group_card_by_name("Group 1"))).to_have_count(1)
+    expect(sidebar.get_group_member_rows(group_two)).to_have_count(2)
+    expect(sidebar.get_workspace_rows()).to_have_count(3)
