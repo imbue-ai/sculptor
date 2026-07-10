@@ -28,8 +28,8 @@ class ProviderCatalogEntry(FrozenModel):
     ``env_var_names`` lists every conventional env var that authenticates the
     provider; the first is the canonical/primary one. ``supports_subscription``
     marks providers pi can authenticate via its OAuth/subscription login — for a
-    SINGLE_KEY provider (anthropic) it is one of two methods, and for a
-    SUBSCRIPTION_ONLY provider it is the only one.
+    SINGLE_KEY provider it is one of two methods, and for a SUBSCRIPTION_ONLY
+    provider it is the only one.
     """
 
     provider_id: str

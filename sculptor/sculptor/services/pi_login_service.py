@@ -123,8 +123,7 @@ _PI_LOGIN_PROVIDER_SELECTOR_MARKER = b"Select provider to configure"
 # a literal newline in the input box).
 _PI_SUBMIT = b"\r"
 
-# The Down key: moves pi's method selector off "Use a subscription" (the default row)
-# onto "Use an API key".
+# The Down key: moves the highlighted row in pi's selectors.
 _PI_DOWN_ARROW = b"\x1b[B"
 
 # How long to wait for pi's TUI to come up before typing a slash command. The real
@@ -275,9 +274,9 @@ def _drive_login(accumulator: _OutputAccumulator, manager: LocalTerminalManager,
     "Use an API key"), then a provider list for that method. A provider with exactly
     one valid method has both selectors auto-answered: subscription-only providers
     confirm the selector's default "Use a subscription" row, API-key-only providers
-    arrow down to "Use an API key" first. A provider supporting both (anthropic)
-    leaves the method choice to the user, then auto-selects the provider in the list
-    their choice renders.
+    arrow down to "Use an API key" first. A provider supporting both methods leaves
+    the method choice to the user, then auto-selects the provider in the list their
+    choice renders.
     """
     if provider_id is None:
         # Provider-agnostic (empty-state CTA): pi's own selectors take over.
