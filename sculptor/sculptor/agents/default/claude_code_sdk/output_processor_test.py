@@ -2247,6 +2247,57 @@ class TestNotificationCoalescingAndIdleBackstop:
         assert "LATE-TOOL-SYNTHESIS" in _collect_text(_drain_queue(processor.output_message_queue))
 
     @pytest.mark.timeout(30)
+    def test_notification_inside_deferred_delivery_turn_does_not_arm_backstop(self) -> None:
+        """A deferred completion (task_updated) makes the CLI start an
+        event-delivery turn whose init does NOT consume found_final_message —
+        so the task's notification lands mid-turn with the flag still True.
+        The handler must keep the loop open (the reset) WITHOUT arming the
+        idle backstop: the active turn may run a long silent tool, and an
+        armed deadline would fire during it and cut off the turn's late
+        content. The silence here is 3x the grace, so a wrongly armed
+        backstop fires during it and LATE-SYNTHESIS goes missing."""
+        session_id = "s-deferred-midturn"
+        pre_silence = [
+            make_task_started_message(
+                task_id="sub-a", tool_use_id="toolu-a", description="A", task_type="local_agent"
+            ),
+            make_assistant_message("msg-main", [make_text_block("Launched.")]),
+            make_end_message(session_id=session_id),
+            # Subagent completes via task_updated (deferred cleanup path).
+            _make_task_updated_message(task_id="sub-a", status="completed"),
+            # The event-delivery turn starts; found_final_message stays True
+            # through this init (only wakeup inits reset it).
+            make_init_message(session_id=session_id),
+            # The task's notification is delivered inside that turn.
+            make_task_notification_message(
+                task_id="sub-a", tool_use_id="toolu-a", status="completed", summary="A done"
+            ),
+            make_assistant_message("msg-working", [make_text_block("Reacting to the subagent result...")]),
+            # ... the turn now runs a long, silent tool ...
+        ]
+        post_silence = [
+            make_assistant_message("msg-late", [make_text_block("LATE-SYNTHESIS")]),
+            make_end_message(session_id=session_id),
+        ]
+        grace_seconds = 0.2
+        processor, input_queue = self._build_idle_processor(pre_silence, grace_seconds=grace_seconds)
+
+        def feed_late_frames() -> None:
+            time.sleep(grace_seconds * 3)
+            for d in post_silence:
+                input_queue.put((json.dumps(d), True))
+
+        feeder = Thread(target=feed_late_frames)
+        feeder.start()
+        completed = processor._process_output()
+        feeder.join()
+
+        assert completed is True
+        assert "LATE-SYNTHESIS" in _collect_text(_drain_queue(processor.output_message_queue)), (
+            "the backstop was armed inside the active delivery turn and cut off its late content"
+        )
+
+    @pytest.mark.timeout(30)
     def test_split_cluster_second_followup_turn_is_processed(self) -> None:
         """Two notifications land before the follow-up init but the CLI answers
         them with TWO separate turns (a completion raced past the first turn's

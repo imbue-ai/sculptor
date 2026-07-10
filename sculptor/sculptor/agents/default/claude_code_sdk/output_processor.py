@@ -573,9 +573,10 @@ class ClaudeOutputProcessor:
                     # nothing else pending, conclude the invocation is
                     # complete so the loop exits and the terminal
                     # RequestSuccess is emitted instead of streaming forever.
-                    # Long-running quiet tools are safe: the deadline only
-                    # exists at turn boundaries and the follow-up turn's init
-                    # clears it before such a tool can start.
+                    # Long-running quiet tools are safe: the deadline is never
+                    # armed while a turn is active (every arm site is a turn
+                    # boundary and the notification handler skips arming
+                    # mid-turn), and a turn's init clears any armed deadline.
                     if (
                         self._followup_owed_deadline is not None
                         and not self._pending_background_tasks
@@ -583,11 +584,10 @@ class ClaudeOutputProcessor:
                         and now >= self._followup_owed_deadline
                     ):
                         logger.info(
-                            "Notification follow-up turn never arrived within the {:.0f}s grace; concluding the invocation is complete (pending_notification_turn_results={}, awaiting_notification_turn_init={}, lingered_for_split_cluster={})",
+                            "Notification follow-up turn never arrived within the {:.0f}s grace; concluding the invocation is complete (pending_notification_turn_results={}, awaiting_notification_turn_init={})",
                             self._followup_owed_grace_seconds,
                             self._pending_notification_turn_results,
                             self._awaiting_notification_turn_init,
-                            self._linger_after_cluster_turn,
                         )
                         self.found_final_message = True
                         self._final_message_time = now
@@ -910,16 +910,26 @@ class ClaudeOutputProcessor:
                 #    the answering turn's result lingers for a possible
                 #    split-off second turn.
                 #
-                #  - Mid-turn or pre-turn (a turn is active, or nothing is
-                #    owed yet): the notification arrived BEFORE the current
-                #    turn produced a result. Either the CLI is delivering it
-                #    ahead of the user's prompt as its own turn (SCU-1660), or
-                #    it is an inline mid-turn notification with no new request
-                #    cycle (SCU-267). We cannot yet tell which, so arm the
-                #    flag; _parse_init_response confirms the former if a fresh
-                #    init follows, and _parse_stream_end_response drops it for
-                #    the latter. No idle backstop here: a long quiet tool in
-                #    the active turn must not trip it.
+                #    found_final_message can also be True while a turn is
+                #    ACTIVE: a deferred completion (task_updated) makes the
+                #    CLI start an event-delivery turn whose init does not
+                #    consume the previous result's flag. The reset below still
+                #    applies (the loop must stay open past momentary
+                #    pending-task/queue emptiness until this turn's own
+                #    result), but the idle backstop must NOT be armed — the
+                #    active turn may legitimately run a long silent tool, and
+                #    its result is the guaranteed conclusion.
+                #
+                #  - Mid-turn or pre-turn with found_final_message False (a
+                #    turn is running, or nothing is owed yet): the
+                #    notification arrived BEFORE the current turn produced a
+                #    result. Either the CLI is delivering it ahead of the
+                #    user's prompt as its own turn (SCU-1660), or it is an
+                #    inline mid-turn notification with no new request cycle
+                #    (SCU-267). We cannot yet tell which, so arm the flag;
+                #    _parse_init_response confirms the former if a fresh init
+                #    follows, and _parse_stream_end_response drops it for the
+                #    latter. No idle backstop here either.
                 at_turn_boundary = self.found_final_message or (
                     self._followup_owed_deadline is not None and not self._turn_active
                 )
@@ -928,7 +938,8 @@ class ClaudeOutputProcessor:
                         self._notification_cluster_extra = True
                     self.found_final_message = False
                     self._notification_reset_pending_result = True
-                    self._arm_followup_backstop(self._notification_followup_grace_seconds)
+                    if not self._turn_active:
+                        self._arm_followup_backstop(self._notification_followup_grace_seconds)
                 else:
                     self._awaiting_notification_turn_init = True
                 # final_workflow_entries doubles as the workflow marker on the
