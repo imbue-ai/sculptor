@@ -40,6 +40,13 @@ const setScrollPosition = (el: HTMLDivElement, scrollTop: number, scrollHeight: 
   Object.defineProperty(el, "scrollHeight", { value: scrollHeight, writable: true, configurable: true });
 };
 
+// Grow only scrollHeight (scrollHeight is a read-only DOM prop; the mock backs
+// it with a redefinable data property). Simulates rows measuring taller than
+// their cold estimates and enlarging the virtual content after mount.
+const setScrollHeight = (el: HTMLDivElement, scrollHeight: number): void => {
+  Object.defineProperty(el, "scrollHeight", { value: scrollHeight, writable: true, configurable: true });
+};
+
 const createMockVirtualItem = (index: number, start: number, size: number): VirtualItem => ({
   index,
   start,
@@ -231,6 +238,129 @@ describe("useAlphaScrollPersistence", () => {
 
     // Content bottom 1100 + 600 = 1700 exceeds the max scroll (1500) — clamped.
     expect(el.scrollTop).toBe(1500);
+  });
+
+  it("keeps re-pinning a near-bottom restore as measurements grow the content after mount", () => {
+    // Cold task switch: off-screen rows start at their estimated heights, so the
+    // content is far shorter than its measured size. The first restore-to-bottom
+    // lands against that estimate; the real rows then measure taller over the
+    // next frames and the content grows underneath the reader. A one-shot
+    // re-assert fires once and stops, stranding the reader pages above the true
+    // bottom — the restore must chase the growing bottom until it converges.
+    const el = createMockScrollContainer(0, 1000, 800); // desktop height; cold scrollHeight 1000
+    const ref = { current: el };
+    const virtualizer = createMockVirtualizer([createMockVirtualItem(0, 0, 200)], 64);
+    const messages = [{ id: "msg-1" }, { id: "msg-2" }, { id: "msg-3" }];
+    const store = createStore();
+    // Saved pinned at the live bottom: the -64 pin-gap signature (PIN_BOTTOM_GAP).
+    store.set(alphaScrollPositionAtomFamily("task-1"), {
+      firstVisibleMessageId: "msg-3",
+      pixelOffset: 0,
+      distanceFromBottom: -64,
+    });
+
+    const machine = createScrollStateMachine();
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, machine, { current: false }), {
+      wrapper: wrapperFor(store),
+    });
+
+    // Cold apply: contentBottom (1000 - 64 - 800 = 136) + 64 = 200, clamped to
+    // the cold max scroll (1000 - 800 = 200).
+    expect(el.scrollTop).toBe(200);
+
+    // Rows measure taller across the next four frames, growing the content to
+    // 3000 — a monotonic cold-to-measured convergence, past the two frames a
+    // single deferred re-assert would cover.
+    act(() => {
+      setScrollHeight(el, 1500);
+      vi.advanceTimersByTime(16);
+      setScrollHeight(el, 2000);
+      vi.advanceTimersByTime(16);
+      setScrollHeight(el, 2500);
+      vi.advanceTimersByTime(16);
+      setScrollHeight(el, 3000);
+      vi.advanceTimersByTime(16);
+      // Let the loop observe the height stabilize and settle.
+      vi.advanceTimersByTime(160);
+    });
+
+    // Re-pinned to the true bottom: contentBottom (3000 - 64 - 800 = 2136) + 64
+    // = 2200, clamped to the grown max scroll (3000 - 800 = 2200) — not the cold
+    // 200, and not the ~1200 a single 2-frame re-assert would leave behind.
+    expect(el.scrollTop).toBe(2200);
+    // And it hands control back once the content stops growing.
+    expect(machine.getState().authority.kind).toBe("userControlled");
+  });
+
+  it("stops chasing the bottom when the user scrolls mid-restore", () => {
+    // The convergence loop must yield to a genuine takeover: once the user
+    // scrolls, it neither re-pins nor clobbers their position, exactly like the
+    // anchor path's deferred re-assert.
+    const el = createMockScrollContainer(0, 1000, 800);
+    const ref = { current: el };
+    const virtualizer = createMockVirtualizer([createMockVirtualItem(0, 0, 200)], 64);
+    const messages = [{ id: "msg-1" }, { id: "msg-2" }, { id: "msg-3" }];
+    const store = createStore();
+    store.set(alphaScrollPositionAtomFamily("task-1"), {
+      firstVisibleMessageId: "msg-3",
+      pixelOffset: 0,
+      distanceFromBottom: -64,
+    });
+
+    const machine = createScrollStateMachine();
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, machine, { current: false }), {
+      wrapper: wrapperFor(store),
+    });
+
+    // Cold apply landed at 200 (one write).
+    expect(el.scrollTopWrites).toEqual([200]);
+
+    act(() => {
+      machine.dispatch({ kind: "userScrolled" });
+      // Content keeps growing, but the user is now in control.
+      setScrollHeight(el, 3000);
+      vi.advanceTimersByTime(160);
+    });
+
+    // No further programmatic writes — the grown bottom is not chased.
+    expect(el.scrollTopWrites).toEqual([200]);
+    expect(machine.getState().authority.kind).toBe("userControlled");
+  });
+
+  it("hands control back even when the content never stops growing", () => {
+    // A task that streams a token every frame never gives the loop two
+    // consecutive stable frames. The frame cap must still settle it so the
+    // machine cannot be stranded in `restoring` (which withholds `settled` and
+    // suppresses saves) for the life of the stream.
+    const el = createMockScrollContainer(0, 1000, 800);
+    const ref = { current: el };
+    const virtualizer = createMockVirtualizer([createMockVirtualItem(0, 0, 200)], 64);
+    const messages = [{ id: "msg-1" }, { id: "msg-2" }, { id: "msg-3" }];
+    const store = createStore();
+    store.set(alphaScrollPositionAtomFamily("task-1"), {
+      firstVisibleMessageId: "msg-3",
+      pixelOffset: 0,
+      distanceFromBottom: -64,
+    });
+
+    const machine = createScrollStateMachine();
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, machine, { current: false }), {
+      wrapper: wrapperFor(store),
+    });
+
+    // Grow the content every frame for more than the frame cap; the loop never
+    // sees two stable frames, so only the cap can end it.
+    act(() => {
+      let height = 1000;
+      for (let frame = 0; frame < 40; frame++) {
+        height += 100;
+        setScrollHeight(el, height);
+        vi.advanceTimersByTime(16);
+      }
+    });
+
+    // The cap handed control back rather than chasing the stream forever.
+    expect(machine.getState().authority.kind).toBe("userControlled");
   });
 
   it("restores to message position when saved", () => {
