@@ -181,7 +181,8 @@ class CreateAgentRequest(RequestModel):
     # Mutually exclusive with `backend_model`: a create names its model on
     # exactly one harness's terms — `model` for Claude's static list,
     # `backend_model` (the chosen `ModelOption`) for a backend-sourced catalog
-    # (pi). A pi prompt requires `backend_model`.
+    # (pi). A pi prompt requires `backend_model`; a promptless create must not
+    # carry one (post-start selection owns that case).
     model: LLMModel | None = None
     backend_model: ModelOption | None = None
     interface: str = TaskInterface.TERMINAL.value

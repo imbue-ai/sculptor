@@ -2308,7 +2308,20 @@ def create_workspace_agent(
                 settings=settings,
             )
 
-        # No prompt — create agent in waiting state
+        # No prompt — create agent in waiting state. There is no turn to run a
+        # backend-model selection under (post-start selection owns that case),
+        # so reject one rather than silently dropping it.
+        if agent_request.backend_model is not None:
+            raise HTTPException(
+                status_code=422,
+                detail=[
+                    {
+                        "loc": ["body", "backend_model"],
+                        "msg": "backend_model requires a prompt — a promptless create selects pi's model after start",
+                        "type": "value_error",
+                    }
+                ],
+            )
         _prevent_action_if_out_of_free_space(services)
 
         workspace_tasks = _get_tasks_for_workspace(workspace, transaction)
