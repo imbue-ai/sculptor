@@ -472,6 +472,43 @@ describe("NewWorkspaceForm", () => {
     expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA)).toHaveValue("");
   });
 
+  it("does not stash an untouched seeded open — the prefill belongs to the auto-open only", () => {
+    // First-run auto-open: the app seeds the prompt; the user dismisses
+    // without editing. An unedited prefill is not the user's work, so the
+    // sidebar reopen is a plain open with no prefill.
+    const store = createStore();
+    store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
+    renderWithProviders(
+      <NewWorkspaceForm initialPrompt="/sculptor:help get started" onCreated={vi.fn()} onDismiss={vi.fn()} />,
+      { store },
+    );
+    expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA)).toHaveValue("/sculptor:help get started");
+    cleanup();
+
+    renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
+    expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA)).toHaveValue("");
+  });
+
+  it("stashes edited fields while an untouched seed still stays out", () => {
+    // The seed masking is per-field: editing the title makes it the user's
+    // content, but the untouched seeded prompt still belongs to the auto-open
+    // only and must not ride along into the next plain open.
+    const store = createStore();
+    store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
+    renderWithProviders(
+      <NewWorkspaceForm initialPrompt="/sculptor:help get started" onCreated={vi.fn()} onDismiss={vi.fn()} />,
+      { store },
+    );
+    fireEvent.change(screen.getByTestId(ElementIds.WORKSPACE_NAME_INPUT), {
+      target: { value: "My onboarding workspace" },
+    });
+    cleanup();
+
+    renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
+    expect(screen.getByTestId(ElementIds.WORKSPACE_NAME_INPUT)).toHaveValue("My onboarding workspace");
+    expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA)).toHaveValue("");
+  });
+
   it("lets an explicit open seed beat a stashed draft", () => {
     const store = createStore();
     store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
