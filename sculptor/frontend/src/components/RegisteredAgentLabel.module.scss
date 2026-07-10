@@ -1,0 +1,8 @@
+// The muted origin tag appended to a registered terminal agent's display name.
+// gray-10 matches the secondary text in the add-panel menu; the tag inherits
+// its font size from the surrounding picker row. The name/tag gap comes from a
+// literal space in the markup (see RegisteredAgentLabel.tsx), which doubles as
+// the accessible-name separator, so no margin is needed here.
+.terminalTag {
+  color: var(--gray-10);
+}

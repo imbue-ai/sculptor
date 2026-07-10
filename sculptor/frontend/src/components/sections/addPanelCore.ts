@@ -224,6 +224,11 @@ export type AgentTypeOption = {
 // The agent-type sub-menu options: Claude, pi, and each registered terminal-agent
 // program. No bare "Terminal" agent type — terminal creation belongs to the
 // dedicated "New terminal" row.
+//
+// A registered option's label is the registration's bare display name; the
+// muted "terminal" origin marker is applied where the option is rendered (via
+// RegisteredAgentLabel), keyed off agentType === "registered", so this pure
+// builder stays free of JSX/styling.
 export function buildAgentTypeOptions(inputs: {
   registrations: ReadonlyArray<TerminalAgentRegistration>;
 }): ReadonlyArray<AgentTypeOption> {
