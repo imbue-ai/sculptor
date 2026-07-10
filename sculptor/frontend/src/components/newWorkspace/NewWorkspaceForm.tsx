@@ -81,6 +81,12 @@ type NewWorkspaceFormProps = {
   onWorkspaceCreated?: (workspaceId: string) => void;
   /** Called after a successful create when "keep open" is off. */
   onCreated: () => void;
+  /**
+   * Called when the form needs its host dialog closed without a create — the
+   * pi empty-state CTA navigates to Settings → Pi, which lands underneath the
+   * dialog, so the navigation only becomes visible once the host dismisses.
+   */
+  onDismiss: () => void;
 };
 
 /**
@@ -98,6 +104,7 @@ export const NewWorkspaceForm = ({
   initialBranchName,
   onWorkspaceCreated,
   onCreated,
+  onDismiss,
 }: NewWorkspaceFormProps): ReactElement => {
   // State and hooks — atoms
   const projects = useAtomValue(projectsArrayAtom);
@@ -264,7 +271,8 @@ export const NewWorkspaceForm = ({
   // Functions and callbacks
   const handleGoToPiSettings = useCallback((): void => {
     openSettings(SettingsSection.PI);
-  }, [openSettings]);
+    onDismiss();
+  }, [openSettings, onDismiss]);
   const handleProjectChange = useCallback((nextProjectId: string): void => {
     setSelectedProjectId(nextProjectId);
     // Switching repos invalidates branch choices made against the old repo.

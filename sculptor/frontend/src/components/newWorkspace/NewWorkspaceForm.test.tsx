@@ -7,6 +7,7 @@ import type { ModelOption, Project } from "~/api";
 import { ElementIds, WorkspaceInitializationStrategy } from "~/api";
 import { updateProjectsAtom } from "~/common/state/atoms/projects.ts";
 import { renderWithProviders } from "~/common/testUtils.tsx";
+import { SettingsSection } from "~/pages/settings/sections.ts";
 
 import { keepNewWorkspaceModalOpenAtom, lastWorkspaceCreationSettingsAtom } from "./newWorkspaceAtoms.ts";
 import { NewWorkspaceForm } from "./NewWorkspaceForm.tsx";
@@ -43,6 +44,13 @@ vi.mock("~/common/state/hooks/useCreateWorkspace.ts", () => ({
 // three catalog states (resolving / populated / empty) the modal must handle.
 vi.mock("~/common/state/hooks/usePiModels.ts", () => ({
   usePiModels: (): unknown => mockUsePiModels(),
+}));
+
+// Settings navigation is a route change; the CTA tests only assert the form
+// asks for the right section.
+const { mockOpenSettings } = vi.hoisted(() => ({ mockOpenSettings: vi.fn() }));
+vi.mock("~/common/state/hooks/useOpenSettings.ts", () => ({
+  useOpenSettings: (): unknown => mockOpenSettings,
 }));
 
 const PI_MODEL_DEFAULT: ModelOption = { provider: "anthropic", modelId: "sonnet", displayName: "Sonnet" };
@@ -122,7 +130,7 @@ const renderForm = (
   if (options.keepOpen) {
     store.set(keepNewWorkspaceModalOpenAtom, true);
   }
-  return renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} {...props} />, { store });
+  return renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} {...props} />, { store });
 };
 
 // Seed pi as the first-agent type via the last-create settings (pi availability
@@ -135,7 +143,7 @@ const renderPiForm = (props: Partial<FormProps> = {}): ReturnType<typeof renderW
     agentType: "pi",
     initStrategy: WorkspaceInitializationStrategy.WORKTREE,
   });
-  return renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} {...props} />, { store });
+  return renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} {...props} />, { store });
 };
 
 // The Create button stays disabled until the (mocked) project fetch resolves a
@@ -309,6 +317,23 @@ describe("NewWorkspaceForm", () => {
       await waitFor(() => expect(createButton).toBeDisabled());
       // The no-usable-model surface routes the user to authenticate a provider.
       expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_PI_EMPTY_STATE)).toBeInTheDocument();
+    });
+
+    it("routes the empty-state CTA to pi settings and dismisses the dialog", async () => {
+      // The settings page opens underneath the host dialog, so the CTA must
+      // also dismiss it — otherwise the modal keeps covering the page it opened.
+      mockUsePiModels.mockReturnValue(piModelsEmpty());
+      const onDismiss = vi.fn();
+      renderPiForm({ onDismiss });
+
+      fireEvent.change(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA), {
+        target: { value: "do a thing" },
+      });
+      await waitFor(() => expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_PI_EMPTY_STATE)).toBeInTheDocument());
+
+      fireEvent.click(screen.getByTestId(ElementIds.NEW_WORKSPACE_PI_EMPTY_STATE));
+      expect(mockOpenSettings).toHaveBeenCalledWith(SettingsSection.PI);
+      expect(onDismiss).toHaveBeenCalledTimes(1);
     });
 
     it("enables a pi prompt against a populated catalog and creates with the default model preselected", async () => {
