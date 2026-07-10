@@ -49,7 +49,7 @@ def expect_desktop_layout(page: Page) -> None:
     expect(page.get_by_test_id(ElementIDs.MOBILE_WORKSPACE_SHELL)).to_have_count(0)
 
 
-def enter_mobile_workspace(page: Page, viewport: dict[str, int] = MOBILE_VIEWPORT) -> "PlaywrightMobileWorkspaceShell":
+def enter_mobile_workspace(page: Page, viewport: dict[str, int] | None = None) -> "PlaywrightMobileWorkspaceShell":
     """Cross the 768px breakpoint into the mobile Workspace shell.
 
     Resizes to ``viewport`` (a phone width) and forces a full SPA reload so
@@ -60,7 +60,7 @@ def enter_mobile_workspace(page: Page, viewport: dict[str, int] = MOBILE_VIEWPOR
     the same agent. Call AFTER ``start_task_and_wait_for_ready`` (which creates the
     workspace/agent at the default desktop viewport).
     """
-    page.set_viewport_size(viewport)
+    page.set_viewport_size(viewport if viewport is not None else MOBILE_VIEWPORT)
     hash_parts = page.url.split("#", 1)
     target_hash = f"#{hash_parts[1]}" if len(hash_parts) > 1 else "#/"
     full_spa_reload(page, target_hash=target_hash)
