@@ -3659,6 +3659,120 @@ def test_turn_metrics_attached_when_stopped() -> None:
     assert completed_assistant[0].stopped is True
 
 
+def test_unqueue_during_background_wait_does_not_stamp_turn_footer() -> None:
+    """Unqueuing a message while the turn is still running (waiting on a
+    background task) must not stamp that turn's pending metrics onto its
+    in-progress message.
+
+    Repro: while the agent waits for a background task, its foreground turn has
+    already emitted ``TurnMetricsAgentMessage`` (so metrics are *pending*) but the
+    request stays open — ``RequestSuccess`` for the real turn has not arrived yet.
+    Queue a message and then unqueue it in that window: the RemoveQueuedMessage
+    lifecycle emits its OWN ``RequestStarted``/``RequestSuccess`` pair. That
+    lifecycle ``RequestSuccess`` does NOT belong to the active turn, so it must
+    not run end-of-turn side effects. Previously it did — unconditionally
+    attaching the pending metrics (a spurious turn footer with token counts that
+    persisted until the turn actually finished and survived a reload) and
+    clearing the background-task wait state. Mirrors the ``can_finalize`` gate in
+    the RequestStopped branch.
+    """
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    # Turn A streams its foreground response and launches a background task.
+    user_message = ChatInputUserMessage(text="do a bg thing", model_name=LLMModel.CLAUDE_4_SONNET)
+    state = convert_agent_messages_to_task_update(
+        [user_message],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+
+    assistant_message_id = AssistantMessageID("assistant-bg-wait")
+    metrics = _make_turn_metrics()
+    state = convert_agent_messages_to_task_update(
+        [
+            RequestStartedAgentMessage(request_id=user_message.message_id),
+            ResponseBlockAgentMessage(
+                role="assistant",
+                assistant_message_id=assistant_message_id,
+                message_id=AgentMessageID(),
+                content=(TextBlock(text="Launching background work"),),
+            ),
+            BackgroundTaskStartedAgentMessage(
+                background_task_id="bg-task-1",
+                tool_use_id=ToolUseID("toolu-bg"),
+                description="Find Python files",
+            ),
+            # Foreground turn-end: metrics are emitted but the request stays open
+            # because the background task is still in flight (no RequestSuccess yet).
+            TurnMetricsAgentMessage(turn_metrics=metrics),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+    # Sanity: the turn is still running (metrics only pending, not attached), and
+    # the background-task wait is in effect.
+    assert state.in_progress_chat_message is not None
+    assert state.in_progress_chat_message.turn_metrics is None
+    assert state.in_progress_user_message_id == user_message.message_id
+    assert set(state.pending_background_task_ids) == {"bg-task-1"}
+
+    # User queues a message, then unqueues it via the RemoveQueuedMessage
+    # lifecycle (its own RequestStarted/RequestSuccess pair).
+    queued_message = ChatInputUserMessage(text="test", model_name=LLMModel.CLAUDE_4_SONNET)
+    state = convert_agent_messages_to_task_update(
+        [queued_message],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+    assert len(state.queued_chat_messages) == 1
+
+    remove_request_id = AgentMessageID()
+    state = convert_agent_messages_to_task_update(
+        [
+            RequestStartedAgentMessage(request_id=remove_request_id),
+            RemoveQueuedMessageAgentMessage(removed_message_id=queued_message.message_id),
+            RequestSuccessAgentMessage(request_id=remove_request_id, interrupted=False),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+
+    # The turn is still running — the lifecycle RequestSuccess must NOT have
+    # finalized it or stamped the pending metrics onto the in-progress message.
+    assert state.in_progress_chat_message is not None, "the active turn must not be finalized by the remove lifecycle"
+    assert state.in_progress_chat_message.turn_metrics is None, (
+        "pending turn metrics must not be attached to the still-running turn (spurious turn footer)"
+    )
+    assert state.in_progress_chat_message.stopped is False
+    assert state.in_progress_user_message_id == user_message.message_id
+    assert len(state.queued_chat_messages) == 0
+    # The background-task wait must survive — the lifecycle success must not clear it.
+    assert set(state.pending_background_task_ids) == {"bg-task-1"}
+
+    # When the real turn finally finishes, the (preserved) metrics attach then —
+    # so the footer still shows on the completed message at the correct time.
+    state = convert_agent_messages_to_task_update(
+        [RequestSuccessAgentMessage(request_id=user_message.message_id)],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+    assert state.in_progress_chat_message is None
+    completed_assistant = [m for m in state.chat_messages if m.role == ChatMessageRole.ASSISTANT]
+    assert len(completed_assistant) == 1
+    assert completed_assistant[0].turn_metrics == metrics
+
+
 # ========== Background Task Notification Tests ==========
 
 
