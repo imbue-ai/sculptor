@@ -116,7 +116,11 @@ const parsePosition = (raw: string): Position | null => {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed === "object" && parsed !== null && "x" in parsed && "y" in parsed) {
       const { x, y } = parsed;
-      if (typeof x === "number" && typeof y === "number") return { x, y };
+      // Finite only: JSON like 1e999 parses to Infinity, which would render
+      // as invalid left/top CSS and strand the overlay off-screen.
+      if (typeof x === "number" && Number.isFinite(x) && typeof y === "number" && Number.isFinite(y)) {
+        return { x, y };
+      }
     }
   } catch {
     // An unset or malformed setting means "never dragged": anchored default.
@@ -259,12 +263,19 @@ export const PreviewSwitcherOverlay = (): ReactElement | null => {
   const onOverlayPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>): void => {
       const box = boxRef.current;
-      if (!event.isPrimary || box === null) return;
+      // Left button only (touch reports 0), so right-click still opens the
+      // context menu instead of dragging.
+      if (!event.isPrimary || event.button !== 0 || box === null) return;
       wasDraggedRef.current = false;
       const rect = box.getBoundingClientRect();
       const startX = event.clientX;
       const startY = event.clientY;
+      // Only the initiating pointer drives the drag — the window-level
+      // listeners also see other pointers (a second touch), which must
+      // neither move the overlay nor end the drag early.
+      const pointerId = event.pointerId;
       const onMove = (moveEvent: PointerEvent): void => {
+        if (moveEvent.pointerId !== pointerId) return;
         const deltaX = moveEvent.clientX - startX;
         const deltaY = moveEvent.clientY - startY;
         if (!wasDraggedRef.current && Math.hypot(deltaX, deltaY) < DRAG_THRESHOLD_PX) return;
@@ -272,7 +283,8 @@ export const PreviewSwitcherOverlay = (): ReactElement | null => {
         setIsDragging(true);
         setDisplayPosition(clampPosition({ x: rect.left + deltaX, y: rect.top + deltaY }, rect.width, rect.height));
       };
-      const onEnd = (): void => {
+      const onEnd = (endEvent: PointerEvent): void => {
+        if (endEvent.pointerId !== pointerId) return;
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onEnd);
         window.removeEventListener("pointercancel", onEnd);
