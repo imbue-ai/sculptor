@@ -1,11 +1,12 @@
 import { Theme } from "@radix-ui/themes";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AuthenticatedProviderEntry } from "~/api";
-import { ProviderGroup } from "~/api";
+import { ElementIds, ProviderGroup } from "~/api";
 
+import type { PiLoginRequestView } from "./PiLoginDialog.tsx";
 import { PiProvidersArea } from "./PiProvidersArea.tsx";
 import { groupProviders } from "./piProvidersGrouping.ts";
 
@@ -17,9 +18,18 @@ vi.mock("~/common/state/hooks/usePiAuthenticatedProviders", () => ({
   usePiAuthenticatedProviders: mockUsePiAuthenticatedProviders,
 }));
 
-// The login dialog embeds an xterm terminal; these tests never open it.
+// The real login dialog embeds an xterm terminal; the stub echoes the request it
+// receives so tests can assert what the area hands it.
 vi.mock("./PiLoginDialog.tsx", () => ({
-  PiLoginDialog: (): ReactElement | null => null,
+  PiLoginDialog: ({ request }: { request: PiLoginRequestView }): ReactElement => (
+    <div
+      data-testid="fake-login-dialog"
+      data-mode={request.mode}
+      data-provider-id={request.providerId ?? ""}
+      data-group={request.group ?? ""}
+      data-supports-subscription={String(request.supportsSubscription)}
+    />
+  ),
 }));
 
 const makeProvider = (overrides: Partial<AuthenticatedProviderEntry>): AuthenticatedProviderEntry => ({
@@ -56,6 +66,36 @@ describe("PiProvidersArea copy", () => {
     renderProvidersArea([makeProvider({ inAuthJson: true })]);
     expect(screen.getByText(/The list of connected providers is synced with/)).toBeTruthy();
     expect(screen.getByText("~/.pi/agent/auth.json")).toBeTruthy();
+  });
+
+  it("hands the dialog the clicked provider's auth shape on login", () => {
+    renderProvidersArea([
+      makeProvider({
+        providerId: "openai-codex",
+        displayName: "ChatGPT Plus/Pro (Codex)",
+        group: ProviderGroup.SUBSCRIPTION_ONLY,
+        supportsSubscription: true,
+        envVarNames: [],
+      }),
+    ]);
+    fireEvent.click(screen.getByTestId(`${ElementIds.PI_PROVIDER_ADD_CELL}-openai-codex`));
+
+    const dialog = screen.getByTestId("fake-login-dialog");
+    expect(dialog.getAttribute("data-mode")).toBe("login");
+    expect(dialog.getAttribute("data-provider-id")).toBe("openai-codex");
+    expect(dialog.getAttribute("data-group")).toBe("subscription_only");
+    expect(dialog.getAttribute("data-supports-subscription")).toBe("true");
+  });
+
+  it("hands the dialog the clicked provider's auth shape on disconnect", () => {
+    renderProvidersArea([makeProvider({ providerId: "anthropic", inAuthJson: true, supportsSubscription: true })]);
+    fireEvent.click(screen.getByTestId(`${ElementIds.PI_PROVIDER_DISCONNECT_BUTTON}-anthropic`));
+
+    const dialog = screen.getByTestId("fake-login-dialog");
+    expect(dialog.getAttribute("data-mode")).toBe("logout");
+    expect(dialog.getAttribute("data-provider-id")).toBe("anthropic");
+    expect(dialog.getAttribute("data-group")).toBe("single_key");
+    expect(dialog.getAttribute("data-supports-subscription")).toBe("true");
   });
 
   it("renders connected rows without a per-row credential-source line", () => {

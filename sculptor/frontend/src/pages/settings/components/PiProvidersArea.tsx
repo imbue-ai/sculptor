@@ -15,6 +15,14 @@ import { groupProviders } from "./piProvidersGrouping.ts";
 const displayNameFor = (provider: AuthenticatedProviderEntry): string =>
   provider.displayName || getProviderDisplayName(provider.providerId);
 
+const loginRequestFor = (provider: AuthenticatedProviderEntry, mode: "login" | "logout"): PiLoginRequestView => ({
+  providerId: provider.providerId,
+  displayName: displayNameFor(provider),
+  mode,
+  group: provider.group,
+  supportsSubscription: provider.supportsSubscription,
+});
+
 const SectionEyebrow = ({ children }: { children: ReactNode }): ReactElement => (
   <Text size="1" weight="bold" color="gray" style={{ textTransform: "uppercase", letterSpacing: "0.06em" }}>
     {children}
@@ -169,23 +177,11 @@ export const PiProvidersArea = (): ReactElement => {
   const grouping = useMemo(() => groupProviders(providers), [providers]);
 
   const openLogin = useCallback((provider: AuthenticatedProviderEntry): void => {
-    setLoginRequest({
-      providerId: provider.providerId,
-      displayName: displayNameFor(provider),
-      mode: "login",
-      group: provider.group,
-      supportsSubscription: provider.supportsSubscription,
-    });
+    setLoginRequest(loginRequestFor(provider, "login"));
   }, []);
 
   const openLogout = useCallback((provider: AuthenticatedProviderEntry): void => {
-    setLoginRequest({
-      providerId: provider.providerId,
-      displayName: displayNameFor(provider),
-      mode: "logout",
-      group: provider.group,
-      supportsSubscription: provider.supportsSubscription,
-    });
+    setLoginRequest(loginRequestFor(provider, "logout"));
   }, []);
 
   const openAgnosticLogin = useCallback((): void => {
