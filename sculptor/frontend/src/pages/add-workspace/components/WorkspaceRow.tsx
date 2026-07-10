@@ -1,4 +1,4 @@
-import { ContextMenu, IconButton } from "@radix-ui/themes";
+import { ContextMenu, IconButton, Skeleton } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import { Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
@@ -47,7 +47,13 @@ export const WorkspaceRow = ({
 }: WorkspaceRowProps): ReactElement => {
   const prDefaultTargetBranch = useAtomValue(prDefaultTargetBranchAtom);
   const branchInfo = useWorkspaceBranch(workspace.objectId);
-  const displayBranch = branchInfo?.currentBranch ?? workspace.sourceBranch;
+  // The workspace's own working branch arrives via the WebSocket stream (the
+  // branch poller publishes it for every workspace with a worktree); until it
+  // does, `branchInfo` is null. Don't fall back to `workspace.sourceBranch` —
+  // that's the DIFFERENT base branch the workspace was forked from, so the row
+  // would flash the wrong branch before the real one lands. Show a skeleton until
+  // `currentBranch` is known instead.
+  const currentBranch = branchInfo?.currentBranch;
   const gitProvider = useGitProvider(workspace.projectId);
 
   const rowContent = (
@@ -65,15 +71,21 @@ export const WorkspaceRow = ({
 
       <div className={styles.leftGroup}>
         <span className={styles.name}>{workspace.description}</span>
-        {displayBranch && (
+        {currentBranch !== undefined ? (
           <span className={styles.branch} data-testid={ElementIds.WORKSPACE_ROW_BRANCH}>
-            {displayBranch}
+            {currentBranch}
+          </span>
+        ) : (
+          // Branch not yet streamed in — a delayed-reveal skeleton so a fast load
+          // shows nothing then the real branch, and never the wrong one.
+          <span className={styles.branchSkeletonWrap} data-testid={ElementIds.WORKSPACE_ROW_BRANCH_SKELETON}>
+            <Skeleton className={styles.branchSkeleton} />
           </span>
         )}
       </div>
 
       <div className={styles.rightGroup}>
-        {displayBranch && (
+        {currentBranch !== undefined && (
           <div className={styles.prButton} onClick={(e) => e.stopPropagation()}>
             <PrButton
               workspaceId={workspace.objectId}

@@ -80,6 +80,41 @@ describe("WorkspaceSidebar nav buttons", () => {
   });
 });
 
+describe("WorkspaceSidebar loading state", () => {
+  let store: ReturnType<typeof createStore>;
+
+  beforeEach(() => {
+    store = createStore();
+  });
+
+  afterEach(() => {
+    cleanup();
+    queryClient.clear();
+  });
+
+  it("shows the loading skeleton before the first workspace snapshot arrives", () => {
+    // `workspaceIdsAtom` defaults to `undefined` (its not-yet-loaded sentinel).
+    // The sidebar can't tell that from an empty list without this signal, so the
+    // rail would otherwise render blank during the post-refresh reconnect.
+    seedProject(store, "p1");
+    renderWithProviders(<Sidebar />, { store });
+
+    expect(screen.getByTestId(ElementIds.SIDEBAR_LOADING_SKELETON)).toBeVisible();
+    // The real repo list is withheld while loading, so a seeded repo's group
+    // (and its "No workspaces yet" hint) must not show through the skeleton.
+    expect(screen.queryByTestId(ElementIds.SIDEBAR_REPO_GROUP)).toBeNull();
+  });
+
+  it("replaces the skeleton with the list once the first snapshot lands", () => {
+    // The first frame writes an array — even an empty one — flipping the list out
+    // of its loading sentinel.
+    store.set(workspaceIdsAtom, []);
+    renderWithProviders(<Sidebar />, { store });
+
+    expect(screen.queryByTestId(ElementIds.SIDEBAR_LOADING_SKELETON)).toBeNull();
+  });
+});
+
 describe("WorkspaceSidebar repo groups", () => {
   let store: ReturnType<typeof createStore>;
 

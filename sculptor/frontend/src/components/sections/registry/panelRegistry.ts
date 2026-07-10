@@ -12,6 +12,7 @@ import type { LucideIcon } from "lucide-react";
 import { FileText, GitBranch, GitCommitVertical, Globe, ListChecks, NotebookPen, Sparkles, Zap } from "lucide-react";
 import type { ComponentType } from "react";
 
+import { tasksArrayAtom } from "../../../common/state/atoms/tasks.ts";
 import type { AgentDotStatus } from "../../statusDot/statusUtils.ts";
 import { activePanelIdInSubSectionAtom, panelsInSubSectionAtom } from "../sectionAtoms.ts";
 import type { PanelId, SubSectionId } from "../sectionTypes.ts";
@@ -246,5 +247,33 @@ export const activePanelComponentInSubSectionAtom = atomFamily((subSection: SubS
       return undefined;
     }
     return get(panelRegistryAtom).find((definition) => definition.id === activePanelId)?.component;
+  }),
+);
+
+// True while a sub-section has a placed panel that currently resolves to NO
+// component ONLY because the agent/task snapshot hasn't arrived yet. Agent panels
+// are registered off `tasksArrayAtom` (via useWorkspaceDynamicPanels), which is
+// `undefined` until the first task frame — so on a reload the layout still names
+// an `agent:<taskId>` panel the registry can't resolve, and the sub-section would
+// otherwise fall through to the "Add panel" empty state as if the workspace were
+// empty. SectionBody reads this to show a loading placeholder for that window
+// instead; the resolved-component undefined check alone can't tell "agent panel
+// still loading" from "genuinely empty section".
+//
+// It flips false the moment the task snapshot arrives: the placed panel then either
+// registers (a component resolves, so this is already false) or its task is gone
+// (the section is genuinely empty and correctly shows the empty state). Guarding on
+// a non-empty placement keeps a truly empty sub-section showing its launcher even
+// during the load window.
+export const isSubSectionPanelLoadingAtom = atomFamily((subSection: SubSectionId) =>
+  atom((get): boolean => {
+    if (get(activePanelComponentInSubSectionAtom(subSection)) !== undefined) {
+      return false;
+    }
+
+    if (get(tasksArrayAtom) !== undefined) {
+      return false;
+    }
+    return get(panelsInSubSectionAtom(subSection)).length > 0;
   }),
 );

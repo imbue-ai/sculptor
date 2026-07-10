@@ -592,6 +592,10 @@ class ElementIDs(StrEnum):
     WORKSPACE_NAME_INPUT = "WORKSPACE_NAME_INPUT"
     WORKSPACE_ROW = "WORKSPACE_ROW"
     WORKSPACE_ROW_BRANCH = "WORKSPACE_ROW_BRANCH"
+    # Placeholder shown in place of a recent-workspace row's branch label while
+    # the workspace's current branch is still streaming in (so the row never
+    # flashes the source branch it was forked from).
+    WORKSPACE_ROW_BRANCH_SKELETON = "WORKSPACE_ROW_BRANCH_SKELETON"
     WORKSPACE_SEARCH_INPUT = "WORKSPACE_SEARCH_INPUT"
     ADD_WORKSPACE_EMPTY_STATE = "ADD_WORKSPACE_EMPTY_STATE"
 
@@ -618,6 +622,10 @@ class ElementIDs(StrEnum):
     # beneath a repo that has no workspaces.
     SIDEBAR_ADD_REPO_BUTTON = "SIDEBAR_ADD_REPO_BUTTON"
     SIDEBAR_NO_WORKSPACES_HINT = "SIDEBAR_NO_WORKSPACES_HINT"
+    # Placeholder skeleton shown in the repo-list area while the first workspace
+    # snapshot is still in flight (e.g. right after a hard refresh), before the
+    # list is known to be empty or populated.
+    SIDEBAR_LOADING_SKELETON = "SIDEBAR_LOADING_SKELETON"
 
     # The PaletteDialog shell's dimmed overlay, rendered for every open.
     PALETTE_DIALOG_OVERLAY = "PALETTE_DIALOG_OVERLAY"
@@ -654,6 +662,10 @@ class ElementIDs(StrEnum):
     SECTION_MAXIMIZE_BUTTON = "SECTION_MAXIMIZE_BUTTON"
     SECTION_ACTIVE_RING = "SECTION_ACTIVE_RING"
     SECTION_EMPTY_STATE = "SECTION_EMPTY_STATE"
+    # Placeholder shown in a section body while its placed panel is still
+    # resolving because the agent/task snapshot hasn't arrived yet (e.g. after a
+    # hard refresh), in place of the empty-state launcher.
+    SECTION_LOADING_STATE = "SECTION_LOADING_STATE"
     SECTION_SPLIT_SUBSECTION = "SECTION_SPLIT_SUBSECTION"
     # The collapsed-section drop overlay floating at a window edge during a panel
     # drag; suffixed with the section id (e.g. f"{SECTION_DROP_OVERLAY}-bottom").

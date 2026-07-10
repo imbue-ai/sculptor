@@ -4,6 +4,7 @@ import type { ComponentType } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { TaskStatus } from "~/api";
+import { taskIdsAtom } from "~/common/state/atoms/tasks.ts";
 
 import { EMPTY_WORKSPACE_LAYOUT } from "../persistence/types.ts";
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "../sectionAtoms.ts";
@@ -14,6 +15,7 @@ import {
   buildExtensionPanelDefinitions,
   buildStaticPanelDefinitions,
   isMultiInstanceKind,
+  isSubSectionPanelLoadingAtom,
   panelRegistriesEqual,
   panelRegistryAtom,
   registerPanelComponent,
@@ -248,5 +250,68 @@ describe("resolvedActivePanelIdInSubSectionAtom", () => {
     expect(store.get(resolvedActivePanelIdInSubSectionAtom("left"))).toBe(EXTENSION_PANEL_ID);
     expect(store.get(activePanelComponentInSubSectionAtom("left"))).toBe(extensionComponent);
     expect(store.get(workspaceLayoutAtom).activePanel.left).toBe(EXTENSION_PANEL_ID);
+  });
+});
+
+describe("isSubSectionPanelLoadingAtom", () => {
+  // A layout whose center names an agent panel — the reload state where the
+  // layout is restored from localStorage but the agent panel isn't registered
+  // yet because the task snapshot hasn't arrived.
+  const seedWithAgentPanel = (): ReturnType<typeof createStore> => {
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-agent-loading");
+    store.set(workspaceLayoutAtom, {
+      ...EMPTY_WORKSPACE_LAYOUT,
+      placement: { "agent:t1": "center" },
+      order: { center: ["agent:t1"] },
+      activePanel: { center: "agent:t1" },
+      expanded: { center: true },
+    });
+    return store;
+  };
+
+  it("reports loading when a placed agent panel is unresolved and tasks haven't loaded", () => {
+    const store = seedWithAgentPanel();
+    // `taskIdsAtom` left at its `undefined` default (task snapshot in flight),
+    // registry empty (the agent panel has no definition yet).
+    store.set(panelRegistryAtom, buildStaticPanelDefinitions());
+
+    expect(store.get(activePanelComponentInSubSectionAtom("center"))).toBeUndefined();
+    expect(store.get(isSubSectionPanelLoadingAtom("center"))).toBe(true);
+  });
+
+  it("reports NOT loading once the task snapshot has arrived, even if still unresolved", () => {
+    const store = seedWithAgentPanel();
+    store.set(panelRegistryAtom, buildStaticPanelDefinitions());
+    // The first task frame lands (agentless: an empty array is still "loaded").
+    store.set(taskIdsAtom, []);
+
+    // Component is still unresolved, but the section is now genuinely empty — the
+    // empty-state launcher should show, not the loading placeholder.
+    expect(store.get(activePanelComponentInSubSectionAtom("center"))).toBeUndefined();
+    expect(store.get(isSubSectionPanelLoadingAtom("center"))).toBe(false);
+  });
+
+  it("reports NOT loading once the agent panel resolves to a component", () => {
+    const store = seedWithAgentPanel();
+    // The agent panel registers (its component becomes resolvable).
+    store.set(panelRegistryAtom, [
+      ...buildStaticPanelDefinitions(),
+      ...deriveDynamicPanels([makeAgent({ taskId: "t1" })], []),
+    ]);
+
+    expect(store.get(activePanelComponentInSubSectionAtom("center"))).toBeDefined();
+    expect(store.get(isSubSectionPanelLoadingAtom("center"))).toBe(false);
+  });
+
+  it("reports NOT loading for a genuinely empty sub-section while tasks load", () => {
+    // No panel placed in center; the load window must not paint a loading
+    // placeholder over an empty section (it would flash then clear to the launcher).
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-empty-center");
+    store.set(workspaceLayoutAtom, EMPTY_WORKSPACE_LAYOUT);
+    store.set(panelRegistryAtom, buildStaticPanelDefinitions());
+
+    expect(store.get(isSubSectionPanelLoadingAtom("center"))).toBe(false);
   });
 });
