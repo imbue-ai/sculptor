@@ -17,7 +17,7 @@ multi-stage actions can be attributed to the slow stage.
 
 Measurements are appended as JSONL to a file selected via the
 ``SCULPTOR_PERF_OUTPUT_PATH`` environment variable (default:
-``test-results/perf-measurements.jsonl``).
+``perf-results/perf-measurements.jsonl`` — see ``resolve_output_path``).
 """
 
 from __future__ import annotations
