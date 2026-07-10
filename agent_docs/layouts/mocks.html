@@ -286,19 +286,14 @@ button { font-family: inherit; }
 .act-row.danger, .act-row.danger svg { color: var(--tomato-11, #ff977d); }
 .act-sep { background: var(--gray-a3); height: 1px; margin: 4px 6px; }
 .act-search { border-top: 1px solid var(--gray-a3); color: var(--gray-9); font-size: 13px; padding: 10px 14px; }
-/* Menu-row affordances: a right-aligned switch (tidy toggle), the current binding
-   for the shortcut row, and the capture pill shown while recording a shortcut. */
+/* Menu-row affordances: a right-aligned switch (tidy toggle), and the shortcut
+   row's current binding + a link-out glyph (assignment lives in Keyboard settings). */
 .act-row .toggle { margin-left: auto; }
-.act-row .kbd-cur { color: var(--gray-10); flex-shrink: 0; font-size: 12px; margin-left: auto; }
-.act-row .rec {
-  align-items: center; background: var(--gray-a3); border: 1px dashed var(--gray-a6);
-  border-radius: 4px; color: var(--gray-11); display: none; font-size: 12px; gap: 2px;
-  margin-left: auto; padding: 1px 8px;
+.act-row .kbd-cur {
+  align-items: center; color: var(--gray-10); display: flex; flex-shrink: 0;
+  font-size: 12px; gap: 6px; margin-left: auto;
 }
-.act-row .rec .caret {
-  animation: blink 1.1s steps(1) infinite; border-left: 1.5px solid var(--gray-11);
-  display: inline-block; height: 12px; margin-left: 2px;
-}
+.act-row .kbd-cur svg { color: var(--gray-9); }
 
 /* ============================================================
    Save-current-as dialog (NewWorkspaceForm-style body + footer)
@@ -318,7 +313,7 @@ button { font-family: inherit; }
 .prev {
   border: 1px solid var(--gray-a4); border-radius: 6px; display: grid; gap: 4px;
   grid-template-areas: "l c r" "b b b"; grid-template-columns: 1fr 1.4fr 1fr;
-  grid-template-rows: 1fr 70px; height: 300px; margin: 0 auto; max-width: 560px;
+  grid-template-rows: 1fr 110px; height: 300px; margin: 0 auto; max-width: 560px;
   padding: 4px; width: 100%;
 }
 .prev .cell { border-radius: 4px; display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow: hidden; padding: 8px; }
@@ -345,6 +340,41 @@ button { font-family: inherit; }
 .opt-row .switch { margin-top: 3px; }
 .opt-title { color: var(--gray-11); font-size: 13px; }
 .opt-sub { color: var(--gray-9); font-size: 12px; margin-top: 1px; }
+
+/* ============================================================
+   Keyboard settings — the Layouts group inside Settings ▸ Keybindings.
+   Assigning a layout's shortcut lives here (no bespoke recording UI in the
+   switcher); the ⌘J "Keyboard shortcut" row deep-links to this section.
+   Mirrors KeybindingsSection: search + reset toolbar, group title, rows of
+   title/description + a HotkeyChip on the right.
+   ============================================================ */
+.kbd-body { display: flex; flex-direction: column; overflow: auto; padding: 24px 28px 28px; }
+.kbd-h1 { color: var(--gray-12); font-size: 20px; font-weight: 600; letter-spacing: -0.005em; }
+.kbd-desc { color: var(--gray-10); font-size: 13px; margin: 6px 0 20px; }
+.kbd-tools { align-items: center; display: flex; gap: 12px; justify-content: space-between; margin-bottom: 20px; }
+.kbd-search {
+  background: var(--gray-a2); border: 1px solid var(--gray-a5); border-radius: 6px;
+  color: var(--gray-9); flex: 1; font-size: 13px; max-width: 300px; padding: 7px 10px;
+}
+.kbd-grp-title { color: var(--gray-11); font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+.set-row {
+  align-items: center; border-top: 1px solid var(--gray-a3); display: flex; gap: 28px;
+  justify-content: space-between; padding: 14px 2px;
+}
+.set-label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.set-title { color: var(--gray-12); font-size: 14px; font-weight: 500; }
+.set-desc { color: var(--gray-10); font-size: 13px; }
+/* HotkeyChip — set state (accent chip + clear) and idle state ("Click to set"). */
+.hk-set {
+  align-items: center; background: var(--indigo-a4); border-radius: 6px; color: var(--indigo-12);
+  display: flex; gap: 10px; height: 32px; justify-content: space-between; min-width: 104px; padding: 0 6px 0 12px;
+}
+.hk-set kbd { font-family: inherit; font-size: 13px; }
+.hk-set .hk-x { align-items: center; color: var(--indigo-11); cursor: pointer; display: flex; padding: 4px; }
+.hk-idle {
+  background: var(--gray-a3); border: none; border-radius: 6px; color: var(--gray-11);
+  cursor: pointer; font-size: 13px; height: 32px; padding: 0 14px;
+}
 
 /* Switch (Radix size-1-ish) */
 .switch { background: var(--gray-a6); border-radius: 999px; flex-shrink: 0; height: 14px; position: relative; width: 26px; }
@@ -394,22 +424,18 @@ body[data-state="dialog-search"] .overlay,
 body[data-state="switcher"] .overlay,
 body[data-state="switcher-actions"] .overlay,
 body[data-state="context-menu"] .overlay,
-body[data-state="shortcut-recording"] .overlay,
+body[data-state="keyboard-settings"] .overlay,
 body[data-state="save"] .overlay,
 body[data-state="save-options"] .overlay { background: rgba(0, 0, 0, 0.7); display: block; }
 body[data-state="switcher"] #dlg-switcher { display: flex; }
 body[data-state="switcher-actions"] #dlg-switcher-actions,
-body[data-state="context-menu"] #dlg-switcher-actions,
-body[data-state="shortcut-recording"] #dlg-switcher-actions { display: flex; }
+body[data-state="context-menu"] #dlg-switcher-actions { display: flex; }
+body[data-state="keyboard-settings"] #dlg-keyboard { display: flex; }
 
 /* Right-click a layout row → the same ⌘J menu, anchored at the row instead of
    the bar. Shows the menu is both a keyboard action and a context menu. */
 body[data-state="context-menu"] .act-pop { bottom: auto; right: auto; left: 330px; top: 150px; }
 body[data-state="context-menu"] .bar-btn.active { background: transparent; }
-/* Recording state: the shortcut row swaps its current binding for a capture pill. */
-body[data-state="shortcut-recording"] #act-shortcut { background: var(--gray-a4); }
-body[data-state="shortcut-recording"] #act-shortcut .kbd-cur { display: none; }
-body[data-state="shortcut-recording"] #act-shortcut .rec { display: flex; }
 body[data-state="palette"] .overlay { background: rgba(0, 0, 0, 0.4); display: block; }
 body[data-state="tidy"] .overlay { background: rgba(0, 0, 0, 0.6); display: block; }
 
@@ -637,7 +663,7 @@ body.bare #chrome { display: none; }
       <div class="act-sep"></div>
       <div class="act-row" id="act-shortcut">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/></svg>
-        Keyboard shortcut<span class="sc kbd-cur"><kbd>⌥1</kbd></span><span class="rec">Press keys…<span class="caret"></span></span>
+        Keyboard shortcut<span class="sc kbd-cur"><kbd>⌥1</kbd><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6"/></svg></span>
       </div>
       <div class="act-row">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -853,6 +879,35 @@ body.bare #chrome { display: none; }
   </footer>
 </section>
 
+<!-- ═══════════════ 4c) Keyboard settings — the Layouts group ═══════════════ -->
+<section class="pal" id="dlg-keyboard" style="max-height: min(80vh, 620px);">
+  <div class="kbd-body">
+    <div class="kbd-h1">Keybindings</div>
+    <div class="kbd-desc">Customize keybindings for Sculptor.</div>
+    <div class="kbd-tools">
+      <span class="kbd-search">layout</span>
+      <button class="btn soft">Reset all to defaults</button>
+    </div>
+    <div class="kbd-grp-title">Layouts</div>
+    <div class="set-row">
+      <span class="set-label"><span class="set-title">Apply “Focused” layout</span><span class="set-desc">Switch this workspace to the Focused layout</span></span>
+      <span class="hk-set"><kbd>⌥1</kbd><span class="hk-x"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></span>
+    </div>
+    <div class="set-row">
+      <span class="set-label"><span class="set-title">Apply “Review” layout</span><span class="set-desc">Switch this workspace to the Review layout</span></span>
+      <span class="hk-set"><kbd>⌥2</kbd><span class="hk-x"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></span>
+    </div>
+    <div class="set-row">
+      <span class="set-label"><span class="set-title">Apply “Debugging” layout</span><span class="set-desc">Switch this workspace to the Debugging layout</span></span>
+      <button class="hk-idle">Click to set</button>
+    </div>
+    <div class="set-row">
+      <span class="set-label"><span class="set-title">Apply System Default layout</span><span class="set-desc">Switch this workspace to the System Default layout</span></span>
+      <button class="hk-idle">Click to set</button>
+    </div>
+  </div>
+</section>
+
 <!-- ═══════════════ 5) Tidy confirmation ═══════════════ -->
 <div class="alert-center" id="dlg-tidy">
   <div class="alert">
@@ -884,7 +939,7 @@ body.bare #chrome { display: none; }
   <a href="?state=switcher">Switcher</a>
   <a href="?state=switcher-actions">Actions ⌘J</a>
   <a href="?state=context-menu">Right-click</a>
-  <a href="?state=shortcut-recording">Set shortcut</a>
+  <a href="?state=keyboard-settings">Keyboard settings</a>
   <a href="?state=save">Save as…</a>
   <a href="?state=save-options">Save options</a>
   <a href="?state=tidy">Tidy</a>
