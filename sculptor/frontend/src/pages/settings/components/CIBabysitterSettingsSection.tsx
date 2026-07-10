@@ -4,6 +4,7 @@ import type { ReactElement } from "react";
 import { useState } from "react";
 
 import { type CiBabysitterConfig, ElementIds, UserConfigField } from "../../../api";
+import { formatRegisteredAgentLabel } from "../../../common/state/atoms/agentTabs.ts";
 import {
   ciBabysitterAgentAtom,
   ciBabysitterMergeConflictPromptAtom,
@@ -13,7 +14,6 @@ import {
 } from "../../../common/state/atoms/userConfig.ts";
 import { INSTALL_PI_LABEL, usePiAgentOption } from "../../../common/state/hooks/usePiAgentOption.ts";
 import { useTerminalAgentRegistrations } from "../../../common/state/hooks/useTerminalAgentRegistrations.ts";
-import { RegisteredAgentLabel } from "../../../components/RegisteredAgentLabel.tsx";
 import { SettingRow } from "./SettingRow.tsx";
 import { SettingsSectionLayout } from "./SettingsSection.tsx";
 import { TextAreaSettingRow } from "./TextAreaSettingRow.tsx";
@@ -150,7 +150,7 @@ export const CIBabysitterSettingsSection = ({ onSettingChange }: CIBabysitterSet
                 key={registration.registrationId}
                 value={`${REGISTERED_VALUE_PREFIX}${registration.registrationId}`}
               >
-                <RegisteredAgentLabel displayName={registration.displayName} />
+                {formatRegisteredAgentLabel(registration.displayName)}
               </Select.Item>
             ))}
           </Select.Content>

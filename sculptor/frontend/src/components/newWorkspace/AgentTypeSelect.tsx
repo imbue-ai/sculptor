@@ -1,17 +1,17 @@
 import { Flex, Select, Text } from "@radix-ui/themes";
 import { BotIcon } from "lucide-react";
-import type { ReactElement, ReactNode } from "react";
+import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
 import {
   AGENT_TYPE_LABELS,
   encodeRegisteredAgentType,
+  formatRegisteredAgentLabel,
   parseStoredAgentType,
   type StoredAgentType,
 } from "~/common/state/atoms/agentTabs.ts";
 import { INSTALL_PI_LABEL, usePiAgentOption } from "~/common/state/hooks/usePiAgentOption.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
-import { RegisteredAgentLabel } from "~/components/RegisteredAgentLabel.tsx";
 
 type AgentTypeSelectProps = {
   /** The stored agent type (e.g. "claude", "registered:<id>"). */
@@ -37,16 +37,12 @@ export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectP
     agentType === "registered"
       ? registrations.find((r) => r.registrationId === registrationId)?.displayName
       : undefined;
-  const triggerLabel: ReactNode =
-    agentType === "registered" ? (
-      registeredDisplayName === undefined ? (
-        "Registered"
-      ) : (
-        <RegisteredAgentLabel displayName={registeredDisplayName} />
-      )
-    ) : (
-      AGENT_TYPE_LABELS[agentType]
-    );
+  const triggerLabel =
+    agentType === "registered"
+      ? registeredDisplayName === undefined
+        ? "Registered"
+        : formatRegisteredAgentLabel(registeredDisplayName)
+      : AGENT_TYPE_LABELS[agentType];
 
   return (
     <Select.Root
@@ -100,7 +96,7 @@ export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectP
             data-testid={ElementIds.AGENT_TYPE_OPTION_REGISTERED}
             data-registration-id={registration.registrationId}
           >
-            <RegisteredAgentLabel displayName={registration.displayName} />
+            {formatRegisteredAgentLabel(registration.displayName)}
           </Select.Item>
         ))}
       </Select.Content>

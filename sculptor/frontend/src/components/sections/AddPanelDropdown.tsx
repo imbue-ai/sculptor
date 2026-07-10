@@ -14,16 +14,14 @@
 
 import { DropdownMenu, Tooltip } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
-import type { PointerEvent as ReactPointerEvent, ReactElement, ReactNode } from "react";
+import type { PointerEvent as ReactPointerEvent, ReactElement } from "react";
 import { useRef } from "react";
 
 import { type AgentTypeName, ElementIds } from "~/api";
 import { useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
-import { parseStoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { INSTALL_PI_LABEL, usePiAgentOption } from "~/common/state/hooks/usePiAgentOption.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 import { mergeClasses } from "~/common/Utils.ts";
-import { RegisteredAgentLabel } from "~/components/RegisteredAgentLabel.tsx";
 
 import {
   availableStaticPanelsAtom,
@@ -47,7 +45,7 @@ const MenuRow = ({
   shortcut,
   description,
 }: {
-  label: ReactNode;
+  label: string;
   shortcut?: string;
   description?: string;
 }): ReactElement => {
@@ -127,25 +125,6 @@ const AddPanelMenuItems = ({
   // rendering / derived data
   const agentTypeOptions = buildAgentTypeOptions({ registrations });
 
-  // The "New {recent} agent" row: for a registered terminal agent whose
-  // registration still resolves, render the name with the muted "terminal" tag
-  // inline in the sentence ("New {name} terminal agent"); otherwise fall back to
-  // the plain string label (built-in types, or a removed registration that
-  // collapses to "agent").
-  const { agentType: recentAgentTypeName, registrationId: recentRegistrationId } =
-    parseStoredAgentType(recentAgentType);
-  const recentRegistration =
-    recentAgentTypeName === "registered"
-      ? registrations.find((registration) => registration.registrationId === recentRegistrationId)
-      : undefined;
-  const recentAgentRowLabel: ReactNode = recentRegistration ? (
-    <>
-      New <RegisteredAgentLabel displayName={recentRegistration.displayName} /> agent
-    </>
-  ) : (
-    `New ${recentAgentLabel(recentAgentType, registrations)} agent`
-  );
-
   return (
     <>
       <DropdownMenu.Item
@@ -155,7 +134,10 @@ const AddPanelMenuItems = ({
           actions.createRecentAgent(subSection);
         }}
       >
-        <MenuRow label={recentAgentRowLabel} shortcut={newAgentShortcut} />
+        {/* recentAgentLabel already carries the "in terminal" marker for a
+            registered recent type, so the row reads e.g. "New Claude in
+            terminal agent". */}
+        <MenuRow label={`New ${recentAgentLabel(recentAgentType, registrations)} agent`} shortcut={newAgentShortcut} />
       </DropdownMenu.Item>
 
       <DropdownMenu.Sub>
@@ -172,13 +154,6 @@ const AddPanelMenuItems = ({
             // "Install Pi" and routes to Settings → Pi instead of creating a pi
             // agent that cannot launch.
             const isUnavailablePi = option.agentType === "pi" && !isPiAvailable;
-            const rowLabel: ReactNode = isUnavailablePi ? (
-              INSTALL_PI_LABEL
-            ) : option.agentType === "registered" ? (
-              <RegisteredAgentLabel displayName={option.label} />
-            ) : (
-              option.label
-            );
             return (
               <DropdownMenu.Item
                 key={option.key}
@@ -193,7 +168,7 @@ const AddPanelMenuItems = ({
                   actions.createAgent(option.agentType, option.registrationId, subSection);
                 }}
               >
-                <MenuRow label={rowLabel} />
+                <MenuRow label={isUnavailablePi ? INSTALL_PI_LABEL : option.label} />
               </DropdownMenu.Item>
             );
           })}
