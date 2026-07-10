@@ -1,10 +1,12 @@
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createStore } from "jotai";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ModelOption, Project } from "~/api";
+import type { DependenciesStatus, ModelOption, Project } from "~/api";
 import { ElementIds, WorkspaceInitializationStrategy } from "~/api";
+import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { updateProjectsAtom } from "~/common/state/atoms/projects.ts";
 import { renderWithProviders } from "~/common/testUtils.tsx";
 import { SettingsSection } from "~/pages/settings/sections.ts";
@@ -356,5 +358,30 @@ describe("NewWorkspaceForm", () => {
         ),
       );
     });
+  });
+
+  it("dismisses the dialog when Install Pi routes to settings from the agent picker", async () => {
+    // With no usable pi binary, the picker's pi entry reads "Install Pi" and
+    // routes to Settings — which lands underneath the host dialog, so choosing
+    // it must dismiss the dialog exactly like the model picker's CTA.
+    const onDismiss = vi.fn();
+    const store = createStore();
+    store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
+    store.set(dependenciesStatusAtom, {
+      git: { installed: true },
+      claude: { installed: false },
+      pi: { installed: false },
+      gh: { installed: false },
+    } as DependenciesStatus);
+    renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={onDismiss} />, { store });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId(ElementIds.ADD_WORKSPACE_AGENT_TYPE_SELECT));
+    const piOption = await screen.findByTestId(ElementIds.AGENT_TYPE_OPTION_PI);
+    expect(piOption).toHaveTextContent("Install Pi");
+    await user.click(piOption);
+
+    expect(mockOpenSettings).toHaveBeenCalledWith(SettingsSection.PI);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });

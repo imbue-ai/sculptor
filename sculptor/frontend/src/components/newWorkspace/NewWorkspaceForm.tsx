@@ -489,7 +489,12 @@ export const NewWorkspaceForm = ({
             />
           )}
 
-          <AgentTypeSelect value={agentTypeValue} onChange={setAgentTypeValue} className={styles.toolbarPill} />
+          <AgentTypeSelect
+            value={agentTypeValue}
+            onChange={setAgentTypeValue}
+            onRouteToPiSettings={onDismiss}
+            className={styles.toolbarPill}
+          />
 
           <ModeSelect value={mode} onChange={handleModeChange} className={styles.toolbarPill} />
 
