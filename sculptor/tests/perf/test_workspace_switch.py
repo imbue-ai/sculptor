@@ -125,7 +125,8 @@ def blend_with_diff_and_files(page: Page) -> None:
     "blend",
     [
         pytest.param(blend_default, id="default"),
-        pytest.param(blend_with_diff_and_files, id="with_diff_and_files", marks=pytest.mark.perf_heavy),
+        # ~1 min on offload — cheap enough to stay in the per-PR fast lane.
+        pytest.param(blend_with_diff_and_files, id="with_diff_and_files"),
     ],
 )
 @user_story("perf: switching between workspaces should not over-fetch or over-render")

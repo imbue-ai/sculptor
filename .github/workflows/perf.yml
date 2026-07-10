@@ -7,7 +7,10 @@ name: perf
 # docs/development/scu-1294-perf-ci-notes.md for the design.
 
 on:
+  # ``labeled`` so adding the "performance" label re-runs and picks up the full
+  # matrix (see the recipe-selection step); the default types cover the rest.
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   merge_group:
   push:
     branches: [main]
@@ -108,21 +111,28 @@ jobs:
             shared/modal/MODAL_TOKEN_ID
             shared/modal/MODAL_TOKEN_SECRET
 
-      # Scenario subset: PRs run the fast subset (cheap default blends) for quick
-      # signal; main records the full matrix (including perf_heavy scenarios) so
-      # its baseline note covers every scenario a PR might later diff against.
-      # offload has no CLI marker override, so the fast lane runs a config derived
-      # from offload-perf.toml (test-offload-perf-fast); see the just recipes.
+      # Scenario subset: PRs run the fast subset (~5-6 min) for quick signal;
+      # main records the full matrix (including perf_heavy scenarios like the
+      # ~6.5 min long_history) so its baseline note covers every scenario a PR
+      # might later diff against. A PR labeled "performance" opts into the full
+      # matrix too — for changes that touch a heavy scenario's surface (e.g. chat
+      # scroll). offload has no CLI marker override, so the fast lane runs a
+      # config derived from offload-perf.toml (test-offload-perf-fast); see the
+      # just recipes.
       - name: Run perf scenarios on offload
         id: tests
+        env:
+          PERF_LABELED: ${{ contains(github.event.pull_request.labels.*.name, 'performance') }}
         run: |
           ulimit -n 8192
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            PERF_RECIPE=test-offload-perf-fast
-          else
+          # Full matrix on non-PR events (main push) or when the PR carries the
+          # "performance" label; the fast subset otherwise.
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "$PERF_LABELED" = "true" ]; then
             PERF_RECIPE=test-offload-perf
+          else
+            PERF_RECIPE=test-offload-perf-fast
           fi
-          echo "perf recipe: $PERF_RECIPE"
+          echo "perf recipe: $PERF_RECIPE (event=${{ github.event_name }}, performance-label=$PERF_LABELED)"
           set +e
           just "$PERF_RECIPE" --ci 2>&1 | tee offload-out.log
           OFFLOAD_EXIT=${PIPESTATUS[0]}

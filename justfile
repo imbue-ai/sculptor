@@ -1687,9 +1687,10 @@ test-offload-perf *args="":
     ulimit -n 8192
     offload run -c offload-perf.toml --trace {{args}} || [ $? -eq 2 ]
 
-# Fast perf subset on offload (per-PR lane): deselects the perf_heavy scenarios
-# (long_history, with_diff_and_files, long_chat_scrolled) so PRs get quick
-# signal from the cheap default blends; main/nightly runs the full matrix via
+# Fast perf subset on offload (default per-PR lane): deselects the perf_heavy
+# scenarios (long_history ~6.5 min, long_chat_scrolled ~3+ min) that would set
+# the parallel tail; PRs get quick signal (~5-6 min job) from everything else.
+# main — and PRs labeled "performance" — run the full matrix via
 # test-offload-perf. The fast config is derived from offload-perf.toml (single
 # source of truth) rather than committed separately, so the two can't drift.
 [group("test")]
