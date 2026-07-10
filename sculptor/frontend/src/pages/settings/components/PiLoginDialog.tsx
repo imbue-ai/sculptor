@@ -5,7 +5,6 @@ import { type ReactElement, useCallback, useEffect, useState } from "react";
 import { ElementIds, finishPiLogin, getPiLoginStatus, startPiLogin } from "~/api";
 
 import { PiLoginTerminal } from "./PiLoginTerminal.tsx";
-import { PiPasteKeyForm } from "./PiPasteKeyForm.tsx";
 
 /** How often the open modal polls for pi having performed the credential change, so it
  *  auto-closes (and the Providers area refetches) without a manual Done. */
@@ -20,7 +19,7 @@ export type PiLoginRequestView = {
   mode: "login" | "logout";
 };
 
-type DialogView = "chooser" | "terminal" | "paste";
+type DialogView = "intro" | "terminal";
 
 type PiLoginDialogProps = {
   request: PiLoginRequestView;
@@ -29,14 +28,14 @@ type PiLoginDialogProps = {
 };
 
 /**
- * Centered modal hosting the interactive pi /login (or /logout) session. Login opens
- * to a chooser ("Open pi login" terminal vs. "Paste API key instead"); logout starts
+ * Centered modal hosting the interactive pi /login (or /logout) session. Login shows a
+ * short intro whose single "Open pi login" action launches the terminal; logout starts
  * the /logout terminal immediately. While the terminal is live, Escape and
  * outside-clicks are suppressed (Escape is a keystroke pi consumes) — the user leaves
  * via Done, which tears the PTY down. pi writes ~/.pi/agent/auth.json itself.
  */
 export const PiLoginDialog = ({ request, onClose }: PiLoginDialogProps): ReactElement => {
-  const [view, setView] = useState<DialogView>(request.mode === "logout" ? "terminal" : "chooser");
+  const [view, setView] = useState<DialogView>(request.mode === "logout" ? "terminal" : "intro");
   const [activeLoginId, setActiveLoginId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -56,7 +55,7 @@ export const PiLoginDialog = ({ request, onClose }: PiLoginDialogProps): ReactEl
     }
   }, [request]);
 
-  // pi /logout has no chooser — kick off its interactive terminal as soon as the modal
+  // pi /logout has no intro step — kick off its interactive terminal as soon as the modal
   // mounts (the parent remounts the dialog per request, so this fires once per open).
   useEffect(() => {
     if (request.mode !== "logout") {
@@ -153,30 +152,19 @@ export const PiLoginDialog = ({ request, onClose }: PiLoginDialogProps): ReactEl
           </Dialog.Close>
         </Flex>
 
-        {view === "chooser" && (
+        {view === "intro" && (
           <Flex direction="column" gap="3">
             <Text size="2" color="gray">
-              Opening pi login launches an interactive session; pi writes the credential to ~/.pi/agent/auth.json
-              itself. One path covers both API-key and OAuth/subscription providers.
+              Continue your login with a Pi interactive session
             </Text>
-            <Flex gap="2" wrap="wrap">
-              <Button
-                variant="solid"
-                onClick={() => void startSession()}
-                data-testid={ElementIds.PI_PROVIDER_AUTHENTICATE_BUTTON}
-              >
-                Open pi login
-              </Button>
-              {request.providerId !== null && (
-                <Button
-                  variant="soft"
-                  onClick={() => setView("paste")}
-                  data-testid={ElementIds.PI_PROVIDER_PASTE_KEY_SWITCH}
-                >
-                  Paste API key instead
-                </Button>
-              )}
-            </Flex>
+            <Button
+              variant="solid"
+              onClick={() => void startSession()}
+              data-testid={ElementIds.PI_PROVIDER_AUTHENTICATE_BUTTON}
+              style={{ alignSelf: "flex-start" }}
+            >
+              Open pi login
+            </Button>
             {errorMessage !== null && (
               <Text size="2" color="red">
                 {errorMessage}
@@ -198,18 +186,6 @@ export const PiLoginDialog = ({ request, onClose }: PiLoginDialogProps): ReactEl
               <Spinner />
             </Flex>
           ))}
-
-        {view === "paste" && request.providerId !== null && (
-          <Flex direction="column" gap="3">
-            <Text size="2" color="gray">
-              Paste an API key for {request.displayName}. Written merge-safe to ~/.pi/agent/auth.json.
-            </Text>
-            <PiPasteKeyForm providerId={request.providerId} onSaved={() => void teardown()} />
-            <Button variant="ghost" size="1" style={{ alignSelf: "flex-start" }} onClick={() => setView("chooser")}>
-              ← Back to pi login
-            </Button>
-          </Flex>
-        )}
       </Dialog.Content>
     </Dialog.Root>
   );
