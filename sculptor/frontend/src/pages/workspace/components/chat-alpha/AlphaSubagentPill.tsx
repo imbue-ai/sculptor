@@ -146,13 +146,17 @@ export const AlphaSubagentPill = ({
 
   const metadata = subagentMetadataMap?.get(parentBlock.id);
   const result = toolResultMap.get(parentBlock.id);
-  // Background Agent tool_uses (run_in_background=true) get an immediate
-  // "Async agent launched" tool_result that completes in ~0s — that's the
-  // launch ack, not the subagent finishing. For background pills, treat the
-  // arrival of responseText (derived from the subagent's child messages) as
-  // the completion signal, and ignore the launch-ack's durationSeconds.
+  // Background Agent tool_uses (explicit run_in_background or harness-converted
+  // async agents) get an immediate "Async agent launched" tool_result that
+  // completes in ~0s — that's the launch ack, not the subagent finishing. For
+  // background pills, treat the arrival of responseText (derived from the
+  // subagent's child messages) as the completion signal, and ignore the
+  // launch-ack's durationSeconds. isStillRunning=false stops the timer when the
+  // task left the pending set without ever delivering a response.
   const isBackground = metadata?.isBackground === true;
-  const isThinking = isBackground ? !metadata?.responseText : !metadata?.responseText && !result;
+  const isThinking = isBackground
+    ? !metadata?.responseText && metadata?.isStillRunning !== false
+    : !metadata?.responseText && !result;
 
   // Timer: always ticking while thinking, frozen once complete
   const { elapsed } = useElapsedTime(true, isThinking, parentBlock.id);

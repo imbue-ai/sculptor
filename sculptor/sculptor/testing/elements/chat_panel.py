@@ -285,6 +285,17 @@ class PlaywrightChatPanelElement(PlaywrightFilePreviewAndUploadMixin, Playwright
     def get_subagent_pills(self) -> Locator:
         return self.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_PILL)
 
+    # The subagent popover renders in a portal, so its parts are located from
+    # the page (like get_tool_pill_popover), not from the panel subtree.
+    def get_subagent_popover_status(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_POPOVER_STATUS)
+
+    def get_subagent_popover_note(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_POPOVER_NOTE)
+
+    def get_subagent_popover_response(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_POPOVER_RESPONSE)
+
     def get_workflow_pills(self) -> Locator:
         return self.get_by_test_id(ElementIDs.ALPHA_CHAT_WORKFLOW_PILL)
 

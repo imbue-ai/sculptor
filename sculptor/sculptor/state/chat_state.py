@@ -125,6 +125,10 @@ class ToolResultBlock(ContentBlock):
         description="Set server-side from the harness when the originating tool is an interactive-backchannel surface; lets the frontend suppress the result (it renders inside the question panel) by role rather than by tool name. None for a regular tool.",
     )
     description: str | None = Field(default=None, description="Human-readable description of what the tool call does")
+    background_task_id: str | None = Field(
+        default=None,
+        description="Set when this tool call launched a background task (an Agent/Task call converted to an async agent, or a run_in_background Bash): the CLI task id, matchable against pending_background_task_ids. When set, `content` is only the launch acknowledgment — the tool's real outcome arrives later via the task's notification, not in this block.",
+    )
 
 
 class WarningBlock(ContentBlock):
