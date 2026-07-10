@@ -1,16 +1,18 @@
-import { Button, Skeleton, Switch, Text, Tooltip } from "@radix-ui/themes";
+import { Button, Flex, Skeleton, Switch, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { EffortLevel } from "~/api";
+import type { EffortLevel, ModelOption } from "~/api";
 import {
   ElementIds,
   getActiveProjects,
   getMostRecentlyUsedProject,
   type LlmModel,
+  ModelCatalogState,
   WorkspaceInitializationStrategy,
 } from "~/api";
+import { hasNoUsableModel } from "~/common/modelConstants.ts";
 import { isDismissibleOverlayOpen } from "~/common/overlayUtils.ts";
 import {
   lastUsedAgentTypeAtom,
@@ -21,11 +23,14 @@ import { isPiAvailableAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { projectsArrayAtom, updateProjectsAtom } from "~/common/state/atoms/projects.ts";
 import { defaultEffortLevelAtom, defaultModelAtom, isDefaultFastModeAtom } from "~/common/state/atoms/userConfig.ts";
 import { useCreateWorkspace } from "~/common/state/hooks/useCreateWorkspace.ts";
+import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
+import { usePiModels } from "~/common/state/hooks/usePiModels.ts";
 import { useRepoInfo } from "~/common/state/hooks/useRepoInfo.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 import { AgentSettingsControls } from "~/components/AgentSettingsControls.tsx";
 import { BranchSelector } from "~/components/BranchSelector.tsx";
 import { KeyboardHint } from "~/components/KeyboardHint.tsx";
+import { ModelSelector } from "~/components/ModelSelector.tsx";
 import { AgentTypeSelect } from "~/components/newWorkspace/AgentTypeSelect.tsx";
 import { BranchNameField } from "~/components/newWorkspace/BranchNameField.tsx";
 import { useBranchNamePreview } from "~/components/newWorkspace/hooks/useBranchNamePreview.ts";
@@ -38,6 +43,7 @@ import { RepoSelector } from "~/components/RepoSelector.tsx";
 import { resolveStoredAgentType } from "~/components/sections/addPanelCore.ts";
 import { Toast, type ToastContent, ToastType } from "~/components/Toast.tsx";
 import { getMetaKey, isModifierPressed } from "~/electron/utils.ts";
+import { SettingsSection } from "~/pages/settings/sections.ts";
 
 import styles from "./NewWorkspaceForm.module.scss";
 
@@ -113,6 +119,10 @@ export const NewWorkspaceForm = ({
   const [agentEffort, setAgentEffort] = useState<EffortLevel>(defaultEffortLevel as EffortLevel);
   const [isAgentFastMode, setIsAgentFastMode] = useState<boolean>(isDefaultFastMode);
   const [isAgentPlanMode, setIsAgentPlanMode] = useState<boolean>(false);
+  // The user's explicit pick in the pi model picker, if any. The effective
+  // selection is derived from this plus the catalog (below) so it can never drift
+  // out of the catalog; an unset override means "use pi's default".
+  const [piSelectionOverride, setPiSelectionOverride] = useState<ModelOption | undefined>(undefined);
 
   // State and hooks — seed the local form state once, from the preset repo (if
   // any) then the MRU settings. Reading the seed lazily keeps it a mount-time
@@ -152,6 +162,12 @@ export const NewWorkspaceForm = ({
   const effectiveAgentType = resolveEffectiveAgentType(agentTypeValue, registrations).agentType;
   const { repoInfo, fetchRepoInfo, fetchCurrentBranch } = useRepoInfo(selectedProjectId);
   const { isCreating, createWorkspace } = useCreateWorkspace();
+  const openSettings = useOpenSettings();
+  // Fetch pi's host-side catalog only while pi is the selected agent type, so the
+  // probe's latency hides behind the user typing a prompt; the hook's window-focus
+  // refetch picks up a Settings login round-trip on return.
+  const isPiSelected = effectiveAgentType === "pi";
+  const piModels = usePiModels({ enabled: isPiSelected });
   const nameInputRef = useRef<HTMLInputElement>(null);
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const formRef = useRef<HTMLDivElement>(null);
@@ -246,6 +262,9 @@ export const NewWorkspaceForm = ({
   }, [prompt]);
 
   // Functions and callbacks
+  const handleGoToPiSettings = useCallback((): void => {
+    openSettings(SettingsSection.PI);
+  }, [openSettings]);
   const handleProjectChange = useCallback((nextProjectId: string): void => {
     setSelectedProjectId(nextProjectId);
     // Switching repos invalidates branch choices made against the old repo.
@@ -265,6 +284,32 @@ export const NewWorkspaceForm = ({
     setShuffleNonce((prev) => prev + 1);
   }, []);
 
+  const isPromptEmpty = prompt.trim() === "";
+  // The pi catalog as the ModelSelector consumes it: the fetched list, or
+  // NOT_FETCHED_YET while the host-side probe is still resolving (which drives the
+  // picker's loading state rather than a premature empty state).
+  const piCatalog: ReadonlyArray<ModelOption> | ModelCatalogState =
+    piModels.data !== undefined ? piModels.availableModels : ModelCatalogState.NOT_FETCHED_YET;
+  // Shared predicate with the composer: a fetched-but-empty catalog is the
+  // no-usable-model state (no authenticated pi providers).
+  const isPiCatalogEmpty = hasNoUsableModel(true, piCatalog);
+  // The effective pi selection, derived (not stored) so it can't drift from the
+  // catalog: the user's explicit pick while the catalog still offers it, otherwise
+  // pi's default (or the first available). An empty or still-resolving catalog has
+  // no selection.
+  const piSelection: ModelOption | undefined =
+    piModels.availableModels.length === 0
+      ? undefined
+      : (piModels.availableModels.find(
+          (m) => m.provider === piSelectionOverride?.provider && m.modelId === piSelectionOverride?.modelId,
+        ) ??
+        piModels.defaultModel ??
+        piModels.availableModels[0]);
+  // The spec's one submission rule: a pi prompt is submittable only against a
+  // resolved, non-empty catalog with a selection (`piSelection` is set exactly
+  // then); a promptless create never waits on the catalog.
+  const isPiPromptBlocked = isPiSelected && !isPromptEmpty && piSelection === undefined;
+
   const isSubmitDisabled =
     selectedProjectId === null ||
     isCreating ||
@@ -279,7 +324,8 @@ export const NewWorkspaceForm = ({
     // A name the validator has flagged — illegal ref or existing branch — hard
     // blocks Create; the backend re-checks at create time as the backstop.
     branchNameStatus === "exists" ||
-    branchNameStatus === "invalid";
+    branchNameStatus === "invalid" ||
+    isPiPromptBlocked;
 
   const handleSubmit = useCallback(async (): Promise<void> => {
     if (isSubmitDisabled || selectedProjectId === null) return;
@@ -294,6 +340,7 @@ export const NewWorkspaceForm = ({
       agentTypeValue,
       registrations,
       defaultModel: agentModel,
+      piBackendModel: piSelection,
       effort: agentEffort,
       fastMode: isAgentFastMode,
       enterPlanMode: isAgentPlanMode,
@@ -358,6 +405,7 @@ export const NewWorkspaceForm = ({
     agentTypeValue,
     registrations,
     agentModel,
+    piSelection,
     agentEffort,
     isAgentFastMode,
     isAgentPlanMode,
@@ -402,7 +450,6 @@ export const NewWorkspaceForm = ({
   const currentProject = projects.find((p) => p.objectId === selectedProjectId);
   const crumbName = currentProject?.name ?? "Select repo";
   const crumbInitial = (currentProject?.name?.trim()?.[0] ?? "?").toUpperCase();
-  const isPromptEmpty = prompt.trim() === "";
 
   // Skeleton the crumb only on a cold first open (no cached project resolved yet
   // while the initial project fetch is in flight); otherwise the real selector
@@ -511,10 +558,10 @@ export const NewWorkspaceForm = ({
 
           {/* Per-prompt agent settings. The row is always laid out so it reserves
               its space; it is hidden via `visibility` until the user has typed a
-              prompt so the modal doesn't jump. Only Claude consumes model / effort
-              / plan / fast at create, so it gets the full control cluster. pi
-              ignores all of them — it picks its model from its own in-task catalog
-              and enters plan mode from the chat — so it gets a hint instead.
+              prompt so the modal doesn't jump. Claude gets the full control cluster
+              (model / effort / plan / fast). pi gets its own backend-sourced model
+              picker, driven by the host-side catalog — the same selector the
+              composer shows, so a pi prompt names a validated model by construction.
               Terminal/registered agents configure nothing here. */}
           <div className={styles.agentSettings} data-visible={!isPromptEmpty} aria-hidden={isPromptEmpty}>
             {effectiveAgentType === "claude" ? (
@@ -529,9 +576,32 @@ export const NewWorkspaceForm = ({
                 onPlanModeToggle={(): void => setIsAgentPlanMode((v) => !v)}
               />
             ) : effectiveAgentType === "pi" ? (
-              <Text size="1" color="gray" data-testid={ElementIds.NEW_WORKSPACE_PI_SETTINGS_HINT}>
-                Select your model after the workspace starts
-              </Text>
+              <Flex align="center" gap="2" data-testid={ElementIds.NEW_WORKSPACE_PI_MODEL_PICKER}>
+                <ModelSelector
+                  model={agentModel}
+                  onModelChange={setAgentModel}
+                  backendModels={piCatalog}
+                  selectedModelId={piSelection?.modelId}
+                  onBackendModelChange={(option): void => setPiSelectionOverride(option)}
+                  sourcesBackendModels
+                />
+                {isPiCatalogEmpty ? (
+                  // No authenticated providers: the picker shows "No models
+                  // available"; this CTA routes to Settings → Pi to authenticate,
+                  // mirroring the composer's send-slot CTA. A pi prompt stays
+                  // blocked until a provider is connected.
+                  <Tooltip content="Authenticate a provider before you can send a prompt">
+                    <Button
+                      size="1"
+                      onClick={handleGoToPiSettings}
+                      data-testid={ElementIds.NEW_WORKSPACE_PI_EMPTY_STATE}
+                      aria-label="Go to harness configuration"
+                    >
+                      Go to harness configuration
+                    </Button>
+                  </Tooltip>
+                ) : null}
+              </Flex>
             ) : null}
           </div>
         </div>

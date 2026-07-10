@@ -423,8 +423,9 @@ def start_task_and_wait_for_ready(
     Opens the new-workspace modal via ``open_new_workspace_form``, fills in the
     workspace name, clicks create, then waits for the agent chat page to appear.
 
-    The new-workspace form has no model selector, so the model is switched on the
-    chat panel once the workspace is ready.
+    This helper creates promptless and switches the model on the chat panel once
+    the workspace is ready, rather than driving the form's own per-prompt model
+    controls.
 
     When *prompt* is provided, this helper leaves the creation form's own prompt
     field empty and sends *prompt* through the chat input after the workspace is

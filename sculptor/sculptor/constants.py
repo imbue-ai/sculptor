@@ -37,10 +37,14 @@ class ElementIDs(StrEnum):
     NEW_WORKSPACE_CONTEXT_PILL = "NEW_WORKSPACE_CONTEXT_PILL"
     NEW_WORKSPACE_KEEP_OPEN_SWITCH = "NEW_WORKSPACE_KEEP_OPEN_SWITCH"
     NEW_WORKSPACE_CREATE_BUTTON = "NEW_WORKSPACE_CREATE_BUTTON"
-    # Shown in place of the per-prompt agent-settings controls when the first
-    # agent is pi: model / effort / plan / fast do not apply to a pi create
-    # (pi picks its model from its own in-task catalog), so a hint replaces them.
-    NEW_WORKSPACE_PI_SETTINGS_HINT = "NEW_WORKSPACE_PI_SETTINGS_HINT"
+    # The pi first-agent model picker, shown in place of Claude's per-prompt
+    # controls: pi carries a backend-sourced catalog, so the modal offers the same
+    # model selector the composer has, fed by the host-side catalog probe.
+    NEW_WORKSPACE_PI_MODEL_PICKER = "NEW_WORKSPACE_PI_MODEL_PICKER"
+    # The pi no-usable-model surface (no authenticated providers): the picker's
+    # "No models available" state plus the CTA routing to Settings -> Pi. A pi
+    # prompt cannot be submitted against it; a promptless create still can.
+    NEW_WORKSPACE_PI_EMPTY_STATE = "NEW_WORKSPACE_PI_EMPTY_STATE"
     WORKSPACE_SELECTOR = "WORKSPACE_SELECTOR"
     WORKSPACE_OPTION_NAME = "WORKSPACE_OPTION_NAME"
     HOME_PAGE_SYSTEM_PROMPT_OPEN_BUTTON = "HOME_PAGE_SYSTEM_PROMPT_OPEN_BUTTON"

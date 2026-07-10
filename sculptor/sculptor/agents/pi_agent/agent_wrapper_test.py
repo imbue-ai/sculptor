@@ -30,12 +30,12 @@ from sculptor.agents.pi_agent.agent_wrapper import PiAgent
 from sculptor.agents.pi_agent.agent_wrapper import _PI_TRANSIENT_RETRY_BASE_DELAY_SECONDS
 from sculptor.agents.pi_agent.agent_wrapper import _PI_TRANSIENT_RETRY_MAX_DELAY_SECONDS
 from sculptor.agents.pi_agent.agent_wrapper import _TurnState
-from sculptor.agents.pi_agent.agent_wrapper import _curate_models
 from sculptor.agents.pi_agent.agent_wrapper import _format_background_completion
 from sculptor.agents.pi_agent.agent_wrapper import _format_subagent_completion
-from sculptor.agents.pi_agent.agent_wrapper import _model_option_from_pi
 from sculptor.agents.pi_agent.agent_wrapper import _render_synthesized_skill
 from sculptor.agents.pi_agent.agent_wrapper import _rewrite_skill_invocation
+from sculptor.agents.pi_agent.agent_wrapper import curate_models
+from sculptor.agents.pi_agent.agent_wrapper import model_option_from_pi
 from sculptor.agents.pi_agent.backchannel import DISMISSED_ANSWER_VALUE
 from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_DIALOG_TITLE
 from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_HEADER
@@ -645,7 +645,7 @@ _CURATED_PI_MODEL_IDS: list[str] = [
 
 
 def _options_from_raw(raw: list[dict[str, Any]]) -> list[ModelOption]:
-    options = [_model_option_from_pi(m) for m in raw]
+    options = [model_option_from_pi(m) for m in raw]
     return [option for option in options if option is not None]
 
 
@@ -936,6 +936,39 @@ class TestTurnFailures:
         )
         with pytest.raises(PiCrashError):
             agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+
+class TestPromptTurnContainment:
+    """A doomed user turn fails softly (error block) instead of killing the agent."""
+
+    def test_auth_failure_on_prompt_turn_reports_failure_without_crashing(self) -> None:
+        """A non-transient provider failure (unauthenticated / unusable model) on a
+        USER turn surfaces the per-turn error block — a RequestFailure carrying the
+        humanized auth message the frontend keys its login CTA on — and the agent
+        stays alive, the same containment `_run_wake_turn` applies. Credentials can
+        be revoked between create and start, so a doomed first prompt must be a
+        recoverable error, not an agent teardown."""
+        agent = _make_agent()
+        auth_error = json.dumps({"type": "authentication_error", "message": "No API key found for provider"})
+        agent._process = _make_process(
+            [
+                _event({"type": "agent_start"}),
+                _event({"type": "message_end", "message": _assistant_error_msg(auth_error)}),
+            ]
+        )
+
+        # Must NOT raise: the crash is contained at the prompt-turn boundary.
+        agent._run_prompt_turn(ChatInputUserMessage(text="do the thing"))
+
+        emitted = _drain(agent._output_messages)
+        failures = [m for m in emitted if isinstance(m, RequestFailureAgentMessage)]
+        assert len(failures) == 1
+        # The humanized auth message survives, so the error block's login CTA
+        # (keyed on "require authentication") still renders.
+        assert "require authentication" in str(failures[0].error.args[0])
+        assert not any(isinstance(m, RequestSuccessAgentMessage) for m in emitted)
+        # The agent did not crash: no fatal exception was captured.
+        assert agent._exception is None
 
 
 class TestTransientRetry:
@@ -3163,7 +3196,7 @@ class TestModelCuration:
 
     def test_curate_models_drops_blacklist_and_dated_and_sorts_newest_first(self) -> None:
         """Curation drops obsolete claude-3-* + dated-pin duplicates, newest-first."""
-        curated = _curate_models(_options_from_raw(_RAW_PI_MODELS), current_model=None)
+        curated = curate_models(_options_from_raw(_RAW_PI_MODELS), current_model=None)
         assert [option.model_id for option in curated] == _CURATED_PI_MODEL_IDS
         # Display names ride through from pi's `name`, and provider is preserved.
         opus_4_8 = next(option for option in curated if option.model_id == "claude-opus-4-8")
@@ -3173,7 +3206,7 @@ class TestModelCuration:
     def test_curate_models_keeps_current_model_even_when_a_rule_would_drop_it(self) -> None:
         """The current model is never dropped — the switcher must not show an empty selection."""
         current = ModelOption(provider="anthropic", model_id="claude-3-opus-20240229", display_name="Claude Opus 3")
-        curated = _curate_models(_options_from_raw(_RAW_PI_MODELS), current_model=current)
+        curated = curate_models(_options_from_raw(_RAW_PI_MODELS), current_model=current)
         assert current in curated
         # Everything else still curated; only the blacklisted current survives the blacklist.
         assert "claude-3-5-haiku-20241022" not in {option.model_id for option in curated}
@@ -3181,38 +3214,38 @@ class TestModelCuration:
     def test_curate_models_keeps_current_model_absent_from_catalog(self) -> None:
         """A current model pi did not list is appended so it can still be shown selected."""
         current = ModelOption(provider="anthropic", model_id="claude-opus-9-9", display_name="Claude Opus 9.9")
-        curated = _curate_models(_options_from_raw(_RAW_PI_MODELS), current_model=current)
+        curated = curate_models(_options_from_raw(_RAW_PI_MODELS), current_model=current)
         assert current in curated
         # Newest major.minor wins, so the fictional 9.9 sorts to the front.
         assert curated[0].model_id == "claude-opus-9-9"
 
     def test_curate_models_filters_to_single_authenticated_provider(self) -> None:
         """Only options whose provider is in the authenticated set survive."""
-        curated = _curate_models(_MULTI_PROVIDER_OPTIONS, current_model=None, authenticated_providers={"anthropic"})
+        curated = curate_models(_MULTI_PROVIDER_OPTIONS, current_model=None, authenticated_providers={"anthropic"})
         assert {option.provider for option in curated} == {"anthropic"}
         assert [option.model_id for option in curated] == ["claude-opus-4-8"]
 
     def test_curate_models_filters_to_multiple_authenticated_providers(self) -> None:
-        curated = _curate_models(
+        curated = curate_models(
             _MULTI_PROVIDER_OPTIONS, current_model=None, authenticated_providers={"anthropic", "openai"}
         )
         assert {option.provider for option in curated} == {"anthropic", "openai"}
 
     def test_curate_models_empty_authenticated_set_yields_empty(self) -> None:
         """An empty authenticated set drops everything (this drives the empty-state CTA)."""
-        curated = _curate_models(_MULTI_PROVIDER_OPTIONS, current_model=None, authenticated_providers=set())
+        curated = curate_models(_MULTI_PROVIDER_OPTIONS, current_model=None, authenticated_providers=set())
         assert curated == []
 
     def test_curate_models_retains_current_model_even_when_provider_unauthenticated(self) -> None:
         """The current model is always offered, even if its provider isn't authenticated."""
         current = ModelOption(provider="openai", model_id="gpt-5", display_name="GPT-5")
-        curated = _curate_models(_MULTI_PROVIDER_OPTIONS, current_model=current, authenticated_providers={"anthropic"})
+        curated = curate_models(_MULTI_PROVIDER_OPTIONS, current_model=current, authenticated_providers={"anthropic"})
         assert current in curated
         assert "gemini-3" not in {option.model_id for option in curated}
 
     def test_curate_models_filter_preserves_blacklist_and_sort(self) -> None:
         """The authenticated filter layers on top of the existing blacklist/sort rules."""
-        curated = _curate_models(
+        curated = curate_models(
             _options_from_raw(_RAW_PI_MODELS), current_model=None, authenticated_providers={"anthropic"}
         )
         # _RAW_PI_MODELS are all anthropic, so the filter is a no-op here and the curated
@@ -3221,10 +3254,10 @@ class TestModelCuration:
 
     def test_model_option_from_pi_defaults_provider_and_name(self) -> None:
         # Missing provider defaults to anthropic; missing name falls back to the id.
-        option = _model_option_from_pi({"id": "claude-opus-4-8"})
+        option = model_option_from_pi({"id": "claude-opus-4-8"})
         assert option == ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="claude-opus-4-8")
         # A row with no usable id is dropped.
-        assert _model_option_from_pi({"name": "no id"}) is None
+        assert model_option_from_pi({"name": "no id"}) is None
 
 
 class TestModelCatalogFetch:
@@ -3439,11 +3472,12 @@ class TestModelProbe:
         agent = _make_agent(env)
         with (
             patch(
-                "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+                "sculptor.agents.pi_agent.catalog_probe.generate_id",
                 side_effect=["probe-sess", "cmd-models", "cmd-state"],
             ),
             patch(
-                "sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value={"anthropic"}
+                "sculptor.agents.pi_agent.catalog_probe.compute_authenticated_provider_ids",
+                return_value={"anthropic"},
             ),
         ):
             available_models, current_model = agent.fetch_available_models_probe(secrets={})
@@ -3468,7 +3502,7 @@ class TestModelProbe:
         env = _make_probe_env(probe_process)
         agent = _make_agent(env)
         with patch(
-            "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+            "sculptor.agents.pi_agent.catalog_probe.generate_id",
             side_effect=["probe-sess", "cmd-models", "cmd-state"],
         ):
             agent.fetch_available_models_probe(secrets={})
@@ -3513,7 +3547,7 @@ class TestModelProbe:
         env = _make_probe_env(probe_process)
         agent = _make_agent(env)
         with patch(
-            "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+            "sculptor.agents.pi_agent.catalog_probe.generate_id",
             side_effect=["probe-sess", "cmd-models", "cmd-state"],
         ):
             assert agent.fetch_available_models_probe(secrets={}) == ([], None)
@@ -3532,10 +3566,10 @@ class TestModelProbe:
         agent = _make_agent(env)
         with (
             patch(
-                "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+                "sculptor.agents.pi_agent.catalog_probe.generate_id",
                 side_effect=["probe-sess", "cmd-models", "cmd-state"],
             ),
-            patch("sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value=set()),
+            patch("sculptor.agents.pi_agent.catalog_probe.compute_authenticated_provider_ids", return_value=set()),
         ):
             assert agent.fetch_available_models_probe(secrets={}) == ([], None)
 

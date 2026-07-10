@@ -3,20 +3,23 @@ import { createStore } from "jotai";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Project } from "~/api";
-import { ElementIds } from "~/api";
+import type { ModelOption, Project } from "~/api";
+import { ElementIds, WorkspaceInitializationStrategy } from "~/api";
 import { updateProjectsAtom } from "~/common/state/atoms/projects.ts";
 import { renderWithProviders } from "~/common/testUtils.tsx";
 
-import { keepNewWorkspaceModalOpenAtom } from "./newWorkspaceAtoms.ts";
+import { keepNewWorkspaceModalOpenAtom, lastWorkspaceCreationSettingsAtom } from "./newWorkspaceAtoms.ts";
 import { NewWorkspaceForm } from "./NewWorkspaceForm.tsx";
 
 // What is under test is the form's own behavior — seeding, submit, and the
 // post-create callbacks — so everything that reaches the backend is stubbed at
 // its module seam: the project fetches, the create flow, the per-repo branch
-// info, the terminal-agent registrations, and the debounced branch-name
-// preview/validation queries.
-const { mockCreateWorkspace } = vi.hoisted(() => ({ mockCreateWorkspace: vi.fn() }));
+// info, the terminal-agent registrations, the debounced branch-name
+// preview/validation queries, and the pi model catalog.
+const { mockCreateWorkspace, mockUsePiModels } = vi.hoisted(() => ({
+  mockCreateWorkspace: vi.fn(),
+  mockUsePiModels: vi.fn(),
+}));
 
 vi.mock("~/api", async (importOriginal) => {
   const original = await importOriginal();
@@ -35,6 +38,49 @@ vi.mock("~/common/state/hooks/useCreateWorkspace.ts", () => ({
     createWorkspace: mockCreateWorkspace,
   }),
 }));
+
+// The host-side pi catalog. Mocked so the admission-rule tests can drive the
+// three catalog states (resolving / populated / empty) the modal must handle.
+vi.mock("~/common/state/hooks/usePiModels.ts", () => ({
+  usePiModels: (): unknown => mockUsePiModels(),
+}));
+
+const PI_MODEL_DEFAULT: ModelOption = { provider: "anthropic", modelId: "sonnet", displayName: "Sonnet" };
+const PI_MODEL_OTHER: ModelOption = { provider: "openai", modelId: "gpt", displayName: "GPT" };
+
+// usePiModels' return shape, one factory per catalog state. Each returns a fresh
+// object; a test hands one to `mockReturnValue` so the reference stays stable
+// across renders (the preselect effect keys on `data` identity).
+const piModelsResolving = (): unknown => ({
+  data: undefined,
+  availableModels: [],
+  defaultModel: null,
+  isPending: true,
+  isFetching: true,
+  isError: false,
+  error: null,
+  refetch: vi.fn(),
+});
+const piModelsPopulated = (): unknown => ({
+  data: { availableModels: [PI_MODEL_DEFAULT, PI_MODEL_OTHER], defaultModel: PI_MODEL_DEFAULT },
+  availableModels: [PI_MODEL_DEFAULT, PI_MODEL_OTHER],
+  defaultModel: PI_MODEL_DEFAULT,
+  isPending: false,
+  isFetching: false,
+  isError: false,
+  error: null,
+  refetch: vi.fn(),
+});
+const piModelsEmpty = (): unknown => ({
+  data: { availableModels: [], defaultModel: null },
+  availableModels: [],
+  defaultModel: null,
+  isPending: false,
+  isFetching: false,
+  isError: false,
+  error: null,
+  refetch: vi.fn(),
+});
 
 vi.mock("~/common/state/hooks/useRepoInfo.ts", () => ({
   useRepoInfo: (): unknown => ({
@@ -79,6 +125,19 @@ const renderForm = (
   return renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} {...props} />, { store });
 };
 
+// Seed pi as the first-agent type via the last-create settings (pi availability
+// fails open in the test, so the seed is honored) and start on the selected repo.
+const renderPiForm = (props: Partial<FormProps> = {}): ReturnType<typeof renderWithProviders> => {
+  const store = createStore();
+  store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
+  store.set(lastWorkspaceCreationSettingsAtom, {
+    projectId: "p1",
+    agentType: "pi",
+    initStrategy: WorkspaceInitializationStrategy.WORKTREE,
+  });
+  return renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} {...props} />, { store });
+};
+
 // The Create button stays disabled until the (mocked) project fetch resolves a
 // selection, so wait for it to enable before clicking.
 const clickCreate = async (): Promise<void> => {
@@ -90,6 +149,9 @@ const clickCreate = async (): Promise<void> => {
 describe("NewWorkspaceForm", () => {
   beforeEach(() => {
     mockCreateWorkspace.mockResolvedValue({ ok: true, workspaceId: "w1" });
+    // Default the catalog to still-resolving; the Claude tests never read it, and
+    // the pi tests override per case.
+    mockUsePiModels.mockReturnValue(piModelsResolving());
   });
 
   // vitest runs with `globals: false`, so RTL's automatic post-test cleanup
@@ -98,6 +160,7 @@ describe("NewWorkspaceForm", () => {
   afterEach(() => {
     cleanup();
     mockCreateWorkspace.mockReset();
+    mockUsePiModels.mockReset();
     window.localStorage.clear();
   });
 
@@ -195,5 +258,78 @@ describe("NewWorkspaceForm", () => {
     // ...and the still-open dialog returns to the request's seeded branch name
     // (not the auto preview).
     await waitFor(() => expect(branchInput).toHaveValue("linear/scu-1-fix"));
+  });
+
+  // The spec's one rule: a pi prompt is submittable only against a resolved,
+  // non-empty catalog with a selection; a promptless create never waits on it.
+  describe("pi model picker admission rule", () => {
+    it("renders the pi model picker in place of the Claude controls", async () => {
+      mockUsePiModels.mockReturnValue(piModelsPopulated());
+      renderPiForm();
+
+      await waitFor(() => expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_CREATE_BUTTON)).toBeEnabled());
+      expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_PI_MODEL_PICKER)).toBeInTheDocument();
+    });
+
+    it("keeps a promptless pi create enabled while the catalog is still resolving", async () => {
+      mockUsePiModels.mockReturnValue(piModelsResolving());
+      renderPiForm();
+
+      // No prompt → the create never waits on the catalog, even mid-probe.
+      await waitFor(() => expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_CREATE_BUTTON)).toBeEnabled());
+    });
+
+    it("blocks a pi prompt while the catalog is resolving, and re-enables when the prompt clears", async () => {
+      mockUsePiModels.mockReturnValue(piModelsResolving());
+      renderPiForm();
+
+      const createButton = screen.getByTestId(ElementIds.NEW_WORKSPACE_CREATE_BUTTON);
+      const promptTextarea = screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA);
+      // Promptless baseline: repo/branch are satisfied, so the only thing that can
+      // disable the button from here is the pi admission gate.
+      await waitFor(() => expect(createButton).toBeEnabled());
+
+      fireEvent.change(promptTextarea, { target: { value: "do a thing" } });
+      await waitFor(() => expect(createButton).toBeDisabled());
+
+      fireEvent.change(promptTextarea, { target: { value: "" } });
+      await waitFor(() => expect(createButton).toBeEnabled());
+    });
+
+    it("blocks a pi prompt when the catalog is empty and offers the login CTA", async () => {
+      mockUsePiModels.mockReturnValue(piModelsEmpty());
+      renderPiForm();
+
+      const createButton = screen.getByTestId(ElementIds.NEW_WORKSPACE_CREATE_BUTTON);
+      await waitFor(() => expect(createButton).toBeEnabled());
+
+      fireEvent.change(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA), {
+        target: { value: "do a thing" },
+      });
+      await waitFor(() => expect(createButton).toBeDisabled());
+      // The no-usable-model surface routes the user to authenticate a provider.
+      expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_PI_EMPTY_STATE)).toBeInTheDocument();
+    });
+
+    it("enables a pi prompt against a populated catalog and creates with the default model preselected", async () => {
+      mockUsePiModels.mockReturnValue(piModelsPopulated());
+      renderPiForm();
+
+      const createButton = screen.getByTestId(ElementIds.NEW_WORKSPACE_CREATE_BUTTON);
+      await waitFor(() => expect(createButton).toBeEnabled());
+
+      fireEvent.change(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA), {
+        target: { value: "do a thing" },
+      });
+      // The default model is preselected, so the prompt stays submittable.
+      await waitFor(() => expect(createButton).toBeEnabled());
+
+      fireEvent.click(createButton);
+      await waitFor(() =>
+        expect(mockCreateWorkspace).toHaveBeenCalledWith(
+          expect.objectContaining({ agentTypeValue: "pi", prompt: "do a thing", piBackendModel: PI_MODEL_DEFAULT }),
+        ),
+      );
+    });
   });
 });

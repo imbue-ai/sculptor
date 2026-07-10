@@ -22,13 +22,14 @@ type AgentSettingsControlsProps = {
 /**
  * The right-side toolbar block of a Claude first agent's per-prompt settings —
  * plan mode, fast mode (when the model supports it), thinking effort, and model.
- * The new-workspace modal renders this beneath its prompt textarea for a Claude
- * first agent. Non-Claude harnesses don't consume any of these at create (pi
- * picks its model from its own in-task catalog and plans from the chat; terminal
- * agents have no model), so the modal renders its own hint in place of this
- * block rather than gating the controls one by one. The fast-mode toggle is
- * gated on `getModelCapabilities(model).supportsFastMode` here (rather than at
- * every callsite) so consumers only have to pass the selected model.
+ * This block is Claude-only: the new-workspace modal renders it beneath its
+ * prompt textarea for a Claude first agent. The other harnesses don't consume
+ * these controls at create — pi drives its own backend-sourced model picker in
+ * the modal (a separate block), and terminal/registered agents have no model —
+ * so the modal chooses the block by agent type rather than gating these controls
+ * one by one. The fast-mode toggle is gated on
+ * `getModelCapabilities(model).supportsFastMode` here (rather than at every
+ * callsite) so consumers only have to pass the selected model.
  *
  * ChatInput renders a parallel copy of this toolbar block that adds
  * capability-gated disabled states and a backend-model selector it needs in

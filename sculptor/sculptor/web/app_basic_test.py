@@ -8,6 +8,7 @@ NOTE: Endpoints are not currently tested for cross-user authorization (preventin
 
 from pathlib import Path
 from typing import Generator
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -1201,17 +1202,20 @@ def test_start_task_resolves_agent_type(
     client: TestClient, test_services: CompleteServiceCollection, test_project: Project
 ) -> None:
     """Prompt-ful creation honors a chat agent_type and rejects terminal types."""
-    response = client.post(
-        f"/api/v1/projects/{test_project.object_id}/tasks",
-        json=model_dump(
-            StartTaskRequest(
-                prompt="hello pi",
-                model=LLMModel.CLAUDE_4_SONNET,
-                agent_type=AgentTypeName.PI,
+    with patch("sculptor.web.app.compute_authenticated_provider_ids", return_value={"anthropic"}):
+        response = client.post(
+            f"/api/v1/projects/{test_project.object_id}/tasks",
+            json=model_dump(
+                StartTaskRequest(
+                    prompt="hello pi",
+                    backend_model=ModelOption(
+                        provider="anthropic", model_id="claude-opus-4-8", display_name="Claude Opus 4.8"
+                    ),
+                    agent_type=AgentTypeName.PI,
+                ),
+                is_camel_case=True,
             ),
-            is_camel_case=True,
-        ),
-    )
+        )
     assert response.status_code == 200, response.text
     task_id = TaskID(response.json()["id"])
     user_session = authenticate_anonymous(test_services, RequestID())

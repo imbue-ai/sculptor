@@ -90,6 +90,17 @@ class PiSetModelError(AgentClientError):
     """
 
 
+class PiTurnError(AgentClientError):
+    """Raised when a pi USER turn fails (provider auth failure, unusable model, pi dying mid-turn).
+
+    An ``AgentClientError`` rather than a crash: the turn's failure is reported
+    as a failed request — the per-turn error block, whose auth-shaped message
+    carries the login CTA — while the agent keeps running so the user can
+    authenticate or switch models and re-send. ``_run_prompt_turn`` converts the
+    turn pump's ``PiCrashError`` onto this contained rail.
+    """
+
+
 class PiCrashError(AgentCrashed):
     """
     This error is raised when pi reports a structured error mid-turn or its subprocess exits unexpectedly.
