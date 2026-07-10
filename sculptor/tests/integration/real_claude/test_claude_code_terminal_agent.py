@@ -145,7 +145,10 @@ def test_claude_code_terminal_agent(sculptor_instance_: SculptorInstance) -> Non
     expect(registered_item).to_be_visible()
     registered_item.click()
 
-    claude_tab = panel_tabs.get_panel_tab_by_name("Claude CLI 1").first
+    # The bundled registration and the SDK agent share the "Claude" naming
+    # prefix, and the workspace's main (empty-prompt) SDK agent already claimed
+    # "Claude 1" at creation — so the registered terminal agent is "Claude 2".
+    claude_tab = panel_tabs.get_panel_tab_by_name("Claude 2").first
     expect(claude_tab).to_be_visible()
     expect(get_agent_terminal_panel(page)).to_be_visible()
     expect(get_agent_terminal_textarea(page)).to_be_attached()
@@ -157,7 +160,7 @@ def test_claude_code_terminal_agent(sculptor_instance_: SculptorInstance) -> Non
     # at startup would make a post-restart `--resume` fail ("No conversation
     # found with session ID"). A message-less agent must instead restart via
     # the plain launch command.
-    assert _read_terminal_session_id(sculptor_instance_.sculptor_folder, "Claude CLI 1") is None, (
+    assert _read_terminal_session_id(sculptor_instance_.sculptor_folder, "Claude 2") is None, (
         "session id persisted before any message — startup-captured ids are not resumable"
     )
 
@@ -168,7 +171,7 @@ def test_claude_code_terminal_agent(sculptor_instance_: SculptorInstance) -> Non
     deadline = time.monotonic() + 90.0
     session_id: str | None = None
     while time.monotonic() < deadline:
-        session_id = _read_terminal_session_id(sculptor_instance_.sculptor_folder, "Claude CLI 1")
+        session_id = _read_terminal_session_id(sculptor_instance_.sculptor_folder, "Claude 2")
         if session_id:
             break
         page.wait_for_timeout(1_000)
