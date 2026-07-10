@@ -1,5 +1,5 @@
 import { ExclamationTriangleIcon, LockClosedIcon, PlusIcon } from "@radix-ui/react-icons";
-import { Box, Button, Callout, Flex, Spinner, Text } from "@radix-ui/themes";
+import { Box, Button, Callout, Code, Flex, Spinner, Text } from "@radix-ui/themes";
 import { type ReactElement, type ReactNode, useCallback, useMemo, useState } from "react";
 
 import type { AuthenticatedProviderEntry } from "~/api";
@@ -52,9 +52,6 @@ const ConnectedCard = ({
   onDisconnect: (provider: AuthenticatedProviderEntry) => void;
 }): ReactElement => {
   const canDisconnect = provider.inAuthJson;
-  const sourceText = provider.inAuthJson
-    ? "Imported from ~/.pi/agent/auth.json"
-    : `Detected via environment variable ${provider.envVarNames[0] ?? "—"}`;
   return (
     <Box
       data-testid={`${ElementIds.PI_PROVIDER_CARD}-${provider.providerId}`}
@@ -67,12 +64,9 @@ const ConnectedCard = ({
     >
       <Flex align="center" gap="3">
         <ProviderMark provider={provider} size={32} />
-        <Flex direction="column" gap="1" flexGrow="1" minWidth="0">
-          <Text weight="medium">{displayNameFor(provider)}</Text>
-          <Text size="2" color="gray">
-            {sourceText}
-          </Text>
-        </Flex>
+        <Text weight="medium" style={{ flexGrow: 1, minWidth: 0 }}>
+          {displayNameFor(provider)}
+        </Text>
         <Flex align="center" gap="2" flexShrink="0">
           <BlandCircle size={8} className={styles.connectedDot} />
           <Text size="2" color="green">
@@ -206,8 +200,8 @@ export const PiProvidersArea = (): ReactElement => {
       <Flex direction="column" gap="1">
         <Text weight="medium">Providers</Text>
         <Text size="2" color="gray">
-          Authenticate the LLM providers that pi supports. Connected providers are imported from your existing pi
-          credentials.
+          Authenticate the LLM providers that pi supports. The list of connected providers is synced with{" "}
+          <Code>~/.pi/agent/auth.json</Code>.
         </Text>
       </Flex>
 

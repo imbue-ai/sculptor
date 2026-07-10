@@ -1,9 +1,26 @@
-import { describe, expect, it } from "vitest";
+import { Theme } from "@radix-ui/themes";
+import { cleanup, render, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AuthenticatedProviderEntry } from "~/api";
 import { ProviderGroup } from "~/api";
 
+import { PiProvidersArea } from "./PiProvidersArea.tsx";
 import { groupProviders } from "./piProvidersGrouping.ts";
+
+const { mockUsePiAuthenticatedProviders } = vi.hoisted(() => ({
+  mockUsePiAuthenticatedProviders: vi.fn(),
+}));
+
+vi.mock("~/common/state/hooks/usePiAuthenticatedProviders", () => ({
+  usePiAuthenticatedProviders: mockUsePiAuthenticatedProviders,
+}));
+
+// The login dialog embeds an xterm terminal; these tests never open it.
+vi.mock("./PiLoginDialog.tsx", () => ({
+  PiLoginDialog: (): ReactElement | null => null,
+}));
 
 const makeProvider = (overrides: Partial<AuthenticatedProviderEntry>): AuthenticatedProviderEntry => ({
   providerId: "anthropic",
@@ -13,6 +30,48 @@ const makeProvider = (overrides: Partial<AuthenticatedProviderEntry>): Authentic
   envDetected: false,
   envVarNames: ["ANTHROPIC_API_KEY"],
   ...overrides,
+});
+
+const renderProvidersArea = (providers: ReadonlyArray<AuthenticatedProviderEntry>): void => {
+  mockUsePiAuthenticatedProviders.mockReturnValue({
+    providers,
+    isPending: false,
+    refetch: vi.fn(),
+  });
+  render(
+    <Theme>
+      <PiProvidersArea />
+    </Theme>,
+  );
+};
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+describe("PiProvidersArea copy", () => {
+  it("describes the connected providers as synced with auth.json", () => {
+    renderProvidersArea([makeProvider({ inAuthJson: true })]);
+    expect(screen.getByText(/The list of connected providers is synced with/)).toBeTruthy();
+    expect(screen.getByText("~/.pi/agent/auth.json")).toBeTruthy();
+  });
+
+  it("renders connected rows without a per-row credential-source line", () => {
+    renderProvidersArea([
+      makeProvider({ providerId: "anthropic", displayName: "Anthropic", inAuthJson: true }),
+      makeProvider({
+        providerId: "groq",
+        displayName: "Groq",
+        envDetected: true,
+        envVarNames: ["GROQ_API_KEY"],
+      }),
+    ]);
+    expect(screen.queryByText(/Imported from/)).toBeNull();
+    expect(screen.queryByText(/Detected via environment variable/)).toBeNull();
+    // The env-only row keeps its explainer note — the only place that names the env var.
+    expect(screen.getByText(/clear that variable to disconnect/)).toBeTruthy();
+  });
 });
 
 describe("groupProviders", () => {
