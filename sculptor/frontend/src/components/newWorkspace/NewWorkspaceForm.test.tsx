@@ -498,4 +498,42 @@ describe("NewWorkspaceForm", () => {
     expect(screen.getByTestId(ElementIds.WORKSPACE_NAME_INPUT)).toHaveValue("Seeded title");
     expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA)).toHaveValue("Seeded prompt");
   });
+
+  it("does not stash a caller seed the user never touched, so the next plain open starts fresh", () => {
+    // The first-run auto-open seeds the prompt with the `/sculptor:help`
+    // onboarding text via `initialPrompt`. Dismissed untouched, that seed is
+    // the caller's, not the user's draft — it must not ride the stash into the
+    // next plain open (the sidebar's New Workspace button / Cmd-T), which
+    // carries no seed of its own. The onboarding prefill belongs to the
+    // auto-open only.
+    const store = createStore();
+    store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
+    renderWithProviders(
+      <NewWorkspaceForm initialPrompt="/sculptor:help onboarding" onCreated={vi.fn()} onDismiss={vi.fn()} />,
+      { store },
+    );
+    // Dismiss without touching the seeded prompt.
+    cleanup();
+
+    renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
+    expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA)).toHaveValue("");
+  });
+
+  it("stashes a caller seed once the user edits it, so their own content survives the reopen", () => {
+    // Editing the seeded prompt makes it the user's content; it then rides the
+    // stash like anything else typed.
+    const store = createStore();
+    store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
+    renderWithProviders(
+      <NewWorkspaceForm initialPrompt="/sculptor:help onboarding" onCreated={vi.fn()} onDismiss={vi.fn()} />,
+      { store },
+    );
+    fireEvent.change(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA), {
+      target: { value: "my own task" },
+    });
+    cleanup();
+
+    renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
+    expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA)).toHaveValue("my own task");
+  });
 });

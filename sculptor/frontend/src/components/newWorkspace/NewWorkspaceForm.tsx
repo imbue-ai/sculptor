@@ -219,11 +219,17 @@ export const NewWorkspaceForm = ({
   const draftSnapshotRef = useRef<NewWorkspaceDraft | null>(null);
   const isDraftSuppressedRef = useRef<boolean>(false);
   useEffect(() => {
+    // Stash the user's OWN entries, not an untouched caller seed. A field that
+    // still equals the seed the open request supplied — most visibly the
+    // first-run auto-open's `/sculptor:help` prompt, which "belongs to the
+    // auto-open only" — is the caller's, not a draft; it stashes blank so it
+    // never leaks into the next plain open (sidebar / Cmd-T). Any edit makes
+    // the field the user's content, and it then rides the stash like the rest.
     draftSnapshotRef.current = {
       projectId: selectedProjectId,
-      title: workspaceName,
-      prompt,
-      branchNameOverride,
+      title: workspaceName === initialTitle ? "" : workspaceName,
+      prompt: prompt === initialPrompt ? "" : prompt,
+      branchNameOverride: branchNameOverride === (initialBranchName ?? null) ? null : branchNameOverride,
       mode,
       sourceBranch: userSelectedBranch,
       agentTypeValue,
