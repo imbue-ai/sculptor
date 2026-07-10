@@ -142,7 +142,7 @@ def _emit_mcp_tool_call_and_wait_for_response(
     return _read_mcp_control_response_text(request_id, tool_use_id, timeout_seconds, expect_error=expect_error)
 
 
-# --- Unified stdin router ---------------------------------------------------
+# Unified stdin router.
 #
 # Every stdin read in FakeClaude funnels through one router so a frame that
 # arrives while a cycle is held open is classified exactly once and never
@@ -150,13 +150,15 @@ def _emit_mcp_tool_call_and_wait_for_response(
 # single buffer: mixing ``sys.stdin``'s BufferedReader with raw ``os.read``
 # splits complete lines across two invisible buffers, the flake behind SCU-783
 # (a matching control_response stranded in Python's buffer where ``select`` on
-# the fd can't see it). With one buffer, whatever a mid-cycle reader pulls off
-# stdin but doesn't itself consume — a later reader's response, a frame to
-# absorb — stays available to the next reader across the cycle boundary.
+# the fd can't see it). With one buffer, whatever a reader pulls off stdin but
+# doesn't itself consume stays available: unparsed bytes remain in the buffer,
+# and a parsed control_response destined for a different reader is stashed for
+# it (see ``stash_control_response``) rather than discarded.
 #
 # Classification is uniform, mirroring the real CLI:
 #   * an ``interrupt`` control_request exits the process (SIGTERM code);
-#   * a ``control_response`` goes to whichever handler is waiting on its id;
+#   * a ``control_response`` goes to whichever reader is waiting on its id,
+#     stashed until that reader asks for it;
 #   * a ``user`` frame arriving mid-cycle is *absorbed* — recorded as a
 #     ``queued_command`` attachment and, under ``--replay-user-messages``,
 #     echoed on stdout (the real CLI's mid-turn steering);
@@ -185,11 +187,25 @@ class _StdinRouter:
     def __init__(self) -> None:
         self._buffer: bytes = b""
         self._eof: bool = False
+        # control_responses read by a reader that wasn't waiting on them, kept
+        # for whichever reader is (keyed by request id). FakeClaude waits for
+        # each response synchronously, so this is usually empty; it exists so a
+        # response is never dropped when one reader pulls another's off stdin.
+        self._stashed_control_responses: dict[str, dict] = {}
 
     def reset(self) -> None:
-        """Drop buffered bytes and clear EOF (unit tests reuse one process)."""
+        """Drop buffered bytes, stashed responses, and EOF (tests reuse one process)."""
         self._buffer = b""
         self._eof = False
+        self._stashed_control_responses = {}
+
+    def stash_control_response(self, request_id: str, envelope: dict) -> None:
+        """Hold a control_response envelope for the reader awaiting ``request_id``."""
+        self._stashed_control_responses[request_id] = envelope
+
+    def pop_stashed_response(self, request_id: str) -> dict | None:
+        """Return and remove a previously stashed response for ``request_id``, if any."""
+        return self._stashed_control_responses.pop(request_id, None)
 
     def _pop_frame(self, flush_partial: bool = False) -> dict | None:
         """Return the next complete, parseable JSON object already buffered.
@@ -310,11 +326,19 @@ def _absorb_user_frame(frame: dict) -> None:
 
 def _route_mid_cycle_frame(frame: dict) -> None:
     """Apply the universal side effects for a frame a mid-cycle reader is not
-    itself consuming: an interrupt exits, a user frame is absorbed, everything
-    else is ignored."""
+    itself consuming: an interrupt exits, a user frame is absorbed, a
+    control_response meant for a different reader is stashed for that reader,
+    and anything else (a ``get_context_usage`` request, chrome events) is
+    ignored."""
     _exit_if_interrupt(frame)
-    if frame.get("type") == "user":
+    frame_type = frame.get("type")
+    if frame_type == "user":
         _absorb_user_frame(frame)
+    elif frame_type == "control_response":
+        envelope = frame.get("response", {})
+        request_id = envelope.get("request_id")
+        if request_id is not None:
+            _STDIN_ROUTER.stash_control_response(request_id, envelope)
 
 
 def read_next_user_prompt() -> str | None:
@@ -344,12 +368,19 @@ def _read_mcp_control_responses(expected_request_ids: set[str], timeout_seconds:
     ``expected_request_ids``. Returns ``{request_id: mcp_response}``.
 
     Runs on the unified router, so a user frame that lands while the handler
-    waits for its answer is absorbed rather than discarded, and a non-matching
-    control_response batched into the same read stays buffered for the next
-    reader instead of being lost (SCU-783).
+    waits for its answer is absorbed rather than discarded, and a
+    control_response meant for a different waiter (batched into the same read,
+    or already seen by an earlier reader) is stashed for that waiter instead of
+    being lost — the SCU-783 guarantee, extended from raw bytes to parsed frames.
     """
     remaining_ids = set(expected_request_ids)
     results: dict[str, dict] = {}
+    # A response for one of our ids may already be waiting from an earlier read.
+    for request_id in list(remaining_ids):
+        stashed = _STDIN_ROUTER.pop_stashed_response(request_id)
+        if stashed is not None:
+            results[request_id] = stashed.get("response", {}).get("mcp_response", {})
+            remaining_ids.discard(request_id)
     deadline = time.monotonic() + timeout_seconds
     while remaining_ids:
         remaining = deadline - time.monotonic()
@@ -367,7 +398,9 @@ def _read_mcp_control_responses(expected_request_ids: set[str], timeout_seconds:
             if request_id in remaining_ids:
                 results[request_id] = response.get("response", {}).get("mcp_response", {})
                 remaining_ids.discard(request_id)
-            continue
+                continue
+        # Not one of ours (a user frame, an interrupt, or another waiter's
+        # response) — route it so it is absorbed / stashed, never dropped.
         _route_mid_cycle_frame(frame)
     if remaining_ids:
         raise RuntimeError(f"Timed out waiting for MCP control_response(s) for request_ids={sorted(remaining_ids)}")
@@ -1245,11 +1278,15 @@ def handle_auto_compact(args: dict, plugin_dir: str | None, emit_streaming: bool
 def _read_control_response_from_stdin(expected_request_id: str, timeout_seconds: float = 5.0) -> None:
     """Read stdin until a ``control_response`` for ``expected_request_id`` arrives.
 
-    Runs on the unified router (so a mid-wait user frame is absorbed and an
-    interrupt exits), but falls back silently after ``timeout_seconds`` — unlike
-    the MCP reader — so FakeClaude doesn't hang if the output processor never
-    acks the hook (e.g. during unit tests that mock stdin).
+    Runs on the unified router (so a mid-wait user frame is absorbed, an
+    interrupt exits, and a control_response for a *different* waiter is stashed
+    for it rather than dropped), but falls back silently after
+    ``timeout_seconds`` — unlike the MCP reader — so FakeClaude doesn't hang if
+    the output processor never acks the hook (e.g. during unit tests that mock
+    stdin).
     """
+    if _STDIN_ROUTER.pop_stashed_response(expected_request_id) is not None:
+        return
     deadline = time.monotonic() + timeout_seconds
     while True:
         remaining = deadline - time.monotonic()

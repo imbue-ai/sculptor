@@ -19,6 +19,7 @@ from sculptor.agents.testing.fake_claude import _read_prompt_from_stream_json_st
 from sculptor.agents.testing.fake_claude_commands import _ABSORBED_FRAMES
 from sculptor.agents.testing.fake_claude_commands import _STDIN_EOF
 from sculptor.agents.testing.fake_claude_commands import _STDIN_ROUTER
+from sculptor.agents.testing.fake_claude_commands import _read_control_response_from_stdin
 from sculptor.agents.testing.fake_claude_commands import _read_mcp_control_response_text
 from sculptor.agents.testing.fake_claude_commands import _read_mcp_control_responses
 from sculptor.agents.testing.fake_claude_commands import configure_stdin_router
@@ -926,43 +927,53 @@ def test_stream_json_interrupt_between_cycles_exits_with_sigterm_code() -> None:
     assert len([e for e in events if e.get("type") == "result"]) == 1
 
 
-def _feed_stdin_pipe(payload: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Point ``sys.stdin`` at a real pipe carrying ``payload`` then EOF.
+@pytest.fixture
+def feed_stdin_pipe(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[[str], None]]:
+    """Point ``sys.stdin`` at a real pipe carrying a payload then EOF.
 
     The unified stdin router reads the raw fd (``sys.stdin.fileno()``), so the
     between-cycle reader tests need a genuine file descriptor rather than an
     ``io.StringIO`` (which has no fileno). Closing the write end after the
-    payload gives the reader a clean EOF.
+    payload gives the reader a clean EOF; the read end is closed at teardown so
+    the suite doesn't leak descriptors.
     """
-    read_fd, write_fd = os.pipe()
-    os.write(write_fd, payload.encode("utf-8"))
-    os.close(write_fd)
-    fake_stdin = os.fdopen(read_fd, "r")
-    monkeypatch.setattr(sys, "stdin", fake_stdin)
+    streams: list[IO[str]] = []
+
+    def _feed(payload: str) -> None:
+        read_fd, write_fd = os.pipe()
+        os.write(write_fd, payload.encode("utf-8"))
+        os.close(write_fd)
+        fake_stdin = os.fdopen(read_fd, "r")
+        streams.append(fake_stdin)
+        monkeypatch.setattr(sys, "stdin", fake_stdin)
+
+    yield _feed
+    for stream in streams:
+        stream.close()
 
 
-def test_read_prompt_returns_none_on_eof(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_read_prompt_returns_none_on_eof(feed_stdin_pipe: Callable[[str], None]) -> None:
     """EOF (empty stdin) yields None so the caller exits instead of running the
     default handler for a turn the user never sent."""
-    _feed_stdin_pipe("", monkeypatch)
+    feed_stdin_pipe("")
     assert _read_prompt_from_stream_json_stdin() is None
 
 
-def test_read_prompt_returns_empty_string_for_empty_content_frame(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_read_prompt_returns_empty_string_for_empty_content_frame(feed_stdin_pipe: Callable[[str], None]) -> None:
     """An explicit empty-content user frame is distinct from EOF: it returns ""
     so the default handler still runs for a genuinely empty prompt."""
     frame = json.dumps({"type": "user", "message": {"role": "user", "content": ""}}) + "\n"
-    _feed_stdin_pipe(frame, monkeypatch)
+    feed_stdin_pipe(frame)
     assert _read_prompt_from_stream_json_stdin() == ""
 
 
-def test_read_prompt_returns_content_for_user_frame(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_read_prompt_returns_content_for_user_frame(feed_stdin_pipe: Callable[[str], None]) -> None:
     frame = json.dumps({"type": "user", "message": {"role": "user", "content": "hello there"}}) + "\n"
-    _feed_stdin_pipe(frame, monkeypatch)
+    feed_stdin_pipe(frame)
     assert _read_prompt_from_stream_json_stdin() == "hello there"
 
 
-def test_read_prompt_skips_non_user_frames_until_user_frame(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_read_prompt_skips_non_user_frames_until_user_frame(feed_stdin_pipe: Callable[[str], None]) -> None:
     """Non-user frames (control responses, context-usage requests) are ignored
     while scanning for the next user frame."""
     lines = (
@@ -973,14 +984,14 @@ def test_read_prompt_skips_non_user_frames_until_user_frame(monkeypatch: pytest.
         + json.dumps({"type": "user", "message": {"role": "user", "content": "actual prompt"}})
         + "\n"
     )
-    _feed_stdin_pipe(lines, monkeypatch)
+    feed_stdin_pipe(lines)
     assert _read_prompt_from_stream_json_stdin() == "actual prompt"
 
 
-def test_read_prompt_exits_on_idle_interrupt(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_read_prompt_exits_on_idle_interrupt(feed_stdin_pipe: Callable[[str], None]) -> None:
     """An interrupt control_request read between cycles exits with the SIGTERM code."""
     frame = json.dumps({"type": "control_request", "request_id": "r", "request": {"subtype": "interrupt"}}) + "\n"
-    _feed_stdin_pipe(frame, monkeypatch)
+    feed_stdin_pipe(frame)
     with pytest.raises(SystemExit) as exc_info:
         _read_prompt_from_stream_json_stdin()
     assert exc_info.value.code == AGENT_EXIT_CODE_FROM_SIGTERM
@@ -1092,7 +1103,7 @@ def test_read_mcp_control_response_surfaces_response_after_buffered_control_requ
     assert result == "MCP error -32602: Invalid params"
 
 
-# --- Mid-turn absorption + --replay-user-messages (SCU-1679) ---
+# Mid-turn absorption + --replay-user-messages (SCU-1679).
 #
 # The real CLI absorbs a user frame that lands while a turn is in flight as a
 # ``queued_command`` attachment (steering), distinct from a between-turns frame
@@ -1335,6 +1346,43 @@ def test_mcp_reader_absorbs_user_frame_while_awaiting_response(
     assert results[request_id]["result"]["content"][0]["text"] == "ANSWER"
     assert _ABSORBED_FRAMES == [steer]
     assert _queued_command_prompts(_read_transcript_from_home(tmp_path)) == [steer]
+
+
+def test_reader_stashes_control_response_for_a_different_waiter(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A control_response a reader isn't waiting on is stashed for the reader
+    that is, not dropped: the hook-ack reader (waiting on A) parks an MCP
+    response for B, and the later MCP reader picks B up from the stash without
+    needing another stdin read."""
+    _STDIN_ROUTER.reset()
+    hook_request_id = "hook_req_A"
+    mcp_request_id = "mcp_req_B"
+    mcp_response = json.dumps(
+        {
+            "type": "control_response",
+            "response": {
+                "subtype": "success",
+                "request_id": mcp_request_id,
+                "response": {"mcp_response": {"result": {"content": [{"type": "text", "text": "B-ANSWER"}]}}},
+            },
+        }
+    )
+    hook_response = json.dumps(
+        {"type": "control_response", "response": {"subtype": "success", "request_id": hook_request_id}}
+    )
+    read_fd, write_fd = os.pipe()
+    # B's response arrives first, while the hook-ack wait (for A) is reading.
+    os.write(write_fd, (mcp_response + "\n" + hook_response + "\n").encode("utf-8"))
+    os.close(write_fd)
+    fake_stdin = os.fdopen(read_fd, "r")
+    monkeypatch.setattr(sys, "stdin", fake_stdin)
+    try:
+        _read_control_response_from_stdin(hook_request_id, timeout_seconds=2.0)
+        # stdin now holds no more responses; B must come from the stash.
+        results = _read_mcp_control_responses({mcp_request_id}, timeout_seconds=2.0)
+    finally:
+        fake_stdin.close()
+
+    assert results[mcp_request_id]["result"]["content"][0]["text"] == "B-ANSWER"
 
 
 class _BackgroundLineReader:
