@@ -434,7 +434,7 @@ class ElementIDs(StrEnum):
     PI_LOGIN_DIALOG = "pi-login-dialog"
     PI_LOGIN_TERMINAL = "pi-login-terminal"
     PI_LOGIN_DONE_BUTTON = "pi-login-done-button"
-    # Power-user paste-key path, reached via "Paste API key instead" inside the modal.
+    # Unused paste-key UI test IDs; drop with a `just generate-api` pass.
     PI_PROVIDER_PASTE_KEY_SWITCH = "pi-provider-paste-key-switch"
     PI_PASTE_KEY_INPUT = "pi-paste-key-input"
     PI_PASTE_KEY_SAVE = "pi-paste-key-save"
