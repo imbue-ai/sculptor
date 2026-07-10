@@ -435,58 +435,43 @@ def _answer_context_usage_and_wait_for_sentinel(sentinel: Path, timeout_seconds:
     the output processor flush the turn's (otherwise-stashed) TurnMetrics
     mid-hold — so ``TurnMetricsAgentMessage`` is pending in message_conversion
     while the request is still open. FakeClaude's default background hold never
-    answers it, so that pending-metrics state (and the bugs it exposes) can't be
-    reproduced end-to-end; this reproduces it.
+    answers it (``_route_mid_cycle_frame`` ignores get_context_usage), so that
+    pending-metrics state — and the bugs it exposes — can't be reproduced
+    end-to-end; this reproduces it.
 
-    Reads stdin via the raw fd (not ``sys.stdin.readline``) for the same SCU-783
-    reason as ``_read_mcp_control_responses``: readline can pull a back-to-back
-    request into Python's buffer where a later ``select`` cannot see it.
+    Reads stdin through the unified router, so a user frame that lands during
+    the wait is absorbed and an interrupt still exits promptly.
     """
-    global _STDIN_UNCONSUMED
-    fd = sys.stdin.fileno()
-    pending = _STDIN_UNCONSUMED
-    _STDIN_UNCONSUMED = b""
     answered = False
     deadline = time.monotonic() + timeout_seconds
-    try:
-        while True:
-            while b"\n" in pending:
-                raw_line, _, pending = pending.partition(b"\n")
-                line = raw_line.decode("utf-8", errors="replace").strip()
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if not isinstance(data, dict) or data.get("type") != "control_request":
-                    continue
-                request = data.get("request")
-                subtype = request.get("subtype") if isinstance(request, dict) else None
-                if subtype == "interrupt":
-                    # Mirror the interrupt handling of the other stdin readers.
-                    sys.exit(AGENT_EXIT_CODE_FROM_SIGTERM)
-                if subtype == "get_context_usage" and not answered:
-                    request_id = data.get("request_id")
-                    if isinstance(request_id, str):
-                        _emit_context_usage_response(request_id)
-                        answered = True
-
-            if sentinel.exists():
-                return
-            if time.monotonic() >= deadline:
-                raise RuntimeError(f"background_subagent pause timed out waiting for {sentinel}")
-            ready, _, _ = select.select([fd], [], [], 0.05)
-            if not ready:
+    while True:
+        if sentinel.exists():
+            return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError(f"background_subagent pause timed out waiting for {sentinel}")
+        frame = _STDIN_ROUTER.next_frame(timeout=min(remaining, 0.05))
+        if frame is _STDIN_TIMEOUT:
+            continue
+        if frame is _STDIN_EOF:
+            # stdin closed (e.g. -p mode) — keep polling the sentinel only.
+            time.sleep(min(remaining, 0.05))
+            continue
+        assert isinstance(frame, dict)
+        request = frame.get("request")
+        if (
+            not answered
+            and frame.get("type") == "control_request"
+            and isinstance(request, dict)
+            and request.get("subtype") == "get_context_usage"
+        ):
+            request_id = frame.get("request_id")
+            if isinstance(request_id, str):
+                _emit_context_usage_response(request_id)
+                answered = True
                 continue
-            chunk = os.read(fd, 8192)
-            if not chunk:
-                # stdin closed (e.g. -p mode) — keep polling the sentinel only.
-                time.sleep(0.05)
-                continue
-            pending += chunk
-    finally:
-        _STDIN_UNCONSUMED = pending
+        # Interrupt exit, user-frame absorption, cross-waiter stashing, etc.
+        _route_mid_cycle_frame(frame)
 
 
 def _extract_mcp_response_text(mcp_response: dict) -> str:
