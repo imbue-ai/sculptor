@@ -136,8 +136,8 @@ const AddPanelMenuItems = ({
       >
         {/* recentAgentLabel already carries the "in terminal" marker for a
             registered recent type, so the row reads e.g. "New Claude in
-            terminal agent". */}
-        <MenuRow label={`New ${recentAgentLabel(recentAgentType, registrations)} agent`} shortcut={newAgentShortcut} />
+            terminal". */}
+        <MenuRow label={`New ${recentAgentLabel(recentAgentType, registrations)}`} shortcut={newAgentShortcut} />
       </DropdownMenu.Item>
 
       <DropdownMenu.Sub>
