@@ -284,6 +284,10 @@ modal_ssh_key.pub
 **/test-results/
 **/test-results-*/
 
+# Perf-scenario measurements (sculptor/tests/perf/); kept outside test-results/
+# because pytest-playwright wipes that directory at session start
+**/perf-results/
+
 # Development Sculptor data directory (used when running dev builds locally)
 /.dev_sculptor/
 
