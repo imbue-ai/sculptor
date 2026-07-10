@@ -30,6 +30,8 @@ This is the user guide. For contributor and developer documentation, see
 - [Pull Requests](pull_requests.md) — opening a GitHub PR and tracking its status.
 - [Skills](skills.md) — the bundled `sculptor-workflow` and `sculptor-experimental`
   skills you can run from `/`.
+- [Extensions](extensions.md) — add panels, widgets, home views, and overlays
+  to the UI; use the bundled ones or have an agent build your own.
 - [Command Palette](command_palette.md) — `Cmd+K` to search and jump around the app.
 - [Settings](settings.md) — a tour of the settings sections.
 

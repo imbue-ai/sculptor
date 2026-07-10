@@ -1,5 +1,5 @@
 ---
-name: build-sculptor-plugin
+name: build-sculptor-extension
 description: |
   Build or modify a Sculptor extension — a runtime ESM module loaded
   into the Sculptor UI. Use when asked to write an extension (or "plugin")
@@ -76,8 +76,8 @@ are disabled.
 
 | Command | What it does |
 |---|---|
-| `sculpt extension load <dir\|manifest.json\|url> [--persist]` | Package the directory (or register the URL) and load it into the live UI |
-| `sculpt extension reload <id>` | Re-package (if from a path) and re-fetch with cache-busting — run after every edit |
+| `sculpt extension load <dir\|manifest.json\|url> [--persist]` | Package the directory (or register the URL) and load it into the live UI — run after every edit |
+| `sculpt extension reload <id>` | Re-import from the extension's **current source** with cache-busting. Does NOT re-package local file edits — after editing a path-loaded extension, run `load` again; reload only helps when the source itself serves fresh files (e.g. a dev-server URL) |
 | `sculpt extension inspect <id>` | One extension's live status, registrations, and config **key names** (values are never shown) |
 | `sculpt extension list` | All extensions (builtin / installed / url / dev) with live status per window |
 | `sculpt extension unload <id>` | Unload from the UI; files stay on disk |
@@ -105,8 +105,9 @@ are disabled.
   UI's per-extension error boundary instead — check `inspect` and the UI when
   something registered but doesn't render.
 
-Typical loop: `load` → edit → `reload` → … → `remove` (cleanup) or
-`load --persist` (keep it installed).
+Typical loop: `load` → edit → `load` again → … → `remove` (cleanup) or
+`load --persist` (keep it installed). Do not reach for `reload` in this loop —
+it re-imports the previously uploaded copy, so your edits won't show up.
 
 Manual no-CLI route: drop the extension directory into
 `<extensions-dir>/<extension-id>/` (path from `sculpt extension dir`) and

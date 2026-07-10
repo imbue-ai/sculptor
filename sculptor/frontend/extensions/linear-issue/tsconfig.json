@@ -17,7 +17,7 @@
       // The rolled-up public SDK contract (generated, freshness-checked in
       // CI) — NOT the SDK source, whose ~-aliased host imports would drag the
       // whole host module graph into this standalone project's typecheck.
-      "@sculptor/extension-sdk": ["../../../sculptor-plugin/skills/build-sculptor-plugin/sdk.d.ts"]
+      "@sculptor/extension-sdk": ["../../../sculptor-plugin/skills/build-sculptor-extension/sdk.d.ts"]
     }
   },
   "include": ["src"]

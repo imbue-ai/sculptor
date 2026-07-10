@@ -959,7 +959,7 @@ generate-api:
     }
     quiet_by_default generate-api _do_generate_api
 
-# Roll up the extension SDK declarations into the build-sculptor-plugin skill's sdk.d.ts
+# Roll up the extension SDK declarations into the build-sculptor-extension skill's sdk.d.ts
 [group("codegen")]
 generate-extension-sdk-dts: generate-api
     #!/usr/bin/env bash
@@ -984,7 +984,7 @@ check-extension-sdk-dts:
       tmp_file=$(mktemp)
       trap 'rm -f "$tmp_file"' EXIT
       ./scripts/generate-extension-sdk-dts.sh "$tmp_file"
-      if ! diff -u ../sculptor-plugin/skills/build-sculptor-plugin/sdk.d.ts "$tmp_file"; then
+      if ! diff -u ../sculptor-plugin/skills/build-sculptor-extension/sdk.d.ts "$tmp_file"; then
         echo "sdk.d.ts is stale - run 'just generate-extension-sdk-dts' and commit the result."
         exit 1
       fi
