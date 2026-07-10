@@ -191,14 +191,20 @@ class _StdinRouter:
         self._buffer = b""
         self._eof = False
 
-    def _pop_frame(self) -> dict | None:
+    def _pop_frame(self, flush_partial: bool = False) -> dict | None:
         """Return the next complete, parseable JSON object already buffered.
 
         Blank and unparseable lines (and non-object JSON) are skipped; a
-        partial trailing line stays buffered for the next read.
+        partial trailing line normally stays buffered for the next read. Pass
+        ``flush_partial`` at EOF to also consume a final line that arrived
+        without a trailing newline, so a last frame isn't dropped (the old
+        ``for line in sys.stdin`` iterator yielded it).
         """
-        while b"\n" in self._buffer:
-            raw_line, _, self._buffer = self._buffer.partition(b"\n")
+        while b"\n" in self._buffer or (flush_partial and self._buffer):
+            if b"\n" in self._buffer:
+                raw_line, _, self._buffer = self._buffer.partition(b"\n")
+            else:
+                raw_line, self._buffer = self._buffer, b""
             line = raw_line.decode("utf-8", errors="replace").strip()
             if not line:
                 continue
@@ -235,13 +241,13 @@ class _StdinRouter:
         frame = self._pop_frame()
         if frame is not None:
             return frame
-        if self._eof:
-            return _STDIN_EOF
-        self._fill(timeout)
-        frame = self._pop_frame()
+        if not self._eof:
+            self._fill(timeout)
+        # At EOF, flush a final newline-less line so a last frame isn't dropped.
+        frame = self._pop_frame(flush_partial=self._eof)
         if frame is not None:
             return frame
-        return _STDIN_EOF if (self._eof and b"\n" not in self._buffer) else _STDIN_TIMEOUT
+        return _STDIN_EOF if self._eof else _STDIN_TIMEOUT
 
 
 _STDIN_ROUTER = _StdinRouter()
@@ -353,7 +359,7 @@ def _read_mcp_control_responses(expected_request_ids: set[str], timeout_seconds:
         if frame is _STDIN_TIMEOUT:
             continue
         if frame is _STDIN_EOF:
-            break
+            raise RuntimeError(f"stdin closed before MCP control_response(s) for request_ids={sorted(remaining_ids)}")
         assert isinstance(frame, dict)
         if frame.get("type") == "control_response":
             response = frame.get("response", {})

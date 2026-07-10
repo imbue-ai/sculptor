@@ -69,11 +69,13 @@ def make_queued_command_attachment_entry(session_id: str, prompt: str) -> dict:
     The real CLI records a frame that arrives while a turn is in flight as a
     ``queued_command`` attachment rather than a plain user message; this is the
     on-disk marker that distinguishes steering from a turn-starting follow-up.
+    ``commandMode: "prompt"`` matches the real CLI's attachment shape (a queued
+    plain prompt, as opposed to a queued slash command).
     """
     return {
         "type": "attachment",
         "sessionId": session_id,
-        "attachment": {"type": "queued_command", "prompt": prompt},
+        "attachment": {"type": "queued_command", "prompt": prompt, "commandMode": "prompt"},
     }
 
 

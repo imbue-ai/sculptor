@@ -17,6 +17,7 @@ import pytest
 from sculptor.agents.testing.fake_claude import _parse_prompt
 from sculptor.agents.testing.fake_claude import _read_prompt_from_stream_json_stdin
 from sculptor.agents.testing.fake_claude_commands import _ABSORBED_FRAMES
+from sculptor.agents.testing.fake_claude_commands import _STDIN_EOF
 from sculptor.agents.testing.fake_claude_commands import _STDIN_ROUTER
 from sculptor.agents.testing.fake_claude_commands import _read_mcp_control_response_text
 from sculptor.agents.testing.fake_claude_commands import _read_mcp_control_responses
@@ -39,6 +40,7 @@ from sculptor.agents.testing.fake_claude_jsonl import generate_id
 from sculptor.agents.testing.fake_claude_jsonl import make_assistant_message
 from sculptor.agents.testing.fake_claude_jsonl import make_end_message
 from sculptor.agents.testing.fake_claude_jsonl import make_init_message
+from sculptor.agents.testing.fake_claude_jsonl import make_queued_command_attachment_entry
 from sculptor.agents.testing.fake_claude_jsonl import make_task_notification_message
 from sculptor.agents.testing.fake_claude_jsonl import make_task_started_message
 from sculptor.agents.testing.fake_claude_jsonl import make_text_block
@@ -1253,6 +1255,42 @@ def test_between_turns_frames_recorded_as_plain_user(tmp_path: Path) -> None:
     plain = _plain_user_texts(entries)
     assert any("TURN1" in text for text in plain)
     assert any("TURN2" in text for text in plain)
+
+
+def test_queued_command_attachment_shape_matches_real_cli() -> None:
+    """The absorbed-frame transcript entry carries the real CLI's attachment
+    shape, including ``commandMode: "prompt"`` (a queued plain prompt)."""
+    entry = make_queued_command_attachment_entry("sess-1", "hello")
+    assert entry["type"] == "attachment"
+    assert entry["sessionId"] == "sess-1"
+    assert entry["attachment"] == {"type": "queued_command", "prompt": "hello", "commandMode": "prompt"}
+
+
+def test_stdin_router_flushes_final_frame_without_trailing_newline(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A last frame written without a trailing newline before EOF is still
+    returned (parity with the old ``for line in sys.stdin`` iterator), not
+    dropped — it is flushed once EOF is observed, then EOF is reported.
+
+    Data and EOF arrive in separate pipe reads, so the frame surfaces across
+    the loop iterations every real caller already runs (they retry on
+    ``_STDIN_TIMEOUT``).
+    """
+    read_fd, write_fd = os.pipe()
+    os.write(write_fd, b'{"type": "user", "message": {"role": "user", "content": "tail"}}')  # no newline
+    os.close(write_fd)
+    fake_stdin = os.fdopen(read_fd, "r")
+    monkeypatch.setattr(sys, "stdin", fake_stdin)
+    try:
+        frame: object = None
+        for _ in range(5):
+            frame = _STDIN_ROUTER.next_frame(timeout=1.0)
+            if isinstance(frame, dict):
+                break
+        assert isinstance(frame, dict), frame
+        assert frame["message"]["content"] == "tail"
+        assert _STDIN_ROUTER.next_frame(timeout=1.0) is _STDIN_EOF
+    finally:
+        fake_stdin.close()
 
 
 def test_mcp_reader_absorbs_user_frame_while_awaiting_response(
