@@ -407,8 +407,8 @@ The deterministic shape: the action only records intent (a ref or a pending atom
 **What to look for:**
 - A menu `onSelect` or palette `perform` that sets state which mounts an auto-focusing component (a rename-target atom, `setIsRenaming(true)`) instead of stashing intent for `onCloseAutoFocus`
 - `requestAnimationFrame` / `setTimeout` wrapped around `.focus()` to "run after the menu closes"
-- A new rename entry point that bypasses the existing handoff patterns (`pendingRenameRef` in `SectionHeader`, `palettePendingRenameAtom` in the command palette)
+- A new rename entry point that bypasses the existing handoff patterns (`pendingRenameRef` in `SectionHeader`, `palettePendingRenameAtom` in the command palette, `pendingWorkspaceRenameIdAtom` in the sidebar row menus)
 
-**Fix:** Record intent in `onSelect`/`perform`; in the overlay's `onCloseAutoFocus`, call `event.preventDefault()` and start the focus-sensitive UI. See `SectionHeader`'s panel-tab context menu and the command palette's `palettePendingRenameAtom` for the two reference implementations.
+**Fix:** Record intent in `onSelect`/`perform`; in the overlay's `onCloseAutoFocus`, call `event.preventDefault()` and start the focus-sensitive UI. See `SectionHeader`'s panel-tab context menu, the command palette's `palettePendingRenameAtom`, and the sidebar row menus' `pendingWorkspaceRenameIdAtom` for reference implementations.
 
-**Exceptions:** Follow-up UI that owns a focus scope (e.g. a menu item opening a Radix Dialog) needs no deferral — the dialog's focus trap wins the handoff on its own. Non-focus side effects (clipboard copies, navigation, atom writes that don't mount focused UI) are unaffected. Menus whose items never hand off focus may keep an unconditional `onCloseAutoFocus={(e) => e.preventDefault()}` (the workspace row menus do) when returning focus to the trigger is not useful.
+**Exceptions:** Follow-up UI that owns a focus scope (e.g. a menu item opening a Radix Dialog) needs no deferral — the dialog's focus trap wins the handoff on its own. Non-focus side effects (clipboard copies, navigation, atom writes that don't mount focused UI) are unaffected. Menus whose items never hand off focus may keep an unconditional `onCloseAutoFocus={(e) => e.preventDefault()}` when returning focus to the trigger is not useful.
