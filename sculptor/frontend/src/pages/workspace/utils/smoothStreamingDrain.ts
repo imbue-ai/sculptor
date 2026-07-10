@@ -32,11 +32,11 @@ export const MAX_DRAIN_WINDOW_MS = 1200;
 export const DEFAULT_DRAIN_WINDOW_MS = 400;
 
 /**
- * Soft catch-up threshold. Once the buffer exceeds this, we progressively
- * shrink the effective drain window so the reveal speeds up and latency stays
- * bounded — WITHOUT dumping the whole buffer in a single frame (which is what
- * produced the visible "jump" choppiness). The further past this the buffer
- * is, the harder we compress the window, down to MIN_CATCHUP_WINDOW_MS.
+ * Soft catch-up threshold. Once the buffer exceeds this, the effective drain
+ * window progressively shrinks so the reveal speeds up and latency stays
+ * bounded without dumping the whole buffer in a single frame. The further past
+ * this the buffer is, the harder the window compresses, down to
+ * MIN_CATCHUP_WINDOW_MS.
  */
 export const CATCHUP_BUFFER_CHARS = 350;
 
@@ -152,13 +152,8 @@ export const computeDrainStep = (
 /**
  * Snap a target character offset to the *nearest* word boundary within a small
  * look-ahead/look-behind window, so reveals land between words instead of
- * mid-word.
- *
- * Unlike a forward-only snap, this may round the step DOWN to the previous
- * boundary when that boundary is closer. Rounding only forward inflated every
- * frame's step by up to a full partial word, which read as phrase-by-phrase
- * popping; snapping to the nearest boundary (and never below 1 char of
- * progress) keeps the crawl smooth.
+ * mid-word. May round the step down to the previous boundary when it is
+ * closer, but never below one character of progress.
  */
 export const snapToWordBoundary = (text: string, currentOffset: number, rawCharsToReveal: number): number => {
   const targetOffset = currentOffset + rawCharsToReveal;
