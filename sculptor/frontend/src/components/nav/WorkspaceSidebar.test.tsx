@@ -117,8 +117,9 @@ describe("WorkspaceSidebar repo groups", () => {
   });
 
   it("enters inline rename mode when a workspace row is double-clicked", async () => {
-    // user.dblClick fires the real click → click → dblclick sequence, so this also
-    // covers the row's onClick guard against navigating on the second click.
+    // user.dblClick fires the real click → click → dblclick sequence, so the
+    // clicks that precede a dblclick are exercised and shown not to block the row
+    // from entering rename mode.
     const user = userEvent.setup();
     seedProject(store, "p1");
     seedWorkspaces(store, ["w1"]);
