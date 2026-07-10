@@ -4,7 +4,7 @@ import { ChevronDown, Folder, FolderPlus, House, Pencil, Plus, Settings, Trash2 
 import type { ReactElement } from "react";
 import { useMemo, useState } from "react";
 
-import { updateWorkspace, type Workspace } from "~/api";
+import { ElementIds, updateWorkspace, type Workspace } from "~/api";
 import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { userEmailAtom } from "~/common/state/atoms/userConfig.ts";
@@ -110,11 +110,15 @@ const DrawerWorkspaceRow = ({
           <span className={styles.menuAnchor} aria-hidden="true" />
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="start" side="bottom" variant="soft" className="mobileTheme">
-          <DropdownMenu.Item onSelect={() => setIsRenaming(true)}>
+          <DropdownMenu.Item onSelect={() => setIsRenaming(true)} data-testid={ElementIds.MOBILE_ROW_RENAME_ACTION}>
             <Pencil size={16} /> Rename
           </DropdownMenu.Item>
           <DropdownMenu.Separator />
-          <DropdownMenu.Item color="red" onSelect={() => onRequestDelete(workspace)}>
+          <DropdownMenu.Item
+            color="red"
+            onSelect={() => onRequestDelete(workspace)}
+            data-testid={ElementIds.MOBILE_ROW_DELETE_ACTION}
+          >
             <Trash2 size={16} /> Delete workspace
           </DropdownMenu.Item>
         </DropdownMenu.Content>
@@ -124,6 +128,7 @@ const DrawerWorkspaceRow = ({
         className={`${styles.workspaceRow} ${isCurrent ? styles.current : ""}`}
         onClick={handleClick}
         aria-current={isCurrent}
+        data-testid={ElementIds.MOBILE_DRAWER_WORKSPACE_ROW}
         {...longPress}
       >
         {dot}
@@ -240,7 +245,11 @@ export const WorkspaceDrawer = ({ isOpen, onClose, currentWorkspaceID }: Workspa
   };
 
   return (
-    <aside className={`${styles.drawer} ${isOpen ? styles.open : ""}`} aria-hidden={!isOpen}>
+    <aside
+      className={`${styles.drawer} ${isOpen ? styles.open : ""}`}
+      aria-hidden={!isOpen}
+      data-testid={ElementIds.MOBILE_WORKSPACE_DRAWER}
+    >
       <div className={styles.header}>
         <span className={styles.wordmark}>Sculptor</span>
         <span className={styles.avatar}>{getInitials(userEmail)}</span>
@@ -254,6 +263,7 @@ export const WorkspaceDrawer = ({ isOpen, onClose, currentWorkspaceID }: Workspa
             onClose();
             navigateToHome();
           }}
+          data-testid={ElementIds.MOBILE_DRAWER_HOME_LINK}
         >
           <House size={20} /> Home
         </button>
@@ -264,6 +274,7 @@ export const WorkspaceDrawer = ({ isOpen, onClose, currentWorkspaceID }: Workspa
             onClose();
             navigateToGlobalSettings();
           }}
+          data-testid={ElementIds.MOBILE_DRAWER_SETTINGS_LINK}
         >
           <Settings size={20} /> Settings
         </button>
@@ -300,6 +311,7 @@ export const WorkspaceDrawer = ({ isOpen, onClose, currentWorkspaceID }: Workspa
           onClose();
           setNewWorkspaceModal({ open: true });
         }}
+        data-testid={ElementIds.MOBILE_DRAWER_NEW_WORKSPACE_BUTTON}
       >
         <Plus size={18} /> New workspace
       </button>

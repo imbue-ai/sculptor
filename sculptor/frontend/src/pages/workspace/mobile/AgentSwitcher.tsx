@@ -3,6 +3,7 @@ import { ChevronDown } from "lucide-react";
 import type { PointerEvent as ReactPointerEvent, ReactElement } from "react";
 import { useCallback, useMemo, useRef } from "react";
 
+import { ElementIds } from "~/api";
 import { useImbueNavigate, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 
@@ -102,6 +103,7 @@ export const AgentSwitcher = ({ onOpenSheet }: AgentSwitcherProps): ReactElement
         className={styles.pill}
         aria-haspopup="dialog"
         aria-label={`Current agent: ${name}. Tap to switch agents.`}
+        data-testid={ElementIds.MOBILE_AGENT_SWITCHER_PILL}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={(e) => endDrag(e.clientX)}

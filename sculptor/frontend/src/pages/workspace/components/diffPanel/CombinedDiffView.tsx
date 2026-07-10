@@ -328,7 +328,7 @@ export const CombinedDiffView = ({
   return (
     <div ref={contentRef} className={isActive ? styles.wrapper : styles.wrapperHidden}>
       {!hideToolbar && (
-        <div className={styles.toolbar}>
+        <div className={styles.toolbar} data-testid={ElementIds.COMBINED_DIFF_TOOLBAR}>
           <TooltipIconButton
             tooltipText="Previous file"
             size="1"

@@ -3,6 +3,7 @@ import { ChevronLeft } from "lucide-react";
 import type { ReactElement } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
+import { ElementIds } from "~/api";
 import { useImbueNavigate } from "~/common/NavigateUtils.ts";
 
 import styles from "./MobileSettingsHeader.module.scss";
@@ -31,7 +32,7 @@ export const MobileSettingsHeader = (): ReactElement => {
   };
 
   return (
-    <header className={`mobileTheme ${styles.header}`}>
+    <header className={`mobileTheme ${styles.header}`} data-testid={ElementIds.MOBILE_SETTINGS_HEADER}>
       <IconButton variant="ghost" color="gray" className={styles.iconButton} aria-label="Back" onClick={handleBack}>
         <ChevronLeft size={22} />
       </IconButton>

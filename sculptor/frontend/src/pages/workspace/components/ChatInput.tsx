@@ -863,7 +863,13 @@ export const ChatInput = ({
               {isMobile ? (
                 <DropdownMenu.Root>
                   <DropdownMenu.Trigger>
-                    <IconButton variant="ghost" size="3" aria-label="Message options" style={{ margin: 0 }}>
+                    <IconButton
+                      variant="ghost"
+                      size="3"
+                      aria-label="Message options"
+                      data-testid={ElementIds.MOBILE_CHAT_INPUT_OPTIONS}
+                      style={{ margin: 0 }}
+                    >
                       <SlidersHorizontal size={16} />
                     </IconButton>
                   </DropdownMenu.Trigger>
@@ -882,7 +888,7 @@ export const ChatInput = ({
                       {(isPlanFirst || isInPlanMode) && <Check size={14} className={styles.menuTrailing} />}
                     </DropdownMenu.Item>
                     <DropdownMenu.Sub>
-                      <DropdownMenu.SubTrigger>
+                      <DropdownMenu.SubTrigger data-testid={ElementIds.MOBILE_CHAT_INPUT_MODEL_SUBMENU}>
                         <Bot size={16} /> {getModelShortName(localModel)}
                       </DropdownMenu.SubTrigger>
                       <DropdownMenu.SubContent className="mobileTheme">
@@ -899,7 +905,7 @@ export const ChatInput = ({
                       </DropdownMenu.SubContent>
                     </DropdownMenu.Sub>
                     <DropdownMenu.Sub>
-                      <DropdownMenu.SubTrigger>
+                      <DropdownMenu.SubTrigger data-testid={ElementIds.MOBILE_CHAT_INPUT_EFFORT_SUBMENU}>
                         <Gauge size={16} /> {EFFORT_DISPLAY_NAMES[effort]}
                       </DropdownMenu.SubTrigger>
                       <DropdownMenu.SubContent className="mobileTheme">
@@ -916,7 +922,10 @@ export const ChatInput = ({
                       </DropdownMenu.SubContent>
                     </DropdownMenu.Sub>
                     {modelCapabilities.supportsFastMode && canUseFastMode && (
-                      <DropdownMenu.Item onSelect={() => setIsFastMode(!isFastMode)}>
+                      <DropdownMenu.Item
+                        onSelect={() => setIsFastMode(!isFastMode)}
+                        data-testid={ElementIds.MOBILE_CHAT_INPUT_FAST_MODE_ITEM}
+                      >
                         <Zap size={16} /> Fast mode
                         {isFastMode && <Check size={14} className={styles.menuTrailing} />}
                       </DropdownMenu.Item>
@@ -1002,7 +1011,7 @@ export const ChatInput = ({
           )}
         </div>
         {!isMobile && (
-          <Flex justify="between" mt="2" gap="3">
+          <Flex justify="between" mt="2" gap="3" data-testid={ElementIds.CHAT_INPUT_KEYBOARD_HINTS}>
             <Flex gap="3" align="center">
               {showPromptNavHint && <KeyboardHint keys="↑↓" label="navigate prompts" />}
             </Flex>

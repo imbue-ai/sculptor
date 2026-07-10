@@ -2,6 +2,8 @@ import { IconButton } from "@radix-ui/themes";
 import { SquareMenu } from "lucide-react";
 import type { ReactElement } from "react";
 
+import { ElementIds } from "~/api";
+
 import styles from "./MobileHomeHeader.module.scss";
 
 type MobileHomeHeaderProps = {
@@ -17,7 +19,7 @@ type MobileHomeHeaderProps = {
  */
 export const MobileHomeHeader = ({ onOpenDrawer }: MobileHomeHeaderProps): ReactElement => {
   return (
-    <header className={`mobileTheme ${styles.header}`}>
+    <header className={`mobileTheme ${styles.header}`} data-testid={ElementIds.MOBILE_HOME_HEADER}>
       <IconButton
         variant="ghost"
         color="gray"

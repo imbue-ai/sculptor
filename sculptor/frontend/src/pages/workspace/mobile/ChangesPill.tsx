@@ -3,7 +3,7 @@ import { ChevronDown, GitMerge, Layers, Plus } from "lucide-react";
 import type { ReactElement } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { PrStatusInfo } from "~/api";
+import { ElementIds, type PrStatusInfo } from "~/api";
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
@@ -179,10 +179,20 @@ export const ChangesPill = ({ onReviewAll }: ChangesPillProps): ReactElement | n
   };
 
   return (
-    <div ref={wrapRef} className={`${styles.wrap} ${isOpen ? styles.open : ""}`}>
+    <div
+      ref={wrapRef}
+      className={`${styles.wrap} ${isOpen ? styles.open : ""}`}
+      data-testid={ElementIds.MOBILE_CHANGES_PILL}
+    >
       <div className={styles.bar}>
         {renderPrControl()}
-        <button type="button" className={styles.changes} onClick={() => setIsOpen((v) => !v)} aria-expanded={isOpen}>
+        <button
+          type="button"
+          className={styles.changes}
+          onClick={() => setIsOpen((v) => !v)}
+          aria-expanded={isOpen}
+          data-testid={ElementIds.MOBILE_CHANGES_PILL_TOGGLE}
+        >
           <span className={styles.stat}>
             <span className={styles.add}>+{summary.added}</span> <span className={styles.del}>−{summary.removed}</span>
             {shouldDropFiles ? null : (
@@ -224,7 +234,12 @@ export const ChangesPill = ({ onReviewAll }: ChangesPillProps): ReactElement | n
           })}
         </div>
         <div className={styles.reviewFoot}>
-          <button type="button" className={styles.reviewButton} onClick={onReviewAll}>
+          <button
+            type="button"
+            className={styles.reviewButton}
+            onClick={onReviewAll}
+            data-testid={ElementIds.MOBILE_CHANGES_PILL_REVIEW_ALL}
+          >
             <Layers size={15} /> Review all changes
           </button>
         </div>

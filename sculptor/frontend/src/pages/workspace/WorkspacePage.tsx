@@ -21,9 +21,9 @@ import { WorkspaceLayoutShell } from "./WorkspaceLayoutShell.tsx";
 // The desktop shell, bootstrapped for the active workspace + agent: scope switch,
 // registry sync, and center-agent placement happen here so the center renders the
 // resolved agent's chat. `taskId` is undefined for a workspace with no agents,
-// which renders the shell with an empty center. The mobile branch
-// (MobileWorkspaceShell) is not built yet — useIsMobile is a no-op seam that
-// always takes this path.
+// which renders the shell with an empty center. Narrow browser viewports take the
+// mobile branch in WorkspacePage below (MobileWorkspaceShell) instead of this
+// desktop shell; this content only renders on desktop.
 const WorkspacePageContent = ({ workspaceId, taskId }: { workspaceId: string; taskId?: string }): ReactElement => {
   useWorkspaceShellBootstrap({ workspaceId, taskId });
 
