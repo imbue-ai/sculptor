@@ -353,7 +353,45 @@ def validate_workspace_id(workspace_id: str) -> WorkspaceID:
         ) from e
 
 
-def _workspace_to_response(workspace: Workspace, workspace_setup_command: str | None = None) -> WorkspaceResponse:
+def _project_path_from_git_repo_url(user_git_repo_url: str | None) -> str | None:
+    """Convert a project's file:// repo URL to a local filesystem path.
+
+    Mirrors ``Project.get_local_user_path`` for callers that only have the raw
+    URL (e.g. denormalized listing rows), but returns None instead of asserting
+    when the URL is missing or not file://-schemed.
+    """
+    if user_git_repo_url is None or not user_git_repo_url.startswith("file://"):
+        return None
+    return str(Path(user_git_repo_url.removeprefix("file://")))
+
+
+def _workspace_working_directory(
+    strategy: WorkspaceInitializationStrategy,
+    environment_id: str | None,
+    project_path: str | None,
+) -> str | None:
+    """Resolve the directory holding a workspace's checkout.
+
+    Mirrors ``LocalEnvironment.get_working_directory`` without resuming the
+    environment (resume has side effects and is too heavy for list endpoints):
+    clone/worktree checkouts live at ``<environment_id>/code`` (environment_id
+    is the absolute workspace directory path), while in-place workspaces work
+    directly in the project's local repo. None when the environment hasn't been
+    initialized yet.
+    """
+    if strategy == WorkspaceInitializationStrategy.IN_PLACE:
+        return project_path
+    if environment_id is None:
+        return None
+    return str(Path(environment_id) / "code")
+
+
+def _workspace_to_response(
+    workspace: Workspace,
+    workspace_setup_command: str | None = None,
+    project_path: str | None = None,
+    current_branch: str | None = None,
+) -> WorkspaceResponse:
     """Convert a Workspace model to a WorkspaceResponse."""
     setup_snapshot = _build_setup_snapshot(workspace)
     return WorkspaceResponse(
@@ -370,6 +408,10 @@ def _workspace_to_response(workspace: Workspace, workspace_setup_command: str | 
         created_at=workspace.created_at,
         workspace_setup_command=workspace_setup_command,
         setup=setup_snapshot,
+        working_directory=_workspace_working_directory(
+            workspace.initialization_strategy, workspace.environment_id, project_path
+        ),
+        current_branch=current_branch,
     )
 
 
@@ -764,7 +806,12 @@ def create_workspace_v2(
             in (WorkspaceInitializationStrategy.CLONE, WorkspaceInitializationStrategy.WORKTREE)
             else None
         )
-        return _workspace_to_response(workspace, workspace_setup_command=setup_command)
+        return _workspace_to_response(
+            workspace,
+            workspace_setup_command=setup_command,
+            project_path=_project_path_from_git_repo_url(project.user_git_repo_url),
+            current_branch=services.workspace_service.get_cached_current_branch(workspace.object_id),
+        )
 
 
 _PREVIEW_BRANCH_NAME_GIT_TIMEOUT = 5.0
@@ -939,6 +986,12 @@ def list_recent_workspaces(
             agent_count=row.agent_count,
             is_open=row.is_open,
             last_activity_at=row.last_activity_at,
+            working_directory=_workspace_working_directory(
+                row.initialization_strategy,
+                row.environment_id,
+                _project_path_from_git_repo_url(row.project_git_repo_url),
+            ),
+            current_branch=services.workspace_service.get_cached_current_branch(row.object_id),
         )
         for row in workspace_rows
     ]
@@ -969,13 +1022,18 @@ def update_workspace(
         except WorkspaceNotFoundError as e:
             raise HTTPException(status_code=404, detail=f"Workspace {workspace_id} not found") from e
         logger.info("Updated workspace {}", workspace_id)
+        project = transaction.get_project(updated_workspace.project_id)
 
     # Refresh diffs after the transaction commits so the frontend picks up the
     # new target-branch diff via the diffUpdatedAt reactivity.
     if update_request.target_branch is not None:
         services.workspace_service.refresh_workspace_diff(validated_workspace_id, include_target_branch_diff=True)
 
-    return _workspace_to_response(updated_workspace)
+    return _workspace_to_response(
+        updated_workspace,
+        project_path=_project_path_from_git_repo_url(project.user_git_repo_url) if project is not None else None,
+        current_branch=services.workspace_service.get_cached_current_branch(updated_workspace.object_id),
+    )
 
 
 @router.post("/api/v1/workspaces/batch-update-open-state")
@@ -1015,7 +1073,12 @@ def get_workspace(
         workspace = transaction.get_workspace(validated_workspace_id)
         if workspace is None or workspace.is_deleted:
             raise HTTPException(status_code=404, detail=f"Workspace {workspace_id} not found")
-        return _workspace_to_response(workspace)
+        project = transaction.get_project(workspace.project_id)
+        return _workspace_to_response(
+            workspace,
+            project_path=_project_path_from_git_repo_url(project.user_git_repo_url) if project is not None else None,
+            current_branch=services.workspace_service.get_cached_current_branch(workspace.object_id),
+        )
 
 
 @router.get("/api/v1/projects/{project_id}/workspaces")
@@ -1030,7 +1093,16 @@ def list_workspaces(
 
     with user_session.open_transaction(services) as transaction:
         workspaces = transaction.get_workspaces(project_id=validated_project_id)
-        return [_workspace_to_response(w) for w in workspaces]
+        project = transaction.get_project(validated_project_id)
+        project_path = _project_path_from_git_repo_url(project.user_git_repo_url) if project is not None else None
+        return [
+            _workspace_to_response(
+                w,
+                project_path=project_path,
+                current_branch=services.workspace_service.get_cached_current_branch(w.object_id),
+            )
+            for w in workspaces
+        ]
 
 
 @router.delete("/api/v1/workspaces/{workspace_id}")

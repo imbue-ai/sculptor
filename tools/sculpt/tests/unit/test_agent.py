@@ -8,8 +8,11 @@ from unittest.mock import patch
 
 import pytest
 import respx
+import typer
 from httpx import ConnectError
 from httpx import Response
+from sculpt.auth import MODEL_MAPPING
+from sculpt.commands.agent import _resolve_send_model
 from sculpt.main import app
 from sculpt.ws_client import AgentNotFoundError
 from sculpt.ws_client import AgentSnapshot
@@ -45,7 +48,7 @@ def _task_response_dict(
     workspace_id: str = "ws_test123",
     title: str = "Test task",
     status: str = "RUNNING",
-    model: str = "CLAUDE-4-SONNET",
+    model: str | None = "CLAUDE-4-SONNET",
 ) -> dict[str, Any]:
     return {
         "id": task_id,
@@ -524,7 +527,7 @@ class TestAgentDelete:
             return_value=Response(200, text="null", headers={"content-type": "application/json"})
         )
 
-        result = runner.invoke(app, ["agent", "delete", "tsk_abc123def456", "-w", "ws_test123"])
+        result = runner.invoke(app, ["agent", "delete", "tsk_abc123def456", "-w", "ws_test123", "-y"])
 
         assert result.exit_code == 0
         assert "deleted" in result.output
@@ -540,7 +543,7 @@ class TestAgentDelete:
             return_value=Response(200, text="null", headers={"content-type": "application/json"})
         )
 
-        result = runner.invoke(app, ["agent", "delete", "tsk_abc123def456", "-w", "ws_test123", "--json"])
+        result = runner.invoke(app, ["agent", "delete", "tsk_abc123def456", "-w", "ws_test123", "--json", "-y"])
 
         assert result.exit_code == 0
         data = json.loads(result.stdout)
@@ -558,7 +561,7 @@ class TestAgentDelete:
             return_value=Response(200, text="null", headers={"content-type": "application/json"})
         )
 
-        result = runner.invoke(app, ["agent", "delete", "tsk_abc", "-w", "ws_test123"])
+        result = runner.invoke(app, ["agent", "delete", "tsk_abc", "-w", "ws_test123", "-y"])
 
         assert result.exit_code == 0
 
@@ -803,6 +806,7 @@ def _make_snapshot(
     current_activity: str | None = None,
     last_activity: str | None = None,
     waiting_detail: str | None = None,
+    waiting_options: list[str] | None = None,
     error_detail: str | None = None,
     task_completed: int = 0,
     task_total: int = 0,
@@ -822,6 +826,7 @@ def _make_snapshot(
         task_total=task_total,
         current_task_subject=current_task_subject,
         waiting_detail=waiting_detail,
+        waiting_options=waiting_options,
         error_detail=error_detail,
         updated_at="2026-01-15T10:35:00Z",
         title="Test task",
@@ -1366,7 +1371,7 @@ class TestWorkspacePrefixResolution:
             return_value=Response(200, text="null", headers={"content-type": "application/json"})
         )
 
-        result = runner.invoke(app, ["agent", "delete", "tsk_abc123def456", "-w", "ws_test123"])
+        result = runner.invoke(app, ["agent", "delete", "tsk_abc123def456", "-w", "ws_test123", "-y"])
 
         assert result.exit_code == 0
 
@@ -1419,3 +1424,428 @@ class TestWorkspacePrefixResolution:
 
         assert result.exit_code == 0
         assert "tsk_abc123d" in result.output
+
+
+class TestAgentCrossWorkspaceResolution:
+    """Workspace scoping for agent actions (send/interrupt/rename/delete).
+
+    An explicit --workspace is authoritative: an agent living elsewhere is an
+    error. SCULPT_WORKSPACE_ID is only a disambiguation scope: an agent with no
+    match there is looked up across all workspaces, so full IDs work from any
+    Sculptor agent shell.
+    """
+
+    @patch("sculpt.commands.agent.fetch_all_agents")
+    @respx.mock
+    def test_send_env_workspace_miss_falls_back_to_actual_workspace(
+        self, mock_fetch: Any, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("SCULPT_WORKSPACE_ID", "ws_env123")
+        _mock_session()
+        _mock_workspaces("ws_env123")
+        respx.get("http://localhost:5050/api/v1/workspaces/ws_env123/agents").mock(return_value=Response(200, json=[]))
+        mock_fetch.return_value = [_make_snapshot(workspace_id="ws_actual456")]
+        route = respx.post(
+            "http://localhost:5050/api/v1/workspaces/ws_actual456/agents/tsk_abc123def456/messages"
+        ).mock(return_value=Response(200, text="null", headers={"content-type": "application/json"}))
+
+        result = runner.invoke(app, ["agent", "send", "tsk_abc123def456", "hello"])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        assert route.called
+        # The widened lookup goes across all workspaces...
+        assert mock_fetch.call_args.kwargs.get("scope") == "all"
+        # ...and the cross-workspace action is never silent.
+        assert "Agent tsk_abc123def456 is in workspace ws_actual456" in result.stderr
+
+    @patch("sculpt.commands.agent.fetch_all_agents")
+    @respx.mock
+    def test_send_with_stale_env_workspace_still_resolves_globally(
+        self, mock_fetch: Any, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # SCULPT_WORKSPACE_ID points at a workspace that no longer exists (it
+        # was deleted after the shell started); the stale scope must degrade
+        # to a global lookup rather than a hard failure.
+        monkeypatch.setenv("SCULPT_WORKSPACE_ID", "ws_gone999")
+        _mock_session()
+        _mock_workspaces("ws_other111")
+        mock_fetch.return_value = [_make_snapshot(workspace_id="ws_actual456")]
+        route = respx.post(
+            "http://localhost:5050/api/v1/workspaces/ws_actual456/agents/tsk_abc123def456/messages"
+        ).mock(return_value=Response(200, text="null", headers={"content-type": "application/json"}))
+
+        result = runner.invoke(app, ["agent", "send", "tsk_abc123def456", "hello"])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        assert route.called
+
+    @patch("sculpt.commands.agent.fetch_all_agents")
+    @respx.mock
+    def test_send_agent_in_env_workspace_stays_local(
+        self, mock_fetch: Any, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("SCULPT_WORKSPACE_ID", "ws_env123")
+        _mock_session()
+        _mock_workspaces("ws_env123")
+        respx.get("http://localhost:5050/api/v1/workspaces/ws_env123/agents").mock(
+            return_value=Response(200, json=[_task_response_dict(workspace_id="ws_env123")])
+        )
+        route = respx.post("http://localhost:5050/api/v1/workspaces/ws_env123/agents/tsk_abc123def456/messages").mock(
+            return_value=Response(200, text="null", headers={"content-type": "application/json"})
+        )
+
+        result = runner.invoke(app, ["agent", "send", "tsk_abc123def456", "hello"])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        assert route.called
+        mock_fetch.assert_not_called()
+        assert "is in workspace" not in result.stderr
+
+    @patch("sculpt.commands.agent.fetch_all_agents")
+    @respx.mock
+    def test_send_explicit_workspace_mismatch_is_an_error(self, mock_fetch: Any, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_workspaces("ws_other789")
+        respx.get("http://localhost:5050/api/v1/workspaces/ws_other789/agents").mock(
+            return_value=Response(200, json=[])
+        )
+        mock_fetch.return_value = [_make_snapshot(workspace_id="ws_actual456")]
+
+        result = runner.invoke(app, ["agent", "send", "tsk_abc123def456", "hello", "-w", "ws_other789"])
+
+        assert result.exit_code == 1
+        assert "Agent tsk_abc123def456 is in workspace ws_actual456, not ws_other789" in result.stderr
+
+    @patch("sculpt.commands.agent.fetch_all_agents")
+    @respx.mock
+    def test_interrupt_env_workspace_miss_hits_actual_workspace(
+        self, mock_fetch: Any, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("SCULPT_WORKSPACE_ID", "ws_env123")
+        _mock_session()
+        _mock_workspaces("ws_env123")
+        respx.get("http://localhost:5050/api/v1/workspaces/ws_env123/agents").mock(return_value=Response(200, json=[]))
+        mock_fetch.return_value = [_make_snapshot(workspace_id="ws_actual456")]
+        route = respx.post(
+            "http://localhost:5050/api/v1/workspaces/ws_actual456/agents/tsk_abc123def456/interrupt"
+        ).mock(return_value=Response(200, text="null", headers={"content-type": "application/json"}))
+
+        result = runner.invoke(app, ["agent", "interrupt", "tsk_abc123def456"])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        assert route.called
+        assert "Agent tsk_abc123def456 is in workspace ws_actual456" in result.stderr
+
+    @patch("sculpt.commands.agent.fetch_all_agents")
+    @respx.mock
+    def test_send_without_workspace_context_resolves_globally(self, mock_fetch: Any, runner: CliRunner) -> None:
+        _mock_session()
+        mock_fetch.return_value = [_make_snapshot(workspace_id="ws_actual456")]
+        route = respx.post(
+            "http://localhost:5050/api/v1/workspaces/ws_actual456/agents/tsk_abc123def456/messages"
+        ).mock(return_value=Response(200, text="null", headers={"content-type": "application/json"}))
+
+        # A prefix (not just a full id) resolves through the global snapshot list.
+        result = runner.invoke(app, ["agent", "send", "tsk_abc", "hello"])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        assert route.called
+        # Without an env workspace there is nothing to contrast against — no note.
+        assert "is in workspace" not in result.stderr
+
+
+class TestAgentSendModelDefault:
+    """`send` without --model reuses the agent's current model, so a plain
+    follow-up never switches the agent to a different model."""
+
+    @respx.mock
+    def test_send_defaults_to_agents_current_model(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        respx.get("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
+            return_value=Response(200, json=[_task_response_dict(model="CLAUDE-4-HAIKU")])
+        )
+        route = respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/agents/tsk_abc123def456/messages").mock(
+            return_value=Response(200, text="null", headers={"content-type": "application/json"})
+        )
+
+        result = runner.invoke(app, ["agent", "send", "tsk_abc123def456", "hello", "-w", "ws_test123"])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        body = json.loads(route.calls.last.request.content)
+        assert body["model"] == "CLAUDE-4-HAIKU"
+
+    @respx.mock
+    def test_send_explicit_model_overrides_current(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        respx.get("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
+            return_value=Response(200, json=[_task_response_dict(model="CLAUDE-4-HAIKU")])
+        )
+        route = respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/agents/tsk_abc123def456/messages").mock(
+            return_value=Response(200, text="null", headers={"content-type": "application/json"})
+        )
+
+        result = runner.invoke(app, ["agent", "send", "tsk_abc123def456", "hello", "-w", "ws_test123", "-m", "opus"])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        body = json.loads(route.calls.last.request.content)
+        assert body["model"] == MODEL_MAPPING["opus"].value
+
+    @respx.mock
+    def test_send_null_current_model_falls_back_to_opus(self, runner: CliRunner) -> None:
+        """Terminal agents carry no model; the request field still needs a value."""
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        respx.get("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
+            return_value=Response(200, json=[_task_response_dict(model=None)])
+        )
+        route = respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/agents/tsk_abc123def456/messages").mock(
+            return_value=Response(200, text="null", headers={"content-type": "application/json"})
+        )
+
+        result = runner.invoke(app, ["agent", "send", "tsk_abc123def456", "hello", "-w", "ws_test123"])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        body = json.loads(route.calls.last.request.content)
+        assert body["model"] == MODEL_MAPPING["opus"].value
+
+    def test_resolve_send_model_unrecognized_current_model_requires_flag(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A current model this sculpt version doesn't know must not be silently
+        swapped for a different one — the user has to pass --model."""
+        with pytest.raises(typer.Exit):
+            _resolve_send_model(None, "CLAUDE-99-FUTURE", False)
+        captured = capsys.readouterr()
+        assert "not recognized" in captured.err
+        assert "--model" in captured.err
+
+    def test_resolve_send_model_explicit_wins_over_current(self) -> None:
+        assert _resolve_send_model("haiku", "CLAUDE-4-SONNET", False) == MODEL_MAPPING["haiku"]
+
+    def test_resolve_send_model_no_flag_no_current_defaults_to_opus(self) -> None:
+        assert _resolve_send_model(None, None, False) == MODEL_MAPPING["opus"]
+
+
+class TestAgentDeleteConfirmation:
+    @respx.mock
+    def test_delete_prompt_declined_sends_no_request(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        respx.get("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
+            return_value=Response(200, json=[_task_response_dict()])
+        )
+        route = respx.delete("http://localhost:5050/api/v1/workspaces/ws_test123/agents/tsk_abc123def456").mock(
+            return_value=Response(200, text="null", headers={"content-type": "application/json"})
+        )
+
+        result = runner.invoke(app, ["agent", "delete", "tsk_abc123def456", "-w", "ws_test123"], input="n\n")
+
+        assert result.exit_code != 0
+        assert not route.called
+
+    @respx.mock
+    def test_delete_json_without_yes_fails_with_structured_error(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        respx.get("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
+            return_value=Response(200, json=[_task_response_dict()])
+        )
+        route = respx.delete("http://localhost:5050/api/v1/workspaces/ws_test123/agents/tsk_abc123def456").mock(
+            return_value=Response(200, text="null", headers={"content-type": "application/json"})
+        )
+
+        result = runner.invoke(app, ["agent", "delete", "tsk_abc123def456", "-w", "ws_test123", "--json"])
+
+        assert result.exit_code != 0
+        assert not route.called
+        error = json.loads(result.stderr.strip().splitlines()[-1])
+        assert "--yes" in error["error"]
+
+    @respx.mock
+    def test_delete_prompt_accepted_sends_delete(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        respx.get("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
+            return_value=Response(200, json=[_task_response_dict()])
+        )
+        route = respx.delete("http://localhost:5050/api/v1/workspaces/ws_test123/agents/tsk_abc123def456").mock(
+            return_value=Response(200, text="null", headers={"content-type": "application/json"})
+        )
+
+        result = runner.invoke(app, ["agent", "delete", "tsk_abc123def456", "-w", "ws_test123"], input="y\n")
+
+        assert result.exit_code == 0
+        assert route.called
+        assert "deleted" in result.output
+
+
+class TestAgentIdentityDefaults:
+    """show/status/messages with no AGENT_ID argument target the shell's own agent."""
+
+    @pytest.mark.parametrize("command", ["show", "status", "messages"])
+    @patch("sculpt.commands.agent.fetch_agent_state")
+    @patch("sculpt.commands._follow_helpers.get_session_token", return_value="test-token")
+    def test_no_arg_defaults_to_env_agent(
+        self,
+        _mock_token: Any,
+        mock_fetch: Any,
+        command: str,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("SCULPT_AGENT_ID", "tsk_abc123def456")
+        mock_fetch.return_value = _make_snapshot()
+
+        result = runner.invoke(app, ["agent", command])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        assert "Using agent from SCULPT_AGENT_ID" in result.stderr
+        assert mock_fetch.call_args[0][2] == "tsk_abc123def456"
+
+    @pytest.mark.parametrize("command", ["show", "status", "messages"])
+    def test_no_arg_without_env_errors(self, command: str, runner: CliRunner) -> None:
+        result = runner.invoke(app, ["agent", command])
+
+        assert result.exit_code == 1
+        assert "SCULPT_AGENT_ID" in result.stderr
+
+
+class TestAgentSelfMarker:
+    """`agent list` flags the calling shell's own agent (SCULPT_AGENT_ID)."""
+
+    @patch("sculpt.commands.agent.fetch_all_agents")
+    @patch("sculpt.commands._follow_helpers.get_session_token", return_value="test-token")
+    def test_list_json_flags_only_own_agent(
+        self, _mock_token: Any, mock_fetch: Any, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("SCULPT_AGENT_ID", "tsk_abc123def456")
+        mock_fetch.return_value = [
+            _make_snapshot(task_id="tsk_abc123def456"),
+            _make_snapshot(task_id="tsk_zzz999xyz888"),
+        ]
+
+        result = runner.invoke(app, ["agent", "list", "--all", "--json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        flags = {item["id"]: item["is_self"] for item in data}
+        assert flags == {"tsk_abc123def456": True, "tsk_zzz999xyz888": False}
+
+    @patch("sculpt.commands.agent.fetch_all_agents")
+    @patch("sculpt.commands._follow_helpers.get_session_token", return_value="test-token")
+    def test_list_table_marks_own_agent_with_legend(
+        self, _mock_token: Any, mock_fetch: Any, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("SCULPT_AGENT_ID", "tsk_abc123def456")
+        mock_fetch.return_value = [
+            _make_snapshot(task_id="tsk_abc123def456"),
+            _make_snapshot(task_id="tsk_zzz999xyz888"),
+        ]
+
+        result = runner.invoke(app, ["agent", "list", "--all"])
+
+        assert result.exit_code == 0
+        assert "tsk_abc123d *" in result.output
+        assert "tsk_zzz999x *" not in result.output
+        assert "* = this agent (SCULPT_AGENT_ID)" in result.stderr
+
+    @patch("sculpt.commands.agent.fetch_all_agents")
+    @patch("sculpt.commands._follow_helpers.get_session_token", return_value="test-token")
+    def test_list_without_env_has_no_marker_or_legend(
+        self, _mock_token: Any, mock_fetch: Any, runner: CliRunner
+    ) -> None:
+        mock_fetch.return_value = [_make_snapshot()]
+
+        result = runner.invoke(app, ["agent", "list", "--all"])
+
+        assert result.exit_code == 0
+        assert "*" not in result.output
+        assert "* = this agent" not in result.stderr
+
+
+class TestAgentWaitingOptions:
+    """A pending AskUserQuestion's answer options surface in status/show output."""
+
+    @patch("sculpt.commands.agent.fetch_agent_state")
+    @patch("sculpt.commands._follow_helpers.get_session_token", return_value="test-token")
+    def test_status_text_renders_options(self, _mock_token: Any, mock_fetch: Any, runner: CliRunner) -> None:
+        mock_fetch.return_value = _make_snapshot(
+            status="WAITING", waiting_detail="Choose a color", waiting_options=["Red", "Blue"]
+        )
+
+        result = runner.invoke(app, ["agent", "status", "tsk_abc123def456"])
+
+        assert result.exit_code == 0
+        assert "Options: Red | Blue" in result.output
+
+    @patch("sculpt.commands.agent.fetch_agent_state")
+    @patch("sculpt.commands._follow_helpers.get_session_token", return_value="test-token")
+    def test_status_json_includes_options(self, _mock_token: Any, mock_fetch: Any, runner: CliRunner) -> None:
+        mock_fetch.return_value = _make_snapshot(
+            status="WAITING", waiting_detail="Choose a color", waiting_options=["Red", "Blue"]
+        )
+
+        result = runner.invoke(app, ["agent", "status", "tsk_abc123def456", "--json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["waiting_options"] == ["Red", "Blue"]
+
+    @patch("sculpt.commands.agent.fetch_agent_state")
+    @patch("sculpt.commands._follow_helpers.get_session_token", return_value="test-token")
+    def test_status_without_pending_question_omits_options(
+        self, _mock_token: Any, mock_fetch: Any, runner: CliRunner
+    ) -> None:
+        mock_fetch.return_value = _make_snapshot()
+
+        result = runner.invoke(app, ["agent", "status", "tsk_abc123def456"])
+
+        assert result.exit_code == 0
+        assert "Options:" not in result.output
+
+    @patch("sculpt.commands.agent.fetch_agent_state")
+    @patch("sculpt.commands._follow_helpers.get_session_token", return_value="test-token")
+    def test_show_text_renders_options(self, _mock_token: Any, mock_fetch: Any, runner: CliRunner) -> None:
+        mock_fetch.return_value = _make_snapshot(
+            status="WAITING", waiting_detail="Choose a color", waiting_options=["Red", "Blue"]
+        )
+
+        result = runner.invoke(app, ["agent", "show", "tsk_abc123def456"])
+
+        assert result.exit_code == 0
+        assert "Options: Red | Blue" in result.output
+
+    @patch("sculpt.commands.agent.fetch_agent_state")
+    @patch("sculpt.commands._follow_helpers.get_session_token", return_value="test-token")
+    def test_show_json_includes_options(self, _mock_token: Any, mock_fetch: Any, runner: CliRunner) -> None:
+        mock_fetch.return_value = _make_snapshot(
+            status="WAITING", waiting_detail="Choose a color", waiting_options=["Red", "Blue"]
+        )
+
+        result = runner.invoke(app, ["agent", "show", "tsk_abc123def456", "--json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["waiting_options"] == ["Red", "Blue"]
+
+
+class TestConnectionErrorHint:
+    @respx.mock
+    def test_send_connection_error_mentions_base_url_and_port_hint(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        respx.get("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
+            return_value=Response(200, json=[_task_response_dict()])
+        )
+        respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/agents/tsk_abc123def456/messages").mock(
+            side_effect=ConnectError("Connection refused")
+        )
+
+        result = runner.invoke(app, ["agent", "send", "tsk_abc123def456", "hello", "-w", "ws_test123"])
+
+        assert result.exit_code == 1
+        assert "http://localhost:5050" in result.stderr
+        assert "SCULPT_API_PORT" in result.stderr
+        assert "--base-url" in result.stderr

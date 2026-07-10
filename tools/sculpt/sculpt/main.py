@@ -13,6 +13,13 @@ from sculpt.commands.workspace import workspace_app
 app = typer.Typer(
     name="sculpt",
     help="CLI client for the Sculptor API",
+    epilog=(
+        "Every Sculptor agent shell exports SCULPT_AGENT_ID, SCULPT_WORKSPACE_ID, and"
+        + " SCULPT_PROJECT_ID identifying that shell's own agent, workspace, and repo."
+        + " Commands use them as defaults where noted (e.g. `sculpt agent show` with no"
+        + " argument shows your own agent). Outside a Sculptor shell, set SCULPT_API_PORT"
+        + " or pass --base-url if the app serves a non-default port."
+    ),
 )
 
 app.add_typer(workspace_app, name="workspace")
