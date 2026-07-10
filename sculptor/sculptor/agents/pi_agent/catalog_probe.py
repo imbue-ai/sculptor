@@ -11,7 +11,8 @@ Two callers share this module so their catalogs cannot disagree:
 The probe launches a minimal pi (no extensions / skills / system prompt)
 against a throwaway session, issues only the ``get_available_models`` and
 ``get_state`` RPCs, then shuts the process down. Curation and the
-authenticated-provider filter live here too, next to their sole consumers.
+authenticated-provider filter live here too, shared by the probes and the
+agent wrapper's start-time fetch.
 """
 
 import json
@@ -358,6 +359,14 @@ def probe_catalog_on_host(binary: str) -> tuple[list[ModelOption], ModelOption |
     same machine, same `$HOME`, same `auth.json` — so this observes the same
     catalog an in-workspace probe would. Best-effort like the core: any failure
     yields `([], None)`.
+
+    One divergence from the in-task probe: the core keeps an UNAUTHENTICATED
+    current model when an authenticated fallback exists, because a running
+    agent's start-time reselect can `set_model` away from it. No reselect
+    exists before a workspace does — offering that model pre-create would only
+    arm the create-time provider-authentication rejection — so the host
+    boundary strips the concession: the catalog is authenticated-only and the
+    default re-points to the newest authenticated model.
     """
     detected_version = _detect_pi_version_on_host(binary)
     if detected_version is None or not pi_version_in_range(detected_version):
@@ -367,4 +376,9 @@ def probe_catalog_on_host(binary: str) -> tuple[list[ModelOption], ModelOption |
         )
         return [], None
     session_dir = get_sculptor_folder() / PI_PROBE_SESSION_DIR_NAME
-    return probe_catalog(_spawn_probe_on_host, binary, session_dir)
+    available_models, default_model = probe_catalog(_spawn_probe_on_host, binary, session_dir)
+    authenticated = compute_authenticated_provider_ids()
+    available_models = [option for option in available_models if option.provider in authenticated]
+    if default_model is not None and default_model.provider not in authenticated:
+        default_model = available_models[0] if available_models else None
+    return available_models, default_model
