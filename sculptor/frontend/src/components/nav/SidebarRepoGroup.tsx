@@ -346,8 +346,6 @@ export const SidebarRepoGroup = ({
     return endOwnedDrag;
   }, [isRepoCollapsed, endOwnedDrag]);
 
-  // Reference-stable (the rows are memoized on their props): the rename
-  // callbacks depend only on reference-stable atom setters and the store.
   const handleBeginRename = useCallback(
     (workspaceId: string): void => {
       setRenamingWorkspaceId(workspaceId);
@@ -355,6 +353,8 @@ export const SidebarRepoGroup = ({
     [setRenamingWorkspaceId],
   );
 
+  // Reference-stable (the rows are memoized on their props): the rename
+  // callbacks depend only on reference-stable atom setters and the store.
   const handleRenameCommit = useCallback(
     (workspaceId: string, newName: string): void => {
       setRenamingWorkspaceId(null);
