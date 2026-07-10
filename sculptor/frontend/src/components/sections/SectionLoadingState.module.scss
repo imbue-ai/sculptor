@@ -1,0 +1,46 @@
+// Loading placeholder for a section body — a stack of skeleton lines filling the
+// content area from the top, where a panel's own content would begin.
+
+.loading {
+
+  // Delayed fade-in so a fast resolve never flashes a skeleton: `both` fill keeps
+  // it transparent through the delay, then it fades in only if the panel is still
+  // resolving. The real panel, when it registers sooner, unmounts this before the
+  // fade ever starts.
+  animation: section-loading-reveal var(--duration-fast) var(--ease-out) var(--duration-normal) both;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  // Fill the section body so the percentage-width lines have a stable basis
+  // (the parent `.content` is a flex column, but don't rely on its cross-axis
+  // stretch — an explicit width keeps the lines sized in any container).
+  width: 100%;
+}
+
+@keyframes section-loading-reveal {
+  from {
+    opacity: 0%;
+  }
+
+  to {
+    opacity: 100%;
+  }
+}
+
+// A text-line placeholder bar; width is set inline per line for an uneven,
+// content-like silhouette.
+.line {
+  border-radius: var(--radius-1);
+  flex-shrink: 0;
+  height: var(--space-2);
+}
+
+// Honour reduced-motion: skip the fade but keep the anti-flash delay, so the
+// skeleton still only appears once resolving has genuinely dragged on. (Radix
+// Skeleton drops its own shimmer under this query independently.)
+@media (prefers-reduced-motion: reduce) {
+  .loading {
+    animation-duration: 0.01ms;
+  }
+}

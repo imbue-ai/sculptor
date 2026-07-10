@@ -22,7 +22,7 @@
     "generate-api-json-schema": "uv run python ../../sculptor/sculptor/scripts/generate_json_schema.py ./sculptor_schema.json",
     "fixup-js-types": "uv run python ../../sculptor/sculptor/scripts/fixup_js_types.py ./src/api/types.gen.ts",
     "generate-api": "./scripts/generate-api.sh",
-    "generate-plugin-sdk-dts": "./scripts/generate-plugin-sdk-dts.sh",
+    "generate-extension-sdk-dts": "./scripts/generate-extension-sdk-dts.sh",
     "test": "vitest run",
     "electron:start": "cross-env SCULPTOR_FRONTEND_DIR=$PWD electron-forge start",
     "preelectron:package": "cd .. && uv run --project sculptor builder sync-frontend-version",

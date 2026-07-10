@@ -12,7 +12,7 @@ import { atomFamily, atomWithStorage, selectAtom } from "jotai/utils";
  *
  * The union lives here (not in useTerminal.ts) so registry/atom consumers can
  * import it without pulling the terminal runtime — and its window-global
- * ambient deps — into type-only programs like the plugin-SDK .d.ts rollup. */
+ * ambient deps — into type-only programs like the extension-SDK .d.ts rollup. */
 export type TerminalConnectionStatus = "connecting" | "connected" | "reconnecting" | "disconnected";
 
 type PersistedTerminalTab = {

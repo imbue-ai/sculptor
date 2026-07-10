@@ -33,7 +33,10 @@ export const NewWorkspaceModal = (): ReactElement | undefined => {
     [setModalState],
   );
 
-  const handleCreated = useCallback((): void => {
+  // One close for both form-initiated exits: a completed create (keep-open
+  // off) and a dismissal request (the pi empty-state CTA navigating to
+  // Settings, which lands underneath this dialog).
+  const handleClose = useCallback((): void => {
     setModalState({ open: false });
   }, [setModalState]);
 
@@ -41,6 +44,10 @@ export const NewWorkspaceModal = (): ReactElement | undefined => {
   if (!modalState.open) {
     return undefined;
   }
+
+  // Destructured because react/jsx-handler-names rejects a member expression
+  // on an `on*` prop (it accepts a plain identifier).
+  const { onWorkspaceCreated } = modalState;
 
   return (
     <PaletteDialog
@@ -52,8 +59,12 @@ export const NewWorkspaceModal = (): ReactElement | undefined => {
       <NewWorkspaceForm
         key={modalState.presetProjectId ?? "default"}
         presetProjectId={modalState.presetProjectId}
+        initialTitle={modalState.initialTitle}
         initialPrompt={modalState.initialPrompt}
-        onCreated={handleCreated}
+        initialBranchName={modalState.initialBranchName}
+        onWorkspaceCreated={onWorkspaceCreated}
+        onCreated={handleClose}
+        onDismiss={handleClose}
       />
     </PaletteDialog>
   );

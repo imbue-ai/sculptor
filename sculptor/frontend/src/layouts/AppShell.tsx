@@ -5,7 +5,7 @@
 // the user moves between them (no tear-down, no top-bar/tab-strip).
 //
 // It mounts the app's cross-cutting chrome — the unified data stream, command palette,
-// keyboard shortcuts, plugins, dialogs, and toasts. Nothing here is workspace-specific,
+// keyboard shortcuts, extensions, dialogs, and toasts. Nothing here is workspace-specific,
 // so the same shell backs Home and Settings.
 
 import { Flex } from "@radix-ui/themes";
@@ -44,11 +44,11 @@ import { NewWorkspaceModal } from "~/components/newWorkspace/NewWorkspaceModal.t
 import { NotificationToasts } from "~/components/NotificationToasts.tsx";
 import { RepoPathDialog } from "~/components/RepoPathDialog.tsx";
 import { WarningStatusBanner } from "~/components/WarningStatusBanner.tsx";
+import { ExtensionLoader } from "~/extensions/ExtensionLoader.tsx";
+import { ExtensionOverlays } from "~/extensions/ExtensionOverlays.tsx";
 import { useAutoUpdateListener } from "~/hooks/useAutoUpdateListener.ts";
 import { useGlobalKeyboardShortcuts } from "~/layouts/hooks/useGlobalKeyboardShortcuts.ts";
 import { useWorkspaceCycleShortcuts } from "~/layouts/hooks/useWorkspaceCycleShortcuts.ts";
-import { PluginLoader } from "~/plugins/PluginLoader.tsx";
-import { PluginOverlays } from "~/plugins/PluginOverlays.tsx";
 
 // Error toasts linger longer than the default so the user can read and act on the
 // failure before it auto-dismisses.
@@ -117,8 +117,8 @@ export const AppShell = (): ReactElement => {
           overflow="hidden"
           style={{ background: "var(--gray-2)" }}
         >
-          <PluginLoader />
-          <PluginOverlays />
+          <ExtensionLoader />
+          <ExtensionOverlays />
           <Outlet />
           {isProjectPathInaccessible && currentProject !== null && (
             <WarningStatusBanner

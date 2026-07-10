@@ -97,7 +97,7 @@ describe("useTaskAvailableModels", () => {
     // Catalog not fetched yet: availableModels is absent, so the select must fall
     // back to NOT_FETCHED_YET (a stable primitive) rather than an empty array —
     // distinguishing "not fetched" from "fetched, empty" is what lets the switcher
-    // show a loading state instead of flashing the login CTA at startup.
+    // show a loading state instead of flashing the empty state at startup.
     const task = createMockTask({ id: "task-1", availableModels: undefined, status: "RUNNING" });
     await writeTasksAndFlush({ "task-1": task });
 

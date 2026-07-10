@@ -16,11 +16,11 @@ from typing import Callable
 from loguru import logger
 
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.web.data_types import ExtensionCommandUiAction
 from sculptor.web.data_types import OpenFileUiAction
-from sculptor.web.data_types import PluginCommandUiAction
 from sculptor.web.data_types import WebviewCommandUiAction
 
-UiAction = OpenFileUiAction | WebviewCommandUiAction | PluginCommandUiAction
+UiAction = OpenFileUiAction | WebviewCommandUiAction | ExtensionCommandUiAction
 UiActionSubscriber = Callable[[UiAction], object]
 
 _subscribers: set[UiActionSubscriber] = set()
@@ -43,7 +43,7 @@ def remove_subscriber(subscriber: UiActionSubscriber) -> None:
 def subscriber_count() -> int:
     """Number of connected stream subscribers (≈ one per renderer/WebSocket).
 
-    The plugin command endpoint uses this as an upper bound on how many
+    The extension command endpoint uses this as an upper bound on how many
     renderer replies to expect, so a single-window setup returns as soon as
     that one renderer answers instead of always waiting out the timeout.
     """

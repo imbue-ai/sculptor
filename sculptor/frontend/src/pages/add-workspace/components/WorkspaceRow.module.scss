@@ -61,6 +61,39 @@
   will-change: color;
 }
 
+// Placeholder shown where the branch label goes, until the workspace's current
+// branch streams in. The wrapper owns a delayed fade-in so a fast load never
+// flashes it (the branch usually lands within the delay); the inner Skeleton
+// keeps Radix's pulse.
+.branchSkeletonWrap {
+  align-items: center;
+  animation: workspace-row-branch-skeleton-reveal var(--duration-fast) var(--ease-out) var(--duration-normal) both;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+@keyframes workspace-row-branch-skeleton-reveal {
+  from {
+    opacity: 0%;
+  }
+
+  to {
+    opacity: 100%;
+  }
+}
+
+.branchSkeleton {
+  border-radius: var(--radius-1);
+  height: var(--space-2);
+  width: 72px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .branchSkeletonWrap {
+    animation-duration: 0.01ms;
+  }
+}
+
 .rightGroup {
   align-items: center;
   display: flex;

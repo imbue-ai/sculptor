@@ -1,4 +1,4 @@
-import { DropdownMenu, Flex, IconButton, Tooltip } from "@radix-ui/themes";
+import { Button, DropdownMenu, Flex, IconButton, Tooltip } from "@radix-ui/themes";
 import type { Editor as TipTapEditor } from "@tiptap/react";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { Bot, Check, Gauge, ListChecks, Plus, SlidersHorizontal, Zap } from "lucide-react";
@@ -40,7 +40,8 @@ import {
   setWorkspaceAgentModel,
 } from "../../../api";
 import { CHAT_INPUT_ELEMENT_ID } from "../../../common/Constants.ts";
-import { useImbueNavigate, useWorkspacePageParams } from "../../../common/NavigateUtils.ts";
+import { hasNoUsableModel } from "../../../common/modelConstants.ts";
+import { useWorkspacePageParams } from "../../../common/NavigateUtils.ts";
 import { shouldHandleKeybinding, useModifiedEnter } from "../../../common/ShortcutUtils.ts";
 import { closeBtwPopupAtom, openBtwPopupAtom } from "../../../common/state/atoms/btwPopup.ts";
 import type { InsertSkillArg } from "../../../common/state/atoms/chatActions.ts";
@@ -60,9 +61,11 @@ import {
 } from "../../../common/state/atoms/userConfig.ts";
 import { useDraftAttachedFiles } from "../../../common/state/hooks/useDraftAttachedFiles.ts";
 import { useInterruptAgent } from "../../../common/state/hooks/useInterruptAgent.ts";
+import { useOpenSettings } from "../../../common/state/hooks/useOpenSettings.ts";
 import { useTaskDetailWithDefaults } from "../../../common/state/hooks/useTaskDetail";
 import {
   useTaskAvailableModels,
+  useTaskConfigurationSettingsSection,
   useTaskModel,
   useTaskSelectedModelId,
   useTaskSourcesBackendModels,
@@ -79,7 +82,6 @@ import type { FileUploadHandle } from "../../../components/FileUpload.tsx";
 import { FileUpload } from "../../../components/FileUpload.tsx";
 import { Toast, type ToastContent, ToastType } from "../../../components/Toast.tsx";
 import { TooltipIconButton } from "../../../components/TooltipIconButton.tsx";
-import { SettingsSection } from "../../settings/sections.ts";
 import { stripHtml } from "../utils/utils.ts";
 import styles from "./ChatInput.module.scss";
 
@@ -160,7 +162,7 @@ export const ChatInput = ({
   const { workspaceID: workspaceIDFromRoute, agentID: agentIDFromRoute } = useWorkspacePageParams();
   const taskID = taskIdProp ?? agentIDFromRoute;
   const workspaceID = workspaceIdProp ?? workspaceIDFromRoute;
-  const { navigateToGlobalSettings } = useImbueNavigate();
+  const openSettings = useOpenSettings();
   // On mobile the toolbar's secondary controls collapse into a single settings
   // menu (plan/model/effort/fast) and the keyboard hints are dropped.
   const isMobile = useIsMobile();
@@ -171,6 +173,11 @@ export const ChatInput = ({
   const backendModels = useTaskAvailableModels(taskID ?? "");
   const selectedModelId = useTaskSelectedModelId(taskID ?? "");
   const hasBackendModelSource = useTaskSourcesBackendModels(taskID ?? "");
+  // No usable model (pi with no authenticated providers): the picker renders disabled
+  // and Send is replaced by a "Go to harness configuration" button routing to the
+  // harness's own settings section (pi -> Pi, else Dependencies).
+  const configurationSettingsSection = useTaskConfigurationSettingsSection(taskID ?? "");
+  const isMissingUsableModel = hasNoUsableModel(hasBackendModelSource, backendModels);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
   const userConfig = useAtomValue(userConfigAtom);
@@ -531,6 +538,11 @@ export const ChatInput = ({
     // A send is already in flight; ignore the trigger entirely so we neither
     // re-send nor fire the trailing interrupt below for a send that no-ops.
     if (isSendingRef.current) return;
+    // No usable model (pi with no authenticated providers): Send is replaced by the
+    // "Go to harness configuration" CTA, but the modified-Enter send binding still
+    // reaches here — block it so a doomed message can't be posted to a harness that
+    // cannot service it.
+    if (isMissingUsableModel) return;
     const isBtwDraft = draftIsBypassCommand(getDraft());
     if (isDisabled && !isBtwDraft) return;
     await sendMessage();
@@ -544,16 +556,26 @@ export const ChatInput = ({
     if (!isBtwDraft && isAlwaysInterruptAndSend && isAgentBusy && taskID) {
       await interruptWorkspaceAgent({ path: { workspace_id: workspaceID, agent_id: taskID } });
     }
-  }, [isDisabled, getDraft, sendMessage, isAlwaysInterruptAndSend, isAgentBusy, taskID, workspaceID]);
+  }, [
+    isDisabled,
+    getDraft,
+    sendMessage,
+    isAlwaysInterruptAndSend,
+    isAgentBusy,
+    taskID,
+    workspaceID,
+    isMissingUsableModel,
+  ]);
 
   const handleInterruptAndSend = useCallback(async (): Promise<void> => {
     if (isSendingRef.current) return;
+    if (isMissingUsableModel) return;
     if (!getDraft()?.trim() || !taskID) return;
     await sendMessage();
     if (isAgentBusy) {
       await interruptWorkspaceAgent({ path: { workspace_id: workspaceID, agent_id: taskID } });
     }
-  }, [getDraft, taskID, sendMessage, isAgentBusy, workspaceID]);
+  }, [getDraft, taskID, sendMessage, isAgentBusy, workspaceID, isMissingUsableModel]);
 
   // Out-of-band model switch for a harness with a backend model list (pi). The
   // value stays server-driven (selectedModelId), so on success the persisted
@@ -579,10 +601,11 @@ export const ChatInput = ({
     [taskID, workspaceID],
   );
 
-  // The no-providers prompt sends the user to pi settings to authenticate a provider.
-  const handleAuthenticate = useCallback((): void => {
-    navigateToGlobalSettings(SettingsSection.PI);
-  }, [navigateToGlobalSettings]);
+  // Route the no-usable-model composer CTA to the harness's own configuration section
+  // (pi -> Pi, else Dependencies) via the canonical settings navigator.
+  const handleGoToHarnessConfig = useCallback((): void => {
+    openSettings(configurationSettingsSection);
+  }, [openSettings, configurationSettingsSection]);
 
   const handleMentionPicker = useCallback((): void => {
     if (!editorRef.current) return;
@@ -942,20 +965,32 @@ export const ChatInput = ({
                       selectedModelId={selectedModelId}
                       onBackendModelChange={handleBackendModelChange}
                       sourcesBackendModels={hasBackendModelSource}
-                      onAuthenticate={handleAuthenticate}
                     />
                   </Flex>
                 </>
               )}
-              <SendButton
-                onClick={handleSend}
-                disabled={isSending || (isDisabled && !draftFlags.isBypass) || !draftFlags.hasContent}
-                loading={shouldShowSendSpinner}
-                tooltip={`${sendHint} to send message`}
-                ariaLabel="Send message"
-                testId={ElementIds.SEND_BUTTON}
-                lastSendError={lastSendError}
-              />
+              {isMissingUsableModel ? (
+                <Tooltip content="Authenticate a provider before you can send messages">
+                  <Button
+                    size="1"
+                    onClick={handleGoToHarnessConfig}
+                    data-testid={ElementIds.HARNESS_CONFIG_CTA}
+                    aria-label="Go to harness configuration"
+                  >
+                    Go to harness configuration
+                  </Button>
+                </Tooltip>
+              ) : (
+                <SendButton
+                  onClick={handleSend}
+                  disabled={isSending || (isDisabled && !draftFlags.isBypass) || !draftFlags.hasContent}
+                  loading={shouldShowSendSpinner}
+                  tooltip={`${sendHint} to send message`}
+                  ariaLabel="Send message"
+                  testId={ElementIds.SEND_BUTTON}
+                  lastSendError={lastSendError}
+                />
+              )}
             </Flex>
           </Flex>
           {isDragging && (

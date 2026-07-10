@@ -423,8 +423,9 @@ def start_task_and_wait_for_ready(
     Opens the new-workspace modal via ``open_new_workspace_form``, fills in the
     workspace name, clicks create, then waits for the agent chat page to appear.
 
-    The new-workspace form has no model selector, so the model is switched on the
-    chat panel once the workspace is ready.
+    This helper creates promptless and switches the model on the chat panel once
+    the workspace is ready, rather than driving the form's own per-prompt model
+    controls.
 
     When *prompt* is provided, this helper leaves the creation form's own prompt
     field empty and sends *prompt* through the chat input after the workspace is
@@ -756,7 +757,12 @@ def navigate_to_settings_page(page: Page, **_kwargs: object) -> PlaywrightSettin
         # route change is in flight survives it and lands ON TOP of Settings,
         # where it would swallow the caller's first click. Require a clear
         # surface too — a failure retries the body, whose Escape dismisses it.
-        expect(page.get_by_test_id(ElementIDs.PALETTE_DIALOG_OVERLAY)).to_have_count(0)
+        # Keep this timeout well under the outer 30s retry budget: the default
+        # expect timeout is also 30s, so an unbounded gate would let the first
+        # stuck-offer attempt exhaust the budget waiting passively, and the
+        # retry that re-presses Escape (the only thing that dismisses the offer)
+        # would never run.
+        expect(page.get_by_test_id(ElementIDs.PALETTE_DIALOG_OVERLAY)).to_have_count(0, timeout=5_000)
 
     retry(
         stop=stop_after_delay(30),
@@ -989,7 +995,9 @@ def wait_for_workspace_list_loaded(page: Page) -> None:
     expect(workspace_rows.or_(sidebar_empty).first).to_be_visible()
 
 
-def create_zero_agent_workspace(page: Page, *, description: str | None = None, source_branch: str = "testing") -> str:
+def create_zero_agent_workspace(
+    page: Page, *, description: str | None = None, source_branch: str = "testing", project_id: str | None = None
+) -> str:
     """Create a WORKTREE workspace with NO agent and navigate to it, returning its id.
 
     The redesign relaxes the old "≥1 agent" invariant, so a
@@ -999,17 +1007,23 @@ def create_zero_agent_workspace(page: Page, *, description: str | None = None, s
     created — then navigates to ``/ws/<id>`` with a hash change so the WebSocket
     stays alive (mirroring ``navigate_to_workspace_without_agent``).
 
-    Resolves the active project and a unique branch name (via the same
-    ``preview-branch-name`` endpoint the Add Workspace form uses) so the worktree
-    branch never collides across repeated calls.
+    Resolves a unique branch name (via the same ``preview-branch-name`` endpoint
+    the Add Workspace form uses) so the worktree branch never collides across
+    repeated calls. ``project_id`` targets a specific repo; when omitted the first
+    active project is used (the common single-repo case). Passing it lets a test
+    pile many workspaces into one particular repo group — e.g. to make a group
+    tall enough to exercise drag behaviour that depends on group height.
     """
     base_url = resolve_backend_api_url(page)
 
-    projects_response = request_with_retry(page.request.get, f"{base_url}/api/v1/projects/active")
-    assert projects_response.ok, f"list active projects failed: {projects_response.status} {projects_response.text()}"
-    projects = projects_response.json()
-    assert projects, "no active project to create a zero-agent workspace in"
-    project_id = projects[0]["objectId"]
+    if project_id is None:
+        projects_response = request_with_retry(page.request.get, f"{base_url}/api/v1/projects/active")
+        assert projects_response.ok, (
+            f"list active projects failed: {projects_response.status} {projects_response.text()}"
+        )
+        projects = projects_response.json()
+        assert projects, "no active project to create a zero-agent workspace in"
+        project_id = projects[0]["objectId"]
 
     workspace_name = description or f"Zero Agent WS {next(_workspace_name_counter)}"
     preview_response = request_with_retry(
@@ -1036,6 +1050,21 @@ def create_zero_agent_workspace(page: Page, *, description: str | None = None, s
 
     navigate_to_workspace_without_agent(page, workspace_id)
     return workspace_id
+
+
+def get_active_project_id_by_name(page: Page, name: str) -> str:
+    """Return the objectId of the active project whose folder name matches ``name``.
+
+    A project's ``name`` is the folder that contains its git repo (see the Project
+    model), so this resolves the id of a repo added via the settings page — handy
+    for then targeting ``create_zero_agent_workspace(project_id=...)`` at that repo.
+    """
+    base_url = resolve_backend_api_url(page)
+    response = request_with_retry(page.request.get, f"{base_url}/api/v1/projects/active")
+    assert response.ok, f"list active projects failed: {response.status} {response.text()}"
+    matches = [project["objectId"] for project in response.json() if project["name"] == name]
+    assert len(matches) == 1, f"expected exactly one active project named {name!r}, found {len(matches)}"
+    return matches[0]
 
 
 def dispatch_modified_shortcuts_in_one_task(page: Page, shortcuts: Sequence[tuple[str, str]]) -> list[str]:

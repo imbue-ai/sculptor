@@ -3,6 +3,7 @@ import { posthog } from "posthog-js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 
 import { useImbueLocation } from "~/common/NavigateUtils.ts";
+import { projectsArrayAtom } from "~/common/state/atoms/projects.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { effectiveOpenTabIdsAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 import { recentAgentTypeAtom } from "~/components/sections/addPanelCore.ts";
@@ -228,6 +229,10 @@ const dynamicProviderInputsAtom = atom((get) => {
   return {
     workspaces: get(workspacesArrayAtom),
     tasks: get(tasksArrayAtom),
+    // The workspace switcher provider reads project names to tag cross-project
+    // rows; without this the badges wouldn't refresh when a project snapshot
+    // lands while the palette is open.
+    projects: get(projectsArrayAtom),
     openTabIds: get(effectiveOpenTabIdsAtom),
     panelRegistry: get(panelRegistryAtom),
     // The panel-toggle provider reads the layout's placement to list only
