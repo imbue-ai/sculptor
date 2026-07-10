@@ -155,7 +155,7 @@ export const PiLoginDialog = ({ request, onClose }: PiLoginDialogProps): ReactEl
         {view === "intro" && (
           <Flex direction="column" gap="3">
             <Text size="2" color="gray">
-              Continue your login with a Pi interactive session
+              Continue your login with a pi interactive session.
             </Text>
             <Button
               variant="solid"
