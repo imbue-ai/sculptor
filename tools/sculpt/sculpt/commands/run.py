@@ -92,8 +92,6 @@ def run_cmd(
             json_output=json_output,
         )
 
-    # pi names its model from its own authenticated catalog, so a pi prompt
-    # carries a backend_model instead of a Claude --model name.
     backend_model = None
     if selection is not None and selection.agent_type == AgentTypeName.PI:
         if model_lower != "opus":

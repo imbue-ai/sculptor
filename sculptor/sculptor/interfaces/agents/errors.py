@@ -96,8 +96,7 @@ class PiTurnError(AgentClientError):
     An ``AgentClientError`` rather than a crash: the turn's failure is reported
     as a failed request — the per-turn error block, whose auth-shaped message
     carries the login CTA — while the agent keeps running so the user can
-    authenticate or switch models and re-send. ``_run_prompt_turn`` converts the
-    turn pump's ``PiCrashError`` onto this contained rail.
+    authenticate or switch models and re-send.
     """
 
 

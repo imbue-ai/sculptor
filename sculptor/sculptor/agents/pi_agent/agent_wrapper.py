@@ -1391,13 +1391,9 @@ class PiAgent(DefaultAgentWrapper):
             try:
                 self._drive_turn(lambda prompt_id: self._build_prompt_payload(prompt_id, message))
             except PiCrashError as error:
-                # A turn-level pi failure on a user turn (unauthenticated
-                # provider, unusable model — e.g. credentials revoked between
-                # create and start) is a failed request, not an agent teardown:
-                # re-raise on the contained AgentClientError rail so
-                # `_handle_user_message` emits the per-turn error block (whose
-                # auth-shaped message carries the login CTA) and the agent stays
-                # alive for a re-send once the user authenticates — the policy
+                # Re-raise on the contained AgentClientError rail (see
+                # PiTurnError): `_handle_user_message` then emits the per-turn
+                # error block and the agent stays alive — the policy
                 # `_run_wake_turn` already applies to reaction turns.
                 raise PiTurnError(error.args[0], exit_code=error.exit_code, metadata=error.metadata) from error
 

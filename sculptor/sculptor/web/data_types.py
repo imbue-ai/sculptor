@@ -127,10 +127,9 @@ class RequestModel(SerializableModel):
 class StartTaskRequest(RequestModel):
     prompt: str
     interface: str = TaskInterface.TERMINAL.value
-    # A create names its model on exactly one harness's terms: `model` for
-    # Claude's static list, `backend_model` for a backend-sourced catalog (pi).
-    # The two are mutually exclusive; the prompt-ful create validates the pair
-    # per resolved harness (`_validate_prompt_model_selection`).
+    # Mutually exclusive, one per harness's terms — the same pair as
+    # CreateAgentRequest, validated per resolved harness
+    # (`_validate_prompt_model_selection`).
     model: LLMModel | None = None
     backend_model: ModelOption | None = None
     files: list[str] = Field(default_factory=list)

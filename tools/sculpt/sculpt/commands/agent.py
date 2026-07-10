@@ -164,8 +164,6 @@ def create(
     if prompt and selection is not None and selection.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
         cli_error("Terminal agents do not take an initial prompt (--prompt)", json_output=json_output)
 
-    # pi names its model from its own authenticated catalog, so a pi prompt
-    # carries a backend_model instead of a Claude --model name.
     backend_model = None
     if prompt and selection is not None and selection.agent_type == AgentTypeName.PI:
         if model_lower != "opus":
