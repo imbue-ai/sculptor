@@ -67,7 +67,7 @@
 // keeps Radix's pulse.
 .branchSkeletonWrap {
   align-items: center;
-  animation: workspace-row-branch-skeleton-reveal 0.15s ease-out 0.2s both;
+  animation: workspace-row-branch-skeleton-reveal var(--duration-fast) var(--ease-out) var(--duration-normal) both;
   display: inline-flex;
   flex-shrink: 0;
 }

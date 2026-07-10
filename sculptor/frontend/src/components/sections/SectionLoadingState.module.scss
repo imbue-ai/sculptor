@@ -7,7 +7,7 @@
   // it transparent through the delay, then it fades in only if the panel is still
   // resolving. The real panel, when it registers sooner, unmounts this before the
   // fade ever starts.
-  animation: section-loading-reveal 0.15s ease-out 0.2s both;
+  animation: section-loading-reveal var(--duration-fast) var(--ease-out) var(--duration-normal) both;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);

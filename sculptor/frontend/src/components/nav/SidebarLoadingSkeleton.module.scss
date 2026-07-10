@@ -7,7 +7,7 @@
   // `both` fill keeps the group fully transparent through the delay, then it
   // fades in only if loading is still going after the delay elapses. The real
   // list, when it arrives sooner, unmounts this before the fade ever starts.
-  animation: sidebar-skeleton-reveal 0.15s ease-out 0.2s both;
+  animation: sidebar-skeleton-reveal var(--duration-fast) var(--ease-out) var(--duration-normal) both;
 }
 
 @keyframes sidebar-skeleton-reveal {
