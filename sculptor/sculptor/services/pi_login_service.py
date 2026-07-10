@@ -10,8 +10,12 @@ PTY hosts a real login shell, types the resolved pi binary path, then drives pi'
 flow with keystrokes (a carriage return submits — pi's raw-mode TUI ignores a bare
 newline). For /logout the chosen provider is known up front (the user clicked its
 Disconnect), so the service fuzzy-filters pi's "select provider" list to that provider
-and confirms, fully automatically. For /login the service only opens the prompt; the
-user picks the provider and enters credentials in the terminal.
+and confirms, fully automatically. For /login with a chosen provider, pi's two
+selectors (authentication method, then provider) are driven so the user lands directly
+on that provider's credential step; the method choice is auto-answered with "Use an
+API key" unless the provider also supports pi's subscription (OAuth) login, in which
+case that one choice stays with the user. The provider-agnostic /login only opens the
+prompt — every choice is the user's.
 
 Completion is observed against auth.json itself (the credential store pi writes): a
 background poll watches for the chosen provider's key to disappear (/logout) or appear
@@ -31,6 +35,7 @@ from loguru import logger
 from pydantic import PrivateAttr
 
 from sculptor.agents.pi_agent.authenticated_providers import read_auth_json_provider_ids
+from sculptor.agents.pi_agent.provider_catalog import get_provider_entry
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.foundation.common import generate_id
 from sculptor.interfaces.agents.agent import PiAgentConfig
@@ -107,16 +112,30 @@ _PI_READY_MARKERS: tuple[bytes, ...] = (b"ctrl+", b"\xe2\x80\xa2", b"interrupt")
 # pi's /logout provider list prints this header; matched before fuzzy-filtering.
 _PI_LOGOUT_SELECTOR_MARKER = b"Select provider to logout"
 
+# pi's /login flow renders two selectors in sequence: the authentication method
+# ("Use a subscription" / "Use an API key"), then the provider list for that method.
+_PI_LOGIN_METHOD_SELECTOR_MARKER = b"Select authentication method"
+_PI_LOGIN_PROVIDER_SELECTOR_MARKER = b"Select provider to configure"
+
 # A carriage return — the Return key — submits in pi's raw-mode TUI (a bare newline is
 # a literal newline in the input box).
 _PI_SUBMIT = b"\r"
+
+# The Down key: moves pi's method selector off "Use a subscription" (the default row)
+# onto "Use an API key".
+_PI_DOWN_ARROW = b"\x1b[B"
 
 # How long to wait for pi's TUI to come up before typing a slash command. The real
 # login pi runs against the user's providers and may fetch a catalog at startup.
 _PI_READY_TIMEOUT_SECONDS = 20.0
 
-# How long to wait for the /logout selector to render after submitting the slash.
+# How long to wait for a selector to render after submitting a slash command or an
+# auto-answered choice.
 _PI_SELECTOR_TIMEOUT_SECONDS = 8.0
+
+# How long to wait for the user to answer the subscription-vs-API-key selector for a
+# subscription-capable provider before giving up on auto-selecting the provider.
+_PI_METHOD_CHOICE_TIMEOUT_SECONDS = 600.0
 
 # Let pi's fuzzy filter settle on the typed provider id before confirming the choice.
 _PI_FILTER_SETTLE_SECONDS = 0.5
@@ -181,6 +200,32 @@ def _login_change_observed(mode: PiLoginMode, provider_id: str | None, baseline:
     return bool(current - baseline)
 
 
+def _submit_slash_until(
+    accumulator: _OutputAccumulator, manager: LocalTerminalManager, slash: bytes, marker: bytes
+) -> bool:
+    """Submit ``slash`` and wait for ``marker`` to render, retyping the slash once.
+
+    A keystroke typed before pi is interactive can be dropped, so the slash is retried
+    once, guarded on the marker's absence (a rendered selector is never typed into).
+    Returns False when the marker still hasn't rendered after the retry.
+    """
+    manager.write(slash + _PI_SUBMIT)
+    if accumulator.wait_for(lambda b: marker in b, _PI_SELECTOR_TIMEOUT_SECONDS):
+        return True
+    manager.write(slash + _PI_SUBMIT)
+    return accumulator.wait_for(lambda b: marker in b, _PI_SELECTOR_TIMEOUT_SECONDS)
+
+
+def _filter_and_confirm(manager: LocalTerminalManager, provider_id: str) -> None:
+    """Fuzzy-filter the rendered provider selector to ``provider_id`` and confirm it.
+
+    Typing the provider id narrows pi's list to its row, and Return selects it.
+    """
+    manager.write(provider_id.encode())
+    time.sleep(_PI_FILTER_SETTLE_SECONDS)
+    manager.write(_PI_SUBMIT)
+
+
 def _drive_pi_session(
     accumulator: _OutputAccumulator,
     manager: LocalTerminalManager,
@@ -191,37 +236,68 @@ def _drive_pi_session(
     """Launch pi in the PTY and drive its /login or /logout flow.
 
     Logout is fully automatic: submit /logout, wait for pi's provider list, fuzzy-filter
-    to the chosen provider id, and confirm. Login only opens the prompt — the user picks
-    the provider and supplies credentials in the terminal. The slash is retried once for
-    logout, since a keystroke typed before pi is interactive can be dropped.
+    to the chosen provider id, and confirm. Login with a chosen provider drives pi's
+    selectors so the user lands on that provider's credential step (see _drive_login).
+    The provider-agnostic login only opens the prompt — the user picks everything.
     """
     # Launch pi as a shell job (the shell is cooked-mode, so a newline submits).
     write_launch_command(manager, pi_binary_path)
 
-    # Best-effort: wait for pi's TUI before typing. The logout retry below is the real
-    # safety net for a too-early slash; login has no auto-steps to lose.
+    # Best-effort: wait for pi's TUI before typing. The slash retry in
+    # _submit_slash_until is the real safety net for a too-early keystroke.
     if not accumulator.wait_for(lambda b: any(m in b for m in _PI_READY_MARKERS), _PI_READY_TIMEOUT_SECONDS):
         logger.debug("pi TUI readiness marker not seen; driving the slash command anyway")
 
-    slash = b"/login" if mode == PiLoginMode.LOGIN else b"/logout"
-    manager.write(slash + _PI_SUBMIT)
+    if mode == PiLoginMode.LOGOUT:
+        _drive_logout(accumulator, manager, provider_id)
+    else:
+        _drive_login(accumulator, manager, provider_id)
 
-    if mode != PiLoginMode.LOGOUT or provider_id is None:
+
+def _drive_logout(accumulator: _OutputAccumulator, manager: LocalTerminalManager, provider_id: str | None) -> None:
+    """Drive /logout to the chosen provider's removal; fully automatic."""
+    if provider_id is None:
+        manager.write(b"/logout" + _PI_SUBMIT)
+        return
+    if not _submit_slash_until(accumulator, manager, b"/logout", _PI_LOGOUT_SELECTOR_MARKER):
+        logger.info("pi /logout selector never rendered; leaving the session for manual completion")
+        return
+    # Return on the filtered row removes the provider's stored key.
+    _filter_and_confirm(manager, provider_id)
+
+
+def _drive_login(accumulator: _OutputAccumulator, manager: LocalTerminalManager, provider_id: str | None) -> None:
+    """Drive /login so the user lands on the chosen provider's credential step.
+
+    pi's /login renders an authentication-method selector ("Use a subscription" /
+    "Use an API key"), then a provider list for that method. An API-key-only provider
+    has exactly one valid method, so both selectors are auto-answered and the user
+    lands on the key input. A subscription-capable provider leaves the method choice
+    to the user, then auto-selects the provider in the list their choice renders.
+    """
+    if provider_id is None:
+        # Provider-agnostic (empty-state CTA): pi's own selectors take over.
+        manager.write(b"/login" + _PI_SUBMIT)
+        return
+    if not _submit_slash_until(accumulator, manager, b"/login", _PI_LOGIN_METHOD_SELECTOR_MARKER):
+        logger.info("pi /login method selector never rendered; leaving the session for manual completion")
         return
 
-    if not accumulator.wait_for(lambda b: _PI_LOGOUT_SELECTOR_MARKER in b, _PI_SELECTOR_TIMEOUT_SECONDS):
-        # The first slash was likely dropped (typed before pi was ready) — submit once
-        # more. Guarded on the marker's absence, so a rendered selector is never typed into.
-        manager.write(slash + _PI_SUBMIT)
-        if not accumulator.wait_for(lambda b: _PI_LOGOUT_SELECTOR_MARKER in b, _PI_SELECTOR_TIMEOUT_SECONDS):
-            logger.warning("pi /logout selector never rendered; leaving the session for manual completion")
-            return
+    entry = get_provider_entry(provider_id)
+    if entry is not None and entry.supports_subscription:
+        provider_selector_timeout = _PI_METHOD_CHOICE_TIMEOUT_SECONDS
+    else:
+        manager.write(_PI_DOWN_ARROW)
+        time.sleep(_PI_FILTER_SETTLE_SECONDS)
+        manager.write(_PI_SUBMIT)
+        provider_selector_timeout = _PI_SELECTOR_TIMEOUT_SECONDS
 
-    # Fuzzy-filter pi's list to the chosen provider, then confirm: typing the provider id
-    # narrows to its row, and Return removes its stored key.
-    manager.write(provider_id.encode())
-    time.sleep(_PI_FILTER_SETTLE_SECONDS)
-    manager.write(_PI_SUBMIT)
+    if not accumulator.wait_for(lambda b: _PI_LOGIN_PROVIDER_SELECTOR_MARKER in b, provider_selector_timeout):
+        logger.info("pi /login provider selector never rendered; leaving the session for manual completion")
+        return
+    # Return on the filtered row opens the provider's credential step (API key input,
+    # or the OAuth dialog when the user chose the subscription method).
+    _filter_and_confirm(manager, provider_id)
 
 
 class PiLoginService(Service):
@@ -240,11 +316,11 @@ class PiLoginService(Service):
     def spawn(self, mode: PiLoginMode, pi_binary_path: str, provider_id: str | None = None) -> str:
         """Spawn a login PTY and drive pi's /login|/logout, polling auth.json for completion.
 
-        ``provider_id`` is the row to filter to in pi's /logout selector and the key to
-        watch for in auth.json; it is None only for the empty-state "authenticate a
-        provider" CTA, where pi's own selector picks. The PTY inherits the user's
-        environment (extra_env empty, no PI_CODING_AGENT_DIR, no api-key secrets) so pi
-        reads/writes the user's real ~/.pi/agent/auth.json.
+        ``provider_id`` is the row to select in pi's /login and /logout selectors and
+        the key to watch for in auth.json; it is None only for the empty-state
+        "authenticate a provider" CTA, where pi's own selectors pick. The PTY inherits
+        the user's environment (extra_env empty, no PI_CODING_AGENT_DIR, no api-key
+        secrets) so pi reads/writes the user's real ~/.pi/agent/auth.json.
         """
         login_id = generate_id()
         terminal_id = pi_login_terminal_id(login_id)

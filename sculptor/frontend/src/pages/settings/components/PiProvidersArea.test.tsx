@@ -29,6 +29,7 @@ const makeProvider = (overrides: Partial<AuthenticatedProviderEntry>): Authentic
   inAuthJson: false,
   envDetected: false,
   envVarNames: ["ANTHROPIC_API_KEY"],
+  supportsSubscription: false,
   ...overrides,
 });
 

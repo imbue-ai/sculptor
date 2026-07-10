@@ -23,13 +23,17 @@ class ProviderCatalogEntry(FrozenModel):
     ``provider_id`` equals both the ``auth.json`` top-level key and the ``provider``
     field pi reports in ``get_available_models`` (e.g. Gemini is ``google``).
     ``env_var_names`` lists every conventional env var that authenticates the
-    provider; the first is the canonical/primary one.
+    provider; the first is the canonical/primary one. ``supports_subscription``
+    marks providers pi can also authenticate via its OAuth/subscription login;
+    every provider accepts an API key. pi's other built-in OAuth providers
+    (github-copilot, openai-codex) are not catalog entries.
     """
 
     provider_id: str
     env_var_names: tuple[str, ...]
     display_name: str
     group: ProviderGroup
+    supports_subscription: bool = False
 
 
 _PROVIDER_CATALOG: tuple[ProviderCatalogEntry, ...] = (
@@ -38,6 +42,7 @@ _PROVIDER_CATALOG: tuple[ProviderCatalogEntry, ...] = (
         env_var_names=("ANTHROPIC_API_KEY",),
         display_name="Anthropic",
         group=ProviderGroup.SINGLE_KEY,
+        supports_subscription=True,
     ),
     ProviderCatalogEntry(
         provider_id="openai",

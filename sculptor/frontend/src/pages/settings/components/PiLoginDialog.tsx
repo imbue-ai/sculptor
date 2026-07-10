@@ -12,11 +12,14 @@ const PI_LOGIN_STATUS_POLL_INTERVAL_MS = 1200;
 
 /** What the Providers area hands the modal: which provider and which direction.
  *  `providerId` is null for the empty-state "Authenticate a provider" CTA (pi's own
- *  TUI picks the provider). */
+ *  TUI picks the provider). `supportsSubscription` selects the login guidance: the
+ *  backend drives pi straight to the API key input unless the provider also offers
+ *  pi's subscription (OAuth) sign-in, where that choice stays with the user. */
 export type PiLoginRequestView = {
   providerId: string | null;
   displayName: string;
   mode: "login" | "logout";
+  supportsSubscription: boolean;
 };
 
 type PiLoginDialogProps = {
@@ -111,10 +114,14 @@ export const PiLoginDialog = ({ request, onClose }: PiLoginDialogProps): ReactEl
 
   const isLogin = request.mode === "login";
   const title = isLogin ? `Authenticate ${request.displayName}` : `Disconnect ${request.displayName}`;
-  const terminalGuidance = isLogin
-    ? request.providerId === null
+  const loginGuidance =
+    request.providerId === null
       ? "Select a provider in the pi login screen below and complete sign-in. This window closes automatically when done."
-      : `Choose ${request.displayName} in the pi login screen below and complete sign-in. This window closes automatically when done.`
+      : request.supportsSubscription
+        ? `Choose how to sign in — subscription or API key — and complete the ${request.displayName} sign-in below. This window closes automatically when done.`
+        : `Enter your ${request.displayName} API key in the pi screen below. This window closes automatically when done.`;
+  const terminalGuidance = isLogin
+    ? loginGuidance
     : `Disconnecting ${request.displayName} from pi — this window closes automatically when done.`;
 
   return (

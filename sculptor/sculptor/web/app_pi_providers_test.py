@@ -64,6 +64,9 @@ def test_authenticated_providers_cover_full_catalog_with_groups(
     by_id = {entry["providerId"]: entry for entry in providers}
     assert by_id["amazon-bedrock"]["group"] == "session_only"
     assert by_id["anthropic"]["group"] == "single_key"
+    # Only anthropic supports pi's subscription (OAuth) login among catalog providers.
+    assert by_id["anthropic"]["supportsSubscription"] is True
+    assert by_id["openai"]["supportsSubscription"] is False
 
 
 def test_paste_key_writes_entry_and_broadcasts(

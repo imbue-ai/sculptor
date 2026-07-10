@@ -32,10 +32,17 @@ vi.mock("./PiLoginTerminal.tsx", () => ({
   ),
 }));
 
-const renderDialog = (mode: "login" | "logout", onClose: () => void = vi.fn()): void => {
+const renderDialog = (
+  mode: "login" | "logout",
+  onClose: () => void = vi.fn(),
+  { supportsSubscription = false }: { supportsSubscription?: boolean } = {},
+): void => {
   render(
     <Theme>
-      <PiLoginDialog request={{ providerId: "openai", displayName: "OpenAI", mode }} onClose={onClose} />
+      <PiLoginDialog
+        request={{ providerId: "openai", displayName: "OpenAI", mode, supportsSubscription }}
+        onClose={onClose}
+      />
     </Theme>,
   );
 };
@@ -58,6 +65,26 @@ describe("PiLoginDialog", () => {
       expect.objectContaining({ body: { mode: "login", providerId: "openai" } }),
     );
     expect(screen.queryByText("Open pi login")).toBeNull();
+  });
+
+  it("tells an API-key-only provider's user that pi opens at the key input", async () => {
+    mockStartPiLogin.mockResolvedValue({ data: { loginId: "login-3" } });
+    mockGetPiLoginStatus.mockResolvedValue({ data: { completed: false } });
+
+    renderDialog("login");
+
+    await screen.findByTestId("fake-login-terminal");
+    expect(screen.getByText(/Enter your OpenAI API key/)).toBeTruthy();
+  });
+
+  it("tells a subscription-capable provider's user to choose a sign-in method", async () => {
+    mockStartPiLogin.mockResolvedValue({ data: { loginId: "login-4" } });
+    mockGetPiLoginStatus.mockResolvedValue({ data: { completed: false } });
+
+    renderDialog("login", vi.fn(), { supportsSubscription: true });
+
+    await screen.findByTestId("fake-login-terminal");
+    expect(screen.getByText(/Choose how to sign in/)).toBeTruthy();
   });
 
   it("shows an error when the session cannot start", async () => {
