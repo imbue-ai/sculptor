@@ -14,7 +14,7 @@ const isAuthenticated = (provider: AuthenticatedProviderEntry): boolean => provi
  * Session-only), ordered alphabetically by display name within each section.
  * Session-only providers always land in their own group regardless of auth state
  * (their persistence is deferred); otherwise an authenticated provider is Connected
- * and an unauthenticated single-key provider is Available.
+ * and an unauthenticated one (single-key or subscription-only) is Available.
  */
 export const groupProviders = (providers: ReadonlyArray<AuthenticatedProviderEntry>): ProviderGrouping => {
   const connected: Array<AuthenticatedProviderEntry> = [];

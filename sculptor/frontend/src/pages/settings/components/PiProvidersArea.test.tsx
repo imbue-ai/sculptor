@@ -101,6 +101,33 @@ describe("groupProviders", () => {
     expect(grouping.connected).toHaveLength(0);
   });
 
+  it("puts an unauthenticated subscription-only provider under Available", () => {
+    const grouping = groupProviders([
+      makeProvider({
+        providerId: "openai-codex",
+        group: ProviderGroup.SUBSCRIPTION_ONLY,
+        supportsSubscription: true,
+        envVarNames: [],
+      }),
+    ]);
+    expect(grouping.available.map((p) => p.providerId)).toEqual(["openai-codex"]);
+    expect(grouping.sessionOnly).toHaveLength(0);
+  });
+
+  it("puts an authenticated subscription-only provider under Connected", () => {
+    const grouping = groupProviders([
+      makeProvider({
+        providerId: "github-copilot",
+        group: ProviderGroup.SUBSCRIPTION_ONLY,
+        supportsSubscription: true,
+        envVarNames: [],
+        inAuthJson: true,
+      }),
+    ]);
+    expect(grouping.connected.map((p) => p.providerId)).toEqual(["github-copilot"]);
+    expect(grouping.sessionOnly).toHaveLength(0);
+  });
+
   it("sorts the Available group alphabetically by display name", () => {
     const grouping = groupProviders([
       makeProvider({ providerId: "openrouter", displayName: "OpenRouter" }),

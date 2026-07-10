@@ -12,10 +12,11 @@ newline). For /logout the chosen provider is known up front (the user clicked it
 Disconnect), so the service fuzzy-filters pi's "select provider" list to that provider
 and confirms, fully automatically. For /login with a chosen provider, pi's two
 selectors (authentication method, then provider) are driven so the user lands directly
-on that provider's credential step; the method choice is auto-answered with "Use an
-API key" unless the provider also supports pi's subscription (OAuth) login, in which
-case that one choice stays with the user. The provider-agnostic /login only opens the
-prompt — every choice is the user's.
+on that provider's credential step; the method choice is auto-answered when the
+provider has exactly one valid method (API key, or subscription for pi's
+subscription-only OAuth providers), and stays with the user for a provider that
+supports both. The provider-agnostic /login only opens the prompt — every choice is
+the user's.
 
 Completion is observed against auth.json itself (the credential store pi writes): a
 background poll watches for the chosen provider's key to disappear (/logout) or appear
@@ -35,6 +36,7 @@ from loguru import logger
 from pydantic import PrivateAttr
 
 from sculptor.agents.pi_agent.authenticated_providers import read_auth_json_provider_ids
+from sculptor.agents.pi_agent.provider_catalog import ProviderGroup
 from sculptor.agents.pi_agent.provider_catalog import get_provider_entry
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.foundation.common import generate_id
@@ -270,10 +272,12 @@ def _drive_login(accumulator: _OutputAccumulator, manager: LocalTerminalManager,
     """Drive /login so the user lands on the chosen provider's credential step.
 
     pi's /login renders an authentication-method selector ("Use a subscription" /
-    "Use an API key"), then a provider list for that method. An API-key-only provider
-    has exactly one valid method, so both selectors are auto-answered and the user
-    lands on the key input. A subscription-capable provider leaves the method choice
-    to the user, then auto-selects the provider in the list their choice renders.
+    "Use an API key"), then a provider list for that method. A provider with exactly
+    one valid method has both selectors auto-answered: subscription-only providers
+    confirm the selector's default "Use a subscription" row, API-key-only providers
+    arrow down to "Use an API key" first. A provider supporting both (anthropic)
+    leaves the method choice to the user, then auto-selects the provider in the list
+    their choice renders.
     """
     if provider_id is None:
         # Provider-agnostic (empty-state CTA): pi's own selectors take over.
@@ -284,7 +288,10 @@ def _drive_login(accumulator: _OutputAccumulator, manager: LocalTerminalManager,
         return
 
     entry = get_provider_entry(provider_id)
-    if entry is not None and entry.supports_subscription:
+    if entry is not None and entry.group is ProviderGroup.SUBSCRIPTION_ONLY:
+        manager.write(_PI_SUBMIT)
+        provider_selector_timeout = _PI_SELECTOR_TIMEOUT_SECONDS
+    elif entry is not None and entry.supports_subscription:
         provider_selector_timeout = _PI_METHOD_CHOICE_TIMEOUT_SECONDS
     else:
         manager.write(_PI_DOWN_ARROW)
@@ -296,7 +303,7 @@ def _drive_login(accumulator: _OutputAccumulator, manager: LocalTerminalManager,
         logger.info("pi /login provider selector never rendered; leaving the session for manual completion")
         return
     # Return on the filtered row opens the provider's credential step (API key input,
-    # or the OAuth dialog when the user chose the subscription method).
+    # or the OAuth dialog on the subscription path).
     _filter_and_confirm(manager, provider_id)
 
 

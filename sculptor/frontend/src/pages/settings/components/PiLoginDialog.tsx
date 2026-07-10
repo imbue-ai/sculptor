@@ -2,7 +2,7 @@ import { Cross1Icon } from "@radix-ui/react-icons";
 import { Dialog, Flex, IconButton, Spinner, Text } from "@radix-ui/themes";
 import { type ReactElement, useCallback, useEffect, useState } from "react";
 
-import { ElementIds, finishPiLogin, getPiLoginStatus, startPiLogin } from "~/api";
+import { ElementIds, finishPiLogin, getPiLoginStatus, ProviderGroup, startPiLogin } from "~/api";
 
 import { PiLoginTerminal } from "./PiLoginTerminal.tsx";
 
@@ -12,13 +12,16 @@ const PI_LOGIN_STATUS_POLL_INTERVAL_MS = 1200;
 
 /** What the Providers area hands the modal: which provider and which direction.
  *  `providerId` is null for the empty-state "Authenticate a provider" CTA (pi's own
- *  TUI picks the provider). `supportsSubscription` selects the login guidance: the
- *  backend drives pi straight to the API key input unless the provider also offers
- *  pi's subscription (OAuth) sign-in, where that choice stays with the user. */
+ *  TUI picks the provider). `group` + `supportsSubscription` mirror the provider's
+ *  catalog entry and select the login guidance: the backend drives pi straight to
+ *  the provider's single credential step (API key input, or the subscription
+ *  sign-in for a subscription-only provider) and leaves the method choice to the
+ *  user only when the provider supports both. */
 export type PiLoginRequestView = {
   providerId: string | null;
   displayName: string;
   mode: "login" | "logout";
+  group: ProviderGroup | null;
   supportsSubscription: boolean;
 };
 
@@ -117,9 +120,11 @@ export const PiLoginDialog = ({ request, onClose }: PiLoginDialogProps): ReactEl
   const loginGuidance =
     request.providerId === null
       ? "Select a provider in the pi login screen below and complete sign-in. This window closes automatically when done."
-      : request.supportsSubscription
-        ? `Choose how to sign in — subscription or API key — and complete the ${request.displayName} sign-in below. This window closes automatically when done.`
-        : `Enter your ${request.displayName} API key in the pi screen below. This window closes automatically when done.`;
+      : request.group === ProviderGroup.SUBSCRIPTION_ONLY
+        ? `Complete the ${request.displayName} subscription sign-in below — pi opens your browser to authorize. This window closes automatically when done.`
+        : request.supportsSubscription
+          ? `Choose how to sign in — subscription or API key — and complete the ${request.displayName} sign-in below. This window closes automatically when done.`
+          : `Enter your ${request.displayName} API key in the pi screen below. This window closes automatically when done.`;
   const terminalGuidance = isLogin
     ? loginGuidance
     : `Disconnecting ${request.displayName} from pi — this window closes automatically when done.`;

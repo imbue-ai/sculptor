@@ -86,6 +86,8 @@ const providerDisplayNames: Record<string, string> = {
   deepseek: "DeepSeek",
   google: "Google",
   openai: "OpenAI",
+  "openai-codex": "ChatGPT Plus/Pro (Codex)",
+  "github-copilot": "GitHub Copilot",
   "amazon-bedrock": "Amazon Bedrock",
 };
 

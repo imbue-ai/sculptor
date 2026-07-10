@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ProviderGroup } from "~/api";
+
 import { PiLoginDialog } from "./PiLoginDialog.tsx";
 
 const { mockStartPiLogin, mockFinishPiLogin, mockGetPiLoginStatus } = vi.hoisted(() => ({
@@ -35,12 +37,15 @@ vi.mock("./PiLoginTerminal.tsx", () => ({
 const renderDialog = (
   mode: "login" | "logout",
   onClose: () => void = vi.fn(),
-  { supportsSubscription = false }: { supportsSubscription?: boolean } = {},
+  {
+    supportsSubscription = false,
+    group = ProviderGroup.SINGLE_KEY,
+  }: { supportsSubscription?: boolean; group?: ProviderGroup } = {},
 ): void => {
   render(
     <Theme>
       <PiLoginDialog
-        request={{ providerId: "openai", displayName: "OpenAI", mode, supportsSubscription }}
+        request={{ providerId: "openai", displayName: "OpenAI", mode, supportsSubscription, group }}
         onClose={onClose}
       />
     </Theme>,
@@ -85,6 +90,16 @@ describe("PiLoginDialog", () => {
 
     await screen.findByTestId("fake-login-terminal");
     expect(screen.getByText(/Choose how to sign in/)).toBeTruthy();
+  });
+
+  it("tells a subscription-only provider's user that pi opens the subscription sign-in", async () => {
+    mockStartPiLogin.mockResolvedValue({ data: { loginId: "login-5" } });
+    mockGetPiLoginStatus.mockResolvedValue({ data: { completed: false } });
+
+    renderDialog("login", vi.fn(), { supportsSubscription: true, group: ProviderGroup.SUBSCRIPTION_ONLY });
+
+    await screen.findByTestId("fake-login-terminal");
+    expect(screen.getByText(/subscription sign-in/)).toBeTruthy();
   });
 
   it("shows an error when the session cannot start", async () => {

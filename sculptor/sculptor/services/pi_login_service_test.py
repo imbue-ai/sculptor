@@ -270,6 +270,23 @@ def test_drive_pi_session_login_subscription_provider_lets_user_pick_method(
     assert terminal.writes == [b"/login\r", b"anthropic", b"\r"]
 
 
+def test_drive_pi_session_login_subscription_only_provider_drives_to_oauth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def on_write(manager: _FakeTerminal, data: bytes) -> None:
+        if data == b"/login\r":
+            manager.emit(b"Select authentication method:")
+        elif data == b"\r":
+            manager.emit(b"Select provider to configure:")
+
+    terminal = _drive_with_fake_pi(monkeypatch, PiLoginMode.LOGIN, "openai-codex", on_write)
+
+    # openai-codex is subscription-only: its single valid method is the selector's
+    # default row ("Use a subscription"), so a bare Return confirms it, then the
+    # provider list is fuzzy-filtered to the provider and confirmed.
+    assert terminal.writes == [b"/login\r", b"\r", b"openai-codex", b"\r"]
+
+
 def test_drive_pi_session_login_gives_up_when_method_selector_never_renders(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
