@@ -7,10 +7,10 @@
     "skipLibCheck": true,
     "paths": {
       "~/*": ["./src/*"],
-      // Bundled plugins import the SDK by its bare specifier; resolve it to host
+      // Bundled extensions import the SDK by its bare specifier; resolve it to host
       // source so `tsc` type-checks them (they're included below). Mirrors each
-      // plugin's own tsconfig path and the vite/import-map resolution.
-      "@sculptor/plugin-sdk": ["./src/plugins/sdk/index.ts"]
+      // extension's own tsconfig path and the vite/import-map resolution.
+      "@sculptor/extension-sdk": ["./src/extensions/sdk/index.ts"]
     },
     /* Bundler mode */
     "moduleResolution": "bundler",
@@ -33,7 +33,7 @@
   },
   "include": [
     "src",
-    "plugins",
+    "extensions",
     "src/globals.d.ts",
     "src/generated-types.d.ts",
     "eslint.config.ts",

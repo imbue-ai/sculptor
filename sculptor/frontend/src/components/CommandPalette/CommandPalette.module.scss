@@ -286,6 +286,17 @@
   color: var(--gray-11);
 }
 
+// Right-aligned annotation pill (the switcher's cross-project tag). A Radix
+// soft-gray Badge provides the quiet chip styling; this only bounds and
+// truncates a long project name so it can't crowd the row.
+.itemBadge {
+  flex-shrink: 0;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 // Per-row shortcut hint, shown at the right edge of the row. Mirrors
 // the chat input's `<KeyboardHint>` styling: inherited system font (no
 // monospace, no bold) so the platform's modifier-glyph rendering kicks

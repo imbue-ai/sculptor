@@ -156,6 +156,16 @@ class DefaultWorkspaceService(WorkspaceService):
     def remove_observer(self, queue: Queue[StreamingUpdateSourceTypes]) -> None:
         self._branch_poller.remove_observer(queue)
 
+    def get_cached_current_branch(self, workspace_id: WorkspaceID) -> str | None:
+        # Read the instance directly instead of going through the lazy
+        # ``_branch_poller`` property: a pure cache read must not construct the
+        # polling machinery.
+        with self._branch_poller_lock:
+            poller = self._branch_poller_instance
+        if poller is None:
+            return None
+        return poller.get_current_branch(workspace_id)
+
     def reconcile_setup_state(self) -> None:
         """Bring persisted setup state into a coherent state on app startup.
 

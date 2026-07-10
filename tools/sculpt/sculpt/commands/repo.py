@@ -25,9 +25,7 @@ repo_app = typer.Typer(
 
 def _repo_item_from_project(project: Project) -> RepoItem:
     """Build the JSON output model for a single repo from a project."""
-    created_at = (
-        project.created_at.isoformat() if isinstance(project.created_at, datetime.datetime) else None
-    )
+    created_at = project.created_at.isoformat() if isinstance(project.created_at, datetime.datetime) else None
     return RepoItem(
         id=project.object_id,
         name=project.name,
@@ -44,8 +42,8 @@ def list_cmd(
 ) -> None:
     """List all known repos."""
     base_url = base_url or get_default_base_url()
-    client = get_authenticated_client(base_url)
-    projects = fetch_projects(client)
+    client = get_authenticated_client(base_url, json_output)
+    projects = fetch_projects(client, json_output)
 
     if json_output:
         items = [_repo_item_from_project(p) for p in projects]
@@ -77,10 +75,17 @@ def show(
 ) -> None:
     """Show details of a repo."""
     base_url = base_url or get_default_base_url()
-    client = get_authenticated_client(base_url)
-    projects = fetch_projects(client)
+    client = get_authenticated_client(base_url, json_output)
+    projects = fetch_projects(client, json_output)
 
-    project = resolve_by_prefix(repo_id, projects, lambda p: p.object_id)
+    project = resolve_by_prefix(
+        repo_id,
+        projects,
+        lambda p: p.object_id,
+        resource_noun="repo",
+        json_output=json_output,
+        label_getter=lambda p: p.name,
+    )
 
     if json_output:
         typer.echo(_repo_item_from_project(project).model_dump_json(indent=2))

@@ -9,7 +9,9 @@ commands stay in lockstep.
 import httpx
 
 from sculpt.client import Client
+from sculpt.client.api.default import get_pi_models
 from sculpt.client.api.default import list_terminal_agent_registrations
+from sculpt.client.models.model_option import ModelOption
 from sculpt.client.models.terminal_agent_registration import TerminalAgentRegistration
 from sculpt.formatting import cli_error
 from sculpt.formatting import handle_connection_error
@@ -51,3 +53,27 @@ def resolve_harness_selection(harness: str | None, client: Client, json_output: 
         valid = ", ".join(available_harness_names(registrations))
         cli_error(f"Invalid harness '{harness}'. Valid options: {valid}", json_output=json_output)
     return selection
+
+
+def resolve_pi_backend_model(client: Client, json_output: bool) -> ModelOption:
+    """Pick the backend model a pi prompt runs under, from pi's own catalog.
+
+    A pi prompt must name a model from pi's curated, authenticated-only catalog
+    (GET /api/v1/pi/models) — the Claude ``--model`` names do not apply to pi.
+    Uses pi's own default when usable, else the newest available model; errors
+    when the catalog is empty (no authenticated provider / unusable pi).
+    """
+    try:
+        catalog = get_pi_models.sync(client=client)
+    except httpx.ConnectError:
+        handle_connection_error(json_output)
+    if catalog is None:
+        cli_error("Failed to fetch pi models", detail="No response from server", json_output=json_output)
+    if catalog.default_model is not None:
+        return catalog.default_model
+    if catalog.available_models:
+        return catalog.available_models[0]
+    cli_error(
+        "pi has no usable model — authenticate a provider (Sculptor Settings → Pi → Providers), then retry",
+        json_output=json_output,
+    )

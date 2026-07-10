@@ -1,6 +1,6 @@
 import { useAtom } from "jotai";
 import type { ReactElement } from "react";
-import { useCallback, useEffect } from "react";
+import { useCallback } from "react";
 
 import { ElementIds } from "~/api";
 import { newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
@@ -10,29 +10,18 @@ import { PaletteDialog } from "~/components/PaletteDialog/PaletteDialog.tsx";
 /**
  * Global host for the new-workspace dialog. Opened/closed via
  * `newWorkspaceModalAtom`, set by the creation entry points — the Cmd+K command,
- * the Cmd/Meta+T shortcut, and the sidebar's New Workspace button (the per-repo
- * "+" direct-creates and only falls back to opening this). Mounted in AppShell, the
- * layout hosting every page route, so it is reachable everywhere except the
- * empty first-run page (which replaces AppShell and renders the form inline
- * instead). Renders the PaletteDialog shell around the
- * form, remounting the form on each open (keyed on the preset repo) so
- * its local field state starts fresh from the MRU seed every time.
+ * the Cmd/Meta+T shortcut, the sidebar's New Workspace button, and the home
+ * page's first-run auto-open (with the onboarding prompt prefilled). A repo
+ * group's "+" direct-creates instead, opening this dialog (with that repo
+ * preset) only as its fallback when the create can't proceed. Mounted in
+ * AppShell, the layout hosting every
+ * page route, so it is reachable everywhere. Renders the PaletteDialog shell
+ * around the form, remounting the form on each open (keyed on the preset repo)
+ * so its local field state starts fresh from the MRU seed every time.
  */
 export const NewWorkspaceModal = (): ReactElement | undefined => {
   // State and hooks
   const [modalState, setModalState] = useAtom(newWorkspaceModalAtom);
-
-  // An open request must not outlive this host. AppShell unmounts when the
-  // workspace list becomes (or turns out to be) empty and the first-run page
-  // takes over; `newWorkspaceModalAtom` lives in the store, so without this
-  // cleanup a request set just before that swap would survive it invisibly and
-  // pop the dialog — overlay and all — over the first workspace created from
-  // the inline form. Close it on unmount so a stale request dies with its host.
-  useEffect(() => {
-    return (): void => {
-      setModalState({ open: false });
-    };
-  }, [setModalState]);
 
   // Functions and callbacks
   const handleOpenChange = useCallback(
@@ -44,7 +33,10 @@ export const NewWorkspaceModal = (): ReactElement | undefined => {
     [setModalState],
   );
 
-  const handleCreated = useCallback((): void => {
+  // One close for both form-initiated exits: a completed create (keep-open
+  // off) and a dismissal request (the pi empty-state CTA navigating to
+  // Settings, which lands underneath this dialog).
+  const handleClose = useCallback((): void => {
     setModalState({ open: false });
   }, [setModalState]);
 
@@ -52,6 +44,10 @@ export const NewWorkspaceModal = (): ReactElement | undefined => {
   if (!modalState.open) {
     return undefined;
   }
+
+  // Destructured because react/jsx-handler-names rejects a member expression
+  // on an `on*` prop (it accepts a plain identifier).
+  const { onWorkspaceCreated } = modalState;
 
   return (
     <PaletteDialog
@@ -63,7 +59,12 @@ export const NewWorkspaceModal = (): ReactElement | undefined => {
       <NewWorkspaceForm
         key={modalState.presetProjectId ?? "default"}
         presetProjectId={modalState.presetProjectId}
-        onCreated={handleCreated}
+        initialTitle={modalState.initialTitle}
+        initialPrompt={modalState.initialPrompt}
+        initialBranchName={modalState.initialBranchName}
+        onWorkspaceCreated={onWorkspaceCreated}
+        onCreated={handleClose}
+        onDismiss={handleClose}
       />
     </PaletteDialog>
   );

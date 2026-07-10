@@ -11,10 +11,11 @@ import type { AgentAction, AgentActionRuntime } from "./types.ts";
  * diagnostics fetched outside the palette; those are not surfaced here.
  *
  * Rename routes through the panel tab's inline edit: its `perform` calls
- * `runtime.beginRename`, which activates the agent's panel and sets
- * `agentRenameTargetAtom` so the mounted tab in `SectionHeader` enters its
- * existing inline-rename mode. Reusing that path keeps the single optimistic
- * rename mutation and avoids a forked dialog.
+ * `runtime.beginRename`, which activates the agent's panel and stashes a
+ * rename handoff that the palette flushes to `agentRenameTargetAtom` once its
+ * dialog has closed (see `palettePendingRenameAtom`), so the mounted tab in
+ * `SectionHeader` enters its existing inline-rename mode. Reusing that path
+ * keeps the single optimistic rename mutation and avoids a forked dialog.
  */
 export const buildAgentActions = (runtime: AgentActionRuntime): ReadonlyArray<AgentAction> => [
   {

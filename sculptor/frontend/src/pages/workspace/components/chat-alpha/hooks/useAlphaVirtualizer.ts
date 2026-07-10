@@ -20,6 +20,19 @@ const OVERSCAN = 5;
 const MAX_CACHED_TASKS = 20;
 
 /**
+ * Per-task caches: item heights (for estimateSize) and tail content height.
+ * MODULE-scoped, not refs: the mobile shell unmounts the whole chat on every
+ * navigation (home ↔ workspace), so a ref-held cache restarts cold on each
+ * return visit. Cold caches mean estimateSize falls back to the generic 120px
+ * guess for every item, and the scroll-position restore first lands far from
+ * the saved spot, then visibly leaps as real measurements land — for seconds
+ * on a phone. Keyed by task id, so surviving the component is safe: a return
+ * visit reads the same task's own heights from its last visit.
+ */
+const heightCacheByTask = new Map<string, Array<number>>();
+const tailCacheByTask = new Map<string, number>();
+
+/**
  * Vertical padding above the virtualised list.
  *
  * Using `paddingStart` (and `paddingEnd` below) is the correct TanStack Virtual
@@ -134,17 +147,13 @@ export const useAlphaVirtualizer = (
   isStreaming: boolean = false,
 ): Virtualizer<HTMLDivElement, Element> => {
   const [containerHeight, setContainerHeight] = useState(0);
-  const [tailContentHeight, setTailContentHeight] = useState(0);
-  const tailContentHeightRef = useRef(0);
+  // Seed from the module-level caches so a REMOUNT of a previously-visited
+  // task starts with its real heights and tail from the first render — the
+  // task-switch branch below only handles taskId changing while mounted.
+  const [tailContentHeight, setTailContentHeight] = useState(() => tailCacheByTask.get(taskId) ?? 0);
+  const tailContentHeightRef = useRef(tailCacheByTask.get(taskId) ?? 0);
   const prevTaskIdRef = useRef(taskId);
-
-  // Per-task caches: item heights (for estimateSize) and tail content height.
-  // When switching away from a task we save these; when switching back we
-  // restore them so items start at approximately-correct positions instead of
-  // the generic 120px estimate and 64px padding fallback.
-  const heightCacheRef = useRef<Map<string, Array<number>>>(new Map());
-  const tailCacheRef = useRef<Map<string, number>>(new Map());
-  const currentEstimatesRef = useRef<Array<number>>([]);
+  const currentEstimatesRef = useRef<Array<number>>(heightCacheByTask.get(taskId) ?? []);
 
   // The settle window (per-item scroll-adjustment suppression after a task
   // switch) is owned by the scroll state machine's layout phase: `measuring`
@@ -269,8 +278,8 @@ export const useAlphaVirtualizer = (
       setIsTailSettling(false);
 
       // Restore saved state for the incoming task.
-      currentEstimatesRef.current = heightCacheRef.current.get(taskId) ?? [];
-      const savedTail = tailCacheRef.current.get(taskId);
+      currentEstimatesRef.current = heightCacheByTask.get(taskId) ?? [];
+      const savedTail = tailCacheByTask.get(taskId);
 
       if (savedTail != null) {
         // Return visit: use the exact tail height from last time.
@@ -351,10 +360,10 @@ export const useAlphaVirtualizer = (
       const item = virtualizer.measurementsCache[i];
       if (item) heights[i] = item.size;
     }
-    heightCacheRef.current.set(taskId, heights);
-    tailCacheRef.current.set(taskId, tailContentHeightRef.current);
-    touchLRU(heightCacheRef.current, taskId, MAX_CACHED_TASKS);
-    touchLRU(tailCacheRef.current, taskId, MAX_CACHED_TASKS);
+    heightCacheByTask.set(taskId, heights);
+    tailCacheByTask.set(taskId, tailContentHeightRef.current);
+    touchLRU(heightCacheByTask, taskId, MAX_CACHED_TASKS);
+    touchLRU(tailCacheByTask, taskId, MAX_CACHED_TASKS);
   });
 
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = buildShouldAdjustScrollPositionOnItemSizeChange(

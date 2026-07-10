@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from queue import Queue
 from threading import Event
+from threading import Thread
 from unittest.mock import MagicMock
 
 import pytest
@@ -1622,8 +1623,10 @@ class TestPartialAndPersistenceShapeEquality:
         assert tuple(current) == persistence
 
 
-def _run_process_output(jsonl_dicts: list[dict]) -> list:
-    """Feed JSONL dicts through the real ``_process_output`` loop and return emitted messages.
+def _run_process_output_returning_processor(jsonl_dicts: list[dict]) -> tuple[list, ClaudeOutputProcessor]:
+    """Feed JSONL dicts through the real ``_process_output`` loop and return
+    (emitted messages, the processor) so tests can also assert on the
+    processor's final accounting state.
 
     Unlike ``_feed_jsonl`` (which mirrors only a subset of the dispatch), this
     pre-populates the process's stdout queue and runs the production
@@ -1652,7 +1655,14 @@ def _run_process_output(jsonl_dicts: list[dict]) -> list:
         streaming_enabled=True,
     )
     processor._process_output()
-    return _drain_queue(processor.output_message_queue)
+    return _drain_queue(processor.output_message_queue), processor
+
+
+def _run_process_output(jsonl_dicts: list[dict]) -> list:
+    """Like ``_run_process_output_returning_processor`` but returns only the
+    emitted messages."""
+    emitted, _ = _run_process_output_returning_processor(jsonl_dicts)
+    return emitted
 
 
 def _collect_tool_ids(messages: Iterable) -> set[str]:
@@ -2026,3 +2036,437 @@ class TestNotificationTurnBeforeUserTurn:
         assert continuation_text in _collect_text(chat_messages), (
             "the user turn's post-tool continuation never reached the chat: the turn was terminated after its first tool result"
         )
+
+
+class TestNotificationCoalescingAndIdleBackstop:
+    """Regression tests for SCU-1770: coalesced task-notifications must not
+    double-count their single follow-up turn, and a follow-up turn that never
+    arrives must not park the output loop forever.
+
+    The CLI can deliver a CLUSTER of task_notifications (one per completed
+    background task) followed by a SINGLE follow-up turn (one init → assistant
+    → result) that responds to all of them. The first notification of the
+    cluster resets ``found_final_message`` (accounting for that follow-up
+    turn); the later notifications used to arm
+    ``_awaiting_notification_turn_init``, which the init then promoted into
+    ``_pending_notification_turn_results`` — counting the SAME follow-up turn a
+    second time. The counter then absorbed the invocation's real final result,
+    and each later notification cycle re-incremented it, so the off-by-one
+    self-perpetuated and the loop waited forever: an orphaned RequestStarted
+    and a UI that streams until the user interrupts.
+    """
+
+    @staticmethod
+    def _incident_frame_sequence() -> list[dict]:
+        """The production frame shape: a user turn launches seven subagents;
+        five completions arrive as one coalesced cluster with a single
+        follow-up turn; a sixth completes with its own follow-up turn; the
+        seventh's notification arrives INLINE mid-follow-up-turn (no init of
+        its own)."""
+        session_id = "session_scu1770"
+        frames: list[dict] = [
+            make_task_started_message(
+                task_id=f"sub-{i}", tool_use_id=f"toolu-{i}", description=f"Explore {i}", task_type="local_agent"
+            )
+            for i in range(7)
+        ]
+        frames.append(make_assistant_message("msg-main", [make_text_block("Dispatched seven subagents.")]))
+        frames.append(make_end_message(session_id=session_id))
+        # Five completions coalesced into ONE follow-up turn.
+        for i in range(5):
+            frames.append(
+                make_task_notification_message(
+                    task_id=f"sub-{i}", tool_use_id=f"toolu-{i}", status="completed", summary=f"done {i}"
+                )
+            )
+        frames.append(make_init_message(session_id=session_id))
+        frames.append(make_assistant_message("msg-cluster", [make_text_block("CLUSTER-SYNTHESIS")]))
+        frames.append(make_end_message(session_id=session_id))
+        # Sixth task: its own notification + follow-up turn, which also
+        # receives the seventh task's notification inline (no init).
+        frames.append(
+            make_task_notification_message(
+                task_id="sub-5", tool_use_id="toolu-5", status="completed", summary="done 5"
+            )
+        )
+        frames.append(make_init_message(session_id=session_id))
+        frames.append(
+            make_task_notification_message(
+                task_id="sub-6", tool_use_id="toolu-6", status="completed", summary="done 6"
+            )
+        )
+        frames.append(make_assistant_message("msg-final", [make_text_block("FINAL-SYNTHESIS")]))
+        frames.append(make_end_message(session_id=session_id))
+        return frames
+
+    # Timeout guard: without the fix these exercise the exact infinite-wait
+    # bug (the output loop never concludes), so bound them so a regression
+    # fails CI fast instead of hanging the whole suite.
+    @pytest.mark.timeout(30)
+    def test_coalesced_notifications_do_not_absorb_the_final_result(self) -> None:
+        """After the full incident sequence the loop must conclude the
+        invocation is complete: found_final_message True with no leftover
+        pending notification-turn results. Before the fix the coalescing
+        double-count left found_final_message False (the real final result was
+        absorbed) and the invocation waited forever."""
+        emitted, processor = _run_process_output_returning_processor(self._incident_frame_sequence())
+
+        assert processor.found_final_message is True
+        assert processor._pending_notification_turn_results == 0
+        text = _collect_text(emitted)
+        assert "CLUSTER-SYNTHESIS" in text
+        assert "FINAL-SYNTHESIS" in text
+
+    @staticmethod
+    def _build_idle_processor(frames: list[dict], grace_seconds: float) -> tuple[ClaudeOutputProcessor, Queue]:
+        """Processor over a live (not finished) process whose queue holds the
+        given frames. ``is_finished`` reports the processor's own
+        found_final_message: False during the silent wait (so the loop keeps
+        idling instead of exiting on queue-drained), True once the turn
+        concludes (so the post-loop context-usage drain returns immediately
+        instead of burning its full timeout)."""
+        input_queue: Queue = Queue()
+        for d in frames:
+            input_queue.put((json.dumps(d), True))
+        mock_process = MagicMock()
+        mock_process.get_queue.return_value = input_queue
+        processor = ClaudeOutputProcessor(
+            process=mock_process,
+            source_command="test",
+            output_message_queue=Queue(),
+            environment=MagicMock(),
+            diff_tracker=None,
+            task_id=TaskID(),
+            session_id_written_event=Event(),
+            harness=CLAUDE_CODE_HARNESS,
+            streaming_enabled=True,
+        )
+        processor._notification_followup_grace_seconds = grace_seconds
+        mock_process.is_finished.side_effect = lambda: processor.found_final_message
+        return processor, input_queue
+
+    @pytest.mark.timeout(30)
+    def test_idle_backstop_concludes_invocation_when_followup_never_arrives(self) -> None:
+        """A notification resets found_final_message and then nothing follows:
+        the idle backstop must conclude the invocation after the grace period
+        instead of waiting forever."""
+        session_id = "s-backstop"
+        frames = [
+            make_task_started_message(
+                task_id="sub-x", tool_use_id="toolu-x", description="X", task_type="local_agent"
+            ),
+            make_assistant_message("msg-main", [make_text_block("Launched.")]),
+            make_end_message(session_id=session_id),
+            make_task_notification_message(
+                task_id="sub-x", tool_use_id="toolu-x", status="completed", summary="X done"
+            ),
+            # No follow-up init/assistant/result ever arrives.
+        ]
+        processor, _ = self._build_idle_processor(frames, grace_seconds=0.3)
+
+        completed = processor._process_output()
+
+        assert completed is True
+        assert processor.found_final_message is True
+        assert processor._pending_notification_turn_results == 0
+
+    @pytest.mark.timeout(30)
+    def test_non_json_line_during_silence_does_not_defuse_backstop(self) -> None:
+        """A non-JSON stdout line (CLI debug output) is NOT a stream frame and
+        must not disarm the idle backstop. The loop tolerates such lines as a
+        warning; if one of them defused the backstop, a CLI that periodically
+        logs non-JSON noise faster than the grace period would keep the
+        backstop from ever firing and reintroduce the wait-forever hang."""
+        session_id = "s-noise"
+        frames = [
+            make_task_started_message(
+                task_id="sub-n", tool_use_id="toolu-n", description="N", task_type="local_agent"
+            ),
+            make_assistant_message("msg-main", [make_text_block("Launched.")]),
+            make_end_message(session_id=session_id),
+            make_task_notification_message(
+                task_id="sub-n", tool_use_id="toolu-n", status="completed", summary="N done"
+            ),
+        ]
+        processor, input_queue = self._build_idle_processor(frames, grace_seconds=0.3)
+        # A non-JSON debug line arrives after the notification and then the CLI
+        # goes silent. The backstop must still conclude the invocation.
+        input_queue.put(("Claude CLI debug: still working on it", True))
+
+        completed = processor._process_output()
+
+        assert completed is True
+        assert processor.found_final_message is True
+        assert processor._pending_notification_turn_results == 0
+
+    @pytest.mark.timeout(30)
+    def test_inline_notification_mid_followup_turn_does_not_trigger_backstop(self) -> None:
+        """An inline notification during an already-started follow-up turn must
+        not arm the idle backstop: a long silent tool in that turn would
+        otherwise trip it and tear the invocation down mid-turn. The sleep here
+        is 3x the grace period, so an incorrectly armed backstop fires during
+        it and the late content goes missing."""
+        session_id = "s-inline"
+        pre_silence = [
+            make_task_started_message(
+                task_id="sub-a", tool_use_id="toolu-a", description="A", task_type="local_agent"
+            ),
+            make_task_started_message(
+                task_id="sub-b", tool_use_id="toolu-b", description="B", task_type="local_agent"
+            ),
+            make_assistant_message("msg-main", [make_text_block("Launched two.")]),
+            make_end_message(session_id=session_id),
+            make_task_notification_message(
+                task_id="sub-a", tool_use_id="toolu-a", status="completed", summary="A done"
+            ),
+            make_init_message(session_id=session_id),
+            # Inline notification mid-follow-up-turn: no init of its own.
+            make_task_notification_message(
+                task_id="sub-b", tool_use_id="toolu-b", status="completed", summary="B done"
+            ),
+            # ... the turn now runs a long, silent tool ...
+        ]
+        post_silence = [
+            make_assistant_message("msg-late", [make_text_block("LATE-TOOL-SYNTHESIS")]),
+            make_end_message(session_id=session_id),
+        ]
+        grace_seconds = 0.2
+        processor, input_queue = self._build_idle_processor(pre_silence, grace_seconds=grace_seconds)
+
+        def feed_late_frames() -> None:
+            time.sleep(grace_seconds * 3)
+            for d in post_silence:
+                input_queue.put((json.dumps(d), True))
+
+        feeder = Thread(target=feed_late_frames)
+        feeder.start()
+        completed = processor._process_output()
+        feeder.join()
+
+        assert completed is True
+        assert "LATE-TOOL-SYNTHESIS" in _collect_text(_drain_queue(processor.output_message_queue))
+
+    @pytest.mark.timeout(30)
+    def test_notification_inside_deferred_delivery_turn_does_not_arm_backstop(self) -> None:
+        """A deferred completion (task_updated) makes the CLI start an
+        event-delivery turn whose init does NOT consume found_final_message —
+        so the task's notification lands mid-turn with the flag still True.
+        The handler must keep the loop open (the reset) WITHOUT arming the
+        idle backstop: the active turn may run a long silent tool, and an
+        armed deadline would fire during it and cut off the turn's late
+        content. The silence here is 3x the grace, so a wrongly armed
+        backstop fires during it and LATE-SYNTHESIS goes missing."""
+        session_id = "s-deferred-midturn"
+        pre_silence = [
+            make_task_started_message(
+                task_id="sub-a", tool_use_id="toolu-a", description="A", task_type="local_agent"
+            ),
+            make_assistant_message("msg-main", [make_text_block("Launched.")]),
+            make_end_message(session_id=session_id),
+            # Subagent completes via task_updated (deferred cleanup path).
+            _make_task_updated_message(task_id="sub-a", status="completed"),
+            # The event-delivery turn starts; found_final_message stays True
+            # through this init (only wakeup inits reset it).
+            make_init_message(session_id=session_id),
+            # The task's notification is delivered inside that turn.
+            make_task_notification_message(
+                task_id="sub-a", tool_use_id="toolu-a", status="completed", summary="A done"
+            ),
+            make_assistant_message("msg-working", [make_text_block("Reacting to the subagent result...")]),
+            # ... the turn now runs a long, silent tool ...
+        ]
+        post_silence = [
+            make_assistant_message("msg-late", [make_text_block("LATE-SYNTHESIS")]),
+            make_end_message(session_id=session_id),
+        ]
+        grace_seconds = 0.2
+        processor, input_queue = self._build_idle_processor(pre_silence, grace_seconds=grace_seconds)
+
+        def feed_late_frames() -> None:
+            time.sleep(grace_seconds * 3)
+            for d in post_silence:
+                input_queue.put((json.dumps(d), True))
+
+        feeder = Thread(target=feed_late_frames)
+        feeder.start()
+        completed = processor._process_output()
+        feeder.join()
+
+        assert completed is True
+        assert "LATE-SYNTHESIS" in _collect_text(_drain_queue(processor.output_message_queue)), (
+            "the backstop was armed inside the active delivery turn and cut off its late content"
+        )
+
+    @pytest.mark.timeout(30)
+    def test_split_cluster_second_followup_turn_is_processed(self) -> None:
+        """Two notifications land before the follow-up init but the CLI answers
+        them with TWO separate turns (a completion raced past the first turn's
+        prompt construction). The multi-notification cluster must make the
+        first answering turn's result linger so the second turn is processed
+        instead of the loop exiting at the first result and discarding it."""
+        session_id = "s-split"
+        frames = [
+            make_task_started_message(
+                task_id="sub-a", tool_use_id="toolu-a", description="A", task_type="local_agent"
+            ),
+            make_task_started_message(
+                task_id="sub-b", tool_use_id="toolu-b", description="B", task_type="local_agent"
+            ),
+            make_assistant_message("msg-main", [make_text_block("Launched two.")]),
+            make_end_message(session_id=session_id),
+            # Both notifications arrive at the turn boundary...
+            make_task_notification_message(
+                task_id="sub-a", tool_use_id="toolu-a", status="completed", summary="A done"
+            ),
+            make_task_notification_message(
+                task_id="sub-b", tool_use_id="toolu-b", status="completed", summary="B done"
+            ),
+            # ...but the CLI answers them with two turns, not one.
+            make_init_message(session_id=session_id),
+            make_assistant_message("msg-t1", [make_text_block("TURN-ONE-REACTION")]),
+            make_end_message(session_id=session_id),
+            make_init_message(session_id=session_id),
+            make_assistant_message("msg-t2", [make_text_block("TURN-TWO-REACTION")]),
+            make_end_message(session_id=session_id),
+        ]
+
+        emitted, processor = _run_process_output_returning_processor(frames)
+
+        assert processor.found_final_message is True
+        assert processor._pending_notification_turn_results == 0
+        text = _collect_text(emitted)
+        assert "TURN-ONE-REACTION" in text
+        assert "TURN-TWO-REACTION" in text, (
+            "the split-off second follow-up turn was cut off: the loop exited at the first turn's result"
+        )
+
+    @pytest.mark.timeout(30)
+    def test_coalesced_cluster_lingers_briefly_then_concludes(self) -> None:
+        """The flip side of the split-cluster linger: when the CLI DOES
+        coalesce a multi-notification cluster into one turn, the linger after
+        that turn's result must expire on its own and conclude the invocation
+        (no second turn is coming)."""
+        session_id = "s-coalesced"
+        frames = [
+            make_task_started_message(
+                task_id="sub-a", tool_use_id="toolu-a", description="A", task_type="local_agent"
+            ),
+            make_task_started_message(
+                task_id="sub-b", tool_use_id="toolu-b", description="B", task_type="local_agent"
+            ),
+            make_assistant_message("msg-main", [make_text_block("Launched two.")]),
+            make_end_message(session_id=session_id),
+            make_task_notification_message(
+                task_id="sub-a", tool_use_id="toolu-a", status="completed", summary="A done"
+            ),
+            make_task_notification_message(
+                task_id="sub-b", tool_use_id="toolu-b", status="completed", summary="B done"
+            ),
+            # One coalesced answering turn, then nothing.
+            make_init_message(session_id=session_id),
+            make_assistant_message("msg-cluster", [make_text_block("CLUSTER-SYNTHESIS")]),
+            make_end_message(session_id=session_id),
+        ]
+        processor, _ = self._build_idle_processor(frames, grace_seconds=5.0)
+        processor._cluster_split_linger_seconds = 0.2
+
+        completed = processor._process_output()
+
+        assert completed is True
+        assert processor.found_final_message is True
+        assert processor._pending_notification_turn_results == 0
+
+    @pytest.mark.timeout(30)
+    def test_single_notification_followup_exits_without_linger(self) -> None:
+        """A single-notification follow-up turn must keep the zero-delay exit:
+        the split-cluster linger only applies when MORE than one boundary
+        notification shared the answering turn. The linger here is set far
+        beyond the assertion bound, so any regression that lingers on single
+        notifications fails the elapsed check."""
+        session_id = "s-single"
+        frames = [
+            make_task_started_message(
+                task_id="sub-a", tool_use_id="toolu-a", description="A", task_type="local_agent"
+            ),
+            make_assistant_message("msg-main", [make_text_block("Launched.")]),
+            make_end_message(session_id=session_id),
+            make_task_notification_message(
+                task_id="sub-a", tool_use_id="toolu-a", status="completed", summary="A done"
+            ),
+            make_init_message(session_id=session_id),
+            make_assistant_message("msg-t1", [make_text_block("REACTION")]),
+            make_end_message(session_id=session_id),
+        ]
+        processor, _ = self._build_idle_processor(frames, grace_seconds=300.0)
+        processor._cluster_split_linger_seconds = 300.0
+
+        start = time.monotonic()
+        completed = processor._process_output()
+        elapsed = time.monotonic() - start
+
+        assert completed is True
+        assert processor.found_final_message is True
+        assert elapsed < 5.0, "a single-notification follow-up turn must end the invocation without lingering"
+
+    @pytest.mark.timeout(30)
+    def test_notification_during_post_absorption_wait_is_answered_by_next_turn(self) -> None:
+        """A notification that arrives during the silent wait AFTER a
+        notification-turn result was absorbed (the SCU-1660 ordering: the CLI
+        delivered a pending notification as its own turn ahead of the user's
+        prompt) is a turn-boundary notification: the user's turn answers it,
+        and that turn's result must end the invocation. Counting it via the
+        SCU-1660 path instead makes the user's own result get absorbed."""
+        session_id = "s-boundary"
+        frames = [
+            # Pending notification delivered ahead of the user's turn.
+            make_task_notification_message(
+                task_id="sub-a", tool_use_id="toolu-a", status="completed", summary="A done"
+            ),
+            make_init_message(session_id=session_id),
+            make_assistant_message("msg-notif-turn", [make_text_block("NOTIF-TURN")]),
+            make_end_message(session_id=session_id),
+            # That result was absorbed; during the wait for the user's turn a
+            # second background task completes.
+            make_task_notification_message(
+                task_id="sub-b", tool_use_id="toolu-b", status="completed", summary="B done"
+            ),
+            # The user's turn answers it (coalesced) and ends the invocation.
+            make_init_message(session_id=session_id),
+            make_assistant_message("msg-user-turn", [make_text_block("USER-TURN")]),
+            make_end_message(session_id=session_id),
+        ]
+
+        emitted, processor = _run_process_output_returning_processor(frames)
+
+        assert processor.found_final_message is True, (
+            "the user's own result was absorbed by the notification-turn counter"
+        )
+        assert processor._pending_notification_turn_results == 0
+        assert "USER-TURN" in _collect_text(emitted)
+
+    @pytest.mark.timeout(30)
+    def test_notification_during_post_absorption_wait_keeps_backstop_armed(self) -> None:
+        """Same boundary notification as above, but the follow-up turn never
+        arrives. The notification frame itself must not leave the wait
+        unprotected — the idle backstop has to stay armed and conclude the
+        invocation instead of parking the loop forever."""
+        session_id = "s-boundary-idle"
+        frames = [
+            make_task_notification_message(
+                task_id="sub-a", tool_use_id="toolu-a", status="completed", summary="A done"
+            ),
+            make_init_message(session_id=session_id),
+            make_assistant_message("msg-notif-turn", [make_text_block("NOTIF-TURN")]),
+            make_end_message(session_id=session_id),
+            make_task_notification_message(
+                task_id="sub-b", tool_use_id="toolu-b", status="completed", summary="B done"
+            ),
+            # No further turn ever arrives.
+        ]
+        processor, _ = self._build_idle_processor(frames, grace_seconds=0.3)
+
+        completed = processor._process_output()
+
+        assert completed is True
+        assert processor.found_final_message is True
+        assert processor._pending_notification_turn_results == 0

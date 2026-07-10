@@ -119,6 +119,7 @@ const FilesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEleme
 
   return (
     <ExplorerLayout
+      panelId="files"
       list={list}
       detail={(sidebarToggle) => (
         <DiffViewer

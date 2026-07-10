@@ -12,6 +12,7 @@ import { ChatMessageRole } from "~/api";
 
 import {
   bottomPinOffset,
+  bottomThresholdFor,
   distanceFromContentBottom,
   FOOTER_REVEAL_WINDOW_MS,
   PIN_BOTTOM_GAP,
@@ -24,7 +25,6 @@ import {
   type ScrollStateMachine,
 } from "../scroll/scrollStateMachine.ts";
 
-const BOTTOM_THRESHOLD = 200;
 // Tighter threshold for re-engaging auto-scroll. The user must scroll to
 // essentially the very bottom — not just "near" it — to opt back in.
 const REENGAGE_THRESHOLD = 5;
@@ -297,10 +297,18 @@ export const useAlphaAutoScroll = (
       const distance = distanceFromContentBottom(el, virtualizer);
       // Sample at-bottness for the projection. projectAtBottom applies the
       // anchoring/following phase override, so no special-case guard is needed.
-      machine.setGeometryAtBottom(distance <= BOTTOM_THRESHOLD);
+      machine.setGeometryAtBottom(distance <= bottomThresholdFor(el));
 
       if (isProgrammaticScroll.current) {
-        isProgrammaticScroll.current = false;
+        // Clear in a microtask, not synchronously: other scroll listeners on
+        // this element (the persistence save handler) classify the SAME event
+        // by reading this flag, and listener order isn't guaranteed — both
+        // hooks re-register independently. A microtask runs after every
+        // listener of this event and before the next event's task, so the
+        // flag stays visible exactly for the one event it describes.
+        queueMicrotask(() => {
+          isProgrammaticScroll.current = false;
+        });
         return;
       }
 
@@ -385,7 +393,7 @@ export const useAlphaAutoScroll = (
 
       if (previous.kind === "restoring" && next.kind === "userControlled" && isStreamingRef.current) {
         const el = scrollContainerRef.current;
-        if (el !== null && distanceFromContentBottom(el, virtualizer) <= BOTTOM_THRESHOLD) {
+        if (el !== null && distanceFromContentBottom(el, virtualizer) <= bottomThresholdFor(el)) {
           machine.dispatch({ kind: "reachedBottom" });
         }
       }
@@ -525,7 +533,7 @@ export const useAlphaAutoScroll = (
       // effect already entered the anchoring phase.
       if (!isAnchoring()) {
         const el = scrollContainerRef.current;
-        if (el && distanceFromContentBottom(el, virtualizer) <= BOTTOM_THRESHOLD) {
+        if (el && distanceFromContentBottom(el, virtualizer) <= bottomThresholdFor(el)) {
           machine.dispatch({ kind: "reachedBottom" });
         }
       }
@@ -595,7 +603,7 @@ export const useAlphaAutoScroll = (
           isProgrammaticScroll.current = true;
           el.scrollTop = desired;
         }
-        machine.setGeometryAtBottom(distanceFromContentBottom(el, virtualizer) <= BOTTOM_THRESHOLD);
+        machine.setGeometryAtBottom(distanceFromContentBottom(el, virtualizer) <= bottomThresholdFor(el));
       });
     },
     [scrollContainerRef, virtualizer, machine, isProgrammaticScroll],
@@ -617,7 +625,7 @@ export const useAlphaAutoScroll = (
         case "pinBottom": {
           // Following the live tail — keep the last message's content bottom in
           // view. A user actively scrolling away during a stream hands control back.
-          if (distance > BOTTOM_THRESHOLD && isUserScrollingRef.current) {
+          if (distance > bottomThresholdFor(el) && isUserScrollingRef.current) {
             machine.dispatch({ kind: "userScrolled" });
             return;
           }
@@ -671,7 +679,7 @@ export const useAlphaAutoScroll = (
     const observer = new ResizeObserver(() => {
       if (messageCount === 0) return;
       const distance = distanceFromContentBottom(el, virtualizer);
-      machine.setGeometryAtBottom(distance <= BOTTOM_THRESHOLD);
+      machine.setGeometryAtBottom(distance <= bottomThresholdFor(el));
       // Reveal the turn footer that grew the content just after a followed turn ended:
       // re-pin (down-only) to the grown content bottom, within the window opened at
       // streaming stop. The two non-obvious guards: still userControlled (a new turn
@@ -693,7 +701,7 @@ export const useAlphaAutoScroll = (
     // further resize would otherwise fire the pin. Only `following` yields
     // pinBottom, so idle reconnects fall through untouched.
     if (isStreaming && messageCount > 0 && projectReflow(machine.getState()).kind === "pinBottom") {
-      if (distanceFromContentBottom(el, virtualizer) <= BOTTOM_THRESHOLD) {
+      if (distanceFromContentBottom(el, virtualizer) <= bottomThresholdFor(el)) {
         pinToBottom();
       }
     }

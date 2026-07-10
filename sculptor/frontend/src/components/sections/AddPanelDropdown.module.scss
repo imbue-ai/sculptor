@@ -2,6 +2,14 @@
 // keybinding hint. Rendered inside Radix DropdownMenu items, so the row itself
 // only lays out its contents — hover/active backgrounds come from the Radix item.
 
+// Radix leaves the menu unbounded, so it grows to fit its widest row — a long
+// panel description would otherwise stretch the whole dropdown. Cap the width so a
+// description that runs past it truncates (see .description) while short ones still
+// show in full.
+.content {
+  max-width: 320px;
+}
+
 .item {
   align-items: center;
   display: flex;
@@ -10,27 +18,40 @@
   min-width: 0;
 }
 
-// Vertical stack holding the title and (optionally) the description, so the
-// description sits UNDER the title while the trailing shortcut stays on the row.
-// Takes the row's free space and clamps its width so both lines ellipsize.
+// Single row holding the title and (optionally) the description side by side: the
+// title keeps its intrinsic width while the description takes the remaining space
+// and ellipsizes, so the description sits on the SAME line as the title and the
+// trailing shortcut stays put.
 .itemText {
+  align-items: baseline;
   display: flex;
   flex: 1 1 auto;
-  flex-direction: column;
+  gap: var(--space-2);
   min-width: 0;
 }
 
 .itemTitle {
   color: var(--gray-12);
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-// Secondary line under the title: compact, muted, single-line with ellipsis.
+// When a description shares the row, the title holds its intrinsic width so the
+// description is the element that gives up space and ellipsizes. On a title-only
+// row the base rule lets the title itself ellipsize if it outgrows the menu.
+.itemTitleWithDescription {
+  flex-shrink: 0;
+}
+
+// Secondary text trailing the title on the same row: compact, muted, and
+// ellipsized when it runs out of room so it never pushes out the shortcut.
 .description {
   color: var(--gray-10);
+  flex: 1 1 auto;
   font-size: var(--font-size-1);
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

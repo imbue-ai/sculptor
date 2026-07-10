@@ -238,12 +238,14 @@ class PlaywrightChatPanelElement(PlaywrightFilePreviewAndUploadMixin, Playwright
         return self._page.get_by_test_id(f"{ElementIDs.MODEL_PROVIDER_OPTION}-{provider}")
 
     def get_picker_empty_state(self) -> Locator:
-        """The pi model-picker empty state (shown when no providers are authenticated)."""
+        """The pi model-picker disabled "no models available" state (shown when no
+        providers are authenticated)."""
         return self.get_by_test_id(ElementIDs.PI_PICKER_EMPTY_STATE)
 
-    def get_picker_login_cta(self) -> Locator:
-        """The "Open pi login" CTA inside the pi picker empty state."""
-        return self.get_by_test_id(ElementIDs.PI_PICKER_LOGIN_CTA)
+    def get_harness_config_cta(self) -> Locator:
+        """The composer "Go to harness configuration" CTA that replaces Send when the
+        harness has no usable model (routes to that harness's settings section)."""
+        return self.get_by_test_id(ElementIDs.HARNESS_CONFIG_CTA)
 
     def get_error_block_login_cta(self, error_block: Locator) -> Locator:
         """The "Open pi login" CTA inside a given (auth-failure) error block."""
