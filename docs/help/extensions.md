@@ -7,10 +7,6 @@ drop them in as files (or load them live from a workspace) and they run
 immediately. You can enable the bundled ones, install extensions others have
 written, or have an agent build a custom one for you in minutes.
 
-> **Upgrading?** In earlier releases extensions were called *plugins*. Anything
-> in the old `~/.sculptor/plugins` directory is migrated automatically, and the
-> old `sculpt plugin` command still works as an alias for `sculpt extension`.
-
 ---
 
 ## What an extension can add
@@ -33,7 +29,7 @@ persist their own settings. Each one is isolated behind an error boundary: if
 an extension crashes while rendering, its slot shows an error message and the
 rest of the app keeps working.
 
-![Home page with the Pomodoro timer and Sculpty overlays active, and the home-view switcher contributed by the Linear extension](images/extensions_home.png)
+![The Linear extension's workspace panel showing the issue linked to the current workspace](images/extensions_linear_panel.png)
 
 ---
 
@@ -51,6 +47,10 @@ Three extensions ship with Sculptor. Toggle them in **Settings → Extensions**:
   perks up when you're typing up a storm.
 - **Pomodoro** *(off by default)* — a small floating pomodoro timer with a
   task label, visible across the whole app.
+
+Sculpty and Pomodoro are also **examples**: small, readable, no-build
+extensions meant to give you a quick sense of how a standalone extension is
+put together before you [build your own](#building-your-own).
 
 ---
 
@@ -119,8 +119,8 @@ agent the manifest format, the SDK, and the live-development loop. Enable
 > Use /sculptor:build-sculptor-extension to build me a panel that shows …
 
 The agent writes the extension, loads it into your running UI with
-`sculpt extension load`, and iterates with `sculpt extension reload` while you
-watch the result live.
+`sculpt extension load`, and re-runs that after each edit while you watch the
+result live.
 
 If you'd rather write one by hand, the minimal extension is two files:
 
@@ -155,8 +155,8 @@ or agent session:
 
 | Command | What it does |
 | --- | --- |
-| `sculpt extension load <dir\|url> [--persist]` | Load an extension into the live UI. Without `--persist` it's a dev install scoped to the current workspace; with it, a permanent install. |
-| `sculpt extension reload <id>` | Re-fetch and re-import after an edit. |
+| `sculpt extension load <dir\|url> [--persist]` | Load an extension into the live UI — and re-run it after each edit. Without `--persist` it's a dev install scoped to the current workspace; with it, a permanent install. |
+| `sculpt extension reload <id>` | Re-import from the extension's current source. This does **not** pick up local file edits (only `load` re-packages them); it's for sources that serve fresh files themselves, like a dev server URL. |
 | `sculpt extension list` | All extensions with their live status. |
 | `sculpt extension inspect <id>` | One extension's status, registrations, and setting key names (values are never shown). |
 | `sculpt extension unload <id>` | Unload from the UI; files stay on disk. |
@@ -175,8 +175,8 @@ whether an edit worked.
   master **Extensions** toggle on, and is the extension's own toggle on? If
   you dropped it in by hand, click **Refresh**.
 - **A row shows "failed"** — the row includes the failing phase and error
-  message. Fix the extension and use the row's reload button (or
-  `sculpt extension reload <id>`).
+  message. Fix the extension and load it again (`sculpt extension load`, or
+  the row's reload button for URL sources).
 - **An extension's panel shows an error box** — the extension crashed while
   rendering. The rest of the app is unaffected; reload the extension after
   fixing it.

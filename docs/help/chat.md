@@ -13,7 +13,7 @@ progress appear in the panel above.
 The model picker sits in the chat input toolbar, to the left of the send button.
 Click it to switch the model for the current agent session. The change takes
 effect on the next message you send. You can set the default model for new
-agents under **Settings**.
+agents under **Settings > Claude**.
 
 ![Model picker](images/model_picker.png)
 
@@ -68,7 +68,7 @@ behavior.
 
 **Fast mode** (lightning-bolt icon) — Toggle on for faster output. Trades some
 depth for speed; useful for quick iteration. You can set the default for new
-agents under **Settings**.
+agents under **Settings > Claude**.
 
 **Effort level** (brain icon with a fill bar) — Click to pick how much thinking
 the agent budgets for each step: **Low**, **Medium**, **High**, **Extra High**
