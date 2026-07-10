@@ -128,8 +128,12 @@ def _format_snapshot_datetime(iso_str: str) -> str:
 def create(
     workspace: str | None = typer.Option(None, "--workspace", "-w", help="Workspace ID (or set SCULPT_WORKSPACE_ID)"),
     prompt: str | None = typer.Option(None, "--prompt", "-p", help="The task prompt"),
-    model: str = typer.Option(
-        "opus", "--model", "-m", help="The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable)"
+    model: str | None = typer.Option(
+        None,
+        "--model",
+        "-m",
+        help="The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable)",
+        show_default="opus",
     ),
     name: str | None = typer.Option(None, "--name", help="Agent name"),
     harness: str | None = typer.Option(
@@ -147,13 +151,13 @@ def create(
     """Create a new agent in a workspace."""
     base_url = base_url or get_default_base_url()
 
-    if not prompt and model != "opus":
+    if not prompt and model is not None:
         cli_error("--model has no effect without --prompt", json_output=json_output)
 
     client = get_authenticated_client(base_url, json_output)
     workspace_id = resolve_workspace(workspace, client, json_output)
 
-    model_lower = model.lower()
+    model_lower = "opus" if model is None else model.lower()
     if model_lower not in MODEL_MAPPING:
         valid = ", ".join(MODEL_MAPPING.keys())
         cli_error(f"Invalid model '{model}'. Valid options: {valid}", json_output=json_output)
@@ -166,7 +170,7 @@ def create(
 
     backend_model = None
     if prompt and selection is not None and selection.agent_type == AgentTypeName.PI:
-        if model_lower != "opus":
+        if model is not None:
             cli_error(
                 "--model does not apply to the Pi harness — pi picks from its own catalog",
                 json_output=json_output,

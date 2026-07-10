@@ -34,8 +34,12 @@ def run_cmd(
             + " or matched against the current working directory."
         ),
     ),
-    model: str = typer.Option(
-        "opus", "--model", "-m", help="The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable)"
+    model: str | None = typer.Option(
+        None,
+        "--model",
+        "-m",
+        help="The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable)",
+        show_default="opus",
     ),
     strategy: str = typer.Option(
         "worktree",
@@ -72,7 +76,7 @@ def run_cmd(
     """Create a workspace and agent in one step."""
     base_url = base_url or get_default_base_url()
 
-    model_lower = model.lower()
+    model_lower = "opus" if model is None else model.lower()
     if model_lower not in MODEL_MAPPING:
         valid = ", ".join(MODEL_MAPPING.keys())
         cli_error(f"Invalid model '{model}'. Valid options: {valid}", json_output=json_output)
@@ -94,7 +98,7 @@ def run_cmd(
 
     backend_model = None
     if selection is not None and selection.agent_type == AgentTypeName.PI:
-        if model_lower != "opus":
+        if model is not None:
             cli_error(
                 "--model does not apply to the Pi harness — pi picks from its own catalog",
                 json_output=json_output,

@@ -463,6 +463,20 @@ class TestRunHarness:
         assert "does not apply to the Pi harness" in result.output + (result.stderr or "")
 
     @respx.mock
+    def test_run_with_harness_pi_rejects_explicit_default_model_flag(self, runner: CliRunner) -> None:
+        """--model is rejected for pi even when it names the flag's default —
+        an explicit choice is never silently ignored."""
+        _mock_session()
+        _mock_initialize_project()
+
+        result = runner.invoke(
+            app, ["run", "Fix the bug", "--repo", "/tmp/test", "--harness", "Pi", "--model", "opus"]
+        )
+
+        assert result.exit_code != 0
+        assert "does not apply to the Pi harness" in result.output + (result.stderr or "")
+
+    @respx.mock
     def test_run_without_harness_omits_agent_type(self, runner: CliRunner) -> None:
         _mock_session()
         _mock_initialize_project()
