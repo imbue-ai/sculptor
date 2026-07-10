@@ -35,9 +35,9 @@ def test_pi_providers_settings_groups_and_detail(
     sculptor_instance_factory_: SculptorInstanceFactory,
     tmp_path: Path,
 ) -> None:
-    """anthropic (in auth.json) shows as a Connected card with the import annotation, an
-    unconfigured single-key provider as an Add-a-provider cell, and a multi-value
-    provider in the Session-only callout with the deferred-persistence explainer."""
+    """anthropic (in auth.json) shows as a Connected card, an unconfigured single-key
+    provider as an Add-a-provider cell, and a multi-value provider in the Session-only
+    callout with the deferred-persistence explainer."""
     agent_dir = tmp_path / "pi-agent"
     agent_dir.mkdir()
     (agent_dir / "auth.json").write_text(json.dumps({"anthropic": {"type": "api_key", "key": "x"}}), encoding="utf-8")
@@ -48,10 +48,10 @@ def test_pi_providers_settings_groups_and_detail(
         settings_page = navigate_to_settings_page(page=instance.page)
         pi_section = settings_page.click_on_pi()
 
-        # anthropic is in auth.json -> a Connected card that names its auth.json source.
+        # anthropic is in auth.json -> a Connected card with the live status label.
         connected = pi_section.get_providers_group_connected()
         expect(connected).to_contain_text("Anthropic")
-        expect(connected).to_contain_text("Imported from ~/.pi/agent/auth.json")
+        expect(connected).to_contain_text("Connected")
 
         # A single-key provider with no credential -> a cell in the Add-a-provider grid.
         expect(pi_section.get_providers_group_available()).to_contain_text("OpenRouter")
