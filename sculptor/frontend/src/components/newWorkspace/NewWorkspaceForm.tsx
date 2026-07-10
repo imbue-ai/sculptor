@@ -35,9 +35,11 @@ import { AgentTypeSelect } from "~/components/newWorkspace/AgentTypeSelect.tsx";
 import { BranchNameField } from "~/components/newWorkspace/BranchNameField.tsx";
 import { useBranchNamePreview } from "~/components/newWorkspace/hooks/useBranchNamePreview.ts";
 import { ModeSelect } from "~/components/newWorkspace/ModeSelect.tsx";
+import type { NewWorkspaceDraft } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import {
   keepNewWorkspaceModalOpenAtom,
   lastWorkspaceCreationSettingsAtom,
+  newWorkspaceDraftAtom,
 } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { RepoSelector } from "~/components/RepoSelector.tsx";
 import { resolveStoredAgentType } from "~/components/sections/addPanelCore.ts";
@@ -93,9 +95,12 @@ type NewWorkspaceFormProps = {
  * The new-workspace form: a borderless title input, an auto-growing
  * prompt textarea, a breadcrumb row of context pills (repo / agent type / mode /
  * branch), and a footer (keep-open switch + Cmd+Enter hint + Create). Field
- * values are LOCAL component state (the modal is ephemeral), seeded from
- * `lastWorkspaceCreationSettingsAtom` and the preset repo. Reuses this branch's
- * RepoSelector / BranchSelector / BranchNameField and the factored create hook.
+ * values are LOCAL component state, seeded from the open request's explicit
+ * seeds, then the session draft (`newWorkspaceDraftAtom`, stashed on every
+ * dismissal and cleared by a successful create), then
+ * `lastWorkspaceCreationSettingsAtom` and the preset repo. Reuses this
+ * branch's RepoSelector / BranchSelector / BranchNameField and the factored
+ * create hook.
  */
 export const NewWorkspaceForm = ({
   presetProjectId,
@@ -116,6 +121,9 @@ export const NewWorkspaceForm = ({
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const [isKeepOpen, setIsKeepOpen] = useAtom(keepNewWorkspaceModalOpenAtom);
+  // The session draft: read by the seed initializers below, rewritten by the
+  // unmount stash whenever the dialog closes, cleared by a successful create.
+  const [draft, setDraft] = useAtom(newWorkspaceDraftAtom);
 
   // Per-prompt agent-settings overrides — model / effort / fast mode / plan
   // mode. Seeded once from the user's defaults; surfaced beneath the prompt only
@@ -129,33 +137,42 @@ export const NewWorkspaceForm = ({
   // The user's explicit pick in the pi model picker, if any. The effective
   // selection is derived from this plus the catalog (below) so it can never drift
   // out of the catalog; an unset override means "use pi's default".
-  const [piSelectionOverride, setPiSelectionOverride] = useState<ModelOption | undefined>(undefined);
-
-  // State and hooks — seed the local form state once, from the preset repo (if
-  // any) then the MRU settings. Reading the seed lazily keeps it a mount-time
-  // snapshot the user can freely change without it being clobbered by later
-  // atom updates.
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
-    () => presetProjectId ?? lastSettings?.projectId ?? null,
+  const [piSelectionOverride, setPiSelectionOverride] = useState<ModelOption | undefined>(
+    () => draft?.piSelectionOverride,
   );
-  const [workspaceName, setWorkspaceName] = useState<string>(() => initialTitle ?? "");
-  const [prompt, setPrompt] = useState<string>(() => initialPrompt ?? "");
+
+  // State and hooks — seed the local form state once: the open request's
+  // explicit seeds win, then a stashed draft, then the MRU settings. Reading
+  // the seed lazily keeps it a mount-time snapshot the user can freely change
+  // without it being clobbered by later atom updates.
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
+    () => presetProjectId ?? draft?.projectId ?? lastSettings?.projectId ?? null,
+  );
+  const [workspaceName, setWorkspaceName] = useState<string>(() => initialTitle ?? draft?.title ?? "");
+  const [prompt, setPrompt] = useState<string>(() => initialPrompt ?? draft?.prompt ?? "");
   const [mode, setMode] = useState<WorkspaceInitializationStrategy>(
-    () => lastSettings?.initStrategy ?? WorkspaceInitializationStrategy.WORKTREE,
+    () => draft?.mode ?? lastSettings?.initStrategy ?? WorkspaceInitializationStrategy.WORKTREE,
   );
   const [agentTypeValue, setAgentTypeValue] = useState<StoredAgentType>(() => {
-    const seed = lastSettings?.agentType ?? lastUsedAgentType;
+    const seed = draft?.agentTypeValue ?? lastSettings?.agentType ?? lastUsedAgentType;
     // Normalize the remembered seed. A bare "terminal" stays: it is a
     // legitimate first-agent choice here. pi can be the remembered seed while no
     // usable pi binary is resolved; preset Claude rather than a pi that cannot
     // launch (the picker still lists pi as "Install Pi").
     return seed === "pi" && !isPiAvailable ? "claude" : resolveStoredAgentType(seed);
   });
-  const [userSelectedBranch, setUserSelectedBranch] = useState<string | undefined>(() => lastSettings?.sourceBranch);
+  // A draft replaces the MRU branch seed even when it holds no explicit pick —
+  // its `sourceBranch: undefined` means the user was on the repo's current
+  // branch, not that the field should fall back to another repo's memory.
+  const [userSelectedBranch, setUserSelectedBranch] = useState<string | undefined>(() =>
+    draft !== undefined ? draft.sourceBranch : lastSettings?.sourceBranch,
+  );
   // `null` means "use the auto-filled preview"; any string means the user has
   // taken over. Both the value and the manual flag collapse into one piece of
   // state so they can never disagree.
-  const [branchNameOverride, setBranchNameOverride] = useState<string | null>(() => initialBranchName ?? null);
+  const [branchNameOverride, setBranchNameOverride] = useState<string | null>(
+    () => initialBranchName ?? draft?.branchNameOverride ?? null,
+  );
   const [shuffleNonce, setShuffleNonce] = useState<number>(0);
   const [isLoadingProjects, setIsLoadingProjects] = useState<boolean>(true);
   const [toast, setToast] = useState<ToastContent | null>(null);
@@ -193,6 +210,33 @@ export const NewWorkspaceForm = ({
   });
 
   const sourceBranch = useMemo(() => userSelectedBranch ?? repoInfo?.currentBranch, [userSelectedBranch, repoInfo]);
+
+  // Effects — stash the form's entries whenever it unmounts, whatever closed
+  // it (Escape, an overlay click, the X, the Settings CTAs), so the next open
+  // can restore them. The unmount cleanup would close over first-render state,
+  // so it reads through a snapshot ref refreshed on every commit; a successful
+  // create suppresses the stash so a completed form doesn't resurrect.
+  const draftSnapshotRef = useRef<NewWorkspaceDraft | null>(null);
+  const isDraftSuppressedRef = useRef<boolean>(false);
+  useEffect(() => {
+    draftSnapshotRef.current = {
+      projectId: selectedProjectId,
+      title: workspaceName,
+      prompt,
+      branchNameOverride,
+      mode,
+      sourceBranch: userSelectedBranch,
+      agentTypeValue,
+      piSelectionOverride,
+    };
+  });
+  useEffect(() => {
+    return (): void => {
+      if (!isDraftSuppressedRef.current && draftSnapshotRef.current !== null) {
+        setDraft(draftSnapshotRef.current);
+      }
+    };
+  }, [setDraft]);
 
   // Effects — load projects on mount. Fall back to the MRU project, then the
   // first project, only when there is no valid seeded selection.
@@ -373,6 +417,9 @@ export const NewWorkspaceForm = ({
       return;
     }
 
+    // The entries became a workspace: clear the session draft.
+    setDraft(undefined);
+
     // Fires on every success, keep-open or not. The callback may come from a
     // extension, so contain a throw rather than letting it break the form's own
     // post-create flow (field reset / dialog close).
@@ -399,6 +446,10 @@ export const NewWorkspaceForm = ({
       setShuffleNonce((prev) => prev + 1);
       nameInputRef.current?.focus();
     } else {
+      // The dialog is about to close on a completed form; keep the unmount
+      // from stashing it as a draft. (A keep-open create stays mounted and
+      // keeps stashing whatever the user types next.)
+      isDraftSuppressedRef.current = true;
       onCreated();
     }
   }, [
@@ -423,6 +474,7 @@ export const NewWorkspaceForm = ({
     initialBranchName,
     onWorkspaceCreated,
     onCreated,
+    setDraft,
   ]);
 
   // Effects — Cmd+Enter creates from anywhere in the form. An overlay open over

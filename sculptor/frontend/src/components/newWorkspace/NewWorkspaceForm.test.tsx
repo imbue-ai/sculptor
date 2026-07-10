@@ -11,7 +11,11 @@ import { updateProjectsAtom } from "~/common/state/atoms/projects.ts";
 import { renderWithProviders } from "~/common/testUtils.tsx";
 import { SettingsSection } from "~/pages/settings/sections.ts";
 
-import { keepNewWorkspaceModalOpenAtom, lastWorkspaceCreationSettingsAtom } from "./newWorkspaceAtoms.ts";
+import {
+  keepNewWorkspaceModalOpenAtom,
+  lastWorkspaceCreationSettingsAtom,
+  newWorkspaceDraftAtom,
+} from "./newWorkspaceAtoms.ts";
 import { NewWorkspaceForm } from "./NewWorkspaceForm.tsx";
 
 // What is under test is the form's own behavior — seeding, submit, and the
@@ -375,6 +379,9 @@ describe("NewWorkspaceForm", () => {
     } as DependenciesStatus);
     renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={onDismiss} />, { store });
 
+    fireEvent.change(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA), {
+      target: { value: "keep me" },
+    });
     const user = userEvent.setup();
     await user.click(screen.getByTestId(ElementIds.ADD_WORKSPACE_AGENT_TYPE_SELECT));
     const piOption = await screen.findByTestId(ElementIds.AGENT_TYPE_OPTION_PI);
@@ -383,5 +390,112 @@ describe("NewWorkspaceForm", () => {
 
     expect(mockOpenSettings).toHaveBeenCalledWith(SettingsSection.PI);
     expect(onDismiss).toHaveBeenCalledTimes(1);
+
+    // The forced exit stashes the entries; the next open restores them.
+    cleanup();
+    renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
+    expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA)).toHaveValue("keep me");
+  });
+
+  it("restores the form's entries on the reopen after the empty-state CTA routed to settings", async () => {
+    mockUsePiModels.mockReturnValue(piModelsEmpty());
+    const store = createStore();
+    store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
+    store.set(lastWorkspaceCreationSettingsAtom, {
+      projectId: "p1",
+      agentType: "pi",
+      initStrategy: WorkspaceInitializationStrategy.WORKTREE,
+    });
+    renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
+
+    fireEvent.change(screen.getByTestId(ElementIds.WORKSPACE_NAME_INPUT), {
+      target: { value: "My workspace" },
+    });
+    fireEvent.change(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA), {
+      target: { value: "do a thing" },
+    });
+    await waitFor(() => expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_PI_EMPTY_STATE)).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId(ElementIds.NEW_WORKSPACE_PI_EMPTY_STATE));
+
+    // The authentication round-trip must not cost the user their entries.
+    cleanup();
+    renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
+    expect(screen.getByTestId(ElementIds.WORKSPACE_NAME_INPUT)).toHaveValue("My workspace");
+    expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA)).toHaveValue("do a thing");
+
+    // Dismissing the restored form re-stashes it: the entries survive until a
+    // create consumes them.
+    cleanup();
+    renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
+    expect(screen.getByTestId(ElementIds.WORKSPACE_NAME_INPUT)).toHaveValue("My workspace");
+    expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA)).toHaveValue("do a thing");
+  });
+
+  it("restores the form's entries after any dismissal — Escape and overlay clicks included", () => {
+    // Every dismissal unmounts the form; the stash rides the unmount, so an
+    // accidental Escape or stray overlay click costs nothing.
+    const store = createStore();
+    store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
+    renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
+
+    fireEvent.change(screen.getByTestId(ElementIds.WORKSPACE_NAME_INPUT), {
+      target: { value: "Half-typed" },
+    });
+    fireEvent.change(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA), {
+      target: { value: "an accidental escape" },
+    });
+    cleanup();
+
+    renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
+    expect(screen.getByTestId(ElementIds.WORKSPACE_NAME_INPUT)).toHaveValue("Half-typed");
+    expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA)).toHaveValue("an accidental escape");
+  });
+
+  it("clears the stash on a successful create so the next open starts fresh", async () => {
+    const onCreated = vi.fn();
+    const store = createStore();
+    store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
+    renderWithProviders(<NewWorkspaceForm onCreated={onCreated} onDismiss={vi.fn()} />, { store });
+
+    fireEvent.change(screen.getByTestId(ElementIds.WORKSPACE_NAME_INPUT), {
+      target: { value: "Shipped" },
+    });
+    fireEvent.change(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA), {
+      target: { value: "created, not drafted" },
+    });
+    await clickCreate();
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    cleanup();
+
+    renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
+    expect(screen.getByTestId(ElementIds.WORKSPACE_NAME_INPUT)).toHaveValue("");
+    expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA)).toHaveValue("");
+  });
+
+  it("lets an explicit open seed beat a stashed draft", () => {
+    const store = createStore();
+    store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
+    store.set(newWorkspaceDraftAtom, {
+      projectId: "p1",
+      title: "Draft title",
+      prompt: "draft prompt",
+      branchNameOverride: null,
+      mode: WorkspaceInitializationStrategy.WORKTREE,
+      sourceBranch: undefined,
+      agentTypeValue: "claude",
+      piSelectionOverride: undefined,
+    });
+    renderWithProviders(
+      <NewWorkspaceForm
+        initialTitle="Seeded title"
+        initialPrompt="Seeded prompt"
+        onCreated={vi.fn()}
+        onDismiss={vi.fn()}
+      />,
+      { store },
+    );
+
+    expect(screen.getByTestId(ElementIds.WORKSPACE_NAME_INPUT)).toHaveValue("Seeded title");
+    expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA)).toHaveValue("Seeded prompt");
   });
 });
