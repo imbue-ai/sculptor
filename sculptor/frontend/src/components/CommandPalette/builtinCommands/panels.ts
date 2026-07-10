@@ -71,7 +71,6 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
     order: 10,
     when: (ctx) => ctx.route.isWorkspace,
     perform: () => runtime.ui.toggleBottomPanel(),
-    keepOpen: true,
   },
   {
     id: "view.toggle_left_panel",
@@ -88,7 +87,6 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
     order: 20,
     when: (ctx) => ctx.route.isWorkspace,
     perform: () => runtime.ui.toggleLeftPanel(),
-    keepOpen: true,
   },
   {
     id: "view.toggle_right_panel",
@@ -102,7 +100,6 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
     order: 30,
     when: (ctx) => ctx.route.isWorkspace,
     perform: () => runtime.ui.toggleRightPanel(),
-    keepOpen: true,
   },
   // The sidebar is workspace-navigation chrome rather than a section, so its
   // toggle lives in the Navigation group at the root (not on the sections
@@ -121,7 +118,6 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
     shortcut: "toggle_sidebar",
     order: 100,
     perform: () => runtime.ui.toggleSidebar(),
-    keepOpen: true,
   },
   {
     id: "view.maximize_section",

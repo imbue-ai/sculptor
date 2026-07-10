@@ -13,9 +13,9 @@
 import { useDraggable } from "@dnd-kit/core";
 import { ContextMenu, Flex, IconButton, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
-import { Maximize2, Minimize2, Plus, X } from "lucide-react";
+import { Maximize2, Minimize2, PanelBottom, PanelRight, Pencil, Trash2, X } from "lucide-react";
 import type { ReactElement } from "react";
-import { memo, useRef, useState } from "react";
+import { Fragment, memo, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { agentRenameTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
@@ -23,10 +23,9 @@ import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { sidebarCollapsedAtom } from "~/components/layout/sidebarAtoms.ts";
 import { AgentStatusDot } from "~/components/statusDot";
 import { getCollapsedSidebarToggleClearance } from "~/electron/utils.ts";
-import { getTabStatusIcon } from "~/pages/workspace/panels/TerminalConnectionIndicator.tsx";
+import { TerminalTabConnectionDot } from "~/pages/workspace/panels/TerminalConnectionIndicator.tsx";
 
-import { AddPanelDropdown } from "./AddPanelDropdown.tsx";
-import type { PanelContextMenuItem, PanelDefinition } from "./registry/panelRegistry.ts";
+import type { PanelContextMenuAction, PanelContextMenuItem, PanelDefinition } from "./registry/panelRegistry.ts";
 import {
   panelDefinitionByIdAtom,
   panelRegistryAtom,
@@ -34,6 +33,7 @@ import {
 } from "./registry/panelRegistry.ts";
 import { isMultiInstanceKind } from "./registry/panelRegistry.ts";
 import { closePanelAtom, setActivePanelAtom, splitSectionAtom } from "./sectionActions.ts";
+import { SectionAddPanelControl } from "./SectionAddPanelControl.tsx";
 import { sectionSplitForSectionAtom } from "./sectionAtoms.ts";
 import styles from "./SectionHeader.module.scss";
 import type { PanelId, SubSectionId } from "./sectionTypes.ts";
@@ -47,6 +47,49 @@ import {
   maximizedSectionAtom,
   recentlyClosedPanelIdsAtom,
 } from "./transientAtoms.ts";
+
+// Leading-icon size shared by every panel tab context-menu row (matches the workspace
+// row menu's icons).
+const CONTEXT_MENU_ICON_SIZE = 14;
+
+// Render one composed context-menu item — a leaf action, or a submenu of leaf actions.
+// The caller draws any separator before it (grouping is a menu-level concern), so this
+// only emits the row itself. Destructive rows render in the danger accent (red).
+const renderPanelContextMenuItem = (item: PanelContextMenuItem): ReactElement => {
+  const icon = item.icon !== undefined ? <item.icon size={CONTEXT_MENU_ICON_SIZE} /> : null;
+  if (item.kind === "submenu") {
+    return (
+      <ContextMenu.Sub>
+        <ContextMenu.SubTrigger data-testid={item.testId}>
+          {icon} {item.label}
+        </ContextMenu.SubTrigger>
+        <ContextMenu.SubContent>
+          {item.items.map((child) => (
+            <ContextMenu.Item
+              key={child.testId}
+              data-testid={child.testId}
+              disabled={child.disabled}
+              color={child.destructive === true ? "red" : undefined}
+              onSelect={() => child.action()}
+            >
+              {child.icon !== undefined ? <child.icon size={CONTEXT_MENU_ICON_SIZE} /> : null} {child.label}
+            </ContextMenu.Item>
+          ))}
+        </ContextMenu.SubContent>
+      </ContextMenu.Sub>
+    );
+  }
+  return (
+    <ContextMenu.Item
+      data-testid={item.testId}
+      disabled={item.disabled}
+      color={item.destructive === true ? "red" : undefined}
+      onSelect={() => item.action()}
+    >
+      {icon} {item.label}
+    </ContextMenu.Item>
+  );
+};
 
 type PanelTabProps = {
   panelId: PanelId;
@@ -82,6 +125,11 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   // The context-menu items shown while the menu is open, resolved fresh on each open
   // (see resolveLiveDefinition below).
   const [openMenuActions, setOpenMenuActions] = useState<ReadonlyArray<PanelContextMenuItem>>([]);
+  // Set when the menu's Rename item is selected. Rename must start only after the
+  // menu has fully closed: Radix restores focus to the tab on close, which would
+  // blur — and cancel — a freshly mounted rename input. The menu's onCloseAutoFocus
+  // consumes this to suppress that focus restore and enter rename mode.
+  const pendingRenameRef = useRef<boolean>(false);
   const section = toSection(subSection);
   const existingSplit = useAtomValue(sectionSplitForSectionAtom(section));
   const splitPanel = useSetAtom(splitSectionAtom);
@@ -245,13 +293,13 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
         </div>
       )}
       {/* A terminal's connection-issue dot (amber pulsing = reconnecting, red static =
-          disconnected). Only terminal panels carry connectionStatus and they never carry
-          dotStatus, so the two dot slots are mutually exclusive. getTabStatusIcon emits
-          the TERMINAL_TAB_STATUS_INDICATOR testid + data-status the harness reads. */}
-      {definition.connectionStatus !== undefined && (
-        <div className={styles.dot} aria-hidden="true">
-          {getTabStatusIcon(definition.connectionStatus)}
-        </div>
+          disconnected), rendered only for terminal panels — which never carry dotStatus,
+          so the two dot slots are mutually exclusive. It subscribes to the terminal's own
+          connection-status slice (not the registry), so a transition re-renders only the
+          dot; healthy/unmounted terminals render nothing. It emits the
+          TERMINAL_TAB_STATUS_INDICATOR testid + data-status the harness reads. */}
+      {definition.kind === "terminal" && (
+        <TerminalTabConnectionDot panelId={panelId} className={styles.dot} ariaHidden />
       )}
       {isRenameActive ? (
         <InlineRenameInput
@@ -280,15 +328,18 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   );
 
   // The (possibly stale) slice is only used for the has-a-menu decision — whether a
-  // panel carries context actions at all never changes over its lifetime. The items
-  // themselves render from openMenuActions, resolved fresh on each open.
-  const hasContextMenu = canRename || (definition.contextMenuActions ?? []).length > 0 || splitOptions.length > 0;
+  // panel carries context actions at all never changes over its lifetime (canRename and
+  // onRequestClose are fixed per kind). The items themselves render from openMenuActions,
+  // resolved fresh on each open.
+  const hasContextMenu =
+    canRename ||
+    (definition.contextMenuActions ?? []).length > 0 ||
+    splitOptions.length > 0 ||
+    definition.onRequestClose !== undefined;
 
   if (!hasContextMenu) {
     return tabBody;
   }
-
-  const hasMenuAboveSplits = canRename || openMenuActions.length > 0;
 
   const handleMenuOpenChange = (open: boolean): void => {
     if (open) {
@@ -299,35 +350,81 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
     }
   };
 
+  // The destructive close/delete row, mirroring the tab's close (X) button: it runs the
+  // same onRequestClose (agent delete / terminal close confirmation). Only multi-instance
+  // panels carry onRequestClose — agents "Delete", terminals "Close". Invocation re-reads
+  // the live definition so a suppressed slice re-emit can't strand a stale callback.
+  const destructiveAction: PanelContextMenuAction | undefined =
+    definition.onRequestClose !== undefined
+      ? {
+          kind: "action",
+          label: definition.kind === "terminal" ? "Close" : "Delete",
+          icon: definition.kind === "terminal" ? X : Trash2,
+          destructive: true,
+          separatorBefore: true,
+          testId:
+            definition.kind === "terminal" ? ElementIds.TAB_CONTEXT_MENU_CLOSE : ElementIds.TAB_CONTEXT_MENU_DELETE,
+          action: () => resolveLiveDefinition().onRequestClose?.(),
+        }
+      : undefined;
+
+  // Compose the whole menu in display order: Rename (drives the tab's own inline edit),
+  // the panel's own actions (agent Mark-as-unread / Copy / Diagnostics submenu), the
+  // section split options, then the destructive close/delete. `separatorBefore` groups
+  // them; the first rendered row's separator is suppressed below.
+  const menuItems: ReadonlyArray<PanelContextMenuItem> = [
+    ...(canRename
+      ? [
+          {
+            kind: "action" as const,
+            label: "Rename",
+            icon: Pencil,
+            testId: ElementIds.TAB_CONTEXT_MENU_RENAME,
+            // Only records the intent — the menu's onCloseAutoFocus starts the
+            // rename once the menu is gone (see pendingRenameRef).
+            action: (): void => {
+              pendingRenameRef.current = true;
+            },
+          },
+        ]
+      : []),
+    ...openMenuActions,
+    ...splitOptions.map((option, index) => ({
+      kind: "action" as const,
+      label: `Create ${option.label} split and move panel`,
+      // The icon points at where the moved panel lands: a horizontal split stacks it
+      // below (bottom), a vertical split places it to the right.
+      icon: option.axis === "horizontal" ? PanelBottom : PanelRight,
+      separatorBefore: index === 0,
+      testId: `${ElementIds.SPLIT_CREATE_OPTION}-${option.axis}`,
+      action: () => splitPanel({ section, panelId, axis: option.axis }),
+    })),
+    ...(destructiveAction !== undefined ? [destructiveAction] : []),
+  ];
+
   return (
     <ContextMenu.Root onOpenChange={handleMenuOpenChange}>
       <ContextMenu.Trigger>{tabBody}</ContextMenu.Trigger>
-      <ContextMenu.Content size="1">
-        {canRename && (
-          <ContextMenu.Item data-testid={ElementIds.TAB_CONTEXT_MENU_RENAME} onSelect={() => setIsRenaming(true)}>
-            Rename
-          </ContextMenu.Item>
-        )}
-        {canRename && openMenuActions.length > 0 && <ContextMenu.Separator />}
-        {openMenuActions.map((action) => (
-          <ContextMenu.Item
-            key={action.label}
-            disabled={action.disabled}
-            data-testid={action.testId}
-            onSelect={() => action.action()}
-          >
-            {action.label}
-          </ContextMenu.Item>
-        ))}
-        {hasMenuAboveSplits && splitOptions.length > 0 && <ContextMenu.Separator />}
-        {splitOptions.map((option) => (
-          <ContextMenu.Item
-            key={option.axis}
-            data-testid={`${ElementIds.SPLIT_CREATE_OPTION}-${option.axis}`}
-            onSelect={() => splitPanel({ section, panelId, axis: option.axis })}
-          >
-            Create {option.label} split and move panel
-          </ContextMenu.Item>
+      <ContextMenu.Content
+        size="1"
+        // When Rename was selected, keep Radix from returning focus to the tab and
+        // enter rename mode now that the menu is closed — the inline input can then
+        // take focus with nothing competing for it. Every other close reason keeps
+        // the default focus restore.
+        onCloseAutoFocus={(event): void => {
+          if (pendingRenameRef.current) {
+            pendingRenameRef.current = false;
+            event.preventDefault();
+            setIsRenaming(true);
+          }
+        }}
+      >
+        {/* eslint-disable-next-line react-hooks/refs -- pendingRenameRef is only written in the Rename item's onSelect action and consumed in onCloseAutoFocus above, both event-time; the menu-item array indirection hides that from the analyzer. */}
+        {menuItems.map((item, index) => (
+          <Fragment key={item.testId}>
+            {index > 0 && item.separatorBefore === true ? <ContextMenu.Separator /> : null}
+            {renderPanelContextMenuItem(item)}
+          </Fragment>
         ))}
       </ContextMenu.Content>
     </ContextMenu.Root>
@@ -342,7 +439,7 @@ const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElemen
   const displayedPanelIds = useAtomValue(displayedPanelIdsAtom(subSection));
   // The registry-aware resolved id — the same atom SectionBody renders from — so the
   // highlighted tab always matches the rendered body, including when the persisted
-  // active id is an unregistered (unloaded/still-loading) plugin panel and the body
+  // active id is an unregistered (unloaded/still-loading) extension panel and the body
   // falls back to another open panel.
   const activePanelId = useAtomValue(resolvedActivePanelIdInSubSectionAtom(subSection));
   const ghostPanelId = useAtomValue(ghostPanelIdAtom(subSection));
@@ -403,23 +500,9 @@ const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElemen
         })}
       </div>
       {/* The add-panel "+" is left-aligned right after the tab strip; only the maximize
-          toggle stays pinned to the far right of the header. */}
-      <AddPanelDropdown
-        subSection={subSection}
-        tooltip="Add panel"
-        trigger={
-          <IconButton
-            variant="ghost"
-            size="1"
-            color="gray"
-            className={styles.headerButton}
-            aria-label="Add panel"
-            data-testid={`${ElementIds.SECTION_ADD_PANEL_BUTTON}-${subSection}`}
-          >
-            <Plus size={14} />
-          </IconButton>
-        }
-      />
+          toggle stays pinned to the far right of the header. Hover opens the menu; in the
+          center a click quick-adds an agent, elsewhere a click pins the menu open. */}
+      <SectionAddPanelControl subSection={subSection} className={styles.headerButton} />
       <Flex align="center" className={styles.controls}>
         <Tooltip content={isMaximized ? "Restore section" : "Maximize section"}>
           <IconButton

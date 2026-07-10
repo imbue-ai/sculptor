@@ -1,30 +1,13 @@
-import { createStore } from "jotai";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
-import type * as api from "../../../api";
-import type { CodingAgentTaskView } from "../../../api";
 import { TaskStatus } from "../../../api";
-import { taskAtomFamily } from "./tasks";
 import {
   clearUnreadOverride,
   getAgentDotStatusWithUnreadOverride,
   isUnreadOverrideActive,
-  markAgentUnreadAtom,
   resetUnreadOverridesForTesting,
   setUnreadOverride,
 } from "./unreadOverrides";
-
-const { mockMarkWorkspaceAgentUnread } = vi.hoisted(() => ({
-  mockMarkWorkspaceAgentUnread: vi.fn(),
-}));
-
-vi.mock("../../../api", async () => {
-  const actual = await vi.importActual<typeof api>("../../../api");
-  return {
-    ...actual,
-    markWorkspaceAgentUnread: mockMarkWorkspaceAgentUnread,
-  };
-});
 
 const UPDATED_AT = "2024-01-01T00:00:00Z";
 const LATER_UPDATED_AT = "2024-01-01T00:05:00Z";
@@ -40,24 +23,8 @@ const running = (updatedAt: string): { status: TaskStatus; updatedAt: string } =
   updatedAt,
 });
 
-const createMockTask = (overrides: Partial<CodingAgentTaskView> = {}): CodingAgentTaskView =>
-  ({
-    id: "task-1",
-    status: TaskStatus.READY,
-    updatedAt: UPDATED_AT,
-    lastReadAt: "2024-01-01T00:01:00Z",
-    isDeleted: false,
-    ...overrides,
-  }) as CodingAgentTaskView;
-
-const flushMicrotasks = async (): Promise<void> => {
-  await new Promise((resolve) => setTimeout(resolve, 0));
-};
-
 beforeEach(() => {
   resetUnreadOverridesForTesting();
-  mockMarkWorkspaceAgentUnread.mockReset();
-  mockMarkWorkspaceAgentUnread.mockResolvedValue(undefined);
 });
 
 describe("unread override lifecycle", () => {
@@ -117,71 +84,5 @@ describe("getAgentDotStatusWithUnreadOverride", () => {
     setUnreadOverride("task-1", running(UPDATED_AT));
     const task = { status: TaskStatus.RUNNING, updatedAt: LATER_UPDATED_AT, lastReadAt: null };
     expect(getAgentDotStatusWithUnreadOverride("task-1", task)).toBe("running");
-  });
-});
-
-describe("markAgentUnreadAtom", () => {
-  it("records the override, clears lastReadAt optimistically, and persists", () => {
-    const store = createStore();
-    store.set(taskAtomFamily("task-1"), createMockTask());
-
-    store.set(markAgentUnreadAtom, { workspaceId: "ws-1", taskId: "task-1" });
-
-    expect(isUnreadOverrideActive("task-1", idle(UPDATED_AT))).toBe(true);
-    expect(store.get(taskAtomFamily("task-1"))?.lastReadAt).toBeNull();
-    expect(mockMarkWorkspaceAgentUnread).toHaveBeenCalledWith({
-      path: { workspace_id: "ws-1", agent_id: "task-1" },
-    });
-  });
-
-  it("keys an idle-agent override to the task's updatedAt at mark time", () => {
-    const store = createStore();
-    store.set(taskAtomFamily("task-1"), createMockTask());
-
-    store.set(markAgentUnreadAtom, { workspaceId: "ws-1", taskId: "task-1" });
-
-    // A later turn expires the override without an explicit clear.
-    expect(isUnreadOverrideActive("task-1", idle(LATER_UPDATED_AT))).toBe(false);
-  });
-
-  it("holds a running agent's override through the rest of its run", () => {
-    const store = createStore();
-    store.set(taskAtomFamily("task-1"), createMockTask({ status: TaskStatus.RUNNING }));
-
-    store.set(markAgentUnreadAtom, { workspaceId: "ws-1", taskId: "task-1" });
-
-    expect(isUnreadOverrideActive("task-1", running(LATER_UPDATED_AT))).toBe(true);
-  });
-
-  it("preserves the other task fields on the optimistic update", () => {
-    const store = createStore();
-    store.set(taskAtomFamily("task-1"), createMockTask({ title: "My agent" }));
-
-    store.set(markAgentUnreadAtom, { workspaceId: "ws-1", taskId: "task-1" });
-
-    const task = store.get(taskAtomFamily("task-1"));
-    expect(task?.title).toBe("My agent");
-    expect(task?.updatedAt).toBe(UPDATED_AT);
-  });
-
-  it("does nothing for an unknown task", () => {
-    const store = createStore();
-
-    store.set(markAgentUnreadAtom, { workspaceId: "ws-1", taskId: "missing-task" });
-
-    expect(isUnreadOverrideActive("missing-task", idle(UPDATED_AT))).toBe(false);
-    expect(mockMarkWorkspaceAgentUnread).not.toHaveBeenCalled();
-  });
-
-  it("keeps the optimistic state when the persist call rejects (fire-and-forget)", async () => {
-    mockMarkWorkspaceAgentUnread.mockRejectedValue(new Error("network down"));
-    const store = createStore();
-    store.set(taskAtomFamily("task-1"), createMockTask());
-
-    store.set(markAgentUnreadAtom, { workspaceId: "ws-1", taskId: "task-1" });
-    await flushMicrotasks();
-
-    expect(isUnreadOverrideActive("task-1", idle(UPDATED_AT))).toBe(true);
-    expect(store.get(taskAtomFamily("task-1"))?.lastReadAt).toBeNull();
   });
 });

@@ -3,7 +3,12 @@ import { describe, expect, it } from "vitest";
 import { TaskStatus } from "~/api";
 
 import type { AgentDotStatus } from "./statusUtils";
-import { computeWorkspaceDotStatus, getAgentDotStatus } from "./statusUtils";
+import {
+  computeWorkspaceDotStatus,
+  getAgentDotStatus,
+  getWorkspaceAttentionRank,
+  WORKSPACE_ATTENTION_TIER,
+} from "./statusUtils";
 
 // An agent whose content changed after the last recorded read — the raw
 // timestamp comparison classifies it as "unread".
@@ -76,5 +81,80 @@ describe("computeWorkspaceDotStatus", () => {
     expect(
       computeWorkspaceDotStatus([unreadTask("agent-1")], resolveWithViewedAgent("agent-in-other-workspace")).hasUnread,
     ).toBe(true);
+  });
+});
+
+const taskWith = (status: TaskStatus, lastReadAt: string | null, updatedAt: string): WorkspaceTask => ({
+  id: `task-${status}-${String(lastReadAt)}`,
+  status,
+  lastReadAt,
+  updatedAt,
+});
+
+describe("getWorkspaceAttentionRank", () => {
+  it("ranks an empty / task-less workspace as IDLE", () => {
+    expect(getWorkspaceAttentionRank([])).toBe(WORKSPACE_ATTENTION_TIER.IDLE);
+  });
+
+  it("ranks a waiting workspace at the top (WAITING)", () => {
+    expect(getWorkspaceAttentionRank([taskWith(TaskStatus.WAITING, READ_AT, READ_AT)])).toBe(
+      WORKSPACE_ATTENTION_TIER.WAITING,
+    );
+  });
+
+  it("prefers WAITING over an un-acked error in the same workspace", () => {
+    expect(
+      getWorkspaceAttentionRank([
+        taskWith(TaskStatus.ERROR, READ_AT, UPDATED_AT_LATER),
+        taskWith(TaskStatus.WAITING, READ_AT, READ_AT),
+      ]),
+    ).toBe(WORKSPACE_ATTENTION_TIER.WAITING);
+  });
+
+  it("ranks an un-acked error (errored, not viewed since) as UNACKED_ERROR", () => {
+    expect(getWorkspaceAttentionRank([taskWith(TaskStatus.ERROR, READ_AT, UPDATED_AT_LATER)])).toBe(
+      WORKSPACE_ATTENTION_TIER.UNACKED_ERROR,
+    );
+    // Never read at all also counts as un-acked.
+    expect(getWorkspaceAttentionRank([taskWith(TaskStatus.ERROR, null, UPDATED_AT_LATER)])).toBe(
+      WORKSPACE_ATTENTION_TIER.UNACKED_ERROR,
+    );
+  });
+
+  it("drops an acked (already-viewed) error to IDLE", () => {
+    // Full ERROR stays red but was viewed after it broke (lastReadAt >= updatedAt).
+    expect(getWorkspaceAttentionRank([taskWith(TaskStatus.ERROR, UPDATED_AT_LATER, READ_AT)])).toBe(
+      WORKSPACE_ATTENTION_TIER.IDLE,
+    );
+  });
+
+  it("treats a read REQUEST_ERROR as acked (IDLE), an unread one as un-acked", () => {
+    expect(getWorkspaceAttentionRank([taskWith(TaskStatus.REQUEST_ERROR, UPDATED_AT_LATER, READ_AT)])).toBe(
+      WORKSPACE_ATTENTION_TIER.IDLE,
+    );
+    expect(getWorkspaceAttentionRank([taskWith(TaskStatus.REQUEST_ERROR, READ_AT, UPDATED_AT_LATER)])).toBe(
+      WORKSPACE_ATTENTION_TIER.UNACKED_ERROR,
+    );
+  });
+
+  it("ranks an unread (non-error) reply as UNREAD", () => {
+    expect(getWorkspaceAttentionRank([taskWith(TaskStatus.READY, READ_AT, UPDATED_AT_LATER)])).toBe(
+      WORKSPACE_ATTENTION_TIER.UNREAD,
+    );
+  });
+
+  it("ranks a running / building workspace as RUNNING", () => {
+    expect(getWorkspaceAttentionRank([taskWith(TaskStatus.RUNNING, READ_AT, READ_AT)])).toBe(
+      WORKSPACE_ATTENTION_TIER.RUNNING,
+    );
+    expect(getWorkspaceAttentionRank([taskWith(TaskStatus.BUILDING, READ_AT, READ_AT)])).toBe(
+      WORKSPACE_ATTENTION_TIER.RUNNING,
+    );
+  });
+
+  it("ranks a fully-read idle workspace as IDLE", () => {
+    expect(getWorkspaceAttentionRank([taskWith(TaskStatus.READY, UPDATED_AT_LATER, READ_AT)])).toBe(
+      WORKSPACE_ATTENTION_TIER.IDLE,
+    );
   });
 });

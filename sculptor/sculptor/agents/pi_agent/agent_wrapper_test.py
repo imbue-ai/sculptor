@@ -22,6 +22,7 @@ from unittest.mock import patch
 
 import pytest
 
+from sculptor.agents.pi_agent import agent_wrapper as agent_wrapper_module
 from sculptor.agents.pi_agent.agent_wrapper import PI_PROBE_SESSION_DIR_NAME
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_DIR_NAME
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_ID_STATE_FILE
@@ -29,15 +30,18 @@ from sculptor.agents.pi_agent.agent_wrapper import PiAgent
 from sculptor.agents.pi_agent.agent_wrapper import _PI_TRANSIENT_RETRY_BASE_DELAY_SECONDS
 from sculptor.agents.pi_agent.agent_wrapper import _PI_TRANSIENT_RETRY_MAX_DELAY_SECONDS
 from sculptor.agents.pi_agent.agent_wrapper import _TurnState
-from sculptor.agents.pi_agent.agent_wrapper import _curate_models
-from sculptor.agents.pi_agent.agent_wrapper import _model_option_from_pi
+from sculptor.agents.pi_agent.agent_wrapper import _format_background_completion
+from sculptor.agents.pi_agent.agent_wrapper import _format_subagent_completion
 from sculptor.agents.pi_agent.agent_wrapper import _render_synthesized_skill
 from sculptor.agents.pi_agent.agent_wrapper import _rewrite_skill_invocation
+from sculptor.agents.pi_agent.agent_wrapper import curate_models
+from sculptor.agents.pi_agent.agent_wrapper import model_option_from_pi
 from sculptor.agents.pi_agent.backchannel import DISMISSED_ANSWER_VALUE
 from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_DIALOG_TITLE
 from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_HEADER
 from sculptor.agents.pi_agent.background import BACKGROUND_NOTIFY_MARKER
 from sculptor.agents.pi_agent.background import BACKGROUND_PAYLOAD_VERSION
+from sculptor.agents.pi_agent.background import parse_background_completion
 from sculptor.agents.pi_agent.harness import PI_HARNESS
 from sculptor.agents.pi_agent.output_processor import AgentMessage
 from sculptor.agents.pi_agent.output_processor import ParsedAgentEnd
@@ -45,6 +49,7 @@ from sculptor.agents.pi_agent.output_processor import ParsedUnknownEvent
 from sculptor.agents.pi_agent.output_processor import extract_tool_call_blocks
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
 from sculptor.agents.pi_agent.subagent import SUBAGENT_NOTIFY_MARKER
+from sculptor.agents.pi_agent.subagent import parse_subagent_completion
 from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
@@ -482,16 +487,6 @@ def _subagent_launch_events() -> list:
     ]
 
 
-def _reaction_turn_events(ack: str) -> list:
-    """A pi-initiated reaction turn (the extension's `sendUserMessage` wake-up):
-    `agent_start` with NO preceding `response` ack, then the assistant reaction."""
-    return [
-        _event({"type": "agent_start"}),
-        _event({"type": "message_end", "message": _assistant_msg(ack)}),
-        _event({"type": "agent_end", "messages": [_assistant_msg(ack)], "willRetry": False}),
-    ]
-
-
 def _main_agent_texts(emitted: list) -> list[str]:
     return [
         block.text
@@ -650,7 +645,7 @@ _CURATED_PI_MODEL_IDS: list[str] = [
 
 
 def _options_from_raw(raw: list[dict[str, Any]]) -> list[ModelOption]:
-    options = [_model_option_from_pi(m) for m in raw]
+    options = [model_option_from_pi(m) for m in raw]
     return [option for option in options if option is not None]
 
 
@@ -941,6 +936,39 @@ class TestTurnFailures:
         )
         with pytest.raises(PiCrashError):
             agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+
+class TestPromptTurnContainment:
+    """A doomed user turn fails softly (error block) instead of killing the agent."""
+
+    def test_auth_failure_on_prompt_turn_reports_failure_without_crashing(self) -> None:
+        """A non-transient provider failure (unauthenticated / unusable model) on a
+        USER turn surfaces the per-turn error block — a RequestFailure carrying the
+        humanized auth message the frontend keys its login CTA on — and the agent
+        stays alive, the same containment `_run_wake_turn` applies. Credentials can
+        be revoked between create and start, so a doomed first prompt must be a
+        recoverable error, not an agent teardown."""
+        agent = _make_agent()
+        auth_error = json.dumps({"type": "authentication_error", "message": "No API key found for provider"})
+        agent._process = _make_process(
+            [
+                _event({"type": "agent_start"}),
+                _event({"type": "message_end", "message": _assistant_error_msg(auth_error)}),
+            ]
+        )
+
+        # Must NOT raise: the crash is contained at the prompt-turn boundary.
+        agent._run_prompt_turn(ChatInputUserMessage(text="do the thing"))
+
+        emitted = _drain(agent._output_messages)
+        failures = [m for m in emitted if isinstance(m, RequestFailureAgentMessage)]
+        assert len(failures) == 1
+        # The humanized auth message survives, so the error block's login CTA
+        # (keyed on "require authentication") still renders.
+        assert "require authentication" in str(failures[0].error.args[0])
+        assert not any(isinstance(m, RequestSuccessAgentMessage) for m in emitted)
+        # The agent did not crash: no fatal exception was captured.
+        assert agent._exception is None
 
 
 class TestTransientRetry:
@@ -2097,6 +2125,7 @@ class TestPushMessageDispatch:
         assert isinstance(emitted, RequestSuccessAgentMessage)
         assert emitted.request_id == stuck_id
         assert emitted.interrupted is True
+        assert emitted.turn_abandoned is True
 
     def test_push_message_enqueues_clear_context_returns_true(self) -> None:
         """A ClearContextUserMessage goes on the same FIFO as chat turns — handled, not dead-lettered."""
@@ -3038,53 +3067,28 @@ class TestSubagents:
         _assert_killed_pgid(agent, 777)
         _assert_killed_pgid(agent, 888)
 
-    def test_subagent_completion_triggers_auto_resume_reaction(self) -> None:
-        """After a sub-agent completion the extension wakes the agent (sendUserMessage);
-        the idle-drain consumes the pi-initiated reaction turn out-of-band so the agent's
-        reaction renders, and the await-reaction guard clears."""
+    def test_idle_drain_rejects_pi_initiated_agent_start(self) -> None:
+        """Pi never self-starts a run (Sculptor is the only turn-initiator — the
+        SCU-1776 invariant), so an `agent_start` between turns is a protocol
+        violation: logged loud, not consumed as a turn. The completion before it
+        still surfaces normally and its wake still enqueues."""
         agent = _make_agent()
         agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
-        ack = "Acknowledged: my sub-agent finished — continuing the work."
         agent._process = _make_process(
-            [_event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())]))]
-            + _reaction_turn_events(ack)
+            [
+                _event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())])),
+                _event({"type": "agent_start"}),
+            ]
         )
-        agent._drain_idle_background_events()
+        with expect_exact_logged_errors(["PiAgent saw a pi-initiated agent_start between turns"]):
+            agent._drain_idle_background_events()
         emitted = _drain(agent._output_messages)
 
         assert len(_bg_notifications(emitted)) == 1
-        assert any(ack in text for text in _main_agent_texts(emitted)), _main_agent_texts(emitted)
+        # Exactly the completion's own request cycle — no reaction turn was consumed.
         types = [type(m).__name__ for m in emitted]
-        assert "RequestStartedAgentMessage" in types and "RequestSuccessAgentMessage" in types
-        assert agent._awaiting_reaction_count == 0
-
-
-class TestAutoResumeReaction:
-    """Auto-resume reaction turns after task completion."""
-
-    def test_background_completion_triggers_auto_resume_reaction(self) -> None:
-        """After a background-task completion the extension wakes the agent; the idle-drain
-        consumes the pi-initiated reaction turn so the agent's reaction renders."""
-        agent = _make_agent()
-        agent._background_tasks[_BG_TASK_ID] = _BG_PGID
-        ack = "Acknowledged: my background task finished — continuing the work."
-        agent._process = _make_process([_event(_background_notify())] + _reaction_turn_events(ack))
-        agent._drain_idle_background_events()
-        emitted = _drain(agent._output_messages)
-
-        assert len(_bg_notifications(emitted)) == 1
-        assert any(ack in text for text in _main_agent_texts(emitted)), _main_agent_texts(emitted)
-        assert agent._awaiting_reaction_count == 0
-
-    def test_idle_drain_gives_up_awaiting_reaction_past_deadline(self) -> None:
-        """A completion whose reaction never arrives must not keep the drain awaiting
-        forever: once the window elapses, `_has_background_tasks` reports no work."""
-        agent = _make_agent()
-        agent._note_awaiting_reaction()
-        assert agent._has_background_tasks() is True
-        agent._awaiting_reaction_deadline = 0.0  # force the window to have elapsed
-        assert agent._has_background_tasks() is False
-        assert agent._awaiting_reaction_count == 0
+        assert types.count("RequestStartedAgentMessage") == 1
+        assert types.count("RequestSuccessAgentMessage") == 1
 
 
 class TestBackgroundTasks:
@@ -3192,7 +3196,7 @@ class TestModelCuration:
 
     def test_curate_models_drops_blacklist_and_dated_and_sorts_newest_first(self) -> None:
         """Curation drops obsolete claude-3-* + dated-pin duplicates, newest-first."""
-        curated = _curate_models(_options_from_raw(_RAW_PI_MODELS), current_model=None)
+        curated = curate_models(_options_from_raw(_RAW_PI_MODELS), current_model=None)
         assert [option.model_id for option in curated] == _CURATED_PI_MODEL_IDS
         # Display names ride through from pi's `name`, and provider is preserved.
         opus_4_8 = next(option for option in curated if option.model_id == "claude-opus-4-8")
@@ -3202,7 +3206,7 @@ class TestModelCuration:
     def test_curate_models_keeps_current_model_even_when_a_rule_would_drop_it(self) -> None:
         """The current model is never dropped — the switcher must not show an empty selection."""
         current = ModelOption(provider="anthropic", model_id="claude-3-opus-20240229", display_name="Claude Opus 3")
-        curated = _curate_models(_options_from_raw(_RAW_PI_MODELS), current_model=current)
+        curated = curate_models(_options_from_raw(_RAW_PI_MODELS), current_model=current)
         assert current in curated
         # Everything else still curated; only the blacklisted current survives the blacklist.
         assert "claude-3-5-haiku-20241022" not in {option.model_id for option in curated}
@@ -3210,38 +3214,38 @@ class TestModelCuration:
     def test_curate_models_keeps_current_model_absent_from_catalog(self) -> None:
         """A current model pi did not list is appended so it can still be shown selected."""
         current = ModelOption(provider="anthropic", model_id="claude-opus-9-9", display_name="Claude Opus 9.9")
-        curated = _curate_models(_options_from_raw(_RAW_PI_MODELS), current_model=current)
+        curated = curate_models(_options_from_raw(_RAW_PI_MODELS), current_model=current)
         assert current in curated
         # Newest major.minor wins, so the fictional 9.9 sorts to the front.
         assert curated[0].model_id == "claude-opus-9-9"
 
     def test_curate_models_filters_to_single_authenticated_provider(self) -> None:
         """Only options whose provider is in the authenticated set survive."""
-        curated = _curate_models(_MULTI_PROVIDER_OPTIONS, current_model=None, authenticated_providers={"anthropic"})
+        curated = curate_models(_MULTI_PROVIDER_OPTIONS, current_model=None, authenticated_providers={"anthropic"})
         assert {option.provider for option in curated} == {"anthropic"}
         assert [option.model_id for option in curated] == ["claude-opus-4-8"]
 
     def test_curate_models_filters_to_multiple_authenticated_providers(self) -> None:
-        curated = _curate_models(
+        curated = curate_models(
             _MULTI_PROVIDER_OPTIONS, current_model=None, authenticated_providers={"anthropic", "openai"}
         )
         assert {option.provider for option in curated} == {"anthropic", "openai"}
 
     def test_curate_models_empty_authenticated_set_yields_empty(self) -> None:
         """An empty authenticated set drops everything (this drives the empty-state CTA)."""
-        curated = _curate_models(_MULTI_PROVIDER_OPTIONS, current_model=None, authenticated_providers=set())
+        curated = curate_models(_MULTI_PROVIDER_OPTIONS, current_model=None, authenticated_providers=set())
         assert curated == []
 
     def test_curate_models_retains_current_model_even_when_provider_unauthenticated(self) -> None:
         """The current model is always offered, even if its provider isn't authenticated."""
         current = ModelOption(provider="openai", model_id="gpt-5", display_name="GPT-5")
-        curated = _curate_models(_MULTI_PROVIDER_OPTIONS, current_model=current, authenticated_providers={"anthropic"})
+        curated = curate_models(_MULTI_PROVIDER_OPTIONS, current_model=current, authenticated_providers={"anthropic"})
         assert current in curated
         assert "gemini-3" not in {option.model_id for option in curated}
 
     def test_curate_models_filter_preserves_blacklist_and_sort(self) -> None:
         """The authenticated filter layers on top of the existing blacklist/sort rules."""
-        curated = _curate_models(
+        curated = curate_models(
             _options_from_raw(_RAW_PI_MODELS), current_model=None, authenticated_providers={"anthropic"}
         )
         # _RAW_PI_MODELS are all anthropic, so the filter is a no-op here and the curated
@@ -3250,10 +3254,10 @@ class TestModelCuration:
 
     def test_model_option_from_pi_defaults_provider_and_name(self) -> None:
         # Missing provider defaults to anthropic; missing name falls back to the id.
-        option = _model_option_from_pi({"id": "claude-opus-4-8"})
+        option = model_option_from_pi({"id": "claude-opus-4-8"})
         assert option == ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="claude-opus-4-8")
         # A row with no usable id is dropped.
-        assert _model_option_from_pi({"name": "no id"}) is None
+        assert model_option_from_pi({"name": "no id"}) is None
 
 
 class TestModelCatalogFetch:
@@ -3317,9 +3321,11 @@ class TestModelCatalogFetch:
         # The unusable openrouter model is no longer offered in the switcher.
         assert "openai/gpt-4o" not in {option.model_id for option in message.available_models}
 
-    def test_fetch_models_into_state_keeps_unauthenticated_current_when_no_alternative(self) -> None:
-        """When the disconnected provider was the only one, the current model is retained
-        (nothing to switch to) rather than blanking the switcher — and no set_model is sent."""
+    def test_fetch_models_into_state_drops_unauthenticated_current_when_no_alternative(self) -> None:
+        """When the disconnected provider was the only one, the now-unusable current model
+        is dropped and an empty catalog is emitted (driving the switcher's empty state).
+        No set_model is sent — there is nothing authenticated to switch to (the process is
+        primed with only the models + state responses, so a set_model call would error)."""
         agent = _make_agent()
         raw = [{"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openrouter"}]
         current_openrouter = {"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openrouter"}
@@ -3332,16 +3338,21 @@ class TestModelCatalogFetch:
 
         emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
         assert len(emitted) == 1
-        assert emitted[0].current_model is not None
-        assert emitted[0].current_model.model_id == "openai/gpt-4o"
+        assert emitted[0].current_model is None
+        assert list(emitted[0].available_models) == []
 
-    def test_fetch_models_into_state_emits_nothing_when_pi_lists_no_models(self) -> None:
-        """No catalog + no current model → no carrier message (switcher falls back to defaults)."""
+    def test_fetch_models_into_state_emits_empty_catalog_when_pi_lists_no_models(self) -> None:
+        """No catalog + no current model (no authenticated providers) → an empty catalog is
+        emitted, so the pi switcher shows its 'no usable model' empty state rather than
+        falling back to the built-in Claude list."""
         agent = _make_agent()
         agent._process = _make_process([_models_response([]), _state_response_with_model(None)])
         with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]):
             agent._fetch_models_into_state()
-        assert not [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+        emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+        assert len(emitted) == 1
+        assert list(emitted[0].available_models) == []
+        assert emitted[0].current_model is None
 
     def test_fetch_models_into_state_adopts_preselected_model_over_pi_default(self) -> None:
         """A model the user selected before the agent went live (preselected_model)
@@ -3461,11 +3472,12 @@ class TestModelProbe:
         agent = _make_agent(env)
         with (
             patch(
-                "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+                "sculptor.agents.pi_agent.catalog_probe.generate_id",
                 side_effect=["probe-sess", "cmd-models", "cmd-state"],
             ),
             patch(
-                "sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value={"anthropic"}
+                "sculptor.agents.pi_agent.catalog_probe.compute_authenticated_provider_ids",
+                return_value={"anthropic"},
             ),
         ):
             available_models, current_model = agent.fetch_available_models_probe(secrets={})
@@ -3490,7 +3502,7 @@ class TestModelProbe:
         env = _make_probe_env(probe_process)
         agent = _make_agent(env)
         with patch(
-            "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+            "sculptor.agents.pi_agent.catalog_probe.generate_id",
             side_effect=["probe-sess", "cmd-models", "cmd-state"],
         ):
             agent.fetch_available_models_probe(secrets={})
@@ -3535,13 +3547,31 @@ class TestModelProbe:
         env = _make_probe_env(probe_process)
         agent = _make_agent(env)
         with patch(
-            "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+            "sculptor.agents.pi_agent.catalog_probe.generate_id",
             side_effect=["probe-sess", "cmd-models", "cmd-state"],
         ):
             assert agent.fetch_available_models_probe(secrets={}) == ([], None)
         probe_process.close_stdin.assert_called_once()
         probe_process.terminate.assert_called_once()
         assert agent._process is None
+
+    def test_fetch_available_models_probe_drops_unauthenticated_current_when_no_alternative(self) -> None:
+        """A selected model whose only provider is now unauthenticated is dropped by the
+        probe (nothing authenticated to fall back to), so the switcher reaches its empty
+        state instead of offering a single unusable model — the deleted-auth.json case."""
+        raw = [{"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openrouter"}]
+        current_openrouter = {"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openrouter"}
+        probe_process = _make_process([_models_response(raw), _state_response_with_model(current_openrouter)])
+        env = _make_probe_env(probe_process)
+        agent = _make_agent(env)
+        with (
+            patch(
+                "sculptor.agents.pi_agent.catalog_probe.generate_id",
+                side_effect=["probe-sess", "cmd-models", "cmd-state"],
+            ),
+            patch("sculptor.agents.pi_agent.catalog_probe.compute_authenticated_provider_ids", return_value=set()),
+        ):
+            assert agent.fetch_available_models_probe(secrets={}) == ([], None)
 
 
 class TestTurnFooterMetrics:
@@ -3646,3 +3676,161 @@ class TestTurnFooterMetrics:
         assert first is not None
         assert agent._diff_tracker is first
         tracker_cls.assert_called_once_with(agent.environment)
+
+
+class TestSculptorInitiatedWake:
+    """SCU-1776: completion wake-ups are Sculptor-initiated, serialized on the input FIFO.
+
+    The extensions' pi-side `sendUserMessage(deliverAs:"followUp")` wake-up raced
+    Sculptor's prompt pump: landing mid-run it spliced reaction turns into the run,
+    deferring `agent_end` (the wrapper's only turn boundary) indefinitely — queued
+    user messages starved and Stop escalated to SIGTERM. The fix makes Sculptor the
+    only turn-initiator: surfacing a completion enqueues a `_ReactionWakeMessage`
+    onto the same FIFO as user messages, and servicing it drives an ordinary
+    prompt turn in its own request cycle.
+
+    `_ReactionWakeMessage` / `_run_wake_turn` are resolved via `getattr` so that,
+    before the fix exists, exactly these tests fail with AttributeError at
+    runtime — a static reference would fail module collection and `just
+    typecheck` for the whole file on the failing-test commit.
+    """
+
+    @staticmethod
+    def _wake_message(text: str) -> Any:
+        wake_cls = getattr(agent_wrapper_module, "_ReactionWakeMessage")  # noqa: B009
+        return wake_cls(text=text)
+
+    @staticmethod
+    def _is_wake(message: Any) -> bool:
+        return type(message).__name__ == "_ReactionWakeMessage"
+
+    def test_subagent_completion_from_idle_drain_enqueues_wake_on_input_fifo(self) -> None:
+        """A sub-agent completion surfaced by the idle-drain enqueues one wake message
+        on the input FIFO, carrying the same summary text the completion notification
+        renders (one completion fact, one rendering)."""
+        agent = _make_agent()
+        agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+        notify = _subagent_notify([_subagent_child("c0", "done", _read_child_events())])
+        agent._process = _make_process([_event(notify)])
+
+        agent._drain_idle_background_events()
+
+        queued = _drain(agent._input_agent_messages)
+        wakes = [m for m in queued if self._is_wake(m)]
+        assert len(wakes) == 1
+        completion = parse_subagent_completion(notify["message"])
+        assert completion is not None
+        assert wakes[0].text == _format_subagent_completion(completion)
+
+    def test_subagent_completion_in_turn_enqueues_wake_on_input_fifo(self) -> None:
+        """A completion that reconciles into an in-flight turn also enqueues the wake:
+        it is serviced from the FIFO after this turn (and any earlier-queued user
+        messages), never spliced into the current run."""
+        agent = _make_agent()
+        agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+        agent._process = _make_process(
+            [
+                _event({"type": "agent_start"}),
+                _event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())])),
+                _event({"type": "agent_end", "messages": [_assistant_msg("done")], "willRetry": False}),
+            ]
+        )
+
+        agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+        queued = _drain(agent._input_agent_messages)
+        assert len(queued) == 1 and self._is_wake(queued[0]), queued
+
+    def test_background_completion_enqueues_wake_on_input_fifo(self) -> None:
+        """A background-task completion enqueues a wake whose text is the notification
+        summary (which carries the output tail), mirroring the sub-agent contract."""
+        agent = _make_agent()
+        agent._background_tasks[_BG_TASK_ID] = _BG_PGID
+        notify = _background_notify()
+        agent._process = _make_process([_event(notify)])
+
+        agent._drain_idle_background_events()
+
+        queued = _drain(agent._input_agent_messages)
+        wakes = [m for m in queued if self._is_wake(m)]
+        assert len(wakes) == 1
+        completion = parse_background_completion(notify["message"])
+        assert completion is not None
+        assert wakes[0].text == _format_background_completion(completion)
+
+    def test_wake_enqueues_behind_already_queued_user_message(self) -> None:
+        """FIFO serialization is the fix's core guarantee: a user message queued before
+        the completion is serviced FIRST; the wake lands behind it (the old pi-side
+        followUp ran reaction turns ahead of queued user messages — the bug)."""
+        agent = _make_agent()
+        agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+        user_message = ChatInputUserMessage(text="answer me first")
+        assert agent._push_message(user_message) is True
+        agent._process = _make_process(
+            [_event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())]))]
+        )
+
+        agent._drain_idle_background_events()
+
+        queued = _drain(agent._input_agent_messages)
+        assert len(queued) == 2, queued
+        assert queued[0] is user_message
+        assert self._is_wake(queued[1])
+
+    def test_wake_turn_sends_prompt_in_own_request_cycle(self) -> None:
+        """Servicing a wake sends its text verbatim as an ordinary `prompt` RPC and
+        brackets the consumed turn in its own RequestStarted → RequestSuccess cycle
+        (a fresh request id — the wake is not a reply to any user message)."""
+        agent = _make_agent()
+        ack = "Both sub-agents finished; continuing."
+        agent._process = _make_process(
+            [
+                _event({"type": "agent_start"}),
+                _event(_text_delta_update(ack, ack)),
+                _event({"type": "message_end", "message": _assistant_msg(ack)}),
+                _event({"type": "agent_end", "messages": [_assistant_msg(ack)], "willRetry": False}),
+            ]
+        )
+        wake = self._wake_message("Sub-agents completed: 1 done, 0 failed (of 1).")
+
+        getattr(agent, "_run_wake_turn")(wake)  # noqa: B009
+
+        sent = [json.loads(call.args[0]) for call in agent._process.write_stdin.call_args_list]
+        prompts = [payload for payload in sent if payload.get("type") == "prompt"]
+        assert len(prompts) == 1
+        assert prompts[0]["message"] == wake.text
+
+        emitted = _drain(agent._output_messages)
+        assert isinstance(emitted[0], RequestStartedAgentMessage)
+        assert isinstance(emitted[-1], RequestSuccessAgentMessage)
+        assert emitted[-1].request_id == emitted[0].request_id
+        assert emitted[-1].interrupted is False
+        assert any(ack in text for text in _main_agent_texts(emitted))
+
+    def test_wake_turn_pi_crash_is_nonfatal(self) -> None:
+        """A wake turn that fails (PiCrashError) must not tear down the agent: the
+        failure is logged and its request cycle resolves interrupted=True, so the
+        message-processing loop lives on to serve the next user message."""
+        agent = _make_agent()
+        # An unexpected stopReason:"aborted" (no interrupt pending) raises
+        # PiCrashError inside the consume loop — the crash shape from the field.
+        agent._process = _make_process(
+            [
+                _event({"type": "agent_start"}),
+                _event(
+                    {
+                        "type": "agent_end",
+                        "messages": [_assistant_msg("boom", stop_reason="aborted")],
+                        "willRetry": False,
+                    }
+                ),
+            ]
+        )
+        wake = self._wake_message("Background task completed (exit code 0).")
+
+        getattr(agent, "_run_wake_turn")(wake)  # must NOT raise  # noqa: B009
+
+        emitted = _drain(agent._output_messages)
+        assert isinstance(emitted[0], RequestStartedAgentMessage)
+        assert isinstance(emitted[-1], RequestSuccessAgentMessage)
+        assert emitted[-1].interrupted is True

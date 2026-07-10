@@ -45,17 +45,8 @@
     animation: swipeOut 100ms ease-out;
   }
 
-  &.success {
-    background-color: var(--green-2);
-    border-color: var(--green-a6);
-
-    .title {
-      color: var(--green-12);
-    }
-  }
-
   &.error {
-    background-color: var(--red-2);
+    background-color: var(--red-a2);
     border-color: var(--red-a6);
 
     .title {
@@ -64,7 +55,7 @@
   }
 
   &.warning {
-    background-color: var(--yellow-2);
+    background-color: var(--yellow-a2);
     border-color: var(--yellow-a6);
 
     .title {

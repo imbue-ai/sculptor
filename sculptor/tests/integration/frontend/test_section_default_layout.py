@@ -2,14 +2,14 @@
 
 On a workspace's FIRST visit the shell seeds the default arrangement:
 
-* center — the only expanded section, holding the active agent;
-* left   — collapsed, with Files/Changes/Commits open and Files active;
+* center — expanded, holding the active agent;
+* left   — expanded, with Files/Changes/Commits open and Files active;
 * bottom — collapsed, with one terminal;
 * right  — collapsed and empty.
 
 These assert the seeded default by driving the section collapse/expand POMs the way a
-user would (the seeded sections start collapsed; expanding one reveals its seeded
-panels).
+user would: the expanded sections show their seeded panels straight away, while the
+collapsed sections reveal theirs once expanded.
 """
 
 import re
@@ -36,17 +36,15 @@ def test_default_center_holds_the_active_agent(sculptor_instance_: SculptorInsta
     expect(center.get_active_tab()).to_have_attribute("data-panel-id", re.compile(r"^agent:"))
 
 
-@user_story("to find Files/Changes/Commits ready in a collapsed left section")
-def test_default_left_collapsed_with_files_changes_commits(sculptor_instance_: SculptorInstance) -> None:
-    """Left starts collapsed; expanded it holds Files/Changes/Commits with Files active."""
+@user_story("to find Files/Changes/Commits ready in an expanded left section")
+def test_default_left_expanded_with_files_changes_commits(sculptor_instance_: SculptorInstance) -> None:
+    """Left starts expanded, holding Files/Changes/Commits with Files active."""
     page = sculptor_instance_.page
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Default Left WS")
 
     left = PlaywrightWorkspaceSection(page, "left")
-    # Collapsed by default: a collapsed section renders no header.
-    expect(left.get_header()).to_have_count(0)
-
-    left.expand_section()
+    # Expanded by default: its header renders with no expand interaction.
+    expect(left.get_header()).to_be_visible()
     expect(left.get_panel_tab("files")).to_be_visible()
     expect(left.get_panel_tab("changes")).to_be_visible()
     expect(left.get_panel_tab("commits")).to_be_visible()

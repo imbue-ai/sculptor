@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
 
-import { fileBrowserStateAtomFamily, focusFolderAtom, revealFolderAtom } from "./atoms.ts";
+import { fileBrowserStateAtomFamily, focusFolderAtom, revealFolderAtom, toggleChangesFolderAtom } from "./atoms.ts";
+import type { FileBrowserState } from "./types.ts";
 
 const WORKSPACE_ID = "workspace-1";
 
@@ -128,5 +129,29 @@ describe("revealFolderAtom", () => {
     expect(secondNonce).toBeDefined();
     expect(secondNonce).not.toBe(firstNonce);
     expect(secondNonce!).toBeGreaterThan(firstNonce!);
+  });
+});
+
+describe("backwards compatibility with pre-upgrade snapshots", () => {
+  it("toggles a Changes folder on a snapshot that predates changesAutoExpandedFolders", () => {
+    // A per-workspace snapshot persisted before the field existed loads without it.
+    const legacyState: FileBrowserState = {
+      expandedFolders: [],
+      changesExpandedFolders: [],
+      viewMode: "tree",
+      searchQuery: "",
+      searchOpen: false,
+      scrollPosition: 0,
+    };
+    store.set(fileBrowserStateAtomFamily(WORKSPACE_ID), legacyState);
+    expect(store.get(fileBrowserStateAtomFamily(WORKSPACE_ID)).changesAutoExpandedFolders).toBeUndefined();
+
+    store.set(toggleChangesFolderAtom, { workspaceId: WORKSPACE_ID, folderPath: "src" });
+
+    // The reducer spreads the snapshot, so the toggle lands and the absent field
+    // stays absent rather than crashing on the missing key.
+    const state = store.get(fileBrowserStateAtomFamily(WORKSPACE_ID));
+    expect(state.changesExpandedFolders).toContain("src");
+    expect(state.changesAutoExpandedFolders).toBeUndefined();
   });
 });

@@ -11,7 +11,6 @@ import {
   WORKSPACE_TAB_ID_PREFIX,
 } from "./common/state/atoms/workspaces.ts";
 import { HOME_TAB_ID, SETTINGS_TAB_ID } from "./components/workspaceTabIds.ts";
-import { EmptyFirstRunGate } from "./EmptyFirstRunGate.tsx";
 import { AppShell } from "./layouts/AppShell";
 import { NotFoundErrorPage } from "./pages/error/NotFound.tsx";
 import { RouteErrorPage } from "./pages/error/RouteErrorPage.tsx";
@@ -63,45 +62,30 @@ const router = createHashRouter([
     loader: rootLoader,
     errorElement: <RouteErrorPage />,
   },
-  // Pathless layout route hosting every page destination. Its element
-  // (`EmptyFirstRunGate`) renders the matched route normally unless the
-  // workspace list is genuinely empty, in which case it swaps in the
-  // EmptyFirstRunPage — except on Settings, which stays reachable.
-  // The has-workspaces flow is unaffected: the gate falls through to <Outlet/>.
+  // The app-wide sidebar shell hosts Home, Settings, and the workspace route, so
+  // the sidebar + chrome stay mounted as the user moves between them.
   {
-    element: <EmptyFirstRunGate />,
-    // The gate route is top-level, so its own subtree (EmptyFirstRunPage,
-    // AutoUpdateToasts, the gate hooks) has no error boundary above it — give
-    // it one here so a render error shows the styled RouteErrorPage instead of
-    // React Router's default screen.
+    element: <AppShell />,
     errorElement: <RouteErrorPage />,
     children: [
-      // The app-wide sidebar shell hosts Home, Settings, and the workspace route, so
-      // the sidebar + chrome stay mounted as the user moves between them.
       {
-        element: <AppShell />,
-        errorElement: <RouteErrorPage />,
+        path: "/home",
+        element: <HomePage />,
+      },
+      {
+        path: "/settings",
+        element: <SettingsPage />,
+      },
+      {
+        path: "/ws/:workspaceID",
         children: [
           {
-            path: "/home",
-            element: <HomePage />,
+            index: true,
+            element: <WorkspacePage />,
           },
           {
-            path: "/settings",
-            element: <SettingsPage />,
-          },
-          {
-            path: "/ws/:workspaceID",
-            children: [
-              {
-                index: true,
-                element: <WorkspacePage />,
-              },
-              {
-                path: "agent/:id",
-                element: <WorkspacePage />,
-              },
-            ],
+            path: "agent/:id",
+            element: <WorkspacePage />,
           },
         ],
       },

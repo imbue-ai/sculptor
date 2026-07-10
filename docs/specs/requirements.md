@@ -63,7 +63,7 @@ pointers to their spec/scenario home.
 | REQ-FUNC-012 | Settings (all sections) | §7.10 | `SET` | Core |
 | REQ-FUNC-013 | Actions & notes; mentions & path autocomplete | §7.11 | `ACT`, `MENT` | Optional |
 | REQ-FUNC-014 | Experimental surface (toggles, experimental skills/panels, container backend) | §7.12 | `SET`, `PANEL` | Experimental |
-| REQ-FUNC-016 | Frontend plugins: on-by-default plugin system, Plugins settings section with a global enable/disable toggle, bundled Linear plugin enabled by default | §7.13 | `PANEL`, `SET` | Standard |
+| REQ-FUNC-016 | Extensions: on-by-default extension system, Extensions settings section with a global enable/disable toggle, bundled Linear extension enabled by default | §7.13 | `PANEL`, `SET` | Standard |
 | REQ-FUNC-015 | `sculpt` CLI: full command surface, `--json`, env-var defaults, cross-surface visibility | §8 | (CLI-level, see §5.4) | Standard |
 
 - **REQ-FUNC-100 (MUST).** Every behavior enumerated in `scenarios.md` is a product requirement; that
@@ -212,8 +212,8 @@ packaging Sculptor):
 
 ### 3.3 Required external binaries
 
-- **REQ-COMPAT-020 (MUST).** **Claude CLI** is required. Compatibility window: **recommended 2.1.195,
-  minimum 2.1.195, maximum 2.99.99, blocked 2.1.101**; supported platforms **darwin-arm64** and
+- **REQ-COMPAT-020 (MUST).** **Claude CLI** is required. Compatibility window: **recommended 2.1.202,
+  minimum 2.1.202, maximum 2.99.99, blocked 2.1.101**; supported platforms **darwin-arm64** and
   **linux-x64** (`sculptor/sculptor/services/managed_tools.py`). Sculptor can install/manage it and can use a
   user-supplied binary (`SPEC.md` §7.1, §7.10).
 - **REQ-COMPAT-021 [Unspecified].** **Git** is required and is **runtime-detected with no
@@ -402,18 +402,19 @@ rules behind them.
 - **REQ-SEC-003 (MUST).** Build & distribution security: the macOS artifact is **signed and notarized**
   (`.dmg`); releases are **tag-driven** with the version checked against build context so a tag build
   cannot publish an inconsistent version (`SPEC.md` §11.2–§11.3).
-- **REQ-SEC-004.** **Frontend-plugin trust model.** The frontend plugin system (on by default, gated
-  on the `enableFrontendPlugins` flag — atom `isFrontendPluginsEnabledAtom`, default `true`; the
-  flag is toggled at the top of the Plugins settings section) runs plugin code **in the
-  renderer with the same privileges as Sculptor's own UI**; a URL plugin source is re-fetched on every
-  load, so the user trusts whatever it serves at load time. Adding a plugin source is therefore
-  equivalent to running that code, documented in `SECURITY.md`. Of the bundled plugins only **Linear**
-  is enabled by default; the others (**Sculpty**, **Pomodoro**) ship disabled. The SDK's
-  `openExternal` is restricted to **`http(s)`** URLs (`sculptor/frontend/src/plugins/sdk/actions.ts`).
-  In the packaged app the renderer and its plugins are served from a single secure custom origin
-  (`sculptor://app`) rather than `file://` (`sculptor/frontend/src/electron/appProtocol.ts`). Plugins
-  load from the Sculptor folder's `plugins/` directory or user-added URL sources; precedence is
-  local-disk > URL > bundled for the same plugin id (`SPEC.md` §7.13).
+- **REQ-SEC-004.** **Extension trust model.** The extension system (on by default, gated
+  on the `enableExtensions` flag, default `true`; the
+  flag is toggled at the top of the Extensions settings section) runs extension code **in the
+  renderer with the same privileges as Sculptor's own UI**; a URL extension source is re-fetched on
+  every load, so the user trusts whatever it serves at load time. Adding an extension source is
+  therefore equivalent to running that code, documented in `SECURITY.md`. Of the bundled extensions
+  only **Linear** is enabled by default; the others (**Sculpty**, **Pomodoro**) ship disabled. The
+  SDK's `openExternal` is restricted to **`http(s)`** URLs
+  (`sculptor/frontend/src/extensions/sdk/actions.ts`).
+  In the packaged app the renderer and its extensions are served from a single secure custom origin
+  (`sculptor://app`) rather than `file://` (`sculptor/frontend/src/electron/appProtocol.ts`).
+  Extensions load from the Sculptor folder's `extensions/` directory or user-added URL sources;
+  precedence is local-disk > URL > bundled for the same extension id (`SPEC.md` §7.13).
 - **REQ-SEC-010 (MUST).** **Telemetry is consent-gated.** Error reporting (Sentry, frontend-only) and
   product analytics (PostHog) are each gated on explicit consent flags
   (`is_error_reporting_enabled`, `is_product_analytics_enabled`, `is_session_recording_enabled`,

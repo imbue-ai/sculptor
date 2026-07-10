@@ -19,6 +19,20 @@ import type { SubSectionId } from "~/components/sections/sectionTypes.ts";
 export const renamingWorkspaceIdAtom = atom<string | null>(null);
 
 /**
+ * A rename handoff the palette flushes once its dialog has closed. The palette
+ * runtimes' `beginRename` stash the target here instead of writing the rename
+ * atoms directly: writing them while the palette is open would mount — and
+ * focus — the inline rename input inside the dialog's still-active focus trap,
+ * which yanks focus back into the dialog and the resulting blur cancels the
+ * rename. The palette's `onCloseAutoFocus` is the single consumer: it clears
+ * this atom, suppresses the dialog's focus restore, and performs the deferred
+ * write, so the input only ever mounts with nothing competing for focus.
+ */
+export const palettePendingRenameAtom = atom<
+  { kind: "agent"; panelId: string } | { kind: "workspace"; workspaceId: string } | null
+>(null);
+
+/**
  * The agent PANEL id whose tab should be in inline-rename mode, set by the
  * command palette's agent `beginRename`. The matching tab in `SectionHeader`
  * derives its rename mode from this atom during render (no effect, no local

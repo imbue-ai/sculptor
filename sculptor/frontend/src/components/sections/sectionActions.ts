@@ -14,7 +14,7 @@ import type { WorkspaceLayoutState } from "./persistence/types.ts";
 import { isMultiInstancePanelId } from "./registry/dynamicPanels.tsx";
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "./sectionAtoms.ts";
 import type { PanelId, SectionId, SplitAxis, SubSectionId } from "./sectionTypes.ts";
-import { canSplitAxis, toSecondary, toSection } from "./sectionTypes.ts";
+import { canSplitAxis, primaryOf, toSecondary, toSection } from "./sectionTypes.ts";
 import { activeSectionRingNonceAtom, maximizedSectionAtom } from "./transientAtoms.ts";
 
 export const SPLIT_RATIO_MIN = 0.15;
@@ -239,13 +239,21 @@ export const setActivePanelAtom = atom(null, (_get, set, params: SetActivePanelP
 );
 
 export const toggleSectionAtom = atom(null, (get, set, params: ToggleSectionParams) => {
+  const isCollapsibleSection = params.section !== "center";
+  const isAlreadyExpanded = isCollapsibleSection && isSectionExpanded(get(workspaceLayoutAtom), params.section);
   // A collapsed section must never stay maximized: the transient full-screen view
   // would otherwise show a section the persisted layout says is closed.
-  const willCollapse = params.section !== "center" && isSectionExpanded(get(workspaceLayoutAtom), params.section);
-  if (willCollapse && get(maximizedSectionAtom) === params.section) {
+  if (isAlreadyExpanded && get(maximizedSectionAtom) === params.section) {
     set(maximizedSectionAtom, null);
   }
   set(workspaceLayoutAtom, (prev) => withToggleSection(prev, params));
+  // Toggling a section open focuses it and pulses the active-section ring — a
+  // deliberate jump, like the keyboard section-cycle and panel add/drop. Collapsing
+  // never focuses: withToggleSection reassigns the active sub-section to center when
+  // the closed section held it.
+  if (isCollapsibleSection && !isAlreadyExpanded) {
+    set(jumpToSectionAtom, { subSection: primaryOf(params.section) });
+  }
 });
 
 export const splitSectionAtom = atom(null, (_get, set, params: SplitSectionParams) =>

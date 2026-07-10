@@ -324,10 +324,12 @@ class SQLTransaction(BaseDataModelTransaction):
                     w.description,
                     w.initialization_strategy,
                     w.source_branch,
+                    w.environment_id,
                     w.is_deleted,
                     w.is_open,
                     w.created_at,
                     p.name AS project_name,
+                    p.user_git_repo_url AS project_git_repo_url,
                     COUNT(CASE
                         WHEN t.is_deleted = 0
                          AND json_extract(t.current_state, '$.workspace_id') = w.object_id

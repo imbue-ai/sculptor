@@ -24,7 +24,7 @@ type UsePiAuthenticatedProvidersResult = BackendQueryResult<Array<AuthenticatedP
  * Fetch the pi provider catalog crossed with current authentication status.
  *
  * Global (no workspace/agent) read of process-level auth.json + env. The
- * credential-change flows (interactive login/logout close, paste-key write) call
+ * credential-change flow (the interactive login/logout modal closing) calls
  * `refetch` so the rail tracks the new auth.json without a restart; `staleTime: 0`
  * makes each `refetch` re-fetch. Going through TanStack Query gives a single shared
  * cache, in-flight de-duplication, and request cancellation on unmount.

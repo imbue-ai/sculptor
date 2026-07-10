@@ -1,4 +1,16 @@
+import type { ModelCatalogState } from "~/api";
 import { LlmModel, type ModelOption } from "~/api";
+
+/**
+ * "No usable model": a backend-sourced harness (pi) whose catalog has been fetched
+ * and is empty (no authenticated providers). `NOT_FETCHED_YET` is excluded — that is
+ * still loading, not empty. Shared by the model picker's disabled state and the
+ * composer's send-guard so the two cannot disagree.
+ */
+export const hasNoUsableModel = (
+  sourcesBackendModels: boolean,
+  backendModels: ReadonlyArray<ModelOption> | ModelCatalogState,
+): boolean => sourcesBackendModels && Array.isArray(backendModels) && backendModels.length === 0;
 
 const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
   [LlmModel.CLAUDE_4_OPUS]: { short: "Opus (1M)", long: "Claude 4.8 Opus (1M)" },

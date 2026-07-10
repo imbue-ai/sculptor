@@ -11,14 +11,19 @@ Without the deferred-completion path in
 pending Monitor task at the current turn's result/success and exits — Sculptor
 then SIGTERMs the CLI before it can emit the follow-up turn.
 
-Sculptor closes the CLI's stdin and waits ~5 s before SIGTERM, so a
-short-running follow-up turn (e.g. a single text reply) sometimes completes
-within that grace window — masking the bug. To observe the bug reliably, the
-prompt asks the agent to run a Bash ``sleep 8`` after acknowledging the
-event and then emit a final marker. With the bug, the CLI is SIGTERMed mid-
-sleep and the final marker never appears in the transcript. With the fix,
-the loop stays alive across the deferred-completion handoff, the bash sleep
-completes, and the final marker lands.
+The test asserts that the follow-up turn *ran at all*: the agent emits
+``MONITOR-FIRED-RECEIVED-91827`` inside turn 2, which only reaches the CLI
+session transcript if the deferred-completion handoff kept the loop alive
+across the turn-1 → turn-2 boundary. With the bug, turn 2 is never delivered
+(the CLI is torn down at turn 1's result) and the marker is absent.
+
+An earlier version of this test tried to hold the loop open longer by asking
+the agent to run a foreground Bash ``sleep 8`` in turn 2 and emit a marker
+afterward. That is unreliable: a foreground tool is not tracked in
+``_pending_background_tasks`` and its ``task_started`` can arrive after the
+turn's ``result``, so Sculptor SIGTERMs the CLI mid-sleep regardless of the
+deferred-completion fix (SCU-1775). Asserting on the turn's delivery instead
+of a post-foreground-tool marker avoids that unrelated race.
 """
 
 import pytest
@@ -96,20 +101,19 @@ def test_monitor_tool_post_notification_turn_runs(sculptor_instance_: SculptorIn
     Without the fix, ``task_updated{completed}`` for Monitor goes into
     ``_completed_via_task_updated`` immediately, so cleanup at turn 1's
     result/success drops ``_pending_background_tasks`` to empty, the output
-    loop exits, and Sculptor SIGTERMs the CLI process — interrupting the
-    agent mid-sleep so ``MONITOR-FINISHED-91827`` is never emitted.
+    loop exits, and Sculptor SIGTERMs the CLI process before turn 2 runs — so
+    ``MONITOR-FIRED-RECEIVED-91827`` is never emitted.
 
     With the fix, Monitor's completion is deferred via
-    ``_completed_pending_deferred`` until turn 2's init promotes it. The
-    loop stays alive, the bash sleep runs to completion, and the final
-    marker lands in the CLI session transcript as an assistant message.
+    ``_completed_pending_deferred`` until turn 2's init promotes it. The loop
+    stays alive across the handoff, turn 2 executes, and its
+    ``MONITOR-FIRED-RECEIVED-91827`` reply lands in the CLI session transcript
+    as an assistant message.
 
-    The test asserts on the CLI session transcript rather than the chat UI
-    or sculptor's own transcript: with the fix, a long-running tool call in
-    the follow-up turn means the CLI is forced to finish that work before
-    sculptor exits, so the marker arrives reliably; without the fix, the
-    sleep is SIGTERMed and the marker is unambiguously absent from the
-    CLI's own session file.
+    The test asserts on the CLI session transcript rather than the chat UI:
+    the marker is emitted inside the follow-up turn, so its presence in the
+    CLI's own session file is unambiguous proof the deferred follow-up turn
+    was delivered rather than dropped.
     """
     prompt = (
         "Use the Monitor tool RIGHT NOW with these exact parameters:\n"
@@ -127,18 +131,20 @@ def test_monitor_tool_post_notification_turn_runs(sculptor_instance_: SculptorIn
         + "- Do NOT add commentary or analysis.\n"
         + "\n"
         + "Step 2: Shortly after, you will receive a system notification containing MONITOR_FIRED_PAYLOAD_91827. "
-        + "When you receive it:\n"
-        + "  (a) reply with exactly: MONITOR-FIRED-RECEIVED-91827\n"
-        + "  (b) then call the Bash tool with command `sleep 8`\n"
-        + "  (c) after the Bash tool returns, reply with exactly: MONITOR-FINISHED-91827\n"
-        + "Then stop. Do not do anything else.\n"
+        + "When you receive it, reply with exactly:\n"
+        + "    MONITOR-FIRED-RECEIVED-91827\n"
+        + "Then stop. Do not call any further tools and do not add commentary.\n"
     )
     task_page = create_workspace_and_send(sculptor_instance_, prompt, wait_for_finish=False)
 
-    # Wait for the FINAL marker to land in the CLI session transcript. The
-    # bash sleep in step (b) keeps the agent active for ~8 s after the event
-    # delivery — long enough that without the fix, sculptor's main loop has
-    # already exited and SIGTERM hits before the sleep finishes. With the
-    # fix, sculptor stays in the loop, the sleep completes, and the agent's
-    # final marker reaches the transcript.
-    _wait_for_assistant_marker_in_transcript(sculptor_instance_, task_page, "MONITOR-FINISHED-91827")
+    # Assert on the follow-up event-delivery turn actually running: MONITOR-FIRED-RECEIVED-91827
+    # is emitted inside turn 2, which only happens if Monitor's deferred completion kept the
+    # output loop alive across the handoff (SCU-1669). Without the fix, the loop clears the
+    # pending Monitor task at turn 1's result and Sculptor SIGTERMs the CLI before turn 2 runs,
+    # so the marker never reaches the transcript.
+    #
+    # We deliberately do NOT gate this on a marker emitted after a foreground Bash in turn 2:
+    # a foreground tool is not tracked in _pending_background_tasks and its task_started can
+    # arrive after the turn's result, so Sculptor tears the CLI down mid-execution regardless of
+    # the deferred-completion fix (SCU-1775). Asserting on the turn's delivery avoids that race.
+    _wait_for_assistant_marker_in_transcript(sculptor_instance_, task_page, "MONITOR-FIRED-RECEIVED-91827")
