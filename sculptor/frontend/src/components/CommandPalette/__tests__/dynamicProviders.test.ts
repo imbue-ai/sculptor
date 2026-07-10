@@ -734,18 +734,19 @@ describe("buildAddPanelProvider", () => {
     expect(cmds.find((c) => c.id === "addpanel.panels.files")?.title).toBe("File browser");
   });
 
-  it('titles the new-agent row "New Claude agent" by default', () => {
+  it('titles the new-agent row "New Claude" by default', () => {
     seedLayout();
     getDefaultStore().set(addPanelTargetSubSectionAtom, "left");
     const cmd = buildAddPanelProvider(makeRuntime())
       .produce(WORKSPACE_CTX)
       .find((c) => c.id === "addpanel.panels.new_agent");
-    expect(cmd?.title).toBe("New Claude agent");
+    expect(cmd?.title).toBe("New Claude");
   });
 
-  it('collapses the new-agent row to "New agent" (no doubled word) when the recent type is a registered terminal agent', () => {
+  it('shows a generic "New agent" when the recent type is a registered terminal agent', () => {
     // The provider runs outside React and can't resolve a registered program's
-    // display name, so the row must not read "New agent agent".
+    // display name, so the row falls back to a generic "New agent" rather than a
+    // nameless row.
     seedLayout();
     getDefaultStore().set(addPanelTargetSubSectionAtom, "left");
     getDefaultStore().set(userConfigAtom, {

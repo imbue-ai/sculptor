@@ -92,7 +92,7 @@ def test_first_agent_type_defaults_to_shared_last_used(
     dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
     dropdown.open()
     new_agent_item = dropdown.get_new_agent_item()
-    expect(new_agent_item).to_contain_text("New Claude agent")
+    expect(new_agent_item).to_contain_text("New Claude")
     expect(dropdown.get_new_terminal_item()).to_be_visible()
     page.keyboard.press("Escape")
 
@@ -114,7 +114,7 @@ def test_first_agent_type_defaults_to_shared_last_used(
     expect(panel_tabs.get_panel_tab_by_name("Terminal 2")).to_have_count(0)
 
     # Only terminal is normalized — a NON-terminal MRU still flows through both
-    # surfaces: a pi-first workspace makes the pinned row read "New pi agent"
+    # surfaces: a pi-first workspace makes the pinned row read "New pi"
     # AND presets the next new-workspace form to pi.
     install_fake_pi_binary(sculptor_instance_.fake_bin_dir)
     start_task_and_wait_for_ready(
@@ -124,7 +124,7 @@ def test_first_agent_type_defaults_to_shared_last_used(
         agent_type="pi",
     )
     dropdown.open()
-    expect(dropdown.get_new_agent_item()).to_contain_text("New pi agent")
+    expect(dropdown.get_new_agent_item()).to_contain_text("New pi")
     page.keyboard.press("Escape")
 
     open_new_workspace_form(page)

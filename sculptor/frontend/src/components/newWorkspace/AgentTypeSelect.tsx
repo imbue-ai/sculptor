@@ -6,6 +6,7 @@ import { ElementIds } from "~/api";
 import {
   AGENT_TYPE_LABELS,
   encodeRegisteredAgentType,
+  formatRegisteredAgentLabel,
   parseStoredAgentType,
   type StoredAgentType,
 } from "~/common/state/atoms/agentTabs.ts";
@@ -32,9 +33,15 @@ export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectP
 
   // JSX and rendering logic
   const { agentType, registrationId } = parseStoredAgentType(value);
+  const registeredDisplayName =
+    agentType === "registered"
+      ? registrations.find((r) => r.registrationId === registrationId)?.displayName
+      : undefined;
   const triggerLabel =
     agentType === "registered"
-      ? (registrations.find((r) => r.registrationId === registrationId)?.displayName ?? "Registered")
+      ? registeredDisplayName === undefined
+        ? "Registered"
+        : formatRegisteredAgentLabel(registeredDisplayName)
       : AGENT_TYPE_LABELS[agentType];
 
   return (
@@ -89,7 +96,7 @@ export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectP
             data-testid={ElementIds.AGENT_TYPE_OPTION_REGISTERED}
             data-registration-id={registration.registrationId}
           >
-            {registration.displayName}
+            {formatRegisteredAgentLabel(registration.displayName)}
           </Select.Item>
         ))}
       </Select.Content>
