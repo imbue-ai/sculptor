@@ -65,6 +65,13 @@ def blend_default(page: Page) -> None:
 _HEAVY_BLEND_FILES_PER_WS = 20
 _HEAVY_BLEND_LINES_PER_FILE = 100
 
+# Fake Claude writes the ~20 files one tool call at a time, so the "agent
+# finished" wait must clear all of them. On contended offload sandboxes that
+# sequence can exceed the helper's default 30s, so give the setup generous
+# headroom — this is blend time, outside any measurement window, so a loose
+# ceiling costs nothing but flake resistance.
+_HEAVY_BLEND_FINISH_TIMEOUT_MS = 120_000
+
 
 def _write_many_files_prompt(seed: str) -> str:
     """fake_claude:multi_step prompt that writes N files with content seeded
@@ -110,10 +117,20 @@ def blend_with_diff_and_files(page: Page) -> None:
 
     Leaves the page on workspace B with B's file open.
     """
-    start_task_and_wait_for_ready(page, prompt=_write_many_files_prompt("alpha"), workspace_name="Perf Heavy WS A")
+    start_task_and_wait_for_ready(
+        page,
+        prompt=_write_many_files_prompt("alpha"),
+        workspace_name="Perf Heavy WS A",
+        finish_timeout_ms=_HEAVY_BLEND_FINISH_TIMEOUT_MS,
+    )
     _open_files_panel_and_first_file(page, seed="alpha")
 
-    start_task_and_wait_for_ready(page, prompt=_write_many_files_prompt("beta"), workspace_name="Perf Heavy WS B")
+    start_task_and_wait_for_ready(
+        page,
+        prompt=_write_many_files_prompt("beta"),
+        workspace_name="Perf Heavy WS B",
+        finish_timeout_ms=_HEAVY_BLEND_FINISH_TIMEOUT_MS,
+    )
     _open_files_panel_and_first_file(page, seed="beta")
 
 
