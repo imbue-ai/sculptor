@@ -391,6 +391,33 @@ class ClaudeOutputProcessor:
         # turn.
         self._awaiting_notification_turn_init: bool = False
         self._pending_notification_turn_results: int = 0
+        # SCU-1770: ``_notification_reset_pending_result`` is set when a
+        # task-notification consumes found_final_message (the True→False reset
+        # above) and is cleared by the follow-up turn's ``system/init`` or by a
+        # ``result``. While set, the follow-up turn is ALREADY accounted for by
+        # the reset, so (a) further coalesced notifications in the same cluster
+        # must not add a second accounting via _awaiting_notification_turn_init,
+        # and (b) the init must not promote that flag into
+        # _pending_notification_turn_results. Without this, a cluster of
+        # notifications delivered as one follow-up turn (the CLI coalesces
+        # them) double-counts that turn — the counter then absorbs the
+        # invocation's real final result and the loop waits forever.
+        self._notification_reset_pending_result: bool = False
+        # SCU-1770 idle backstop: timestamp armed whenever found_final_message
+        # is knocked back to False at a turn boundary (the notification reset
+        # above, or the notification-turn result absorption in
+        # _parse_stream_end_response) — i.e. whenever the loop is waiting for a
+        # follow-up turn that cannot be locally guaranteed to arrive. Any
+        # parsed stream frame disarms it (the follow-up is arriving); if the
+        # CLI instead stays silent for the grace period with no pending
+        # background task or wakeup, the loop concludes the invocation is
+        # complete rather than waiting forever. Control-protocol frames
+        # (context-usage responses, permission requests) do NOT disarm it —
+        # the CLI emits those at turn boundaries without implying a follow-up
+        # turn.
+        self._notification_followup_armed_at: float | None = None
+        # Instance attribute (not a module constant) so tests can shrink it.
+        self._notification_followup_grace_seconds: float = 30.0
         # Last time we received any stdout line from the CLI. Used to detect
         # hangs where the CLI stops producing output after an interrupt.
         self._last_output_time: float = time.monotonic()
@@ -505,6 +532,39 @@ class ClaudeOutputProcessor:
                 self._flush_due_workflow_progress()
                 now = time.monotonic()
                 if not self.found_final_message:
+                    # SCU-1770 idle backstop: found_final_message was knocked
+                    # back to False at a turn boundary (a task-notification
+                    # reset or a notification-turn result absorption) and the
+                    # CLI has produced no stream frame since. The predicted
+                    # follow-up turn cannot be locally guaranteed to arrive
+                    # (notification/turn accounting is heuristic — see the
+                    # coalescing double-count this backstops); after the grace
+                    # period of true silence with nothing else pending,
+                    # conclude the invocation is complete so the loop exits
+                    # and the terminal RequestSuccess is emitted instead of
+                    # streaming forever. Long-running quiet tools are safe:
+                    # the backstop is only armed at turn boundaries and any
+                    # stream frame (e.g. the follow-up turn's init) disarms
+                    # it before such a tool can start.
+                    if (
+                        self._notification_followup_armed_at is not None
+                        and not self._pending_background_tasks
+                        and not self._pending_wakeup
+                        and now - self._notification_followup_armed_at >= self._notification_followup_grace_seconds
+                    ):
+                        logger.info(
+                            "Notification follow-up turn never arrived after {:.0f}s of silence; concluding the invocation is complete (pending_notification_turn_results={}, awaiting_notification_turn_init={})",
+                            now - self._notification_followup_armed_at,
+                            self._pending_notification_turn_results,
+                            self._awaiting_notification_turn_init,
+                        )
+                        self.found_final_message = True
+                        self._final_message_time = now
+                        self._pending_notification_turn_results = 0
+                        self._awaiting_notification_turn_init = False
+                        self._notification_reset_pending_result = False
+                        self._notification_followup_armed_at = None
+                        continue
                     # Detect hung CLI after interrupt: if we sent an interrupt
                     # but no stdout line has arrived for _idle_timeout_seconds
                     # and we never got the end-of-turn message, the CLI is
@@ -677,6 +737,20 @@ class ClaudeOutputProcessor:
                 self.output_message_queue.put(warning)
                 continue
 
+            # A successfully parsed frame (even one the parser drops to None)
+            # is real CLI activity, so it disarms the notification-followup
+            # idle backstop: the follow-up turn the arming reset was waiting on
+            # is arriving (handlers re-arm at the next silent reset point).
+            # Placed AFTER the parse — a malformed/non-JSON line degrades to a
+            # warning via the except above and must NOT defuse the backstop
+            # during the very silence it exists to detect (recurring CLI debug
+            # output would otherwise keep it from ever firing). Control-protocol
+            # frames (context-usage responses, permission requests) are already
+            # excluded: they short-circuit with their own `continue` above,
+            # since the CLI emits them at turn boundaries without implying a
+            # follow-up turn. (SCU-1770)
+            self._notification_followup_armed_at = None
+
             if result is None:
                 continue
 
@@ -801,8 +875,18 @@ class ClaudeOutputProcessor:
                 #    for the latter.
                 if self.found_final_message:
                     self.found_final_message = False
+                    self._notification_reset_pending_result = True
+                    self._notification_followup_armed_at = time.monotonic()
                 else:
                     self._awaiting_notification_turn_init = True
+                    if self._notification_reset_pending_result:
+                        # Part of a coalesced cluster: an earlier notification
+                        # already reset found_final_message and the single
+                        # follow-up turn will answer the whole cluster. The
+                        # armed flag above will be discarded (not promoted) by
+                        # _parse_init_response; refresh the idle backstop while
+                        # the cluster keeps arriving. (SCU-1770)
+                        self._notification_followup_armed_at = time.monotonic()
                 # final_workflow_entries doubles as the workflow marker on the
                 # persisted notification: an empty tuple (not None) for a
                 # workflow that never reported a tree, so history replay can
@@ -1081,7 +1165,19 @@ class ClaudeOutputProcessor:
         # of the user's prompt (SCU-1660) rather than inline mid-turn. Promote
         # it to a pending notification-turn result so _parse_stream_end_response
         # skips that turn's result and keeps the loop open for the user's turn.
-        if self._awaiting_notification_turn_init:
+        #
+        # Exception (SCU-1770): when found_final_message is False because a
+        # notification RESET it (rather than because the user's turn is still
+        # running), this init IS the follow-up turn that the reset already
+        # accounts for. The CLI coalesces a cluster of notifications into that
+        # one follow-up turn; the cluster's later notifications armed
+        # _awaiting_notification_turn_init, and promoting it here would count
+        # the same turn twice — the counter then absorbs the invocation's real
+        # final result and the loop never exits.
+        if self._notification_reset_pending_result:
+            self._notification_reset_pending_result = False
+            self._awaiting_notification_turn_init = False
+        elif self._awaiting_notification_turn_init:
             self._awaiting_notification_turn_init = False
             self._pending_notification_turn_results += 1
 
@@ -1194,6 +1290,9 @@ class ClaudeOutputProcessor:
 
         self.found_final_message = True
         self._final_message_time = time.monotonic()
+        # A result answers any outstanding notification reset; a notification
+        # arriving after this point flips found_final_message afresh.
+        self._notification_reset_pending_result = False
 
         # SCU-1660: if this result terminates a task-notification turn the CLI
         # delivered ahead of the user's own message turn, it is not the end of
@@ -1202,6 +1301,9 @@ class ClaudeOutputProcessor:
         if self._pending_notification_turn_results > 0:
             self._pending_notification_turn_results -= 1
             self.found_final_message = False
+            # Waiting again for a turn that cannot be locally guaranteed to
+            # arrive — arm the idle backstop (SCU-1770).
+            self._notification_followup_armed_at = time.monotonic()
         # A notification that never started a fresh request cycle before this
         # result was an inline mid-turn notification (SCU-267), not a separate
         # turn — drop the pending classification so it doesn't leak into a later
