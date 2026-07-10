@@ -313,15 +313,32 @@ export const useAlphaScrollPersistence = (
     // scroll flips authority out of `restoring` and ends the chase on the next
     // frame with no final clobbering write. Saves stay suppressed throughout:
     // the save handler ignores scrolls while authority is `restoring`.
+    //
+    // Each re-pin is a programmatic scrollTop write, so the loop holds
+    // `isProgrammaticScrollRef` for the whole chase — the documented flag every
+    // chat scroll listener reads to tell a restore from a user scroll (like
+    // useAlphaAutoScroll's pinToBottom) — and clears it at every exit, so a
+    // scroll event from a re-pin is never misread and the flag never lingers
+    // past the restore.
     let lastHeight = el.scrollHeight;
     let stableFrames = 0;
     let elapsedFrames = 0;
     let rafId = 0;
+    const endConvergence = (): void => {
+      isProgrammaticScrollRef.current = false;
+    };
+
     const tick = (): void => {
       pendingRafsRef.current.delete(rafId);
       const container = scrollContainerRef.current;
-      if (!container || machine.getState().authority.kind !== "restoring") return;
+      // The user grabbed the scroll (or the container unmounted): stop chasing
+      // and leave their position untouched. Authority is already userControlled.
+      if (!container || machine.getState().authority.kind !== "restoring") {
+        endConvergence();
+        return;
+      }
 
+      isProgrammaticScrollRef.current = true;
       applyScrollPosition();
 
       const height = container.scrollHeight;
@@ -331,6 +348,7 @@ export const useAlphaScrollPersistence = (
 
       if (stableFrames >= BOTTOM_CONVERGE_STABLE_FRAMES || elapsedFrames >= BOTTOM_CONVERGE_MAX_FRAMES) {
         machine.dispatch({ kind: "restoreSettled" });
+        endConvergence();
         return;
       }
       rafId = requestAnimationFrame(tick);
@@ -346,6 +364,7 @@ export const useAlphaScrollPersistence = (
     sweepMountedMeasurements,
     machine,
     taskId,
+    isProgrammaticScrollRef,
   ]);
 
   // Restore scroll position synchronously before paint so the user never
