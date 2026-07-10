@@ -30,7 +30,8 @@ const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
 export const getModelShortName = (model: LlmModel): string => modelNames[model]?.short || "Unknown";
 export const getModelLongName = (model: LlmModel): string => modelNames[model]?.long || "Unknown";
 
-const PRODUCTION_MODELS: ReadonlyArray<LlmModel> = [
+// Models offered in production model pickers (desktop selector + mobile `+` menu).
+export const PRODUCTION_MODELS: ReadonlyArray<LlmModel> = [
   LlmModel.CLAUDE_FABLE_5,
   LlmModel.CLAUDE_4_OPUS_200K,
   LlmModel.CLAUDE_4_OPUS,

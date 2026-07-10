@@ -136,4 +136,16 @@
   width: 80px;
 }
 
+/* Touch devices can't hover, so the hover-gated delete button and repo name
+   would never appear — reveal them on the mobile surface. Gated on
+   html.mobileUx (the app's single mobile/desktop verdict, never set in the
+   Electron renderer — see index.css / useLayoutMode.ts); desktop, including a
+   touchscreen laptop running the desktop app, is unaffected. */
+:global(html.mobileUx) {
+  .repo,
+  .deleteButton {
+    opacity: 100%;
+  }
+}
+
 /* stylelint-enable no-descending-specificity */

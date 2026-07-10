@@ -14,6 +14,7 @@ import type { ReactElement } from "react";
 import { useState } from "react";
 import { Outlet } from "react-router-dom";
 
+import { useIsMobile } from "~/common/hooks/useLayoutMode.ts";
 import { useSyncActiveTabFromRoute } from "~/common/hooks/useSyncActiveTabFromRoute.ts";
 import { useActiveProjectID } from "~/common/NavigateUtils.ts";
 import { backendStatusAtom } from "~/common/state/atoms/backend.ts";
@@ -73,6 +74,7 @@ export const AppShell = (): ReactElement => {
   // External atoms
   const isSidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
   const backendStatus = useAtomValue(backendStatusAtom);
+  const isMobile = useIsMobile();
 
   // Internal state
   const [isRepoPathDialogOpen, setIsRepoPathDialogOpen] = useState<boolean>(false);
@@ -99,8 +101,12 @@ export const AppShell = (): ReactElement => {
   return (
     <>
       <Flex direction="row" height="var(--app-height)" width="100vw" position="relative" overflow="hidden">
-        {/* Global chrome: the sidebar rail (or the collapsed expand toggle). */}
-        {isSidebarCollapsed ? <CollapsedSidebarToggle /> : <WorkspaceSidebar />}
+        {/* Global chrome: the sidebar rail (or the collapsed expand toggle).
+            Suppressed on mobile — the single-column pages carry their own
+            headers, and workspace/agent navigation goes through the mobile
+            WorkspaceDrawer instead of the rail. The rest of the shell (unified
+            stream, toasts, dialogs, plugins) is layout-independent and stays. */}
+        {!isMobile && (isSidebarCollapsed ? <CollapsedSidebarToggle /> : <WorkspaceSidebar />)}
 
         <Flex
           direction="column"
