@@ -12,12 +12,14 @@ re-pin loop in ``useAlphaScrollPersistence``), rather than applying once and
 settling mid-convergence.
 """
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.alpha_chat_view import get_last_turn_footer_viewport_gaps
 from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_by
 from sculptor.testing.elements.alpha_chat_view import wait_for_alpha_scroll_settled
+from sculptor.testing.elements.alpha_chat_view import wait_for_last_turn_footer_near_bottom
 from sculptor.testing.elements.alpha_chat_view import wait_for_scroll_save_debounce
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
@@ -79,11 +81,9 @@ def test_reload_restores_scroll_to_bottom(sculptor_instance_: SculptorInstance) 
     scroll_alpha_chat_by(page, 2000)
     wait_for_scroll_save_debounce(page)
 
-    # Precondition: the last turn footer is at the bottom before the reload.
-    gaps_before = get_last_turn_footer_viewport_gaps(page)
-    assert gaps_before is not None and gaps_before["bottom_gap"] <= _FOOTER_BOTTOM_MARGIN_PX, (
-        f"precondition failed: the chat is not at the bottom before the reload (gaps={gaps_before})"
-    )
+    # Precondition: the chat is at the bottom before the reload (retry until the
+    # footer settles there, rather than snapshotting a single frame).
+    wait_for_last_turn_footer_near_bottom(page, max_bottom_gap=_FOOTER_BOTTOM_MARGIN_PX)
 
     # The coldest possible restore: a full SPA teardown wipes the in-memory scroll
     # atom, so the saved position is re-read from localStorage and resolved against
@@ -96,15 +96,19 @@ def test_reload_restores_scroll_to_bottom(sculptor_instance_: SculptorInstance) 
     wait_for_completed_message_count(chat_panel=reloaded_chat_panel, expected_message_count=expected_count)
     wait_for_alpha_scroll_settled(page)
 
-    # The reload landed back at the bottom: the last turn footer is in view and
-    # close to the viewport bottom — not stranded pages above it.
-    gaps = get_last_turn_footer_viewport_gaps(page)
-    assert gaps is not None, "no turn footer rendered after the reload"
-    assert gaps["bottom_gap"] >= -_EDGE_TOLERANCE_PX, (
-        f"after the reload the last turn footer is cut off {-gaps['bottom_gap']}px below the fold; "
-        + "the restore stranded the reader above the bottom instead of chasing the growing content"
-    )
-    assert gaps["bottom_gap"] <= _FOOTER_BOTTOM_MARGIN_PX, (
-        f"after the reload the last turn footer sits {gaps['bottom_gap']}px above the viewport bottom "
-        + f"(expected <= {_FOOTER_BOTTOM_MARGIN_PX}px); the restore did not return to the bottom"
-    )
+    # The reload must land back at the bottom: the last turn footer in view and
+    # close to the viewport bottom, not stranded pages above it. A retrying wait
+    # (per use_expect_not_assert) so a footer that renders — or a chase that
+    # converges — a beat late does not read as a failure; the one-shot read only
+    # runs on timeout, to turn the raw wait error into an actionable geometry.
+    try:
+        wait_for_last_turn_footer_near_bottom(
+            page, max_bottom_gap=_FOOTER_BOTTOM_MARGIN_PX, min_bottom_gap=-_EDGE_TOLERANCE_PX
+        )
+    except PlaywrightTimeoutError:
+        gaps = get_last_turn_footer_viewport_gaps(page)
+        raise AssertionError(
+            f"after the reload the last turn footer did not land at the bottom (gaps={gaps}); "
+            + f"expected bottom_gap in [{-_EDGE_TOLERANCE_PX}, {_FOOTER_BOTTOM_MARGIN_PX}] px — the "
+            + "restore stranded the reader above the bottom or cut the footer off below the fold"
+        )

@@ -338,8 +338,17 @@ export const useAlphaScrollPersistence = (
         return;
       }
 
+      const beforeScrollTop = container.scrollTop;
       isProgrammaticScrollRef.current = true;
       applyScrollPosition();
+      // A re-pin that didn't move scrollTop fires no scroll event, so no
+      // listener will consume (and clear) the flag this frame — clear it now,
+      // otherwise it lingers until the next tick and a user scroll in that gap
+      // would be misread as programmatic. A move keeps the flag set for the
+      // scroll event it produces; the scroll handler clears it in a microtask.
+      if (container.scrollTop === beforeScrollTop) {
+        isProgrammaticScrollRef.current = false;
+      }
 
       const height = container.scrollHeight;
       stableFrames = height === lastHeight ? stableFrames + 1 : 0;
