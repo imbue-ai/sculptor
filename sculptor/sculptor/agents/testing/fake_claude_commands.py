@@ -416,9 +416,9 @@ def _emit_context_usage_response(request_id: str) -> None:
         "response": {
             "request_id": request_id,
             "response": {
-                "totalTokens": 1234,
+                "totalTokens": 120000,
                 "maxTokens": 200000,
-                "percentage": 0.6,
+                "percentage": 60.0,
                 "autoCompactThreshold": 160000,
             },
         },

@@ -44,10 +44,11 @@ def test_unqueue_during_background_wait_does_not_show_turn_footer(
 
     # Queuing only happens when always-interrupt-and-send is OFF; a sibling test
     # in the shared session may have enabled it, so disable it defensively.
+    # start_task_and_wait_for_ready navigates to workspace creation from here, so
+    # there's no need to route back through the (hash-history-flaky) go_back().
     settings_page = navigate_to_settings_page(page=page)
     experimental = settings_page.click_on_experimental()
     experimental.disable_always_interrupt()
-    page.go_back()
 
     # Park the agent in the background-wait window AND answer get_context_usage
     # during the hold, so the turn's metrics are flushed and pending while the
